@@ -1,0 +1,99 @@
+name: MySQL CI and Hostinger Deploy
+
+on:
+  pull_request:
+    branches: [main, develop]
+  push:
+    branches: [main, develop]
+
+concurrency:
+  group: hoa-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    services:
+      mysql:
+        image: mysql:8.4
+        env:
+          MYSQL_DATABASE: hoa_portal
+          MYSQL_USER: hoa_app
+          MYSQL_PASSWORD: hoa_ci_password
+          MYSQL_ROOT_PASSWORD: hoa_ci_root_password
+        ports: ["3306:3306"]
+        options: >-
+          --health-cmd="mysqladmin ping -h localhost -uroot -phoa_ci_root_password"
+          --health-interval=5s --health-timeout=5s --health-retries=20
+    env:
+      DATABASE_URL: mysql://hoa_app:hoa_ci_password@127.0.0.1:3306/hoa_portal
+      AUTH_SECRET: ci-only-auth-secret-with-at-least-32-characters
+      APP_URL: http://127.0.0.1:3000
+      SEED_SYSTEM_ADMIN_EMAIL: ci-system@example.invalid
+      SEED_SYSTEM_ADMIN_PASSWORD: CI-Temporary-Password-2026!
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.12.1
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm exec prisma validate
+      - run: pnpm exec prisma generate
+      - run: pnpm exec prisma migrate deploy
+      - run: pnpm db:seed
+      - run: pnpm typecheck
+      - run: pnpm build
+      - name: Application smoke check
+        run: |
+          pnpm start > /tmp/hoa-next.log 2>&1 &
+          for attempt in {1..30}; do
+            curl --fail --silent http://127.0.0.1:3000/api/health && break
+            sleep 2
+          done
+          curl --fail --silent http://127.0.0.1:3000/api/health | grep '"status":"ok"'
+          curl --fail --silent http://127.0.0.1:3000/login > /dev/null
+
+  deploy:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: verify
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure SSH
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.HOSTINGER_SSH_PRIVATE_KEY }}
+          HOST: ${{ secrets.HOSTINGER_HOST }}
+          PORT: ${{ secrets.HOSTINGER_PORT }}
+        run: |
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$SSH_PRIVATE_KEY" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          ssh-keyscan -p "${PORT:-22}" "$HOST" >> ~/.ssh/known_hosts
+      - name: Upload immutable release
+        env:
+          HOST: ${{ secrets.HOSTINGER_HOST }}
+          PORT: ${{ secrets.HOSTINGER_PORT }}
+          USER: ${{ secrets.HOSTINGER_USER }}
+          APP_ROOT: ${{ secrets.HOSTINGER_APP_PATH }}
+        run: |
+          PORT="${PORT:-22}"
+          ssh -p "$PORT" "$USER@$HOST" "mkdir -p '$APP_ROOT/releases/$GITHUB_SHA' '$APP_ROOT/shared' '$APP_ROOT/backups'"
+          rsync -az --delete -e "ssh -p $PORT" \
+            --exclude .git --exclude .env --exclude .next --exclude node_modules \
+            --exclude backups --exclude storage --exclude public/uploads \
+            ./ "$USER@$HOST:$APP_ROOT/releases/$GITHUB_SHA/"
+          ssh -p "$PORT" "$USER@$HOST" "APP_ROOT='$APP_ROOT' RELEASE_ID='$GITHUB_SHA' bash '$APP_ROOT/releases/$GITHUB_SHA/scripts/deploy-hostinger.sh'"
+      - name: Verify production health
+        env:
+          APP_URL: ${{ secrets.HOSTINGER_APP_URL }}
+        run: |
+          for attempt in {1..20}; do
+            curl --fail --silent "$APP_URL/api/health" | grep '"status":"ok"' && exit 0
+            sleep 5
+          done
+          exit 1

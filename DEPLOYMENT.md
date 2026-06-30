@@ -59,7 +59,7 @@ Merge only after the `verify` GitHub check passes. Hostinger then pulls the new 
 1. In hPanel open **Websites > Add Website > Node.js Web App**.
 2. Choose **Import Git Repository** and authorize the GitHub account `lowiesevilla-crypto`.
 3. Select `lowiesevilla-crypto/Hoapagsibol4B` and branch `main`.
-4. Select **Next.js**, package manager **pnpm**, and Node.js **20.x**.
+4. Select **Next.js**, package manager **pnpm**, and Node.js **22.x**.
 5. Use these commands:
 
 ```text

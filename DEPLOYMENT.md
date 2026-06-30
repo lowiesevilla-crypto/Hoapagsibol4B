@@ -224,6 +224,7 @@ Then test authenticated Admin, Homeowner, System Administrator, and Employee wor
 
 - Build cannot connect to MySQL: verify Hostinger DB hostname, user grants, encoded password, and whether the Node service may access that database.
 - Prisma migration fails: stop deployment, keep the previous release active, inspect the migration SQL, and restore the pre-deployment backup if data changed.
+- Prisma engine returns `EACCES`: keep the build command set to `pnpm hostinger:build`; it restores Hostinger build permissions before running Prisma.
 - 403 after deployment: redeploy the Node.js app so Hostinger regenerates routing; do not manually overwrite `.htaccess`.
 - Uploads disappear: `STORAGE_ROOT` is inside the replaceable build directory or lacks write permission.
 - SMTP authentication fails: verify full mailbox username, password, port/encryption pair, and authorized From address.

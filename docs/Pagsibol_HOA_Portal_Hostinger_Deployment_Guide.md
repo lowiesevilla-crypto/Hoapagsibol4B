@@ -1,5 +1,7 @@
 # Hostinger Production Deployment Guide
 
+> The current managed GitHub deployment procedure for `https://hoahub.tech` is maintained in the repository root at `DEPLOYMENT.md`. This document remains the detailed VPS/SSH alternative.
+
 This guide deploys the HOA Digital Hub from local development through GitHub to Hostinger or a similar provider. It targets a Hostinger VPS or hosting plan that supports Node.js 20, persistent Node processes, SSH, MySQL 8, and custom environment variables. Basic static/PHP-only shared hosting cannot run this Next.js server application.
 
 ## 1. Accounts and tools

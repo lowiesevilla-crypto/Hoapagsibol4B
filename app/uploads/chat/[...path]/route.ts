@@ -1,6 +1,7 @@
 import { readFile, stat } from "node:fs/promises";
 import path from "node:path";
 import { requireUser } from "@/lib/auth";
+import { locateUpload, uploadDirectory } from "@/lib/storage";
 
 export const runtime = "nodejs";
 
@@ -11,17 +12,18 @@ export async function GET(_request: Request, { params }: { params: Promise<{ pat
     return new Response("Invalid attachment path.", { status: 400 });
   }
 
-  const baseDir = path.resolve(process.cwd(), "public", "uploads", "chat");
+  const baseDir = uploadDirectory("chat");
   const filePath = path.resolve(baseDir, ...segments);
   if (!filePath.startsWith(baseDir + path.sep)) {
     return new Response("Invalid attachment path.", { status: 400 });
   }
 
   try {
-    const info = await stat(filePath);
+    const storedPath = await locateUpload("chat", ...segments);
+    const info = await stat(storedPath);
     if (!info.isFile()) return new Response("Attachment not found.", { status: 404 });
-    const bytes = await readFile(filePath);
-    const contentType = contentTypeFor(filePath);
+    const bytes = await readFile(storedPath);
+    const contentType = contentTypeFor(storedPath);
     const fileName = segments.at(-1) || "attachment";
     const disposition = contentType.startsWith("image/") || contentType === "application/pdf" ? "inline" : "attachment";
     return new Response(bytes, {
@@ -30,6 +32,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ pat
         "Content-Length": String(info.size),
         "Content-Disposition": `${disposition}; filename="${fileName.replaceAll("\"", "")}"`,
         "Cache-Control": "private, max-age=300",
+        "X-Content-Type-Options": "nosniff",
       },
     });
   } catch {

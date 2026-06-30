@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
+import { uploadDirectory } from "@/lib/storage";
 
 const allowedTypes = new Map([
   ["image/jpeg", ".jpg"],
@@ -20,11 +21,11 @@ export async function savePaymentProof(formData: FormData) {
 
   const now = new Date();
   const folder = `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, "0")}`;
-  const uploadDirectory = path.join(process.cwd(), "public", "uploads", "payments", folder);
+  const targetDirectory = uploadDirectory("payments", folder);
   const storedName = `${randomUUID()}${extension}`;
   try {
-    await mkdir(uploadDirectory, { recursive: true });
-    await writeFile(path.join(uploadDirectory, storedName), Buffer.from(await file.arrayBuffer()));
+    await mkdir(targetDirectory, { recursive: true });
+    await writeFile(path.join(targetDirectory, storedName), Buffer.from(await file.arrayBuffer()));
   } catch {
     throw new Error("Proof of payment could not be uploaded. Try again or submit without an attachment.");
   }

@@ -1,5 +1,6 @@
 import { NotificationChannel, NotificationStatus, NotificationType, SystemSettingCategory } from "@prisma/client";
 import nodemailer from "nodemailer";
+import { getAppUrl } from "@/lib/app-url";
 import { prisma } from "@/lib/db";
 import { getAssociationSettings, getSystemSettingMap } from "@/lib/system-settings";
 
@@ -23,6 +24,7 @@ export type MailConfiguration = {
   password: string;
   fromName: string;
   fromAddress: string;
+  replyTo: string;
   appUrl: string;
   configured: boolean;
 };
@@ -30,20 +32,22 @@ export type MailConfiguration = {
 export async function getMailConfiguration(): Promise<MailConfiguration> {
   const settings = await getSystemSettingMap();
   const saved = (key: string) => settings.get(`${SystemSettingCategory.EMAIL}.${key}`)?.value?.trim() || "";
-  const value = (key: string, fallback = "") => saved(key) || process.env[key]?.trim() || fallback;
-  const provider = value("MAIL_PROVIDER", "gmail").toLowerCase();
-  const host = value("MAIL_HOST", provider === "gmail" ? "smtp.gmail.com" : "");
-  const port = Number(value("MAIL_PORT", "587")) || 587;
-  const rawEncryption = value("MAIL_ENCRYPTION", "tls").toLowerCase();
+  const environment = (...keys: string[]) => keys.map((key) => process.env[key]?.trim()).find(Boolean) || "";
+  const value = (key: string, fallback = "", ...aliases: string[]) => environment(...aliases, key) || saved(key) || fallback;
+  const provider = value("MAIL_PROVIDER", "smtp").toLowerCase();
+  const host = value("MAIL_HOST", "smtp.hostinger.com", "SMTP_HOST");
+  const port = Number(value("MAIL_PORT", "465", "SMTP_PORT")) || 465;
+  const rawEncryption = value("MAIL_ENCRYPTION", "ssl", "SMTP_ENCRYPTION").toLowerCase();
   const encryption = rawEncryption === "ssl" || rawEncryption === "none" ? rawEncryption : "tls";
-  const username = process.env.MAIL_USERNAME?.trim() || "";
-  const password = process.env.MAIL_PASSWORD?.trim() || "";
-  const fromName = value("MAIL_FROM_NAME", "HOA Digital Hub");
-  const fromAddress = value("MAIL_FROM_ADDRESS", username);
-  const appUrl = (process.env.APP_URL?.trim() || process.env.PUBLIC_APP_URL?.trim() || "http://localhost:3000").replace(/\/$/, "");
-  const requiresAuthentication = provider === "gmail";
+  const username = environment("SMTP_USERNAME", "MAIL_USERNAME");
+  const password = environment("SMTP_PASSWORD", "MAIL_PASSWORD");
+  const fromName = value("MAIL_FROM_NAME", "HOAHUB");
+  const fromAddress = value("MAIL_FROM_ADDRESS", "noreply@hoahub.tech");
+  const replyTo = environment("MAIL_REPLY_TO") || "admin@hoahub.tech";
+  const appUrl = getAppUrl();
+  const requiresAuthentication = process.env.SMTP_ALLOW_UNAUTHENTICATED !== "true";
   return {
-    provider, host, port, encryption, username, password, fromName, fromAddress, appUrl,
+    provider, host, port, encryption, username, password, fromName, fromAddress, replyTo, appUrl,
     configured: Boolean(host && fromAddress && (!requiresAuthentication || (username && password))),
   };
 }
@@ -71,6 +75,7 @@ export async function sendEmailNotification(input: EmailInput) {
       });
       const result = await transporter.sendMail({
         from: { name: config.fromName, address: config.fromAddress },
+        replyTo: config.replyTo,
         to: input.email,
         subject: input.subject.replace(/[\r\n]+/g, " ").slice(0, 200),
         text: brandedMessage,

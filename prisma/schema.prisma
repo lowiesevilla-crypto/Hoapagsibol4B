@@ -300,7 +300,7 @@ model User {
   chatParticipants               ChatParticipant[]
   chatMessages                   ChatMessage[]                @relation("ChatMessageSender")
   presence                       UserPresence?
-  passwordResetTokens           PasswordResetToken[]
+  passwordResetTokens            PasswordResetToken[]
 
   @@index([role])
 }
@@ -369,7 +369,7 @@ model Bill {
   balance         Decimal          @db.Decimal(12, 2)
   dueDate         DateTime         @db.Date
   status          BillStatus       @default(UNPAID)
-  notes           String?    @db.Text
+  notes           String?          @db.Text
   payments        Payment[]
   paymentRequests PaymentRequest[]
   archivedAt      DateTime?
@@ -402,39 +402,39 @@ model DuesExemption {
 }
 
 model Payment {
-  id               String           @id @default(cuid())
-  billId           String
-  bill             Bill             @relation(fields: [billId], references: [id], onDelete: Cascade)
-  homeownerId      String
-  homeowner        HomeownerProfile @relation(fields: [homeownerId], references: [id], onDelete: Cascade)
-  amount           Decimal          @db.Decimal(12, 2)
-  paymentDate      DateTime         @db.Date
-  method           PaymentMethod
-  referenceNumber  String?
-  paymentBatchId   String?
-  coverageStart    DateTime?        @db.Date
-  coverageEnd      DateTime?        @db.Date
-  coverageMonths   Json?
-  coverageFromMonth Int?
-  coverageFromYear  Int?
-  coverageToMonth   Int?
-  coverageToYear    Int?
+  id                     String           @id @default(cuid())
+  billId                 String
+  bill                   Bill             @relation(fields: [billId], references: [id], onDelete: Cascade)
+  homeownerId            String
+  homeowner              HomeownerProfile @relation(fields: [homeownerId], references: [id], onDelete: Cascade)
+  amount                 Decimal          @db.Decimal(12, 2)
+  paymentDate            DateTime         @db.Date
+  method                 PaymentMethod
+  referenceNumber        String?
+  paymentBatchId         String?
+  coverageStart          DateTime?        @db.Date
+  coverageEnd            DateTime?        @db.Date
+  coverageMonths         Json?
+  coverageFromMonth      Int?
+  coverageFromYear       Int?
+  coverageToMonth        Int?
+  coverageToYear         Int?
   paymentCoverageDisplay String?
-  remarks          String?
-  receiptNumber    String?          @unique
-  proofUrl         String?
-  proofFileName    String?
-  proofContentType String?
-  proofFileSize    Int?
-  status           PaymentStatus    @default(ACTIVE)
-  voidedAt         DateTime?
-  voidedById       String?
-  voidedBy         User?            @relation("PaymentVoidedBy", fields: [voidedById], references: [id], onDelete: SetNull)
-  voidReason       String?
-  processedById    String?
-  processedBy      User?            @relation("PaymentProcessor", fields: [processedById], references: [id], onDelete: SetNull)
-  paymentRequest   PaymentRequest?
-  createdAt        DateTime         @default(now())
+  remarks                String?
+  receiptNumber          String?          @unique
+  proofUrl               String?
+  proofFileName          String?
+  proofContentType       String?
+  proofFileSize          Int?
+  status                 PaymentStatus    @default(ACTIVE)
+  voidedAt               DateTime?
+  voidedById             String?
+  voidedBy               User?            @relation("PaymentVoidedBy", fields: [voidedById], references: [id], onDelete: SetNull)
+  voidReason             String?
+  processedById          String?
+  processedBy            User?            @relation("PaymentProcessor", fields: [processedById], references: [id], onDelete: SetNull)
+  paymentRequest         PaymentRequest?
+  createdAt              DateTime         @default(now())
 
   @@index([homeownerId, paymentDate])
   @@index([billId])
@@ -445,38 +445,38 @@ model Payment {
 }
 
 model PaymentArchive {
-  id                String        @id @default(cuid())
-  originalPaymentId String        @unique
-  billId            String
-  billingMonth      DateTime      @db.Date
-  homeownerId       String
-  homeownerName     String
-  homeownerAddress  String
-  property          String
-  amount            Decimal       @db.Decimal(12, 2)
-  paymentDate       DateTime      @db.Date
-  method            PaymentMethod
-  referenceNumber   String?
-  paymentBatchId    String?
-  coverageStart     DateTime?      @db.Date
-  coverageEnd       DateTime?      @db.Date
-  coverageMonths    Json?
-  coverageFromMonth Int?
-  coverageFromYear  Int?
-  coverageToMonth   Int?
-  coverageToYear    Int?
+  id                     String        @id @default(cuid())
+  originalPaymentId      String        @unique
+  billId                 String
+  billingMonth           DateTime      @db.Date
+  homeownerId            String
+  homeownerName          String
+  homeownerAddress       String
+  property               String
+  amount                 Decimal       @db.Decimal(12, 2)
+  paymentDate            DateTime      @db.Date
+  method                 PaymentMethod
+  referenceNumber        String?
+  paymentBatchId         String?
+  coverageStart          DateTime?     @db.Date
+  coverageEnd            DateTime?     @db.Date
+  coverageMonths         Json?
+  coverageFromMonth      Int?
+  coverageFromYear       Int?
+  coverageToMonth        Int?
+  coverageToYear         Int?
   paymentCoverageDisplay String?
-  receiptNumber     String?
-  remarks           String?
-  proofUrl          String?
-  proofFileName     String?
-  proofContentType  String?
-  proofFileSize     Int?
-  originalCreatedAt DateTime
-  voidedById        String
-  voidedBy          User          @relation("PaymentArchiveVoidedBy", fields: [voidedById], references: [id], onDelete: Restrict)
-  voidedAt          DateTime      @default(now())
-  voidReason        String?
+  receiptNumber          String?
+  remarks                String?
+  proofUrl               String?
+  proofFileName          String?
+  proofContentType       String?
+  proofFileSize          Int?
+  originalCreatedAt      DateTime
+  voidedById             String
+  voidedBy               User          @relation("PaymentArchiveVoidedBy", fields: [voidedById], references: [id], onDelete: Restrict)
+  voidedAt               DateTime      @default(now())
+  voidReason             String?
 
   @@index([voidedAt])
   @@index([homeownerId, paymentDate])
@@ -581,7 +581,7 @@ model DataMigration {
   contractor           ContractorProfile?  @relation(fields: [contractorId], references: [id], onDelete: Restrict)
   period               DateTime?           @db.Date
   amount               Decimal             @db.Decimal(12, 2)
-  remarks              String             @db.Text
+  remarks              String              @db.Text
   referenceNumber      String?
   relatedReceiptNumber String?
   postedRecordType     String?
@@ -1140,32 +1140,32 @@ model Event {
 }
 
 model NotificationLog {
-  id          String              @id @default(cuid())
-  recipientId String
-  recipient   User                @relation("NotificationRecipient", fields: [recipientId], references: [id], onDelete: Cascade)
-  type        NotificationType
-  channel     NotificationChannel
-  subject     String
-  message     String              @db.Text
-  status      NotificationStatus  @default(QUEUED)
-  sentAt      DateTime?
+  id                String              @id @default(cuid())
+  recipientId       String
+  recipient         User                @relation("NotificationRecipient", fields: [recipientId], references: [id], onDelete: Cascade)
+  type              NotificationType
+  channel           NotificationChannel
+  subject           String
+  message           String              @db.Text
+  status            NotificationStatus  @default(QUEUED)
+  sentAt            DateTime?
   providerMessageId String?
   errorMessage      String?
-  createdAt   DateTime            @default(now())
+  createdAt         DateTime            @default(now())
 
   @@index([recipientId, createdAt])
   @@index([status])
 }
 
 model PasswordResetToken {
-  id              String   @id @default(cuid())
+  id              String    @id @default(cuid())
   userId          String
-  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  tokenHash       String   @unique
+  user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash       String    @unique
   requestedIpHash String?
   expiresAt       DateTime
   usedAt          DateTime?
-  createdAt       DateTime @default(now())
+  createdAt       DateTime  @default(now())
 
   @@index([userId, createdAt])
   @@index([expiresAt, usedAt])
@@ -1312,4 +1312,14 @@ model UserPresence {
   user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   lastSeenAt DateTime @default(now())
   context    String?
+}
+
+model RateLimitEvent {
+  id        String   @id @default(cuid())
+  action    String
+  keyHash   String
+  createdAt DateTime @default(now())
+
+  @@index([action, keyHash, createdAt])
+  @@index([createdAt])
 }

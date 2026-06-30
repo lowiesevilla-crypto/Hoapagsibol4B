@@ -4,6 +4,7 @@ import { CollectionType, NotificationType, PaymentRequestType, Role } from "@pri
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { requireUser } from "@/lib/auth";
+import { getAppUrl } from "@/lib/app-url";
 import { prisma } from "@/lib/db";
 import { savePaymentProof } from "@/lib/payment-proofs";
 import { approvePaymentRequest, rejectPaymentRequest } from "@/lib/services/payment-requests";
@@ -98,7 +99,7 @@ export async function approvePaymentRequestAction(formData: FormData) {
   if (!parsed.success) throw new Error(parsed.error.issues[0]?.message || "Invalid review details.");
   await approvePaymentRequest(parsed.data.id, admin.id, parsed.data.reviewRemarks);
   const approved = await prisma.paymentRequest.findUnique({ where: { id: parsed.data.id }, include: { homeowner: { include: { user: true } }, payment: true, collection: true } });
-  if (approved) await sendEmailNotification({ recipientId: approved.homeowner.userId, email: approved.homeowner.user.email, subject: "HOA payment confirmed", heading: "Payment confirmation", message: `Hello ${approved.homeowner.user.name},\nYour payment of PHP ${Number(approved.amount).toFixed(2)} has been verified and approved.\nReference: ${approved.referenceNumber || "Not provided"}\nReceipt: ${approved.payment?.receiptNumber || approved.collection?.receiptNumber || "Available from the HOA office"}`, type: NotificationType.PAYMENT_CONFIRMATION, actionLabel: "View payment history", actionUrl: `${process.env.APP_URL?.replace(/\/$/, "") || "https://pagsibol-hoa.tail2abf68.ts.net"}/portal/payments` }).catch(() => undefined);
+  if (approved) await sendEmailNotification({ recipientId: approved.homeowner.userId, email: approved.homeowner.user.email, subject: "HOA payment confirmed", heading: "Payment confirmation", message: `Hello ${approved.homeowner.user.name},\nYour payment of PHP ${Number(approved.amount).toFixed(2)} has been verified and approved.\nReference: ${approved.referenceNumber || "Not provided"}\nReceipt: ${approved.payment?.receiptNumber || approved.collection?.receiptNumber || "Available from the HOA office"}`, type: NotificationType.PAYMENT_CONFIRMATION, actionLabel: "View payment history", actionUrl: `${getAppUrl()}/portal/payments` }).catch(() => undefined);
   revalidatePaymentPages();
   redirect("/admin/payments?success=approved&message=QR%20payment%20approved%20and%20officially%20recorded.");
 }

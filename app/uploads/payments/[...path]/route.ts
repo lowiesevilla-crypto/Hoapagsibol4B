@@ -3,6 +3,7 @@ import path from "node:path";
 import { Role } from "@prisma/client";
 import { requireUser } from "@/lib/auth";
 import { prisma } from "@/lib/db";
+import { locateUpload, uploadDirectory } from "@/lib/storage";
 
 export const runtime = "nodejs";
 
@@ -10,7 +11,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ pat
   const user = await requireUser();
   const { path: segments } = await params;
   if (!segments?.length || segments.some((segment) => segment.includes("..") || segment.includes("/") || segment.includes("\\"))) return new Response("Invalid attachment path.", { status: 400 });
-  const baseDirectory = path.resolve(process.cwd(), "public", "uploads", "payments");
+  const baseDirectory = uploadDirectory("payments");
   const filePath = path.resolve(baseDirectory, ...segments);
   if (!filePath.startsWith(baseDirectory + path.sep)) return new Response("Invalid attachment path.", { status: 400 });
   const proofUrl = `/uploads/payments/${segments.join("/")}`;
@@ -20,9 +21,10 @@ export async function GET(_request: Request, { params }: { params: Promise<{ pat
     if (!ownsProof) return new Response("Not authorized.", { status: 403 });
   }
   try {
-    const info = await stat(filePath);
+    const storedPath = await locateUpload("payments", ...segments);
+    const info = await stat(storedPath);
     if (!info.isFile()) return new Response("Attachment not found.", { status: 404 });
-    return new Response(await readFile(filePath), { headers: { "Content-Type": contentTypeFor(filePath), "Content-Length": String(info.size), "Cache-Control": "private, max-age=3600", "X-Content-Type-Options": "nosniff" } });
+    return new Response(await readFile(storedPath), { headers: { "Content-Type": contentTypeFor(storedPath), "Content-Length": String(info.size), "Cache-Control": "private, max-age=3600", "X-Content-Type-Options": "nosniff" } });
   } catch {
     return new Response("Attachment not found.", { status: 404 });
   }

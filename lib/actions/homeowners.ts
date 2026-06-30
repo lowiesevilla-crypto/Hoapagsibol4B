@@ -5,6 +5,7 @@ import { hash } from "bcryptjs";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { requireUser } from "@/lib/auth";
+import { getAppUrl } from "@/lib/app-url";
 import { prisma } from "@/lib/db";
 import { homeownerSchema } from "@/lib/validation";
 import { sendEmailNotification } from "@/lib/services/notifications";
@@ -85,7 +86,7 @@ export async function saveHomeownerAction(formData: FormData) {
       message: `Hello ${created.name},\nYour homeowner portal account has been created. For security, passwords are never sent by email. Sign in using the credentials issued by the HOA office, or use Forgot Password to create a new password securely.`,
       type: NotificationType.WELCOME,
       actionLabel: "Open homeowner login",
-      actionUrl: process.env.APP_URL?.replace(/\/$/, "") ? `${process.env.APP_URL!.replace(/\/$/, "")}/login` : "https://pagsibol-hoa.tail2abf68.ts.net/login",
+      actionUrl: `${getAppUrl()}/login`,
     }).catch(async (error) => prisma.auditLog.create({ data: { actorId: admin.id, module: "EMAIL", action: "WELCOME_EMAIL_LOG_FAILED", entityType: "User", entityId: created.id, metadata: { error: error instanceof Error ? error.message.slice(0, 300) : "Unknown email logging error" } } }));
   }
 

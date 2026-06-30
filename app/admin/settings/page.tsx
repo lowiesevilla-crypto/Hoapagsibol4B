@@ -6,6 +6,7 @@ import { PageHeader } from "@/components/page-header";
 import { SubmitButton } from "@/components/ui";
 import { saveSystemSettingsAction, sendTestEmailAction } from "@/lib/actions/settings";
 import { requireUser } from "@/lib/auth";
+import { getAppUrl } from "@/lib/app-url";
 import { allSettingFields, getSystemSettingMap, maskedSecret, settingSections } from "@/lib/system-settings";
 import { getMailConfiguration } from "@/lib/services/notifications";
 import { shortDate } from "@/lib/utils";
@@ -22,29 +23,36 @@ const icons = {
 export default async function SystemSettingsPage({ searchParams }: { searchParams: Promise<{ error?: string; success?: string; message?: string }> }) {
   await requireUser(Role.SYSTEM_ADMIN);
   const [settings, query, mail] = await Promise.all([getSystemSettingMap(), searchParams, getMailConfiguration()]);
+  const environmentAliases: Record<string, string[]> = {
+    MAIL_HOST: ["SMTP_HOST"], MAIL_PORT: ["SMTP_PORT"], MAIL_ENCRYPTION: ["SMTP_ENCRYPTION"],
+  };
   const sourceFor = (category: SystemSettingCategory, key: string) => {
     const saved = settings.get(`${category}.${key}`)?.value?.trim();
-    const env = process.env[key]?.trim();
-    if (saved) return { source: "Database setting", value: saved };
+    const env = [...(environmentAliases[key] || []), key].map((name) => process.env[name]?.trim()).find(Boolean);
     if (env) return { source: "Environment variable", value: env };
+    if (saved) return { source: "Database setting", value: saved };
     return { source: "Not configured", value: "" };
   };
   const setupRows = allSettingFields.map((field) => ({ ...field, ...sourceFor(field.category, field.key) }));
   const endpointRows = [
-    ["Public login URL", "https://pagsibol-hoa.tail2abf68.ts.net/login"],
+    ["Public login URL", `${getAppUrl()}/login`],
     ["Local login URL", "http://localhost:3000/login"],
     ["System settings", "/admin/settings"],
     ["Homeowner QR payment", "/portal/pay"],
     ["Admin QR review", "/admin/payments"],
     ["GCash webhook endpoint", "/api/payments/webhook/gcash"],
+    ["Daily maintenance cron", "/api/cron/daily"],
+    ["Monthly dues cron", "/api/cron/monthly-dues"],
     ["Node environment", process.env.NODE_ENV || "development"],
   ];
   const envStatus = [
     ["DATABASE_URL", Boolean(process.env.DATABASE_URL)],
     ["AUTH_SECRET", Boolean(process.env.AUTH_SECRET)],
-    ["APP_URL", Boolean(process.env.APP_URL || process.env.PUBLIC_APP_URL)],
-    ["MAIL_USERNAME", Boolean(process.env.MAIL_USERNAME)],
-    ["MAIL_PASSWORD", Boolean(process.env.MAIL_PASSWORD)],
+    ["APP_URL", Boolean(process.env.APP_URL || process.env.BASE_URL || process.env.PUBLIC_APP_URL)],
+    ["SMTP_USERNAME", Boolean(process.env.SMTP_USERNAME || process.env.MAIL_USERNAME)],
+    ["SMTP_PASSWORD", Boolean(process.env.SMTP_PASSWORD || process.env.MAIL_PASSWORD)],
+    ["CRON_SECRET", Boolean(process.env.CRON_SECRET)],
+    ["STORAGE_ROOT", Boolean(process.env.STORAGE_ROOT)],
     ["FACEBOOK_PAGE_ID", Boolean(process.env.FACEBOOK_PAGE_ID)],
     ["FACEBOOK_PAGE_ACCESS_TOKEN", Boolean(process.env.FACEBOOK_PAGE_ACCESS_TOKEN)],
   ] as const;
@@ -68,7 +76,7 @@ export default async function SystemSettingsPage({ searchParams }: { searchParam
 
     <section className="card mb-6 border-pine-100 bg-pine-50/40">
       <div className="grid gap-5 lg:grid-cols-[1fr_auto] lg:items-end">
-        <div><p className="text-xs font-black uppercase tracking-[.16em] text-pine-700">SMTP verification</p><h2 className="mt-1 text-lg font-black">Send test email</h2><p className="mt-1 text-sm leading-6 text-slate-600">Current provider: <b>{mail.provider}</b>. Connection status: <b>{mail.configured ? "ready for testing" : "credentials or sender settings missing"}</b>. Gmail username and App Password remain environment-only.</p></div>
+        <div><p className="text-xs font-black uppercase tracking-[.16em] text-pine-700">SMTP verification</p><h2 className="mt-1 text-lg font-black">Send test email</h2><p className="mt-1 text-sm leading-6 text-slate-600">Current provider: <b>{mail.provider}</b>. Connection status: <b>{mail.configured ? "ready for testing" : "credentials or sender settings missing"}</b>. Hostinger SMTP username and password remain environment-only.</p></div>
         <form action={sendTestEmailAction} className="grid min-w-0 gap-3 sm:grid-cols-[minmax(220px,1fr)_auto]"><div><label className="label" htmlFor="test-email">Test recipient</label><input id="test-email" className="field" name="email" type="email" defaultValue={mail.fromAddress} placeholder="admin@example.com" required /></div><div className="sm:self-end"><SubmitButton>Send test email</SubmitButton></div></form>
       </div>
     </section>

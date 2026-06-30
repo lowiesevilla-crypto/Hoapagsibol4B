@@ -1,4 +1,4 @@
-# PAGSIBOL VILLAGE PH2 4B EAST Portal
+# HOAHub - PAGSIBOL VILLAGE PH2 4B EAST Portal
 
 Production-oriented HOA Digital Hub built with Next.js 15, TypeScript, Tailwind CSS, Prisma, and MySQL 8. It provides role-based administration, homeowner billing and payments, receipts, collections and bonds, payroll, expenses, reports, announcements, events, chat, document generation, and mobile access.
 
@@ -19,7 +19,7 @@ Production-oriented HOA Digital Hub built with Next.js 15, TypeScript, Tailwind 
 6. Optionally set `SEED_SYSTEM_ADMIN_EMAIL` and `SEED_SYSTEM_ADMIN_PASSWORD`, then run `pnpm db:seed`.
 7. Start development: `pnpm dev`
 
-Open [http://localhost:3000/login](http://localhost:3000/login). The configuration seed creates lookup and system configuration only. It does not create homeowner, billing, payment, payroll, attendance, announcement, event, or chat transactions.
+Open [http://localhost:3000/login](http://localhost:3000/login). Production runs at [https://hoahub.tech](https://hoahub.tech). The configuration seed creates lookup and system configuration only. It does not create homeowner, billing, payment, payroll, attendance, announcement, event, or chat transactions.
 
 ## Environment
 
@@ -66,6 +66,8 @@ Pull requests run MySQL migrations, configuration seed, type checking, a product
 
 Read these guides before production work:
 
+- [HOAHub production deployment](DEPLOYMENT.md)
+- [Production checklist](PRODUCTION_CHECKLIST.md)
 - [MySQL migration](docs/MYSQL_MIGRATION_GUIDE.md)
 - [Database operations](docs/DATABASE_OPERATIONS.md)
 - [GitHub workflow](docs/GITHUB_WORKFLOW.md)

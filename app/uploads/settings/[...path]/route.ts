@@ -1,6 +1,7 @@
 import { readFile, stat } from "node:fs/promises";
 import path from "node:path";
 import { requireUser } from "@/lib/auth";
+import { uploadDirectory } from "@/lib/storage";
 
 export const runtime = "nodejs";
 
@@ -8,7 +9,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ pat
   await requireUser();
   const { path: segments } = await params;
   if (!segments?.length || segments.some((segment) => segment.includes("..") || segment.includes("/") || segment.includes("\\"))) return new Response("Invalid image path.", { status: 400 });
-  const baseDirectory = path.resolve(process.cwd(), "storage", "uploads", "settings");
+  const baseDirectory = uploadDirectory("settings");
   const filePath = path.resolve(baseDirectory, ...segments);
   if (!filePath.startsWith(baseDirectory + path.sep)) return new Response("Invalid image path.", { status: 400 });
   try {

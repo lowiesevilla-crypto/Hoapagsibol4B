@@ -6,6 +6,7 @@ import { hash } from "bcryptjs";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { deleteSession } from "@/lib/auth";
+import { getAppUrl } from "@/lib/app-url";
 import { prisma } from "@/lib/db";
 import { sendEmailNotification } from "@/lib/services/notifications";
 import { getPasswordPolicy } from "@/lib/system-settings";
@@ -118,10 +119,10 @@ function tokenFingerprint(rawToken: string) { return /^[A-Za-z0-9_-]{40,100}$/.t
 function fingerprint(value: string) { return createHash("sha256").update(value).digest("hex"); }
 function clientIp(input: Headers) { return input.get("x-forwarded-for")?.split(",")[0]?.trim() || input.get("x-real-ip")?.trim() || "unknown"; }
 function requestBaseUrl(input: Headers) {
-  const configured = process.env.APP_URL?.trim() || process.env.PUBLIC_APP_URL?.trim();
-  if (configured) return configured.replace(/\/$/, "");
+  const configured = process.env.APP_URL?.trim() || process.env.BASE_URL?.trim() || process.env.PUBLIC_APP_URL?.trim();
+  if (configured) return getAppUrl();
   const host = (input.get("x-forwarded-host") || input.get("host") || "localhost:3000").toLowerCase();
-  const safeHost = host === "localhost:3000" || host === "127.0.0.1:3000" || host.endsWith(".tail2abf68.ts.net");
+  const safeHost = host === "localhost:3000" || host === "127.0.0.1:3000" || host === "hoahub.tech" || host === "www.hoahub.tech";
   if (!safeHost) return "http://localhost:3000";
   return `${input.get("x-forwarded-proto") || (host.includes("localhost") || host.startsWith("127.") ? "http" : "https")}://${host}`;
 }

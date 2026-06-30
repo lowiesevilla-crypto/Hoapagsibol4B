@@ -5,6 +5,7 @@ import { NextResponse } from "next/server";
 import { requireUser } from "@/lib/auth";
 import { writeAuditLog } from "@/lib/audit";
 import { getChatSettings } from "@/lib/system-settings";
+import { uploadDirectory } from "@/lib/storage";
 
 export const runtime = "nodejs";
 
@@ -19,7 +20,7 @@ export async function POST(request: Request) {
   const uploaded = [];
   const now = new Date();
   const folder = `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, "0")}`;
-  const uploadDir = path.join(process.cwd(), "public", "uploads", "chat", folder);
+  const uploadDir = uploadDirectory("chat", folder);
   await mkdir(uploadDir, { recursive: true });
 
   for (const file of files) {

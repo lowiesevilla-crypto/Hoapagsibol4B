@@ -4,6 +4,7 @@ import { NotificationStatus, NotificationType, Role, SystemSettingCategory } fro
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { requireUser } from "@/lib/auth";
+import { getAppUrl } from "@/lib/app-url";
 import { prisma } from "@/lib/db";
 import { removeStoredGcashQrImage, resolveGcashQrImage } from "@/lib/gcash-qr";
 import { allSettingFields, settingField } from "@/lib/system-settings";
@@ -92,7 +93,7 @@ export async function sendTestEmailAction(formData: FormData) {
       message: "This test confirms that the HOA Digital Hub can securely send email through the configured SMTP service.",
       type: NotificationType.TEST_EMAIL,
       actionLabel: "Open HOA Digital Hub",
-      actionUrl: process.env.APP_URL?.replace(/\/$/, "") || "https://pagsibol-hoa.tail2abf68.ts.net/login",
+      actionUrl: `${getAppUrl()}/login`,
     });
     if (log.status !== NotificationStatus.SENT) throw new Error(log.errorMessage || "SMTP accepted the connection but the test message was not sent.");
     outcome = "SENT";

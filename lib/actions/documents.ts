@@ -5,6 +5,7 @@ import { DocumentRequestStatus, DocumentType, NotificationType, Role } from "@pr
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { requireUser } from "@/lib/auth";
+import { getAppUrl } from "@/lib/app-url";
 import { prisma } from "@/lib/db";
 import { getAssociationSettings } from "@/lib/system-settings";
 import { asJson, getActiveOrganizationOfficers, officerSnapshot } from "@/lib/organization";
@@ -172,7 +173,7 @@ export async function processDocumentRequestAction(formData: FormData) {
   }
   if (operation === "approve" || operation === "reject") {
     const approved = operation === "approve";
-    const appUrl = process.env.APP_URL?.replace(/\/$/, "") || "https://pagsibol-hoa.tail2abf68.ts.net";
+    const appUrl = getAppUrl();
     await sendEmailNotification({
       recipientId: request.homeowner.user.id,
       email: request.homeowner.user.email,

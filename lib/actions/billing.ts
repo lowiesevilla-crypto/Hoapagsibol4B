@@ -4,6 +4,7 @@ import { BillStatus, HomeownerStatus, NotificationType, PaymentRequestStatus, Pr
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { requireUser } from "@/lib/auth";
+import { getAppUrl } from "@/lib/app-url";
 import { prisma } from "@/lib/db";
 import { billSchema } from "@/lib/validation";
 import { sendEmailNotification } from "@/lib/services/notifications";
@@ -50,7 +51,7 @@ export async function saveBillAction(formData: FormData) {
   }
 
   const savedBill = await prisma.bill.findUnique({ where: { homeownerId_billingMonth: { homeownerId: data.homeownerId, billingMonth } }, include: { homeowner: { include: { user: true } } } });
-  if (savedBill) await sendEmailNotification({ recipientId: savedBill.homeowner.userId, email: savedBill.homeowner.user.email, subject: `HOA billing notice - ${savedBill.billingMonth.toLocaleDateString("en-PH", { month: "long", year: "numeric" })}`, heading: "Billing notification", message: `Hello ${savedBill.homeowner.user.name},\nA billing record of PHP ${Number(savedBill.totalAmount).toFixed(2)} is available in your homeowner portal. The due date is ${savedBill.dueDate.toLocaleDateString("en-PH")}.`, type: NotificationType.BILLING_NOTIFICATION, actionLabel: "View my billing", actionUrl: `${process.env.APP_URL?.replace(/\/$/, "") || "https://pagsibol-hoa.tail2abf68.ts.net"}/portal/billing` }).catch(() => undefined);
+  if (savedBill) await sendEmailNotification({ recipientId: savedBill.homeowner.userId, email: savedBill.homeowner.user.email, subject: `HOA billing notice - ${savedBill.billingMonth.toLocaleDateString("en-PH", { month: "long", year: "numeric" })}`, heading: "Billing notification", message: `Hello ${savedBill.homeowner.user.name},\nA billing record of PHP ${Number(savedBill.totalAmount).toFixed(2)} is available in your homeowner portal. The due date is ${savedBill.dueDate.toLocaleDateString("en-PH")}.`, type: NotificationType.BILLING_NOTIFICATION, actionLabel: "View my billing", actionUrl: `${getAppUrl()}/portal/billing` }).catch(() => undefined);
 
   revalidatePath("/admin/billing");
   redirect("/admin/billing?success=saved");
@@ -83,7 +84,7 @@ export async function generateMonthlyBillsAction(formData: FormData) {
       }),
     ),
   );
-  await Promise.allSettled(billableHomeowners.map((homeowner) => sendEmailNotification({ recipientId: homeowner.userId, email: homeowner.user.email, subject: `HOA billing notice - ${billingMonth.toLocaleDateString("en-PH", { month: "long", year: "numeric" })}`, heading: "Monthly dues billing", message: `Hello ${homeowner.user.name},\nYour monthly HOA dues of PHP ${Number(homeowner.monthlyDuesAmount).toFixed(2)} has been posted. Payment is due ${dueDate.toLocaleDateString("en-PH")}.`, type: NotificationType.BILLING_NOTIFICATION, actionLabel: "View my billing", actionUrl: `${process.env.APP_URL?.replace(/\/$/, "") || "https://pagsibol-hoa.tail2abf68.ts.net"}/portal/billing` })));
+  await Promise.allSettled(billableHomeowners.map((homeowner) => sendEmailNotification({ recipientId: homeowner.userId, email: homeowner.user.email, subject: `HOA billing notice - ${billingMonth.toLocaleDateString("en-PH", { month: "long", year: "numeric" })}`, heading: "Monthly dues billing", message: `Hello ${homeowner.user.name},\nYour monthly HOA dues of PHP ${Number(homeowner.monthlyDuesAmount).toFixed(2)} has been posted. Payment is due ${dueDate.toLocaleDateString("en-PH")}.`, type: NotificationType.BILLING_NOTIFICATION, actionLabel: "View my billing", actionUrl: `${getAppUrl()}/portal/billing` })));
   revalidatePath("/admin/billing");
   revalidatePath("/admin/dashboard");
   redirect(`/admin/billing?success=generated&count=${billableHomeowners.length}&skipped=${exemptions.length}&message=${encodeURIComponent(`${billableHomeowners.length} bills generated. ${exemptions.length} exempt homeowner(s) skipped.`)}`);

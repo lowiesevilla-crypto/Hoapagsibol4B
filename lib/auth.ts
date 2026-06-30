@@ -29,10 +29,14 @@ function canUseRole(actualRole: Role, requiredRole: Role) {
 }
 
 export async function createSession(payload: SessionPayload) {
+  const configuredMaxAge = Number(process.env.SESSION_MAX_AGE_SECONDS);
+  const maxAge = Number.isInteger(configuredMaxAge) && configuredMaxAge >= 900 && configuredMaxAge <= 60 * 60 * 24 * 30
+    ? configuredMaxAge
+    : 60 * 60 * 8;
   const token = await new SignJWT(payload)
     .setProtectedHeader({ alg: "HS256" })
     .setIssuedAt()
-    .setExpirationTime("7d")
+    .setExpirationTime(`${maxAge}s`)
     .sign(secret);
   const store = await cookies();
   store.set(COOKIE_NAME, token, {
@@ -40,7 +44,7 @@ export async function createSession(payload: SessionPayload) {
     sameSite: "lax",
     secure: process.env.NODE_ENV === "production",
     path: "/",
-    maxAge: 60 * 60 * 24 * 7,
+    maxAge,
   });
 }
 

@@ -1,6 +1,6 @@
 module.exports = {
   apps: [{
-    name: "pagsibol-hoa",
+    name: "hoahub",
     cwd: __dirname,
     script: "node_modules/next/dist/bin/next",
     args: `start -p ${process.env.PORT || 3000}`,

@@ -1,5 +1,6 @@
 import { readFile, stat } from "node:fs/promises";
 import path from "node:path";
+import { locateUpload, uploadDirectory } from "@/lib/storage";
 
 export const runtime = "nodejs";
 
@@ -9,17 +10,19 @@ export async function GET(_request: Request, { params }: { params: Promise<{ pat
     return new Response("Invalid image path.", { status: 400 });
   }
 
-  const baseDir = path.resolve(process.cwd(), "public", "uploads", "content");
+  const baseDir = uploadDirectory("content");
   const filePath = path.resolve(baseDir, ...segments);
   if (!filePath.startsWith(baseDir + path.sep)) return new Response("Invalid image path.", { status: 400 });
 
   try {
-    const info = await stat(filePath);
+    const storedPath = await locateUpload("content", ...segments);
+    const info = await stat(storedPath);
     if (!info.isFile()) return new Response("Image not found.", { status: 404 });
-    const bytes = await readFile(filePath);
+    const bytes = await readFile(storedPath);
     return new Response(bytes, {
       headers: {
-        "Content-Type": contentTypeFor(filePath),
+        "Content-Type": contentTypeFor(storedPath),
+        "X-Content-Type-Options": "nosniff",
         "Content-Length": String(info.size),
         "Cache-Control": "public, max-age=86400",
       },

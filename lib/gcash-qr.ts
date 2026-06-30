@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { mkdir, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
+import { uploadDirectory } from "@/lib/storage";
 
 const allowedTypes = new Map([
   ["image/jpeg", ".jpg"],
@@ -23,7 +24,7 @@ export async function resolveGcashQrImage(formData: FormData, currentUrl?: strin
   if (!extension) throw new Error("GCash QR image must be a JPG, JPEG, PNG, or WEBP file.");
   if (file.size > maxGcashQrBytes) throw new Error("GCash QR image must not exceed 5MB.");
 
-  const storageDirectory = path.join(process.cwd(), "storage", "uploads", "settings", "gcash");
+  const storageDirectory = uploadDirectory("settings", "gcash");
   const storedName = `${randomUUID()}${extension}`;
   try {
     await mkdir(storageDirectory, { recursive: true });
@@ -39,7 +40,7 @@ export async function removeStoredGcashQrImage(url?: string | null) {
   if (!url?.startsWith(prefix)) return;
   const fileName = url.slice(prefix.length);
   if (!fileName || fileName.includes("/") || fileName.includes("\\") || fileName.includes("..")) return;
-  await rm(path.join(process.cwd(), "storage", "uploads", "settings", "gcash", fileName), { force: true });
+  await rm(path.join(uploadDirectory("settings", "gcash"), fileName), { force: true });
 }
 
 function isUploadedFile(value: FormDataEntryValue | null): value is File {

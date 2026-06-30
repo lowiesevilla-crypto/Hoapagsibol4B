@@ -4,6 +4,7 @@ import { NotificationType, Prisma, Role } from "@prisma/client";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { requireUser } from "@/lib/auth";
+import { getAppUrl } from "@/lib/app-url";
 import { prisma } from "@/lib/db";
 import { paymentAmountUpdateSchema, paymentSchema, paymentVoidSchema } from "@/lib/validation";
 import { updatePaymentAmountLedger, voidPaymentLedger } from "@/lib/services/payment-ledger";
@@ -37,7 +38,7 @@ export async function recordPaymentAction(formData: FormData) {
     redirect(`/admin/payments?error=${encodeURIComponent(error instanceof Error ? error.message : "Payment could not be recorded.")}`);
   }
 
-  if (confirmation) await sendEmailNotification({ recipientId: confirmation.recipientId, email: confirmation.email, subject: "HOA payment recorded", heading: "Payment confirmation", message: `Hello ${confirmation.name},\nYour HOA payment of PHP ${confirmation.amount.toFixed(2)} has been recorded successfully.\nPayment for: ${confirmation.coverageDisplay}\nReference: ${confirmation.referenceNumber || "Not required for cash payment"}`, type: NotificationType.PAYMENT_CONFIRMATION, actionLabel: "View payment history", actionUrl: `${process.env.APP_URL?.replace(/\/$/, "") || "https://pagsibol-hoa.tail2abf68.ts.net"}/portal/payments` }).catch(() => undefined);
+  if (confirmation) await sendEmailNotification({ recipientId: confirmation.recipientId, email: confirmation.email, subject: "HOA payment recorded", heading: "Payment confirmation", message: `Hello ${confirmation.name},\nYour HOA payment of PHP ${confirmation.amount.toFixed(2)} has been recorded successfully.\nPayment for: ${confirmation.coverageDisplay}\nReference: ${confirmation.referenceNumber || "Not required for cash payment"}`, type: NotificationType.PAYMENT_CONFIRMATION, actionLabel: "View payment history", actionUrl: `${getAppUrl()}/portal/payments` }).catch(() => undefined);
 
   revalidatePath("/admin/payments");
   revalidatePath("/admin/billing");

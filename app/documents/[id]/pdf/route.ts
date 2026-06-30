@@ -1,5 +1,6 @@
 import { readFile } from "node:fs/promises";
 import path from "node:path";
+import { uploadDirectory } from "@/lib/storage";
 import { DocumentRequestStatus } from "@prisma/client";
 import { PDFDocument, StandardFonts, rgb, type PDFFont, type PDFPage } from "pdf-lib";
 import QRCode from "qrcode";
@@ -273,7 +274,7 @@ async function loadLogo(pdf: PDFDocument, logoUrl: string) {
   try {
     const organizationPrefix = "/uploads/organization-file/";
     const fullPath = logoUrl.startsWith(organizationPrefix)
-      ? path.join(process.cwd(), "storage", "uploads", "organization", logoUrl.slice(organizationPrefix.length))
+      ? path.join(uploadDirectory("organization"), logoUrl.slice(organizationPrefix.length))
       : path.join(process.cwd(), "public", logoUrl.replace(/^\/+/, ""));
     const bytes = await readFile(fullPath);
     return /\.jpe?g$/i.test(logoUrl) ? await pdf.embedJpg(bytes) : await pdf.embedPng(bytes);

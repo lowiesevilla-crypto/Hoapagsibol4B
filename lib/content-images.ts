@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
+import { uploadDirectory } from "@/lib/storage";
 
 const allowedContentImageTypes = new Map([
   ["image/jpeg", ".jpg"],
@@ -18,7 +19,7 @@ export async function resolveContentImage(formData: FormData, existingImageUrl?:
   if (image.size > maxContentImageBytes) throw new Error("Image must not exceed 5MB.");
   const now = new Date();
   const folder = `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, "0")}`;
-  const uploadDir = path.join(process.cwd(), "public", "uploads", "content", folder);
+  const uploadDir = uploadDirectory("content", folder);
   try {
     await mkdir(uploadDir, { recursive: true });
     const storedName = `${randomUUID()}${ext}`;

@@ -1,12 +1,17 @@
 {
-  "name": "hoa-web-portal",
+  "name": "hoahub",
   "version": "2.0.0",
   "private": true,
   "packageManager": "pnpm@10.12.1",
+  "engines": {
+    "node": ">=20 <25"
+  },
   "scripts": {
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
+    "hostinger:build": "prisma generate && prisma migrate deploy && next build",
+    "smoke:production": "node scripts/production-smoke.mjs",
     "lint": "next lint",
     "typecheck": "tsc --noEmit",
     "db:generate": "prisma generate",

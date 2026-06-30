@@ -1,0 +1,1 @@
+export default function Loading() { return <div className="space-y-4"><div className="h-24 animate-pulse rounded-3xl bg-slate-100" /><div className="h-64 animate-pulse rounded-3xl bg-slate-100" /><p className="text-center text-sm text-slate-500">Loading document requests...</p></div>; }

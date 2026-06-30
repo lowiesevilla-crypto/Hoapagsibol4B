@@ -1,0 +1,1325 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  SYSTEM_ADMIN
+  ADMIN
+  HOMEOWNER
+  EMPLOYEE
+}
+
+enum HomeownerStatus {
+  ACTIVE
+  INACTIVE
+}
+
+enum BillStatus {
+  PAID
+  PARTIAL
+  UNPAID
+  OVERDUE
+}
+
+enum PaymentMethod {
+  CASH
+  BANK_TRANSFER
+  GCASH
+  CHECK
+  OTHER
+}
+
+enum PaymentStatus {
+  ACTIVE
+  VOIDED
+}
+
+enum ContractorStatus {
+  ACTIVE
+  INACTIVE
+}
+
+enum CollectionType {
+  GATE_PASS
+  STICKER
+  MEMBERSHIP
+  CONSTRUCTION_BOND
+  CONTRACTOR_BOND
+  OTHER
+}
+
+enum PayerType {
+  HOMEOWNER
+  CONTRACTOR
+}
+
+enum RefundStatus {
+  NOT_APPLICABLE
+  HELD
+  PARTIALLY_REFUNDED
+  REFUNDED
+  FORFEITED
+}
+
+enum EmployeeStatus {
+  ACTIVE
+  INACTIVE
+}
+
+enum SalaryType {
+  DAILY
+  MONTHLY
+}
+
+enum AttendanceStatus {
+  PRESENT
+  HALF_DAY
+  ABSENT
+  PAID_LEAVE
+  UNPAID_LEAVE
+  HOLIDAY
+}
+
+enum PayrollStatus {
+  DRAFT
+  FINALIZED
+  PAID
+}
+
+enum PayrollAccessRole {
+  PAYROLL_MANAGER
+  PAYROLL_STAFF
+  HR_ADMIN
+  FINANCE_APPROVER
+  SYSTEM_ADMINISTRATOR
+  READ_ONLY_AUDITOR
+}
+
+enum PayrollDayType {
+  REGULAR_HOLIDAY
+  SPECIAL_NON_WORKING_HOLIDAY
+  SPECIAL_WORKING_HOLIDAY
+  HOA_DECLARED_HOLIDAY
+  WORKING_DAY
+  NON_WORKING_DAY
+}
+
+enum AttendanceAdjustmentStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum OvertimeStatus {
+  DRAFT
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum OvertimeSource {
+  APPROVED_REQUEST
+  PAYROLL_MANAGER_ADJUSTMENT
+}
+
+enum EmployeeLoanType {
+  CASH_ADVANCE
+  LOAN
+  OTHER
+}
+
+enum EmployeeLoanStatus {
+  OPEN
+  PAID
+  CANCELLED
+}
+
+enum NotificationType {
+  ANNOUNCEMENT
+  BILL_REMINDER
+  PASSWORD_RESET
+  WELCOME
+  DOCUMENT_APPROVED
+  DOCUMENT_REJECTED
+  PAYMENT_CONFIRMATION
+  BILLING_NOTIFICATION
+  TEST_EMAIL
+  EVENT
+}
+
+enum NotificationChannel {
+  EMAIL
+  MESSENGER
+}
+
+enum NotificationStatus {
+  QUEUED
+  SENT
+  FAILED
+  SKIPPED
+}
+
+enum VehicleStatus {
+  ACTIVE
+  INACTIVE
+  EXPIRED
+}
+
+enum FacebookPostStatus {
+  NOT_REQUESTED
+  QUEUED
+  SENT
+  FAILED
+  SKIPPED
+}
+
+enum SystemSettingCategory {
+  ASSOCIATION
+  DATABASE
+  EMAIL
+  FACEBOOK
+  PAYMENT
+  CHAT
+}
+
+enum PaymentRequestType {
+  MONTHLY_DUES
+  OTHER_COLLECTION
+}
+
+enum PaymentRequestStatus {
+  PENDING_REVIEW
+  APPROVED
+  REJECTED
+}
+
+enum DataMigrationKind {
+  DUES_OPENING_BALANCE
+  CONSTRUCTION_BOND_OPENING_BALANCE
+  CONTRACTOR_BOND_OPENING_BALANCE
+  DUES_PREVIOUS_COLLECTION
+  CONSTRUCTION_BOND_PREVIOUS_COLLECTION
+  CONTRACTOR_BOND_PREVIOUS_COLLECTION
+  CONSTRUCTION_BOND_REFUND
+  CONTRACTOR_BOND_REFUND
+  CONSTRUCTION_BOND_FORFEITURE
+  CONTRACTOR_BOND_FORFEITURE
+}
+
+enum DataMigrationTag {
+  MIGRATED
+  OPENING_BALANCE
+  PREVIOUS_COLLECTION
+}
+
+enum DataMigrationStatus {
+  VALIDATED
+  POSTED
+}
+
+enum DocumentType {
+  CERTIFICATE_OF_RESIDENCY
+  CERTIFICATE_OF_GOOD_STANDING
+  CLEARANCE_CERTIFICATE
+  PAYMENT_CERTIFICATION
+  CONSTRUCTION_BOND_CERTIFICATION
+  CONTRACTOR_BOND_CERTIFICATION
+  GATE_PASS
+  MOVE_IN_OUT_PASS
+}
+
+enum DocumentRequestStatus {
+  DRAFT
+  SUBMITTED
+  UNDER_REVIEW
+  APPROVED
+  REJECTED
+  GENERATED
+  DOWNLOADED
+}
+
+enum DocumentOrigin {
+  HOMEOWNER
+  ADMIN
+}
+
+model User {
+  id                             String                       @id @default(cuid())
+  name                           String
+  email                          String                       @unique
+  passwordHash                   String
+  role                           Role                         @default(HOMEOWNER)
+  homeownerProfile               HomeownerProfile?
+  employeeProfile                EmployeeProfile?             @relation("EmployeeUser")
+  announcementsCreated           Announcement[]               @relation("AnnouncementCreator")
+  eventsCreated                  Event[]                      @relation("EventCreator")
+  notificationLogs               NotificationLog[]            @relation("NotificationRecipient")
+  collectionsCreated             Collection[]                 @relation("CollectionCreator")
+  refundsProcessed               BondRefund[]                 @relation("RefundProcessor")
+  forfeituresProcessed           Collection[]                 @relation("ForfeitureProcessor")
+  payrollPeriodsCreated          PayrollPeriod[]              @relation("PayrollCreator")
+  expensesCreated                Expense[]                    @relation("ExpenseCreator")
+  duesExemptionsCreated          DuesExemption[]              @relation("DuesExemptionCreator")
+  createdAt                      DateTime                     @default(now())
+  updatedAt                      DateTime                     @updatedAt
+  systemSettingsUpdated          SystemSetting[]              @relation("SystemSettingUpdater")
+  paymentRequestsReviewed        PaymentRequest[]             @relation("PaymentRequestReviewer")
+  payrollAccesses                PayrollAccess[]              @relation("PayrollAccessUser")
+  payrollAccessGranted           PayrollAccess[]              @relation("PayrollAccessGrantedBy")
+  auditLogs                      AuditLog[]                   @relation("AuditActor")
+  calendarDaysCreated            PayrollCalendarDay[]         @relation("PayrollCalendarCreator")
+  schedulesCreated               EmployeeSchedule[]           @relation("EmployeeScheduleCreator")
+  attendanceAdjustmentsRequested AttendanceAdjustment[]       @relation("AttendanceAdjustmentRequester")
+  attendanceAdjustmentsReviewed  AttendanceAdjustment[]       @relation("AttendanceAdjustmentReviewer")
+  overtimeRecordsCreated         OvertimeRecord[]             @relation("OvertimeRecordCreator")
+  overtimeRecordsReviewed        OvertimeRecord[]             @relation("OvertimeRecordReviewer")
+  payrollArchivesDeleted         PayrollArchive[]             @relation("PayrollArchiveDeletedBy")
+  billsArchived                  Bill[]                       @relation("BillArchivedBy")
+  paymentsVoided                 Payment[]                    @relation("PaymentVoidedBy")
+  paymentsProcessed              Payment[]                    @relation("PaymentProcessor")
+  paymentArchivesVoided          PaymentArchive[]             @relation("PaymentArchiveVoidedBy")
+  dataMigrationsCreated          DataMigration[]              @relation("DataMigrationCreator")
+  documentTemplatesUpdated       DocumentTemplate[]           @relation("DocumentTemplateUpdater")
+  documentRequestsProcessed      DocumentRequest[]            @relation("DocumentRequestProcessor")
+  documentRequestsApproved       DocumentRequest[]            @relation("DocumentRequestApprover")
+  documentDownloadOverrides      DocumentRequest[]            @relation("DocumentDownloadOverride")
+  documentRequestsInitiated      DocumentRequest[]            @relation("DocumentInitiator")
+  documentRequestsArchived       DocumentRequest[]            @relation("DocumentArchiver")
+  documentVersionsGenerated      DocumentVersion[]            @relation("DocumentVersionGenerator")
+  documentRequestHistory         DocumentRequestHistory[]     @relation("DocumentRequestHistoryActor")
+  organizationOfficersUpdated    OrganizationOfficer[]        @relation("OrganizationOfficerUpdater")
+  organizationHistoryCreated     OrganizationOfficerHistory[] @relation("OrganizationOfficerHistoryActor")
+  chatConversationsHomeowner     ChatConversation[]           @relation("ChatConversationHomeowner")
+  chatConversationsCreated       ChatConversation[]           @relation("ChatConversationCreator")
+  chatConversationsAssigned      ChatConversation[]           @relation("ChatConversationAssignee")
+  chatParticipants               ChatParticipant[]
+  chatMessages                   ChatMessage[]                @relation("ChatMessageSender")
+  presence                       UserPresence?
+  passwordResetTokens            PasswordResetToken[]
+
+  @@index([role])
+}
+
+model HomeownerProfile {
+  id                String            @id @default(cuid())
+  userId            String            @unique
+  user              User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  address           String
+  block             String
+  lot               String
+  phone             String
+  birthDate         DateTime?         @db.Date
+  civilStatus       String?
+  citizenship       String?
+  occupation        String?
+  residencyDate     DateTime?         @db.Date
+  phase             String?
+  propertyType      String?
+  occupancyStatus   String?
+  messengerId       String?
+  status            HomeownerStatus   @default(ACTIVE)
+  monthlyDuesAmount Decimal           @db.Decimal(12, 2)
+  bills             Bill[]
+  payments          Payment[]
+  paymentRequests   PaymentRequest[]
+  collections       Collection[]
+  duesExemptions    DuesExemption[]
+  vehicles          Vehicle[]
+  dataMigrations    DataMigration[]
+  documentRequests  DocumentRequest[]
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
+
+  @@unique([block, lot])
+  @@index([status])
+}
+
+model ContractorProfile {
+  id             String           @id @default(cuid())
+  companyName    String           @unique
+  contactPerson  String
+  email          String?
+  phone          String
+  address        String
+  licenseNumber  String?
+  status         ContractorStatus @default(ACTIVE)
+  collections    Collection[]
+  dataMigrations DataMigration[]
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+
+  @@index([companyName])
+  @@index([status])
+}
+
+model Bill {
+  id              String           @id @default(cuid())
+  homeownerId     String
+  homeowner       HomeownerProfile @relation(fields: [homeownerId], references: [id], onDelete: Cascade)
+  billingMonth    DateTime         @db.Date
+  amount          Decimal          @db.Decimal(12, 2)
+  penalty         Decimal          @default(0) @db.Decimal(12, 2)
+  totalAmount     Decimal          @db.Decimal(12, 2)
+  amountPaid      Decimal          @default(0) @db.Decimal(12, 2)
+  balance         Decimal          @db.Decimal(12, 2)
+  dueDate         DateTime         @db.Date
+  status          BillStatus       @default(UNPAID)
+  notes           String?          @db.Text
+  payments        Payment[]
+  paymentRequests PaymentRequest[]
+  archivedAt      DateTime?
+  archivedById    String?
+  archivedBy      User?            @relation("BillArchivedBy", fields: [archivedById], references: [id], onDelete: SetNull)
+  archiveReason   String?
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+
+  @@unique([homeownerId, billingMonth])
+  @@index([status, dueDate])
+  @@index([billingMonth])
+  @@index([archivedAt, status, dueDate])
+  @@index([archivedById])
+}
+
+model DuesExemption {
+  id           String           @id @default(cuid())
+  homeownerId  String
+  homeowner    HomeownerProfile @relation(fields: [homeownerId], references: [id], onDelete: Cascade)
+  billingMonth DateTime         @db.Date
+  reason       String
+  createdById  String
+  createdBy    User             @relation("DuesExemptionCreator", fields: [createdById], references: [id], onDelete: Restrict)
+  createdAt    DateTime         @default(now())
+  updatedAt    DateTime         @updatedAt
+
+  @@unique([homeownerId, billingMonth])
+  @@index([billingMonth])
+}
+
+model Payment {
+  id                     String           @id @default(cuid())
+  billId                 String
+  bill                   Bill             @relation(fields: [billId], references: [id], onDelete: Cascade)
+  homeownerId            String
+  homeowner              HomeownerProfile @relation(fields: [homeownerId], references: [id], onDelete: Cascade)
+  amount                 Decimal          @db.Decimal(12, 2)
+  paymentDate            DateTime         @db.Date
+  method                 PaymentMethod
+  referenceNumber        String?
+  paymentBatchId         String?
+  coverageStart          DateTime?        @db.Date
+  coverageEnd            DateTime?        @db.Date
+  coverageMonths         Json?
+  coverageFromMonth      Int?
+  coverageFromYear       Int?
+  coverageToMonth        Int?
+  coverageToYear         Int?
+  paymentCoverageDisplay String?
+  remarks                String?
+  receiptNumber          String?          @unique
+  proofUrl               String?
+  proofFileName          String?
+  proofContentType       String?
+  proofFileSize          Int?
+  status                 PaymentStatus    @default(ACTIVE)
+  voidedAt               DateTime?
+  voidedById             String?
+  voidedBy               User?            @relation("PaymentVoidedBy", fields: [voidedById], references: [id], onDelete: SetNull)
+  voidReason             String?
+  processedById          String?
+  processedBy            User?            @relation("PaymentProcessor", fields: [processedById], references: [id], onDelete: SetNull)
+  paymentRequest         PaymentRequest?
+  createdAt              DateTime         @default(now())
+
+  @@index([homeownerId, paymentDate])
+  @@index([billId])
+  @@index([status, paymentDate])
+  @@index([paymentBatchId])
+  @@index([voidedById])
+  @@index([processedById])
+}
+
+model PaymentArchive {
+  id                     String        @id @default(cuid())
+  originalPaymentId      String        @unique
+  billId                 String
+  billingMonth           DateTime      @db.Date
+  homeownerId            String
+  homeownerName          String
+  homeownerAddress       String
+  property               String
+  amount                 Decimal       @db.Decimal(12, 2)
+  paymentDate            DateTime      @db.Date
+  method                 PaymentMethod
+  referenceNumber        String?
+  paymentBatchId         String?
+  coverageStart          DateTime?     @db.Date
+  coverageEnd            DateTime?     @db.Date
+  coverageMonths         Json?
+  coverageFromMonth      Int?
+  coverageFromYear       Int?
+  coverageToMonth        Int?
+  coverageToYear         Int?
+  paymentCoverageDisplay String?
+  receiptNumber          String?
+  remarks                String?
+  proofUrl               String?
+  proofFileName          String?
+  proofContentType       String?
+  proofFileSize          Int?
+  originalCreatedAt      DateTime
+  voidedById             String
+  voidedBy               User          @relation("PaymentArchiveVoidedBy", fields: [voidedById], references: [id], onDelete: Restrict)
+  voidedAt               DateTime      @default(now())
+  voidReason             String?
+
+  @@index([voidedAt])
+  @@index([homeownerId, paymentDate])
+  @@index([billId])
+  @@index([paymentBatchId])
+  @@index([voidedById])
+}
+
+model Collection {
+  id              String             @id @default(cuid())
+  type            CollectionType
+  description     String?
+  payerType       PayerType
+  homeownerId     String?
+  homeowner       HomeownerProfile?  @relation(fields: [homeownerId], references: [id], onDelete: Restrict)
+  contractorId    String?
+  contractor      ContractorProfile? @relation(fields: [contractorId], references: [id], onDelete: Restrict)
+  amount          Decimal            @db.Decimal(12, 2)
+  collectionDate  DateTime           @db.Date
+  method          PaymentMethod
+  referenceNumber String?
+  receiptNumber   String?            @unique
+  remarks         String?
+  refundable      Boolean            @default(false)
+  amountRefunded  Decimal            @default(0) @db.Decimal(12, 2)
+  amountForfeited Decimal            @default(0) @db.Decimal(12, 2)
+  refundStatus    RefundStatus       @default(NOT_APPLICABLE)
+  forfeitedAt     DateTime?          @db.Date
+  forfeitedById   String?
+  forfeitedBy     User?              @relation("ForfeitureProcessor", fields: [forfeitedById], references: [id], onDelete: Restrict)
+  createdById     String
+  createdBy       User               @relation("CollectionCreator", fields: [createdById], references: [id], onDelete: Restrict)
+  refunds         BondRefund[]
+  vehicle         Vehicle?
+  paymentRequest  PaymentRequest?
+  createdAt       DateTime           @default(now())
+  updatedAt       DateTime           @updatedAt
+
+  @@index([type, collectionDate])
+  @@index([homeownerId, collectionDate])
+  @@index([contractorId, collectionDate])
+  @@index([refundable, refundStatus])
+  @@index([forfeitedById])
+}
+
+model Vehicle {
+  id                  String           @id @default(cuid())
+  homeownerId         String
+  homeowner           HomeownerProfile @relation(fields: [homeownerId], references: [id], onDelete: Cascade)
+  plateNumber         String           @unique
+  vehicleType         String
+  make                String
+  model               String
+  color               String
+  stickerNumber       String           @unique
+  stickerCollectionId String?          @unique
+  stickerCollection   Collection?      @relation(fields: [stickerCollectionId], references: [id], onDelete: SetNull)
+  issuedAt            DateTime         @db.Date
+  expiresAt           DateTime?        @db.Date
+  status              VehicleStatus    @default(ACTIVE)
+  remarks             String?
+  createdAt           DateTime         @default(now())
+  updatedAt           DateTime         @updatedAt
+
+  @@index([homeownerId, status])
+  @@index([stickerNumber])
+}
+
+model BondRefund {
+  id              String        @id @default(cuid())
+  collectionId    String
+  collection      Collection    @relation(fields: [collectionId], references: [id], onDelete: Restrict)
+  amount          Decimal       @db.Decimal(12, 2)
+  refundDate      DateTime      @db.Date
+  method          PaymentMethod
+  referenceNumber String?
+  remarks         String?
+  processedById   String
+  processedBy     User          @relation("RefundProcessor", fields: [processedById], references: [id], onDelete: Restrict)
+  createdAt       DateTime      @default(now())
+
+  @@index([collectionId, refundDate])
+}
+
+model ReceiptCounter {
+  series     String
+  year       Int
+  lastNumber Int      @default(0)
+  updatedAt  DateTime @updatedAt
+
+  @@id([series, year])
+}
+
+model DataMigration {
+  id                   String              @id @default(cuid())
+  kind                 DataMigrationKind
+  tag                  DataMigrationTag
+  status               DataMigrationStatus @default(POSTED)
+  homeownerId          String?
+  homeowner            HomeownerProfile?   @relation(fields: [homeownerId], references: [id], onDelete: Restrict)
+  contractorId         String?
+  contractor           ContractorProfile?  @relation(fields: [contractorId], references: [id], onDelete: Restrict)
+  period               DateTime?           @db.Date
+  amount               Decimal             @db.Decimal(12, 2)
+  remarks              String              @db.Text
+  referenceNumber      String?
+  relatedReceiptNumber String?
+  postedRecordType     String?
+  postedRecordId       String?
+  dedupeKey            String              @unique
+  createdById          String
+  createdBy            User                @relation("DataMigrationCreator", fields: [createdById], references: [id], onDelete: Restrict)
+  createdAt            DateTime            @default(now())
+
+  @@index([kind, createdAt])
+  @@index([homeownerId, period])
+  @@index([contractorId, createdAt])
+}
+
+model DocumentTemplate {
+  id          String       @id @default(cuid())
+  type        DocumentType @unique
+  title       String
+  body        String       @db.Text
+  active      Boolean      @default(true)
+  version     Int          @default(1)
+  updatedById String?
+  updatedBy   User?        @relation("DocumentTemplateUpdater", fields: [updatedById], references: [id], onDelete: SetNull)
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  @@index([active])
+}
+
+model DocumentRequest {
+  id                          String                   @id @default(cuid())
+  documentNumber              String?                  @unique
+  homeownerId                 String
+  homeowner                   HomeownerProfile         @relation(fields: [homeownerId], references: [id], onDelete: Cascade)
+  origin                      DocumentOrigin           @default(HOMEOWNER)
+  initiatedById               String?
+  initiatedBy                 User?                    @relation("DocumentInitiator", fields: [initiatedById], references: [id], onDelete: SetNull)
+  type                        DocumentType
+  status                      DocumentRequestStatus    @default(SUBMITTED)
+  purpose                     String?
+  remarks                     String?
+  adminRemarks                String?
+  validityDate                DateTime?                @db.Date
+  scheduledDate               DateTime?                @db.Date
+  startTime                   String?
+  endTime                     String?
+  passType                    String?
+  vehicleDetails              String?
+  partyName                   String?
+  contractorDetails           String?
+  representativeName          String?
+  propertyDetails             String?
+  outstandingBalanceAtRequest Decimal                  @default(0) @db.Decimal(12, 2)
+  allowDownloadDespiteBalance Boolean                  @default(false)
+  downloadOverrideReason      String?
+  downloadOverrideAt          DateTime?
+  downloadOverrideById        String?
+  downloadOverrideBy          User?                    @relation("DocumentDownloadOverride", fields: [downloadOverrideById], references: [id], onDelete: SetNull)
+  requestedAt                 DateTime                 @default(now())
+  reviewedAt                  DateTime?
+  approvedAt                  DateTime?
+  generatedAt                 DateTime?
+  downloadedAt                DateTime?
+  processedById               String?
+  processedBy                 User?                    @relation("DocumentRequestProcessor", fields: [processedById], references: [id], onDelete: SetNull)
+  approvedById                String?
+  approvedBy                  User?                    @relation("DocumentRequestApprover", fields: [approvedById], references: [id], onDelete: SetNull)
+  processedByOfficerId        String?
+  processedByOfficer          OrganizationOfficer?     @relation("DocumentProcessedOfficer", fields: [processedByOfficerId], references: [id], onDelete: SetNull)
+  approvedByOfficerId         String?
+  approvedByOfficer           OrganizationOfficer?     @relation("DocumentApprovedOfficer", fields: [approvedByOfficerId], references: [id], onDelete: SetNull)
+  templateVersion             Int?
+  templateSnapshot            String?                  @db.Text
+  generatedContent            String?                  @db.Text
+  associationSnapshot         Json?
+  homeownerSnapshot           Json?
+  organizationSnapshot        Json?
+  processedOfficerSnapshot    Json?
+  approvedOfficerSnapshot     Json?
+  verificationCode            String?                  @unique
+  currentVersion              Int                      @default(0)
+  versions                    DocumentVersion[]
+  archivedAt                  DateTime?
+  archivedById                String?
+  archivedBy                  User?                    @relation("DocumentArchiver", fields: [archivedById], references: [id], onDelete: SetNull)
+  archiveReason               String?
+  histories                   DocumentRequestHistory[]
+  createdAt                   DateTime                 @default(now())
+  updatedAt                   DateTime                 @updatedAt
+
+  @@index([homeownerId, requestedAt])
+  @@index([status, requestedAt])
+  @@index([type, requestedAt])
+  @@index([processedById])
+  @@index([approvedById])
+  @@index([downloadOverrideById])
+  @@index([processedByOfficerId])
+  @@index([approvedByOfficerId])
+  @@index([origin, requestedAt])
+  @@index([archivedAt, requestedAt])
+  @@index([initiatedById])
+  @@index([archivedById])
+}
+
+model DocumentVersion {
+  id               String          @id @default(cuid())
+  requestId        String
+  request          DocumentRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  version          Int
+  documentNumber   String
+  verificationCode String
+  templateVersion  Int
+  templateSnapshot String          @db.Text
+  generatedContent String          @db.Text
+  requestSnapshot  Json
+  generatedById    String?
+  generatedBy      User?           @relation("DocumentVersionGenerator", fields: [generatedById], references: [id], onDelete: SetNull)
+  reason           String?
+  createdAt        DateTime        @default(now())
+
+  @@unique([requestId, version])
+  @@index([requestId, createdAt])
+  @@index([generatedById])
+}
+
+model OrganizationOfficer {
+  id                 String                       @id @default(cuid())
+  fullName           String
+  position           String
+  committee          String?
+  contactNumber      String?
+  email              String?
+  photoUrl           String?
+  signatureUrl       String?
+  displayOrder       Int                          @default(0)
+  active             Boolean                      @default(true)
+  effectiveDate      DateTime                     @db.Date
+  endDate            DateTime?                    @db.Date
+  archivedAt         DateTime?
+  updatedById        String?
+  updatedBy          User?                        @relation("OrganizationOfficerUpdater", fields: [updatedById], references: [id], onDelete: SetNull)
+  processedDocuments DocumentRequest[]            @relation("DocumentProcessedOfficer")
+  approvedDocuments  DocumentRequest[]            @relation("DocumentApprovedOfficer")
+  histories          OrganizationOfficerHistory[]
+  createdAt          DateTime                     @default(now())
+  updatedAt          DateTime                     @updatedAt
+
+  @@index([active, archivedAt, displayOrder])
+  @@index([effectiveDate, endDate])
+  @@index([updatedById])
+}
+
+model OrganizationOfficerHistory {
+  id        String              @id @default(cuid())
+  officerId String
+  officer   OrganizationOfficer @relation(fields: [officerId], references: [id], onDelete: Cascade)
+  action    String
+  snapshot  Json
+  actorId   String?
+  actor     User?               @relation("OrganizationOfficerHistoryActor", fields: [actorId], references: [id], onDelete: SetNull)
+  createdAt DateTime            @default(now())
+
+  @@index([officerId, createdAt])
+  @@index([actorId])
+}
+
+model DocumentRequestHistory {
+  id        String                @id @default(cuid())
+  requestId String
+  request   DocumentRequest       @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  status    DocumentRequestStatus
+  note      String?
+  actorId   String?
+  actor     User?                 @relation("DocumentRequestHistoryActor", fields: [actorId], references: [id], onDelete: SetNull)
+  createdAt DateTime              @default(now())
+
+  @@index([requestId, createdAt])
+  @@index([actorId])
+}
+
+model DocumentCounter {
+  type       DocumentType
+  year       Int
+  lastNumber Int          @default(0)
+  updatedAt  DateTime     @updatedAt
+
+  @@id([type, year])
+}
+
+model EmployeeProfile {
+  id                String             @id @default(cuid())
+  userId            String?            @unique
+  user              User?              @relation("EmployeeUser", fields: [userId], references: [id], onDelete: SetNull)
+  employeeNumber    String             @unique
+  name              String
+  position          String
+  email             String?
+  phone             String
+  address           String
+  hireDate          DateTime           @db.Date
+  salaryType        SalaryType
+  baseRate          Decimal            @db.Decimal(12, 2)
+  standardWorkDays  Int                @default(26)
+  fixedAllowance    Decimal            @default(0) @db.Decimal(12, 2)
+  fixedDeduction    Decimal            @default(0) @db.Decimal(12, 2)
+  status            EmployeeStatus     @default(ACTIVE)
+  attendance        Attendance[]
+  schedules         EmployeeSchedule[]
+  payslips          Payslip[]
+  payrollDeductions PayrollDeduction[]
+  employeeLoans     EmployeeLoan[]
+  overtimeRecords   OvertimeRecord[]
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+
+  @@index([name])
+  @@index([status])
+}
+
+model PayrollDeductionType {
+  id                String             @id @default(cuid())
+  name              String             @unique
+  description       String?
+  amount            Decimal            @db.Decimal(12, 2)
+  active            Boolean            @default(true)
+  applyToMonthly    Boolean            @default(true)
+  applyToDaily      Boolean            @default(true)
+  payrollDeductions PayrollDeduction[]
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+
+  @@index([active])
+}
+
+model EmployeeLoan {
+  id                String             @id @default(cuid())
+  employeeId        String
+  employee          EmployeeProfile    @relation(fields: [employeeId], references: [id], onDelete: Restrict)
+  type              EmployeeLoanType
+  description       String
+  principalAmount   Decimal            @db.Decimal(12, 2)
+  amountPaid        Decimal            @default(0) @db.Decimal(12, 2)
+  balance           Decimal            @db.Decimal(12, 2)
+  issuedDate        DateTime           @db.Date
+  referenceNumber   String?
+  remarks           String?
+  status            EmployeeLoanStatus @default(OPEN)
+  payrollDeductions PayrollDeduction[]
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+
+  @@index([employeeId, status])
+  @@index([issuedDate])
+}
+
+model Attendance {
+  id                     String                 @id @default(cuid())
+  employeeId             String
+  employee               EmployeeProfile        @relation(fields: [employeeId], references: [id], onDelete: Restrict)
+  date                   DateTime               @db.Date
+  timeIn                 String?
+  timeOut                String?
+  totalHours             Decimal                @default(0) @db.Decimal(6, 2)
+  lateMinutes            Int                    @default(0)
+  undertimeMinutes       Int                    @default(0)
+  status                 AttendanceStatus
+  overtimeHours          Decimal                @default(0) @db.Decimal(6, 2)
+  nightDifferentialHours Decimal                @default(0) @db.Decimal(6, 2)
+  isRestDay              Boolean                @default(false)
+  holidayType            PayrollDayType?
+  remarks                String?
+  adjustments            AttendanceAdjustment[]
+  overtimeRecords        OvertimeRecord[]
+  createdAt              DateTime               @default(now())
+  updatedAt              DateTime               @updatedAt
+
+  @@unique([employeeId, date])
+  @@index([date, status])
+}
+
+model PayrollAccess {
+  id          String            @id @default(cuid())
+  userId      String
+  user        User              @relation("PayrollAccessUser", fields: [userId], references: [id], onDelete: Cascade)
+  role        PayrollAccessRole
+  active      Boolean           @default(true)
+  grantedById String?
+  grantedBy   User?             @relation("PayrollAccessGrantedBy", fields: [grantedById], references: [id], onDelete: SetNull)
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+
+  @@unique([userId, role])
+  @@index([role, active])
+  @@index([grantedById])
+}
+
+model AuditLog {
+  id         String   @id @default(cuid())
+  actorId    String?
+  actor      User?    @relation("AuditActor", fields: [actorId], references: [id], onDelete: SetNull)
+  module     String
+  action     String
+  entityType String?
+  entityId   String?
+  metadata   Json?
+  createdAt  DateTime @default(now())
+
+  @@index([module, createdAt])
+  @@index([actorId, createdAt])
+  @@index([entityType, entityId])
+}
+
+model PayrollCalendarDay {
+  id          String         @id @default(cuid())
+  date        DateTime       @unique @db.Date
+  type        PayrollDayType
+  description String
+  payRule     String
+  active      Boolean        @default(true)
+  createdById String?
+  createdBy   User?          @relation("PayrollCalendarCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+
+  @@index([type, active])
+  @@index([createdById])
+}
+
+model EmployeeSchedule {
+  id            String          @id @default(cuid())
+  employeeId    String
+  employee      EmployeeProfile @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  dayOfWeek     Int
+  shiftStart    String
+  shiftEnd      String
+  restDay       Boolean         @default(false)
+  effectiveFrom DateTime        @db.Date
+  effectiveTo   DateTime?       @db.Date
+  createdById   String?
+  createdBy     User?           @relation("EmployeeScheduleCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+
+  @@index([employeeId, dayOfWeek, effectiveFrom])
+  @@index([createdById])
+}
+
+model AttendanceAdjustment {
+  id            String                     @id @default(cuid())
+  attendanceId  String
+  attendance    Attendance                 @relation(fields: [attendanceId], references: [id], onDelete: Cascade)
+  originalData  Json
+  adjustedData  Json
+  reason        String
+  status        AttendanceAdjustmentStatus @default(PENDING)
+  requestedById String?
+  requestedBy   User?                      @relation("AttendanceAdjustmentRequester", fields: [requestedById], references: [id], onDelete: SetNull)
+  reviewedById  String?
+  reviewedBy    User?                      @relation("AttendanceAdjustmentReviewer", fields: [reviewedById], references: [id], onDelete: SetNull)
+  reviewedAt    DateTime?
+  createdAt     DateTime                   @default(now())
+  updatedAt     DateTime                   @updatedAt
+
+  @@index([attendanceId, status])
+  @@index([requestedById])
+  @@index([reviewedById])
+}
+
+model OvertimeRecord {
+  id            String          @id @default(cuid())
+  employeeId    String
+  employee      EmployeeProfile @relation(fields: [employeeId], references: [id], onDelete: Restrict)
+  attendanceId  String?
+  attendance    Attendance?     @relation(fields: [attendanceId], references: [id], onDelete: Cascade)
+  date          DateTime        @db.Date
+  hours         Decimal         @db.Decimal(6, 2)
+  status        OvertimeStatus  @default(PENDING)
+  source        OvertimeSource  @default(APPROVED_REQUEST)
+  reason        String
+  attachmentUrl String?
+  createdById   String
+  createdBy     User            @relation("OvertimeRecordCreator", fields: [createdById], references: [id], onDelete: Restrict)
+  reviewedById  String?
+  reviewedBy    User?           @relation("OvertimeRecordReviewer", fields: [reviewedById], references: [id], onDelete: SetNull)
+  reviewedAt    DateTime?
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+
+  @@index([employeeId, date, status])
+  @@index([attendanceId])
+  @@index([createdById])
+  @@index([reviewedById])
+}
+
+model PayrollPeriod {
+  id          String             @id @default(cuid())
+  startDate   DateTime           @db.Date
+  endDate     DateTime           @db.Date
+  payDate     DateTime           @db.Date
+  status      PayrollStatus      @default(DRAFT)
+  createdById String
+  createdBy   User               @relation("PayrollCreator", fields: [createdById], references: [id], onDelete: Restrict)
+  payslips    Payslip[]
+  deductions  PayrollDeduction[]
+  createdAt   DateTime           @default(now())
+  updatedAt   DateTime           @updatedAt
+
+  @@unique([startDate, endDate])
+  @@index([status, payDate])
+}
+
+model PayrollArchive {
+  id                String   @id @default(cuid())
+  originalPayrollId String
+  status            String
+  startDate         DateTime @db.Date
+  endDate           DateTime @db.Date
+  payDate           DateTime @db.Date
+  periodSnapshot    Json
+  employeeBreakdown Json
+  deductions        Json
+  adjustments       Json
+  overtimeRecords   Json
+  payslipData       Json
+  deletedById       String
+  deletedBy         User     @relation("PayrollArchiveDeletedBy", fields: [deletedById], references: [id], onDelete: Restrict)
+  deletedAt         DateTime @default(now())
+  deletionReason    String?
+
+  @@index([deletedAt])
+  @@index([startDate, endDate])
+  @@index([deletedById])
+}
+
+model PayrollDeduction {
+  id              String               @id @default(cuid())
+  payrollId       String
+  payroll         PayrollPeriod        @relation(fields: [payrollId], references: [id], onDelete: Cascade)
+  employeeId      String
+  employee        EmployeeProfile      @relation(fields: [employeeId], references: [id], onDelete: Restrict)
+  deductionTypeId String
+  deductionType   PayrollDeductionType @relation(fields: [deductionTypeId], references: [id], onDelete: Restrict)
+  employeeLoanId  String?
+  employeeLoan    EmployeeLoan?        @relation(fields: [employeeLoanId], references: [id], onDelete: Restrict)
+  amount          Decimal              @db.Decimal(12, 2)
+  remarks         String?
+  createdAt       DateTime             @default(now())
+  updatedAt       DateTime             @updatedAt
+
+  @@unique([payrollId, employeeId, deductionTypeId])
+  @@index([employeeId])
+  @@index([deductionTypeId])
+  @@index([employeeLoanId])
+}
+
+model Payslip {
+  id             String          @id @default(cuid())
+  payrollId      String
+  payroll        PayrollPeriod   @relation(fields: [payrollId], references: [id], onDelete: Restrict)
+  employeeId     String
+  employee       EmployeeProfile @relation(fields: [employeeId], references: [id], onDelete: Restrict)
+  payableDays    Decimal         @db.Decimal(6, 2)
+  absentDays     Decimal         @default(0) @db.Decimal(6, 2)
+  overtimeHours  Decimal         @default(0) @db.Decimal(6, 2)
+  basicPay       Decimal         @db.Decimal(12, 2)
+  overtimePay    Decimal         @default(0) @db.Decimal(12, 2)
+  overtimeSource String          @default("NONE")
+  allowance      Decimal         @default(0) @db.Decimal(12, 2)
+  deduction      Decimal         @default(0) @db.Decimal(12, 2)
+  grossPay       Decimal         @db.Decimal(12, 2)
+  netPay         Decimal         @db.Decimal(12, 2)
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+
+  @@unique([payrollId, employeeId])
+  @@index([employeeId, createdAt])
+}
+
+model ExpenseCategory {
+  id          String    @id @default(cuid())
+  name        String    @unique
+  description String?
+  active      Boolean   @default(true)
+  expenses    Expense[]
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+}
+
+model Expense {
+  id              String          @id @default(cuid())
+  categoryId      String
+  category        ExpenseCategory @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  description     String
+  payee           String
+  amount          Decimal         @db.Decimal(12, 2)
+  expenseDate     DateTime        @db.Date
+  method          PaymentMethod
+  referenceNumber String?
+  voucherNumber   String?
+  remarks         String?
+  createdById     String
+  createdBy       User            @relation("ExpenseCreator", fields: [createdById], references: [id], onDelete: Restrict)
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+
+  @@index([expenseDate, categoryId])
+  @@index([payee])
+}
+
+model Announcement {
+  id                  String             @id @default(cuid())
+  title               String
+  content             String
+  type                String             @default("GENERAL")
+  status              String             @default("PUBLISHED")
+  imageUrl            String?
+  createdById         String
+  createdBy           User               @relation("AnnouncementCreator", fields: [createdById], references: [id], onDelete: Restrict)
+  sendEmail           Boolean            @default(false)
+  postToFacebook      Boolean            @default(false)
+  facebookStatus      FacebookPostStatus @default(NOT_REQUESTED)
+  facebookPostId      String?
+  facebookPublishedAt DateTime?
+  facebookError       String?
+  createdAt           DateTime           @default(now())
+  updatedAt           DateTime           @updatedAt
+
+  @@index([createdAt])
+  @@index([status, createdAt])
+}
+
+model Event {
+  id                  String             @id @default(cuid())
+  title               String
+  description         String
+  type                String             @default("COMMUNITY")
+  status              String             @default("PUBLISHED")
+  eventDate           DateTime           @db.Date
+  eventTime           String
+  startTime           String?
+  endTime             String?
+  location            String
+  imageUrl            String?
+  createdById         String
+  createdBy           User               @relation("EventCreator", fields: [createdById], references: [id], onDelete: Restrict)
+  postToFacebook      Boolean            @default(false)
+  facebookStatus      FacebookPostStatus @default(NOT_REQUESTED)
+  facebookPostId      String?
+  facebookPublishedAt DateTime?
+  facebookError       String?
+  createdAt           DateTime           @default(now())
+  updatedAt           DateTime           @updatedAt
+
+  @@index([eventDate])
+  @@index([status, eventDate])
+}
+
+model NotificationLog {
+  id                String              @id @default(cuid())
+  recipientId       String
+  recipient         User                @relation("NotificationRecipient", fields: [recipientId], references: [id], onDelete: Cascade)
+  type              NotificationType
+  channel           NotificationChannel
+  subject           String
+  message           String              @db.Text
+  status            NotificationStatus  @default(QUEUED)
+  sentAt            DateTime?
+  providerMessageId String?
+  errorMessage      String?
+  createdAt         DateTime            @default(now())
+
+  @@index([recipientId, createdAt])
+  @@index([status])
+}
+
+model PasswordResetToken {
+  id              String    @id @default(cuid())
+  userId          String
+  user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash       String    @unique
+  requestedIpHash String?
+  expiresAt       DateTime
+  usedAt          DateTime?
+  createdAt       DateTime  @default(now())
+
+  @@index([userId, createdAt])
+  @@index([expiresAt, usedAt])
+}
+
+model PasswordResetAttempt {
+  id        String   @id @default(cuid())
+  emailHash String
+  ipHash    String
+  createdAt DateTime @default(now())
+
+  @@index([emailHash, createdAt])
+  @@index([ipHash, createdAt])
+}
+
+model SystemSetting {
+  id          String                @id @default(cuid())
+  category    SystemSettingCategory
+  key         String
+  label       String
+  value       String?               @db.Text
+  isSecret    Boolean               @default(false)
+  updatedById String?
+  updatedBy   User?                 @relation("SystemSettingUpdater", fields: [updatedById], references: [id], onDelete: SetNull)
+  createdAt   DateTime              @default(now())
+  updatedAt   DateTime              @updatedAt
+
+  @@unique([category, key])
+  @@index([category])
+  @@index([updatedById])
+}
+
+model PaymentRequest {
+  id               String               @id @default(cuid())
+  type             PaymentRequestType
+  status           PaymentRequestStatus @default(PENDING_REVIEW)
+  homeownerId      String
+  homeowner        HomeownerProfile     @relation(fields: [homeownerId], references: [id], onDelete: Cascade)
+  billId           String?
+  bill             Bill?                @relation(fields: [billId], references: [id], onDelete: Restrict)
+  collectionType   CollectionType?
+  description      String?
+  amount           Decimal              @db.Decimal(12, 2)
+  paymentDate      DateTime             @db.Date
+  method           PaymentMethod        @default(GCASH)
+  referenceNumber  String?
+  proofImageUrl    String?
+  proofFileName    String?
+  proofContentType String?
+  proofFileSize    Int?
+  payerNotes       String?
+  reviewRemarks    String?
+  reviewedById     String?
+  reviewedBy       User?                @relation("PaymentRequestReviewer", fields: [reviewedById], references: [id], onDelete: SetNull)
+  reviewedAt       DateTime?
+  paymentId        String?              @unique
+  payment          Payment?             @relation(fields: [paymentId], references: [id], onDelete: SetNull)
+  collectionId     String?              @unique
+  collection       Collection?          @relation(fields: [collectionId], references: [id], onDelete: SetNull)
+  createdAt        DateTime             @default(now())
+  updatedAt        DateTime             @updatedAt
+
+  @@index([homeownerId, createdAt])
+  @@index([status, createdAt])
+  @@index([billId])
+  @@index([reviewedById])
+}
+
+model ChatConversation {
+  id            String            @id @default(cuid())
+  subject       String?
+  homeownerId   String?
+  homeowner     User?             @relation("ChatConversationHomeowner", fields: [homeownerId], references: [id], onDelete: SetNull)
+  assignedToId  String?
+  assignedTo    User?             @relation("ChatConversationAssignee", fields: [assignedToId], references: [id], onDelete: SetNull)
+  createdById   String
+  createdBy     User              @relation("ChatConversationCreator", fields: [createdById], references: [id], onDelete: Restrict)
+  lastMessageAt DateTime?
+  participants  ChatParticipant[]
+  messages      ChatMessage[]
+  createdAt     DateTime          @default(now())
+  updatedAt     DateTime          @updatedAt
+
+  @@index([homeownerId, lastMessageAt])
+  @@index([assignedToId, lastMessageAt])
+  @@index([createdById])
+}
+
+model ChatParticipant {
+  id             String           @id @default(cuid())
+  conversationId String
+  conversation   ChatConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  userId         String
+  user           User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  lastReadAt     DateTime?
+  deletedAt      DateTime?
+  pinnedAt       DateTime?
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+
+  @@unique([conversationId, userId])
+  @@index([userId, deletedAt])
+  @@index([pinnedAt])
+}
+
+model ChatMessage {
+  id                    String           @id @default(cuid())
+  conversationId        String
+  conversation          ChatConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  senderId              String
+  sender                User             @relation("ChatMessageSender", fields: [senderId], references: [id], onDelete: Restrict)
+  body                  String?
+  attachmentUrl         String?
+  attachmentName        String?
+  attachmentContentType String?
+  replyToId             String?
+  replyTo               ChatMessage?     @relation("ChatMessageReplies", fields: [replyToId], references: [id], onDelete: SetNull)
+  replies               ChatMessage[]    @relation("ChatMessageReplies")
+  attachments           ChatAttachment[]
+  deletedForEveryoneAt  DateTime?
+  createdAt             DateTime         @default(now())
+
+  @@index([conversationId, createdAt])
+  @@index([senderId, createdAt])
+  @@index([replyToId])
+}
+
+model ChatAttachment {
+  id          String      @id @default(cuid())
+  messageId   String
+  message     ChatMessage @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  url         String
+  fileName    String
+  contentType String
+  size        Int
+  createdAt   DateTime    @default(now())
+
+  @@index([messageId])
+  @@index([contentType])
+}
+
+model UserPresence {
+  userId     String   @id
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  lastSeenAt DateTime @default(now())
+  context    String?
+}
+
+model RateLimitEvent {
+  id        String   @id @default(cuid())
+  action    String
+  keyHash   String
+  createdAt DateTime @default(now())
+
+  @@index([action, keyHash, createdAt])
+  @@index([createdAt])
+}

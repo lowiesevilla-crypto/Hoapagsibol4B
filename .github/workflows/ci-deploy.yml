@@ -1,0 +1,62 @@
+name: HOAHub MySQL CI
+
+on:
+  pull_request:
+    branches: [main, develop]
+  push:
+    branches: [main, develop]
+
+concurrency:
+  group: hoa-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    services:
+      mysql:
+        image: mysql:8.4
+        env:
+          MYSQL_DATABASE: hoa_portal
+          MYSQL_USER: hoa_app
+          MYSQL_PASSWORD: hoa_ci_password
+          MYSQL_ROOT_PASSWORD: hoa_ci_root_password
+        ports: ["3306:3306"]
+        options: >-
+          --health-cmd="mysqladmin ping -h localhost -uroot -phoa_ci_root_password"
+          --health-interval=5s --health-timeout=5s --health-retries=20
+    env:
+      DATABASE_URL: mysql://hoa_app:hoa_ci_password@127.0.0.1:3306/hoa_portal
+      AUTH_SECRET: ci-only-auth-secret-with-at-least-32-characters
+      APP_URL: http://127.0.0.1:3000
+      BASE_URL: http://127.0.0.1:3000
+      API_URL: http://127.0.0.1:3000/api
+      ALLOWED_ORIGINS: http://127.0.0.1:3000
+      CRON_SECRET: ci-only-cron-secret-with-at-least-32-characters
+      STORAGE_ROOT: /tmp/hoahub-storage
+      SEED_SYSTEM_ADMIN_EMAIL: ci-system@example.invalid
+      SEED_SYSTEM_ADMIN_PASSWORD: CI-Temporary-Password-2026!
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.12.1
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm exec prisma validate
+      - run: pnpm exec prisma generate
+      - run: pnpm exec prisma migrate deploy
+      - run: pnpm db:seed
+      - run: pnpm typecheck
+      - run: pnpm build
+      - name: Application smoke check
+        run: |
+          pnpm start > /tmp/hoa-next.log 2>&1 &
+          for attempt in {1..30}; do
+            curl --fail --silent http://127.0.0.1:3000/api/health && break
+            sleep 2
+          done
+          pnpm smoke:production -- http://127.0.0.1:3000

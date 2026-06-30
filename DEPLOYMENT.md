@@ -223,6 +223,7 @@ Then test authenticated Admin, Homeowner, System Administrator, and Employee wor
 ## Troubleshooting
 
 - Build cannot connect to MySQL: verify Hostinger DB hostname, user grants, encoded password, and whether the Node service may access that database.
+- MySQL returns `P1000` after database creation: set the database user's password from hPanel, update the encoded password in `DATABASE_URL`, and trigger a new GitHub deployment.
 - Prisma migration fails: stop deployment, keep the previous release active, inspect the migration SQL, and restore the pre-deployment backup if data changed.
 - Prisma engine returns `EACCES`: keep the build command set to `pnpm hostinger:build`; it restores Hostinger build permissions before running Prisma.
 - 403 after deployment: redeploy the Node.js app so Hostinger regenerates routing; do not manually overwrite `.htaccess`.

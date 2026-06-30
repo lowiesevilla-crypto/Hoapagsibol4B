@@ -10,7 +10,7 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "hostinger:build": "prisma generate && prisma migrate deploy && next build",
+    "hostinger:build": "node scripts/prepare-prisma-engines.mjs && prisma generate && prisma migrate deploy && next build",
     "smoke:production": "node scripts/production-smoke.mjs",
     "lint": "next lint",
     "typecheck": "tsc --noEmit",

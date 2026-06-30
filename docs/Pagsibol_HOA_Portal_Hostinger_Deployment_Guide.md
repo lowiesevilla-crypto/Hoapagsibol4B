@@ -2,7 +2,7 @@
 
 > The current managed GitHub deployment procedure for `https://hoahub.tech` is maintained in the repository root at `DEPLOYMENT.md`. This document remains the detailed VPS/SSH alternative.
 
-This guide deploys the HOA Digital Hub from local development through GitHub to Hostinger or a similar provider. It targets a Hostinger VPS or hosting plan that supports Node.js 20, persistent Node processes, SSH, MySQL 8, and custom environment variables. Basic static/PHP-only shared hosting cannot run this Next.js server application.
+This guide deploys the HOA Digital Hub from local development through GitHub to Hostinger or a similar provider. It targets a Hostinger VPS or hosting plan that supports Node.js 22, persistent Node processes, SSH, MySQL 8, and custom environment variables. Basic static/PHP-only shared hosting cannot run this Next.js server application.
 
 ## 1. Accounts and tools
 
@@ -11,7 +11,7 @@ Prepare:
 - Hostinger account and a VPS/Node-capable plan
 - domain or temporary Hostinger hostname
 - GitHub repository administrator access
-- local Git, Node.js 20, pnpm 10, Docker Desktop, and Codex
+- local Git, Node.js 22, pnpm 11, Docker Desktop, and Codex
 - SSH key pair dedicated to deployment
 
 Never paste production passwords or private keys into source files, issues, screenshots, or chat. Store them in Hostinger and GitHub secrets.
@@ -62,7 +62,7 @@ Connect over SSH:
 ssh HOSTINGER_USER@HOSTINGER_HOST
 ```
 
-Install or enable Node.js 20, corepack/pnpm, PM2, rsync, MySQL client tools, Git, and Nginx if the plan does not manage the reverse proxy:
+Install or enable Node.js 22, corepack/pnpm, PM2, rsync, MySQL client tools, Git, and Nginx if the plan does not manage the reverse proxy:
 
 ```bash
 node --version

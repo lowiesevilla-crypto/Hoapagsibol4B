@@ -4,7 +4,7 @@ Production-oriented HOA Digital Hub built with Next.js 15, TypeScript, Tailwind 
 
 ## Requirements
 
-- Node.js 20 or newer
+- Node.js 22.13 or newer
 - pnpm 10.12.1
 - MySQL 8.0 or newer
 - Docker Desktop for the included local MySQL service

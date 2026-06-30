@@ -6,7 +6,7 @@
 - [ ] `hoahub.tech` is added to the correct Hostinger website.
 - [ ] GitHub repository `lowiesevilla-crypto/Hoapagsibol4B` is connected to Hostinger.
 - [ ] Deployment branch is `main` and contains the reviewed HOAHub application.
-- [ ] Node.js 20.x and pnpm are selected.
+- [ ] Node.js 22.x and pnpm 11 are selected.
 - [ ] Install command is `pnpm install --frozen-lockfile`.
 - [ ] Build command is `pnpm hostinger:build`.
 - [ ] Start command is `pnpm start`.

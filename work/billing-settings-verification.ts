@@ -25,7 +25,7 @@ function assert(condition: unknown, message: string): asserts condition {
 
 async function main() {
   const actor = await prisma.user.findFirstOrThrow({ where: { role: { in: ["SYSTEM_ADMIN", "ADMIN"] } }, orderBy: { role: "asc" } });
-  const homeowner = await prisma.homeownerProfile.findFirstOrThrow({ where: { user: { email: { contains: "@gmail.com" } } }, include: { user: true } });
+  const homeowner = await prisma.homeownerProfile.findFirstOrThrow({ include: { user: true }, orderBy: { createdAt: "asc" } });
   const previousQrSetting = await prisma.systemSetting.findUnique({ where: { category_key: { category: "PAYMENT", key: "GCASH_QR_IMAGE_URL" } } });
 
   try {

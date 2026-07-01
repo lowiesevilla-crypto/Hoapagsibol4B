@@ -24,7 +24,9 @@ export async function middleware(request: NextRequest) {
   const appUrl = new URL(getAppUrl());
   const forwardedProto = request.headers.get("x-forwarded-proto")?.split(",")[0]?.trim();
   const forwardedHost = request.headers.get("x-forwarded-host")?.split(",")[0]?.trim() || request.headers.get("host");
-  if (process.env.NODE_ENV === "production" && appUrl.protocol === "https:" && (forwardedProto !== "https" || forwardedHost !== appUrl.host)) {
+  const localHost = forwardedHost === "localhost:3000" || forwardedHost === "127.0.0.1:3000" || forwardedHost === "[::1]:3000";
+  const allowLocalOrigin = process.env.ALLOW_LOCAL_ORIGINS === "true" && localHost;
+  if (process.env.NODE_ENV === "production" && appUrl.protocol === "https:" && !allowLocalOrigin && (forwardedProto !== "https" || forwardedHost !== appUrl.host)) {
     return NextResponse.redirect(new URL(`${request.nextUrl.pathname}${request.nextUrl.search}`, appUrl));
   }
 

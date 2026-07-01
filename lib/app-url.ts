@@ -21,5 +21,6 @@ export function getApiUrl() {
 
 export function allowedOrigins() {
   const configured = (process.env.ALLOWED_ORIGINS || "").split(",").map((value) => value.trim()).filter(Boolean);
-  return new Set([getAppUrl(), OFFICIAL_APP_URL, ...configured, ...(process.env.NODE_ENV === "production" ? [] : ["http://localhost:3000", "http://127.0.0.1:3000"])]);
+  const allowLocalOrigins = process.env.NODE_ENV !== "production" || process.env.ALLOW_LOCAL_ORIGINS === "true";
+  return new Set([getAppUrl(), OFFICIAL_APP_URL, ...configured, ...(allowLocalOrigins ? ["http://localhost:3000", "http://127.0.0.1:3000"] : [])]);
 }

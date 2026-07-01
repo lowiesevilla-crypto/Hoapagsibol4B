@@ -24,8 +24,8 @@ async function get(path, token) {
 }
 
 try {
-  const systemAdmin = await prisma.user.findUniqueOrThrow({ where: { email: "system@pagsibol.test" } });
-  const admin = await prisma.user.findUniqueOrThrow({ where: { email: "admin@greenmeadows.test" } });
+  const systemAdmin = await prisma.user.findFirstOrThrow({ where: { role: "SYSTEM_ADMIN" }, orderBy: { createdAt: "asc" } });
+  const admin = await prisma.user.findFirstOrThrow({ where: { role: "ADMIN" }, orderBy: { createdAt: "asc" } });
   const homeowner = await prisma.user.findFirstOrThrow({ where: { role: "HOMEOWNER", homeownerProfile: { isNot: null } }, include: { homeownerProfile: true }, orderBy: { createdAt: "asc" } });
   check(systemAdmin.role === Role.SYSTEM_ADMIN, "system admin seed has SYSTEM_ADMIN role");
 

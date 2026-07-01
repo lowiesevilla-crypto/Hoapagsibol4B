@@ -24,6 +24,10 @@ export async function POST(request: Request) {
     return NextResponse.json({ ok: true });
   } catch (error) {
     console.error("Production schema synchronization failed.", error);
-    return NextResponse.json({ error: "Schema synchronization failed." }, { status: 500 });
+    const commandError = error as Error & { stderr?: string; stdout?: string };
+    return NextResponse.json({
+      error: "Schema synchronization failed.",
+      detail: commandError.stderr?.slice(-2_000) || commandError.stdout?.slice(-2_000) || commandError.message,
+    }, { status: 500 });
   }
 }

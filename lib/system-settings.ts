@@ -1,6 +1,6 @@
 import "server-only";
 
-import { SystemSettingCategory } from "@prisma/client";
+import { SystemSettingCategory, type SystemSetting } from "@prisma/client";
 import { prisma } from "@/lib/db";
 
 export type SettingField = {
@@ -98,8 +98,13 @@ export function settingField(category: SystemSettingCategory, key: string) {
 }
 
 export async function getSystemSettingMap() {
-  const settings = await prisma.systemSetting.findMany();
-  return new Map(settings.map((setting) => [`${setting.category}.${setting.key}`, setting]));
+  try {
+    const settings = await prisma.systemSetting.findMany();
+    return new Map(settings.map((setting) => [`${setting.category}.${setting.key}`, setting]));
+  } catch (error) {
+    console.warn("System settings are unavailable; using bootstrap defaults.", error);
+    return new Map<string, SystemSetting>();
+  }
 }
 
 export async function getSystemSettingValue(category: SystemSettingCategory, key: string) {

@@ -97,3 +97,4 @@ The scheduled task `Pagsibol HOA Portal` runs `maintain-public-portal.cmd`, whic
 ## Release
 
 Current application release: `2.0.0` (MySQL and Hostinger CI/CD baseline). See [CHANGELOG.md](CHANGELOG.md) and [RELEASE_NOTES.md](RELEASE_NOTES.md).
+

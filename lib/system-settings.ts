@@ -40,14 +40,16 @@ export const settingSections: { category: SystemSettingCategory; title: string; 
   {
     category: SystemSettingCategory.EMAIL,
     title: "Email setup",
-    description: "Non-secret SMTP and sender settings. Gmail username and App Password are read only from server environment variables and are never displayed here.",
+    description: "Hostinger SMTP and sender settings. The password is encrypted before database storage and is never displayed after saving.",
     fields: [
       { category: SystemSettingCategory.EMAIL, key: "MAIL_PROVIDER", label: "Mail provider", help: "Use smtp for Hostinger Email delivery.", placeholder: "smtp" },
       { category: SystemSettingCategory.EMAIL, key: "MAIL_HOST", label: "SMTP host", help: "Hostinger Email uses smtp.hostinger.com.", placeholder: "smtp.hostinger.com" },
       { category: SystemSettingCategory.EMAIL, key: "MAIL_PORT", label: "SMTP port", help: "Hostinger supports 465 with SSL or 587 with STARTTLS.", placeholder: "465" },
       { category: SystemSettingCategory.EMAIL, key: "MAIL_ENCRYPTION", label: "Encryption", help: "Use ssl for port 465 or tls for port 587.", placeholder: "ssl" },
+      { category: SystemSettingCategory.EMAIL, key: "MAIL_USERNAME", label: "SMTP username", help: "Use the complete Hostinger mailbox address.", placeholder: "support@hoahub.tech" },
+      { category: SystemSettingCategory.EMAIL, key: "MAIL_PASSWORD", label: "SMTP password", help: "Leave blank to preserve the current password. Masked values are never saved.", secret: true },
       { category: SystemSettingCategory.EMAIL, key: "MAIL_FROM_NAME", label: "Sender name", help: "Friendly name displayed in homeowner inboxes.", placeholder: "HOAHUB" },
-      { category: SystemSettingCategory.EMAIL, key: "MAIL_FROM_ADDRESS", label: "Sender email", help: "Use noreply@hoahub.tech after creating or authorizing that Hostinger mailbox/alias.", placeholder: "noreply@hoahub.tech" },
+      { category: SystemSettingCategory.EMAIL, key: "MAIL_FROM_ADDRESS", label: "Sender email", help: "Use the same authorized Hostinger mailbox as the SMTP username.", placeholder: "support@hoahub.tech" },
       { category: SystemSettingCategory.EMAIL, key: "PASSWORD_RESET_EXPIRY_MINUTES", label: "Reset link expiry (minutes)", help: "Password reset links expire after this duration, from 30 to 60 minutes.", placeholder: "60" },
       { category: SystemSettingCategory.EMAIL, key: "PASSWORD_MIN_LENGTH", label: "Minimum password length", help: "Allowed range is 8 to 72 characters.", placeholder: "10" },
       { category: SystemSettingCategory.EMAIL, key: "PASSWORD_REQUIRE_UPPERCASE", label: "Require uppercase", help: "Enter true or false.", placeholder: "true" },

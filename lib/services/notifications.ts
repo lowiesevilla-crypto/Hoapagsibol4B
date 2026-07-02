@@ -2,6 +2,7 @@ import { NotificationChannel, NotificationStatus, NotificationType, SystemSettin
 import nodemailer from "nodemailer";
 import { getAppUrl } from "@/lib/app-url";
 import { prisma } from "@/lib/db";
+import { decryptSettingSecret, isMaskedSecret } from "@/lib/setting-secrets";
 import { getAssociationSettings, getSystemSettingMap } from "@/lib/system-settings";
 
 type EmailInput = {
@@ -27,29 +28,65 @@ export type MailConfiguration = {
   replyTo: string;
   appUrl: string;
   configured: boolean;
+  credentialSource: "environment" | "database" | "none";
 };
 
 export async function getMailConfiguration(): Promise<MailConfiguration> {
   const settings = await getSystemSettingMap();
-  const saved = (key: string) => settings.get(`${SystemSettingCategory.EMAIL}.${key}`)?.value?.trim() || "";
+  const savedRaw = (key: string) => settings.get(`${SystemSettingCategory.EMAIL}.${key}`)?.value || "";
+  const saved = (key: string) => savedRaw(key).trim();
   const environment = (...keys: string[]) => keys.map((key) => process.env[key]?.trim()).find(Boolean) || "";
   const value = (key: string, fallback = "", ...aliases: string[]) => environment(...aliases, key) || saved(key) || fallback;
-  const provider = value("MAIL_PROVIDER", "smtp").toLowerCase();
+  const rawProvider = value("MAIL_PROVIDER", "smtp").toLowerCase();
+  const provider = rawProvider === "gmail" ? "gmail" : "smtp";
   const host = value("MAIL_HOST", "smtp.hostinger.com", "SMTP_HOST");
   const port = Number(value("MAIL_PORT", "465", "SMTP_PORT")) || 465;
   const rawEncryption = value("MAIL_ENCRYPTION", "ssl", "SMTP_ENCRYPTION").toLowerCase();
-  const encryption = rawEncryption === "ssl" || rawEncryption === "none" ? rawEncryption : "tls";
-  const username = environment("SMTP_USERNAME", "MAIL_USERNAME");
-  const password = environment("SMTP_PASSWORD", "MAIL_PASSWORD");
+  const encryption = port === 465 ? "ssl" : port === 587 ? "tls" : rawEncryption === "ssl" || rawEncryption === "none" ? rawEncryption : "tls";
+  const environmentUsername = environment("SMTP_USERNAME", "MAIL_USERNAME");
+  const environmentPassword = ["SMTP_PASSWORD", "MAIL_PASSWORD"].map((key) => process.env[key]).find((entry) => entry !== undefined && entry !== "") || "";
+  const databasePassword = savedRaw("MAIL_PASSWORD");
+  const username = environmentUsername || saved("MAIL_USERNAME");
+  const password = environmentPassword || (!databasePassword || isMaskedSecret(databasePassword) ? "" : decryptSettingSecret(databasePassword));
+  const credentialSource = environmentPassword ? "environment" : password ? "database" : "none";
   const fromName = value("MAIL_FROM_NAME", "HOAHUB");
-  const fromAddress = value("MAIL_FROM_ADDRESS", "noreply@hoahub.tech");
-  const replyTo = environment("MAIL_REPLY_TO") || "admin@hoahub.tech";
+  const fromAddress = value("MAIL_FROM_ADDRESS", "support@hoahub.tech");
+  const replyTo = environment("MAIL_REPLY_TO") || fromAddress;
   const appUrl = getAppUrl();
   const requiresAuthentication = process.env.SMTP_ALLOW_UNAUTHENTICATED !== "true";
   return {
     provider, host, port, encryption, username, password, fromName, fromAddress, replyTo, appUrl,
-    configured: Boolean(host && fromAddress && (!requiresAuthentication || (username && password))),
+    configured: Boolean(provider === "smtp" && host && fromAddress && (!requiresAuthentication || (username && password))),
+    credentialSource,
   };
+}
+
+export function smtpTransportOptions(config: Pick<MailConfiguration, "host" | "port" | "encryption" | "username" | "password">) {
+  const secure = config.port === 465 || (config.port !== 587 && config.encryption === "ssl");
+  return {
+    host: config.host,
+    port: config.port,
+    secure,
+    requireTLS: !secure && (config.port === 587 || config.encryption === "tls"),
+    auth: config.username && config.password ? { user: config.username, pass: config.password } : undefined,
+    tls: { minVersion: "TLSv1.2" as const },
+  };
+}
+
+function debugMailConfiguration(operation: "send" | "verify", config: MailConfiguration) {
+  console.info("[smtp] configuration", {
+    operation,
+    provider: config.provider,
+    host: config.host,
+    port: config.port,
+    encryption: config.encryption,
+    secure: smtpTransportOptions(config).secure,
+    username: config.username,
+    senderEmail: config.fromAddress,
+    credentialSource: config.credentialSource,
+    passwordPresent: Boolean(config.password),
+    passwordLength: config.password.length,
+  });
 }
 
 export async function sendEmailNotification(input: EmailInput) {
@@ -62,17 +99,11 @@ export async function sendEmailNotification(input: EmailInput) {
   let errorMessage: string | undefined;
 
   if (!config.configured) {
-    errorMessage = "Email delivery is not configured. Add SMTP settings and environment-only credentials.";
+    errorMessage = "Email delivery is not configured. Add a valid SMTP username, password, and sender address.";
   } else {
     try {
-      const transporter = nodemailer.createTransport({
-        host: config.host,
-        port: config.port,
-        secure: config.encryption === "ssl" || config.port === 465,
-        requireTLS: config.encryption === "tls",
-        auth: config.username && config.password ? { user: config.username, pass: config.password } : undefined,
-        tls: { minVersion: "TLSv1.2" },
-      });
+      debugMailConfiguration("send", config);
+      const transporter = nodemailer.createTransport(smtpTransportOptions(config));
       const result = await transporter.sendMail({
         from: { name: config.fromName, address: config.fromAddress },
         replyTo: config.replyTo,
@@ -86,7 +117,7 @@ export async function sendEmailNotification(input: EmailInput) {
       providerMessageId = result.messageId;
     } catch (error) {
       status = NotificationStatus.FAILED;
-      errorMessage = safeError(error);
+      errorMessage = safeMailError(error);
     }
   }
 
@@ -107,16 +138,14 @@ export async function sendEmailNotification(input: EmailInput) {
 
 export async function verifyMailConnection() {
   const config = await getMailConfiguration();
-  if (!config.configured) throw new Error("SMTP is not fully configured. Check the sender settings and environment-only credentials.");
-  const transporter = nodemailer.createTransport({
-    host: config.host,
-    port: config.port,
-    secure: config.encryption === "ssl" || config.port === 465,
-    requireTLS: config.encryption === "tls",
-    auth: config.username && config.password ? { user: config.username, pass: config.password } : undefined,
-    tls: { minVersion: "TLSv1.2" },
-  });
-  await transporter.verify();
+  if (!config.configured) throw new Error("SMTP is not fully configured. Check the mailbox username, password, and sender settings.");
+  debugMailConfiguration("verify", config);
+  const transporter = nodemailer.createTransport(smtpTransportOptions(config));
+  try {
+    await transporter.verify();
+  } catch (error) {
+    throw new Error(safeMailError(error));
+  }
   return config;
 }
 
@@ -151,4 +180,11 @@ function escapeHtml(value: string) {
 }
 
 function escapeAttribute(value: string) { return escapeHtml(value).replace(/`/g, "&#96;"); }
-function safeError(error: unknown) { return (error instanceof Error ? error.message : "Email delivery failed.").replace(/[\r\n]+/g, " ").slice(0, 500); }
+export function safeMailError(error: unknown) {
+  const details = error as { code?: string; responseCode?: number; message?: string };
+  const message = error instanceof Error ? error.message : details?.message || "Email delivery failed.";
+  if (details?.code === "EAUTH" || details?.responseCode === 535 || /(?:535|invalid login|authentication failed)/i.test(message)) {
+    return "SMTP authentication failed. Confirm the full mailbox username and password, then save Mail Settings and try again.";
+  }
+  return message.replace(/[\r\n]+/g, " ").slice(0, 500);
+}

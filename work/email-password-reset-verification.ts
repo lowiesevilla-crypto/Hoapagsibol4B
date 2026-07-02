@@ -6,10 +6,12 @@ import { NotificationType, PrismaClient, SystemSettingCategory } from "@prisma/c
 import { hash } from "bcryptjs";
 
 const prisma = new PrismaClient();
-const configKeys = ["MAIL_PROVIDER", "MAIL_HOST", "MAIL_PORT", "MAIL_ENCRYPTION", "MAIL_FROM_NAME", "MAIL_FROM_ADDRESS"];
+const configKeys = ["MAIL_PROVIDER", "MAIL_HOST", "MAIL_PORT", "MAIL_ENCRYPTION", "MAIL_USERNAME", "MAIL_PASSWORD", "MAIL_FROM_NAME", "MAIL_FROM_ADDRESS"];
 const capturedMessages: string[] = [];
 
 async function main() {
+  const previousUnauthenticated = process.env.SMTP_ALLOW_UNAUTHENTICATED;
+  process.env.SMTP_ALLOW_UNAUTHENTICATED = "true";
   const moduleLoader = Module as typeof Module & { _load: (request: string, parent: unknown, isMain: boolean) => unknown };
   const originalLoad = moduleLoader._load;
   moduleLoader._load = function loadForVerification(request, parent, isMain) {
@@ -19,7 +21,7 @@ async function main() {
     if (request === "@/lib/auth") return { deleteSession: async () => undefined };
     return originalLoad.call(this, request, parent, isMain);
   };
-  const [{ sendEmailNotification, emailHtml }, { getAssociationSettings, getPasswordPolicy }, { forgotPasswordAction }] = await Promise.all([import("../lib/services/notifications"), import("../lib/system-settings"), import("../lib/actions/password-reset")]);
+  const [{ sendEmailNotification, emailHtml, getMailConfiguration, safeMailError, smtpTransportOptions }, { getAssociationSettings, getPasswordPolicy }, { forgotPasswordAction }, { decryptSettingSecret, encryptSettingSecret, isMaskedSecret, resolveSettingSecretSubmission }] = await Promise.all([import("../lib/services/notifications"), import("../lib/system-settings"), import("../lib/actions/password-reset"), import("../lib/setting-secrets")]);
   const original = await prisma.systemSetting.findMany({ where: { category: SystemSettingCategory.EMAIL, key: { in: configKeys } } });
   const user = await prisma.user.create({ data: { name: "QA SMTP Recipient", email: `qa.smtp.${Date.now()}@example.test`, passwordHash: await hash(randomBytes(24).toString("base64url"), 12), role: "HOMEOWNER" } });
   const server = createTestSmtpServer();
@@ -38,11 +40,19 @@ async function main() {
     const policy = await getPasswordPolicy();
     const renderedHtml = emailHtml({ subject: "HOA Digital Hub email test", heading: "SMTP verification", message: "This message verifies responsive branded SMTP delivery.", actionLabel: "Open test portal", actionUrl: "https://pagsibol-hoa.tail2abf68.ts.net/login" }, await getAssociationSettings(), "https://pagsibol-hoa.tail2abf68.ts.net");
     const legacySecrets = await prisma.systemSetting.count({ where: { category: SystemSettingCategory.EMAIL, key: { in: ["RESEND_API_KEY", "SMTP_USER", "SMTP_PASSWORD"] } } });
+    const encryptedPassword = encryptSettingSecret(" example password with spaces ");
+    const sslOptions = smtpTransportOptions({ host: "smtp.hostinger.com", port: 465, encryption: "ssl", username: "support@hoahub.tech", password: "secret" });
+    const tlsOptions = smtpTransportOptions({ host: "smtp.hostinger.com", port: 587, encryption: "tls", username: "support@hoahub.tech", password: "secret" });
+    const savedSecret = resolveSettingSecretSubmission("new password", null).value;
     const responses: string[] = [];
     for (let index = 0; index < 4; index += 1) { const form = new FormData(); form.set("email", user.email); responses.push((await forgotPasswordAction({}, form)).success || ""); }
     const emailHash = createHash("sha256").update(user.email).digest("hex");
     const attemptCount = await prisma.passwordResetAttempt.count({ where: { emailHash } });
     const rateAuditCount = await prisma.auditLog.count({ where: { action: "PASSWORD_RESET_RATE_LIMITED", metadata: { path: "$.emailFingerprint", equals: emailHash.slice(0, 12) } } });
+    await setConfig("MAIL_PROVIDER", "support@hoahub.tech");
+    await setConfig("MAIL_USERNAME", "support@hoahub.tech");
+    await setConfig("MAIL_PASSWORD", encryptedPassword);
+    const databaseMail = await getMailConfiguration();
     const checks = [
       [log.status === "SENT", "SMTP message status is SENT"],
       [Boolean(log.providerMessageId), "provider message id is logged"],
@@ -53,6 +63,14 @@ async function main() {
       [renderedHtml.includes('name="viewport"') && renderedHtml.includes("max-width:680px"), "email template is responsive"],
       [policy.minLength >= 10 && policy.expiryMinutes >= 30 && policy.expiryMinutes <= 60, "password policy and expiry are enforced"],
       [legacySecrets === 0, "legacy database credential fields are removed"],
+      [encryptedPassword !== " example password with spaces " && decryptSettingSecret(encryptedPassword) === " example password with spaces ", "database SMTP password is encrypted and decrypted without trimming"],
+      [isMaskedSecret("********") && isMaskedSecret("••••••••"), "masked password placeholders are rejected"],
+      [resolveSettingSecretSubmission("", savedSecret).value === savedSecret && resolveSettingSecretSubmission("********", savedSecret).value === savedSecret, "blank and masked password submissions preserve the saved secret"],
+      [sslOptions.secure === true && sslOptions.requireTLS === false, "port 465 uses SSL with secure true"],
+      [tlsOptions.secure === false && tlsOptions.requireTLS === true, "port 587 uses STARTTLS with secure false"],
+      [databaseMail.provider === "smtp", "invalid legacy provider values normalize to smtp"],
+      [databaseMail.username === "support@hoahub.tech" && databaseMail.password === " example password with spaces " && databaseMail.credentialSource === "database", "database SMTP credentials load and decrypt correctly"],
+      [safeMailError(Object.assign(new Error("535 5.7.8 Invalid login"), { code: "EAUTH", responseCode: 535 })).startsWith("SMTP authentication failed"), "SMTP authentication failures return a clear password-safe message"],
       [responses.length === 4 && new Set(responses).size === 1 && responses[0].startsWith("If that email"), "forgot-password response does not reveal account state"],
       [attemptCount === 4 && rateAuditCount === 1, "persistent per-email rate limiting is enforced and audited"],
     ] as const;
@@ -70,6 +88,8 @@ async function main() {
     if (original.length) await prisma.systemSetting.createMany({ data: original.map(({ id, category, key, label, value, isSecret, updatedById, createdAt, updatedAt }) => ({ id, category, key, label, value, isSecret, updatedById, createdAt, updatedAt })) });
     await new Promise<void>((resolve) => server.close(() => resolve()));
     moduleLoader._load = originalLoad;
+    if (previousUnauthenticated === undefined) delete process.env.SMTP_ALLOW_UNAUTHENTICATED;
+    else process.env.SMTP_ALLOW_UNAUTHENTICATED = previousUnauthenticated;
     await prisma.$disconnect();
   }
 }

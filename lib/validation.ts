@@ -22,6 +22,8 @@ export const emailSettingsSchema = z.object({
   MAIL_HOST: z.string().trim().min(3, "Enter a valid SMTP host.").max(253),
   MAIL_PORT: z.coerce.number().int().min(1).max(65535),
   MAIL_ENCRYPTION: z.enum(["tls", "ssl", "none"]),
+  MAIL_USERNAME: z.string().trim().toLowerCase().email("Enter a valid SMTP username.").or(z.literal("")),
+  MAIL_PASSWORD: z.string().max(1024).optional(),
   MAIL_FROM_NAME: z.string().trim().min(2).max(100),
   MAIL_FROM_ADDRESS: z.string().trim().toLowerCase().email("Enter a valid sender email address."),
   PASSWORD_RESET_EXPIRY_MINUTES: z.coerce.number().int().min(30).max(60),

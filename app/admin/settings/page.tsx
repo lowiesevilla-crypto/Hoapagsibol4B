@@ -25,6 +25,7 @@ export default async function SystemSettingsPage({ searchParams }: { searchParam
   const [settings, query, mail] = await Promise.all([getSystemSettingMap(), searchParams, getMailConfiguration()]);
   const environmentAliases: Record<string, string[]> = {
     MAIL_HOST: ["SMTP_HOST"], MAIL_PORT: ["SMTP_PORT"], MAIL_ENCRYPTION: ["SMTP_ENCRYPTION"],
+    MAIL_USERNAME: ["SMTP_USERNAME"], MAIL_PASSWORD: ["SMTP_PASSWORD"],
   };
   const sourceFor = (category: SystemSettingCategory, key: string) => {
     const saved = settings.get(`${category}.${key}`)?.value?.trim();
@@ -76,7 +77,7 @@ export default async function SystemSettingsPage({ searchParams }: { searchParam
 
     <section className="card mb-6 border-pine-100 bg-pine-50/40">
       <div className="grid gap-5 lg:grid-cols-[1fr_auto] lg:items-end">
-        <div><p className="text-xs font-black uppercase tracking-[.16em] text-pine-700">SMTP verification</p><h2 className="mt-1 text-lg font-black">Send test email</h2><p className="mt-1 text-sm leading-6 text-slate-600">Current provider: <b>{mail.provider}</b>. Connection status: <b>{mail.configured ? "ready for testing" : "credentials or sender settings missing"}</b>. Hostinger SMTP username and password remain environment-only.</p></div>
+        <div><p className="text-xs font-black uppercase tracking-[.16em] text-pine-700">SMTP verification</p><h2 className="mt-1 text-lg font-black">Send test email</h2><p className="mt-1 text-sm leading-6 text-slate-600">Current provider: <b>{mail.provider}</b>. Connection status: <b>{mail.configured ? "ready for testing" : "credentials or sender settings missing"}</b>. Credential source: <b>{mail.credentialSource}</b>. Passwords are never displayed or returned by the server.</p></div>
         <form action={sendTestEmailAction} className="grid min-w-0 gap-3 sm:grid-cols-[minmax(220px,1fr)_auto]"><div><label className="label" htmlFor="test-email">Test recipient</label><input id="test-email" className="field" name="email" type="email" defaultValue={mail.fromAddress} placeholder="admin@example.com" required /></div><div className="sm:self-end"><SubmitButton>Send test email</SubmitButton></div></form>
       </div>
     </section>
@@ -111,7 +112,10 @@ export default async function SystemSettingsPage({ searchParams }: { searchParam
               return <div key={field.key}>
                 {field.key === "GCASH_QR_IMAGE_URL" ? <GcashQrUpload currentUrl={saved} /> : <>
                   <label className="label" htmlFor={field.key}>{field.label}</label>
-                  {field.multiline ? <textarea id={field.key} className="field min-h-28" name={field.key} defaultValue={saved} placeholder={field.placeholder} /> : <input id={field.key} className="field" name={field.key} type={field.secret ? "password" : "text"} defaultValue={field.secret ? "" : saved} placeholder={field.secret ? maskedSecret(saved) : field.placeholder} autoComplete="off" />}
+                  {field.key === "MAIL_PROVIDER" ? <select id={field.key} className="field" name={field.key} defaultValue={saved === "gmail" ? "gmail" : "smtp"}><option value="smtp">SMTP</option><option value="gmail">Gmail SMTP</option></select>
+                    : field.key === "MAIL_ENCRYPTION" ? <select id={field.key} className="field" name={field.key} defaultValue={saved === "tls" || saved === "none" ? saved : "ssl"}><option value="ssl">SSL (port 465)</option><option value="tls">STARTTLS (port 587)</option><option value="none">None (development only)</option></select>
+                    : field.multiline ? <textarea id={field.key} className="field min-h-28" name={field.key} defaultValue={saved} placeholder={field.placeholder} />
+                    : <input id={field.key} className="field" name={field.key} type={field.secret ? "password" : field.key === "MAIL_USERNAME" || field.key === "MAIL_FROM_ADDRESS" ? "email" : "text"} defaultValue={field.secret ? "" : saved} placeholder={field.secret ? maskedSecret(saved) : field.placeholder} autoComplete={field.key === "MAIL_PASSWORD" ? "new-password" : "off"} />}
                   <div className="mt-1 flex flex-col gap-1 text-xs text-slate-500 sm:flex-row sm:items-center sm:justify-between"><span>{field.help}</span>{item?.updatedAt && <span>Updated {shortDate(item.updatedAt)}</span>}</div>
                 </>}
               </div>;

@@ -7,6 +7,7 @@ import { requireUser } from "@/lib/auth";
 import { getAppUrl } from "@/lib/app-url";
 import { prisma } from "@/lib/db";
 import { removeStoredGcashQrImage, resolveGcashQrImage } from "@/lib/gcash-qr";
+import { resolveSettingSecretSubmission } from "@/lib/setting-secrets";
 import { allSettingFields, settingField } from "@/lib/system-settings";
 import { sendEmailNotification, verifyMailConnection } from "@/lib/services/notifications";
 import { emailSettingsSchema, testEmailSchema } from "@/lib/validation";
@@ -34,22 +35,29 @@ export async function saveSystemSettingsAction(formData: FormData) {
       for (const field of fields) {
         const registered = settingField(category, field.key);
         if (!registered) continue;
-        const raw = field.key === "GCASH_QR_IMAGE_URL" && qrResolution ? qrResolution.url ?? "" : String(formData.get(field.key) || "").trim();
+        const submitted = String(formData.get(field.key) || "");
+        const raw = field.key === "GCASH_QR_IMAGE_URL" && qrResolution
+          ? qrResolution.url ?? ""
+          : field.key === "MAIL_PASSWORD"
+            ? submitted
+            : submitted.trim();
         const existing = await tx.systemSetting.findUnique({ where: { category_key: { category, key: field.key } } });
-        if (field.secret && raw === "" && existing) continue;
+        const secretSubmission = field.key === "MAIL_PASSWORD" ? resolveSettingSecretSubmission(raw, existing?.value) : null;
+        if (field.secret && (secretSubmission?.preserve || raw === "")) continue;
+        const storedValue = secretSubmission?.value ?? raw;
         await tx.systemSetting.upsert({
           where: { category_key: { category, key: field.key } },
           create: {
             category,
             key: field.key,
             label: field.label,
-            value: raw || null,
+            value: storedValue || null,
             isSecret: Boolean(field.secret),
             updatedById: systemAdmin.id,
           },
           update: {
             label: field.label,
-            value: raw || null,
+            value: storedValue || null,
             isSecret: Boolean(field.secret),
             updatedById: systemAdmin.id,
           },

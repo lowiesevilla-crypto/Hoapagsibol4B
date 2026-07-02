@@ -124,12 +124,12 @@ MONTHLY_DUES_DUE_DAY=15
 MAIL_PROVIDER=smtp
 SMTP_HOST=smtp.hostinger.com
 SMTP_PORT=465
-SMTP_USERNAME=admin@hoahub.tech
+SMTP_USERNAME=support@hoahub.tech
 SMTP_PASSWORD=HOSTINGER_EMAIL_PASSWORD
 SMTP_ENCRYPTION=ssl
-MAIL_FROM_ADDRESS=noreply@hoahub.tech
+MAIL_FROM_ADDRESS=support@hoahub.tech
 MAIL_FROM_NAME=HOAHUB
-MAIL_REPLY_TO=admin@hoahub.tech
+MAIL_REPLY_TO=support@hoahub.tech
 
 PASSWORD_RESET_EXPIRY_MINUTES=60
 PASSWORD_MIN_LENGTH=10
@@ -158,10 +158,10 @@ Generate secrets locally without sharing the output:
 
 ## SMTP and email
 
-1. In hPanel open **Emails**, create `admin@hoahub.tech`, and create/authorize `noreply@hoahub.tech` as a mailbox or sender alias.
+1. In hPanel open **Emails** and confirm the `support@hoahub.tech` mailbox can sign in to Webmail.
 2. Use `smtp.hostinger.com`, SSL port `465`; STARTTLS port `587` is the fallback.
-3. Keep `SMTP_PASSWORD` only in Hostinger environment variables.
-4. If Hostinger requires the From address to match authentication, temporarily set `MAIL_FROM_ADDRESS=admin@hoahub.tech` until `noreply@hoahub.tech` is authorized.
+3. Prefer `SMTP_PASSWORD` in Hostinger environment variables. System Admin may instead save it in Mail Settings, where it is encrypted using `SETTINGS_ENCRYPTION_KEY` or `AUTH_SECRET` and never displayed again.
+4. Keep `MAIL_FROM_ADDRESS=support@hoahub.tech` so the authenticated mailbox and sender address match.
 5. Sign in as System Administrator and use **System Settings > Send test email**.
 
 The notification service supports welcome messages, password resets, billing notices/reminders, payment/receipt confirmations, announcements/events, and document/pass approval updates. A dedicated account email-verification workflow and a separate service-request module are not currently present; they are product enhancements, not deployment settings.

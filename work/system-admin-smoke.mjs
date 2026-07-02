@@ -38,6 +38,7 @@ try {
   check(settingsPage.status === 200 && settingsHtml.includes("Configuration center"), "system admin can open configuration center");
   check(settingsHtml.includes("Association profile") && settingsHtml.includes("Association logo URL"), "association profile settings render");
   check(settingsHtml.includes("GCash and QR payments") && settingsHtml.includes("Facebook connection"), "configuration sections render");
+  check(settingsHtml.includes("SMTP username") && settingsHtml.includes("SMTP password") && settingsHtml.includes("Send test email") && settingsHtml.includes('name="MAIL_PROVIDER"'), "SMTP credentials and test-email controls render");
   check(settingsHtml.includes("GCash QR image upload") && settingsHtml.includes('name="GCASH_QR_IMAGE_FILE"') && !settingsHtml.includes("GCash QR image URL"), "GCash settings use direct image upload instead of a URL textbox");
 
   const adminSettings = await get("/admin/settings", adminToken);

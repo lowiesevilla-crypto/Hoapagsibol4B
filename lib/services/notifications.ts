@@ -25,6 +25,8 @@ export type MailConfiguration = {
   password: string;
   fromName: string;
   fromAddress: string;
+  configuredFromAddress: string;
+  senderAddressAdjusted: boolean;
   replyTo: string;
   appUrl: string;
   configured: boolean;
@@ -50,15 +52,24 @@ export async function getMailConfiguration(): Promise<MailConfiguration> {
   const password = environmentPassword || (!databasePassword || isMaskedSecret(databasePassword) ? "" : decryptSettingSecret(databasePassword));
   const credentialSource = environmentPassword ? "environment" : password ? "database" : "none";
   const fromName = value("MAIL_FROM_NAME", "HOAHUB");
-  const fromAddress = value("MAIL_FROM_ADDRESS", "support@hoahub.tech");
+  const configuredFromAddress = value("MAIL_FROM_ADDRESS", username || "support@hoahub.tech");
+  const fromAddress = resolveSenderAddress(host, username, configuredFromAddress);
+  const senderAddressAdjusted = fromAddress.toLowerCase() !== configuredFromAddress.toLowerCase();
   const replyTo = environment("MAIL_REPLY_TO") || fromAddress;
   const appUrl = getAppUrl();
   const requiresAuthentication = process.env.SMTP_ALLOW_UNAUTHENTICATED !== "true";
   return {
-    provider, host, port, encryption, username, password, fromName, fromAddress, replyTo, appUrl,
+    provider, host, port, encryption, username, password, fromName, fromAddress, configuredFromAddress, senderAddressAdjusted, replyTo, appUrl,
     configured: Boolean(provider === "smtp" && host && fromAddress && (!requiresAuthentication || (username && password))),
     credentialSource,
   };
+}
+
+export function resolveSenderAddress(host: string, username: string, configuredFromAddress: string) {
+  const isHostinger = host.trim().toLowerCase() === "smtp.hostinger.com";
+  const allowDifferentSender = process.env.SMTP_ALLOW_DIFFERENT_FROM_ADDRESS === "true";
+  if (isHostinger && username && !allowDifferentSender && username.toLowerCase() !== configuredFromAddress.toLowerCase()) return username;
+  return configuredFromAddress;
 }
 
 export function smtpTransportOptions(config: Pick<MailConfiguration, "host" | "port" | "encryption" | "username" | "password">) {
@@ -83,6 +94,8 @@ function debugMailConfiguration(operation: "send" | "verify", config: MailConfig
     secure: smtpTransportOptions(config).secure,
     username: config.username,
     senderEmail: config.fromAddress,
+    configuredSenderEmail: config.configuredFromAddress,
+    senderAddressAdjusted: config.senderAddressAdjusted,
     credentialSource: config.credentialSource,
     passwordPresent: Boolean(config.password),
     passwordLength: config.password.length,
@@ -185,6 +198,9 @@ export function safeMailError(error: unknown) {
   const message = error instanceof Error ? error.message : details?.message || "Email delivery failed.";
   if (details?.code === "EAUTH" || details?.responseCode === 535 || /(?:535|invalid login|authentication failed)/i.test(message)) {
     return "SMTP authentication failed. Confirm the full mailbox username and password, then save Mail Settings and try again.";
+  }
+  if (details?.responseCode === 553 || /sender address rejected|not owned by user/i.test(message)) {
+    return "SMTP sender address was rejected. Hostinger requires the sender email to match the authenticated mailbox unless the address is an authorized alias.";
   }
   return message.replace(/[\r\n]+/g, " ").slice(0, 500);
 }

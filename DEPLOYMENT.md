@@ -127,6 +127,7 @@ SMTP_PORT=465
 SMTP_USERNAME=support@hoahub.tech
 SMTP_PASSWORD=HOSTINGER_EMAIL_PASSWORD
 SMTP_ENCRYPTION=ssl
+SMTP_ALLOW_DIFFERENT_FROM_ADDRESS=false
 MAIL_FROM_ADDRESS=support@hoahub.tech
 MAIL_FROM_NAME=HOAHUB
 MAIL_REPLY_TO=support@hoahub.tech
@@ -162,6 +163,7 @@ Generate secrets locally without sharing the output:
 2. Use `smtp.hostinger.com`, SSL port `465`; STARTTLS port `587` is the fallback.
 3. Prefer `SMTP_PASSWORD` in Hostinger environment variables. System Admin may instead save it in Mail Settings, where it is encrypted using `SETTINGS_ENCRYPTION_KEY` or `AUTH_SECRET` and never displayed again.
 4. Keep `MAIL_FROM_ADDRESS=support@hoahub.tech` so the authenticated mailbox and sender address match.
+   The app automatically uses the authenticated username when Hostinger detects a different sender. Set `SMTP_ALLOW_DIFFERENT_FROM_ADDRESS=true` only after Hostinger has authorized the alternate sender or alias.
 5. Sign in as System Administrator and use **System Settings > Send test email**.
 
 The notification service supports welcome messages, password resets, billing notices/reminders, payment/receipt confirmations, announcements/events, and document/pass approval updates. A dedicated account email-verification workflow and a separate service-request module are not currently present; they are product enhancements, not deployment settings.

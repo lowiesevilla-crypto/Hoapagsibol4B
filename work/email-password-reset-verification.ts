@@ -21,7 +21,7 @@ async function main() {
     if (request === "@/lib/auth") return { deleteSession: async () => undefined };
     return originalLoad.call(this, request, parent, isMain);
   };
-  const [{ sendEmailNotification, emailHtml, getMailConfiguration, safeMailError, smtpTransportOptions }, { getAssociationSettings, getPasswordPolicy }, { forgotPasswordAction }, { decryptSettingSecret, encryptSettingSecret, isMaskedSecret, resolveSettingSecretSubmission }] = await Promise.all([import("../lib/services/notifications"), import("../lib/system-settings"), import("../lib/actions/password-reset"), import("../lib/setting-secrets")]);
+  const [{ sendEmailNotification, emailHtml, getMailConfiguration, resolveSenderAddress, safeMailError, smtpTransportOptions }, { getAssociationSettings, getPasswordPolicy }, { forgotPasswordAction }, { decryptSettingSecret, encryptSettingSecret, isMaskedSecret, resolveSettingSecretSubmission }] = await Promise.all([import("../lib/services/notifications"), import("../lib/system-settings"), import("../lib/actions/password-reset"), import("../lib/setting-secrets")]);
   const original = await prisma.systemSetting.findMany({ where: { category: SystemSettingCategory.EMAIL, key: { in: configKeys } } });
   const user = await prisma.user.create({ data: { name: "QA SMTP Recipient", email: `qa.smtp.${Date.now()}@example.test`, passwordHash: await hash(randomBytes(24).toString("base64url"), 12), role: "HOMEOWNER" } });
   const server = createTestSmtpServer();
@@ -71,6 +71,8 @@ async function main() {
       [databaseMail.provider === "smtp", "invalid legacy provider values normalize to smtp"],
       [databaseMail.username === "support@hoahub.tech" && databaseMail.password === " example password with spaces " && databaseMail.credentialSource === "database", "database SMTP credentials load and decrypt correctly"],
       [safeMailError(Object.assign(new Error("535 5.7.8 Invalid login"), { code: "EAUTH", responseCode: 535 })).startsWith("SMTP authentication failed"), "SMTP authentication failures return a clear password-safe message"],
+      [resolveSenderAddress("smtp.hostinger.com", "admin@hoahub.tech", "noreply@hoahub.tech") === "admin@hoahub.tech", "Hostinger sender defaults to the authenticated mailbox"],
+      [safeMailError(Object.assign(new Error("553 Sender address rejected: not owned by user"), { responseCode: 553 })).startsWith("SMTP sender address was rejected"), "Hostinger sender rejection returns a clear message"],
       [responses.length === 4 && new Set(responses).size === 1 && responses[0].startsWith("If that email"), "forgot-password response does not reveal account state"],
       [attemptCount === 4 && rateAuditCount === 1, "persistent per-email rate limiting is enforced and audited"],
     ] as const;

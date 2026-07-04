@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { mkdir, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { uploadDirectory } from "@/lib/storage";
+import { tenantUploadDirectory } from "@/lib/storage";
 
 const allowedTypes = new Map([
   ["image/jpeg", ".jpg"],
@@ -13,7 +13,7 @@ export const maxGcashQrBytes = 5 * 1024 * 1024;
 export const gcashQrFileField = "GCASH_QR_IMAGE_FILE";
 export const gcashQrRemoveField = "GCASH_QR_IMAGE_REMOVE";
 
-export async function resolveGcashQrImage(formData: FormData, currentUrl?: string | null) {
+export async function resolveGcashQrImage(formData: FormData, tenantSlug: string, currentUrl?: string | null) {
   const file = formData.get(gcashQrFileField);
   const removeCurrent = formData.get(gcashQrRemoveField) === "on";
   if (!isUploadedFile(file) || file.size === 0) {
@@ -24,7 +24,7 @@ export async function resolveGcashQrImage(formData: FormData, currentUrl?: strin
   if (!extension) throw new Error("GCash QR image must be a JPG, JPEG, PNG, or WEBP file.");
   if (file.size > maxGcashQrBytes) throw new Error("GCash QR image must not exceed 5MB.");
 
-  const storageDirectory = uploadDirectory("settings", "gcash");
+  const storageDirectory = tenantUploadDirectory(tenantSlug, "settings", "gcash");
   const storedName = `${randomUUID()}${extension}`;
   try {
     await mkdir(storageDirectory, { recursive: true });
@@ -32,15 +32,15 @@ export async function resolveGcashQrImage(formData: FormData, currentUrl?: strin
   } catch {
     throw new Error("GCash QR image could not be uploaded. Please try again.");
   }
-  return { url: `/uploads/settings/gcash/${storedName}`, obsoleteUrl: currentUrl?.trim() || null };
+  return { url: `/uploads/settings/${tenantSlug}/gcash/${storedName}`, obsoleteUrl: currentUrl?.trim() || null };
 }
 
-export async function removeStoredGcashQrImage(url?: string | null) {
-  const prefix = "/uploads/settings/gcash/";
+export async function removeStoredGcashQrImage(tenantSlug: string, url?: string | null) {
+  const prefix = `/uploads/settings/${tenantSlug}/gcash/`;
   if (!url?.startsWith(prefix)) return;
   const fileName = url.slice(prefix.length);
   if (!fileName || fileName.includes("/") || fileName.includes("\\") || fileName.includes("..")) return;
-  await rm(path.join(uploadDirectory("settings", "gcash"), fileName), { force: true });
+  await rm(path.join(tenantUploadDirectory(tenantSlug, "settings", "gcash"), fileName), { force: true });
 }
 
 function isUploadedFile(value: FormDataEntryValue | null): value is File {

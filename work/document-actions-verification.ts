@@ -1,5 +1,6 @@
 import Module from "node:module";
-import { DocumentType, PrismaClient } from "@prisma/client";
+import { DocumentType, PrismaClient, TenantModule } from "@prisma/client";
+import { setTenantContext } from "../lib/tenant-context";
 
 const prisma = new PrismaClient();
 const checks: string[] = [];
@@ -10,10 +11,12 @@ let testBillId: string | null = null;
 function check(condition: unknown, label: string) { if (!condition) throw new Error(`FAILED: ${label}`); checks.push(label); }
 
 async function main() {
-  const admin = await prisma.user.findFirstOrThrow({ where: { role: "SYSTEM_ADMIN" } });
+  const admin = await prisma.user.findFirstOrThrow({ where: { role: { in: ["SYSTEM_ADMIN", "SUPER_ADMIN"] } } });
+  setTenantContext({ tenantId: admin.tenantId, role: admin.role, platform: false, enabledModules: new Set(Object.values(TenantModule)) });
   const homeowner = await prisma.homeownerProfile.findFirstOrThrow({ where: { bills: { none: { archivedAt: null, balance: { gt: 0 } } } }, include: { user: true } });
+  const verificationStartedAt = new Date();
   const year = new Date().getUTCFullYear();
-  originalCounter = await prisma.documentCounter.findUnique({ where: { type_year: { type: DocumentType.GATE_PASS, year } }, select: { lastNumber: true } });
+  originalCounter = await prisma.documentCounter.findUnique({ where: { tenantId_type_year: { tenantId: admin.tenantId, type: DocumentType.GATE_PASS, year } }, select: { lastNumber: true } });
 
   const moduleLoader = Module as typeof Module & { _load: (request: string, parent: unknown, isMain: boolean) => unknown };
   const originalLoad = moduleLoader._load;
@@ -23,7 +26,7 @@ async function main() {
     if (request === "next/cache") return { revalidatePath() {} };
     if (request === "next/navigation") return { redirect(url: string) { throw new RedirectResult(url); } };
     if (request === "next/headers") return { cookies: async () => ({ get() { return undefined; }, set() {}, delete() {} }) };
-    if (request === "@/lib/auth") return { requireUser: async () => ({ id: admin.id, name: admin.name, email: admin.email, role: admin.role, homeownerProfile: null, employeeProfile: null }) };
+    if (request === "@/lib/auth") return { requireUser: async () => ({ id: admin.id, tenantId: admin.tenantId, name: admin.name, email: admin.email, role: admin.role, homeownerProfile: null, employeeProfile: null, tenant: { slug: "pagsibol4b" } }) };
     return originalLoad.call(this, request, parent, isMain);
   };
 
@@ -92,8 +95,15 @@ async function main() {
       await prisma.auditLog.deleteMany({ where: { entityType: "DocumentRequest", entityId: { in: createdIds } } });
     }
     if (testBillId) await prisma.bill.delete({ where: { id: testBillId } }).catch(() => {});
-    if (originalCounter) await prisma.documentCounter.update({ where: { type_year: { type: DocumentType.GATE_PASS, year } }, data: { lastNumber: originalCounter.lastNumber } }).catch(() => {});
-    else await prisma.documentCounter.delete({ where: { type_year: { type: DocumentType.GATE_PASS, year } } }).catch(() => {});
+    await prisma.notificationLog.deleteMany({
+      where: {
+        recipientId: homeowner.userId,
+        createdAt: { gte: verificationStartedAt },
+        type: { in: ["DOCUMENT_APPROVED", "DOCUMENT_REJECTED"] },
+      },
+    });
+    if (originalCounter) await prisma.documentCounter.update({ where: { tenantId_type_year: { tenantId: admin.tenantId, type: DocumentType.GATE_PASS, year } }, data: { lastNumber: originalCounter.lastNumber } }).catch(() => {});
+    else await prisma.documentCounter.delete({ where: { tenantId_type_year: { tenantId: admin.tenantId, type: DocumentType.GATE_PASS, year } } }).catch(() => {});
   }
 
   check(await prisma.documentRequest.count({ where: { id: { in: createdIds } } }) === 0, "document action verification records are fully cleaned up");

@@ -11,7 +11,8 @@ export async function getAccessibleGeneratedDocument(id: string, options?: { req
   if (!request?.generatedContent || !request.documentNumber || !request.verificationCode) notFound();
   if (user.role === Role.HOMEOWNER && request.homeownerId !== user.homeownerProfile?.id) redirect("/portal/documents");
   if (user.role === Role.HOMEOWNER && request.archivedAt) redirect("/portal/documents?error=This%20document%20has%20been%20archived%20by%20the%20HOA%20office.");
-  if (user.role !== Role.HOMEOWNER && user.role !== Role.ADMIN && user.role !== Role.SYSTEM_ADMIN) redirect("/login");
+  const adminRoles: Role[] = [Role.ADMIN, Role.SYSTEM_ADMIN, Role.HOA_ADMIN, Role.BILLING_MANAGER, Role.PAYROLL_MANAGER, Role.STAFF, Role.SUPER_ADMIN, Role.PLATFORM_ADMIN];
+  if (user.role !== Role.HOMEOWNER && !adminRoles.includes(user.role)) redirect("/login");
   const unpaid = user.role === Role.HOMEOWNER ? await prisma.bill.aggregate({ where: { homeownerId: request.homeownerId, archivedAt: null, balance: { gt: 0 } }, _sum: { balance: true } }) : null;
   const currentOutstandingBalance = Number(unpaid?._sum.balance ?? 0);
   const downloadAllowed = user.role !== Role.HOMEOWNER || currentOutstandingBalance <= 0 || request.allowDownloadDespiteBalance;

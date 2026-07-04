@@ -2,6 +2,7 @@ import "server-only";
 
 import { SystemSettingCategory, type SystemSetting } from "@prisma/client";
 import { prisma } from "@/lib/db";
+import { currentTenantContext, withTenantContext } from "@/lib/tenant-context";
 
 export type SettingField = {
   category: SystemSettingCategory;
@@ -99,9 +100,9 @@ export function settingField(category: SystemSettingCategory, key: string) {
   return allSettingFields.find((field) => field.category === category && field.key === key);
 }
 
-export async function getSystemSettingMap() {
+export async function getSystemSettingMap(tenantId = currentTenantContext()?.tenantId || "tenant_pagsibol4b_default") {
   try {
-    const settings = await prisma.systemSetting.findMany();
+    const settings = await withTenantContext(tenantId, async () => await prisma.systemSetting.findMany({ where: { tenantId } }));
     return new Map(settings.map((setting) => [`${setting.category}.${setting.key}`, setting]));
   } catch (error) {
     console.warn("System settings are unavailable; using bootstrap defaults.", error);
@@ -109,13 +110,13 @@ export async function getSystemSettingMap() {
   }
 }
 
-export async function getSystemSettingValue(category: SystemSettingCategory, key: string) {
-  const setting = await prisma.systemSetting.findUnique({ where: { category_key: { category, key } }, select: { value: true } });
+export async function getSystemSettingValue(category: SystemSettingCategory, key: string, tenantId = currentTenantContext()?.tenantId || "tenant_pagsibol4b_default") {
+  const setting = await withTenantContext(tenantId, async () => await prisma.systemSetting.findFirst({ where: { category, key }, select: { value: true } }));
   return setting?.value?.trim() || "";
 }
 
-export async function getPasswordPolicy() {
-  const map = await getSystemSettingMap();
+export async function getPasswordPolicy(tenantId = currentTenantContext()?.tenantId || "tenant_pagsibol4b_default") {
+  const map = await getSystemSettingMap(tenantId);
   const value = (key: string, fallback: string) => map.get(`${SystemSettingCategory.EMAIL}.${key}`)?.value?.trim() || process.env[key]?.trim() || fallback;
   const enabled = (key: string, fallback = "true") => value(key, fallback).toLowerCase() === "true";
   return {
@@ -128,8 +129,8 @@ export async function getPasswordPolicy() {
   };
 }
 
-export async function getPaymentSettings() {
-  const map = await getSystemSettingMap();
+export async function getPaymentSettings(tenantId = currentTenantContext()?.tenantId || "tenant_pagsibol4b_default") {
+  const map = await getSystemSettingMap(tenantId);
   const value = (key: string) => map.get(`${SystemSettingCategory.PAYMENT}.${key}`)?.value?.trim() || "";
   return {
     gcashAccountName: value("GCASH_ACCOUNT_NAME"),
@@ -140,25 +141,25 @@ export async function getPaymentSettings() {
   };
 }
 
-export async function getAssociationSettings() {
-  const map = await getSystemSettingMap();
+export async function getAssociationSettings(tenantId = currentTenantContext()?.tenantId || "tenant_pagsibol4b_default") {
+  const [map, tenant] = await Promise.all([getSystemSettingMap(tenantId), prisma.tenant.findUnique({ where: { id: tenantId } })]);
   const value = (key: string, fallback = "") => map.get(`${SystemSettingCategory.ASSOCIATION}.${key}`)?.value?.trim() || process.env[key]?.trim() || fallback;
-  const name = value("ASSOCIATION_NAME", "PAGSIBOL VILLAGE PH2 4B EAST");
-  const logoUrl = value("ASSOCIATION_LOGO_URL", "/pagsibol-logo.png");
+  const name = value("ASSOCIATION_NAME", tenant?.name || "PAGSIBOL VILLAGE PH2 4B EAST");
+  const logoUrl = value("ASSOCIATION_LOGO_URL", tenant?.logoUrl || "/pagsibol-logo.png");
   return {
     name,
-    address: value("ASSOCIATION_ADDRESS", "Pagsibol Village Phase 2 4B East"),
-    contactNumber: value("ASSOCIATION_CONTACT_NUMBER"),
-    email: value("ASSOCIATION_EMAIL"),
-    tinNumber: value("ASSOCIATION_TIN_NUMBER"),
-    secRegistrationNumber: value("ASSOCIATION_SEC_REGISTRATION_NUMBER"),
+    address: value("ASSOCIATION_ADDRESS", tenant?.address || "Pagsibol Village Phase 2 4B East"),
+    contactNumber: value("ASSOCIATION_CONTACT_NUMBER", tenant?.contactNumber || ""),
+    email: value("ASSOCIATION_EMAIL", tenant?.email || ""),
+    tinNumber: value("ASSOCIATION_TIN_NUMBER", tenant?.tinNumber || ""),
+    secRegistrationNumber: value("ASSOCIATION_SEC_REGISTRATION_NUMBER", tenant?.secRegistrationNumber || ""),
     logoUrl: logoUrl || "/pagsibol-logo.png",
     documentTitle: `${name} Homeowners Association`,
   };
 }
 
-export async function getChatSettings() {
-  const map = await getSystemSettingMap();
+export async function getChatSettings(tenantId = currentTenantContext()?.tenantId || "tenant_pagsibol4b_default") {
+  const map = await getSystemSettingMap(tenantId);
   const value = (key: string, fallback: string) => map.get(`${SystemSettingCategory.CHAT}.${key}`)?.value?.trim() || fallback;
   const defaultTypes = [
     "image/jpeg",

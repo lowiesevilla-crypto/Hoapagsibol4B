@@ -7,8 +7,8 @@ try {
   const envText = await readFile(new URL("../.env", import.meta.url), "utf8");
   const authSecret = envText.match(/^AUTH_SECRET="?([^"\r\n]+)"?/m)?.[1];
   if (!authSecret) throw new Error("AUTH_SECRET not found");
-  const admin = await prisma.user.findUniqueOrThrow({ where: { email: "admin@greenmeadows.test" } });
-  const token = await new SignJWT({ userId: admin.id, role: admin.role }).setProtectedHeader({ alg: "HS256" }).setIssuedAt().setExpirationTime("10m").sign(new TextEncoder().encode(authSecret));
+  const admin = await prisma.user.findUniqueOrThrow({ where: { tenantId_email: { tenantId: "tenant_pagsibol4b_default", email: "admin@greenmeadows.test" } }, include: { tenant: true } });
+  const token = await new SignJWT({ userId: admin.id, role: admin.role, tenantId: admin.tenantId, tenantSlug: admin.tenant.slug }).setProtectedHeader({ alg: "HS256" }).setIssuedAt().setExpirationTime("10m").sign(new TextEncoder().encode(authSecret));
   const headers = { Cookie: `hoa_session=${token}` };
   const [pdf, docx] = await Promise.all([
     fetch("http://localhost:3000/admin/reports/pdf?from=2026-01-01&to=2026-12-31", { headers }),

@@ -89,7 +89,7 @@ async function main() {
       })));
 
       const result = await recordMonthlyDuesPayment(tx, {
-        actor: { id: actor.id, name: actor.name, email: actor.email },
+        actor: { id: actor.id, tenantId: actor.tenantId, name: actor.name, email: actor.email },
         billIds: bills.map((bill) => bill.id),
         amount: 3000,
         paymentDate: new Date("2097-06-15T00:00:00.000Z"),

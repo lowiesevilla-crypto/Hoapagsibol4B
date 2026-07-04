@@ -7,25 +7,28 @@ import { prisma } from "@/lib/db";
 import { paymentCoverageLabel } from "@/lib/payment-coverage";
 import { refreshOverdueBills } from "@/lib/actions/billing";
 import { collectionLabel, money, monthLabel, shortDate } from "@/lib/utils";
+import { requireUser } from "@/lib/auth";
 
 export default async function AdminDashboard() {
+  const user = await requireUser();
+  const tenantId = user.tenantId;
   await refreshOverdueBills();
   const now = new Date();
   const monthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
   const monthEnd = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1));
   const [totalHomeowners, billed, duesCollected, otherIncome, forfeitedIncome, monthExpenses, monthPayroll, bondTotals, receivables, overdueHomeowners, recentPayments, recentCollections] = await Promise.all([
-    prisma.homeownerProfile.count({ where: { status: HomeownerStatus.ACTIVE } }),
-    prisma.bill.aggregate({ _sum: { totalAmount: true }, where: { billingMonth: { gte: monthStart, lt: monthEnd }, archivedAt: null } }),
-    prisma.payment.aggregate({ _sum: { amount: true }, where: { status: "ACTIVE", paymentDate: { gte: monthStart, lt: monthEnd } } }),
-    prisma.collection.aggregate({ _sum: { amount: true }, where: { refundable: false, collectionDate: { gte: monthStart, lt: monthEnd } } }),
-    prisma.collection.aggregate({ _sum: { amountForfeited: true }, where: { forfeitedAt: { gte: monthStart, lt: monthEnd } } }),
-    prisma.expense.aggregate({ _sum: { amount: true }, where: { expenseDate: { gte: monthStart, lt: monthEnd } } }),
-    prisma.payslip.aggregate({ _sum: { netPay: true }, where: { payroll: { payDate: { gte: monthStart, lt: monthEnd }, status: { in: ["FINALIZED", "PAID"] } } } }),
-    prisma.collection.aggregate({ _sum: { amount: true, amountRefunded: true, amountForfeited: true }, where: { refundable: true } }),
-    prisma.bill.aggregate({ _sum: { balance: true }, where: { balance: { gt: 0 }, archivedAt: null } }),
-    prisma.bill.groupBy({ by: ["homeownerId"], where: { status: BillStatus.OVERDUE, balance: { gt: 0 }, archivedAt: null } }),
-    prisma.payment.findMany({ where: { status: "ACTIVE" }, take: 8, orderBy: [{ paymentDate: "desc" }, { createdAt: "desc" }], include: { homeowner: { include: { user: true } }, bill: true } }),
-    prisma.collection.findMany({ take: 8, orderBy: [{ collectionDate: "desc" }, { createdAt: "desc" }], include: { homeowner: { include: { user: true } }, contractor: true } }),
+    prisma.homeownerProfile.count({ where: { tenantId, status: HomeownerStatus.ACTIVE } }),
+    prisma.bill.aggregate({ _sum: { totalAmount: true }, where: { tenantId, billingMonth: { gte: monthStart, lt: monthEnd }, archivedAt: null } }),
+    prisma.payment.aggregate({ _sum: { amount: true }, where: { tenantId, status: "ACTIVE", paymentDate: { gte: monthStart, lt: monthEnd } } }),
+    prisma.collection.aggregate({ _sum: { amount: true }, where: { tenantId, refundable: false, collectionDate: { gte: monthStart, lt: monthEnd } } }),
+    prisma.collection.aggregate({ _sum: { amountForfeited: true }, where: { tenantId, forfeitedAt: { gte: monthStart, lt: monthEnd } } }),
+    prisma.expense.aggregate({ _sum: { amount: true }, where: { tenantId, expenseDate: { gte: monthStart, lt: monthEnd } } }),
+    prisma.payslip.aggregate({ _sum: { netPay: true }, where: { tenantId, payroll: { payDate: { gte: monthStart, lt: monthEnd }, status: { in: ["FINALIZED", "PAID"] } } } }),
+    prisma.collection.aggregate({ _sum: { amount: true, amountRefunded: true, amountForfeited: true }, where: { tenantId, refundable: true } }),
+    prisma.bill.aggregate({ _sum: { balance: true }, where: { tenantId, balance: { gt: 0 }, archivedAt: null } }),
+    prisma.bill.groupBy({ by: ["homeownerId"], where: { tenantId, status: BillStatus.OVERDUE, balance: { gt: 0 }, archivedAt: null } }),
+    prisma.payment.findMany({ where: { tenantId, status: "ACTIVE" }, take: 8, orderBy: [{ paymentDate: "desc" }, { createdAt: "desc" }], include: { homeowner: { include: { user: true } }, bill: true } }),
+    prisma.collection.findMany({ where: { tenantId }, take: 8, orderBy: [{ collectionDate: "desc" }, { createdAt: "desc" }], include: { homeowner: { include: { user: true } }, contractor: true } }),
   ]);
   const totalIncome = Number(duesCollected._sum.amount ?? 0) + Number(otherIncome._sum.amount ?? 0) + Number(forfeitedIncome._sum.amountForfeited ?? 0);
   const totalOutflows = Number(monthExpenses._sum.amount ?? 0) + Number(monthPayroll._sum.netPay ?? 0);

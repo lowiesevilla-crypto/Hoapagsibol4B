@@ -17,10 +17,10 @@ function check(condition, label) {
 
 try {
   const [admin, samplePayment] = await Promise.all([
-    prisma.user.findFirstOrThrow({ where: { role: { in: ["SYSTEM_ADMIN", "ADMIN"] } }, orderBy: { role: "asc" } }),
+    prisma.user.findFirstOrThrow({ where: { role: { in: ["SYSTEM_ADMIN", "ADMIN"] } }, include: { tenant: true }, orderBy: { role: "asc" } }),
     prisma.payment.findFirstOrThrow({ where: { status: "ACTIVE" }, orderBy: { paymentDate: "desc" } }),
   ]);
-  const token = await new SignJWT({ userId: admin.id, role: admin.role }).setProtectedHeader({ alg: "HS256" }).setIssuedAt().setExpirationTime("10m").sign(new TextEncoder().encode(authSecret));
+  const token = await new SignJWT({ userId: admin.id, role: admin.role, tenantId: admin.tenantId, tenantSlug: admin.tenant.slug }).setProtectedHeader({ alg: "HS256" }).setIssuedAt().setExpirationTime("10m").sign(new TextEncoder().encode(authSecret));
   const headers = { Cookie: `hoa_session=${token}` };
   const reportYear = samplePayment.paymentDate.getUTCFullYear();
   const query = `from=${reportYear}-01-01&to=${reportYear}-12-31`;

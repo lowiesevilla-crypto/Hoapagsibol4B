@@ -22,7 +22,7 @@ export async function deriveAttendanceMetrics(input: AttendanceInput) {
       },
       orderBy: { effectiveFrom: "desc" },
     }),
-    prisma.payrollCalendarDay.findUnique({ where: { date: input.date } }),
+    prisma.payrollCalendarDay.findFirst({ where: { date: input.date } }),
   ]);
   return calculateAttendanceMetrics(input, schedule, calendarDay);
 }

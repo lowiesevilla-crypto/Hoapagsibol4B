@@ -20,8 +20,8 @@ export async function saveOrganizationOfficerAction(formData: FormData) {
   const existing = id ? await prisma.organizationOfficer.findUnique({ where: { id } }) : null;
   if (id && !existing) return goError("Officer record not found.");
   try {
-    const photoUrl = await saveOrganizationImage(formData.get("photo"), "photos", existing?.photoUrl, formData.get("removePhoto") === "on");
-    const signatureUrl = await saveOrganizationImage(formData.get("signature"), "signatures", existing?.signatureUrl, formData.get("removeSignature") === "on");
+    const photoUrl = await saveOrganizationImage(formData.get("photo"), actor.tenant.slug, "photos", existing?.photoUrl, formData.get("removePhoto") === "on");
+    const signatureUrl = await saveOrganizationImage(formData.get("signature"), actor.tenant.slug, "signatures", existing?.signatureUrl, formData.get("removeSignature") === "on");
     const data = {
       fullName,
       position,

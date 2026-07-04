@@ -6,6 +6,7 @@ import { jwtVerify } from "jose/jwt/verify";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/db";
+import { setTenantContext } from "@/lib/tenant-context";
 
 const COOKIE_NAME = "hoa_session";
 const configuredSecret = process.env.AUTH_SECRET;
@@ -14,17 +15,19 @@ if (process.env.NODE_ENV === "production" && (!configuredSecret || configuredSec
 }
 const secret = new TextEncoder().encode(configuredSecret || "development-only-secret-change-me-now");
 
-type SessionPayload = { userId: string; role: Role };
+export type SessionPayload = { userId: string; role: Role; tenantId: string; tenantSlug: string };
 
 function homeForRole(role: Role) {
   if (role === Role.HOMEOWNER) return "/portal/dashboard";
   if (role === Role.EMPLOYEE) return "/employee/attendance";
+  if (role === Role.SUPER_ADMIN || role === Role.PLATFORM_ADMIN) return "/platform/tenants";
   if (role === Role.SYSTEM_ADMIN) return "/admin/settings";
   return "/admin/dashboard";
 }
 
 function canUseRole(actualRole: Role, requiredRole: Role) {
-  if (requiredRole === Role.ADMIN) return actualRole === Role.ADMIN || actualRole === Role.SYSTEM_ADMIN;
+  if (requiredRole === Role.ADMIN) return (actualRole as string) === Role.ADMIN || [Role.SYSTEM_ADMIN, Role.HOA_ADMIN, Role.BILLING_MANAGER, Role.PAYROLL_MANAGER, Role.STAFF, Role.SUPER_ADMIN, Role.PLATFORM_ADMIN].some((role) => role === actualRole);
+  if (requiredRole === Role.SYSTEM_ADMIN) return actualRole === Role.SYSTEM_ADMIN || actualRole === Role.SUPER_ADMIN || actualRole === Role.PLATFORM_ADMIN;
   return actualRole === requiredRole;
 }
 
@@ -58,25 +61,38 @@ export async function readSession(): Promise<SessionPayload | null> {
   if (!token) return null;
   try {
     const { payload } = await jwtVerify(token, secret);
-    if (typeof payload.userId !== "string" || !Object.values(Role).includes(payload.role as Role)) return null;
-    return { userId: payload.userId, role: payload.role as Role };
+    if (typeof payload.userId !== "string" || typeof payload.tenantId !== "string" || typeof payload.tenantSlug !== "string" || !Object.values(Role).includes(payload.role as Role)) return null;
+    return { userId: payload.userId, role: payload.role as Role, tenantId: payload.tenantId, tenantSlug: payload.tenantSlug };
   } catch {
     return null;
   }
 }
 
+export async function sessionIsCurrent(session: SessionPayload) {
+  setTenantContext({ tenantId: session.tenantId, role: session.role, platform: session.role === Role.SUPER_ADMIN || session.role === Role.PLATFORM_ADMIN });
+  const user = await prisma.user.findFirst({ where: { id: session.userId, tenantId: session.tenantId, role: session.role, active: true, tenant: { slug: session.tenantSlug, status: "ACTIVE", subscriptionStatus: { not: "CANCELLED" } } }, select: { id: true } });
+  return Boolean(user);
+}
+
 export async function requireUser(requiredRole?: Role) {
   const session = await readSession();
   if (!session) redirect("/login");
+  const platform = session.role === Role.SUPER_ADMIN || session.role === Role.PLATFORM_ADMIN;
+  setTenantContext({ tenantId: session.tenantId, role: session.role, platform });
   if (requiredRole && !canUseRole(session.role, requiredRole)) {
     redirect(homeForRole(session.role));
   }
   const user = await prisma.user.findUnique({
     where: { id: session.userId },
-    select: { id: true, name: true, email: true, role: true, homeownerProfile: { select: { id: true } }, employeeProfile: { select: { id: true } } },
+    select: { id: true, tenantId: true, name: true, email: true, role: true, active: true, tenant: { select: { slug: true, status: true, subscriptionStatus: true } }, homeownerProfile: { select: { id: true } }, employeeProfile: { select: { id: true } } },
   });
-  if (!user || user.role !== session.role) redirect("/login");
+  if (!user || !user.active || user.role !== session.role || user.tenantId !== session.tenantId || user.tenant.slug !== session.tenantSlug) redirect("/login");
+  if (user.tenant.status !== "ACTIVE" || user.tenant.subscriptionStatus === "CANCELLED") redirect(`/${session.tenantSlug}/login?error=tenant-inactive`);
   if (requiredRole && !canUseRole(user.role, requiredRole)) redirect(homeForRole(user.role));
+  if (!platform) {
+    const entitlements = await prisma.tenantModuleEntitlement.findMany({ where: { tenantId: user.tenantId, enabled: true }, select: { module: true } });
+    setTenantContext({ tenantId: user.tenantId, role: user.role, platform: false, enabledModules: new Set(entitlements.map((item) => item.module)) });
+  }
   return user;
 }
 

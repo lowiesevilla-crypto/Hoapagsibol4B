@@ -18,7 +18,7 @@ function check(condition, label) {
 }
 
 async function tokenFor(user) {
-  return new SignJWT({ userId: user.id, role: user.role }).setProtectedHeader({ alg: "HS256" }).setIssuedAt().setExpirationTime("10m").sign(secret);
+  return new SignJWT({ userId: user.id, role: user.role, tenantId: user.tenantId, tenantSlug: "pagsibol4b" }).setProtectedHeader({ alg: "HS256" }).setIssuedAt().setExpirationTime("10m").sign(secret);
 }
 
 async function get(path, token) {

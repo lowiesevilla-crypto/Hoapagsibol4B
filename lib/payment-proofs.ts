@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { uploadDirectory } from "@/lib/storage";
+import { tenantUploadDirectory } from "@/lib/storage";
 
 const allowedTypes = new Map([
   ["image/jpeg", ".jpg"],
@@ -12,7 +12,7 @@ const allowedTypes = new Map([
 
 export const maxPaymentProofBytes = 5 * 1024 * 1024;
 
-export async function savePaymentProof(formData: FormData) {
+export async function savePaymentProof(formData: FormData, tenantSlug: string) {
   const file = formData.get("proofFile");
   if (!isUploadedFile(file) || file.size === 0) return null;
   const extension = allowedTypes.get(file.type);
@@ -21,7 +21,7 @@ export async function savePaymentProof(formData: FormData) {
 
   const now = new Date();
   const folder = `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, "0")}`;
-  const targetDirectory = uploadDirectory("payments", folder);
+  const targetDirectory = tenantUploadDirectory(tenantSlug, "payments", folder);
   const storedName = `${randomUUID()}${extension}`;
   try {
     await mkdir(targetDirectory, { recursive: true });
@@ -30,7 +30,7 @@ export async function savePaymentProof(formData: FormData) {
     throw new Error("Proof of payment could not be uploaded. Try again or submit without an attachment.");
   }
   return {
-    url: `/uploads/payments/${folder}/${storedName}`,
+    url: `/uploads/payments/${tenantSlug}/${folder}/${storedName}`,
     fileName: file.name.slice(0, 255),
     contentType: file.type,
     size: file.size,

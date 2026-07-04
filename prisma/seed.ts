@@ -8,6 +8,7 @@ import {
 import { hash } from "bcryptjs";
 
 const prisma = new PrismaClient();
+const tenantId = "tenant_pagsibol4b_default";
 
 async function seedBootstrapAdministrator() {
   const email = process.env.SEED_SYSTEM_ADMIN_EMAIL?.trim().toLowerCase();
@@ -16,9 +17,10 @@ async function seedBootstrapAdministrator() {
   if (password.length < 12) throw new Error("SEED_SYSTEM_ADMIN_PASSWORD must contain at least 12 characters.");
 
   const user = await prisma.user.upsert({
-    where: { email },
+    where: { tenantId_email: { tenantId, email } },
     update: { role: Role.SYSTEM_ADMIN },
     create: {
+      tenantId,
       name: process.env.SEED_SYSTEM_ADMIN_NAME?.trim() || "System Administrator",
       email,
       passwordHash: await hash(password, 12),
@@ -67,9 +69,9 @@ async function main() {
   ] as const;
   for (const [category, key, label, value] of settings) {
     await prisma.systemSetting.upsert({
-      where: { category_key: { category, key } },
+      where: { tenantId_category_key: { tenantId, category, key } },
       update: { label, ...(key === "DATABASE_PROVIDER" ? { value: "MySQL" } : {}) },
-      create: { category, key, label, value, updatedById: administrator?.id },
+      create: { tenantId, category, key, label, value, updatedById: administrator?.id },
     });
   }
   await prisma.systemSetting.updateMany({
@@ -84,7 +86,7 @@ async function main() {
     ["Office and Administrative", "Supplies, printing and administrative costs"],
     ["Community Activities", "Assemblies, events and community programs"],
   ] as const) {
-    await prisma.expenseCategory.upsert({ where: { name }, update: { description, active: true }, create: { name, description } });
+    await prisma.expenseCategory.upsert({ where: { tenantId_name: { tenantId, name } }, update: { description, active: true }, create: { tenantId, name, description } });
   }
 
   for (const [name, description] of [
@@ -95,17 +97,17 @@ async function main() {
     ["Loan Payment", "Employee-specific loan repayment"],
   ] as const) {
     await prisma.payrollDeductionType.upsert({
-      where: { name },
+      where: { tenantId_name: { tenantId, name } },
       update: { description },
-      create: { name, description, amount: 0, active: false, applyToMonthly: true, applyToDaily: true },
+      create: { tenantId, name, description, amount: 0, active: false, applyToMonthly: true, applyToDaily: true },
     });
   }
 
   for (const type of Object.values(DocumentType)) {
     await prisma.documentTemplate.upsert({
-      where: { type },
+      where: { tenantId_type: { tenantId, type } },
       update: {},
-      create: { type, title: type.replaceAll("_", " "), body: "Managed by the HOA document generation service." },
+      create: { tenantId, type, title: type.replaceAll("_", " "), body: "Managed by the HOA document generation service." },
     });
   }
 }

@@ -32,22 +32,22 @@ async function setup() {
   const admin = await prisma.user.findFirstOrThrow({ where: { role: { in: ["ADMIN", "SYSTEM_ADMIN"] } }, orderBy: { role: "asc" } });
   const homeowner = await prisma.homeownerProfile.findFirstOrThrow({ where: { status: "ACTIVE" }, include: { user: true } });
 
-  const noProof = await savePaymentProof(new FormData());
+  const noProof = await savePaymentProof(new FormData(), "pagsibol4b");
   assert(noProof === null, "payment proof is optional");
 
   const imageProofForm = new FormData();
   imageProofForm.set("proofFile", new File([pngBytes], "gcash-proof.png", { type: "image/png" }));
-  const imageProof = await savePaymentProof(imageProofForm);
+  const imageProof = await savePaymentProof(imageProofForm, "pagsibol4b");
   assert(imageProof?.url.endsWith(".png"), "PNG payment proof is stored");
 
   const pdfProofForm = new FormData();
   pdfProofForm.set("proofFile", new File([pdfBytes], "gcash-proof.pdf", { type: "application/pdf" }));
-  const pdfProof = await savePaymentProof(pdfProofForm);
+  const pdfProof = await savePaymentProof(pdfProofForm, "pagsibol4b");
   assert(pdfProof?.url.endsWith(".pdf"), "PDF payment proof is stored");
 
   const contentForm = new FormData();
   contentForm.set("image", new File([pngBytes], "community-banner.png", { type: "image/png" }));
-  const contentImage = await resolveContentImage(contentForm);
+  const contentImage = await resolveContentImage(contentForm, "pagsibol4b");
   assert(contentImage.url?.endsWith(".png"), "announcement/event content image is stored");
 
   const [imageRequest, pdfRequest, announcement, event, conversation] = await prisma.$transaction([
@@ -93,12 +93,12 @@ async function validateUploads() {
   const oversized = new FormData();
   oversized.set("proofFile", new File([new Uint8Array(5 * 1024 * 1024 + 1)], "too-large.png", { type: "image/png" }));
   let sizeRejected = false;
-  try { await savePaymentProof(oversized); } catch (error) { sizeRejected = error instanceof Error && error.message.includes("5MB"); }
+  try { await savePaymentProof(oversized, "pagsibol4b"); } catch (error) { sizeRejected = error instanceof Error && error.message.includes("5MB"); }
   assert(sizeRejected, "payment proof files over 5MB are rejected");
   const invalid = new FormData();
   invalid.set("proofFile", new File([Buffer.from("not allowed")], "proof.txt", { type: "text/plain" }));
   let typeRejected = false;
-  try { await savePaymentProof(invalid); } catch (error) { typeRejected = error instanceof Error && error.message.includes("JPG"); }
+  try { await savePaymentProof(invalid, "pagsibol4b"); } catch (error) { typeRejected = error instanceof Error && error.message.includes("JPG"); }
   assert(typeRejected, "unsupported payment proof file types are rejected");
   console.log("UPLOAD_VALIDATION_PASS");
 }

@@ -24,7 +24,7 @@ export async function saveAnnouncementAction(formData: FormData) {
       const existing = await prisma.announcement.findUnique({ where: { id: data.id }, select: { id: true } });
       if (!existing) throw new Error("Announcement not found.");
     }
-    const image = await resolveContentImage(formData, data.existingImageUrl, data.removeImage);
+    const image = await resolveContentImage(formData, admin.tenant.slug, data.existingImageUrl, data.removeImage);
     uploadWarning = image.warning ?? "";
     const announcement = data.id
       ? await prisma.announcement.update({ where: { id: data.id }, data: { title: data.title, content: data.content, type: data.type, status: data.status, imageUrl: image.url, sendEmail: data.sendEmail, postToFacebook: data.postToFacebook, facebookStatus: data.postToFacebook ? undefined : FacebookPostStatus.NOT_REQUESTED } })
@@ -71,7 +71,7 @@ export async function saveEventAction(formData: FormData) {
       const existing = await prisma.event.findUnique({ where: { id: data.id }, select: { id: true } });
       if (!existing) throw new Error("Event not found.");
     }
-    const image = await resolveContentImage(formData, data.existingImageUrl, data.removeImage);
+    const image = await resolveContentImage(formData, admin.tenant.slug, data.existingImageUrl, data.removeImage);
     uploadWarning = image.warning ?? "";
     const eventTime = `${data.startTime} - ${data.endTime}`;
     const values = { title: data.title, description: data.description, type: data.type, status: data.status, eventDate: new Date(`${data.eventDate}T00:00:00.000Z`), eventTime, startTime: data.startTime, endTime: data.endTime, location: data.location, imageUrl: image.url, postToFacebook: data.postToFacebook };

@@ -11,7 +11,7 @@ export async function updatePaymentAmountLedger({ paymentId, amount, actor, reas
     const previousAmount = Number(payment.amount);
     if (Math.abs(previousAmount - amount) < 0.005) throw new Error("The payment amount has not changed.");
     await tx.payment.update({ where: { id: paymentId }, data: { amount } });
-    const recalculated = await recalculateBillFromActivePayments(tx, payment.bill);
+    const recalculated = await recalculateBillFromActivePayments(tx as unknown as Prisma.TransactionClient, payment.bill);
     await tx.auditLog.create({
       data: {
         actorId: actor.id,
@@ -85,7 +85,7 @@ export async function voidPaymentLedger({ paymentId, actor, reason }: { paymentI
         data: { paymentId: null, status: "REJECTED", reviewedById: actor.id, reviewedAt: voidedAt, reviewRemarks: [payment.paymentRequest.reviewRemarks, `Associated payment was voided${reason ? `: ${reason}` : "."}`].filter(Boolean).join("\n") },
       });
     }
-    const recalculated = await recalculateBillFromActivePayments(tx, payment.bill);
+    const recalculated = await recalculateBillFromActivePayments(tx as unknown as Prisma.TransactionClient, payment.bill);
     await tx.auditLog.create({
       data: {
         actorId: actor.id,

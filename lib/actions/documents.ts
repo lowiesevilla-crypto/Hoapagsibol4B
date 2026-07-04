@@ -1,7 +1,7 @@
 "use server";
 
 import { randomUUID } from "node:crypto";
-import { DocumentRequestStatus, DocumentType, NotificationType, Role } from "@prisma/client";
+import { DocumentRequestStatus, DocumentType, NotificationType, Prisma, Role } from "@prisma/client";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { requireUser } from "@/lib/auth";
@@ -38,7 +38,7 @@ export async function submitDocumentRequestAction(formData: FormData) {
 
   const unpaid = await prisma.bill.aggregate({ where: { homeownerId, archivedAt: null, balance: { gt: 0 } }, _sum: { balance: true } });
   const outstandingBalance = Number(unpaid._sum.balance ?? 0);
-  const template = await prisma.documentTemplate.findUnique({ where: { type } });
+  const template = await prisma.documentTemplate.findFirst({ where: { type } });
   if (!template?.active) redirect("/portal/documents?error=This%20document%20type%20is%20currently%20unavailable.");
 
   const request = await prisma.documentRequest.create({
@@ -96,7 +96,7 @@ export async function processDocumentRequestAction(formData: FormData) {
     if (regenerating && (!request.generatedContent || !request.documentNumber || !request.verificationCode || request.archivedAt)) fail("Only active generated documents can be regenerated.");
     const [unpaid, template, payments, constructionBonds, association, officers] = await Promise.all([
       prisma.bill.aggregate({ where: { homeownerId: request.homeownerId, archivedAt: null, balance: { gt: 0 } }, _sum: { balance: true } }),
-      prisma.documentTemplate.findUnique({ where: { type: request.type } }),
+      prisma.documentTemplate.findFirst({ where: { type: request.type } }),
       prisma.payment.aggregate({ where: { homeownerId: request.homeownerId, status: "ACTIVE" }, _sum: { amount: true } }),
       prisma.collection.findMany({ where: { homeownerId: request.homeownerId, type: "CONSTRUCTION_BOND", refundable: true } }),
       getAssociationSettings(),
@@ -112,7 +112,7 @@ export async function processDocumentRequestAction(formData: FormData) {
     const now = new Date();
     const verificationCode = randomUUID().replaceAll("-", "").slice(0, 20).toUpperCase();
     await prisma.$transaction(async (tx) => {
-      const documentNumber = regenerating ? request.documentNumber! : await allocateDocumentNumber(tx, request.type, now);
+      const documentNumber = regenerating ? request.documentNumber! : await allocateDocumentNumber(tx as unknown as Prisma.TransactionClient, request.tenantId, request.type, now);
       const nextVersion = regenerating ? Math.max(1, request.currentVersion) + 1 : 1;
       const content = renderDocumentTemplate(template.body, {
         associationName: association.name,
@@ -225,8 +225,8 @@ export async function saveDocumentTemplateAction(formData: FormData) {
   const body = String(formData.get("body") || "").trim();
   const active = formData.get("active") === "on";
   if (!documentTypeOptions.some((item) => item.value === type) || title.length < 3 || body.length < 20) redirect("/admin/document-templates?error=Enter%20a%20valid%20title%20and%20template%20body.");
-  const existing = await prisma.documentTemplate.findUnique({ where: { type } });
-  const template = await prisma.documentTemplate.upsert({ where: { type }, create: { type, title, body, active, updatedById: admin.id }, update: { title, body, active, updatedById: admin.id, version: { increment: 1 } } });
+  const existing = await prisma.documentTemplate.findFirst({ where: { type } });
+  const template = await prisma.documentTemplate.upsert({ where: { tenantId_type: { tenantId: admin.tenantId, type } }, create: { tenantId: admin.tenantId, type, title, body, active, updatedById: admin.id }, update: { title, body, active, updatedById: admin.id, version: { increment: 1 } } });
   await prisma.auditLog.create({ data: { actorId: admin.id, module: "DOCUMENTS", action: existing ? "UPDATE_TEMPLATE" : "CREATE_TEMPLATE", entityType: "DocumentTemplate", entityId: template.id, metadata: { type, version: template.version, active } } });
   revalidatePath("/admin/document-templates");
   revalidatePath("/portal/documents");

@@ -7,10 +7,12 @@ import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { deleteSession } from "@/lib/auth";
 import { getAppUrl } from "@/lib/app-url";
-import { prisma } from "@/lib/db";
+import { platformPrisma, prisma } from "@/lib/db";
 import { sendEmailNotification } from "@/lib/services/notifications";
 import { getPasswordPolicy } from "@/lib/system-settings";
 import { forgotPasswordSchema } from "@/lib/validation";
+import { resolveTenant, tenantCanSignIn } from "@/lib/tenant";
+import { currentTenantContext, setTenantContext } from "@/lib/tenant-context";
 
 export type ForgotPasswordState = { error?: string; success?: string };
 export type ResetPasswordState = { error?: string };
@@ -21,6 +23,9 @@ export async function forgotPasswordAction(_state: ForgotPasswordState, formData
   const parsed = forgotPasswordSchema.safeParse(Object.fromEntries(formData.entries()));
   if (!parsed.success) return { error: parsed.error.issues[0]?.message || "Enter a valid email address." };
   const email = parsed.data.email;
+  const tenant = await resolveTenant(String(formData.get("tenantSlug") || ""));
+  if (!tenant || !tenantCanSignIn(tenant)) return { success: GENERIC_RESPONSE };
+  setTenantContext({ tenantId: tenant.id, platform: false, enabledModules: new Set(tenant.moduleEntitlements.filter((item) => item.enabled).map((item) => item.module)) });
   const requestHeaders = await headers();
   const ip = clientIp(requestHeaders);
   const emailHash = fingerprint(email);
@@ -37,11 +42,11 @@ export async function forgotPasswordAction(_state: ForgotPasswordState, formData
     return { success: GENERIC_RESPONSE };
   }
 
-  const user = await prisma.user.findUnique({ where: { email }, select: { id: true, name: true, email: true, role: true } });
+  const user = await prisma.user.findFirst({ where: { email }, select: { id: true, name: true, email: true, role: true } });
   await prisma.auditLog.create({ data: { actorId: user?.id, module: "AUTH", action: "PASSWORD_RESET_REQUESTED", entityType: "User", entityId: user?.id, metadata: { emailFingerprint: emailHash.slice(0, 12), homeownerAccount: user?.role === Role.HOMEOWNER } } });
   if (!user || user.role !== Role.HOMEOWNER) return { success: GENERIC_RESPONSE };
 
-  const policy = await getPasswordPolicy();
+  const policy = await getPasswordPolicy(tenant.id);
   const rawToken = randomBytes(32).toString("base64url");
   const tokenHash = fingerprint(rawToken);
   const expiresAt = new Date(Date.now() + policy.expiryMinutes * 60 * 1000);
@@ -49,7 +54,7 @@ export async function forgotPasswordAction(_state: ForgotPasswordState, formData
     prisma.passwordResetToken.updateMany({ where: { userId: user.id, usedAt: null }, data: { usedAt: new Date() } }),
     prisma.passwordResetToken.create({ data: { userId: user.id, tokenHash, requestedIpHash: ipHash, expiresAt } }),
   ]);
-  const resetUrl = `${requestBaseUrl(requestHeaders)}/reset-password?token=${encodeURIComponent(rawToken)}`;
+  const resetUrl = `${requestBaseUrl(requestHeaders)}/reset-password?token=${encodeURIComponent(rawToken)}&tenantSlug=${encodeURIComponent(tenant.slug)}`;
   const log = await sendEmailNotification({
     recipientId: user.id,
     email: user.email,
@@ -72,7 +77,12 @@ export async function resetPasswordAction(_state: ResetPasswordState, formData: 
   const confirmPassword = String(formData.get("confirmPassword") || "");
   const tokenHash = tokenFingerprint(rawToken);
   if (!tokenHash) return failedReset("This reset link is invalid. Request a new link.");
-  const policy = await getPasswordPolicy();
+  const tokenRecord = tokenHash ? await platformPrisma.passwordResetToken.findUnique({ where: { tokenHash }, select: { tenantId: true, userId: true } }) : null;
+  if (!tokenRecord) return failedReset("This reset link is invalid. Request a new link.");
+  const tokenTenant = await platformPrisma.tenant.findUnique({ where: { id: tokenRecord.tenantId }, select: { slug: true } });
+  if (!tokenTenant) return failedReset("This reset link is invalid. Request a new link.");
+  setTenantContext({ tenantId: tokenRecord.tenantId, platform: false });
+  const policy = await getPasswordPolicy(tokenRecord.tenantId);
   const passwordError = validatePassword(password, confirmPassword, policy);
   if (passwordError) return { error: passwordError };
   const token = await prisma.passwordResetToken.findUnique({ where: { tokenHash }, select: { id: true, userId: true, usedAt: true, expiresAt: true } });
@@ -90,13 +100,13 @@ export async function resetPasswordAction(_state: ResetPasswordState, formData: 
     return failedReset("This reset link has already been used. Request a new link.", token.userId, tokenHash);
   }
   await deleteSession();
-  redirect("/login?reset=success");
+  redirect(`/${tokenTenant.slug}/login?reset=success`);
 }
 
 export async function getValidResetToken(rawToken: string) {
   const tokenHash = tokenFingerprint(rawToken);
   if (!tokenHash) return null;
-  return prisma.passwordResetToken.findFirst({ where: { tokenHash, usedAt: null, expiresAt: { gt: new Date() } }, select: { expiresAt: true } });
+  return platformPrisma.passwordResetToken.findFirst({ where: { tokenHash, usedAt: null, expiresAt: { gt: new Date() } }, select: { tenantId: true, expiresAt: true } });
 }
 
 function validatePassword(password: string, confirmation: string, policy: Awaited<ReturnType<typeof getPasswordPolicy>>) {
@@ -111,7 +121,7 @@ function validatePassword(password: string, confirmation: string, policy: Awaite
 }
 
 async function failedReset(message: string, actorId?: string, tokenHash?: string): Promise<ResetPasswordState> {
-  await prisma.auditLog.create({ data: { actorId, module: "AUTH", action: "PASSWORD_RESET_FAILED", entityType: "User", entityId: actorId, metadata: { reason: message, tokenFingerprint: tokenHash?.slice(0, 12) } } });
+  if (currentTenantContext()) await prisma.auditLog.create({ data: { actorId, module: "AUTH", action: "PASSWORD_RESET_FAILED", entityType: "User", entityId: actorId, metadata: { reason: message, tokenFingerprint: tokenHash?.slice(0, 12) } } });
   return { error: message };
 }
 

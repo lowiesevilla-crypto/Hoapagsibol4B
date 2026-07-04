@@ -2,6 +2,7 @@ import { BillStatus, HomeownerStatus, PaymentMethod, PrismaClient, Role } from "
 import { hash } from "bcryptjs";
 
 const prisma = new PrismaClient();
+const TENANT_ID = "tenant_pagsibol4b_default";
 
 const TEST_PASSWORD = "ChangeMe123!";
 
@@ -12,8 +13,8 @@ async function assignReceiptNumber(paymentId: string, paymentDate: Date) {
   return prisma.$transaction(async (tx) => {
     const year = paymentDate.getUTCFullYear();
     const counter = await tx.receiptCounter.upsert({
-      where: { series_year: { series: "MD", year } },
-      create: { series: "MD", year, lastNumber: 1 },
+      where: { tenantId_series_year: { tenantId: TENANT_ID, series: "MD", year } },
+      create: { tenantId: TENANT_ID, series: "MD", year, lastNumber: 1 },
       update: { lastNumber: { increment: 1 } },
     });
     const receiptNumber = `AR-MD-${year}-${String(counter.lastNumber).padStart(7, "0")}`;
@@ -58,8 +59,9 @@ async function main() {
 
   for (const testHomeowner of testHomeowners) {
     const user = await prisma.user.upsert({
-      where: { email: testHomeowner.email },
+      where: { tenantId_email: { tenantId: TENANT_ID, email: testHomeowner.email } },
       update: {
+        tenantId: TENANT_ID,
         name: testHomeowner.name,
         role: Role.HOMEOWNER,
         passwordHash,

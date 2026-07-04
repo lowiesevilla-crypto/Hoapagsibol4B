@@ -89,6 +89,8 @@ export function ChatMessenger({
   useEffect(() => {
     const timer = window.setInterval(() => refresh(false), data.settings.pollIntervalSeconds * 1000);
     return () => window.clearInterval(timer);
+    // The timer is intentionally recreated when the request filters change.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedId, recipientSearch, data.settings.pollIntervalSeconds]);
 
   useEffect(() => {

@@ -2,6 +2,7 @@ import type { HomeownerProfile, User } from "@prisma/client";
 import Link from "next/link";
 import { saveHomeownerAction } from "@/lib/actions/homeowners";
 import { SubmitButton } from "@/components/ui";
+import { PasswordInput } from "@/components/password-input";
 
 type Record = HomeownerProfile & { user: Pick<User, "name" | "email"> };
 
@@ -40,5 +41,5 @@ export function HomeownerForm({ homeowner }: { homeowner?: Record }) {
 }
 
 function Field({ label, name, ...props }: React.InputHTMLAttributes<HTMLInputElement> & { label: string; name: string }) {
-  return <div><label className="label" htmlFor={name}>{label}</label><input className="field" id={name} name={name} {...props} /></div>;
+  return <div><label className="label" htmlFor={name}>{label}</label>{props.type === "password" ? <PasswordInput id={name} name={name} {...props} /> : <input className="field" id={name} name={name} {...props} />}</div>;
 }

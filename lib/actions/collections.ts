@@ -38,7 +38,7 @@ export async function recordCollectionAction(formData: FormData) {
   await prisma.$transaction(async (tx) => {
     const collectionDate = new Date(`${data.collectionDate}T00:00:00.000Z`);
     const series = collectionReceiptSeries(data.type);
-    const receiptNumber = await allocateReceiptNumber(tx, collectionDate, series);
+    const receiptNumber = await allocateReceiptNumber(tx as unknown as Prisma.TransactionClient, admin.tenantId, collectionDate, series);
     const collection = await tx.collection.create({ data: {
       type: data.type,
       description: data.description || null,

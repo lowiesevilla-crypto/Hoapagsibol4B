@@ -27,11 +27,11 @@ function coverageLabel(payment) {
 
 try {
   const [admin, payments] = await Promise.all([
-    prisma.user.findFirstOrThrow({ where: { role: { in: ["SYSTEM_ADMIN", "ADMIN"] } }, orderBy: { role: "asc" } }),
+    prisma.user.findFirstOrThrow({ where: { role: { in: ["SYSTEM_ADMIN", "ADMIN"] } }, include: { tenant: true }, orderBy: { role: "asc" } }),
     prisma.payment.findMany({ where: { status: "ACTIVE" }, include: { bill: true }, orderBy: { paymentDate: "desc" }, take: 5 }),
   ]);
   check(payments.length > 0, "an active payment is available for receipt verification");
-  const token = await new SignJWT({ userId: admin.id, role: admin.role })
+  const token = await new SignJWT({ userId: admin.id, role: admin.role, tenantId: admin.tenantId, tenantSlug: admin.tenant.slug })
     .setProtectedHeader({ alg: "HS256" })
     .setIssuedAt()
     .setExpirationTime("10m")

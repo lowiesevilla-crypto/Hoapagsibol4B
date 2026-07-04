@@ -23,6 +23,7 @@ import { calculatePayslip } from "../lib/services/payroll";
 
 const prisma = new PrismaClient();
 const TEST_PASSWORD = "ChangeMe123!";
+const TENANT_ID = "tenant_pagsibol4b_default";
 
 function utcDate(year: number, month: number, day: number) {
   return new Date(Date.UTC(year, month - 1, day));
@@ -31,9 +32,10 @@ function utcDate(year: number, month: number, day: number) {
 async function ensureAdminUser() {
   const passwordHash = await hash(TEST_PASSWORD, 12);
   return prisma.user.upsert({
-    where: { email: "admin@greenmeadows.test" },
+    where: { tenantId_email: { tenantId: TENANT_ID, email: "admin@greenmeadows.test" } },
     update: { role: Role.ADMIN },
     create: {
+      tenantId: TENANT_ID,
       name: "Maria Santos",
       email: "admin@greenmeadows.test",
       passwordHash,
@@ -46,8 +48,8 @@ async function nextReceiptNumber(date: Date) {
   return prisma.$transaction(async (tx) => {
     const year = date.getUTCFullYear();
     const counter = await tx.receiptCounter.upsert({
-      where: { series_year: { series: "MD", year } },
-      create: { series: "MD", year, lastNumber: 1 },
+      where: { tenantId_series_year: { tenantId: TENANT_ID, series: "MD", year } },
+      create: { tenantId: TENANT_ID, series: "MD", year, lastNumber: 1 },
       update: { lastNumber: { increment: 1 } },
     });
     return `AR-MD-${year}-${String(counter.lastNumber).padStart(7, "0")}`;
@@ -182,9 +184,9 @@ async function main() {
   const homeowners = [];
   for (const item of homeownerInputs) {
     const user = await prisma.user.upsert({
-      where: { email: item.email },
+      where: { tenantId_email: { tenantId: TENANT_ID, email: item.email } },
       update: { name: item.name, role: Role.HOMEOWNER, passwordHash },
-      create: { name: item.name, email: item.email, role: Role.HOMEOWNER, passwordHash },
+      create: { tenantId: TENANT_ID, name: item.name, email: item.email, role: Role.HOMEOWNER, passwordHash },
     });
     homeowners.push(
       await prisma.homeownerProfile.upsert({
@@ -392,9 +394,9 @@ async function main() {
   ]) {
     contractors.push(
       await prisma.contractorProfile.upsert({
-        where: { companyName: item.companyName },
+        where: { tenantId_companyName: { tenantId: TENANT_ID, companyName: item.companyName } },
         update: { ...item, status: ContractorStatus.ACTIVE },
-        create: { ...item, status: ContractorStatus.ACTIVE },
+        create: { ...item, tenantId: TENANT_ID, status: ContractorStatus.ACTIVE },
       }),
     );
   }
@@ -429,8 +431,9 @@ async function main() {
   });
 
   await prisma.vehicle.upsert({
-    where: { plateNumber: "TEST-AAA-001" },
+    where: { tenantId_plateNumber: { tenantId: TENANT_ID, plateNumber: "TEST-AAA-001" } },
     update: {
+      tenantId: TENANT_ID,
       homeownerId: homeowners[0].id,
       vehicleType: "SUV",
       make: "Toyota",
@@ -459,8 +462,9 @@ async function main() {
     },
   });
   await prisma.vehicle.upsert({
-    where: { plateNumber: "TEST-BBB-002" },
+    where: { tenantId_plateNumber: { tenantId: TENANT_ID, plateNumber: "TEST-BBB-002" } },
     update: {
+      tenantId: TENANT_ID,
       homeownerId: homeowners[1].id,
       vehicleType: "Sedan",
       make: "Honda",
@@ -522,9 +526,9 @@ async function main() {
   ]) {
     employees.push(
       await prisma.employeeProfile.upsert({
-        where: { employeeNumber: item.employeeNumber },
+        where: { tenantId_employeeNumber: { tenantId: TENANT_ID, employeeNumber: item.employeeNumber } },
         update: { ...item, status: EmployeeStatus.ACTIVE },
-        create: { ...item, status: EmployeeStatus.ACTIVE },
+        create: { ...item, tenantId: TENANT_ID, status: EmployeeStatus.ACTIVE },
       }),
     );
   }
@@ -534,7 +538,7 @@ async function main() {
     { name: "TEST Uniform Deduction", description: "TEST payroll deduction type assigned only to employees with uniform charges for the cutoff.", amount: 150, active: true, applyToMonthly: true, applyToDaily: true },
   ];
   for (const item of deductionInputs) {
-    await prisma.payrollDeductionType.upsert({ where: { name: item.name }, update: item, create: item });
+    await prisma.payrollDeductionType.upsert({ where: { tenantId_name: { tenantId: TENANT_ID, name: item.name } }, update: item, create: { ...item, tenantId: TENANT_ID } });
   }
 
   for (const employee of employees) {
@@ -592,9 +596,9 @@ async function main() {
     { startDate: utcDate(2026, 6, 16), endDate: utcDate(2026, 6, 30), payDate: utcDate(2026, 7, 1), status: PayrollStatus.PAID },
   ]) {
     const payroll = await prisma.payrollPeriod.upsert({
-      where: { startDate_endDate: { startDate: item.startDate, endDate: item.endDate } },
+      where: { tenantId_startDate_endDate: { tenantId: TENANT_ID, startDate: item.startDate, endDate: item.endDate } },
       update: { payDate: item.payDate, status: item.status, createdById: admin.id },
-      create: { ...item, createdById: admin.id },
+      create: { ...item, tenantId: TENANT_ID, createdById: admin.id },
     });
     const cashAdvance = deductionTypes.find((deduction) => deduction.name === "TEST Cash Advance");
     const uniformDeduction = deductionTypes.find((deduction) => deduction.name === "TEST Uniform Deduction");
@@ -643,7 +647,7 @@ async function main() {
     { name: "TEST Utilities", description: "TEST expense category for utilities." },
     { name: "TEST Repairs", description: "TEST expense category for repairs." },
   ]) {
-    categories.push(await prisma.expenseCategory.upsert({ where: { name: item.name }, update: { ...item, active: true }, create: { ...item, active: true } }));
+    categories.push(await prisma.expenseCategory.upsert({ where: { tenantId_name: { tenantId: TENANT_ID, name: item.name } }, update: { ...item, active: true }, create: { ...item, tenantId: TENANT_ID, active: true } }));
   }
   await upsertExpense({
     categoryId: categories[0].id,

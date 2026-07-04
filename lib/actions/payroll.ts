@@ -36,13 +36,14 @@ export async function recalculatePayrollAction(formData: FormData) {
 
 async function calculatePeriod(input: { startDate: Date; endDate: Date; payDate: Date; createdById: string }) {
   return prisma.$transaction(async (tx) => {
-    const existing = await tx.payrollPeriod.findUnique({ where: { startDate_endDate: { startDate: input.startDate, endDate: input.endDate } } });
+    const actor = await tx.user.findUniqueOrThrow({ where: { id: input.createdById }, select: { tenantId: true } });
+    const existing = await tx.payrollPeriod.findUnique({ where: { tenantId_startDate_endDate: { tenantId: actor.tenantId, startDate: input.startDate, endDate: input.endDate } } });
     if (existing?.status === PayrollStatus.PAID) throw new Error("Paid payroll periods are locked and cannot be recalculated.");
     if (existing?.status === PayrollStatus.FINALIZED) throw new Error("Return this payroll period to draft before recalculating.");
     const period = existing
       ? await tx.payrollPeriod.update({ where: { id: existing.id }, data: { payDate: input.payDate } })
       : await tx.payrollPeriod.create({ data: input });
-    await refreshPeriodPayslips(tx, period);
+    await refreshPeriodPayslips(tx as unknown as Prisma.TransactionClient, period);
     return period.id;
   }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
 }
@@ -391,7 +392,7 @@ export async function savePayrollDeductionAction(formData: FormData) {
       create: { payrollId, employeeId, deductionTypeId, employeeLoanId, amount, remarks },
       update: { employeeLoanId, amount, remarks },
     });
-    await refreshPeriodPayslips(tx, period);
+    await refreshPeriodPayslips(tx as unknown as Prisma.TransactionClient, period);
   }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
   await writeAuditLog({ actorId: user.id, module: "PAYROLL", action: "SAVE_PAYROLL_DEDUCTION", entityType: "PayrollPeriod", entityId: payrollId, metadata: { employeeId, deductionTypeId, employeeLoanId, amount } });
 
@@ -415,7 +416,7 @@ export async function deletePayrollDeductionAction(formData: FormData) {
     if (!deduction || deduction.payrollId !== payrollId) throw new Error("Payroll deduction not found for this cutoff period.");
     employeeId = employeeId || deduction.employeeId;
     await tx.payrollDeduction.delete({ where: { id } });
-    await refreshPeriodPayslips(tx, period);
+    await refreshPeriodPayslips(tx as unknown as Prisma.TransactionClient, period);
   }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
   await writeAuditLog({ actorId: user.id, module: "PAYROLL", action: "DELETE_PAYROLL_DEDUCTION", entityType: "PayrollDeduction", entityId: id, metadata: { payrollId } });
 
@@ -458,7 +459,7 @@ export async function savePayrollCalendarDayAction(formData: FormData) {
   const targetDate = new Date(`${date}T00:00:00.000Z`);
   const record = id
     ? await prisma.payrollCalendarDay.update({ where: { id }, data: { ...data, date: targetDate, createdById: user.id } })
-    : await prisma.payrollCalendarDay.upsert({ where: { date: targetDate }, create: { ...data, date: targetDate, createdById: user.id }, update: { ...data, createdById: user.id } });
+    : await prisma.payrollCalendarDay.upsert({ where: { tenantId_date: { tenantId: user.tenantId, date: targetDate } }, create: { ...data, tenantId: user.tenantId, date: targetDate, createdById: user.id }, update: { ...data, createdById: user.id } });
   await writeAuditLog({ actorId: user.id, module: "PAYROLL", action: id ? "UPDATE_CALENDAR_DAY" : "SAVE_CALENDAR_DAY", entityType: "PayrollCalendarDay", entityId: record.id, metadata: { date, type: data.type } });
   revalidatePayrollPages();
   revalidatePath("/admin/attendance");

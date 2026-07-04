@@ -61,7 +61,7 @@ export async function postDataMigrationAction(formData: FormData) {
   let input: MigrationInput;
   try {
     input = parseManualInput(formData);
-    await prisma.$transaction((tx) => postMigration(tx, input, admin.id), { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+    await prisma.$transaction((tx) => postMigration(tx as unknown as Prisma.TransactionClient, input, admin.id, admin.tenantId), { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
   } catch (error) {
     redirect(`/admin/data/migrations?error=${encodeURIComponent(error instanceof Error ? error.message : "Migration entry could not be posted.")}`);
   }
@@ -81,7 +81,6 @@ export async function importDataMigrationsAction(_state: MigrationImportState, f
   if (!parsed.rows.length) return failure("No records found.", ["CSV file does not contain data rows."]);
 
   const homeownerEmails = [...new Set(parsed.rows.map((row) => value(row, "homeownerEmail").toLowerCase()).filter(Boolean))];
-  const contractorCompanies = [...new Set(parsed.rows.map((row) => value(row, "contractorCompany").toLowerCase()).filter(Boolean))];
   const [homeowners, contractors] = await Promise.all([
     prisma.homeownerProfile.findMany({ where: { user: { email: { in: homeownerEmails } } }, include: { user: true } }),
     prisma.contractorProfile.findMany({ where: { companyName: { in: parsed.rows.map((row) => value(row, "contractorCompany")).filter(Boolean) } } }),
@@ -111,7 +110,7 @@ export async function importDataMigrationsAction(_state: MigrationImportState, f
 
   try {
     await prisma.$transaction(async (tx) => {
-      for (const input of inputs) await postMigration(tx, input, admin.id);
+      for (const input of inputs) await postMigration(tx as unknown as Prisma.TransactionClient, input, admin.id, admin.tenantId);
     }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable, timeout: 30_000 });
   } catch (error) {
     return failure("Import could not be posted. No entries were saved.", [error instanceof Error ? error.message : "Database error."]);
@@ -120,7 +119,7 @@ export async function importDataMigrationsAction(_state: MigrationImportState, f
   return { success: true, message: `${inputs.length} migration entr${inputs.length === 1 ? "y" : "ies"} posted successfully.`, imported: inputs.length, errors: [] };
 }
 
-export async function postMigration(tx: Prisma.TransactionClient, input: MigrationInput, actorId: string) {
+export async function postMigration(tx: Prisma.TransactionClient, input: MigrationInput, actorId: string, tenantId: string) {
   validateInput(input);
   const dedupeKey = migrationDedupeKey(input);
   if (await tx.dataMigration.count({ where: { dedupeKey } })) throw new Error("This migration entry has already been posted.");
@@ -146,7 +145,7 @@ export async function postMigration(tx: Prisma.TransactionClient, input: Migrati
       bill = await tx.bill.create({ data: { homeownerId: input.homeownerId!, billingMonth: period, amount: input.amount, penalty: 0, totalAmount: input.amount, amountPaid: 0, balance: input.amount, dueDate, status: BillStatus.UNPAID, notes: note } });
     }
     const paymentDate = input.period ?? new Date();
-    const receiptNumber = await allocateReceiptNumber(tx, paymentDate, "MD");
+    const receiptNumber = await allocateReceiptNumber(tx, tenantId, paymentDate, "MD");
     const coverage = buildPaymentCoverage([bill.billingMonth]);
     const payment = await tx.payment.create({ data: { billId: bill.id, homeownerId: input.homeownerId!, amount: input.amount, paymentDate, method: PaymentMethod.OTHER, referenceNumber: input.referenceNumber, paymentBatchId: randomUUID(), ...coverage, paymentCoverageDisplay: migratedPaymentCoverageDisplay(), receiptNumber, remarks: note, processedById: actorId } });
     await recalculateBillFromActivePayments(tx, bill);
@@ -158,13 +157,13 @@ export async function postMigration(tx: Prisma.TransactionClient, input: Migrati
     const type = isConstruction ? CollectionType.CONSTRUCTION_BOND : CollectionType.CONTRACTOR_BOND;
     const collectionDate = input.period ?? new Date();
     const series = collectionReceiptSeries(type);
-    const receiptNumber = await allocateReceiptNumber(tx, collectionDate, series);
+    const receiptNumber = await allocateReceiptNumber(tx, tenantId, collectionDate, series);
     const collection = await tx.collection.create({ data: { type, payerType: isConstruction ? PayerType.HOMEOWNER : PayerType.CONTRACTOR, homeownerId: isConstruction ? input.homeownerId : null, contractorId: isConstruction ? null : input.contractorId, amount: input.amount, collectionDate, method: PaymentMethod.OTHER, referenceNumber: input.referenceNumber, receiptNumber, remarks: note, refundable: true, refundStatus: RefundStatus.HELD, createdById: actorId } });
     await receiptAudit(tx, actorId, series, "Collection", collection.id, receiptNumber, input.amount);
     postedRecordType = "Collection";
     postedRecordId = collection.id;
   } else {
-    const collection = await tx.collection.findUnique({ where: { receiptNumber: input.relatedReceiptNumber! } });
+    const collection = await tx.collection.findFirst({ where: { receiptNumber: input.relatedReceiptNumber! } });
     if (!collection || !collection.refundable) throw new Error("The related refundable bond receipt was not found.");
     const expectsConstruction = input.kind.toString().startsWith("CONSTRUCTION_BOND");
     if ((expectsConstruction && collection.type !== CollectionType.CONSTRUCTION_BOND) || (!expectsConstruction && collection.type !== CollectionType.CONTRACTOR_BOND)) throw new Error("The related receipt belongs to a different bond type.");

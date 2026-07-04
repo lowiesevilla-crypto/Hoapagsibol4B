@@ -45,7 +45,7 @@ export async function submitPaymentRequestAction(formData: FormData) {
     if (bills.length !== uniqueBillIds.length) throw new Error("One or more selected dues records are no longer available.");
     const pending = bills.find((bill) => bill.paymentRequests.length > 0);
     if (pending) throw new Error("One selected bill already has a pending QR payment verification.");
-    const proof = await savePaymentProof(formData);
+    const proof = await savePaymentProof(formData, user.tenant.slug);
     await prisma.paymentRequest.createMany({
       data: bills.map((bill) => ({
         type: PaymentRequestType.MONTHLY_DUES,
@@ -66,7 +66,7 @@ export async function submitPaymentRequestAction(formData: FormData) {
       if (!homeownerCollectionTypes.has(collectionType)) throw new Error("That collection type cannot be paid from the homeowner portal.");
       if (!data.amount) throw new Error("Enter the payment amount.");
       if (collectionType === CollectionType.OTHER && !data.description) throw new Error("Describe the payment purpose.");
-      const proof = await savePaymentProof(formData);
+      const proof = await savePaymentProof(formData, user.tenant.slug);
       await prisma.paymentRequest.create({
         data: {
           type: PaymentRequestType.OTHER_COLLECTION,

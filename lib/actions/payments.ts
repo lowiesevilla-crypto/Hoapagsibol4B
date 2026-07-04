@@ -21,8 +21,8 @@ export async function recordPaymentAction(formData: FormData) {
 
   let confirmation: Awaited<ReturnType<typeof recordMonthlyDuesPayment>> | null = null;
   try {
-    confirmation = await prisma.$transaction((tx) => recordMonthlyDuesPayment(tx, {
-      actor: { id: admin.id, name: admin.name, email: admin.email },
+    confirmation = await prisma.$transaction((tx) => recordMonthlyDuesPayment(tx as unknown as Prisma.TransactionClient, {
+      actor: { id: admin.id, tenantId: admin.tenantId, name: admin.name, email: admin.email },
       billIds,
       amount: data.amount,
       paymentDate: new Date(`${data.paymentDate}T00:00:00.000Z`),

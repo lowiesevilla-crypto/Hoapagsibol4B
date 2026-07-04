@@ -23,7 +23,7 @@ export async function approvePaymentRequest(requestId: string, reviewerId?: stri
       if (amount > balance) throw new Error("Payment request exceeds the current bill balance.");
       const amountPaid = Number(bill.amountPaid) + amount;
       const nextBalance = Number(bill.totalAmount) - amountPaid;
-      const receiptNumber = await allocateReceiptNumber(tx, paymentDate, "MD");
+      const receiptNumber = await allocateReceiptNumber(tx as unknown as Prisma.TransactionClient, request.tenantId, paymentDate, "MD");
       const coverage = buildPaymentCoverage([bill.billingMonth]);
       const payment = await tx.payment.create({
         data: {
@@ -60,7 +60,7 @@ export async function approvePaymentRequest(requestId: string, reviewerId?: stri
     if (!adminId) throw new Error("No administrator account is available to record this collection.");
     const refundable = refundableTypes.has(request.collectionType);
     const series = collectionReceiptSeries(request.collectionType);
-    const receiptNumber = await allocateReceiptNumber(tx, paymentDate, series);
+    const receiptNumber = await allocateReceiptNumber(tx as unknown as Prisma.TransactionClient, request.tenantId, paymentDate, series);
     const collection = await tx.collection.create({
       data: {
         type: request.collectionType,

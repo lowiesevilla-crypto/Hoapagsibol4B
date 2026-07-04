@@ -19,9 +19,9 @@ export function isPassDocument(type: DocumentType) {
   return type === DocumentType.GATE_PASS || type === DocumentType.MOVE_IN_OUT_PASS;
 }
 
-export async function allocateDocumentNumber(tx: Prisma.TransactionClient, type: DocumentType, date = new Date()) {
+export async function allocateDocumentNumber(tx: Prisma.TransactionClient, tenantId: string, type: DocumentType, date = new Date()) {
   const year = date.getUTCFullYear();
-  const counter = await tx.documentCounter.upsert({ where: { type_year: { type, year } }, create: { type, year, lastNumber: 1 }, update: { lastNumber: { increment: 1 } }, select: { lastNumber: true } });
+  const counter = await tx.documentCounter.upsert({ where: { tenantId_type_year: { tenantId, type, year } }, create: { tenantId, type, year, lastNumber: 1 }, update: { lastNumber: { increment: 1 } }, select: { lastNumber: true } });
   if (type === DocumentType.CERTIFICATE_OF_RESIDENCY) return `CR-${year}-${String(counter.lastNumber).padStart(6, "0")}`;
   const prefix = documentTypeOptions.find((item) => item.value === type)?.prefix ?? "DOC";
   return `DOC-${prefix}-${year}-${String(counter.lastNumber).padStart(6, "0")}`;

@@ -3,6 +3,7 @@ import { Role, SystemSettingCategory } from "@prisma/client";
 import { Building2, Database, Facebook, KeyRound, Mail, MessageSquare, QrCode } from "lucide-react";
 import { GcashQrUpload } from "@/components/gcash-qr-upload";
 import { PageHeader } from "@/components/page-header";
+import { PasswordInput } from "@/components/password-input";
 import { SubmitButton } from "@/components/ui";
 import { saveSystemSettingsAction, sendTestEmailAction } from "@/lib/actions/settings";
 import { requireUser } from "@/lib/auth";
@@ -115,7 +116,8 @@ export default async function SystemSettingsPage({ searchParams }: { searchParam
                   {field.key === "MAIL_PROVIDER" ? <select id={field.key} className="field" name={field.key} defaultValue={saved === "gmail" ? "gmail" : "smtp"}><option value="smtp">SMTP</option><option value="gmail">Gmail SMTP</option></select>
                     : field.key === "MAIL_ENCRYPTION" ? <select id={field.key} className="field" name={field.key} defaultValue={saved === "tls" || saved === "none" ? saved : "ssl"}><option value="ssl">SSL (port 465)</option><option value="tls">STARTTLS (port 587)</option><option value="none">None (development only)</option></select>
                     : field.multiline ? <textarea id={field.key} className="field min-h-28" name={field.key} defaultValue={saved} placeholder={field.placeholder} />
-                    : <input id={field.key} className="field" name={field.key} type={field.secret ? "password" : field.key === "MAIL_USERNAME" || field.key === "MAIL_FROM_ADDRESS" ? "email" : "text"} defaultValue={field.secret ? "" : saved} placeholder={field.secret ? maskedSecret(saved) : field.placeholder} autoComplete={field.key === "MAIL_PASSWORD" ? "new-password" : "off"} />}
+                    : field.secret ? <PasswordInput id={field.key} className="field" name={field.key} defaultValue="" placeholder={maskedSecret(saved)} autoComplete={field.key === "MAIL_PASSWORD" ? "new-password" : "off"} />
+                    : <input id={field.key} className="field" name={field.key} type={field.key === "MAIL_USERNAME" || field.key === "MAIL_FROM_ADDRESS" ? "email" : "text"} defaultValue={saved} placeholder={field.placeholder} autoComplete="off" />}
                   <div className="mt-1 flex flex-col gap-1 text-xs text-slate-500 sm:flex-row sm:items-center sm:justify-between"><span>{field.help}</span>{item?.updatedAt && <span>Updated {shortDate(item.updatedAt)}</span>}</div>
                 </>}
               </div>;

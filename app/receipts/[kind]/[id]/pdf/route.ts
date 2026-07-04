@@ -111,7 +111,7 @@ function drawReceipt(page: PDFPage, receipt: PdfReceipt, association: Awaited<Re
   y = drawField(page, "Received From", receipt.payer, y, regular, bold);
   y = drawField(page, "Address", receipt.address, y, regular, bold);
   y = drawField(page, "The Sum Of", amountInWords(receipt.amount), y, regular, bold);
-  y = drawField(page, "Payment For", receipt.paymentFor, y, regular, bold);
+  drawField(page, "Payment For", receipt.paymentFor, y, regular, bold);
 
   page.drawRectangle({ x: 42, y: 375, width: 511, height: 145, borderColor: navy, borderWidth: .8 });
   page.drawRectangle({ x: 42, y: 490, width: 511, height: 30, color: rgb(.94, .97, .94), borderColor: navy, borderWidth: .8 });

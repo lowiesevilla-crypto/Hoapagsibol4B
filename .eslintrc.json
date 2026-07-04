@@ -1,0 +1,9 @@
+{
+  "root": true,
+  "extends": ["next/core-web-vitals", "next/typescript"],
+  "ignorePatterns": ["Hoapagsibol4B/**", ".next/**", "next-env.d.ts", "backups/**", "storage/**", "tmp/**"],
+  "rules": {
+    "@next/next/no-img-element": "off",
+    "@typescript-eslint/no-unused-vars": ["error", { "argsIgnorePattern": "^_", "varsIgnorePattern": "^_" }]
+  }
+}

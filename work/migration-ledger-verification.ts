@@ -27,35 +27,35 @@ moduleLoader._load = function loadForVerification(request, parent, isMain) {
 const { postMigration } = await import("../lib/actions/data-migrations");
 try {
   await prisma.$transaction(async (tx) => {
-    const admin = await tx.user.findFirstOrThrow({ where: { role: "SYSTEM_ADMIN" } });
+    const admin = await tx.user.findFirstOrThrow({ where: { role: { in: ["SYSTEM_ADMIN", "SUPER_ADMIN"] } } });
     const homeowner = await tx.homeownerProfile.findFirstOrThrow({ orderBy: { createdAt: "asc" } });
     const contractor = await tx.contractorProfile.findFirst() ?? await tx.contractorProfile.create({ data: { companyName: `QA Contractor ${Date.now()}`, contactPerson: "QA Contact", phone: "09000000000", address: "Rolled back verification record", status: "ACTIVE" } });
     const input = (kind: DataMigrationKind, amount: number, remarks: string, extra: Partial<MigrationInput> = {}): MigrationInput => ({ kind, amount, remarks: `${marker} ${remarks}`, period, ...extra });
 
-    await postMigration(tx, input(DataMigrationKind.DUES_OPENING_BALANCE, 321.23, "dues opening", { homeownerId: homeowner.id }), admin.id);
-    await postMigration(tx, input(DataMigrationKind.DUES_PREVIOUS_COLLECTION, 100, "dues previous", { homeownerId: homeowner.id, referenceNumber: `${marker}-MD` }), admin.id);
-    await postMigration(tx, input(DataMigrationKind.CONSTRUCTION_BOND_OPENING_BALANCE, 1000, "construction opening", { homeownerId: homeowner.id }), admin.id);
-    await postMigration(tx, input(DataMigrationKind.CONSTRUCTION_BOND_PREVIOUS_COLLECTION, 500, "construction previous", { homeownerId: homeowner.id, referenceNumber: `${marker}-CB2` }), admin.id);
-    await postMigration(tx, input(DataMigrationKind.CONTRACTOR_BOND_OPENING_BALANCE, 800, "contractor opening", { contractorId: contractor.id }), admin.id);
-    await postMigration(tx, input(DataMigrationKind.CONTRACTOR_BOND_PREVIOUS_COLLECTION, 400, "contractor previous", { contractorId: contractor.id, referenceNumber: `${marker}-CTB2` }), admin.id);
+    await postMigration(tx, input(DataMigrationKind.DUES_OPENING_BALANCE, 321.23, "dues opening", { homeownerId: homeowner.id }), admin.id, admin.tenantId);
+    await postMigration(tx, input(DataMigrationKind.DUES_PREVIOUS_COLLECTION, 100, "dues previous", { homeownerId: homeowner.id, referenceNumber: `${marker}-MD` }), admin.id, admin.tenantId);
+    await postMigration(tx, input(DataMigrationKind.CONSTRUCTION_BOND_OPENING_BALANCE, 1000, "construction opening", { homeownerId: homeowner.id }), admin.id, admin.tenantId);
+    await postMigration(tx, input(DataMigrationKind.CONSTRUCTION_BOND_PREVIOUS_COLLECTION, 500, "construction previous", { homeownerId: homeowner.id, referenceNumber: `${marker}-CB2` }), admin.id, admin.tenantId);
+    await postMigration(tx, input(DataMigrationKind.CONTRACTOR_BOND_OPENING_BALANCE, 800, "contractor opening", { contractorId: contractor.id }), admin.id, admin.tenantId);
+    await postMigration(tx, input(DataMigrationKind.CONTRACTOR_BOND_PREVIOUS_COLLECTION, 400, "contractor previous", { contractorId: contractor.id, referenceNumber: `${marker}-CTB2` }), admin.id, admin.tenantId);
 
     const [constructionBond, contractorBond] = await Promise.all([
       tx.collection.findFirstOrThrow({ where: { remarks: { contains: `${marker} construction opening` } } }),
       tx.collection.findFirstOrThrow({ where: { remarks: { contains: `${marker} contractor opening` } } }),
     ]);
-    await postMigration(tx, input(DataMigrationKind.CONSTRUCTION_BOND_REFUND, 100, "construction refund", { relatedReceiptNumber: constructionBond.receiptNumber!, referenceNumber: `${marker}-CBR` }), admin.id);
-    await postMigration(tx, input(DataMigrationKind.CONSTRUCTION_BOND_FORFEITURE, 50, "construction forfeiture", { relatedReceiptNumber: constructionBond.receiptNumber! }), admin.id);
-    await postMigration(tx, input(DataMigrationKind.CONTRACTOR_BOND_REFUND, 80, "contractor refund", { relatedReceiptNumber: contractorBond.receiptNumber!, referenceNumber: `${marker}-CTBR` }), admin.id);
-    await postMigration(tx, input(DataMigrationKind.CONTRACTOR_BOND_FORFEITURE, 40, "contractor forfeiture", { relatedReceiptNumber: contractorBond.receiptNumber! }), admin.id);
+    await postMigration(tx, input(DataMigrationKind.CONSTRUCTION_BOND_REFUND, 100, "construction refund", { relatedReceiptNumber: constructionBond.receiptNumber!, referenceNumber: `${marker}-CBR` }), admin.id, admin.tenantId);
+    await postMigration(tx, input(DataMigrationKind.CONSTRUCTION_BOND_FORFEITURE, 50, "construction forfeiture", { relatedReceiptNumber: constructionBond.receiptNumber! }), admin.id, admin.tenantId);
+    await postMigration(tx, input(DataMigrationKind.CONTRACTOR_BOND_REFUND, 80, "contractor refund", { relatedReceiptNumber: contractorBond.receiptNumber!, referenceNumber: `${marker}-CTBR` }), admin.id, admin.tenantId);
+    await postMigration(tx, input(DataMigrationKind.CONTRACTOR_BOND_FORFEITURE, 40, "contractor forfeiture", { relatedReceiptNumber: contractorBond.receiptNumber! }), admin.id, admin.tenantId);
 
     let duplicateRejected = false;
     try {
-      await postMigration(tx, input(DataMigrationKind.DUES_PREVIOUS_COLLECTION, 100, "dues previous", { homeownerId: homeowner.id, referenceNumber: `${marker}-MD` }), admin.id);
+      await postMigration(tx, input(DataMigrationKind.DUES_PREVIOUS_COLLECTION, 100, "dues previous", { homeownerId: homeowner.id, referenceNumber: `${marker}-MD` }), admin.id, admin.tenantId);
     } catch (error) {
       duplicateRejected = error instanceof Error && error.message.includes("already been posted");
     }
     check(duplicateRejected, "duplicate migration is rejected before ledger mutation");
-    await postMigration(tx, input(DataMigrationKind.DUES_PREVIOUS_COLLECTION, 100, "dues previous", { homeownerId: homeowner.id, referenceNumber: `${marker}-MD`, dedupeNonce: "approved-override-verification" }), admin.id);
+    await postMigration(tx, input(DataMigrationKind.DUES_PREVIOUS_COLLECTION, 100, "dues previous", { homeownerId: homeowner.id, referenceNumber: `${marker}-MD`, dedupeNonce: "approved-override-verification" }), admin.id, admin.tenantId);
 
     const [bill, migrations, payments, collections, audits] = await Promise.all([
       tx.bill.findUniqueOrThrow({ where: { homeownerId_billingMonth: { homeownerId: homeowner.id, billingMonth: period } } }),

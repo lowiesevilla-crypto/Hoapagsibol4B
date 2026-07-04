@@ -5,6 +5,7 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useMemo } from "react";
 
 const successMessages: Record<string, string> = {
+  created: "Record has been created successfully.",
   saved: "Record has been saved successfully.",
   recorded: "Transaction has been recorded successfully.",
   generated: "Monthly billing records were generated successfully.",

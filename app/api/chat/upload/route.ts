@@ -5,7 +5,7 @@ import { NextResponse } from "next/server";
 import { requireUser } from "@/lib/auth";
 import { writeAuditLog } from "@/lib/audit";
 import { getChatSettings } from "@/lib/system-settings";
-import { uploadDirectory } from "@/lib/storage";
+import { tenantUploadDirectory } from "@/lib/storage";
 
 export const runtime = "nodejs";
 
@@ -20,7 +20,7 @@ export async function POST(request: Request) {
   const uploaded = [];
   const now = new Date();
   const folder = `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, "0")}`;
-  const uploadDir = uploadDirectory("chat", folder);
+  const uploadDir = tenantUploadDirectory(user.tenant.slug, "chat", folder);
   await mkdir(uploadDir, { recursive: true });
 
   for (const file of files) {
@@ -36,7 +36,7 @@ export async function POST(request: Request) {
     const bytes = Buffer.from(await file.arrayBuffer());
     await writeFile(path.join(uploadDir, storedName), bytes);
     uploaded.push({
-      url: `/uploads/chat/${folder}/${storedName}`,
+      url: `/uploads/chat/${user.tenant.slug}/${folder}/${storedName}`,
       fileName: safeName,
       contentType: file.type,
       size: file.size,

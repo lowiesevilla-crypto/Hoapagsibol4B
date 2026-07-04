@@ -7,7 +7,7 @@ import { StatusBadge } from "@/components/status-badge";
 import { SubmitButton } from "@/components/ui";
 import { prisma } from "@/lib/db";
 import { hasPayrollRole, payrollManageRoles, requirePayrollAccess } from "@/lib/payroll-access";
-import { inputDate, shortDate } from "@/lib/utils";
+import { shortDate } from "@/lib/utils";
 
 type Params = { employee?: string; from?: string; to?: string; status?: string; payrollStatus?: string };
 

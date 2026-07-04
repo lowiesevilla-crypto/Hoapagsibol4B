@@ -4,22 +4,28 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { approvePaymentRequest } from "@/lib/services/payment-requests";
 import { getPaymentSettings } from "@/lib/system-settings";
+import { resolveTenant, tenantCanSignIn } from "@/lib/tenant";
+import { setTenantContext } from "@/lib/tenant-context";
 
 type WebhookPayload = {
   paymentRequestId?: string;
   referenceNumber?: string;
   status?: string;
   amount?: number;
+  tenantSlug?: string;
 };
 
 export async function POST(request: NextRequest) {
-  const settings = await getPaymentSettings();
+  const payload = await request.json().catch(() => null) as WebhookPayload | null;
+  if (!payload) return NextResponse.json({ error: "Invalid JSON payload." }, { status: 400 });
+  if (!payload.tenantSlug) return NextResponse.json({ error: "tenantSlug is required." }, { status: 400 });
+  const tenant = await resolveTenant(payload.tenantSlug);
+  if (!tenant || !tenantCanSignIn(tenant)) return NextResponse.json({ error: "HOA portal not found or inactive." }, { status: 404 });
+  setTenantContext({ tenantId: tenant.id, platform: false, enabledModules: new Set(tenant.moduleEntitlements.filter((item) => item.enabled).map((item) => item.module)) });
+  const settings = await getPaymentSettings(tenant.id);
   if (!settings.paymentWebhookSecret) return NextResponse.json({ error: "Payment webhook is not configured." }, { status: 503 });
   const providedSecret = request.headers.get("x-hoa-payment-webhook-secret") || "";
   if (providedSecret !== settings.paymentWebhookSecret) return NextResponse.json({ error: "Invalid webhook secret." }, { status: 401 });
-
-  const payload = await request.json().catch(() => null) as WebhookPayload | null;
-  if (!payload) return NextResponse.json({ error: "Invalid JSON payload." }, { status: 400 });
   const paid = ["PAID", "SUCCESS", "SUCCESSFUL", "COMPLETED"].includes(String(payload.status || "").toUpperCase());
   if (!paid) return NextResponse.json({ error: "Webhook status is not a paid/success state." }, { status: 400 });
   if (!payload.paymentRequestId && !payload.referenceNumber) return NextResponse.json({ error: "paymentRequestId or referenceNumber is required." }, { status: 400 });

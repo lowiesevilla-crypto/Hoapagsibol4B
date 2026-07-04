@@ -4,7 +4,7 @@ import { PageHeader } from "@/components/page-header";
 import { prisma } from "@/lib/db";
 import { paymentCoverageLabel } from "@/lib/payment-coverage";
 import { requireHomeownerProfile } from "@/lib/portal";
-import { money, monthLabel, shortDate } from "@/lib/utils";
+import { money, shortDate } from "@/lib/utils";
 
 export default async function PortalPaymentsPage() {
   const profile = await requireHomeownerProfile();

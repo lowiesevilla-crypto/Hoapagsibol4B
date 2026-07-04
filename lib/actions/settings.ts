@@ -26,9 +26,9 @@ export async function saveSystemSettingsAction(formData: FormData) {
   let obsoleteQrUrl: string | null = null;
   try {
     const currentQr = category === SystemSettingCategory.PAYMENT
-      ? await prisma.systemSetting.findUnique({ where: { category_key: { category, key: "GCASH_QR_IMAGE_URL" } }, select: { value: true } })
+      ? await prisma.systemSetting.findUnique({ where: { tenantId_category_key: { tenantId: systemAdmin.tenantId, category, key: "GCASH_QR_IMAGE_URL" } }, select: { value: true } })
       : null;
-    const qrResolution = category === SystemSettingCategory.PAYMENT ? await resolveGcashQrImage(formData, currentQr?.value) : null;
+    const qrResolution = category === SystemSettingCategory.PAYMENT ? await resolveGcashQrImage(formData, systemAdmin.tenant.slug, currentQr?.value) : null;
     obsoleteQrUrl = qrResolution?.obsoleteUrl && qrResolution.obsoleteUrl !== qrResolution.url ? qrResolution.obsoleteUrl : null;
 
     await prisma.$transaction(async (tx) => {
@@ -41,13 +41,14 @@ export async function saveSystemSettingsAction(formData: FormData) {
           : field.key === "MAIL_PASSWORD"
             ? submitted
             : submitted.trim();
-        const existing = await tx.systemSetting.findUnique({ where: { category_key: { category, key: field.key } } });
+        const existing = await tx.systemSetting.findUnique({ where: { tenantId_category_key: { tenantId: systemAdmin.tenantId, category, key: field.key } } });
         const secretSubmission = field.key === "MAIL_PASSWORD" ? resolveSettingSecretSubmission(raw, existing?.value) : null;
         if (field.secret && (secretSubmission?.preserve || raw === "")) continue;
         const storedValue = secretSubmission?.value ?? raw;
         await tx.systemSetting.upsert({
-          where: { category_key: { category, key: field.key } },
+          where: { tenantId_category_key: { tenantId: systemAdmin.tenantId, category, key: field.key } },
           create: {
+            tenantId: systemAdmin.tenantId,
             category,
             key: field.key,
             label: field.label,
@@ -78,7 +79,7 @@ export async function saveSystemSettingsAction(formData: FormData) {
     redirect(`/admin/settings?error=${encodeURIComponent(error instanceof Error ? error.message : "Settings could not be saved.")}`);
   }
 
-  if (obsoleteQrUrl) await removeStoredGcashQrImage(obsoleteQrUrl);
+  if (obsoleteQrUrl) await removeStoredGcashQrImage(systemAdmin.tenant.slug, obsoleteQrUrl);
 
   revalidatePath("/admin/settings");
   revalidatePath("/portal/pay");

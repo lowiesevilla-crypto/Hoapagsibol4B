@@ -91,7 +91,7 @@ export async function saveHomeownerAction(formData: FormData) {
   }
 
   revalidatePath("/admin/homeowners");
-  redirect("/admin/homeowners?success=saved");
+  redirect(data.id ? "/admin/homeowners?success=saved&message=Homeowner%20record%20updated%20successfully." : "/admin/homeowners?success=created&message=Homeowner%20record%20and%20portal%20account%20created%20successfully.");
 }
 
 function optionalProfileDate(value?: string) { return value ? new Date(`${value}T00:00:00.000Z`) : null; }

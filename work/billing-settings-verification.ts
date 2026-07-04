@@ -1,9 +1,10 @@
 import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
-import { PrismaClient } from "@prisma/client";
+import { PrismaClient, TenantModule } from "@prisma/client";
 import { resolveGcashQrImage, removeStoredGcashQrImage } from "../lib/gcash-qr";
 import { updatePaymentAmountLedger, voidPaymentLedger } from "../lib/services/payment-ledger";
 import { paymentAmountUpdateSchema } from "../lib/validation";
+import { setTenantContext } from "../lib/tenant-context";
 
 const envText = readFileSync(path.join(process.cwd(), ".env"), "utf8");
 const databaseUrl = envText.match(/^DATABASE_URL="?([^"\r\n]+)"?/m)?.[1];
@@ -25,45 +26,46 @@ function assert(condition: unknown, message: string): asserts condition {
 
 async function main() {
   const actor = await prisma.user.findFirstOrThrow({ where: { role: { in: ["SYSTEM_ADMIN", "ADMIN"] } }, orderBy: { role: "asc" } });
+  setTenantContext({ tenantId: actor.tenantId, role: actor.role, platform: false, enabledModules: new Set(Object.values(TenantModule)) });
   const homeowner = await prisma.homeownerProfile.findFirstOrThrow({ include: { user: true }, orderBy: { createdAt: "asc" } });
-  const previousQrSetting = await prisma.systemSetting.findUnique({ where: { category_key: { category: "PAYMENT", key: "GCASH_QR_IMAGE_URL" } } });
+  const previousQrSetting = await prisma.systemSetting.findUnique({ where: { tenantId_category_key: { tenantId: actor.tenantId, category: "PAYMENT", key: "GCASH_QR_IMAGE_URL" } } });
 
   try {
     const firstForm = new FormData();
     firstForm.set("GCASH_QR_IMAGE_FILE", new File([pngBytes], "gcash-qr.png", { type: "image/png" }));
-    const firstQr = await resolveGcashQrImage(firstForm, null);
+    const firstQr = await resolveGcashQrImage(firstForm, "pagsibol4b", null);
     assert(Boolean(firstQr.url?.endsWith(".png")), "GCash QR PNG upload is stored with an internal application path");
     temporaryQrUrls.push(firstQr.url!);
-    await setQrValue(firstQr.url!, actor.id);
-    assert((await currentQrValue()) === firstQr.url, "uploaded GCash QR path is saved in system settings");
+    await setQrValue(actor.tenantId, firstQr.url!, actor.id);
+    assert((await currentQrValue(actor.tenantId)) === firstQr.url, "uploaded GCash QR path is saved in system settings");
     assert(existsSync(qrDiskPath(firstQr.url!)), "uploaded GCash QR file exists in application storage");
 
     const replacementForm = new FormData();
     replacementForm.set("GCASH_QR_IMAGE_FILE", new File([pngBytes], "replacement.webp", { type: "image/webp" }));
-    const replacementQr = await resolveGcashQrImage(replacementForm, firstQr.url);
+    const replacementQr = await resolveGcashQrImage(replacementForm, "pagsibol4b", firstQr.url);
     assert(Boolean(replacementQr.url?.endsWith(".webp")) && replacementQr.obsoleteUrl === firstQr.url, "GCash QR replacement returns the new path and old file reference");
     temporaryQrUrls.push(replacementQr.url!);
-    await setQrValue(replacementQr.url!, actor.id);
-    await removeStoredGcashQrImage(replacementQr.obsoleteUrl);
+    await setQrValue(actor.tenantId, replacementQr.url!, actor.id);
+    await removeStoredGcashQrImage("pagsibol4b", replacementQr.obsoleteUrl);
     assert(!existsSync(qrDiskPath(firstQr.url!)) && existsSync(qrDiskPath(replacementQr.url!)), "replacing GCash QR removes the old stored image");
 
     const removeForm = new FormData();
     removeForm.set("GCASH_QR_IMAGE_REMOVE", "on");
-    const removedQr = await resolveGcashQrImage(removeForm, replacementQr.url);
-    await setQrValue(removedQr.url, actor.id);
-    await removeStoredGcashQrImage(removedQr.obsoleteUrl);
-    assert((await currentQrValue()) === "" && !existsSync(qrDiskPath(replacementQr.url!)), "Admin can remove the current GCash QR image");
+    const removedQr = await resolveGcashQrImage(removeForm, "pagsibol4b", replacementQr.url);
+    await setQrValue(actor.tenantId, removedQr.url, actor.id);
+    await removeStoredGcashQrImage("pagsibol4b", removedQr.obsoleteUrl);
+    assert((await currentQrValue(actor.tenantId)) === "" && !existsSync(qrDiskPath(replacementQr.url!)), "Admin can remove the current GCash QR image");
 
     const invalidForm = new FormData();
     invalidForm.set("GCASH_QR_IMAGE_FILE", new File([Buffer.from("bad")], "qr.txt", { type: "text/plain" }));
     let invalidRejected = false;
-    try { await resolveGcashQrImage(invalidForm, null); } catch (error) { invalidRejected = error instanceof Error && error.message.includes("JPG"); }
+    try { await resolveGcashQrImage(invalidForm, "pagsibol4b", null); } catch (error) { invalidRejected = error instanceof Error && error.message.includes("JPG"); }
     assert(invalidRejected, "unsupported GCash QR file types are rejected");
 
     const oversizedForm = new FormData();
     oversizedForm.set("GCASH_QR_IMAGE_FILE", new File([new Uint8Array(5 * 1024 * 1024 + 1)], "large.png", { type: "image/png" }));
     let oversizedRejected = false;
-    try { await resolveGcashQrImage(oversizedForm, null); } catch (error) { oversizedRejected = error instanceof Error && error.message.includes("5MB"); }
+    try { await resolveGcashQrImage(oversizedForm, "pagsibol4b", null); } catch (error) { oversizedRejected = error instanceof Error && error.message.includes("5MB"); }
     assert(oversizedRejected, "GCash QR files over 5MB are rejected");
 
     const billingMonth = await findUnusedBillingMonth(homeowner.id);
@@ -102,7 +104,7 @@ async function main() {
       await prisma.payment.deleteMany({ where: { id: paymentId } });
     }
     if (billId) await prisma.bill.deleteMany({ where: { id: billId } });
-    for (const url of temporaryQrUrls) await removeStoredGcashQrImage(url);
+    for (const url of temporaryQrUrls) await removeStoredGcashQrImage("pagsibol4b", url);
     if (previousQrSetting) await prisma.systemSetting.update({ where: { id: previousQrSetting.id }, data: { label: previousQrSetting.label, value: previousQrSetting.value, isSecret: previousQrSetting.isSecret, updatedById: previousQrSetting.updatedById } });
     else await prisma.systemSetting.deleteMany({ where: { category: "PAYMENT", key: "GCASH_QR_IMAGE_URL" } });
     await prisma.$disconnect();
@@ -110,16 +112,16 @@ async function main() {
   console.log("BILLING_AND_SETTINGS_VERIFICATION_COMPLETE");
 }
 
-async function setQrValue(value: string | null, updatedById: string) {
-  await prisma.systemSetting.upsert({ where: { category_key: { category: "PAYMENT", key: "GCASH_QR_IMAGE_URL" } }, create: { category: "PAYMENT", key: "GCASH_QR_IMAGE_URL", label: "GCash QR image", value, updatedById }, update: { label: "GCash QR image", value, updatedById } });
+async function setQrValue(tenantId: string, value: string | null, updatedById: string) {
+  await prisma.systemSetting.upsert({ where: { tenantId_category_key: { tenantId, category: "PAYMENT", key: "GCASH_QR_IMAGE_URL" } }, create: { tenantId, category: "PAYMENT", key: "GCASH_QR_IMAGE_URL", label: "GCash QR image", value, updatedById }, update: { label: "GCash QR image", value, updatedById } });
 }
 
-async function currentQrValue() {
-  return (await prisma.systemSetting.findUnique({ where: { category_key: { category: "PAYMENT", key: "GCASH_QR_IMAGE_URL" } }, select: { value: true } }))?.value ?? "";
+async function currentQrValue(tenantId: string) {
+  return (await prisma.systemSetting.findUnique({ where: { tenantId_category_key: { tenantId, category: "PAYMENT", key: "GCASH_QR_IMAGE_URL" } }, select: { value: true } }))?.value ?? "";
 }
 
 function qrDiskPath(url: string) {
-  return path.join(process.cwd(), "storage", "uploads", "settings", "gcash", url.split("/").at(-1)!);
+  return path.join(process.cwd(), "storage", "uploads", "tenants", "pagsibol4b", "settings", "gcash", url.split("/").at(-1)!);
 }
 
 async function findUnusedBillingMonth(homeownerId: string) {

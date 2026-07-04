@@ -16,7 +16,7 @@ function check(condition, label) {
 }
 
 async function tokenFor(user) {
-  return new SignJWT({ userId: user.id, role: user.role }).setProtectedHeader({ alg: "HS256" }).setIssuedAt().setExpirationTime("10m").sign(secret);
+  return new SignJWT({ userId: user.id, role: user.role, tenantId: user.tenantId, tenantSlug: "pagsibol4b" }).setProtectedHeader({ alg: "HS256" }).setIssuedAt().setExpirationTime("10m").sign(secret);
 }
 
 async function get(path, token) {
@@ -24,10 +24,10 @@ async function get(path, token) {
 }
 
 try {
-  const systemAdmin = await prisma.user.findFirstOrThrow({ where: { role: "SYSTEM_ADMIN" }, orderBy: { createdAt: "asc" } });
+  const systemAdmin = await prisma.user.findFirstOrThrow({ where: { role: { in: ["SYSTEM_ADMIN", "SUPER_ADMIN"] } }, orderBy: { createdAt: "asc" } });
   const admin = await prisma.user.findFirstOrThrow({ where: { role: "ADMIN" }, orderBy: { createdAt: "asc" } });
   const homeowner = await prisma.user.findFirstOrThrow({ where: { role: "HOMEOWNER", homeownerProfile: { isNot: null } }, include: { homeownerProfile: true }, orderBy: { createdAt: "asc" } });
-  check(systemAdmin.role === Role.SYSTEM_ADMIN, "system admin seed has SYSTEM_ADMIN role");
+  check(systemAdmin.role === Role.SUPER_ADMIN || systemAdmin.role === Role.SYSTEM_ADMIN, "system admin seed has platform administration role");
 
   const [systemToken, adminToken, homeownerToken] = await Promise.all([tokenFor(systemAdmin), tokenFor(admin), tokenFor(homeowner)]);
   const settingsCount = await prisma.systemSetting.count();
@@ -49,7 +49,7 @@ try {
   check(homeownerPay.status === 200 && homeownerPayHtml.includes("Pay by QR code"), "homeowner can open QR payment page");
   check(homeownerPayHtml.includes("Submit QR payment") && homeownerPayHtml.includes("Transaction type") && homeownerPayHtml.includes("Select pending dues"), "QR page supports a unified transaction selector and multi-dues selection");
   check(!homeownerPayHtml.includes("Submit other HOA payment"), "old separate other-payment form is removed");
-  const qrSetting = await prisma.systemSetting.findUnique({ where: { category_key: { category: "PAYMENT", key: "GCASH_QR_IMAGE_URL" } } });
+  const qrSetting = await prisma.systemSetting.findUnique({ where: { tenantId_category_key: { tenantId: "tenant_pagsibol4b_default", category: "PAYMENT", key: "GCASH_QR_IMAGE_URL" } } });
   check(Boolean(qrSetting?.value?.startsWith("/uploads/settings/gcash/")) && homeownerPayHtml.includes(qrSetting.value) && homeownerPayHtml.includes("object-contain"), "homeowner payment page displays the stored QR without cropping");
   const qrImage = await get(qrSetting.value, homeownerToken);
   check(qrImage.status === 200 && qrImage.headers.get("content-type")?.startsWith("image/"), "stored GCash QR image is served successfully to homeowners");
@@ -63,7 +63,7 @@ try {
   check(adminPayments.status === 200 && adminPaymentsHtml.includes("QR / GCash payment requests"), "admin payments page includes QR request review");
   check(adminPaymentsHtml.includes("Payment amount") && adminPaymentsHtml.includes("Controlled amount update") && adminPaymentsHtml.includes("Void") && adminPaymentsHtml.includes("Transaction history (read only)"), "admin payment page renders editable amounts, void controls, and read-only archive history");
 
-  const webhookNoSecret = await fetch(`${base}/api/payments/webhook/gcash`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ status: "PAID" }), redirect: "manual" });
+  const webhookNoSecret = await fetch(`${base}/api/payments/webhook/gcash`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ tenantSlug: "pagsibol4b", status: "PAID" }), redirect: "manual" });
   check([401, 503].includes(webhookNoSecret.status), "payment webhook rejects untrusted calls");
 
   console.log(`PASS ${checks.length} system admin / QR checks`);

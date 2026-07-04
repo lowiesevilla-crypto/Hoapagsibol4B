@@ -10,6 +10,7 @@ const authSecret = envText.match(/^AUTH_SECRET="?([^"\r\n]+)"?/m)?.[1];
 if (!authSecret) throw new Error("AUTH_SECRET not found");
 const secret = new TextEncoder().encode(authSecret);
 const checks = [];
+const tenantId = "tenant_pagsibol4b_default";
 let testDocumentId;
 let testClearanceId;
 let testResidencyId;
@@ -17,12 +18,12 @@ let testPaymentId;
 let testBillId;
 
 function check(condition, label) { if (!condition) throw new Error(`FAILED: ${label}`); checks.push(label); }
-async function tokenFor(user) { return new SignJWT({ userId: user.id, role: user.role }).setProtectedHeader({ alg: "HS256" }).setIssuedAt().setExpirationTime("20m").sign(secret); }
+async function tokenFor(user) { return new SignJWT({ userId: user.id, role: user.role, tenantId: user.tenantId, tenantSlug: "pagsibol4b" }).setProtectedHeader({ alg: "HS256" }).setIssuedAt().setExpirationTime("20m").sign(secret); }
 async function get(path, token) { return fetch(`${base}${path}`, { headers: token ? { Cookie: `hoa_session=${token}` } : {}, redirect: "manual" }); }
 
 try {
   const [admin, homeowner] = await Promise.all([
-    prisma.user.findFirstOrThrow({ where: { role: Role.SYSTEM_ADMIN } }),
+    prisma.user.findFirstOrThrow({ where: { role: { in: [Role.SYSTEM_ADMIN, Role.SUPER_ADMIN] } } }),
     prisma.user.findFirstOrThrow({ where: { role: Role.HOMEOWNER }, include: { homeownerProfile: true } }),
   ]);
   const [adminToken, homeownerToken] = await Promise.all([tokenFor(admin), tokenFor(homeowner)]);
@@ -37,7 +38,7 @@ try {
   const counterResults = await prisma.$transaction(async (tx) => {
     const allocate = async (series) => {
       const year = 2097;
-      const counter = await tx.receiptCounter.upsert({ where: { series_year: { series, year } }, create: { series, year, lastNumber: 1 }, update: { lastNumber: { increment: 1 } } });
+      const counter = await tx.receiptCounter.upsert({ where: { tenantId_series_year: { tenantId, series, year } }, create: { tenantId, series, year, lastNumber: 1 }, update: { lastNumber: { increment: 1 } } });
       return `AR-${series}-${year}-${String(counter.lastNumber).padStart(7, "0")}`;
     };
     const values = [await allocate("MD"), await allocate("MD"), await allocate("CB"), await allocate("CTB"), await allocate("OC")];
@@ -47,8 +48,8 @@ try {
   check(Number(counterResults[1].slice(-7)) === Number(counterResults[0].slice(-7)) + 1 && counterResults[2].endsWith("0000001") && counterResults[3].endsWith("0000001") && counterResults[4].endsWith("0000001"), "receipt series maintain independent atomic counters");
   check(await prisma.receiptCounter.count({ where: { year: 2097 } }) === 0, "receipt counter test rolled back without production sequence changes");
 
-  const duplicateIndex = await prisma.$queryRawUnsafe(`SELECT INDEX_NAME, NON_UNIQUE FROM information_schema.STATISTICS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'DataMigration' AND INDEX_NAME = 'DataMigration_dedupeKey_key'`);
-  check(duplicateIndex.length === 1 && Number(duplicateIndex[0].NON_UNIQUE) === 0, "migration duplicate prevention is enforced by a unique database index");
+  const duplicateIndex = await prisma.$queryRawUnsafe(`SELECT INDEX_NAME, NON_UNIQUE FROM information_schema.STATISTICS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'DataMigration' AND INDEX_NAME = 'DataMigration_tenantId_dedupeKey_key'`);
+  check(duplicateIndex.length === 2 && duplicateIndex.every((row) => Number(row.NON_UNIQUE) === 0), "migration duplicate prevention is enforced by a tenant-composite unique database index");
 
   const billingMonth = new Date("2098-12-01T00:00:00.000Z");
   const dueDate = new Date("2098-12-31T00:00:00.000Z");
@@ -58,7 +59,7 @@ try {
   const portalBlocked = await get("/portal/documents", homeownerToken);
   const portalBlockedHtml = await portalBlocked.text();
   check(portalBlocked.status === 200 && portalBlockedHtml.includes("Outstanding monthly dues") && portalBlockedHtml.includes("You may submit a request") && portalBlockedHtml.includes("Open Pay by QR"), "homeowner requests remain available while downloads are balance-controlled with Pay by QR guidance");
-  const qrSetting = await prisma.systemSetting.findUnique({ where: { category_key: { category: "PAYMENT", key: "GCASH_QR_IMAGE_URL" } } });
+  const qrSetting = await prisma.systemSetting.findUnique({ where: { tenantId_category_key: { tenantId, category: "PAYMENT", key: "GCASH_QR_IMAGE_URL" } } });
   check(!qrSetting?.value || portalBlockedHtml.includes(qrSetting.value) || portalBlockedHtml.includes("GCash QR is currently unavailable"), "blocked request page displays configured GCash QR or exact unavailable message");
 
   const now = new Date();

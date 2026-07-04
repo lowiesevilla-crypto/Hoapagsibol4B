@@ -8,7 +8,7 @@ import { requireUser } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { paymentCoverageDisplay } from "@/lib/payment-coverage";
 import { getAssociationSettings } from "@/lib/system-settings";
-import { amountInWords, collectionLabel, money, monthLabel, shortDate } from "@/lib/utils";
+import { amountInWords, collectionLabel, money, shortDate } from "@/lib/utils";
 
 type ReceiptView = {
   number: string;

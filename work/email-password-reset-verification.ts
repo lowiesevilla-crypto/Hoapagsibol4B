@@ -4,12 +4,14 @@ import { createHash, randomBytes } from "node:crypto";
 import Module from "node:module";
 import { NotificationType, PrismaClient, SystemSettingCategory } from "@prisma/client";
 import { hash } from "bcryptjs";
+import { setTenantContext } from "../lib/tenant-context";
 
 const prisma = new PrismaClient();
 const configKeys = ["MAIL_PROVIDER", "MAIL_HOST", "MAIL_PORT", "MAIL_ENCRYPTION", "MAIL_USERNAME", "MAIL_PASSWORD", "MAIL_FROM_NAME", "MAIL_FROM_ADDRESS"];
 const capturedMessages: string[] = [];
 
 async function main() {
+  setTenantContext({ tenantId: "tenant_pagsibol4b_default", platform: false });
   const previousUnauthenticated = process.env.SMTP_ALLOW_UNAUTHENTICATED;
   process.env.SMTP_ALLOW_UNAUTHENTICATED = "true";
   const moduleLoader = Module as typeof Module & { _load: (request: string, parent: unknown, isMain: boolean) => unknown };
@@ -128,7 +130,7 @@ function createTestSmtpServer() {
 }
 
 async function setConfig(key: string, value: string) {
-  await prisma.systemSetting.upsert({ where: { category_key: { category: SystemSettingCategory.EMAIL, key } }, create: { category: SystemSettingCategory.EMAIL, key, label: key, value }, update: { value } });
+  await prisma.systemSetting.upsert({ where: { tenantId_category_key: { tenantId: "tenant_pagsibol4b_default", category: SystemSettingCategory.EMAIL, key } }, create: { tenantId: "tenant_pagsibol4b_default", category: SystemSettingCategory.EMAIL, key, label: key, value }, update: { value } });
 }
 
 async function waitFor(condition: () => boolean) {

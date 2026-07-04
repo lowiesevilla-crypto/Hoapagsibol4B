@@ -1,17 +1,15 @@
 import { notFound } from "next/navigation";
 import { AssociationLogo } from "@/components/association-logo";
-import { prisma } from "@/lib/db";
+import { platformPrisma } from "@/lib/db";
 import { documentTypeLabel } from "@/lib/services/documents";
 import { getAssociationSettings } from "@/lib/system-settings";
 import { shortDate } from "@/lib/utils";
 
 export default async function VerifyDocumentPage({ params }: { params: Promise<{ code: string }> }) {
   const { code } = await params;
-  const [request, association] = await Promise.all([
-    prisma.documentRequest.findUnique({ where: { verificationCode: code.toUpperCase() }, include: { homeowner: { include: { user: true } }, processedBy: true, approvedBy: true } }),
-    getAssociationSettings(),
-  ]);
+  const request = await platformPrisma.documentRequest.findUnique({ where: { verificationCode: code.toUpperCase() }, include: { homeowner: { include: { user: true } }, processedBy: true, approvedBy: true } });
   if (!request?.generatedContent || !request.documentNumber) notFound();
+  const association = await getAssociationSettings(request.tenantId);
   const archived = Boolean(request.archivedAt);
   return <main className="grid min-h-screen place-items-center bg-gradient-to-b from-pine-900 to-pine-700 p-4"><section className="w-full max-w-2xl rounded-3xl bg-white p-6 shadow-2xl sm:p-9">
     <div className="flex items-center gap-4 border-b border-slate-200 pb-5"><AssociationLogo className="size-20" src={association.logoUrl} alt={`${association.name} logo`} /><div><p className="text-xs font-black uppercase tracking-widest text-pine-700">Verified HOA document</p><h1 className="text-xl font-black">{association.name}</h1></div></div>

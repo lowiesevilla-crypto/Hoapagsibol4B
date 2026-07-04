@@ -8,11 +8,11 @@ export function collectionReceiptSeries(type: string): ReceiptSeries {
   return "OC";
 }
 
-export async function allocateReceiptNumber(tx: Prisma.TransactionClient, date: Date, series: ReceiptSeries) {
+export async function allocateReceiptNumber(tx: Prisma.TransactionClient, tenantId: string, date: Date, series: ReceiptSeries) {
   const year = date.getUTCFullYear();
   const counter = await tx.receiptCounter.upsert({
-    where: { series_year: { series, year } },
-    create: { series, year, lastNumber: 1 },
+    where: { tenantId_series_year: { tenantId, series, year } },
+    create: { tenantId, series, year, lastNumber: 1 },
     update: { lastNumber: { increment: 1 } },
     select: { lastNumber: true },
   });

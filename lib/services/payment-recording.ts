@@ -6,7 +6,7 @@ import { recalculateBillFromActivePayments } from "@/lib/services/payment-ledger
 import { allocateReceiptNumber } from "@/lib/services/receipt";
 
 type RecordMonthlyDuesInput = {
-  actor: { id: string; name: string; email: string };
+  actor: { id: string; tenantId: string; name: string; email: string };
   billIds: string[];
   amount: number;
   paymentDate: Date;
@@ -48,7 +48,7 @@ export async function recordMonthlyDuesPayment(tx: Prisma.TransactionClient, inp
     const amount = roundMoney(index === bills.length - 1 ? remainingAmount : Math.min(remainingAmount, Number(bill.balance)));
     if (amount <= 0) continue;
     receiptIndex += 1;
-    const receiptNumber = await allocateReceiptNumber(tx, input.paymentDate, "MD");
+    const receiptNumber = await allocateReceiptNumber(tx, input.actor.tenantId, input.paymentDate, "MD");
     const payment = await tx.payment.create({
       data: {
         billId: bill.id,

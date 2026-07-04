@@ -14,11 +14,11 @@ function normalizedMonth(value: string) {
 }
 
 export async function refreshOverdueBills() {
-  await requireUser();
+  const user = await requireUser();
   const today = new Date();
   today.setHours(0, 0, 0, 0);
   await prisma.bill.updateMany({
-    where: { archivedAt: null, dueDate: { lt: today }, balance: { gt: 0 }, status: { in: [BillStatus.UNPAID, BillStatus.PARTIAL] } },
+    where: { tenantId: user.tenantId, archivedAt: null, dueDate: { lt: today }, balance: { gt: 0 }, status: { in: [BillStatus.UNPAID, BillStatus.PARTIAL] } },
     data: { status: BillStatus.OVERDUE },
   });
 }

@@ -1,6 +1,7 @@
 import { CalendarDays, CheckCircle2, LockKeyhole, Megaphone, ReceiptText, WalletCards } from "lucide-react";
 import { LoginForm } from "@/components/login-form";
 import { AssociationLogo } from "@/components/association-logo";
+import { DEFAULT_TENANT_LOGO_URL } from "@/lib/tenant-logo";
 
 type LoginTenant = { name: string; slug: string; logoUrl: string | null; address?: string | null; blocked?: boolean; advisory?: string };
 
@@ -11,7 +12,7 @@ export function TenantLoginScreen({ tenant, reset }: { tenant: LoginTenant; rese
     { title: "Community updates", note: "Announcements and reminders", icon: Megaphone },
     { title: "Activities", note: "Events and neighborhood schedules", icon: CalendarDays },
   ];
-  const logo = tenant.logoUrl || "/pagsibol-logo.png";
+  const logo = tenant.logoUrl || DEFAULT_TENANT_LOGO_URL;
   return <main className="grid min-h-screen overflow-x-hidden bg-[#eef8fc] lg:grid-cols-[1.08fr_.92fr]">
     <section className="brand-hero brand-grid relative hidden min-h-screen flex-col justify-between overflow-hidden p-10 text-white lg:flex xl:p-16">
       <div className="relative flex items-center gap-5"><AssociationLogo className="size-24" src={logo} alt={`${tenant.name} logo`} /><div><p className="text-xl font-black leading-tight text-white">{tenant.name}</p><p className="mt-1 text-sm font-bold uppercase tracking-[.18em] text-[#dff8d2]">Homeowners Association</p></div></div>

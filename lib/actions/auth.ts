@@ -28,18 +28,39 @@ export async function loginAction(_state: LoginState, formData: FormData): Promi
   const tenant = await resolveTenant(tenantSlug);
   if (!tenant) return { error: "HOA portal not found." };
   if (!tenantCanSignIn(tenant)) return { error: tenant.advisories[0]?.message || "This HOA portal is currently unavailable." };
-  setTenantContext({ tenantId: tenant.id, platform: false, enabledModules: new Set(tenant.moduleEntitlements.filter((item) => item.enabled).map((item) => item.module)) });
+
+  setTenantContext({
+    tenantId: tenant.id,
+    platform: false,
+    enabledModules: new Set(tenant.moduleEntitlements.filter((item) => item.enabled).map((item) => item.module)),
+  });
+
   const user = await prisma.user.findFirst({ where: { tenantId: tenant.id, email: parsed.data.email } });
   if (!user || !user.active || !(await compare(parsed.data.password, user.passwordHash))) {
-    await Promise.all([recordRateLimitFailure("LOGIN_EMAIL", `${tenantSlug}:${parsed.data.email}`), recordRateLimitFailure("LOGIN_IP", ip)]);
+    await Promise.all([
+      recordRateLimitFailure("LOGIN_EMAIL", `${tenantSlug}:${parsed.data.email}`),
+      recordRateLimitFailure("LOGIN_IP", ip),
+    ]);
     return { error: "Incorrect email or password." };
   }
 
   await clearRateLimit("LOGIN_EMAIL", `${tenantSlug}:${parsed.data.email}`);
+
   await prisma.$transaction([
     prisma.user.update({ where: { id: user.id }, data: { lastLoginAt: new Date() } }),
-    prisma.auditLog.create({ data: { tenantId: tenant.id, actorId: user.id, module: "AUTH", action: "TENANT_LOGIN", entityType: "User", entityId: user.id, metadata: { tenantSlug: tenant.slug } } }),
+    prisma.auditLog.create({
+      data: {
+        tenantId: tenant.id,
+        actorId: user.id,
+        module: "AUTH",
+        action: "TENANT_LOGIN",
+        entityType: "User",
+        entityId: user.id,
+        metadata: { tenantSlug: tenant.slug },
+      },
+    }),
   ]);
+
   await createSession({ userId: user.id, role: user.role, tenantId: tenant.id, tenantSlug: tenant.slug });
   redirect(defaultHomeForRole(user.role));
 }
@@ -47,5 +68,10 @@ export async function loginAction(_state: LoginState, formData: FormData): Promi
 export async function logoutAction() {
   const session = await readSession();
   await deleteSession();
+
+  if (session?.role === "SUPER_ADMIN" || session?.role === "PLATFORM_ADMIN") {
+    redirect("/login");
+  }
+
   redirect(session?.tenantSlug ? `/${session.tenantSlug}/login` : "/login");
 }

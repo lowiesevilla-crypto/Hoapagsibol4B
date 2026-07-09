@@ -1,5 +1,29 @@
 # Session Progress
 
+## 2026-07-09 - Develop Tenant Login URL Release Blocker
+
+Branch:
+develop
+
+Completed:
+
+- Fixed tenant login URL behavior from Platform Tenant Management.
+- Confirmed tenant list and tenant detail links point to `/{tenantSlug}/login`.
+- Updated tenant login routing so Platform Admin and Super Admin sessions can preview tenant login pages without wrong redirects.
+- Preserved existing redirect behavior for signed-in tenant users.
+
+Validation:
+
+- pnpm typecheck: Pending
+- pnpm build: Pending
+
+Not included:
+
+- No deployment.
+- No merge to main.
+- No database migrations.
+- No unrelated UI changes.
+
 ## 2026-07-09 - Phase 1 SUPER_ADMIN Platform Permission Hotfix
 
 Branch:

@@ -1,4 +1,5 @@
 import { notFound, redirect } from "next/navigation";
+import { Role } from "@prisma/client";
 import { defaultHomeForRole, readSession, sessionIsCurrent } from "@/lib/auth";
 import { resolveTenant, tenantCanSignIn } from "@/lib/tenant";
 import { TenantLoginScreen } from "@/components/tenant-login-screen";
@@ -18,7 +19,9 @@ export default async function TenantLoginPage({
 
   const session = await readSession();
 
-  if (session && (await sessionIsCurrent(session))) {
+  const previewingAsPlatformUser = session?.role === Role.SUPER_ADMIN || session?.role === Role.PLATFORM_ADMIN;
+
+  if (session && !previewingAsPlatformUser && (await sessionIsCurrent(session))) {
     redirect(defaultHomeForRole(session.role));
   }
 

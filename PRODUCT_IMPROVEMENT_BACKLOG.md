@@ -463,7 +463,7 @@ Priority:
 Critical
 
 Status:
-Open
+Fixed in release blocker hotfix on 2026-07-09
 
 Problem:
 SUPER_ADMIN cannot access new Platform pages.
@@ -521,4 +521,34 @@ Platform users are redirected to the Platform Dashboard after login.
 Tenant users are redirected to their tenant dashboard.
 No tenant information is shown on the Platform login page.
 
+## Improvement / Bug #022
+
+Module:
+Platform Tenant Management
+
+Priority:
+Critical
+
+Status:
+Open
+
+Problem:
+The tenant slug login URL link is not working when clicked from the HOAHub Platform on web and mobile.
+
+Expected:
+When Platform Admin clicks the tenant login URL, it should open the correct tenant login page.
+
+Example:
+`/pagsibol4b/login`
+
+Acceptance Criteria:
+- Tenant login URL is clickable on desktop
+- Tenant login URL is clickable on mobile
+- Link opens correct tenant login page
+- No broken routing
+- No wrong redirect
+- Works for all tenants
+
+Fix Summary:
+Platform Admin and Super Admin sessions can now open tenant login pages from Platform Tenant Management without being redirected back to the platform dashboard. Tenant-user login redirect behavior remains unchanged.
 

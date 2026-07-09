@@ -69,7 +69,6 @@ Only visible to:
 
 PLATFORM_ADMIN
 
-SUPER_ADMIN
 
 ---
 

@@ -1,5 +1,33 @@
 # Session Progress
 
+## 2026-07-09 - Sprint 2.1 Finance Engine SOA v1
+
+Branch:
+feature/soa-v1
+
+Completed:
+
+- Added the homeowner Statement of Account route at `/admin/homeowners/[id]/soa`.
+- Added a Statement of Account action from the homeowner detail page.
+- Built a tenant-scoped SOA data service from existing bills, payments, homeowner collections, and bond refunds.
+- Added account summary, running ledger, payment history, billing history, aging summary, print action, and PDF download.
+- Reused existing HOA association settings, document branding, QR pattern, payment coverage formatting, and receipt-style document layout.
+- Preserved existing authentication, RBAC, tenant routing, and database schema.
+
+Validation:
+
+- pnpm typecheck: Passed
+- pnpm build: Passed
+
+Not included:
+
+- No Prisma models.
+- No database migrations.
+- No payment gateway.
+- No AI features.
+- No production deployment.
+- SOA QR opens the tenant-scoped SOA route; persisted public SOA verification is deferred to a later sprint.
+
 ## 2026-07-09 - Develop Tenant Login URL Release Blocker
 
 Branch:

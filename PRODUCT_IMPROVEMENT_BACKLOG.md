@@ -419,6 +419,23 @@ Priority: 🔴 Critical
 
 🔴 Improvement #013 – Official Statement of Account
 Printable SOA with HOA branding, billing history, totals, QR verification, and PDF export.
+
+Sprint 2.1 Phase 1 Status:
+Development complete for SOA v1.
+
+Delivered:
+- Admin homeowner SOA route at `/admin/homeowners/[id]/soa`
+- Tenant-scoped financial view from existing bills, payments, collections, and bond refunds
+- HOA header, homeowner profile, account summary, running ledger, payment history, billing history, aging summary
+- Print SOA and Download PDF actions
+- Homeowner detail action for Statement of Account
+
+Remaining:
+- Persisted public SOA verification records
+- Homeowner portal self-service SOA route
+- Configurable SOA numbering policy
+- Treasurer signature workflow
+
 🔴 Improvement #014 – Monthly Dues Exemption Period
 Configurable exemption periods with reasons and audit logging.
 🔴 Improvement #015 – Billing Rules Engine

@@ -1,5 +1,18 @@
 # HOAHub v1.1 Implementation Plan
 
+## Sprint 2.1 - Finance Engine Foundation
+
+### Phase 1 - Homeowner Statement of Account
+
+- [x] Add `/admin/homeowners/[id]/soa`
+- [x] Add homeowner detail action for Statement of Account
+- [x] Reuse existing bills, payments, homeowner collections, and bond refund records
+- [x] Add HOA header, homeowner information, account summary, running ledger, payment history, billing history, and aging summary
+- [x] Add print and PDF export actions
+- [x] Keep SOA reads tenant-scoped and behind existing admin RBAC
+- [ ] Add persisted public SOA verification model in a future phase
+- [ ] Expand homeowner self-service SOA access in a future phase
+
 ## EPIC-002 Subscription & License Management
 
 ### Phase 1 — Database

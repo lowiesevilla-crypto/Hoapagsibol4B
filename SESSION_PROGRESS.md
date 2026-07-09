@@ -76,3 +76,22 @@ Not included:
 - No payment gateway.
 - No AI features.
 - No production deployment.
+
+Sprint 2.1 Progress
+
+Completed:
+- Statement of Account
+- Billing History
+- Payment History
+- Ledger
+- PDF Export
+
+UAT:
+PASS
+
+Release Blockers:
+- Print button not working
+- Outstanding Balance overlap
+
+Next Task:
+SOA Hotfix

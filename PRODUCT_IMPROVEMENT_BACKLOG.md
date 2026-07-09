@@ -569,3 +569,39 @@ Acceptance Criteria:
 Fix Summary:
 Platform Admin and Super Admin sessions can now open tenant login pages from Platform Tenant Management without being redirected back to the platform dashboard. Tenant-user login redirect behavior remains unchanged.
 
+Payments Module
+
+1. Ease of use-  Very Usefull
+2. Mobile experience- Next to enhance The UI/UX that Fits to all type of Screen and Device
+3. Missing features - Missing is the payment Webhook Each Tenant should have specific Setup of the Webhook for the Payment.
+4. Business process gaps- If Payment  Sucessful This will automatically Update all the related Reports, Balance ect. Reciept will be automatically Generated 
+5. AI opportunities- AI can Check Payment Status of the Tenant and Can Answer any Question Related Payments only for thier Spedicfic Tenant Always Apply the Data Privacy Act of 2012
+
+## Bug #028 – Print SOA Button
+
+Priority: Critical
+
+Status: Open
+
+Problem:
+Print SOA button is visible but does not trigger printing.
+
+Acceptance Criteria:
+- Button is clickable.
+- Opens browser print dialog.
+- Works on desktop.
+- Gracefully handled on mobile.
+## Bug #029 – SOA Outstanding Balance Layout
+
+Priority: High
+
+Status: Open
+
+Problem:
+Outstanding Balance overlaps adjacent text in both the screen view and PDF.
+
+Acceptance Criteria:
+- No overlapping text.
+- Responsive layout.
+- Large currency values display correctly.
+- Print and PDF layouts match.

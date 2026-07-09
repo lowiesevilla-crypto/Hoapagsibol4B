@@ -17,13 +17,14 @@ export default async function StatementOfAccountPage({ params }: { params: Promi
   const soa = await getStatementOfAccount(id, user.tenantId, getAppUrl());
   const qr = await QRCode.toDataURL(soa.verifyUrl, { width: 180, margin: 1, errorCorrectionLevel: "M" });
   const contactLine = [soa.association.contactNumber && `Contact: ${soa.association.contactNumber}`, soa.association.email && `Email: ${soa.association.email}`].filter(Boolean).join(" | ");
+  const pdfHref = `/admin/homeowners/${soa.homeowner.id}/soa/pdf`;
 
   return (
     <main className="print-document mx-auto min-h-screen max-w-6xl bg-white p-4 sm:p-8">
       <div className="print-hidden mb-5 flex flex-wrap justify-end gap-2">
         <Link className="btn-secondary" href={`/admin/homeowners/${soa.homeowner.id}`}><ArrowLeft className="size-4" /> Return to Homeowner</Link>
-        <a className="btn-secondary" href={`/admin/homeowners/${soa.homeowner.id}/soa/pdf`}><Download className="size-4" /> Download PDF</a>
-        <PrintButton label="Print SOA" />
+        <a className="btn-secondary" href={pdfHref}><Download className="size-4" /> Download PDF</a>
+        <PrintButton label="Print SOA" fallbackHref={pdfHref} />
       </div>
 
       <section className="border-2 border-ink p-4 sm:p-7">
@@ -62,14 +63,16 @@ export default async function StatementOfAccountPage({ params }: { params: Promi
           </div>
           <div>
             <h2 className="mb-3 text-sm font-black uppercase tracking-wider text-pine-800">Account Summary</h2>
-            <div className="grid gap-2 text-sm sm:grid-cols-2">
+            <div className="space-y-2 text-sm">
               <Summary label="Current Outstanding Balance" value={money(soa.summary.currentOutstandingBalance)} strong />
-              <Summary label="Total Amount Billed" value={money(soa.summary.totalAmountBilled)} />
-              <Summary label="Total Payments" value={money(soa.summary.totalPayments)} />
-              <Summary label="Total Credits" value={money(soa.summary.totalCredits)} />
-              <Summary label="Total Penalties" value={money(soa.summary.totalPenalties)} />
-              <Summary label="Last Payment Date" value={soa.summary.lastPaymentDate ? shortDate(soa.summary.lastPaymentDate) : "-"} />
-              <Summary label="Collection Status" value={soa.summary.collectionStatus} strong />
+              <div className="grid gap-2 sm:grid-cols-2">
+                <Summary label="Total Amount Billed" value={money(soa.summary.totalAmountBilled)} />
+                <Summary label="Total Payments" value={money(soa.summary.totalPayments)} />
+                <Summary label="Total Credits" value={money(soa.summary.totalCredits)} />
+                <Summary label="Total Penalties" value={money(soa.summary.totalPenalties)} />
+                <Summary label="Last Payment Date" value={soa.summary.lastPaymentDate ? shortDate(soa.summary.lastPaymentDate) : "-"} />
+                <Summary label="Collection Status" value={soa.summary.collectionStatus} />
+              </div>
             </div>
           </div>
         </section>
@@ -134,7 +137,12 @@ function Info({ label, value, wide = false }: { label: string; value: string; wi
 }
 
 function Summary({ label, value, strong = false }: { label: string; value: string; strong?: boolean }) {
-  return <div className="rounded-lg border border-slate-200 p-3"><p className="text-[11px] font-black uppercase text-slate-500">{label}</p><p className={strong ? "mt-1 text-lg font-black text-pine-800" : "mt-1 font-bold text-ink"}>{value}</p></div>;
+  return <div className={strong ? "rounded-lg border-2 border-pine-700 bg-pine-50 p-3" : "rounded-lg border border-slate-200 p-3"}>
+    <div className="grid grid-cols-1 items-start gap-1 sm:grid-cols-[minmax(0,1fr)_auto] sm:gap-3">
+      <p className="min-w-0 text-[11px] font-black uppercase leading-4 text-slate-500">{label}</p>
+      <p className={`${strong ? "text-xl text-pine-900 sm:text-2xl" : "text-sm text-ink"} max-w-full justify-self-end whitespace-nowrap text-right font-mono font-black tabular-nums leading-tight`}>{value}</p>
+    </div>
+  </div>;
 }
 
 function Aging({ label, value }: { label: string; value: number }) {

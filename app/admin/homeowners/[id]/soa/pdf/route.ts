@@ -86,9 +86,8 @@ function drawInfoBlocks(doc: PdfDoc, soa: StatementOfAccount) {
     ["Total Penalties", pdfMoney(soa.summary.totalPenalties)],
     ["Last Payment Date", soa.summary.lastPaymentDate ? shortDate(soa.summary.lastPaymentDate) : "-"],
   ];
-  drawKeyValues(doc, summary.slice(0, 3), 36, doc.y, 245);
-  drawKeyValues(doc, summary.slice(3), 315, doc.y, 220);
-  doc.y -= 78;
+  drawSummaryGrid(doc, summary);
+  doc.y -= 8;
 }
 
 function drawAging(doc: PdfDoc, soa: StatementOfAccount) {
@@ -205,6 +204,29 @@ function drawKeyValues(doc: PdfDoc, rows: string[][], x: number, y: number, widt
   });
 }
 
+function drawSummaryGrid(doc: PdfDoc, rows: string[][]) {
+  const [outstanding, ...rest] = rows;
+  const pine = rgb(0.03, 0.24, 0.17);
+  doc.page.drawRectangle({ x: 36, y: doc.y - 38, width: 523, height: 38, color: rgb(0.94, 0.98, 0.95), borderColor: pine, borderWidth: 1 });
+  doc.page.drawText(outstanding[0].toUpperCase(), { x: 46, y: doc.y - 16, font: doc.bold, size: 7, color: rgb(0.28, 0.34, 0.34) });
+  drawRightAligned(doc.page, outstanding[1], doc.bold, 13, 546, doc.y - 24, pine);
+  doc.y -= 48;
+
+  const cellWidth = 250;
+  const cellGap = 23;
+  const rowHeight = 30;
+  rest.forEach(([label, value], index) => {
+    const column = index % 2;
+    const row = Math.floor(index / 2);
+    const x = 36 + column * (cellWidth + cellGap);
+    const y = doc.y - row * rowHeight;
+    doc.page.drawRectangle({ x, y: y - 24, width: cellWidth, height: 24, borderColor: rgb(0.83, 0.86, 0.88), borderWidth: 0.5 });
+    doc.page.drawText(label.toUpperCase(), { x: x + 7, y: y - 10, font: doc.bold, size: 6.2, color: rgb(0.35, 0.38, 0.4), maxWidth: 105 });
+    drawRightAligned(doc.page, safe(value), doc.bold, 8, x + cellWidth - 7, y - 17, rgb(0.05, 0.07, 0.09));
+  });
+  doc.y -= Math.ceil(rest.length / 2) * rowHeight;
+}
+
 function labelValue(page: PDFPage, bold: PDFFont, regular: PDFFont, label: string, value: string, x: number, y: number, width: number) {
   page.drawText(label.toUpperCase(), { x, y, font: bold, size: 6.5, color: rgb(0.35, 0.38, 0.4) });
   page.drawText(safe(value), { x, y: y - 13, font: regular, size: 8, color: rgb(0.05, 0.07, 0.09), maxWidth: width });
@@ -237,6 +259,11 @@ function wrapText(text: string, font: PDFFont, size: number, maxWidth: number) {
 function drawCenteredWithin(page: PDFPage, text: string, font: PDFFont, size: number, x1: number, x2: number, y: number, color: ReturnType<typeof rgb>) {
   const width = font.widthOfTextAtSize(text, size);
   page.drawText(text, { x: x1 + Math.max(0, (x2 - x1 - width) / 2), y, font, size, color });
+}
+
+function drawRightAligned(page: PDFPage, text: string, font: PDFFont, size: number, rightX: number, y: number, color: ReturnType<typeof rgb>) {
+  const width = font.widthOfTextAtSize(text, size);
+  page.drawText(text, { x: rightX - width, y, font, size, color });
 }
 
 function pdfMoney(value: number) {

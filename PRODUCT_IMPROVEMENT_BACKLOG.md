@@ -436,6 +436,10 @@ Remaining:
 - Configurable SOA numbering policy
 - Treasurer signature workflow
 
+Hotfix #001:
+- Bug #028 Fixed: Print SOA now invokes browser printing and falls back to PDF when print is unavailable.
+- Bug #029 Fixed: Outstanding Balance and summary currency values now use non-overlapping right-aligned layouts on screen, print, and PDF.
+
 🔴 Improvement #014 – Monthly Dues Exemption Period
 Configurable exemption periods with reasons and audit logging.
 🔴 Improvement #015 – Billing Rules Engine

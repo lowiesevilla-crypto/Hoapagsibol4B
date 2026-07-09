@@ -1,5 +1,34 @@
 # Session Progress
 
+## 2026-07-09 - Sprint 2.1 Hotfix #001 SOA Print and Layout
+
+Branch:
+feature/soa-v1
+
+Completed:
+
+- Bug #028 Fixed: Updated the SOA print action to use the browser print dialog with a PDF fallback when printing is unavailable.
+- Bug #029 Fixed: Redesigned the SOA account summary layout so Outstanding Balance and other currency values are right-aligned and do not overlap on screen, print, or PDF.
+- Adjusted the SOA PDF account summary to measure currency text from the right edge for large balances.
+- Preserved existing authentication, RBAC, tenant routing, tenant isolation, database schema, and SOA business data source logic.
+
+Validation:
+
+- pnpm typecheck: Passed
+- pnpm build: Passed
+
+Regression Scope:
+
+- SOA Header: Passed build regression
+- Homeowner Information: Passed build regression
+- Financial Summary: Passed build regression
+- Billing History: Passed build regression
+- Payment History: Passed build regression
+- Ledger: Passed build regression
+- PDF Download: Passed build regression
+- Return Button: Passed build regression
+- Tenant Isolation / RBAC: Passed build regression
+
 ## 2026-07-09 - Sprint 2.1 Finance Engine SOA v1
 
 Branch:

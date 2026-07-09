@@ -1,4 +1,5 @@
 export type IconName =
+  | "audit"
   | "dashboard"
   | "homeowners"
   | "contractors"
@@ -16,24 +17,53 @@ export type IconName =
   | "data"
   | "settings"
   | "profile"
+  | "licenses"
   | "chat"
-  | "documents";
+  | "documents"
+  | "plans"
+  | "platform"
+  | "subscriptions";
 
 export type LinkItem = { href: string; label: string; icon: IconName; section: string };
 
 export const adminLinks: LinkItem[] = [
-  { href: "/admin/dashboard", label: "Dashboard", icon: "dashboard", section: "Overview" },
-  { href: "/admin/homeowners", label: "Homeowners", icon: "homeowners", section: "Residents" }, { href: "/admin/contractors", label: "Contractors", icon: "contractors", section: "Residents" }, { href: "/admin/vehicles", label: "Vehicles & stickers", icon: "vehicles", section: "Residents" },
-  { href: "/admin/employees", label: "Employees", icon: "employees", section: "Human resources" }, { href: "/admin/attendance", label: "Attendance", icon: "attendance", section: "Human resources" }, { href: "/admin/payroll", label: "Payroll", icon: "payroll", section: "Human resources" },
-  { href: "/admin/billing", label: "Billing", icon: "billing", section: "Finance" }, { href: "/admin/payments", label: "Payments", icon: "payments", section: "Finance" }, { href: "/admin/receipts", label: "Receipt register", icon: "collections", section: "Finance" }, { href: "/admin/collections", label: "Other collections", icon: "collections", section: "Finance" }, { href: "/admin/expenses", label: "Expenses", icon: "expenses", section: "Finance" }, { href: "/admin/reports", label: "Reports", icon: "reports", section: "Finance" }, { href: "/admin/data", label: "Data management", icon: "data", section: "Finance" }, { href: "/admin/data/migrations", label: "Balance migration", icon: "data", section: "Finance" },
-  { href: "/admin/documents/new", label: "Generate document", icon: "documents", section: "Document management" }, { href: "/admin/documents", label: "Document requests", icon: "documents", section: "Document management" }, { href: "/admin/documents/generated", label: "Generated documents", icon: "documents", section: "Document management" }, { href: "/admin/document-templates", label: "Document templates", icon: "documents", section: "Document management" }, { href: "/admin/documents/archive", label: "Document archive", icon: "documents", section: "Document management" },
-  { href: "/admin/announcements", label: "Announcements", icon: "announcements", section: "Community" }, { href: "/admin/events", label: "Events", icon: "events", section: "Community" }, { href: "/admin/chat", label: "Chat", icon: "chat", section: "Community" },
+  { href: "/admin/dashboard", label: "Dashboard", icon: "dashboard", section: "Administration" },
+  { href: "/admin/homeowners", label: "Homeowners", icon: "homeowners", section: "Administration" },
+  { href: "/admin/contractors", label: "Contractors", icon: "contractors", section: "Security" },
+  { href: "/admin/vehicles", label: "Vehicles & stickers", icon: "vehicles", section: "Security" },
+  { href: "/admin/billing", label: "Billing", icon: "billing", section: "Finance" },
+  { href: "/admin/payments", label: "Payments", icon: "payments", section: "Finance" },
+  { href: "/admin/receipts", label: "Receipt register", icon: "collections", section: "Finance" },
+  { href: "/admin/collections", label: "Other collections", icon: "collections", section: "Finance" },
+  { href: "/admin/expenses", label: "Expenses", icon: "expenses", section: "Finance" },
+  { href: "/admin/documents/new", label: "Generate document", icon: "documents", section: "Resident Services" },
+  { href: "/admin/documents", label: "Document requests", icon: "documents", section: "Resident Services" },
+  { href: "/admin/documents/generated", label: "Generated documents", icon: "documents", section: "Resident Services" },
+  { href: "/admin/document-templates", label: "Document templates", icon: "documents", section: "Resident Services" },
+  { href: "/admin/documents/archive", label: "Document archive", icon: "documents", section: "Resident Services" },
+  { href: "/admin/announcements", label: "Announcements", icon: "announcements", section: "Resident Services" },
+  { href: "/admin/events", label: "Events", icon: "events", section: "Resident Services" },
+  { href: "/admin/chat", label: "Chat", icon: "chat", section: "Resident Services" },
+  { href: "/admin/employees", label: "Employees", icon: "employees", section: "HR & Payroll" },
+  { href: "/admin/attendance", label: "Attendance", icon: "attendance", section: "HR & Payroll" },
+  { href: "/admin/payroll", label: "Payroll", icon: "payroll", section: "HR & Payroll" },
+  { href: "/admin/reports", label: "Reports", icon: "reports", section: "Reports" },
+  { href: "/admin/data", label: "Data management", icon: "data", section: "Reports" },
+  { href: "/admin/data/migrations", label: "Balance migration", icon: "data", section: "Reports" },
 ];
 
 export const systemAdminLinks: LinkItem[] = [
-  { href: "/admin/settings", label: "System settings", icon: "settings", section: "System" },
-  { href: "/admin/settings/organization", label: "Organization", icon: "homeowners", section: "System" },
+  { href: "/admin/settings", label: "System settings", icon: "settings", section: "Settings" },
+  { href: "/admin/settings/organization", label: "Organization", icon: "homeowners", section: "Settings" },
   ...adminLinks,
+];
+
+export const platformLinks: LinkItem[] = [
+  { href: "/platform/tenants", label: "Tenants", icon: "platform", section: "Platform" },
+  { href: "/platform/plans", label: "Plans", icon: "plans", section: "Platform" },
+  { href: "/platform/subscriptions", label: "Subscriptions", icon: "subscriptions", section: "Platform" },
+  { href: "/platform/licenses", label: "Licenses", icon: "licenses", section: "Platform" },
+  { href: "/platform/audit", label: "Platform audit", icon: "audit", section: "Platform" },
 ];
 
 export const portalLinks: LinkItem[] = [

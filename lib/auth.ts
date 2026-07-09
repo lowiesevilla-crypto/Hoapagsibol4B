@@ -6,6 +6,7 @@ import { jwtVerify } from "jose/jwt/verify";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/db";
+import { adminHomeForRole } from "@/lib/role-access";
 import { setTenantContext } from "@/lib/tenant-context";
 
 const COOKIE_NAME = "hoa_session";
@@ -22,11 +23,12 @@ function homeForRole(role: Role) {
   if (role === Role.EMPLOYEE) return "/employee/attendance";
   if (role === Role.SUPER_ADMIN || role === Role.PLATFORM_ADMIN) return "/platform/tenants";
   if (role === Role.SYSTEM_ADMIN) return "/admin/settings";
-  return "/admin/dashboard";
+  return adminHomeForRole(role);
 }
 
 function canUseRole(actualRole: Role, requiredRole: Role) {
-  if (requiredRole === Role.ADMIN) return (actualRole as string) === Role.ADMIN || [Role.SYSTEM_ADMIN, Role.HOA_ADMIN, Role.BILLING_MANAGER, Role.PAYROLL_MANAGER, Role.STAFF, Role.SUPER_ADMIN, Role.PLATFORM_ADMIN].some((role) => role === actualRole);
+  if (requiredRole === Role.ADMIN) return (actualRole as string) === Role.ADMIN || [Role.SYSTEM_ADMIN, Role.HOA_ADMIN, Role.BILLING_MANAGER, Role.PAYROLL_MANAGER, Role.STAFF, Role.SUPER_ADMIN].some((role) => role === actualRole);
+  if (requiredRole === Role.PLATFORM_ADMIN) return actualRole === Role.PLATFORM_ADMIN || actualRole === Role.SUPER_ADMIN;
   if (requiredRole === Role.SYSTEM_ADMIN) return actualRole === Role.SYSTEM_ADMIN || actualRole === Role.SUPER_ADMIN || actualRole === Role.PLATFORM_ADMIN;
   return actualRole === requiredRole;
 }

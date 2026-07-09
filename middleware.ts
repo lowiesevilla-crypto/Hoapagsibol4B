@@ -54,9 +54,9 @@ export async function middleware(request: NextRequest) {
     const { payload } = await jwtVerify(token, secret);
     const role = String(payload.role || "");
     const isPlatformRole = role === "SUPER_ADMIN" || role === "PLATFORM_ADMIN";
-    const isAdminRole = isPlatformRole || ["ADMIN", "SYSTEM_ADMIN", "HOA_ADMIN", "BILLING_MANAGER", "PAYROLL_MANAGER", "STAFF"].includes(role);
+    const isAdminRole = role === "SUPER_ADMIN" || ["ADMIN", "SYSTEM_ADMIN", "HOA_ADMIN", "BILLING_MANAGER", "PAYROLL_MANAGER", "STAFF"].includes(role);
     if (path.startsWith("/platform") && !isPlatformRole) return NextResponse.redirect(new URL("/admin/dashboard", request.url));
-    if (path.startsWith("/admin") && !isAdminRole) return NextResponse.redirect(new URL("/portal/dashboard", request.url));
+    if (path.startsWith("/admin") && !isAdminRole) return NextResponse.redirect(new URL(role === "PLATFORM_ADMIN" ? "/platform/tenants" : "/portal/dashboard", request.url));
     if (path.startsWith("/portal") && role !== "HOMEOWNER") return NextResponse.redirect(new URL(role === "SYSTEM_ADMIN" ? "/admin/settings" : role === "EMPLOYEE" ? "/employee/attendance" : "/admin/dashboard", request.url));
     if (path.startsWith("/employee") && role !== "EMPLOYEE") return NextResponse.redirect(new URL(isAdminRole ? "/admin/dashboard" : "/portal/dashboard", request.url));
     const requestHeaders = new Headers(request.headers);

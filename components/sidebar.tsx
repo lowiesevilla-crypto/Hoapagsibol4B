@@ -1,22 +1,39 @@
 "use client";
 
 import Link from "next/link";
-import { Fragment, useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { usePathname } from "next/navigation";
-import { BellRing, CalendarDays, CarFront, CircleDollarSign, CreditCard, FileBarChart, FileText, HardHat, LayoutDashboard, LogOut, Megaphone, Menu, MessageSquare, ReceiptText, Settings, UserRound, UsersRound } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
+import { BellRing, Building2, CalendarDays, CarFront, ChevronDown, CircleDollarSign, CreditCard, FileBarChart, FileText, HardHat, KeyRound, Layers3, LayoutDashboard, ListChecks, LogOut, Megaphone, Menu, MessageSquare, ReceiptText, Settings, ShieldCheck, UserRound, UsersRound } from "lucide-react";
 import { logoutAction } from "@/lib/actions/auth";
 import { AssociationLogo } from "@/components/association-logo";
+import type { IconName, LinkItem } from "@/components/sidebar-links";
 
-const icons = { dashboard: LayoutDashboard, homeowners: UsersRound, contractors: HardHat, vehicles: CarFront, employees: UsersRound, attendance: CalendarDays, payroll: CreditCard, expenses: ReceiptText, billing: CircleDollarSign, payments: CreditCard, collections: ReceiptText, announcements: Megaphone, events: CalendarDays, reports: FileBarChart, data: FileBarChart, settings: Settings, profile: UserRound, chat: MessageSquare, documents: FileText };
-type IconName = keyof typeof icons;
-type LinkItem = { href: string; label: string; icon: IconName; section: string };
+const icons: Record<IconName, LucideIcon> = { audit: ShieldCheck, dashboard: LayoutDashboard, homeowners: UsersRound, contractors: HardHat, vehicles: CarFront, employees: UsersRound, attendance: CalendarDays, payroll: CreditCard, expenses: ReceiptText, billing: CircleDollarSign, payments: CreditCard, collections: ReceiptText, announcements: Megaphone, events: CalendarDays, reports: FileBarChart, data: FileBarChart, settings: Settings, profile: UserRound, licenses: KeyRound, chat: MessageSquare, documents: FileText, plans: Layers3, platform: Building2, subscriptions: ListChecks };
 type AssociationBrand = { name: string; logoUrl: string };
+const OPEN_SECTIONS_KEY = "hoahub.sidebar.openSections.v1";
 
 export function Sidebar({ user, links, roleLabel, association, initialChatUnreadCount = 0 }: { user: { name: string; email: string }; links: LinkItem[]; roleLabel: string; association: AssociationBrand; initialChatUnreadCount?: number }) {
   const pathname = usePathname();
   const mobileMenuRef = useRef<HTMLDetailsElement>(null);
   const [chatUnreadCount, setChatUnreadCount] = useState(initialChatUnreadCount);
+  const [openSections, setOpenSections] = useState<Record<string, boolean>>({});
+  const groupedLinks = useMemo(() => groupLinks(links), [links]);
+  const hasChatLink = links.some((item) => item.icon === "chat");
   useEffect(() => {
+    try {
+      const saved = window.localStorage.getItem(OPEN_SECTIONS_KEY);
+      if (saved) setOpenSections(JSON.parse(saved) as Record<string, boolean>);
+    } catch { /* Ignore storage issues; the nav remains usable. */ }
+  }, []);
+  useEffect(() => {
+    if (!Object.keys(openSections).length) return;
+    try {
+      window.localStorage.setItem(OPEN_SECTIONS_KEY, JSON.stringify(openSections));
+    } catch { /* Ignore storage issues; the nav remains usable. */ }
+  }, [openSections]);
+  useEffect(() => {
+    if (!hasChatLink) return;
     let active = true;
     async function refreshUnread() {
       try {
@@ -35,9 +52,12 @@ export function Sidebar({ user, links, roleLabel, association, initialChatUnread
     window.addEventListener("chat-unread-updated", handleUnread);
     window.addEventListener("focus", refreshUnread);
     return () => { active = false; window.clearInterval(timer); window.removeEventListener("chat-unread-updated", handleUnread); window.removeEventListener("focus", refreshUnread); };
-  }, []);
+  }, [hasChatLink]);
   const closeMobileMenu = () => {
     if (mobileMenuRef.current) mobileMenuRef.current.open = false;
+  };
+  const toggleSection = (section: string) => {
+    setOpenSections((current) => ({ ...current, [section]: !(current[section] ?? true) }));
   };
   const titleParts = association.name.split(/\s+/);
   const firstLine = titleParts.slice(0, 3).join(" ") || association.name;
@@ -47,10 +67,10 @@ export function Sidebar({ user, links, roleLabel, association, initialChatUnread
       <span className="absolute inset-x-0 top-0 hidden h-1 bg-gradient-to-r from-leaf-500 via-white/80 to-pine-500 lg:block" />
       <div className="flex h-18 items-center justify-between px-5 lg:h-24">
         <Link href={links[0].href} className="flex min-w-0 items-center gap-3 font-black"><AssociationLogo className="size-12 lg:size-14" src={association.logoUrl} alt={`${association.name} logo`} /><span className="min-w-0 max-w-44 break-words text-sm leading-tight lg:text-base">{firstLine}<br />{secondLine && <span className="text-leaf-100">{secondLine}</span>}</span></Link>
-        <details ref={mobileMenuRef} className="relative lg:hidden"><summary aria-label="Open navigation" className="relative cursor-pointer list-none rounded-xl border border-white/15 bg-white/10 p-2.5 hover:bg-white/20"><Menu className="size-5" />{chatUnreadCount > 0 && <span className="absolute -right-2 -top-2 grid min-w-5 place-items-center rounded-full bg-red-500 px-1 text-[10px] font-black text-white" aria-label={`${chatUnreadCount} unread chat messages`}>{chatUnreadCount > 99 ? "99+" : chatUnreadCount}</span>}</summary><nav className="absolute right-0 top-12 z-50 max-h-[75vh] w-64 overflow-y-auto rounded-2xl border border-white/10 bg-pine-900 p-2 shadow-2xl">{links.map((item) => <MobileLink key={item.href} item={item} active={pathname === item.href || pathname.startsWith(`${item.href}/`)} onNavigate={closeMobileMenu} unreadCount={item.icon === "chat" ? chatUnreadCount : 0} />)}<form action={logoutAction} className="mt-1 border-t border-white/10 pt-1"><button onClick={closeMobileMenu} className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm hover:bg-white/10"><LogOut className="size-4" />Log out</button></form></nav></details>
+        <details ref={mobileMenuRef} className="relative lg:hidden"><summary aria-label="Open navigation" className="relative cursor-pointer list-none rounded-xl border border-white/15 bg-white/10 p-2.5 hover:bg-white/20"><Menu className="size-5" />{hasChatLink && chatUnreadCount > 0 && <span className="absolute -right-2 -top-2 grid min-w-5 place-items-center rounded-full bg-red-500 px-1 text-[10px] font-black text-white" aria-label={`${chatUnreadCount} unread chat messages`}>{chatUnreadCount > 99 ? "99+" : chatUnreadCount}</span>}</summary><nav className="absolute right-0 top-12 z-50 max-h-[75vh] w-72 overflow-y-auto rounded-2xl border border-white/10 bg-pine-900 p-2 shadow-2xl">{groupedLinks.map(({ section, items }) => <SidebarSection key={section} section={section} items={items} pathname={pathname} open={sectionIsActive(items, pathname) || (openSections[section] ?? true)} onToggle={() => toggleSection(section)} unreadCount={chatUnreadCount} onNavigate={closeMobileMenu} mobile />)}<form action={logoutAction} className="mt-1 border-t border-white/10 pt-1"><button onClick={closeMobileMenu} className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm hover:bg-white/10"><LogOut className="size-4" />Log out</button></form></nav></details>
       </div>
       <nav className="hidden max-h-[calc(100vh-13.5rem)] overflow-y-auto px-3 pb-5 lg:block">
-        {links.map((item, index) => { const Icon = item.icon === "chat" && chatUnreadCount > 0 ? BellRing : icons[item.icon]; const active = pathname === item.href || pathname.startsWith(`${item.href}/`); const showSection = index === 0 || links[index - 1].section !== item.section; return <Fragment key={item.href}>{showSection && <p className="mb-1 mt-4 px-3 text-[10px] font-extrabold uppercase tracking-[.22em] text-leaf-100/80">{item.section}</p>}<Link href={item.href} className={`mb-1 flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold transition ${active ? "bg-white text-pine-900 shadow-lg" : "text-pine-100 hover:bg-white/10 hover:text-white"}`}><span className={`grid size-8 place-items-center rounded-lg ${active ? "bg-gradient-to-br from-leaf-100 to-pine-100 text-pine-700" : item.icon === "chat" && chatUnreadCount > 0 ? "animate-pulse bg-red-500 text-white" : "bg-white/5"}`}><Icon className="size-4.5" /></span>{item.label}{item.icon === "chat" && chatUnreadCount > 0 && <span className={`ml-auto grid min-w-6 place-items-center rounded-full px-2 py-1 text-xs font-black ${active ? "bg-red-500 text-white" : "bg-white text-pine-900"}`} aria-label={`${chatUnreadCount} unread messages`}>{chatUnreadCount > 99 ? "99+" : chatUnreadCount}</span>}</Link></Fragment>; })}
+        {groupedLinks.map(({ section, items }) => <SidebarSection key={section} section={section} items={items} pathname={pathname} open={sectionIsActive(items, pathname) || (openSections[section] ?? true)} onToggle={() => toggleSection(section)} unreadCount={chatUnreadCount} />)}
       </nav>
       <div className="hidden border-t border-white/10 bg-black/5 p-4 lg:absolute lg:inset-x-0 lg:bottom-0 lg:block">
         <div className="mb-3 flex items-center gap-3"><span className="grid size-11 place-items-center rounded-2xl bg-gradient-to-br from-leaf-500 to-leaf-600 font-black text-white shadow-lg">{user.name.charAt(0)}</span><div className="min-w-0"><p className="truncate text-sm font-bold">{user.name}</p><p className="truncate text-xs text-pine-100/70">{roleLabel}</p></div></div>
@@ -60,7 +80,39 @@ export function Sidebar({ user, links, roleLabel, association, initialChatUnread
   );
 }
 
-function MobileLink({ item, active, onNavigate, unreadCount }: { item: LinkItem; active: boolean; onNavigate: () => void; unreadCount: number }) { const Icon = item.icon === "chat" && unreadCount > 0 ? BellRing : icons[item.icon]; return <Link href={item.href} onClick={onNavigate} className={`flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm ${active ? "bg-white text-pine-900" : "hover:bg-white/10"}`}><Icon className="size-4" />{item.label}{unreadCount > 0 && <span className="ml-auto grid min-w-6 place-items-center rounded-full bg-red-500 px-2 py-1 text-xs font-black text-white">{unreadCount > 99 ? "99+" : unreadCount}</span>}</Link>; }
+function SidebarSection({ section, items, pathname, open, onToggle, unreadCount, onNavigate, mobile = false }: { section: string; items: LinkItem[]; pathname: string; open: boolean; onToggle: () => void; unreadCount: number; onNavigate?: () => void; mobile?: boolean }) {
+  return <div className="mt-2">
+    <button type="button" onClick={onToggle} className="flex w-full items-center justify-between rounded-xl px-3 py-2 text-[10px] font-extrabold uppercase tracking-[.2em] text-leaf-100/85 hover:bg-white/10">
+      <span>{section}</span>
+      <ChevronDown className={`size-4 transition ${open ? "rotate-180" : ""}`} />
+    </button>
+    {open && <div className="mt-1 space-y-1">
+      {items.map((item) => <SidebarLink key={item.href} item={item} active={linkIsActive(item.href, pathname)} unreadCount={item.icon === "chat" ? unreadCount : 0} onNavigate={onNavigate} mobile={mobile} />)}
+    </div>}
+  </div>;
+}
+
+function SidebarLink({ item, active, unreadCount, onNavigate, mobile = false }: { item: LinkItem; active: boolean; unreadCount: number; onNavigate?: () => void; mobile?: boolean }) {
+  const Icon = item.icon === "chat" && unreadCount > 0 ? BellRing : icons[item.icon];
+  return <Link href={item.href} onClick={onNavigate} className={`flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold transition ${active ? "bg-white text-pine-900 shadow-lg" : "text-pine-100 hover:bg-white/10 hover:text-white"} ${mobile ? "" : "mb-1"}`}><span className={`grid size-8 place-items-center rounded-lg ${active ? "bg-gradient-to-br from-leaf-100 to-pine-100 text-pine-700" : item.icon === "chat" && unreadCount > 0 ? "animate-pulse bg-red-500 text-white" : "bg-white/5"}`}><Icon className="size-4" /></span><span className="min-w-0 flex-1 truncate">{item.label}</span>{unreadCount > 0 && <span className={`ml-auto grid min-w-6 place-items-center rounded-full px-2 py-1 text-xs font-black ${active ? "bg-red-500 text-white" : "bg-white text-pine-900"}`} aria-label={`${unreadCount} unread messages`}>{unreadCount > 99 ? "99+" : unreadCount}</span>}</Link>;
+}
+
+function groupLinks(links: LinkItem[]) {
+  return links.reduce<Array<{ section: string; items: LinkItem[] }>>((groups, item) => {
+    const group = groups.find((entry) => entry.section === item.section);
+    if (group) group.items.push(item);
+    else groups.push({ section: item.section, items: [item] });
+    return groups;
+  }, []);
+}
+
+function sectionIsActive(items: LinkItem[], pathname: string) {
+  return items.some((item) => linkIsActive(item.href, pathname));
+}
+
+function linkIsActive(href: string, pathname: string) {
+  return pathname === href || pathname.startsWith(`${href}/`);
+}
 
 export const adminLinks: LinkItem[] = [
   { href: "/admin/dashboard", label: "Dashboard", icon: "dashboard", section: "Overview" },

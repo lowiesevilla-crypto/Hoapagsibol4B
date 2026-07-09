@@ -3,39 +3,23 @@ import type { LinkItem } from "@/components/sidebar-links";
 
 const unrestrictedAdminRoles = new Set<Role>([
   Role.SUPER_ADMIN,
-  Role.PLATFORM_ADMIN,
   Role.SYSTEM_ADMIN,
   Role.HOA_ADMIN,
   Role.ADMIN,
 ]);
 
 const payrollManagerAllowedAdminPrefixes = [
-  "/admin/dashboard",
   "/admin/employees",
   "/admin/attendance",
   "/admin/payroll",
-  "/admin/reports",
-  "/admin/chat",
-  "/admin/announcements",
-  "/admin/events",
-  "/admin/documents",
-  "/admin/document-templates",
-  "/admin/loans",
-  "/admin/cash-advance",
 ];
 
 const billingManagerAllowedAdminPrefixes = [
-  "/admin/dashboard",
   "/admin/billing",
   "/admin/payments",
   "/admin/receipts",
   "/admin/collections",
   "/admin/expenses",
-  "/admin/reports",
-  "/admin/chat",
-  "/admin/announcements",
-  "/admin/events",
-  "/admin/documents",
 ];
 
 const staffAllowedAdminPrefixes = [
@@ -64,4 +48,11 @@ export function filterAdminLinksByRole(links: LinkItem[], role: Role) {
   const prefixes = adminPrefixesForRole(role);
   if (prefixes === null) return links;
   return links.filter((link) => prefixes.some((prefix) => link.href === prefix || link.href.startsWith(`${prefix}/`)));
+}
+
+export function adminHomeForRole(role: Role) {
+  if (role === Role.PAYROLL_MANAGER) return "/admin/payroll";
+  if (role === Role.BILLING_MANAGER) return "/admin/billing";
+  if (role === Role.STAFF) return "/admin/chat";
+  return "/admin/dashboard";
 }

@@ -427,3 +427,22 @@ Configurable billing policies (exemptions, discounts, penalties, rate types).
 Role-aware AI capable of explaining balances, dues, and statements while respecting tenant isolation and user permissions.
 🟡 Improvement #017 – Billing Timeline View
 Visual monthly payment status for both staff and homeowners.
+🔴 Improvement #019 – SUPER_ADMIN Permission Inheritance
+
+Priority: Critical
+
+Problem:
+SUPER_ADMIN cannot access Platform pages because role checks treat PLATFORM_ADMIN and SUPER_ADMIN as separate roles.
+
+Business Requirement:
+SUPER_ADMIN must inherit all permissions.
+
+Acceptance Criteria:
+
+Access all Platform pages.
+Access all HOA modules.
+No duplicate permission logic.
+Centralized RBAC.
+
+Status:
+Completed in Phase 1 hotfix on 2026-07-09

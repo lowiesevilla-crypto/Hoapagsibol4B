@@ -427,22 +427,98 @@ Configurable billing policies (exemptions, discounts, penalties, rate types).
 Role-aware AI capable of explaining balances, dues, and statements while respecting tenant isolation and user permissions.
 🟡 Improvement #017 – Billing Timeline View
 Visual monthly payment status for both staff and homeowners.
-🔴 Improvement #019 – SUPER_ADMIN Permission Inheritance
+## Improvement #018
+
+Module:
+Navigation
+
+Priority:
+High
+
+Problem:
+Menu groups cannot be collapsed or expanded.
+
+Business Value:
+Large installations with many modules become difficult to navigate.
+
+Solution:
+Implement collapsible sidebar groups.
+
+Requirements:
+- Expand/Collapse animation
+- Remember expanded state
+- Collapse all / Expand all (future)
+- Mobile compatible
+
+Status:
+Backlog
+
+md
+## Improvement #019
+
+Module:
+Platform RBAC
+
+Priority:
+Critical
+
+Status:
+Open
+
+Problem:
+SUPER_ADMIN cannot access new Platform pages.
+
+Business Requirement:
+SUPER_ADMIN must inherit all PLATFORM_ADMIN permissions.
+
+Acceptance Criteria:
+- SUPER_ADMIN can access /platform/plans
+- SUPER_ADMIN can access /platform/subscriptions
+- SUPER_ADMIN can access /platform/licenses
+- SUPER_ADMIN can access /platform/audit
+- PLATFORM_ADMIN can access Platform pages
+- HOA_ADMIN cannot access Platform pages
+- Tenant users cannot access Platform pages
+
+## Improvement #020
+
+Module:
+Chat
+
+Priority:
+High
+
+Status:
+Backlog
+
+Requirement:
+SUPER_ADMIN should have a Platform Chat view that can communicate with HOA Admins across all tenants.
+
+Acceptance Criteria:
+- SUPER_ADMIN can see HOA Admin contacts grouped by tenant
+- SUPER_ADMIN can start chat with HOA Admins only
+- SUPER_ADMIN cannot see private homeowner/employee chats unless explicitly authorized
+- Tenant data privacy is preserved
+
+md
+🔴 Improvement #021 – Separate Platform Login Experience
 
 Priority: Critical
 
-Problem:
-SUPER_ADMIN cannot access Platform pages because role checks treat PLATFORM_ADMIN and SUPER_ADMIN as separate roles.
+Business Problem
 
-Business Requirement:
-SUPER_ADMIN must inherit all permissions.
+Platform administrators currently see tenant branding on the login page, which is confusing and does not reflect the platform-level administration experience.
 
-Acceptance Criteria:
+Business Requirement
 
-Access all Platform pages.
-Access all HOA modules.
-No duplicate permission logic.
-Centralized RBAC.
+Provide a dedicated Platform login page at /platform/login with HOAHub branding, while keeping tenant-specific branding for /{tenantSlug}/login.
 
-Status:
-Completed in Phase 1 hotfix on 2026-07-09
+Acceptance Criteria
+
+/platform/login uses HOAHub branding.
+/{tenantSlug}/login uses the tenant's logo, colors, and community information.
+Platform users are redirected to the Platform Dashboard after login.
+Tenant users are redirected to their tenant dashboard.
+No tenant information is shown on the Platform login page.
+
+

@@ -9,6 +9,21 @@ import { prisma } from "@/lib/db";
 import { findEffectiveBillingRule } from "@/lib/services/billing-rules";
 import { money, shortDate } from "@/lib/utils";
 
+const MONTH_NAMES = [
+  "January",
+  "February",
+  "March",
+  "April",
+  "May",
+  "June",
+  "July",
+  "August",
+  "September",
+  "October",
+  "November",
+  "December",
+];
+
 export default async function BillingRulesPage({ searchParams }: { searchParams: Promise<{ edit?: string; error?: string; field?: string; fieldMessage?: string; success?: string }> }) {
   const user = await requireBillingSettingsAccess();
   const query = await searchParams;
@@ -90,8 +105,9 @@ function monthOptions() {
   return Array.from({ length: 12 }, (_, index) => <option key={index + 1} value={String(index + 1)}>{monthName(index + 1)}</option>);
 }
 
-function monthName(month: number) {
-  return new Date(Date.UTC(2026, month - 1, 1)).toLocaleDateString("en-PH", { month: "long", timeZone: "UTC" });
+function monthName(month: number | null | undefined) {
+  if (!month || month < 1 || month > 12) return "";
+  return MONTH_NAMES[month - 1];
 }
 
 function label(value: string) {

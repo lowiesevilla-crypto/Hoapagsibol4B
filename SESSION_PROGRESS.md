@@ -1,5 +1,45 @@
 # Session Progress
 
+## 2026-07-11 - Sprint 2.2 End Period Display and Clearing Fix
+
+Branch:
+feature/billing-rules-engine
+
+Completed:
+
+- Fixed Bug #049 by replacing Date-based month display with a deterministic month-name array indexed by `month - 1`.
+- Updated optional end-period parsing so submitted blank strings become `null`, numeric strings like `"12"` become numbers, and absent fields remain distinguishable.
+- Updated Billing Rule save mapping to use `FormData.has()` so explicit clearing writes `effectiveEndYear: null` and `effectiveEndMonth: null`, while omitted fields can preserve existing values.
+- Left Prisma schema, migrations, billing calculations, duplicate billing prevention, exemption logic, auth/RBAC, tenant routing, notifications, payments, and receipts unchanged.
+
+Root causes:
+
+- December display relied on JavaScript Date/locale formatting for a simple month label, leaving the UI vulnerable to month-index/timezone confusion instead of directly mapping persisted 1-12 values.
+- Clearing both end-period fields used the same optional-number path as omitted fields, so blank submitted values could be treated like `undefined` instead of explicit `null`.
+
+Validation:
+
+- Test A: Set End Year `2026` and End Month `12`, confirmed persisted month `12`, December selected in edit mode, and history `January 2026 to December 2026`.
+- Test B: Cleared both end fields, confirmed persisted `null/null`, empty edit fields, and history `January 2026 to Open Ended`.
+- Test C: Edited notes only on an Open Ended rule and confirmed it remained Open Ended.
+- Test D: End Year only returns `Choose an end month, or clear the end year for an open-ended rule.`
+- Test E: End Month only returns `Enter an end year, or clear the end month for an open-ended rule.`
+- Regression: Resolution Date populated and remained preserved as `2026-07-11`.
+- Regression: Notification close and auto-dismiss both worked in the local browser.
+- Regression: Created a disposable inactive Billing Rule and confirmed `January 2034 to December 2034` with stored month `12`.
+- Regression: Billing Exemptions page and existing Billing page rendered without alerts.
+- Regression: Tenant isolation still requires tenant context and blocks cross-tenant billing-rule queries.
+- Cleanup: Temporary rules and audit entries were removed, and the local admin password hash was restored.
+- pnpm exec prisma validate: Passed
+- pnpm exec prisma generate: Passed
+- pnpm typecheck: Passed
+- pnpm build after removing `.next`: Passed
+
+Not included:
+
+- No Prisma schema or migration changes.
+- No billing calculation, exemption, duplicate billing, auth, RBAC, tenant routing, payment, receipt, or notification changes.
+
 ## 2026-07-11 - Sprint 2.2 Billing Rule End Period Hotfix
 
 Branch:

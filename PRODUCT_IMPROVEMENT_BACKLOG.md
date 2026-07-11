@@ -714,3 +714,35 @@ Acceptance Criteria:
 
 Fix Summary:
 Billing Rule end-period validation now requires end year and end month to be supplied or cleared together, and the history display only labels a rule Open Ended when both stored end-period fields are null.
+
+## Bug #049 - Billing Rule End Period Display and Clearing
+
+Module:
+Billing Rules
+
+Priority:
+Critical
+
+Status:
+Fixed in Sprint 2.2 end period display and clearing hotfix on 2026-07-11
+
+Problem:
+Stored Effective End Month value `12` persisted successfully but did not reliably display as December, and explicitly clearing both Effective End Year and Effective End Month did not save the rule back to Open Ended.
+
+Expected Behavior:
+Month values stored as 1 through 12 must map directly to January through December, and submitted blank end-period fields must be saved as `null` values so the rule becomes Open Ended.
+
+Acceptance Criteria:
+- Stored month `1` displays January.
+- Stored month `12` displays December.
+- Edit dropdown selects the saved end month.
+- History displays `December 2026` for end month `12` and end year `2026`.
+- Clearing both Effective End Year and Effective End Month saves both fields as null.
+- Open Ended displays only when both end-period fields are null.
+- One-sided end periods return precise validation messages.
+- Notes-only edits keep an Open Ended rule open-ended.
+- Rule creation still stores December as month `12`.
+- No historical bills are modified.
+
+Fix Summary:
+Billing Rules now use a deterministic `MONTH_NAMES[month - 1]` helper for all month labels, validation converts submitted blank end-period fields to `null` while preserving absent fields as undefined, and the update action uses `FormData.has()` to distinguish explicit clearing from omitted fields.

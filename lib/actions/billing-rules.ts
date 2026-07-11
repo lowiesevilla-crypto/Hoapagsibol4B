@@ -29,6 +29,8 @@ function auditMetadata(payload: Record<string, unknown>) {
 
 export async function saveBillingRuleAction(formData: FormData) {
   const admin = await requireBillingSettingsAccess();
+  const endYearSubmitted = formData.has("effectiveEndYear");
+  const endMonthSubmitted = formData.has("effectiveEndMonth");
   const parsed = billingRuleSchema.safeParse(Object.fromEntries(formData.entries()));
   if (!parsed.success) {
     const validationError = firstValidationError(parsed.error);
@@ -37,14 +39,19 @@ export async function saveBillingRuleAction(formData: FormData) {
   const data = parsed.data;
   if (data.recurringChargeType !== "MONTHLY_DUES") redirectError("/admin/settings/billing-rules", "Only monthly dues can be configured in Phase 2.2A.");
   try {
+    const existingRule = data.id ? await prisma.billingRule.findFirst({ where: { id: data.id, tenantId: admin.tenantId }, select: { id: true, effectiveEndYear: true, effectiveEndMonth: true } }) : null;
+    if (data.id && !existingRule) throw new Error("Billing rule not found or access denied.");
+    const effectiveEndYear = endYearSubmitted ? data.effectiveEndYear ?? null : existingRule?.effectiveEndYear ?? null;
+    const effectiveEndMonth = endMonthSubmitted ? data.effectiveEndMonth ?? null : existingRule?.effectiveEndMonth ?? null;
+
     if (data.active) {
       await assertNoOverlappingBillingRule({
         tenantId: admin.tenantId,
         recurringChargeType: data.recurringChargeType as RecurringChargeType,
         startYear: data.effectiveStartYear,
         startMonth: data.effectiveStartMonth,
-        endYear: data.effectiveEndYear,
-        endMonth: data.effectiveEndMonth,
+        endYear: effectiveEndYear,
+        endMonth: effectiveEndMonth,
         excludeId: data.id,
       });
     }
@@ -62,16 +69,14 @@ export async function saveBillingRuleAction(formData: FormData) {
       penaltyFrequency: data.penaltyFrequency,
       effectiveStartYear: data.effectiveStartYear,
       effectiveStartMonth: data.effectiveStartMonth,
-      effectiveEndYear: data.effectiveEndYear ?? null,
-      effectiveEndMonth: data.effectiveEndMonth ?? null,
+      effectiveEndYear,
+      effectiveEndMonth,
       resolutionReference: data.resolutionReference,
       resolutionDate: data.resolutionDate ? new Date(`${data.resolutionDate}T00:00:00.000Z`) : null,
       notes: data.notes ?? null,
       active: data.active,
       updatedById: admin.id,
     };
-    const existingRule = data.id ? await prisma.billingRule.findFirst({ where: { id: data.id, tenantId: admin.tenantId }, select: { id: true } }) : null;
-    if (data.id && !existingRule) throw new Error("Billing rule not found or access denied.");
     const rule = data.id
       ? await prisma.billingRule.update({ where: { id: existingRule!.id }, data: payload })
       : await prisma.billingRule.create({ data: { ...payload, createdById: admin.id } });

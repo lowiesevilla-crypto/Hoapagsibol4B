@@ -77,8 +77,9 @@ export const duesExemptionSchema = z.object({
 
 const periodMonthSchema = z.coerce.number().int().min(1).max(12);
 const periodYearSchema = z.coerce.number().int().min(1900).max(2200);
-const optionalPeriodMonthSchema = z.preprocess(emptyToUndefined, periodMonthSchema.optional());
-const optionalPeriodYearSchema = z.preprocess(emptyToUndefined, periodYearSchema.optional());
+const emptyToNull = (value: unknown) => value === "" ? null : value;
+const optionalPeriodMonthSchema = z.preprocess(emptyToNull, periodMonthSchema.nullable().optional());
+const optionalPeriodYearSchema = z.preprocess(emptyToNull, periodYearSchema.nullable().optional());
 const optionalDateSchema = z.preprocess(emptyToUndefined, z.string().date("Choose a valid date.").optional());
 const formBooleanSchema = z.preprocess((value) => value === undefined || value === "" ? "true" : value, z.enum(["true", "false"]).transform((value) => value === "true"));
 

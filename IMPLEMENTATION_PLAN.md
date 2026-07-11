@@ -1,5 +1,21 @@
 # HOAHub v1.1 Implementation Plan
 
+## Sprint 2.2 End Period Display and Clearing Fix
+
+- [x] Fix Bug #049: stored month `12` now displays as December using `MONTH_NAMES[month - 1]`.
+- [x] Convert submitted blank end-period fields to `null` so clearing both fields saves Open Ended.
+- [x] Preserve existing end-period values when fields are absent from an update request.
+- [x] Keep Open Ended display limited to `effectiveEndYear === null && effectiveEndMonth === null`.
+- [x] Verify End Year `2026` and End Month `12` persist and reopen as December 2026.
+- [x] Verify clearing both end fields reopens as Open Ended.
+- [x] Verify one-sided end-period validation messages.
+- [x] Verify rule creation, resolution date preservation, notifications, exemptions page, billing page, and tenant isolation.
+- [x] Leave schema, migrations, billing calculations, exemptions, duplicate billing, auth, RBAC, tenant routing, payments, receipts, and notifications unchanged.
+- [x] Run `pnpm exec prisma validate`.
+- [x] Run `pnpm exec prisma generate`.
+- [x] Run `pnpm typecheck`.
+- [x] Clean `.next` and run `pnpm build`.
+
 ## Sprint 2.2 Billing Rule End Period Hotfix
 
 - [x] Fix Bug #048: Billing Rule end year and end month now validate as an explicit pair and preserve December as month `12`.

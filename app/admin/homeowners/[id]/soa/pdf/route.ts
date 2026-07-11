@@ -12,7 +12,9 @@ const pageSize: [number, number] = [595.28, 841.89];
 const marginX = 36;
 const contentWidth = 523;
 const topY = 792;
-const bottomY = 54;
+const bottomY = 42;
+const tableHeaderHeight = 18;
+const tableGapAfter = 10;
 
 export async function GET(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const user = await requireUser(Role.ADMIN);
@@ -151,13 +153,13 @@ function drawBilling(doc: PdfDoc, soa: StatementOfAccount) {
 }
 
 function drawFooter(doc: PdfDoc, soa: StatementOfAccount) {
-  const footerHeight = 64;
+  const footerHeight = 56;
   ensureSpace(doc, footerHeight);
-  const signatureLineY = doc.y - 34;
-  const labelY = signatureLineY - 14;
-  const generatedY = doc.y - 64;
-  doc.page.drawLine({ start: { x: 72, y: signatureLineY }, end: { x: 238, y: signatureLineY }, thickness: 0.7, color: rgb(0.1, 0.1, 0.1) });
-  doc.page.drawLine({ start: { x: 356, y: signatureLineY }, end: { x: 522, y: signatureLineY }, thickness: 0.7, color: rgb(0.1, 0.1, 0.1) });
+  const signatureLineY = doc.y - 24;
+  const labelY = signatureLineY - 12;
+  const generatedY = labelY - 18;
+  doc.page.drawLine({ start: { x: 78, y: signatureLineY }, end: { x: 232, y: signatureLineY }, thickness: 0.45, color: rgb(0.45, 0.48, 0.5) });
+  doc.page.drawLine({ start: { x: 362, y: signatureLineY }, end: { x: 516, y: signatureLineY }, thickness: 0.45, color: rgb(0.45, 0.48, 0.5) });
   drawCenteredWithin(doc.page, "Prepared by HOAHub Finance Engine", doc.regular, 7, 72, 238, labelY, rgb(0.25, 0.28, 0.3));
   drawCenteredWithin(doc.page, "Treasurer / Authorized HOA Representative", doc.regular, 7, 356, 522, labelY, rgb(0.25, 0.28, 0.3));
   drawCenteredWithin(doc.page, safe(`Generated for ${soa.homeowner.user.name} on ${shortDate(soa.statementDate)}. Page ${doc.pageNumber}`), doc.regular, 6.5, marginX, 559, generatedY, rgb(0.45, 0.48, 0.5));
@@ -165,20 +167,21 @@ function drawFooter(doc: PdfDoc, soa: StatementOfAccount) {
 }
 
 function table(doc: PdfDoc, title: string, headers: string[], widths: number[], rows: string[][]) {
-  ensureSpace(doc, 72);
+  const firstRowHeight = rows.length ? rowHeight(doc, rows[0], widths) : 20;
+  ensureSpace(doc, 16 + tableHeaderHeight + firstRowHeight + tableGapAfter);
   sectionTitle(doc, title);
   drawTableHeader(doc, headers, widths);
   if (!rows.length) {
-    const height = 30;
-    ensureSpace(doc, height + 20, () => drawTableHeader(doc, headers, widths));
+    const height = 20;
+    ensureSpace(doc, height + tableGapAfter, () => drawTableHeader(doc, headers, widths));
     doc.page.drawRectangle({ x: marginX, y: doc.y - height, width: contentWidth, height, borderColor: rgb(0.86, 0.88, 0.9), borderWidth: 0.35 });
-    doc.page.drawText("No records found.", { x: marginX + 8, y: doc.y - 18, font: doc.regular, size: 8, color: rgb(0.35, 0.38, 0.4) });
-    doc.y -= height + 22;
+    doc.page.drawText("No records found.", { x: marginX + 8, y: doc.y - 13, font: doc.regular, size: 7.2, color: rgb(0.35, 0.38, 0.4) });
+    doc.y -= height + tableGapAfter;
     return;
   }
   for (const row of rows) {
     const lines = row.map((cell, index) => wrapText(safe(cell), doc.regular, 6.5, widths[index] - 8).slice(0, 4));
-    const height = Math.max(20, Math.max(...lines.map((line) => line.length)) * 8 + 8);
+    const height = Math.max(18, Math.max(...lines.map((line) => line.length)) * 8 + 7);
     ensureSpace(doc, height + 8, () => drawTableHeader(doc, headers, widths));
     let x = marginX;
     row.forEach((_, index) => {
@@ -188,18 +191,18 @@ function table(doc: PdfDoc, title: string, headers: string[], widths: number[], 
     });
     doc.y -= height;
   }
-  doc.y -= 18;
+  doc.y -= tableGapAfter;
 }
 
 function drawTableHeader(doc: PdfDoc, headers: string[], widths: number[]) {
   const pine = rgb(0.03, 0.24, 0.17);
   let x = marginX;
   for (let index = 0; index < headers.length; index++) {
-    doc.page.drawRectangle({ x, y: doc.y - 20, width: widths[index], height: 20, color: pine });
-    doc.page.drawText(headers[index], { x: x + 4, y: doc.y - 13, font: doc.bold, size: 6.5, color: rgb(1, 1, 1) });
+    doc.page.drawRectangle({ x, y: doc.y - tableHeaderHeight, width: widths[index], height: tableHeaderHeight, color: pine });
+    doc.page.drawText(headers[index], { x: x + 4, y: doc.y - 12, font: doc.bold, size: 6.3, color: rgb(1, 1, 1) });
     x += widths[index];
   }
-  doc.y -= 20;
+  doc.y -= tableHeaderHeight;
 }
 
 function sectionTitle(doc: PdfDoc, title: string) {
@@ -218,7 +221,6 @@ function drawKeyValues(doc: PdfDoc, rows: string[][], x: number, y: number, widt
     const rowHeight = Math.max(18, lines.length * 10 + 6);
     doc.page.drawText(label.toUpperCase(), { x, y: cursorY, font: doc.bold, size: 6.5, color: rgb(0.35, 0.38, 0.4), maxWidth: labelWidth });
     lines.forEach((line, lineIndex) => doc.page.drawText(line, { x: valueX, y: cursorY - lineIndex * 10, font: doc.regular, size: 8, color: rgb(0.05, 0.07, 0.09) }));
-    doc.page.drawLine({ start: { x: valueX, y: cursorY - rowHeight + 5 }, end: { x: x + width, y: cursorY - rowHeight + 5 }, thickness: 0.35, color: rgb(0.75, 0.78, 0.8) });
     cursorY -= rowHeight;
   }
   return y - cursorY;
@@ -277,6 +279,11 @@ function wrapText(text: string, font: PDFFont, size: number, maxWidth: number) {
   }
   if (line) lines.push(line);
   return lines;
+}
+
+function rowHeight(doc: PdfDoc, row: string[], widths: number[]) {
+  const lines = row.map((cell, index) => wrapText(safe(cell), doc.regular, 6.5, widths[index] - 8).slice(0, 4));
+  return Math.max(18, Math.max(...lines.map((line) => line.length)) * 8 + 7);
 }
 
 function drawCenteredWithin(page: PDFPage, text: string, font: PDFFont, size: number, x1: number, x2: number, y: number, color: ReturnType<typeof rgb>) {

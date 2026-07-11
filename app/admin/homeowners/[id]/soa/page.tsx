@@ -20,14 +20,14 @@ export default async function StatementOfAccountPage({ params }: { params: Promi
   const pdfHref = `/admin/homeowners/${soa.homeowner.id}/soa/pdf`;
 
   return (
-    <main className="print-document mx-auto min-h-screen max-w-6xl bg-white p-4 sm:p-8">
+    <main className="soa-document print-document mx-auto min-h-screen max-w-6xl bg-white p-4 sm:p-8">
       <div className="print-hidden mb-5 flex flex-wrap justify-end gap-2">
         <Link className="btn-secondary" href={`/admin/homeowners/${soa.homeowner.id}`}><ArrowLeft className="size-4" /> Return to Homeowner</Link>
         <a className="btn-secondary" href={pdfHref}><Download className="size-4" /> Download PDF</a>
         <SoaPrintButton />
       </div>
 
-      <section className="border-2 border-ink p-4 sm:p-7">
+      <section className="soa-sheet border-2 border-ink p-4 sm:p-7">
         <header className="grid gap-5 border-b-2 border-ink pb-5 lg:grid-cols-[auto_1fr_auto] lg:items-center">
           <AssociationLogo className="size-24" src={soa.association.logoUrl} alt={`${soa.association.name} logo`} />
           <div className="text-center lg:text-left">
@@ -123,7 +123,7 @@ export default async function StatementOfAccountPage({ params }: { params: Promi
           </div>
         </section>
 
-        <footer className="mt-8 grid gap-10 text-center text-xs sm:grid-cols-2">
+        <footer className="soa-signature-footer mt-8 grid gap-10 text-center text-xs sm:grid-cols-2">
           <div className="border-t border-ink pt-2">Prepared by HOAHub Finance Engine</div>
           <div className="border-t border-ink pt-2">Treasurer / Authorized HOA Representative</div>
         </footer>

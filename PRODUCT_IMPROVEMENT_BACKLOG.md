@@ -1087,7 +1087,7 @@ Priority:
 Critical
 
 Status:
-Open
+Fixed in Sprint 2.4 SOA finalization on 2026-07-11
 
 Problem:
 The Print SOA button remains visible but does not open the browser print dialog.
@@ -1103,6 +1103,9 @@ Acceptance Criteria:
 - No console or hydration errors.
 - PDF download remains available.
 
+Fix Summary:
+Print SOA now uses a dedicated client button with `type="button"`, a direct `window.print()` mouse handler, and explicit Enter/Space keyboard activation. Chrome and Edge local verification confirmed print invocation, active pointer events, no disabled state, no runtime errors, and preserved PDF Download/Return links.
+
 ---
 
 ## Bug #029 – SOA PDF Pagination and Footer
@@ -1114,7 +1117,7 @@ Priority:
 Critical
 
 Status:
-Open
+Fixed in Sprint 2.4 SOA finalization on 2026-07-11
 
 Problem:
 Short SOA documents still create an unnecessary second page containing the signature or footer area.
@@ -1129,3 +1132,6 @@ Acceptance Criteria:
 - Long statements paginate correctly.
 - No overlapping text or decorative lines.
 - Tables remain aligned.
+
+Fix Summary:
+SOA PDF table flow now measures the first row with the header, uses compact empty-state rows, reduces excess table gaps, removes crowded decorative value lines, and draws the signature/footer block only after confirming measured remaining space. The verified 1-ledger / 0-payment / 1-billing sample renders as exactly one A4 page.

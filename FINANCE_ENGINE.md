@@ -176,7 +176,16 @@ SOA includes:
 - Running Ledger
 - Outstanding Balance
 - PDF Export
+- Browser Print
 - Mobile Layout
+
+SOA print and PDF output rules:
+
+- Print uses a client-side `button type="button"` that invokes browser printing from a direct user gesture.
+- PDF generation uses content-flow layout for tables, signatures, and footer content.
+- Short statements must not create a nearly empty second page.
+- Long statements paginate naturally while repeating table headers where practical and keeping signature lines together.
+- SOA output preserves tenant branding, homeowner details, statement number, QR verification, ledger, aging, billing, and payment history.
 
 ---
 
@@ -319,3 +328,4 @@ Planned
 |----------|------|-------------|
 | 1.0 | July 11, 2026 | Initial Finance Engine Documentation |
 | 1.1 | July 11, 2026 | Documented Sprint 2.3B individual billing and split payments workflow |
+| 1.2 | July 11, 2026 | Documented final SOA browser print and PDF pagination rules |

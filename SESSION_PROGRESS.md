@@ -441,3 +441,40 @@ The latest `develop` branch, including Sprint 2.2 Billing Rules and Sprint 2.3 F
 Sprint 2.2 and Sprint 2.3 Finance work remain approved on `develop`.
 
 Production release remains on hold until Bug #028 and Bug #029 pass final UAT.
+
+## 2026-07-11 - Sprint 2.4 SOA Finalization
+
+Branch:
+feature/soa-final
+
+Completed:
+
+- Fixed Bug #028 by keeping Print SOA as a dedicated client component with a native `button type="button"`, direct `onClick={() => window.print()}`, and explicit Enter/Space keyboard activation.
+- Fixed Bug #029 by changing SOA PDF table/footer flow to measure first-row space with headers, use compact empty-state table rows, reduce excess table gaps, remove crowded decorative value lines, and draw the signature/footer block only when measured space is available.
+- Added SOA-specific print CSS so action buttons are hidden, tables can paginate naturally, table headers repeat in print, and the signature footer stays together when possible.
+- Preserved PDF Download and Return to Homeowner actions.
+- Left Prisma schema, migrations, billing/payment/receipt/balance logic, authentication, RBAC, tenant routing, and other modules unchanged.
+
+Root causes:
+
+- Print failure: the SOA print action needed its own final client-side control with an actual button, direct print call, and explicit keyboard handling; previous attempts were not fully verified against mouse plus keyboard activation in both Chrome and Edge.
+- Unnecessary second PDF page: the PDF flow stacked full-width tables with an oversized empty payment table gap and then reserved a 64-point footer block, pushing the short 1-ledger / 0-payment / 1-billing sample below the remaining-space threshold.
+
+Validation:
+
+- Pre-flight passed on `feature/soa-final`; working tree was clean and last commit was `525078e`.
+- Short SOA sample PDF route returned `application/pdf`, 150774 bytes, exactly 1 page.
+- Poppler `pdfinfo`: Passed; A4 portrait, 1 page.
+- Poppler rendered page PNG: visually inspected; no overlapping tables, no clipped text, aligned table widths, readable summary, and signature/footer on page 1.
+- Chrome 150: mouse click, Enter, and Space each invoked `window.print()` once; button was `BUTTON type=button`, enabled, `pointer-events:auto`, PDF/Return links present, runtime errors 0.
+- Edge 150: mouse click, Enter, and Space each invoked `window.print()` once; button was `BUTTON type=button`, enabled, `pointer-events:auto`, PDF/Return links present, runtime errors 0.
+- Disposable QA homeowner/bill rows were removed after verification.
+
+Validation commands:
+
+- pnpm exec prisma migrate status: Passed; database schema is up to date.
+- pnpm exec prisma validate: Passed.
+- pnpm exec prisma generate: Passed.
+- pnpm typecheck: Passed.
+- Remove-Item -Recurse -Force .next -ErrorAction SilentlyContinue: Passed.
+- pnpm build: Passed.

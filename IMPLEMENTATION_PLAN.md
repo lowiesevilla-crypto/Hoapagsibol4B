@@ -27,7 +27,7 @@
 
 ### Status
 
-🟡 In Progress
+✅ Completed on `feature/soa-final`
 
 ### Completed
 
@@ -37,16 +37,23 @@
 - Running Ledger
 - Aging Summary
 - PDF Export
+- Browser Print SOA action
+- One-page short SOA PDF layout
+- Final signature/footer placement
 - Mobile Layout
 - Tenant-scoped access
 - RBAC validation
 
-### Remaining Release Blockers
+### Final Release Blockers
 
-- Print SOA button does not open the browser print dialog
-- Short SOA PDF still creates an unnecessary second page
-- Signature and footer placement require final refinement
+- [x] Bug #028: Print SOA opens through a dedicated client button with mouse, Enter, and Space activation.
+- [x] Bug #029: Short SOA PDF sample with 1 ledger row, 0 payment rows, and 1 billing row renders as exactly one A4 page.
+- [x] Signature lines and generated footer flow on the true final page.
+- [x] SOA print CSS hides action UI and allows tables to paginate without horizontal overflow.
+- [x] Prisma schema and migrations unchanged.
+- [x] Finance calculations, receipt logic, authentication, RBAC, and tenant routing unchanged.
+- [x] Required local quality gates passed.
 
 ### Next Milestone
 
-Finalize SOA on top of the latest `develop` finance implementation, complete UAT, and prepare the Finance release for `main`.
+Prepare SOA finalization for review and merge after product-owner UAT.

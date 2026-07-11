@@ -196,6 +196,13 @@ main, section, article, header, footer, aside, nav, form, div { min-width: 0; }
   .soa-print-table { width: 100% !important; min-width: 0 !important; table-layout: fixed !important; font-size: 7.5pt !important; }
   .soa-print-table th, .soa-print-table td { padding: 4pt 5pt !important; overflow-wrap: anywhere !important; word-break: normal !important; vertical-align: top !important; }
   .card, .print-document section, tr { break-inside: avoid; page-break-inside: avoid; }
+  .soa-document { width: 100% !important; overflow: visible !important; color: #10354c !important; }
+  .soa-document .soa-sheet { border-width: 1px !important; padding: 6mm !important; }
+  .soa-document section { break-inside: auto !important; page-break-inside: auto !important; }
+  .soa-document .soa-table-frame { max-width: 100% !important; border-radius: 0 !important; }
+  .soa-document .soa-print-table thead { display: table-header-group; }
+  .soa-document .soa-print-table tr { break-inside: avoid !important; page-break-inside: avoid !important; }
+  .soa-document .soa-signature-footer { break-inside: avoid !important; page-break-inside: avoid !important; }
   .document-copy, .pass-sheet, .residency-sheet, .clearance-sheet { break-inside: avoid; page-break-inside: avoid; }
 }
 

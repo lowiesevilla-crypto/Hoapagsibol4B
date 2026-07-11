@@ -40,6 +40,9 @@ This version is intended for development and internal User Acceptance Testing (U
 - Improved layout spacing
 - Improved ledger presentation
 - Mobile optimization
+- Final Print SOA activation with mouse, Enter, and Space support
+- Final one-page PDF layout for short statements
+- Refined signature and footer placement
 
 ---
 
@@ -116,7 +119,7 @@ This version is intended for development and internal User Acceptance Testing (U
 
 # Known Issues
 
-The following items remain scheduled for Sprint 2.3A:
+Resolved before this release candidate:
 
 - Individual Billing Generation
 - Resolution Reference in Billing Preview
@@ -126,23 +129,20 @@ The following items remain scheduled for Sprint 2.3A:
 - Billing Preview Search
 - Finance Navigation Improvements
 - Exemption Summary Counter
+- SOA Print button activation
+- SOA short-PDF unnecessary second page
 
 ---
 
 # Upcoming Sprint
 
-## Sprint 2.3A – Finance Integration Hotfix
+## Post-RC UAT
 
 Planned Deliverables
 
-- Individual Billing Generation
-- Finance Workflow Integration
-- Balance Synchronization
-- Payment Synchronization
-- Billing Preview Improvements
-- Search Improvements
-- Finance Navigation
-- Record Payment Improvements
+- Product-owner UAT
+- Merge review into `develop`
+- Production release preparation from `main`
 
 ---
 
@@ -158,7 +158,7 @@ Planned Deliverables
 | Billing Generation | ✅ Core Complete |
 | Statement of Account | ✅ Complete |
 | Official Receipts | ✅ Stable |
-| Payments | ⚠️ Under Enhancement |
+| Payments | ✅ Finance Workflow Complete |
 | Reports | 🚧 In Progress |
 | Documents | 🚧 In Progress |
 | HRIS | 📅 Planned |
@@ -182,7 +182,9 @@ Status:
 
 ✅ Internal Testing Complete
 
-⚠️ Finance Integration Hotfix Required
+✅ Finance Integration Hotfix Complete
+
+✅ SOA Finalization Complete
 
 ❌ Not Yet Approved for Production
 

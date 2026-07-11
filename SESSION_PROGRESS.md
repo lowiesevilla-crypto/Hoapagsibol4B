@@ -1,5 +1,40 @@
 # Session Progress
 
+## 2026-07-11 - Sprint 2.2 Billing Rules Migration Safety Correction
+
+Branch:
+feature/billing-rules-engine
+
+Completed:
+
+- Removed the hardcoded `tenant_pagsibol4b_default` database default from `BillingRule.tenantId`; billing rule creates now assign `tenantId` from the authenticated server session.
+- Removed the migration's automatic `BillingRule` backfill from homeowner dues and the PHP 1,200 fallback so no tenant receives an invented financial policy.
+- Backfilled `Bill.coverageYear` and `Bill.coverageMonth` from non-null `billingMonth`, then made both fields required so the tenant/homeowner/charge/coverage unique index cannot be bypassed by MySQL `NULL` behavior.
+- Backfilled `DuesExemption` period fields from `billingMonth`, then made `startYear`, `startMonth`, `endYear`, and `endMonth` required.
+- Added the `BillingRule.tenantId -> Tenant.id` foreign key with `ON DELETE RESTRICT` and `ON UPDATE CASCADE`.
+- Preserved legacy/manual billing: individual bill creation and dues data migration now write required coverage fields explicitly and do not require a configured `BillingRule`.
+- Updated billing UI messaging to show when no billing rule is configured before rule-based generation.
+
+Compatibility notes:
+
+- Existing `Bill.billingMonth` and `DuesExemption.billingMonth` are already required date fields in the Prisma model, so migration backfills can safely derive valid months 1-12.
+- If production contains out-of-band invalid date data, the NOT NULL alteration should be tested locally before deployment and the affected rows corrected before running deploy.
+
+Validation:
+
+- pnpm exec prisma validate: Passed
+- pnpm exec prisma generate: Passed
+- pnpm typecheck: Passed
+- pnpm build: Passed
+- Local read-only data compatibility check: Passed; no `Bill` or `DuesExemption` rows had null or invalid `billingMonth` values.
+
+Not included:
+
+- No `prisma migrate deploy`.
+- No migration reset.
+- No deployment.
+- No push to develop or main.
+
 ## 2026-07-09 - Develop Tenant Login URL Release Blocker
 
 Branch:

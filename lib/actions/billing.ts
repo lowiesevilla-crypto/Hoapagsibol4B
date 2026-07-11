@@ -1,6 +1,6 @@
 "use server";
 
-import { BillStatus, HomeownerStatus, NotificationType, PaymentRequestStatus, Prisma, Role } from "@prisma/client";
+import { BillStatus, NotificationType, PaymentRequestStatus, Prisma, RecurringChargeType, Role } from "@prisma/client";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { requireUser } from "@/lib/auth";
@@ -8,6 +8,7 @@ import { getAppUrl } from "@/lib/app-url";
 import { prisma } from "@/lib/db";
 import { billSchema } from "@/lib/validation";
 import { sendEmailNotification } from "@/lib/services/notifications";
+import { generateMonthlyDuesFromRules, periodFromDate } from "@/lib/services/billing-rules";
 
 function normalizedMonth(value: string) {
   return new Date(`${value.slice(0, 7)}-01T00:00:00.000Z`);
@@ -21,19 +22,23 @@ export async function refreshOverdueBills() {
     where: { tenantId: user.tenantId, archivedAt: null, dueDate: { lt: today }, balance: { gt: 0 }, status: { in: [BillStatus.UNPAID, BillStatus.PARTIAL] } },
     data: { status: BillStatus.OVERDUE },
   });
+  return user;
 }
 
 export async function saveBillAction(formData: FormData) {
-  await requireUser(Role.ADMIN);
+  const admin = await requireUser(Role.ADMIN);
   const parsed = billSchema.safeParse(Object.fromEntries(formData.entries()));
   if (!parsed.success) throw new Error(parsed.error.issues[0]?.message || "Invalid bill details.");
   const data = parsed.data;
   const billingMonth = normalizedMonth(data.billingMonth);
+  const period = periodFromDate(billingMonth);
   const dueDate = new Date(`${data.dueDate}T00:00:00.000Z`);
   const totalAmount = data.amount + data.penalty;
+  const homeowner = await prisma.homeownerProfile.findFirst({ where: { id: data.homeownerId, tenantId: admin.tenantId }, select: { id: true } });
+  if (!homeowner) throw new Error("Homeowner not found or access denied.");
 
   if (data.id) {
-    const existing = await prisma.bill.findUnique({ where: { id: data.id } });
+    const existing = await prisma.bill.findFirst({ where: { id: data.id, tenantId: admin.tenantId } });
     if (!existing) throw new Error("Bill not found.");
     if (existing.archivedAt) throw new Error("Archived bills cannot be edited.");
     if (Number(existing.amountPaid) > totalAmount) throw new Error("Bill total cannot be below payments already received.");
@@ -42,15 +47,15 @@ export async function saveBillAction(formData: FormData) {
     const status = balance === 0 ? BillStatus.PAID : data.status === BillStatus.OVERDUE ? BillStatus.OVERDUE : amountPaid > 0 ? BillStatus.PARTIAL : data.status ?? BillStatus.UNPAID;
     await prisma.bill.update({
       where: { id: data.id },
-      data: { homeownerId: data.homeownerId, billingMonth, dueDate, amount: data.amount, penalty: data.penalty, totalAmount, balance, status, notes: data.notes || null },
+      data: { tenantId: admin.tenantId, homeownerId: homeowner.id, billingMonth, recurringChargeType: RecurringChargeType.MONTHLY_DUES, coverageYear: period.year, coverageMonth: period.month, dueDate, amount: data.amount, penalty: data.penalty, totalAmount, balance, status, notes: data.notes || null },
     });
   } else {
     await prisma.bill.create({
-      data: { homeownerId: data.homeownerId, billingMonth, dueDate, amount: data.amount, penalty: data.penalty, totalAmount, balance: totalAmount, notes: data.notes || null },
+      data: { tenantId: admin.tenantId, homeownerId: homeowner.id, billingMonth, recurringChargeType: RecurringChargeType.MONTHLY_DUES, coverageYear: period.year, coverageMonth: period.month, dueDate, amount: data.amount, penalty: data.penalty, totalAmount, balance: totalAmount, notes: data.notes || null },
     });
   }
 
-  const savedBill = await prisma.bill.findUnique({ where: { homeownerId_billingMonth: { homeownerId: data.homeownerId, billingMonth } }, include: { homeowner: { include: { user: true } } } });
+  const savedBill = await prisma.bill.findFirst({ where: { tenantId: admin.tenantId, homeownerId: homeowner.id, billingMonth }, include: { homeowner: { include: { user: true } } } });
   if (savedBill) await sendEmailNotification({ recipientId: savedBill.homeowner.userId, email: savedBill.homeowner.user.email, subject: `HOA billing notice - ${savedBill.billingMonth.toLocaleDateString("en-PH", { month: "long", year: "numeric" })}`, heading: "Billing notification", message: `Hello ${savedBill.homeowner.user.name},\nA billing record of PHP ${Number(savedBill.totalAmount).toFixed(2)} is available in your homeowner portal. The due date is ${savedBill.dueDate.toLocaleDateString("en-PH")}.`, type: NotificationType.BILLING_NOTIFICATION, actionLabel: "View my billing", actionUrl: `${getAppUrl()}/portal/billing` }).catch(() => undefined);
 
   revalidatePath("/admin/billing");
@@ -58,36 +63,21 @@ export async function saveBillAction(formData: FormData) {
 }
 
 export async function generateMonthlyBillsAction(formData: FormData) {
-  await requireUser(Role.ADMIN);
+  const admin = await requireUser(Role.ADMIN);
   const month = String(formData.get("billingMonth") || "");
   const due = String(formData.get("dueDate") || "");
   if (!/^\d{4}-\d{2}$/.test(month) || !/^\d{4}-\d{2}-\d{2}$/.test(due)) throw new Error("Choose a valid billing month and due date.");
   const billingMonth = new Date(`${month}-01T00:00:00.000Z`);
   const dueDate = new Date(`${due}T00:00:00.000Z`);
-  const homeowners = await prisma.homeownerProfile.findMany({ where: { status: HomeownerStatus.ACTIVE }, include: { user: true } });
-  const exemptions = await prisma.duesExemption.findMany({ where: { billingMonth }, select: { homeownerId: true } });
-  const exemptIds = new Set(exemptions.map((item) => item.homeownerId));
-  const billableHomeowners = homeowners.filter((homeowner) => !exemptIds.has(homeowner.id));
-  await prisma.$transaction(
-    billableHomeowners.map((homeowner) =>
-      prisma.bill.upsert({
-        where: { homeownerId_billingMonth: { homeownerId: homeowner.id, billingMonth } },
-        update: {},
-        create: {
-          homeownerId: homeowner.id,
-          billingMonth,
-          dueDate,
-          amount: homeowner.monthlyDuesAmount,
-          totalAmount: homeowner.monthlyDuesAmount,
-          balance: homeowner.monthlyDuesAmount,
-        },
-      }),
-    ),
-  );
-  await Promise.allSettled(billableHomeowners.map((homeowner) => sendEmailNotification({ recipientId: homeowner.userId, email: homeowner.user.email, subject: `HOA billing notice - ${billingMonth.toLocaleDateString("en-PH", { month: "long", year: "numeric" })}`, heading: "Monthly dues billing", message: `Hello ${homeowner.user.name},\nYour monthly HOA dues of PHP ${Number(homeowner.monthlyDuesAmount).toFixed(2)} has been posted. Payment is due ${dueDate.toLocaleDateString("en-PH")}.`, type: NotificationType.BILLING_NOTIFICATION, actionLabel: "View my billing", actionUrl: `${getAppUrl()}/portal/billing` })));
+  let result: Awaited<ReturnType<typeof generateMonthlyDuesFromRules>>;
+  try {
+    result = await generateMonthlyDuesFromRules({ actor: admin, billingMonth, dueDate });
+  } catch (error) {
+    redirect(`/admin/billing?error=${encodeURIComponent(error instanceof Error ? error.message : "Monthly bills could not be generated.")}`);
+  }
   revalidatePath("/admin/billing");
   revalidatePath("/admin/dashboard");
-  redirect(`/admin/billing?success=generated&count=${billableHomeowners.length}&skipped=${exemptions.length}&message=${encodeURIComponent(`${billableHomeowners.length} bills generated. ${exemptions.length} exempt homeowner(s) skipped.`)}`);
+  redirect(`/admin/billing?success=generated&count=${result.generated}&skipped=${result.exemptSkipped}&message=${encodeURIComponent(`${result.generated} bills generated from ${result.rule.resolutionReference}. ${result.exemptSkipped} exempt homeowner(s) and ${result.duplicateSkipped} duplicate(s) skipped.`)}`);
 }
 
 export async function archiveBillAction(formData: FormData) {

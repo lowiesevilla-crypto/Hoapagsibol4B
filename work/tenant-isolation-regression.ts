@@ -18,7 +18,7 @@ async function fixture(suffix: string) {
   const resident = await raw.user.create({ data: { tenantId: tenant.id, name: `Resident ${suffix}`, email: `${marker.toLowerCase()}-resident@example.invalid`, username: `${marker.toLowerCase()}-resident`, passwordHash: "not-used", role: "HOMEOWNER" } });
   const homeowner = await raw.homeownerProfile.create({ data: { tenantId: tenant.id, userId: resident.id, address: "Shared test address", block: "ISO", lot: "1", phone: "09000000000", monthlyDuesAmount: 100 } });
   const contractor = await raw.contractorProfile.create({ data: { tenantId: tenant.id, companyName: `${marker} Builders`, contactPerson: "Test", phone: "09000000000", address: "Test" } });
-  const bill = await raw.bill.create({ data: { tenantId: tenant.id, homeownerId: homeowner.id, billingMonth: new Date("2098-01-01T00:00:00.000Z"), amount: 100, totalAmount: 100, balance: 100, dueDate: new Date("2098-01-31T00:00:00.000Z") } });
+  const bill = await raw.bill.create({ data: { tenantId: tenant.id, homeownerId: homeowner.id, billingMonth: new Date("2098-01-01T00:00:00.000Z"), coverageYear: 2098, coverageMonth: 1, amount: 100, totalAmount: 100, balance: 100, dueDate: new Date("2098-01-31T00:00:00.000Z") } });
   const payment = await raw.payment.create({ data: { tenantId: tenant.id, billId: bill.id, homeownerId: homeowner.id, amount: 10, paymentDate: new Date("2098-01-10T00:00:00.000Z"), method: "CASH", receiptNumber: `${marker}-RECEIPT` } });
   const collection = await raw.collection.create({ data: { tenantId: tenant.id, type: "CONSTRUCTION_BOND", payerType: "HOMEOWNER", homeownerId: homeowner.id, amount: 100, collectionDate: new Date("2098-01-10T00:00:00.000Z"), method: "CASH", receiptNumber: `${marker}-COLLECTION`, refundable: true, refundStatus: "HELD", createdById: admin.id } });
   const vehicle = await raw.vehicle.create({ data: { tenantId: tenant.id, homeownerId: homeowner.id, plateNumber: `${marker}-PLATE`, vehicleType: "CAR", make: "Test", model: "Test", color: "White", stickerNumber: `${marker}-STICKER`, issuedAt: new Date("2098-01-01T00:00:00.000Z") } });
@@ -100,7 +100,7 @@ async function main() {
       check(updateBlocked, "cross-tenant update is blocked at the database client boundary");
 
       let relationBlocked = false;
-      try { await prisma.bill.create({ data: { homeownerId: b!.homeowner.id, billingMonth: new Date("2098-02-01T00:00:00.000Z"), amount: 1, totalAmount: 1, balance: 1, dueDate: new Date("2098-02-28T00:00:00.000Z") } }); } catch (error) { relationBlocked = error instanceof Error && error.message.includes("Cross-tenant relation blocked"); }
+      try { await prisma.bill.create({ data: { homeownerId: b!.homeowner.id, billingMonth: new Date("2098-02-01T00:00:00.000Z"), coverageYear: 2098, coverageMonth: 2, amount: 1, totalAmount: 1, balance: 1, dueDate: new Date("2098-02-28T00:00:00.000Z") } }); } catch (error) { relationBlocked = error instanceof Error && error.message.includes("Cross-tenant relation blocked"); }
       check(relationBlocked, "cross-tenant scalar foreign keys are blocked before write");
 
       const nested = await prisma.documentRequest.create({ data: { homeownerId: a!.homeowner.id, type: "GATE_PASS", histories: { create: { status: "SUBMITTED", actorId: a!.admin.id, note: marker } } }, include: { histories: true } });

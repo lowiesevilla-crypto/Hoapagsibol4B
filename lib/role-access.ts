@@ -16,6 +16,8 @@ const payrollManagerAllowedAdminPrefixes = [
 
 const billingManagerAllowedAdminPrefixes = [
   "/admin/billing",
+  "/admin/settings/billing-rules",
+  "/admin/settings/billing-exemptions",
   "/admin/payments",
   "/admin/receipts",
   "/admin/collections",

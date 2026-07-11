@@ -73,6 +73,58 @@ export const duesExemptionSchema = z.object({
   reason: required.max(500),
 });
 
+const periodMonthSchema = z.coerce.number().int().min(1).max(12);
+const periodYearSchema = z.coerce.number().int().min(1900).max(2200);
+
+export const billingRuleSchema = z.object({
+  id: z.string().optional(),
+  recurringChargeType: z.enum(["MONTHLY_DUES", "SECURITY_FEE", "MAINTENANCE_FEE", "GARBAGE_FEE", "OTHER"]).default("MONTHLY_DUES"),
+  amount: currency.positive("Amount must be greater than zero."),
+  billingFrequency: z.enum(["MONTHLY", "QUARTERLY", "ANNUAL"]),
+  generationMode: z.enum(["MANUAL", "AUTOMATIC"]),
+  billingDay: z.coerce.number().int().min(1).max(28),
+  dueDay: z.coerce.number().int().min(1).max(31),
+  gracePeriodDays: z.coerce.number().int().min(0).max(365),
+  penaltyType: z.enum(["NONE", "FIXED", "PERCENTAGE"]),
+  penaltyValue: currency,
+  penaltyFrequency: z.enum(["NONE", "MONTHLY"]),
+  effectiveStartYear: periodYearSchema,
+  effectiveStartMonth: periodMonthSchema,
+  effectiveEndYear: z.union([periodYearSchema, z.literal("").transform(() => undefined)]).optional(),
+  effectiveEndMonth: z.union([periodMonthSchema, z.literal("").transform(() => undefined)]).optional(),
+  resolutionReference: required.max(120),
+  resolutionDate: z.string().date().or(z.literal("")).optional(),
+  notes: z.string().trim().max(1000).optional(),
+}).superRefine((data, context) => {
+  if ((data.effectiveEndYear && !data.effectiveEndMonth) || (!data.effectiveEndYear && data.effectiveEndMonth)) {
+    context.addIssue({ code: "custom", path: ["effectiveEndMonth"], message: "Provide both end month and end year, or leave both blank." });
+  }
+  if (data.effectiveEndYear && data.effectiveEndMonth) {
+    const start = data.effectiveStartYear * 12 + data.effectiveStartMonth;
+    const end = data.effectiveEndYear * 12 + data.effectiveEndMonth;
+    if (end < start) context.addIssue({ code: "custom", path: ["effectiveEndMonth"], message: "End period must not be earlier than start period." });
+  }
+  if (data.penaltyType === "NONE" && data.penaltyValue > 0) {
+    context.addIssue({ code: "custom", path: ["penaltyValue"], message: "Penalty value must be zero when penalty type is none." });
+  }
+});
+
+export const billingExemptionSchema = z.object({
+  homeownerId: z.string().min(1, "Select a homeowner."),
+  recurringChargeType: z.enum(["MONTHLY_DUES"]).default("MONTHLY_DUES"),
+  startYear: periodYearSchema,
+  startMonth: periodMonthSchema,
+  endYear: periodYearSchema,
+  endMonth: periodMonthSchema,
+  reason: required.max(500),
+  resolutionReference: z.string().trim().max(120).optional(),
+  approvedBy: z.string().trim().max(120).optional(),
+}).superRefine((data, context) => {
+  const start = data.startYear * 12 + data.startMonth;
+  const end = data.endYear * 12 + data.endMonth;
+  if (end < start) context.addIssue({ code: "custom", path: ["endMonth"], message: "End period must not be earlier than start period." });
+});
+
 const coverageMonthSchema = z.string().trim().regex(/^(?:[1-9]|1[0-2])$/, "Choose a valid coverage month.").transform(Number);
 const coverageYearSchema = z.string().trim().regex(/^\d{4}$/, "Enter a valid four-digit coverage year.").transform(Number).refine((year) => year >= 1900 && year <= 2200, "Coverage year must be between 1900 and 2200.");
 

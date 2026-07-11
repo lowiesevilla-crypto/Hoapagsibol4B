@@ -78,6 +78,8 @@ async function main() {
         data: {
           homeownerId: homeowner.id,
           billingMonth,
+          coverageYear: billingMonth.getUTCFullYear(),
+          coverageMonth: billingMonth.getUTCMonth() + 1,
           amount: 1000,
           totalAmount: 1000,
           amountPaid: 0,

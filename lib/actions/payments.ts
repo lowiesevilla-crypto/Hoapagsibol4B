@@ -35,27 +35,29 @@ export async function recordPaymentAction(formData: FormData) {
       remarks: data.remarks,
     }), { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
   } catch (error) {
-    redirect(`/admin/payments?error=${encodeURIComponent(error instanceof Error ? error.message : "Payment could not be recorded.")}`);
+    redirect(`/admin/payments/record?error=${encodeURIComponent(error instanceof Error ? error.message : "Payment could not be recorded.")}`);
   }
 
   if (confirmation) await sendEmailNotification({ recipientId: confirmation.recipientId, email: confirmation.email, subject: "HOA payment recorded", heading: "Payment confirmation", message: `Hello ${confirmation.name},\nYour HOA payment of PHP ${confirmation.amount.toFixed(2)} has been recorded successfully.\nPayment for: ${confirmation.coverageDisplay}\nReference: ${confirmation.referenceNumber || "Not required for cash payment"}`, type: NotificationType.PAYMENT_CONFIRMATION, actionLabel: "View payment history", actionUrl: `${getAppUrl()}/portal/payments` }).catch(() => undefined);
 
   revalidatePath("/admin/payments");
+  revalidatePath("/admin/payments/record");
+  revalidatePath("/admin/payments/active");
   revalidatePath("/admin/billing");
   revalidatePath("/admin/dashboard");
-  redirect("/admin/payments?success=recorded&message=Payment%20recorded%20successfully.");
+  redirect("/admin/payments/record?success=recorded&message=Payment%20recorded%20successfully.");
 }
 
 export async function updatePaymentAmountAction(formData: FormData) {
   const admin = await requireUser(Role.ADMIN);
   const parsed = paymentAmountUpdateSchema.safeParse(Object.fromEntries(formData.entries()));
-  if (!parsed.success) redirect(`/admin/payments?error=${encodeURIComponent(parsed.error.issues[0]?.message || "Enter a valid payment amount.")}`);
+  if (!parsed.success) redirect(`/admin/payments/active?error=${encodeURIComponent(parsed.error.issues[0]?.message || "Enter a valid payment amount.")}`);
   const { id, amount, reason } = parsed.data;
 
   try {
     await updatePaymentAmountLedger({ paymentId: id, amount, actor: admin, reason });
   } catch (error) {
-    redirect(`/admin/payments?error=${encodeURIComponent(error instanceof Error ? error.message : "Payment amount could not be updated.")}`);
+    redirect(`/admin/payments/active?error=${encodeURIComponent(error instanceof Error ? error.message : "Payment amount could not be updated.")}`);
   }
 
   revalidatePath("/admin/payments");
@@ -65,27 +67,31 @@ export async function updatePaymentAmountAction(formData: FormData) {
   revalidatePath("/portal/payments");
   revalidatePath("/portal/dashboard");
   revalidatePath(`/receipts/payment/${id}`);
-  redirect("/admin/payments?success=saved&message=Payment%20amount%20updated%20and%20billing%20totals%20recalculated.");
+  redirect("/admin/payments/active?success=saved&message=Payment%20amount%20updated%20and%20billing%20totals%20recalculated.");
 }
 
 export async function voidPaymentAction(formData: FormData) {
   const admin = await requireUser(Role.ADMIN);
   const parsed = paymentVoidSchema.safeParse(Object.fromEntries(formData.entries()));
-  if (!parsed.success) redirect(`/admin/payments?error=${encodeURIComponent(parsed.error.issues[0]?.message || "Payment could not be voided.")}`);
+  if (!parsed.success) redirect(`/admin/payments/active?error=${encodeURIComponent(parsed.error.issues[0]?.message || "Payment could not be voided.")}`);
   const { id, reason } = parsed.data;
 
   try {
     await voidPaymentLedger({ paymentId: id, actor: admin, reason });
   } catch (error) {
-    redirect(`/admin/payments?error=${encodeURIComponent(error instanceof Error ? error.message : "Payment could not be voided.")}`);
+    redirect(`/admin/payments/active?error=${encodeURIComponent(error instanceof Error ? error.message : "Payment could not be voided.")}`);
   }
 
   revalidatePaymentPages(id);
-  redirect("/admin/payments?success=deleted&message=Payment%20voided%2C%20archived%2C%20and%20billing%20totals%20recalculated.");
+  redirect("/admin/payments/active?success=deleted&message=Payment%20voided%2C%20archived%2C%20and%20billing%20totals%20recalculated.");
 }
 
 function revalidatePaymentPages(paymentId?: string) {
   revalidatePath("/admin/payments");
+  revalidatePath("/admin/payments/record");
+  revalidatePath("/admin/payments/requests");
+  revalidatePath("/admin/payments/active");
+  revalidatePath("/admin/payments/history");
   revalidatePath("/admin/billing");
   revalidatePath("/admin/dashboard");
   revalidatePath("/portal/billing");

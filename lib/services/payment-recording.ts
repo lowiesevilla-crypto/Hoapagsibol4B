@@ -22,14 +22,14 @@ export async function recordMonthlyDuesPayment(tx: Prisma.TransactionClient, inp
   const referenceNumber = normalizePaymentReference(input.method, input.referenceNumber);
 
   if (referenceNumber) {
-    const duplicatePayment = await tx.payment.findFirst({ where: { referenceNumber } });
+    const duplicatePayment = await tx.payment.findFirst({ where: { tenantId: input.actor.tenantId, referenceNumber } });
     if (duplicatePayment) throw new Error("This payment reference number has already been recorded.");
-    const duplicateRequest = await tx.paymentRequest.findFirst({ where: { referenceNumber, status: { not: "REJECTED" } } });
+    const duplicateRequest = await tx.paymentRequest.findFirst({ where: { tenantId: input.actor.tenantId, referenceNumber, status: { not: "REJECTED" } } });
     if (duplicateRequest) throw new Error("This reference number is already attached to a QR/GCash payment request.");
   }
 
   const bills = await tx.bill.findMany({
-    where: { id: { in: billIds }, balance: { gt: 0 }, archivedAt: null },
+    where: { tenantId: input.actor.tenantId, id: { in: billIds }, balance: { gt: 0 }, archivedAt: null },
     include: { homeowner: { include: { user: true } } },
     orderBy: [{ billingMonth: "asc" }, { dueDate: "asc" }],
   });
@@ -51,6 +51,7 @@ export async function recordMonthlyDuesPayment(tx: Prisma.TransactionClient, inp
     const receiptNumber = await allocateReceiptNumber(tx, input.actor.tenantId, input.paymentDate, "MD");
     const payment = await tx.payment.create({
       data: {
+        tenantId: input.actor.tenantId,
         billId: bill.id,
         homeownerId: bill.homeownerId,
         amount,
@@ -71,6 +72,7 @@ export async function recordMonthlyDuesPayment(tx: Prisma.TransactionClient, inp
     paymentIds.push(payment.id);
     await tx.auditLog.create({
       data: {
+        tenantId: input.actor.tenantId,
         actorId: input.actor.id,
         module: "RECEIPTS",
         action: "GENERATE_MD_RECEIPT",

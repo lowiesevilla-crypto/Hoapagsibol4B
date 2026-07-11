@@ -3,6 +3,8 @@ import { paymentMethodRequiresReference } from "@/lib/payment-methods";
 
 const currency = z.coerce.number().finite().nonnegative().max(10_000_000);
 const required = z.string().trim().min(1, "This field is required.").max(500);
+const emptyToUndefined = (value: unknown) => value === "" ? undefined : value;
+const optionalText = (max: number) => z.preprocess(emptyToUndefined, z.string().trim().max(max).optional());
 
 export const loginSchema = z.object({
   email: z.string().trim().toLowerCase().email("Enter a valid email."),
@@ -71,6 +73,69 @@ export const duesExemptionSchema = z.object({
   homeownerId: z.string().min(1, "Select a homeowner."),
   billingMonth: z.string().regex(/^\d{4}-\d{2}$/, "Choose a valid billing month."),
   reason: required.max(500),
+});
+
+const periodMonthSchema = z.coerce.number().int().min(1).max(12);
+const periodYearSchema = z.coerce.number().int().min(1900).max(2200);
+const emptyToNull = (value: unknown) => value === "" ? null : value;
+const optionalPeriodMonthSchema = z.preprocess(emptyToNull, periodMonthSchema.nullable().optional());
+const optionalPeriodYearSchema = z.preprocess(emptyToNull, periodYearSchema.nullable().optional());
+const optionalDateSchema = z.preprocess(emptyToUndefined, z.string().date("Choose a valid date.").optional());
+const formBooleanSchema = z.preprocess((value) => value === undefined || value === "" ? "true" : value, z.enum(["true", "false"]).transform((value) => value === "true"));
+
+export const billingRuleSchema = z.object({
+  id: z.preprocess(emptyToUndefined, z.string().optional()),
+  recurringChargeType: z.enum(["MONTHLY_DUES", "SECURITY_FEE", "MAINTENANCE_FEE", "GARBAGE_FEE", "OTHER"]).default("MONTHLY_DUES"),
+  amount: currency.positive("Amount must be greater than zero."),
+  billingFrequency: z.enum(["MONTHLY", "QUARTERLY", "ANNUAL"]),
+  generationMode: z.enum(["MANUAL", "AUTOMATIC"]),
+  billingDay: z.coerce.number().int().min(1).max(28),
+  dueDay: z.coerce.number().int().min(1).max(31),
+  gracePeriodDays: z.coerce.number().int().min(0).max(365),
+  penaltyType: z.enum(["NONE", "FIXED", "PERCENTAGE"]),
+  penaltyValue: currency,
+  penaltyFrequency: z.enum(["NONE", "MONTHLY"]),
+  effectiveStartYear: periodYearSchema,
+  effectiveStartMonth: periodMonthSchema,
+  effectiveEndYear: optionalPeriodYearSchema,
+  effectiveEndMonth: optionalPeriodMonthSchema,
+  resolutionReference: required.max(120, "Resolution reference must not exceed 120 characters."),
+  resolutionDate: optionalDateSchema,
+  notes: optionalText(1000),
+  active: formBooleanSchema,
+}).superRefine((data, context) => {
+  const hasEndYear = data.effectiveEndYear != null;
+  const hasEndMonth = data.effectiveEndMonth != null;
+  if (hasEndYear && !hasEndMonth) {
+    context.addIssue({ code: "custom", path: ["effectiveEndMonth"], message: "Choose an end month, or clear the end year for an open-ended rule." });
+  }
+  if (!hasEndYear && hasEndMonth) {
+    context.addIssue({ code: "custom", path: ["effectiveEndYear"], message: "Enter an end year, or clear the end month for an open-ended rule." });
+  }
+  if (hasEndYear && hasEndMonth) {
+    const start = data.effectiveStartYear * 12 + data.effectiveStartMonth;
+    const end = data.effectiveEndYear! * 12 + data.effectiveEndMonth!;
+    if (end < start) context.addIssue({ code: "custom", path: ["effectiveEndMonth"], message: "End period must not be earlier than start period." });
+  }
+  if (data.penaltyType === "NONE" && data.penaltyValue > 0) {
+    context.addIssue({ code: "custom", path: ["penaltyValue"], message: "Penalty value must be zero when penalty type is none." });
+  }
+});
+
+export const billingExemptionSchema = z.object({
+  homeownerId: z.string().min(1, "Select a homeowner."),
+  recurringChargeType: z.enum(["MONTHLY_DUES"]).default("MONTHLY_DUES"),
+  startYear: periodYearSchema,
+  startMonth: periodMonthSchema,
+  endYear: periodYearSchema,
+  endMonth: periodMonthSchema,
+  reason: required.max(500),
+  resolutionReference: z.string().trim().max(120).optional(),
+  approvedBy: z.string().trim().max(120).optional(),
+}).superRefine((data, context) => {
+  const start = data.startYear * 12 + data.startMonth;
+  const end = data.endYear * 12 + data.endMonth;
+  if (end < start) context.addIssue({ code: "custom", path: ["endMonth"], message: "End period must not be earlier than start period." });
 });
 
 const coverageMonthSchema = z.string().trim().regex(/^(?:[1-9]|1[0-2])$/, "Choose a valid coverage month.").transform(Number);

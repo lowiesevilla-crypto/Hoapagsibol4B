@@ -52,13 +52,13 @@ export default async function AdminDashboard() {
     </section>
     <section className="mt-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-5">
       <StatCard label="Outstanding Collections" value={money(receivables._sum.balance ?? 0)} note="Open homeowner receivables" icon={CircleDollarSign} href="/admin/billing" />
-      <StatCard label="Pending Approvals" value={String(pendingApprovals)} note={`${pendingPaymentRequests} payment, ${pendingDocumentRequests} document`} icon={ClipboardCheck} href="/admin/payments?status=PENDING_REVIEW" />
+      <StatCard label="Pending Approvals" value={String(pendingApprovals)} note={`${pendingPaymentRequests} payment, ${pendingDocumentRequests} document`} icon={ClipboardCheck} href="/admin/payments/requests?status=PENDING_REVIEW" />
       <StatCard label="Resident Complaints" value="0" note="Complaints workflow placeholder" icon={MessageSquareWarning} />
       <StatCard label="Today's Visitors" value="0" note="Visitor module placeholder" icon={UserCheck} />
       <StatCard label="Active Announcements" value={String(activeAnnouncements)} note="Published notices" icon={Megaphone} href="/admin/announcements" />
       <StatCard label="Employee Attendance" value={String(todayAttendance)} note="Records captured today" icon={CalendarClock} href="/admin/attendance" />
       <StatCard label="Payroll Reminders" value={String(payrollReminders)} note="Draft or finalized payroll periods" icon={BellRing} href="/admin/payroll" />
-      <StatCard label="Recent Payments" value={String(recentPayments.length)} note="Latest receipts listed below" icon={ReceiptText} href="/admin/payments" />
+      <StatCard label="Recent Payments" value={String(recentPayments.length)} note="Latest receipts listed below" icon={ReceiptText} href="/admin/payments/active" />
       <StatCard label="Community Health" value={`${communityHealth}%`} note="Active homeowners less overdue accounts" icon={Activity} href="/admin/reports" />
     </section>
     <section className="card mt-6">

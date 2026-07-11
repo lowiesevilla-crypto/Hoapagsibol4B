@@ -19,7 +19,7 @@ export type OpenBillChoice = {
   search: string;
 };
 
-export function PaymentForm({ bills, today }: { bills: OpenBillChoice[]; today: string }) {
+export function PaymentForm({ bills, today, serverSearch = false }: { bills: OpenBillChoice[]; today: string; serverSearch?: boolean }) {
   const [todayYear, todayMonth] = today.split("-").map(Number);
   const [query, setQuery] = useState("");
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
@@ -36,8 +36,8 @@ export function PaymentForm({ bills, today }: { bills: OpenBillChoice[]; today: 
   const selectedBillingMonths = selectedBills.map((bill) => bill.billingMonth).sort().join(",");
   const matches = useMemo(() => {
     const term = query.trim().toLowerCase();
-    return bills.filter((bill) => !term || bill.search.includes(term)).slice(0, 12);
-  }, [bills, query]);
+    return serverSearch ? bills : bills.filter((bill) => !term || bill.search.includes(term));
+  }, [bills, query, serverSearch]);
 
   useEffect(() => {
     setAmount(total > 0 ? total.toFixed(2) : "");
@@ -66,8 +66,9 @@ export function PaymentForm({ bills, today }: { bills: OpenBillChoice[]; today: 
     <div className="mb-5"><h2 className="text-lg font-black">Record a payment</h2><p className="text-sm text-slate-500">Search a homeowner, select one or more open billings, then record the payment. Reference numbers are optional for Cash and required for non-cash methods.</p></div>
     <div className="grid gap-5 xl:grid-cols-[1.15fr_1fr]">
       <div>
-        <label className="label" htmlFor="homeowner-bill-search">Search homeowner or property</label>
-        <div className="relative"><Search className="pointer-events-none absolute left-3.5 top-3 size-4 text-slate-400" /><input id="homeowner-bill-search" className="field pl-10" type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Type a name, block, lot, or billing month" autoComplete="off" /></div>
+        <label className="label" htmlFor="homeowner-bill-search">{serverSearch ? "Open billing results" : "Search homeowner or property"}</label>
+        {!serverSearch && <div className="relative"><Search className="pointer-events-none absolute left-3.5 top-3 size-4 text-slate-400" /><input id="homeowner-bill-search" className="field pl-10" type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Type a name, block, lot, or billing month" autoComplete="off" /></div>}
+        {serverSearch && <p className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-semibold text-slate-600">Use the search above to find homeowners by name, block, lot, account number, email, resolution reference, or bill ID.</p>}
         {selectedIds.map((id) => <input key={id} type="hidden" name="billIds" value={id} />)}
         <div className="mt-2 max-h-72 overflow-y-auto rounded-xl border border-slate-200 bg-slate-50/70 p-1.5">
           {matches.map((bill) => {
@@ -79,7 +80,7 @@ export function PaymentForm({ bills, today }: { bills: OpenBillChoice[]; today: 
               <span className="text-right text-sm font-black">{bill.balanceLabel}<span className={`block text-[10px] font-semibold uppercase ${selected ? "text-pine-100" : "text-slate-400"}`}>Balance</span></span>
             </button>;
           })}
-          {!matches.length && <p className="px-3 py-8 text-center text-sm text-slate-500">No open bills match that search.</p>}
+          {!matches.length && <p className="px-3 py-8 text-center text-sm text-slate-500">No homeowner found with an open balance.</p>}
         </div>
       </div>
       <div className="grid content-start gap-4 sm:grid-cols-2">

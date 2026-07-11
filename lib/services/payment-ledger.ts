@@ -1,11 +1,11 @@
 import { BillStatus, Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
 
-type PaymentActor = { id: string; name: string; email: string };
+type PaymentActor = { id: string; tenantId: string; name: string; email: string };
 
 export async function updatePaymentAmountLedger({ paymentId, amount, actor, reason }: { paymentId: string; amount: number; actor: PaymentActor; reason?: string }) {
   return prisma.$transaction(async (tx) => {
-    const payment = await tx.payment.findUnique({ where: { id: paymentId }, include: { bill: true, homeowner: { include: { user: true } } } });
+    const payment = await tx.payment.findFirst({ where: { id: paymentId, tenantId: actor.tenantId }, include: { bill: true, homeowner: { include: { user: true } } } });
     if (!payment) throw new Error("Payment record not found.");
     if (payment.status !== "ACTIVE") throw new Error("Voided payments cannot be changed.");
     const previousAmount = Number(payment.amount);
@@ -14,6 +14,7 @@ export async function updatePaymentAmountLedger({ paymentId, amount, actor, reas
     const recalculated = await recalculateBillFromActivePayments(tx as unknown as Prisma.TransactionClient, payment.bill);
     await tx.auditLog.create({
       data: {
+        tenantId: actor.tenantId,
         actorId: actor.id,
         module: "PAYMENTS",
         action: "UPDATE_PAYMENT_AMOUNT",
@@ -37,8 +38,8 @@ export async function updatePaymentAmountLedger({ paymentId, amount, actor, reas
 
 export async function voidPaymentLedger({ paymentId, actor, reason }: { paymentId: string; actor: PaymentActor; reason?: string }) {
   return prisma.$transaction(async (tx) => {
-    const payment = await tx.payment.findUnique({
-      where: { id: paymentId },
+    const payment = await tx.payment.findFirst({
+      where: { id: paymentId, tenantId: actor.tenantId },
       include: { bill: true, homeowner: { include: { user: true } }, paymentRequest: true },
     });
     if (!payment) throw new Error("Payment record not found.");
@@ -46,6 +47,7 @@ export async function voidPaymentLedger({ paymentId, actor, reason }: { paymentI
     const voidedAt = new Date();
     const archive = await tx.paymentArchive.create({
       data: {
+        tenantId: actor.tenantId,
         originalPaymentId: payment.id,
         billId: payment.billId,
         billingMonth: payment.bill.billingMonth,
@@ -88,6 +90,7 @@ export async function voidPaymentLedger({ paymentId, actor, reason }: { paymentI
     const recalculated = await recalculateBillFromActivePayments(tx as unknown as Prisma.TransactionClient, payment.bill);
     await tx.auditLog.create({
       data: {
+        tenantId: actor.tenantId,
         actorId: actor.id,
         module: "PAYMENTS",
         action: "VOID_PAYMENT_TRANSACTION",

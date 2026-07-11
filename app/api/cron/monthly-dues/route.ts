@@ -1,9 +1,8 @@
-import { HomeownerStatus, NotificationType, TenantModule } from "@prisma/client";
+import { BillingGenerationMode, RecurringChargeType, TenantModule } from "@prisma/client";
 import { NextResponse } from "next/server";
-import { getAppUrl } from "@/lib/app-url";
 import { authorizeCron } from "@/lib/cron-auth";
 import { platformPrisma, prisma } from "@/lib/db";
-import { sendEmailNotification } from "@/lib/services/notifications";
+import { findEffectiveBillingRule } from "@/lib/services/billing-rules";
 import { runWithTenant } from "@/lib/tenant-context";
 
 export const runtime = "nodejs";
@@ -28,34 +27,28 @@ export async function POST(request: Request) {
 
 async function generateTenantDues(tenantId: string, tenantSlug: string) {
   const now = new Date();
-  const billingMonth = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
-  const configuredDueDay = Number(process.env.MONTHLY_DUES_DUE_DAY || 15);
-  const dueDay = Number.isInteger(configuredDueDay) && configuredDueDay >= 1 && configuredDueDay <= 28 ? configuredDueDay : 15;
-  const dueDate = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), dueDay));
-  const [homeowners, exemptions, existing] = await Promise.all([
-    prisma.homeownerProfile.findMany({ where: { status: HomeownerStatus.ACTIVE }, include: { user: true } }),
-    prisma.duesExemption.findMany({ where: { billingMonth }, select: { homeownerId: true } }),
-    prisma.bill.findMany({ where: { billingMonth }, select: { homeownerId: true } }),
-  ]);
-  const exemptIds = new Set(exemptions.map((item) => item.homeownerId));
-  const existingIds = new Set(existing.map((item) => item.homeownerId));
-  const billable = homeowners.filter((homeowner) => !exemptIds.has(homeowner.id) && !existingIds.has(homeowner.id));
-  const created = await prisma.bill.createMany({
-    data: billable.map((homeowner) => ({ tenantId, homeownerId: homeowner.id, billingMonth, dueDate, amount: homeowner.monthlyDuesAmount, totalAmount: homeowner.monthlyDuesAmount, balance: homeowner.monthlyDuesAmount, notes: "Automatically generated monthly HOA dues." })),
-    skipDuplicates: true,
+  const rule = await findEffectiveBillingRule(tenantId, RecurringChargeType.MONTHLY_DUES, now.getUTCFullYear(), now.getUTCMonth() + 1);
+  await prisma.auditLog.create({
+    data: {
+      tenantId,
+      module: "CRON",
+      action: "MONTHLY_DUES_CRON_DEFERRED",
+      entityType: "BillingRule",
+      entityId: rule?.id,
+      metadata: {
+        tenantSlug,
+        billingMonth: `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, "0")}`,
+        ruleResolution: rule?.resolutionReference ?? null,
+        generationMode: rule?.generationMode ?? null,
+        reason: "Automatic execution is deferred to Sprint 2.2B. Phase 2.2A stores the preference only.",
+      },
+    },
   });
-  for (let index = 0; index < billable.length; index += 10) {
-    await Promise.allSettled(billable.slice(index, index + 10).map((homeowner) => sendEmailNotification({
-      recipientId: homeowner.userId,
-      email: homeowner.user.email,
-      subject: `HOA billing notice - ${billingMonth.toLocaleDateString("en-PH", { month: "long", year: "numeric", timeZone: "UTC" })}`,
-      heading: "Monthly dues billing",
-      message: `Hello ${homeowner.user.name},\nYour monthly HOA dues of PHP ${Number(homeowner.monthlyDuesAmount).toFixed(2)} has been posted. Payment is due ${dueDate.toLocaleDateString("en-PH", { timeZone: "UTC" })}.`,
-      type: NotificationType.BILLING_NOTIFICATION,
-      actionLabel: "Open HOA portal",
-      actionUrl: `${getAppUrl()}/${tenantSlug}/login`,
-    })));
-  }
-  await prisma.auditLog.create({ data: { tenantId, module: "CRON", action: "GENERATE_MONTHLY_DUES", entityType: "Bill", metadata: { billingMonth: billingMonth.toISOString(), dueDate: dueDate.toISOString(), created: created.count, exempt: exemptions.length, alreadyExisting: existing.length } } });
-  return { billingMonth: billingMonth.toISOString().slice(0, 7), created: created.count, exempt: exemptions.length, alreadyExisting: existing.length };
+  return {
+    billingMonth: `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, "0")}`,
+    created: 0,
+    deferred: true,
+    automaticConfigured: rule?.generationMode === BillingGenerationMode.AUTOMATIC,
+    rule: rule ? { id: rule.id, resolutionReference: rule.resolutionReference, generationMode: rule.generationMode } : null,
+  };
 }

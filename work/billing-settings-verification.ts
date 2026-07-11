@@ -69,7 +69,7 @@ async function main() {
     assert(oversizedRejected, "GCash QR files over 5MB are rejected");
 
     const billingMonth = await findUnusedBillingMonth(homeowner.id);
-    const bill = await prisma.bill.create({ data: { homeownerId: homeowner.id, billingMonth, amount: 1000, totalAmount: 1000, amountPaid: 400, balance: 600, dueDate: new Date(Date.UTC(billingMonth.getUTCFullYear(), billingMonth.getUTCMonth(), 28)), status: "PARTIAL", notes: marker } });
+    const bill = await prisma.bill.create({ data: { homeownerId: homeowner.id, billingMonth, coverageYear: billingMonth.getUTCFullYear(), coverageMonth: billingMonth.getUTCMonth() + 1, amount: 1000, totalAmount: 1000, amountPaid: 400, balance: 600, dueDate: new Date(Date.UTC(billingMonth.getUTCFullYear(), billingMonth.getUTCMonth(), 28)), status: "PARTIAL", notes: marker } });
     billId = bill.id;
     const payment = await prisma.payment.create({ data: { billId: bill.id, homeownerId: homeowner.id, amount: 400, paymentDate: new Date(), method: "GCASH", referenceNumber: marker, receiptNumber: marker, remarks: marker } });
     paymentId = payment.id;

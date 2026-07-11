@@ -694,7 +694,7 @@ Priority:
 Critical
 
 Status:
-Open
+Fixed in Sprint 2.2 end period hotfix on 2026-07-11
 
 Problem:
 When editing a Billing Rule and changing the Effective End Month to December, the saved rule still displays Open Ended.
@@ -711,3 +711,6 @@ Acceptance Criteria:
 - Editing other fields must preserve the end period.
 - Effective period validation remains enforced.
 - No historical bills are modified.
+
+Fix Summary:
+Billing Rule end-period validation now requires end year and end month to be supplied or cleared together, and the history display only labels a rule Open Ended when both stored end-period fields are null.

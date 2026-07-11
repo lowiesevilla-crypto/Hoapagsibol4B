@@ -76,8 +76,14 @@ function Info({ label: labelText, value }: { label: string; value: string }) {
 
 function periodLabel(rule: { effectiveStartYear: number; effectiveStartMonth: number; effectiveEndYear: number | null; effectiveEndMonth: number | null }) {
   const start = `${monthName(rule.effectiveStartMonth)} ${rule.effectiveStartYear}`;
-  const end = rule.effectiveEndYear && rule.effectiveEndMonth ? `${monthName(rule.effectiveEndMonth)} ${rule.effectiveEndYear}` : "Present";
+  const end = endPeriodLabel(rule);
   return `${start} to ${end}`;
+}
+
+function endPeriodLabel(rule: { effectiveEndYear: number | null; effectiveEndMonth: number | null }) {
+  if (rule.effectiveEndYear == null && rule.effectiveEndMonth == null) return "Open Ended";
+  if (rule.effectiveEndYear != null && rule.effectiveEndMonth != null) return `${monthName(rule.effectiveEndMonth)} ${rule.effectiveEndYear}`;
+  return "Incomplete end period";
 }
 
 function monthOptions() {

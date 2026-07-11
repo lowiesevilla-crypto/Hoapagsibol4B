@@ -103,12 +103,17 @@ export const billingRuleSchema = z.object({
   notes: optionalText(1000),
   active: formBooleanSchema,
 }).superRefine((data, context) => {
-  if ((data.effectiveEndYear && !data.effectiveEndMonth) || (!data.effectiveEndYear && data.effectiveEndMonth)) {
-    context.addIssue({ code: "custom", path: ["effectiveEndMonth"], message: "Provide both end month and end year, or leave both blank." });
+  const hasEndYear = data.effectiveEndYear != null;
+  const hasEndMonth = data.effectiveEndMonth != null;
+  if (hasEndYear && !hasEndMonth) {
+    context.addIssue({ code: "custom", path: ["effectiveEndMonth"], message: "Choose an end month, or clear the end year for an open-ended rule." });
   }
-  if (data.effectiveEndYear && data.effectiveEndMonth) {
+  if (!hasEndYear && hasEndMonth) {
+    context.addIssue({ code: "custom", path: ["effectiveEndYear"], message: "Enter an end year, or clear the end month for an open-ended rule." });
+  }
+  if (hasEndYear && hasEndMonth) {
     const start = data.effectiveStartYear * 12 + data.effectiveStartMonth;
-    const end = data.effectiveEndYear * 12 + data.effectiveEndMonth;
+    const end = data.effectiveEndYear! * 12 + data.effectiveEndMonth!;
     if (end < start) context.addIssue({ code: "custom", path: ["effectiveEndMonth"], message: "End period must not be earlier than start period." });
   }
   if (data.penaltyType === "NONE" && data.penaltyValue > 0) {

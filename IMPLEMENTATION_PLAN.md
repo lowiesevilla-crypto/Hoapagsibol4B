@@ -1,5 +1,19 @@
 # HOAHub v1.1 Implementation Plan
 
+## Sprint 2.2 Billing Rule End Period Hotfix
+
+- [x] Fix Bug #048: Billing Rule end year and end month now validate as an explicit pair and preserve December as month `12`.
+- [x] Show `Open Ended` only when both `effectiveEndYear` and `effectiveEndMonth` are null.
+- [x] Show a clear validation error when only one end-period field is provided.
+- [x] Verify editing an open-ended rule to December 2026, reopening, and seeing `December 2026` in history.
+- [x] Verify notes-only edits preserve an existing defined end period.
+- [x] Verify clearing both end fields returns the rule to Open Ended.
+- [x] Leave schema, migrations, billing calculations, exemptions, duplicate billing, auth, RBAC, tenant routing, payments, receipts, and notifications unchanged.
+- [x] Run `pnpm exec prisma validate`.
+- [x] Run `pnpm exec prisma generate`.
+- [x] Run `pnpm typecheck`.
+- [x] Clean `.next` and run `pnpm build`.
+
 ## Sprint 2.2 Final Billing Rules UI Hotfix
 
 - [x] Fix Bug #046: Billing Rule edit mode now formats `resolutionDate` as a stable `YYYY-MM-DD` value for the HTML date input.

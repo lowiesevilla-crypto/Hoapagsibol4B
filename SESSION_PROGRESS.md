@@ -1,5 +1,44 @@
 # Session Progress
 
+## 2026-07-11 - Sprint 2.2 Billing Rule End Period Hotfix
+
+Branch:
+feature/billing-rules-engine
+
+Completed:
+
+- Tightened Billing Rule end-period validation to treat end year and end month as an explicit pair using null-aware checks.
+- Updated Billing Rules history/current-period display so `Open Ended` appears only when both end year and end month are null.
+- Added an `Incomplete end period` display fallback for any pre-existing partial stored state instead of mislabeling it as open-ended.
+- Left notifications, billing calculations, duplicate billing logic, exemptions, auth/RBAC, tenant routing, payments, receipts, schema, and migrations unchanged.
+
+Root cause:
+
+- The save path already submitted `effectiveEndMonth` and converted `"12"` to numeric `12`, but the display logic treated any missing end-period side as open-ended. That could mask partial state and make the UI appear to ignore the selected end month. Validation also used truthy checks instead of explicit null-aware pair checks.
+
+Validation:
+
+- Test 1: Edited a temporary open-ended rule, set End Year `2026` and End Month `December`, saved, reopened, confirmed End Month value `12`, End Year `2026`, and history `January 2026 to December 2026`.
+- Test 2: Changed notes only, saved, reopened, and confirmed End Year `2026` and End Month `12` remained unchanged.
+- Test 3: Cleared both End Year and End Month, saved, reopened, and confirmed history `January 2026 to Open Ended`.
+- Test 4: Submitted End Year without End Month and confirmed the precise validation message `Choose an end month, or clear the end year for an open-ended rule.`
+- Regression: Resolution Date still populated as `2026-07-11` and stayed preserved during edits.
+- Regression: Notification close removed the toast while field validation remained visible.
+- Regression: Error notification auto-dismissed while field validation remained visible.
+- Regression: Created a disposable inactive Billing Rule and confirmed history `January 2032 to December 2032`; DB showed `effectiveEndMonth: 12`.
+- Regression: Billing Exemptions page rendered.
+- Regression: Existing Billing page rendered.
+- Cleanup: Temporary rules and audit entries were removed, and the local admin password hash was restored.
+- pnpm exec prisma validate: Passed
+- pnpm exec prisma generate: Passed after stopping leftover Next dev processes that held the Prisma DLL on Windows.
+- pnpm typecheck: Passed
+- pnpm build: Passed
+
+Not included:
+
+- No Prisma schema or migration changes.
+- No billing calculation, exemption, duplicate billing, auth, RBAC, tenant routing, payment, receipt, or notification changes.
+
 ## 2026-07-11 - Sprint 2.2 Final Billing Rules UI Hotfix
 
 Branch:

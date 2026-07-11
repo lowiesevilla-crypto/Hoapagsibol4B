@@ -1,5 +1,22 @@
 # HOAHub v1.1 Implementation Plan
 
+## Sprint 2.3 Automated Billing Generation Engine
+
+- [x] Reuse `lib/services/billing-rules.ts` as the single preview and generation engine.
+- [x] Add preview for all eligible, individual homeowner, selected homeowners, block, and phase scopes.
+- [x] Resolve tenant and authorization server-side; never accept tenant identity from client input.
+- [x] Use the effective Billing Rule for the selected coverage period; do not invent rates when no rule exists.
+- [x] Skip active Dues Exemptions that cover the selected period and show skip reason.
+- [x] Skip duplicate bills by tenant, homeowner, charge type, coverage year, and coverage month.
+- [x] Create eligible bills with coverage fields, billing rule ID, rule snapshot, resolution reference, rule amount, due date from rule due day, and existing balance behavior.
+- [x] Record summary audit logs plus exemption, duplicate, and row-failure audit details.
+- [x] Keep automatic scheduled execution deferred.
+- [x] Leave Prisma schema and migrations unchanged.
+- [x] Run `pnpm exec prisma validate`.
+- [x] Run `pnpm exec prisma generate`.
+- [x] Run `pnpm typecheck`.
+- [x] Clean `.next` and run `pnpm build`.
+
 ## Sprint 2.2 End Period Display and Clearing Fix
 
 - [x] Fix Bug #049: stored month `12` now displays as December using `MONTH_NAMES[month - 1]`.

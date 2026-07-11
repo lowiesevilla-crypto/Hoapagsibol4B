@@ -1,5 +1,43 @@
 # Session Progress
 
+## 2026-07-11 - Sprint 2.3 Automated Billing Generation Engine
+
+Branch:
+feature/billing-generation-engine
+
+Completed:
+
+- Added a preview-first Billing Generation panel on `/admin/billing`.
+- Reused and expanded `lib/services/billing-rules.ts` for preview and generation instead of creating parallel billing logic.
+- Added generation scopes for all eligible homeowners, individual homeowner, selected homeowners, block, and phase when data exists.
+- Added searchable homeowner selection for individual and selected generation.
+- Preview shows tenant, coverage period, effective rule, rule amount, resolution reference, generation mode, eligible count, exempt count, duplicate count, invalid/skipped count, projected bill count, projected total, due date, and a detailed homeowner table.
+- Generation creates only eligible bills, stores recurring charge type, coverage year/month, billing rule ID, billing rule snapshot, resolution reference, amount, total, balance, and status.
+- Duplicate and exemption handling are idempotent; rerunning the same selected generation did not create duplicates.
+- Audit logs now record generation summary plus exemption skips, duplicate skips, and row-level failures.
+- Automatic scheduled generation remains deferred; the cron endpoint still records deferred status only.
+- Left Prisma schema and migrations unchanged.
+
+Validation:
+
+- Pre-flight passed on `feature/billing-generation-engine`; working tree was clean and last commit was `f91fe4b`.
+- Service preview for December 2026 found the active rule `Initial monthly dues rate`, 500 eligible homeowners, 0 duplicates, 0 exemptions, 500 projected bills, and projected total PHP 300,000.
+- Disposable selected-homeowner generation for December 2199 created 1 bill, skipped 1 temporary exemption, stored rule ID/snapshot/resolution reference, and used due date `2199-12-15`.
+- Idempotency check reran the same selected generation and created 0 bills, skipped 1 duplicate, and skipped the same exemption.
+- Cleanup removed the disposable bill, temporary exemption, and generated audit rows.
+- Rendered `/admin/billing?preview=1&coverageYear=2026&coverageMonth=12&scope=ALL` returned HTTP 200 and included the generation panel, preview table, rule reference, generate button, manual bill form, and exemptions section.
+- Tenant isolation still requires tenant context and blocks cross-tenant billing queries.
+- pnpm exec prisma validate: Passed
+- pnpm exec prisma generate: Passed
+- pnpm typecheck: Passed
+- pnpm build after removing `.next`: Passed
+
+Not included:
+
+- No scheduled automatic execution.
+- No Prisma schema or migration changes.
+- No payment, receipt, authentication, tenant routing, or existing migration changes.
+
 ## 2026-07-11 - Sprint 2.2 End Period Display and Clearing Fix
 
 Branch:

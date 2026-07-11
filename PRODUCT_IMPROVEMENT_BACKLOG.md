@@ -423,6 +423,12 @@ Printable SOA with HOA branding, billing history, totals, QR verification, and P
 Configurable exemption periods with reasons and audit logging.
 🔴 Improvement #015 – Billing Rules Engine
 Configurable billing policies (exemptions, discounts, penalties, rate types).
+
+Status:
+Completed through Sprint 2.3 local implementation on 2026-07-11
+
+Sprint 2.3 Completion:
+The Billing page now supports preview-first tenant-scoped monthly dues generation from Billing Rules and Dues Exemptions. It supports all eligible homeowners, one homeowner, selected homeowners, block, and phase scopes where data exists. Duplicate bills and exempt homeowners are skipped, eligible bills store coverage fields and the billing rule snapshot, and audit logs record summary plus skip/failure details. Automatic scheduled execution remains deferred.
 🟡 Improvement #016 – AI Billing Assistant
 Role-aware AI capable of explaining balances, dues, and statements while respecting tenant isolation and user permissions.
 🟡 Improvement #017 – Billing Timeline View

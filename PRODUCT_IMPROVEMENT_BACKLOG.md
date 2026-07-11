@@ -442,7 +442,7 @@ Hotfix #001:
 
 Hotfix #002:
 - Bug #028 Fixed: Print SOA now uses a dedicated SOA Client Component with a native `button type="button"` and direct `window.print()` click handler.
-- Bug #029 Fixed: SOA PDF signatures and generated footer now use remaining-space flow layout, keeping short statements on one A4 page and adding a page only when the footer block cannot fit.
+- Bug #029 Fixed: SOA PDF signatures and generated footer now use exact remaining-space flow layout, keeping the 1-ledger / 0-payment / 1-billing sample on one A4 page and adding a page only when the footer block cannot fit.
 
 🔴 Improvement #014 – Monthly Dues Exemption Period
 Configurable exemption periods with reasons and audit logging.
@@ -594,7 +594,7 @@ Priority:
 Critical
 
 Status:
-Fixed in Sprint 2.1 release blocker hotfix #002 on 2026-07-11
+Fixed in Sprint 2.1 final root-cause hotfix on 2026-07-11
 
 Problem:
 The Print SOA button remains visible but does not respond when clicked.
@@ -623,7 +623,7 @@ Priority:
 Critical
 
 Status:
-Fixed in Sprint 2.1 release blocker hotfix #002 on 2026-07-11
+Fixed in Sprint 2.1 final root-cause hotfix on 2026-07-11
 
 Problem:
 The PDF creates a second page containing only the signature and footer section, leaving most of the page blank.

@@ -43,6 +43,7 @@ Completed:
 - Fixed empty Payment History spacing by rendering an empty state inside a bordered table row with reserved height.
 - Added SOA-specific browser print table rules for A4-safe table wrapping.
 - Fixed SOA PDF signature/footer pagination so short statements stay on one page and long statements add a final page only when remaining space is insufficient.
+- Final root-cause adjustment: the short sample landed the generated footer exactly at the bottom margin, but the PDF reserved 66 points while drawing a 64-point footer block. The footer reservation now matches the actual drawn block height, preventing the unnecessary Page 2.
 
 Verification:
 - pnpm typecheck: Passed on 2026-07-11

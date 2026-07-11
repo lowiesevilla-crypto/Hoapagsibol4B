@@ -151,7 +151,7 @@ function drawBilling(doc: PdfDoc, soa: StatementOfAccount) {
 }
 
 function drawFooter(doc: PdfDoc, soa: StatementOfAccount) {
-  const footerHeight = 66;
+  const footerHeight = 64;
   ensureSpace(doc, footerHeight);
   const signatureLineY = doc.y - 34;
   const labelY = signatureLineY - 14;

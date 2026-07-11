@@ -41,7 +41,7 @@ export default async function SystemSettingsPage({ searchParams }: { searchParam
     ["Local login URL", "http://localhost:3000/login"],
     ["System settings", "/admin/settings"],
     ["Homeowner QR payment", "/portal/pay"],
-    ["Admin QR review", "/admin/payments"],
+    ["Admin QR review", "/admin/payments/requests"],
     ["GCash webhook endpoint", "/api/payments/webhook/gcash"],
     ["Daily maintenance cron", "/api/cron/daily"],
     ["Monthly dues cron", "/api/cron/monthly-dues"],

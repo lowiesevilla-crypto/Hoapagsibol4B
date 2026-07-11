@@ -1,5 +1,53 @@
 # HOAHub v1.1 Implementation Plan
 
+## Sprint 2.3B Individual Billing and Payments Workflow Completion
+
+- [x] Fix Bug #057: individual billing create now submits numeric coverage year/month into the Billing Generation preview without locale-dependent date parsing.
+- [x] Fix Bug #058: individual billing uses the shared Billing Rules generation engine and persists rule linkage, snapshot, coverage, resolution reference, amount, and balance updates.
+- [x] Fix Improvement #059: individual billing has a searchable full-dataset tenant-scoped homeowner selector.
+- [x] Fix Bug #060: Payments are split into `/admin/payments/record`, `/admin/payments/requests`, `/admin/payments/active`, and `/admin/payments/history`; `/admin/payments` redirects safely.
+- [x] Fix Bug #061: Record Payment uses server-side tenant-scoped search over current open balances with no arbitrary small client result limit.
+- [x] Fix Bug #062: Billing generation and payment mutations revalidate Billing plus dedicated Payment routes so newly generated balances are immediately payable.
+- [x] Preserve existing payment posting, official receipt generation, payment request review, Billing Exemptions, duplicate prevention, tenant isolation, and audit behavior.
+- [x] Leave Prisma schema and migrations unchanged.
+- [x] Run `pnpm exec prisma validate`.
+- [x] Run `pnpm exec prisma generate`.
+- [x] Run `pnpm typecheck`.
+- [x] Clean `.next` and run `pnpm build`.
+
+## Sprint 2.3A Finance Integration Hotfix
+
+- [x] Fix Bug #050: Billing Preview now displays the effective Billing Rule, Resolution Reference, effective period, rule amount, generation mode, penalty configuration, and no-rule state.
+- [x] Fix Bug #051: individual billing creation and preview use the shared Billing Rules generation service and persist Billing Rule linkage, snapshot, coverage fields, and Resolution Reference.
+- [x] Fix Bug #052: generation counts are computed from the final normalized preview rows through one summary helper.
+- [x] Fix Bug #053: generated bills remain the balance source of truth and Billing/Payments views are revalidated after generation.
+- [x] Fix Bug #054: Record Payment now searches tenant-scoped open balances by homeowner name, block, lot, email, account ID, bill ID, resolution reference, and billing month.
+- [x] Add Billing Preview search, sorting, pagination, and mobile table handling without changing summary counts.
+- [x] Add Payments sub-navigation for Record Payment, Payment Requests, Active Payments, and Transaction History.
+- [x] Preserve existing payment recording, receipt, exemption, duplicate-prevention, and audit behavior.
+- [x] Leave Prisma schema and migrations unchanged.
+- [x] Run `pnpm exec prisma validate`.
+- [x] Run `pnpm exec prisma generate`.
+- [x] Run `pnpm typecheck`.
+- [x] Clean `.next` and run `pnpm build`.
+
+## Sprint 2.3 Automated Billing Generation Engine
+
+- [x] Reuse `lib/services/billing-rules.ts` as the single preview and generation engine.
+- [x] Add preview for all eligible, individual homeowner, selected homeowners, block, and phase scopes.
+- [x] Resolve tenant and authorization server-side; never accept tenant identity from client input.
+- [x] Use the effective Billing Rule for the selected coverage period; do not invent rates when no rule exists.
+- [x] Skip active Dues Exemptions that cover the selected period and show skip reason.
+- [x] Skip duplicate bills by tenant, homeowner, charge type, coverage year, and coverage month.
+- [x] Create eligible bills with coverage fields, billing rule ID, rule snapshot, resolution reference, rule amount, due date from rule due day, and existing balance behavior.
+- [x] Record summary audit logs plus exemption, duplicate, and row-failure audit details.
+- [x] Keep automatic scheduled execution deferred.
+- [x] Leave Prisma schema and migrations unchanged.
+- [x] Run `pnpm exec prisma validate`.
+- [x] Run `pnpm exec prisma generate`.
+- [x] Run `pnpm typecheck`.
+- [x] Clean `.next` and run `pnpm build`.
+
 ## Sprint 2.2 End Period Display and Clearing Fix
 
 - [x] Fix Bug #049: stored month `12` now displays as December using `MONTH_NAMES[month - 1]`.
@@ -132,3 +180,19 @@ Migration safety notes:
 - [ ] GitHub Actions
 - [ ] Local UAT
 - [ ] Production UAT
+# Sprint 2.3 Status
+
+Completed
+- Billing Generation Engine
+- Duplicate Prevention
+- Billing Rule Integration
+- Billing Exemption Integration
+- Billing Preview
+- Bulk Generation
+
+Deferred to Sprint 2.3A
+- Individual Billing Generation
+- Payment Synchronization
+- Finance Navigation Improvements
+- Resolution Reference Display
+- Billing Preview Search

@@ -423,6 +423,12 @@ Printable SOA with HOA branding, billing history, totals, QR verification, and P
 Configurable exemption periods with reasons and audit logging.
 🔴 Improvement #015 – Billing Rules Engine
 Configurable billing policies (exemptions, discounts, penalties, rate types).
+
+Status:
+Completed through Sprint 2.3 local implementation on 2026-07-11
+
+Sprint 2.3 Completion:
+The Billing page now supports preview-first tenant-scoped monthly dues generation from Billing Rules and Dues Exemptions. It supports all eligible homeowners, one homeowner, selected homeowners, block, and phase scopes where data exists. Duplicate bills and exempt homeowners are skipped, eligible bills store coverage fields and the billing rule snapshot, and audit logs record summary plus skip/failure details. Automatic scheduled execution remains deferred.
 🟡 Improvement #016 – AI Billing Assistant
 Role-aware AI capable of explaining balances, dues, and statements while respecting tenant isolation and user permissions.
 🟡 Improvement #017 – Billing Timeline View
@@ -746,3 +752,284 @@ Acceptance Criteria:
 
 Fix Summary:
 Billing Rules now use a deterministic `MONTH_NAMES[month - 1]` helper for all month labels, validation converts submitted blank end-period fields to `null` while preserving absent fields as undefined, and the update action uses `FormData.has()` to distinguish explicit clearing from omitted fields.
+# Sprint 2.3A – Finance Integration Hotfix
+
+## Bug #050 – Resolution Reference Missing in Billing Preview
+Priority: Critical
+Status: Fixed in Sprint 2.3A finance integration hotfix on 2026-07-11
+
+Preview Billing does not display the Billing Rule Resolution Reference before generation.
+
+Fix Summary:
+Billing Preview now displays the effective rule, Resolution Reference, effective period, rule amount, generation mode, penalty configuration, and a clear no-rule state. Preview rows carry the same Resolution Reference persisted on generated Bill records.
+
+---
+
+## Bug #051 – Individual Billing Generation Incomplete
+Priority: Critical
+Status: Fixed in Sprint 2.3A finance integration hotfix on 2026-07-11
+
+Issues:
+- No Preview
+- Cannot Generate Individual Bill
+- Billing Rule not linked
+- Resolution Reference not shown
+- Balance not updated
+
+Fix Summary:
+Individual preview and generation use the same shared Billing Rules service as all-homeowner generation. Rule-based individual bill creation persists billingRuleId, billingRuleSnapshot, resolutionReference, recurringChargeType, coverageYear, and coverageMonth while preserving tenant and duplicate checks.
+
+---
+
+## Bug #052 – Exemption Count Incorrect
+Priority: High
+Status: Fixed in Sprint 2.3A finance integration hotfix on 2026-07-11
+
+Preview shows Exempt Homeowners = 0 even when SKIP_EXEMPT is correctly identified.
+
+Fix Summary:
+Preview and generation summaries now compute counts from the final normalized row actions through one helper, so SKIP_EXEMPT rows and Exempt Homeowners totals stay aligned.
+
+---
+
+## Bug #053 – Billing and Payment Synchronization
+Priority: Critical
+Status: Fixed in Sprint 2.3A finance integration hotfix on 2026-07-11
+
+After billing generation:
+- Record Payment does not immediately reflect newly generated bills.
+- Newly billed homeowners are not searchable.
+- Outstanding balances are not refreshed.
+
+Fix Summary:
+Generated bills remain the balance source of truth, and Billing/Payments views are revalidated after generation. The payment posting path now scopes selected bills and created payments to the authenticated tenant.
+
+---
+
+## Bug #054 – Payment Search Dataset Incomplete
+Priority: High
+Status: Fixed in Sprint 2.3A finance integration hotfix on 2026-07-11
+
+Record Payment search does not include all homeowners with outstanding balances.
+
+Fix Summary:
+Record Payment now queries tenant-scoped open bills and searchable homeowner options by name, block, lot, email, account ID, bill ID, resolution reference, and billing month.
+
+---
+
+## Improvement #055 – Billing Preview Search
+Priority: Medium
+Status: Completed in Sprint 2.3A finance integration hotfix on 2026-07-11
+
+Add:
+- Search
+- Sort
+- Pagination
+
+to the Billing Preview table.
+
+Fix Summary:
+Billing Preview now has client-side full-result search, sorting, pagination, and responsive table handling while summary counts remain based on the complete preview dataset.
+
+---
+
+## Improvement #056 – Finance Navigation Redesign
+Priority: Medium
+Status: Completed in Sprint 2.3A finance integration hotfix on 2026-07-11
+
+Split the Payments module into:
+
+Payments
+├── Record Payment
+├── Payment Requests
+├── Active Payments
+├── Transaction History
+├── Refunds
+└── Reports
+
+Fix Summary:
+Payments now provides mobile-friendly sub-navigation for Record Payment, Payment Requests, Active Payments, and Transaction History while preserving the existing route and actions.
+# Sprint 2.3A Remaining Finance Integration Blockers
+
+## Bug #057 – Individual Billing Date Validation Failure
+
+Module:
+Billing – Create Individual Bill
+
+Priority:
+Critical
+
+Status:
+Fixed in Sprint 2.3B individual billing and payments workflow completion on 2026-07-11
+
+Problem:
+Creating an individual bill fails with:
+“Something went wrong. We couldn't finish that request. Invalid date.”
+
+Expected Behavior:
+The selected coverage month and year must be converted into a valid billing date and processed through the shared Billing Generation Engine.
+
+Acceptance Criteria:
+- Valid coverage month/year produces a valid billing date.
+- No locale-dependent date parsing.
+- Individual billing preview is available before creation.
+- Individual generation succeeds for an eligible homeowner.
+- Clear validation is shown for invalid coverage.
+- Existing bulk generation remains unchanged.
+
+Fix Summary:
+Individual bill creation no longer uses locale-dependent date parsing. The create form submits numeric `coverageYear` and `coverageMonth` into the shared billing generation preview, and server validation rejects invalid month/year values before generation.
+
+---
+
+## Bug #058 – Individual Billing Does Not Use Billing Rules Engine
+
+Module:
+Billing – Create Individual Bill
+
+Priority:
+Critical
+
+Status:
+Fixed in Sprint 2.3B individual billing and payments workflow completion on 2026-07-11
+
+Problem:
+The individual billing workflow does not show or persist:
+- Effective Billing Rule
+- Resolution Reference
+- Coverage
+- Rule Amount
+- Updated balance
+
+Expected Behavior:
+Individual billing must use the same preview and generation service as bulk billing.
+
+Acceptance Criteria:
+- Effective rule is shown before generation.
+- Resolution reference is shown and saved.
+- Billing rule ID and snapshot are saved.
+- Coverage month/year are saved.
+- Correct rule amount is used.
+- Homeowner balance updates immediately.
+- Duplicate and exemption checks apply.
+- Generated bill appears in Billing and Payments.
+
+Fix Summary:
+Individual billing now uses the same preview/generation engine as bulk billing by submitting `scope=HOMEOWNER`, persisting the Billing Rule linkage, rule snapshot, resolution reference, coverage fields, amount, and balance updates through the existing generation service.
+
+---
+
+## Improvement #059 – Searchable Individual Homeowner Selector
+
+Module:
+Billing – Create Individual Bill
+
+Priority:
+High
+
+Status:
+Fixed in Sprint 2.3B individual billing and payments workflow completion on 2026-07-11
+
+Problem:
+The homeowner dropdown is not searchable.
+
+Acceptance Criteria:
+- Search by homeowner name.
+- Search by block.
+- Search by lot.
+- Search by account number.
+- Full tenant dataset is searchable.
+- No arbitrary small result limit.
+- Keyboard and mobile friendly.
+- Clear empty state.
+
+Fix Summary:
+Added a reusable searchable homeowner selector for individual billing and removed the arbitrary small option limit so the full tenant-scoped homeowner dataset can be searched by name, block, lot, account, and email.
+
+---
+
+## Bug #060 – Payments Navigation Not Separated
+
+Module:
+Payments
+
+Priority:
+High
+
+Status:
+Fixed in Sprint 2.3B individual billing and payments workflow completion on 2026-07-11
+
+Problem:
+Navigation buttons were added, but all payment functions remain rendered on the same overcrowded page.
+
+Expected Structure:
+- `/admin/payments/record`
+- `/admin/payments/requests`
+- `/admin/payments/active`
+- `/admin/payments/history`
+
+Acceptance Criteria:
+- Each route displays only its related function.
+- Payments parent menu is collapsible.
+- Current links redirect safely.
+- Mobile navigation works.
+- Existing payment actions remain unchanged.
+
+Fix Summary:
+Payments now has dedicated routes for Record Payment, Payment Requests, Active Payments, and Transaction History. The old `/admin/payments` path redirects safely to `/admin/payments/record`, and the sidebar exposes Payments as its own grouped section.
+
+---
+
+## Bug #061 – Record Payment Homeowner Search Incomplete
+
+Module:
+Payments – Record Payment
+
+Priority:
+Critical
+
+Status:
+Fixed in Sprint 2.3B individual billing and payments workflow completion on 2026-07-11
+
+Problem:
+Not all tenant homeowners are searchable. Newly billed homeowners and newly generated balances may not appear.
+
+Acceptance Criteria:
+- All eligible tenant homeowners are searchable.
+- Lowie Sevilla is searchable when in the authenticated tenant.
+- Search by name, block, lot, account number, and email.
+- Search operates on the full server-side dataset.
+- Newly billed homeowners appear immediately.
+- Current outstanding balance refreshes after billing.
+- No cross-tenant results.
+- No arbitrary result truncation.
+
+Fix Summary:
+Record Payment now uses a tenant-scoped server-side query over current open bill balances with search across homeowner name, block, lot, email, account ID, bill ID, and resolution reference. Client-side truncation was removed.
+
+---
+
+## Bug #062 – Newly Generated Billing Not Reflected in Record Payment
+
+Module:
+Finance Integration
+
+Priority:
+Critical
+
+Status:
+Fixed in Sprint 2.3B individual billing and payments workflow completion on 2026-07-11
+
+Problem:
+Newly generated bills and balances are not consistently visible in the Record Payment workflow.
+
+Acceptance Criteria:
+- Billing generation revalidates Billing and Payment routes.
+- Newly generated bills appear without restarting the app.
+- Current outstanding balance is recalculated from the authoritative source.
+- Record Payment uses current bill data.
+- Payment reduces balance correctly.
+- Official Receipt generation remains functional.
+
+Fix Summary:
+Billing generation and payment mutations now revalidate the dedicated payment routes. Record Payment reads current open bill balances from the database so newly generated bills are available immediately for payment posting and receipt generation.

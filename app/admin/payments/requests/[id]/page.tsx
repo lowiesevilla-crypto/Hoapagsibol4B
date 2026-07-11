@@ -24,7 +24,7 @@ export default async function PaymentRequestDetailsPage({ params }: { params: Pr
     : collectionLabel(String(request.collectionType), request.description);
 
   return <>
-    <PageHeader eyebrow="QR / GCash review" title="Payment request details" description="Review the homeowner payment proof, status, and submission details before approval." action={<Link className="btn-secondary" href="/admin/payments">Back to payments</Link>} />
+    <PageHeader eyebrow="QR / GCash review" title="Payment request details" description="Review the homeowner payment proof, status, and submission details before approval." action={<Link className="btn-secondary" href="/admin/payments/requests">Back to payment requests</Link>} />
     <section className="grid gap-6 xl:grid-cols-[1fr_1.2fr]">
       <div className="card">
         <div className="mb-4 flex items-start justify-between gap-3">

@@ -1,5 +1,74 @@
 # Session Progress
 
+## 2026-07-11 - Sprint 2.3A Finance Integration Hotfix
+
+Branch:
+feature/billing-generation-engine
+
+Completed:
+
+- Fixed Bug #050 by displaying Billing Preview rule metadata: effective rule, Resolution Reference, effective period, amount, generation mode, penalty configuration, and no-rule state.
+- Fixed Bug #051 by keeping individual preview/generation on `lib/services/billing-rules.ts`; new individual bill creation now delegates to the shared service and persists Billing Rule linkage, snapshot, Resolution Reference, charge type, and coverage period.
+- Fixed Bug #052 by computing preview and generation counts from final normalized row actions through one summary helper.
+- Fixed Bug #053 by preserving Bill rows as the balance source of truth, revalidating Billing and Payments after generation, and keeping duplicate/exempt skips balance-neutral.
+- Fixed Bug #054 by tenant-scoping the Record Payment datasets and expanding search to homeowner name, block, lot, email, account ID, bill ID, Resolution Reference, and billing month.
+- Added Billing Preview table search, sorting, pagination, and responsive handling without changing full-dataset summary counts.
+- Added Payments sub-navigation for Record Payment, Payment Requests, Active Payments, and Transaction History.
+- Tightened payment posting, update, and void services so bill/payment/archive/audit writes use the authenticated tenant.
+- Left Prisma schema and migrations unchanged.
+
+Validation:
+
+- Pre-flight passed on `feature/billing-generation-engine`; working tree was clean and last commit was `70a51c2`.
+- `pnpm exec prisma validate`: Passed.
+- `pnpm exec prisma generate`: Initially hit a Windows Prisma DLL lock from two local Node processes in this checkout; after stopping those workspace-local processes, passed.
+- `pnpm typecheck`: Passed.
+- Clean build after `Remove-Item -Recurse -Force .next -ErrorAction SilentlyContinue`: Passed.
+
+Remaining issues:
+
+- Automatic scheduled billing remains deferred.
+- Payment gateway/webhook automation remains out of scope.
+- Refunds and Reports remain future Payments navigation placeholders.
+
+## 2026-07-11 - Sprint 2.3 Automated Billing Generation Engine
+
+Branch:
+feature/billing-generation-engine
+
+Completed:
+
+- Added a preview-first Billing Generation panel on `/admin/billing`.
+- Reused and expanded `lib/services/billing-rules.ts` for preview and generation instead of creating parallel billing logic.
+- Added generation scopes for all eligible homeowners, individual homeowner, selected homeowners, block, and phase when data exists.
+- Added searchable homeowner selection for individual and selected generation.
+- Preview shows tenant, coverage period, effective rule, rule amount, resolution reference, generation mode, eligible count, exempt count, duplicate count, invalid/skipped count, projected bill count, projected total, due date, and a detailed homeowner table.
+- Generation creates only eligible bills, stores recurring charge type, coverage year/month, billing rule ID, billing rule snapshot, resolution reference, amount, total, balance, and status.
+- Duplicate and exemption handling are idempotent; rerunning the same selected generation did not create duplicates.
+- Audit logs now record generation summary plus exemption skips, duplicate skips, and row-level failures.
+- Automatic scheduled generation remains deferred; the cron endpoint still records deferred status only.
+- Left Prisma schema and migrations unchanged.
+
+Validation:
+
+- Pre-flight passed on `feature/billing-generation-engine`; working tree was clean and last commit was `f91fe4b`.
+- Service preview for December 2026 found the active rule `Initial monthly dues rate`, 500 eligible homeowners, 0 duplicates, 0 exemptions, 500 projected bills, and projected total PHP 300,000.
+- Disposable selected-homeowner generation for December 2199 created 1 bill, skipped 1 temporary exemption, stored rule ID/snapshot/resolution reference, and used due date `2199-12-15`.
+- Idempotency check reran the same selected generation and created 0 bills, skipped 1 duplicate, and skipped the same exemption.
+- Cleanup removed the disposable bill, temporary exemption, and generated audit rows.
+- Rendered `/admin/billing?preview=1&coverageYear=2026&coverageMonth=12&scope=ALL` returned HTTP 200 and included the generation panel, preview table, rule reference, generate button, manual bill form, and exemptions section.
+- Tenant isolation still requires tenant context and blocks cross-tenant billing queries.
+- pnpm exec prisma validate: Passed
+- pnpm exec prisma generate: Passed
+- pnpm typecheck: Passed
+- pnpm build after removing `.next`: Passed
+
+Not included:
+
+- No scheduled automatic execution.
+- No Prisma schema or migration changes.
+- No payment, receipt, authentication, tenant routing, or existing migration changes.
+
 ## 2026-07-11 - Sprint 2.2 End Period Display and Clearing Fix
 
 Branch:
@@ -238,3 +307,96 @@ Not included:
 - No payment gateway.
 - No AI features.
 - No production deployment.
+# Sprint 2.3 UAT Summary
+
+Completed
+- Billing Generation Engine
+- Bulk Billing Generation
+- Billing Rules Integration
+- Duplicate Prevention
+- Exemption Handling
+- Mobile Compatibility
+
+Remaining Release Blockers
+- Individual Billing
+- Payment Synchronization
+- Resolution Reference Preview
+- Exemption Count
+- Payment Search
+
+Decision
+
+Sprint 2.3 approved for development completion but NOT approved for merge.
+
+Proceed to Sprint 2.3A Finance Integration Hotfix.
+# Sprint 2.3A UAT Result
+
+## Passed
+
+- Billing Preview
+- Resolution Reference Preview
+- Search, Sorting, and Pagination
+- Exemption Counts
+- Duplicate Counts
+- Bulk Billing Generation
+- Billing Rules Regression
+- Billing Exemptions Regression
+- Official Receipts
+- Tenant Isolation
+- Mobile Billing
+
+## Failed
+
+- Individual Homeowner Search
+- Individual Billing Preview
+- Individual Billing Generation
+- Individual Billing Rule Link
+- Individual Resolution Reference
+- Individual Coverage and Amount
+- Individual Balance Update
+- Separate Payments Routes
+- Complete Record Payment Search
+- Newly Generated Bill Visibility
+- Newly Generated Balance Visibility
+
+## Decision
+
+Sprint 2.3A is not approved for merge.
+
+Next Task:
+Sprint 2.3B – Individual Billing and Payments Workflow Completion
+
+## 2026-07-11 - Sprint 2.3B Individual Billing and Payments Workflow Completion
+
+Branch:
+feature/billing-generation-engine
+
+Completed:
+
+- Fixed Bug #057 by replacing the legacy individual bill create path with a numeric coverage year/month preview form that submits to the Billing Generation Engine.
+- Fixed Bug #058 by routing individual homeowner billing through `scope=HOMEOWNER`, preserving Billing Rule linkage, snapshots, resolution references, coverage fields, generated amount, and bill balance updates.
+- Fixed Improvement #059 by adding a searchable full-dataset homeowner selector for individual billing with tenant-scoped options and no arbitrary small result limit.
+- Fixed Bug #060 by splitting Payments into `/admin/payments/record`, `/admin/payments/requests`, `/admin/payments/active`, and `/admin/payments/history`; `/admin/payments` now redirects to Record Payment.
+- Fixed Bug #061 by moving Record Payment bill lookup to server-side tenant-scoped search across homeowner name, block, lot, account ID, email, bill ID, and resolution reference.
+- Fixed Bug #062 by revalidating Billing and the dedicated Payment routes after billing generation and payment mutations so newly generated balances are immediately visible.
+- Tightened payment request approval, rejection, and webhook approval to resolve requests within the authenticated or resolved tenant.
+
+Root causes:
+
+- Individual billing still used a separate manual bill form that depended on date-like input conversion instead of the shared billing preview/generation service.
+- Payments navigation was visually separated but still rendered too many workflows in one page, and Record Payment relied on client-side filtered/truncated bill choices.
+- Newly generated bill visibility depended on revalidation of the old payments route instead of the dedicated payment workflows that now need current balances.
+
+Validation:
+
+- pnpm exec prisma validate: Passed
+- pnpm exec prisma generate: Passed
+- pnpm typecheck: Passed
+- Remove-Item -Recurse -Force .next -ErrorAction SilentlyContinue: Passed
+- pnpm build: Passed
+
+Not included:
+
+- No Prisma schema changes.
+- No migration changes.
+- No payment gateway, webhook implementation expansion, AI, refunds, scheduled billing, authentication, RBAC, tenant routing, or Billing Exemption logic changes.

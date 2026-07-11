@@ -5,10 +5,11 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { requireUser } from "@/lib/auth";
 import { getAppUrl } from "@/lib/app-url";
+import { requireBillingSettingsAccess } from "@/lib/billing-access";
 import { prisma } from "@/lib/db";
 import { billSchema } from "@/lib/validation";
 import { sendEmailNotification } from "@/lib/services/notifications";
-import { generateMonthlyDuesFromRules, periodFromDate } from "@/lib/services/billing-rules";
+import { billingGenerationScopes, generateBillingFromRules, generateMonthlyDuesFromRules, periodFromDate, type BillingGenerationScope } from "@/lib/services/billing-rules";
 
 function normalizedMonth(value: string) {
   return new Date(`${value.slice(0, 7)}-01T00:00:00.000Z`);
@@ -50,20 +51,23 @@ export async function saveBillAction(formData: FormData) {
       data: { tenantId: admin.tenantId, homeownerId: homeowner.id, billingMonth, recurringChargeType: RecurringChargeType.MONTHLY_DUES, coverageYear: period.year, coverageMonth: period.month, dueDate, amount: data.amount, penalty: data.penalty, totalAmount, balance, status, notes: data.notes || null },
     });
   } else {
-    await prisma.bill.create({
-      data: { tenantId: admin.tenantId, homeownerId: homeowner.id, billingMonth, recurringChargeType: RecurringChargeType.MONTHLY_DUES, coverageYear: period.year, coverageMonth: period.month, dueDate, amount: data.amount, penalty: data.penalty, totalAmount, balance: totalAmount, notes: data.notes || null },
-    });
+    throw new Error("Use Preview individual bill so the Billing Rules engine can validate the coverage period, exemption status, duplicate status, and rule amount before generation.");
   }
 
   const savedBill = await prisma.bill.findFirst({ where: { tenantId: admin.tenantId, homeownerId: homeowner.id, billingMonth }, include: { homeowner: { include: { user: true } } } });
   if (savedBill) await sendEmailNotification({ recipientId: savedBill.homeowner.userId, email: savedBill.homeowner.user.email, subject: `HOA billing notice - ${savedBill.billingMonth.toLocaleDateString("en-PH", { month: "long", year: "numeric" })}`, heading: "Billing notification", message: `Hello ${savedBill.homeowner.user.name},\nA billing record of PHP ${Number(savedBill.totalAmount).toFixed(2)} is available in your homeowner portal. The due date is ${savedBill.dueDate.toLocaleDateString("en-PH")}.`, type: NotificationType.BILLING_NOTIFICATION, actionLabel: "View my billing", actionUrl: `${getAppUrl()}/portal/billing` }).catch(() => undefined);
 
   revalidatePath("/admin/billing");
+  revalidatePath("/admin/payments");
+  revalidatePath("/admin/payments/record");
+  revalidatePath(`/admin/homeowners/${homeowner.id}`);
+  revalidatePath("/portal/billing");
+  revalidatePath("/portal/payments");
   redirect("/admin/billing?success=saved");
 }
 
 export async function generateMonthlyBillsAction(formData: FormData) {
-  const admin = await requireUser(Role.ADMIN);
+  const admin = await requireBillingSettingsAccess();
   const month = String(formData.get("billingMonth") || "");
   const due = String(formData.get("dueDate") || "");
   if (!/^\d{4}-\d{2}$/.test(month) || !/^\d{4}-\d{2}-\d{2}$/.test(due)) throw new Error("Choose a valid billing month and due date.");
@@ -78,6 +82,56 @@ export async function generateMonthlyBillsAction(formData: FormData) {
   revalidatePath("/admin/billing");
   revalidatePath("/admin/dashboard");
   redirect(`/admin/billing?success=generated&count=${result.generated}&skipped=${result.exemptSkipped}&message=${encodeURIComponent(`${result.generated} bills generated from ${result.rule.resolutionReference}. ${result.exemptSkipped} exempt homeowner(s) and ${result.duplicateSkipped} duplicate(s) skipped.`)}`);
+}
+
+export async function generateBillingFromPreviewAction(formData: FormData) {
+  const admin = await requireBillingSettingsAccess();
+  let redirectUrl = "/admin/billing?success=generated";
+  try {
+    const input = parseGenerationForm(admin, formData);
+    const result = await generateBillingFromRules(input);
+    const ruleLabel = result.rule?.resolutionReference ?? "no rule";
+    const message = `${result.createdCount} bill(s) generated for ${periodLabel(input.coverageYear, input.coverageMonth)} from ${ruleLabel}. ${result.exemptCount} exempt, ${result.duplicateCount} duplicate, ${result.failedCount} failed.`;
+    revalidatePath("/admin/billing");
+    revalidatePath("/admin/payments");
+    revalidatePath("/admin/payments/record");
+    revalidatePath("/admin/payments/requests");
+    revalidatePath("/admin/payments/active");
+    revalidatePath("/admin/payments/history");
+    revalidatePath("/admin/dashboard");
+    revalidatePath("/portal/billing");
+    revalidatePath("/portal/pay");
+    revalidatePath("/portal/payments");
+    input.homeownerIds?.forEach((id) => revalidatePath(`/admin/homeowners/${id}`));
+    redirectUrl = `/admin/billing?success=generated&message=${encodeURIComponent(message)}&billingGenerated=1&coverageYear=${input.coverageYear}&coverageMonth=${input.coverageMonth}&scope=${input.scope}${input.homeownerIds?.[0] ? `&homeownerId=${encodeURIComponent(input.homeownerIds[0])}` : ""}`;
+  } catch (error) {
+    redirect(`/admin/billing?error=${encodeURIComponent(error instanceof Error ? error.message : "Billing generation failed.")}`);
+  }
+  redirect(redirectUrl);
+}
+
+function parseGenerationForm(admin: Awaited<ReturnType<typeof requireBillingSettingsAccess>>, formData: FormData) {
+  const coverageYear = Number(formData.get("coverageYear"));
+  const coverageMonth = Number(formData.get("coverageMonth"));
+  if (!Number.isInteger(coverageYear) || coverageYear < 1900 || coverageYear > 2200) throw new Error("Enter a valid four-digit coverage year.");
+  if (!Number.isInteger(coverageMonth) || coverageMonth < 1 || coverageMonth > 12) throw new Error("Choose a coverage month from January through December.");
+  const rawScope = String(formData.get("scope") || "ALL");
+  const scope = billingGenerationScopes.includes(rawScope as BillingGenerationScope) ? rawScope as BillingGenerationScope : "ALL";
+  const homeownerIds = formData.getAll("homeownerIds").map(String).filter(Boolean);
+  const individualHomeowner = String(formData.get("homeownerId") || "");
+  return {
+    actor: admin,
+    coverageYear,
+    coverageMonth,
+    scope,
+    homeownerIds: scope === "HOMEOWNER" ? [individualHomeowner].filter(Boolean) : homeownerIds,
+    block: String(formData.get("block") || "").trim(),
+    phase: String(formData.get("phase") || "").trim(),
+  };
+}
+
+function periodLabel(year: number, month: number) {
+  return new Date(Date.UTC(year, month - 1, 1)).toLocaleDateString("en-PH", { month: "long", year: "numeric", timeZone: "UTC" });
 }
 
 export async function archiveBillAction(formData: FormData) {
@@ -146,6 +200,10 @@ export async function archiveBillAction(formData: FormData) {
 
   revalidatePath("/admin/billing");
   revalidatePath("/admin/payments");
+  revalidatePath("/admin/payments/record");
+  revalidatePath("/admin/payments/requests");
+  revalidatePath("/admin/payments/active");
+  revalidatePath("/admin/payments/history");
   revalidatePath("/admin/dashboard");
   revalidatePath("/portal/billing");
   revalidatePath("/portal/pay");

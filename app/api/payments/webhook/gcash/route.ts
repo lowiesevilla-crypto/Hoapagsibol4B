@@ -36,6 +36,7 @@ export async function POST(request: NextRequest) {
   ].filter(Boolean) as { id?: string; referenceNumber?: string }[];
   const paymentRequest = await prisma.paymentRequest.findFirst({
     where: {
+      tenantId: tenant.id,
       status: PaymentRequestStatus.PENDING_REVIEW,
       OR: identifiers,
     },
@@ -45,8 +46,12 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Webhook amount does not match the pending payment request." }, { status: 409 });
   }
 
-  const approved = await approvePaymentRequest(paymentRequest.id, undefined, "Auto-approved by payment webhook.");
+  const approved = await approvePaymentRequest(paymentRequest.id, undefined, "Auto-approved by payment webhook.", tenant.id);
   revalidatePath("/admin/payments");
+  revalidatePath("/admin/payments/record");
+  revalidatePath("/admin/payments/requests");
+  revalidatePath("/admin/payments/active");
+  revalidatePath("/admin/payments/history");
   revalidatePath("/portal/pay");
   revalidatePath("/portal/payments");
   revalidatePath("/portal/billing");

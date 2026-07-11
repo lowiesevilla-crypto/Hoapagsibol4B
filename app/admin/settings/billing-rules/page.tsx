@@ -9,7 +9,7 @@ import { prisma } from "@/lib/db";
 import { findEffectiveBillingRule } from "@/lib/services/billing-rules";
 import { money, shortDate } from "@/lib/utils";
 
-export default async function BillingRulesPage({ searchParams }: { searchParams: Promise<{ edit?: string; error?: string; field?: string; success?: string }> }) {
+export default async function BillingRulesPage({ searchParams }: { searchParams: Promise<{ edit?: string; error?: string; field?: string; fieldMessage?: string; success?: string }> }) {
   const user = await requireBillingSettingsAccess();
   const query = await searchParams;
   const today = new Date();
@@ -18,7 +18,7 @@ export default async function BillingRulesPage({ searchParams }: { searchParams:
     prisma.billingRule.findMany({ where: { tenantId: user.tenantId, recurringChargeType: RecurringChargeType.MONTHLY_DUES }, include: { createdBy: true, updatedBy: true }, orderBy: [{ effectiveStartYear: "desc" }, { effectiveStartMonth: "desc" }, { createdAt: "desc" }] }),
     query.edit ? prisma.billingRule.findFirst({ where: { id: query.edit, tenantId: user.tenantId } }) : null,
   ]);
-  const fieldError = (name: string) => query.field === name ? query.error : undefined;
+  const fieldError = (name: string) => query.field === name ? query.fieldMessage || query.error : undefined;
 
   return <>
     <PageHeader eyebrow="Finance settings" title="Billing rules" description="Manage resolution-based monthly dues rates. Automatic mode is stored for Phase 2.2B; current generation remains manual." action={<Link className="btn-secondary" href="/admin/settings/billing-exemptions">Billing exemptions</Link>} />
@@ -96,6 +96,21 @@ function nullableNumberValue(value: number | null | undefined) {
   return value == null ? "" : String(value);
 }
 
-function dateInputValue(value: Date | null | undefined) {
-  return value ? value.toISOString().slice(0, 10) : "";
+function dateInputValue(value: Date | string | null | undefined) {
+  if (!value) return "";
+  if (typeof value === "string") {
+    const dateOnly = value.match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if (dateOnly) return `${dateOnly[1]}-${dateOnly[2]}-${dateOnly[3]}`;
+    const parsed = new Date(value);
+    if (Number.isNaN(parsed.getTime())) return "";
+    return localDateInputValue(parsed);
+  }
+  return localDateInputValue(value);
+}
+
+function localDateInputValue(value: Date) {
+  const year = value.getFullYear();
+  const month = String(value.getMonth() + 1).padStart(2, "0");
+  const day = String(value.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
 }

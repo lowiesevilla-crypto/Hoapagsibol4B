@@ -2,7 +2,7 @@
 
 import { CheckCircle2, CircleX, X } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { useCallback, useEffect, useMemo } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 const successMessages: Record<string, string> = {
   created: "Record has been created successfully.",
@@ -32,35 +32,49 @@ export function TransactionFeedback() {
   const success = params.get("success");
   const error = params.get("error");
   const message = params.get("message");
-  const text = useMemo(() => message || error || (success ? successMessages[success] || "Transaction completed successfully." : ""), [error, message, success]);
+  const incoming = useMemo(() => {
+    const text = message || error || (success ? successMessages[success] || "Transaction completed successfully." : "");
+    return text ? { id: params.toString(), text, failed: Boolean(error) } : null;
+  }, [error, message, params, success]);
+  const [notification, setNotification] = useState(incoming);
 
-  const dismiss = useCallback(() => {
+  const clearToastParams = useCallback(() => {
     const next = new URLSearchParams(params.toString());
     ["success", "error", "message", "count", "skipped"].forEach((key) => next.delete(key));
     const query = next.toString();
     router.replace(query ? `${pathname}?${query}` : pathname, { scroll: false });
   }, [params, pathname, router]);
 
-  useEffect(() => {
-    if (!text) return;
-    const timer = window.setTimeout(dismiss, 5000);
-    return () => window.clearTimeout(timer);
-  }, [dismiss, text]);
+  const dismiss = useCallback(() => {
+    setNotification(null);
+    clearToastParams();
+  }, [clearToastParams]);
 
   useEffect(() => {
-    if (!text) return;
+    if (!incoming) return;
+    setNotification(incoming);
+    clearToastParams();
+  }, [clearToastParams, incoming]);
+
+  useEffect(() => {
+    if (!notification) return;
+    const timer = window.setTimeout(dismiss, notification.failed ? 8000 : 4500);
+    return () => window.clearTimeout(timer);
+  }, [dismiss, notification]);
+
+  useEffect(() => {
+    if (!notification) return;
     function onKeyDown(event: KeyboardEvent) {
       if (event.key === "Escape") dismiss();
     }
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [dismiss, text]);
+  }, [dismiss, notification]);
 
-  if (!text) return null;
-  const failed = Boolean(error);
-  return <div className={`fixed inset-x-3 top-20 z-[70] flex max-w-[calc(100vw-1.5rem)] items-start gap-3 rounded-2xl border bg-white p-4 shadow-2xl sm:left-auto sm:right-4 sm:max-w-sm lg:top-5 ${failed ? "border-rose-200" : "border-leaf-200"}`} role="alert" aria-live="polite">
-    <span className={`mt-0.5 grid size-8 shrink-0 place-items-center rounded-full ${failed ? "bg-rose-50 text-rose-600" : "bg-leaf-50 text-leaf-700"}`}>{failed ? <CircleX className="size-5" /> : <CheckCircle2 className="size-5" />}</span>
-    <div className="min-w-0"><p className="font-black text-ink">{failed ? "Action not completed" : "Success"}</p><p className="mt-0.5 text-sm leading-5 text-slate-600">{text}</p></div>
-    <button type="button" onClick={dismiss} className="rounded-lg p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700" aria-label="Dismiss notification"><X className="size-4" /></button>
+  if (!notification) return null;
+  return <div className={`pointer-events-auto fixed inset-x-3 top-20 z-[70] flex max-w-[calc(100vw-1.5rem)] items-start gap-3 rounded-2xl border bg-white p-4 shadow-2xl sm:left-auto sm:right-4 sm:max-w-sm lg:top-5 ${notification.failed ? "border-rose-200" : "border-leaf-200"}`} role="alert" aria-live="polite">
+    <span className={`mt-0.5 grid size-8 shrink-0 place-items-center rounded-full ${notification.failed ? "bg-rose-50 text-rose-600" : "bg-leaf-50 text-leaf-700"}`}>{notification.failed ? <CircleX className="size-5" /> : <CheckCircle2 className="size-5" />}</span>
+    <div className="min-w-0 flex-1"><p className="font-black text-ink">{notification.failed ? "Action not completed" : "Success"}</p><p className="mt-0.5 text-sm leading-5 text-slate-600">{notification.text}</p></div>
+    <button type="button" onClick={dismiss} className="grid size-8 shrink-0 place-items-center rounded-lg text-slate-400 hover:bg-slate-100 hover:text-slate-700 focus:outline-none focus:ring-2 focus:ring-pine-500" aria-label="Dismiss notification"><X className="size-4" /></button>
   </div>;
 }

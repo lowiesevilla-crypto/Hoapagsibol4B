@@ -11,7 +11,10 @@ import { billingExemptionSchema, billingRuleSchema } from "@/lib/validation";
 function redirectError(path: string, error: unknown, field?: string): never {
   const message = error instanceof Error ? error.message : String(error || "The request could not be completed.");
   const params = new URLSearchParams({ error: message });
-  if (field) params.set("field", field);
+  if (field) {
+    params.set("field", field);
+    params.set("fieldMessage", message);
+  }
   redirect(`${path}?${params.toString()}`);
 }
 

@@ -1,5 +1,18 @@
 # HOAHub v1.1 Implementation Plan
 
+## Sprint 2.2 Final Billing Rules UI Hotfix
+
+- [x] Fix Bug #046: Billing Rule edit mode now formats `resolutionDate` as a stable `YYYY-MM-DD` value for the HTML date input.
+- [x] Fix Bug #047: Billing Rules notifications now hydrate in local development, expose a working dismiss button, and auto-dismiss with separate success/error delays.
+- [x] Preserve field-level validation messages after toast dismissal by separating `fieldMessage` from transient toast query parameters.
+- [x] Verify saving an edited Billing Rule without changing the resolution date preserves the stored day.
+- [x] Verify Billing Rules mobile layout at 390px without horizontal overflow.
+- [x] Leave Prisma schema, migrations, billing calculations, exemptions logic, duplicate billing logic, auth, RBAC, tenant routing, payments, and receipts unchanged.
+- [x] Run `pnpm exec prisma validate`.
+- [x] Run `pnpm exec prisma generate`.
+- [x] Run `pnpm typecheck`.
+- [x] Clean `.next` and run `pnpm build`.
+
 ## Sprint 2.2 Billing Rules Functional Hotfix
 
 - [x] Fix Bug #043: Billing Rule create submissions now parse blank optional fields safely and return precise validation/overlap errors.

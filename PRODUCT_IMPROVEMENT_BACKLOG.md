@@ -639,7 +639,7 @@ Priority:
 High
 
 Status:
-Open
+Fixed in Sprint 2.2 final UI hotfix on 2026-07-11
 
 Problem:
 The saved Resolution Date does not populate when editing a Billing Rule. The date input only displays its placeholder format.
@@ -654,6 +654,9 @@ Acceptance Criteria:
 - Empty resolution date remains optional.
 - No timezone shift changes the stored day.
 
+Fix Summary:
+Billing Rule edit mode now formats stored Date/string values into a date-input-safe `YYYY-MM-DD` value without using localized display strings or ISO timestamp values.
+
 ---
 
 ## Bug #047 – Billing Rule Notifications Cannot Be Dismissed
@@ -665,7 +668,7 @@ Priority:
 High
 
 Status:
-Open
+Fixed in Sprint 2.2 final UI hotfix on 2026-07-11
 
 Problem:
 Success and error notifications have no working close action and do not disappear automatically.
@@ -678,3 +681,6 @@ Acceptance Criteria:
 - Keyboard accessible.
 - Mobile friendly.
 - Multiple messages do not permanently cover the screen.
+
+Fix Summary:
+The shared transaction toast now captures URL-driven messages into client state, clears transient toast query parameters, supports close/Escape dismissal, and uses separate auto-dismiss delays for success and error notifications while preserving field-level validation messages.

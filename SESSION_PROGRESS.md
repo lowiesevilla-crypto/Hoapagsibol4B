@@ -1,5 +1,43 @@
 # Session Progress
 
+## 2026-07-11 - Sprint 2.2 Final Billing Rules UI Hotfix
+
+Branch:
+feature/billing-rules-engine
+
+Completed:
+
+- Fixed Billing Rule resolution date edit population by formatting stored Date/string values into date-input-safe `YYYY-MM-DD` without `toISOString()` timezone shifting.
+- Separated field-level validation copy into `fieldMessage` so toast dismissal can remove transient `error`/`success` URL params without erasing field errors.
+- Reworked the shared transaction toast to keep client-owned notification state, support close/Escape/timer dismissal, and clear toast query params after capture or dismissal.
+- Adjusted development CSP so Next.js client hydration can run locally; production script policy remains strict.
+
+Root causes:
+
+- Bug #046: The edit form used ISO serialization for a date input, which can shift calendar days when a Date represents local midnight and can fail the strict `YYYY-MM-DD` date input contract.
+- Bug #047: Toast state was tied directly to URL params, so notifications could reappear after navigation/refresh; local development also blocked Next's client runtime with CSP, preventing close and timer effects from hydrating.
+
+Validation:
+
+- Billing Rule edit form showed `resolutionDate=2026-07-11`, end month `12`, end year `2031`, notes, and inactive status for a temporary verification rule.
+- Saved the temporary rule without changing the date, reopened edit mode, and confirmed `2026-07-11` remained populated.
+- Success notification showed a close button, auto-dismissed after the success delay, and removed `success`/`message` query params.
+- Error notification showed a close button, manually dismissed, and kept the field-level validation message through `fieldMessage`.
+- Error notification auto-dismissed after the longer error delay while field-level validation remained visible.
+- Mobile browser verification at 390px: Passed without horizontal overflow.
+- Billing Exemptions page rendered.
+- Existing Billing page rendered.
+- Temporary verification rule and audit entries were removed, and the local admin password hash was restored.
+- pnpm exec prisma validate: Passed
+- pnpm exec prisma generate: Passed after stopping leftover Next dev processes that held the Prisma DLL on Windows.
+- pnpm typecheck: Passed
+- pnpm build: Passed
+
+Not included:
+
+- No Prisma schema or migration changes.
+- No billing calculation, duplicate billing, exemption logic, payment, receipt, auth, RBAC, or tenant routing changes.
+
 ## 2026-07-11 - Sprint 2.2 Billing Rules Functional Hotfix
 
 Branch:

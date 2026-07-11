@@ -151,12 +151,17 @@ function drawBilling(doc: PdfDoc, soa: StatementOfAccount) {
 }
 
 function drawFooter(doc: PdfDoc, soa: StatementOfAccount) {
-  ensureSpace(doc, 74);
-  doc.page.drawLine({ start: { x: 72, y: doc.y - 52 }, end: { x: 238, y: doc.y - 52 }, thickness: 0.7, color: rgb(0.1, 0.1, 0.1) });
-  doc.page.drawLine({ start: { x: 356, y: doc.y - 52 }, end: { x: 522, y: doc.y - 52 }, thickness: 0.7, color: rgb(0.1, 0.1, 0.1) });
-  drawCenteredWithin(doc.page, "Prepared by HOAHub Finance Engine", doc.regular, 7, 72, 238, doc.y - 66, rgb(0.25, 0.28, 0.3));
-  drawCenteredWithin(doc.page, "Treasurer / Authorized HOA Representative", doc.regular, 7, 356, 522, doc.y - 66, rgb(0.25, 0.28, 0.3));
-  drawCenteredWithin(doc.page, safe(`Generated for ${soa.homeowner.user.name} on ${shortDate(soa.statementDate)}. Page ${doc.pageNumber}`), doc.regular, 6.5, marginX, 559, 36, rgb(0.45, 0.48, 0.5));
+  const footerHeight = 66;
+  ensureSpace(doc, footerHeight);
+  const signatureLineY = doc.y - 34;
+  const labelY = signatureLineY - 14;
+  const generatedY = doc.y - 64;
+  doc.page.drawLine({ start: { x: 72, y: signatureLineY }, end: { x: 238, y: signatureLineY }, thickness: 0.7, color: rgb(0.1, 0.1, 0.1) });
+  doc.page.drawLine({ start: { x: 356, y: signatureLineY }, end: { x: 522, y: signatureLineY }, thickness: 0.7, color: rgb(0.1, 0.1, 0.1) });
+  drawCenteredWithin(doc.page, "Prepared by HOAHub Finance Engine", doc.regular, 7, 72, 238, labelY, rgb(0.25, 0.28, 0.3));
+  drawCenteredWithin(doc.page, "Treasurer / Authorized HOA Representative", doc.regular, 7, 356, 522, labelY, rgb(0.25, 0.28, 0.3));
+  drawCenteredWithin(doc.page, safe(`Generated for ${soa.homeowner.user.name} on ${shortDate(soa.statementDate)}. Page ${doc.pageNumber}`), doc.regular, 6.5, marginX, 559, generatedY, rgb(0.45, 0.48, 0.5));
+  doc.y -= footerHeight;
 }
 
 function table(doc: PdfDoc, title: string, headers: string[], widths: number[], rows: string[][]) {

@@ -4,7 +4,7 @@ import Link from "next/link";
 import QRCode from "qrcode";
 import type { ReactNode } from "react";
 import { AssociationLogo } from "@/components/association-logo";
-import { PrintButton } from "@/components/print-button";
+import { SoaPrintButton } from "@/components/soa-print-button";
 import { StatusBadge } from "@/components/status-badge";
 import { requireUser } from "@/lib/auth";
 import { getAppUrl } from "@/lib/app-url";
@@ -24,7 +24,7 @@ export default async function StatementOfAccountPage({ params }: { params: Promi
       <div className="print-hidden mb-5 flex flex-wrap justify-end gap-2">
         <Link className="btn-secondary" href={`/admin/homeowners/${soa.homeowner.id}`}><ArrowLeft className="size-4" /> Return to Homeowner</Link>
         <a className="btn-secondary" href={pdfHref}><Download className="size-4" /> Download PDF</a>
-        <PrintButton label="Print SOA" fallbackHref={pdfHref} />
+        <SoaPrintButton />
       </div>
 
       <section className="border-2 border-ink p-4 sm:p-7">

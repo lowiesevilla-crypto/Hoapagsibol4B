@@ -590,23 +590,27 @@ Priority:
 Critical
 
 Status:
-Fixed in Release Blocker Fix #002
+Reopened
 
 Problem:
-The Print SOA button remains visible but is not clickable and does not open the browser print dialog.
+The Print SOA button remains visible but does not respond when clicked.
+
+Expected Behavior:
+The browser print dialog must open from the SOA page.
 
 Acceptance Criteria:
-- Print SOA is an actual interactive button.
-- Clicking it opens the browser print dialog.
-- It works in Chrome and Edge.
-- It does not require a full page reload.
-- It works from desktop.
-- Mobile users can download the PDF when browser printing is unavailable.
-- No console errors occur.
+- Button is a real interactive client-side button.
+- Uses `type="button"`.
+- Calls `window.print()` from a Client Component.
+- No overlay or CSS `pointer-events` rule blocks the button.
+- Works using mouse and keyboard.
+- Works in Chrome and Edge.
+- No JavaScript or hydration errors.
+- PDF Download remains available on mobile.
 
 ---
 
-## Bug #029 – SOA PDF and Print Layout
+## Bug #029 – SOA PDF Pagination and Footer
 
 Module:
 Statement of Account
@@ -615,31 +619,20 @@ Priority:
 Critical
 
 Status:
-Fixed in Release Blocker Fix #002
+Reopened
 
-Problems:
-- Property address overlaps the Account Summary heading.
-- Account Summary content can overlap or become cramped.
-- Billing History and Payment History tables do not align with the Running Ledger table.
-- Empty Payment History text collides with the Billing History heading.
-- Footer is unnecessarily moved to a nearly empty second page.
-- Page spacing and section gaps are inconsistent.
+Problem:
+The PDF creates a second page containing only the signature and footer section, leaving most of the page blank.
+
+Expected Behavior:
+For short statements, all content and signatures should fit on one A4 portrait page.
 
 Acceptance Criteria:
-- No text overlap anywhere.
-- Long homeowner names and addresses wrap safely.
-- Account Summary begins only after homeowner information is complete.
-- Running Ledger, Payment History, and Billing History use the same printable width.
-- Empty-state text has sufficient space below it.
-- Section headings never overlap tables or empty-state messages.
-- Footer stays on page 1 when content fits.
-- Page 2 is created only when genuinely required.
-- PDF and browser print layouts are consistent.
-- Layout supports large currency values up to PHP 99,999,999.99.
-- Layout remains professional on A4 portrait paper.
-
-Release Blocker Fix #002:
-- Print SOA now calls `window.print()` directly from the client click handler to preserve browser user activation.
-- SOA browser print tables use a consistent printable width and wrapping cell behavior.
-- SOA PDF homeowner information now uses content-driven vertical spacing for long names, emails, account numbers, and property addresses.
-- SOA PDF ledger, payment history, and billing history tables now share the same A4 content width, margins, header sizing, borders, and empty-state spacing.
+- Signature block remains on page 1 when sufficient space exists.
+- Footer remains on page 1 when sufficient space exists.
+- No nearly empty final page.
+- Page 2 is created only when transaction volume requires it.
+- Signature and footer must not use fixed positioning that forces a page break.
+- Tables and signature block must use content-flow layout.
+- A4 margins remain consistent.
+- Long statements paginate cleanly.

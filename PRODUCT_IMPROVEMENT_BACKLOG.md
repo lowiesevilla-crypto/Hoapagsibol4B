@@ -552,3 +552,30 @@ Acceptance Criteria:
 Fix Summary:
 Platform Admin and Super Admin sessions can now open tenant login pages from Platform Tenant Management without being redirected back to the platform dashboard. Tenant-user login redirect behavior remains unchanged.
 
+## Improvement #042 – Searchable Homeowner Selector in Create Individual Bill
+
+Module:
+Billing
+
+Priority:
+High
+
+Status:
+Open
+
+Problem:
+The Create Individual Bill form displays homeowners in a standard dropdown. This becomes difficult to use when the tenant has many homeowners.
+
+Business Requirement:
+Replace the standard dropdown with a searchable homeowner selector.
+
+Acceptance Criteria:
+- Search by homeowner name.
+- Search by block.
+- Search by lot.
+- Search by account number, if available.
+- Search results remain tenant-scoped.
+- Keyboard navigation works.
+- Mobile-friendly.
+- Shows a clear “No homeowner found” state.
+- Existing bill creation behavior remains unchanged.

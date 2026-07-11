@@ -329,3 +329,39 @@ Decision
 Sprint 2.3 approved for development completion but NOT approved for merge.
 
 Proceed to Sprint 2.3A Finance Integration Hotfix.
+# Sprint 2.3A UAT Result
+
+## Passed
+
+- Billing Preview
+- Resolution Reference Preview
+- Search, Sorting, and Pagination
+- Exemption Counts
+- Duplicate Counts
+- Bulk Billing Generation
+- Billing Rules Regression
+- Billing Exemptions Regression
+- Official Receipts
+- Tenant Isolation
+- Mobile Billing
+
+## Failed
+
+- Individual Homeowner Search
+- Individual Billing Preview
+- Individual Billing Generation
+- Individual Billing Rule Link
+- Individual Resolution Reference
+- Individual Coverage and Amount
+- Individual Balance Update
+- Separate Payments Routes
+- Complete Record Payment Search
+- Newly Generated Bill Visibility
+- Newly Generated Balance Visibility
+
+## Decision
+
+Sprint 2.3A is not approved for merge.
+
+Next Task:
+Sprint 2.3B – Individual Billing and Payments Workflow Completion

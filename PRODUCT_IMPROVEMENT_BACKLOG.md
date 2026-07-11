@@ -849,3 +849,169 @@ Payments
 
 Fix Summary:
 Payments now provides mobile-friendly sub-navigation for Record Payment, Payment Requests, Active Payments, and Transaction History while preserving the existing route and actions.
+# Sprint 2.3A Remaining Finance Integration Blockers
+
+## Bug #057 – Individual Billing Date Validation Failure
+
+Module:
+Billing – Create Individual Bill
+
+Priority:
+Critical
+
+Status:
+Open
+
+Problem:
+Creating an individual bill fails with:
+“Something went wrong. We couldn't finish that request. Invalid date.”
+
+Expected Behavior:
+The selected coverage month and year must be converted into a valid billing date and processed through the shared Billing Generation Engine.
+
+Acceptance Criteria:
+- Valid coverage month/year produces a valid billing date.
+- No locale-dependent date parsing.
+- Individual billing preview is available before creation.
+- Individual generation succeeds for an eligible homeowner.
+- Clear validation is shown for invalid coverage.
+- Existing bulk generation remains unchanged.
+
+---
+
+## Bug #058 – Individual Billing Does Not Use Billing Rules Engine
+
+Module:
+Billing – Create Individual Bill
+
+Priority:
+Critical
+
+Status:
+Open
+
+Problem:
+The individual billing workflow does not show or persist:
+- Effective Billing Rule
+- Resolution Reference
+- Coverage
+- Rule Amount
+- Updated balance
+
+Expected Behavior:
+Individual billing must use the same preview and generation service as bulk billing.
+
+Acceptance Criteria:
+- Effective rule is shown before generation.
+- Resolution reference is shown and saved.
+- Billing rule ID and snapshot are saved.
+- Coverage month/year are saved.
+- Correct rule amount is used.
+- Homeowner balance updates immediately.
+- Duplicate and exemption checks apply.
+- Generated bill appears in Billing and Payments.
+
+---
+
+## Improvement #059 – Searchable Individual Homeowner Selector
+
+Module:
+Billing – Create Individual Bill
+
+Priority:
+High
+
+Status:
+Open
+
+Problem:
+The homeowner dropdown is not searchable.
+
+Acceptance Criteria:
+- Search by homeowner name.
+- Search by block.
+- Search by lot.
+- Search by account number.
+- Full tenant dataset is searchable.
+- No arbitrary small result limit.
+- Keyboard and mobile friendly.
+- Clear empty state.
+
+---
+
+## Bug #060 – Payments Navigation Not Separated
+
+Module:
+Payments
+
+Priority:
+High
+
+Status:
+Open
+
+Problem:
+Navigation buttons were added, but all payment functions remain rendered on the same overcrowded page.
+
+Expected Structure:
+- `/admin/payments/record`
+- `/admin/payments/requests`
+- `/admin/payments/active`
+- `/admin/payments/history`
+
+Acceptance Criteria:
+- Each route displays only its related function.
+- Payments parent menu is collapsible.
+- Current links redirect safely.
+- Mobile navigation works.
+- Existing payment actions remain unchanged.
+
+---
+
+## Bug #061 – Record Payment Homeowner Search Incomplete
+
+Module:
+Payments – Record Payment
+
+Priority:
+Critical
+
+Status:
+Open
+
+Problem:
+Not all tenant homeowners are searchable. Newly billed homeowners and newly generated balances may not appear.
+
+Acceptance Criteria:
+- All eligible tenant homeowners are searchable.
+- Lowie Sevilla is searchable when in the authenticated tenant.
+- Search by name, block, lot, account number, and email.
+- Search operates on the full server-side dataset.
+- Newly billed homeowners appear immediately.
+- Current outstanding balance refreshes after billing.
+- No cross-tenant results.
+- No arbitrary result truncation.
+
+---
+
+## Bug #062 – Newly Generated Billing Not Reflected in Record Payment
+
+Module:
+Finance Integration
+
+Priority:
+Critical
+
+Status:
+Open
+
+Problem:
+Newly generated bills and balances are not consistently visible in the Record Payment workflow.
+
+Acceptance Criteria:
+- Billing generation revalidates Billing and Payment routes.
+- Newly generated bills appear without restarting the app.
+- Current outstanding balance is recalculated from the authoritative source.
+- Record Payment uses current bill data.
+- Payment reduces balance correctly.
+- Official Receipt generation remains functional.

@@ -45,6 +45,7 @@ const tenantModels = new Set(
 
 const modelModules: Partial<Record<string, TenantModule>> = {
   Bill: TenantModule.BILLING,
+  BillingRule: TenantModule.BILLING,
   DuesExemption: TenantModule.BILLING,
   Payment: TenantModule.BILLING,
   PaymentArchive: TenantModule.BILLING,

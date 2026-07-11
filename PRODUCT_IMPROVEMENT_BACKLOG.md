@@ -552,3 +552,197 @@ Acceptance Criteria:
 Fix Summary:
 Platform Admin and Super Admin sessions can now open tenant login pages from Platform Tenant Management without being redirected back to the platform dashboard. Tenant-user login redirect behavior remains unchanged.
 
+## Improvement #042 – Searchable Homeowner Selector in Create Individual Bill
+
+Module:
+Billing
+
+Priority:
+High
+
+Status:
+Open
+
+Problem:
+The Create Individual Bill form displays homeowners in a standard dropdown. This becomes difficult to use when the tenant has many homeowners.
+
+Business Requirement:
+Replace the standard dropdown with a searchable homeowner selector.
+
+Acceptance Criteria:
+- Search by homeowner name.
+- Search by block.
+- Search by lot.
+- Search by account number, if available.
+- Search results remain tenant-scoped.
+- Keyboard navigation works.
+- Mobile-friendly.
+- Shows a clear “No homeowner found” state.
+- Existing bill creation behavior remains unchanged.
+
+## Bug #043 – Billing Rule Creation Failure
+
+Module:
+Billing Rules
+
+Priority:
+Critical
+
+Status:
+Fixed in Sprint 2.2 functional hotfix on 2026-07-11
+
+Problem:
+Completed Billing Rule submissions could show a vague failure message instead of explaining the exact validation or effective-period blocker.
+
+Fix Summary:
+Optional blank fields are normalized, numeric/date/enum values are parsed precisely, overlap failures name the existing active rule, and unexpected save errors are logged server-side with tenant-safe diagnostic context.
+
+## Bug #044 – Billing Rule Edit Values Missing
+
+Module:
+Billing Rules
+
+Priority:
+High
+
+Status:
+Fixed in Sprint 2.2 functional hotfix on 2026-07-11
+
+Problem:
+Editing a saved Billing Rule did not reliably expose every persisted value, especially inactive status and optional end/date/note fields.
+
+Fix Summary:
+Edit mode now loads tenant-scoped active or inactive rules and maps amount, enums, period fields, resolution reference/date, notes, and active status back into the form.
+
+## Bug #045 – Billing Rules Notification Cannot Be Dismissed
+
+Module:
+Billing Rules
+
+Priority:
+High
+
+Status:
+Fixed in Sprint 2.2 functional hotfix on 2026-07-11
+
+Problem:
+Billing settings pages rendered persistent inline query alerts alongside the shared toast, making notifications appear stuck.
+
+Fix Summary:
+Billing settings now rely on the shared transaction toast, which supports close button dismissal, Escape key dismissal, and timed auto-dismiss without permanently obscuring the page.
+## Bug #046 – Billing Rule Resolution Date Not Populated
+
+Module:
+Billing Rules
+
+Priority:
+High
+
+Status:
+Fixed in Sprint 2.2 final UI hotfix on 2026-07-11
+
+Problem:
+The saved Resolution Date does not populate when editing a Billing Rule. The date input only displays its placeholder format.
+
+Expected Behavior:
+The saved date must appear in the HTML date input using `YYYY-MM-DD`.
+
+Acceptance Criteria:
+- Existing resolution date loads correctly.
+- Date input receives `YYYY-MM-DD`.
+- Saving without changing the date preserves the original value.
+- Empty resolution date remains optional.
+- No timezone shift changes the stored day.
+
+Fix Summary:
+Billing Rule edit mode now formats stored Date/string values into a date-input-safe `YYYY-MM-DD` value without using localized display strings or ISO timestamp values.
+
+---
+
+## Bug #047 – Billing Rule Notifications Cannot Be Dismissed
+
+Module:
+Billing Rules Notifications
+
+Priority:
+High
+
+Status:
+Fixed in Sprint 2.2 final UI hotfix on 2026-07-11
+
+Problem:
+Success and error notifications have no working close action and do not disappear automatically.
+
+Acceptance Criteria:
+- Visible close button.
+- Close action removes the notification immediately.
+- Success notification auto-dismisses.
+- Error notification auto-dismisses after a reasonable delay.
+- Keyboard accessible.
+- Mobile friendly.
+- Multiple messages do not permanently cover the screen.
+
+Fix Summary:
+The shared transaction toast now captures URL-driven messages into client state, clears transient toast query parameters, supports close/Escape dismissal, and uses separate auto-dismiss delays for success and error notifications while preserving field-level validation messages.
+
+## Bug #048 – Billing Rule End Month Does Not Persist
+
+Module:
+Billing Rules
+
+Priority:
+Critical
+
+Status:
+Fixed in Sprint 2.2 end period hotfix on 2026-07-11
+
+Problem:
+When editing a Billing Rule and changing the Effective End Month to December, the saved rule still displays Open Ended.
+
+Expected Behavior:
+The selected Effective End Year and Effective End Month must persist and display correctly after saving.
+
+Acceptance Criteria:
+- End Year persists after save.
+- End Month persists after save.
+- December is stored as month 12.
+- Open Ended is shown only when both end year and end month are null.
+- Saving an existing rule must not clear its end period.
+- Editing other fields must preserve the end period.
+- Effective period validation remains enforced.
+- No historical bills are modified.
+
+Fix Summary:
+Billing Rule end-period validation now requires end year and end month to be supplied or cleared together, and the history display only labels a rule Open Ended when both stored end-period fields are null.
+
+## Bug #049 - Billing Rule End Period Display and Clearing
+
+Module:
+Billing Rules
+
+Priority:
+Critical
+
+Status:
+Fixed in Sprint 2.2 end period display and clearing hotfix on 2026-07-11
+
+Problem:
+Stored Effective End Month value `12` persisted successfully but did not reliably display as December, and explicitly clearing both Effective End Year and Effective End Month did not save the rule back to Open Ended.
+
+Expected Behavior:
+Month values stored as 1 through 12 must map directly to January through December, and submitted blank end-period fields must be saved as `null` values so the rule becomes Open Ended.
+
+Acceptance Criteria:
+- Stored month `1` displays January.
+- Stored month `12` displays December.
+- Edit dropdown selects the saved end month.
+- History displays `December 2026` for end month `12` and end year `2026`.
+- Clearing both Effective End Year and Effective End Month saves both fields as null.
+- Open Ended displays only when both end-period fields are null.
+- One-sided end periods return precise validation messages.
+- Notes-only edits keep an Open Ended rule open-ended.
+- Rule creation still stores December as month `12`.
+- No historical bills are modified.
+
+Fix Summary:
+Billing Rules now use a deterministic `MONTH_NAMES[month - 1]` helper for all month labels, validation converts submitted blank end-period fields to `null` while preserving absent fields as undefined, and the update action uses `FormData.has()` to distinguish explicit clearing from omitted fields.

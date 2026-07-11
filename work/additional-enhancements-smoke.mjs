@@ -53,7 +53,7 @@ try {
 
   const billingMonth = new Date("2098-12-01T00:00:00.000Z");
   const dueDate = new Date("2098-12-31T00:00:00.000Z");
-  const bill = await prisma.bill.create({ data: { homeownerId: profile.id, billingMonth, amount: 432.1, penalty: 0, totalAmount: 432.1, amountPaid: 0, balance: 432.1, dueDate, status: "UNPAID", notes: "QA TEMPORARY - REMOVE" } });
+  const bill = await prisma.bill.create({ data: { homeownerId: profile.id, billingMonth, coverageYear: billingMonth.getUTCFullYear(), coverageMonth: billingMonth.getUTCMonth() + 1, amount: 432.1, penalty: 0, totalAmount: 432.1, amountPaid: 0, balance: 432.1, dueDate, status: "UNPAID", notes: "QA TEMPORARY - REMOVE" } });
   testBillId = bill.id;
 
   const portalBlocked = await get("/portal/documents", homeownerToken);

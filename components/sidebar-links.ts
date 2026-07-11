@@ -32,6 +32,8 @@ export const adminLinks: LinkItem[] = [
   { href: "/admin/contractors", label: "Contractors", icon: "contractors", section: "Security" },
   { href: "/admin/vehicles", label: "Vehicles & stickers", icon: "vehicles", section: "Security" },
   { href: "/admin/billing", label: "Billing", icon: "billing", section: "Finance" },
+  { href: "/admin/settings/billing-rules", label: "Billing rules", icon: "billing", section: "Finance" },
+  { href: "/admin/settings/billing-exemptions", label: "Billing exemptions", icon: "billing", section: "Finance" },
   { href: "/admin/payments", label: "Payments", icon: "payments", section: "Finance" },
   { href: "/admin/receipts", label: "Receipt register", icon: "collections", section: "Finance" },
   { href: "/admin/collections", label: "Other collections", icon: "collections", section: "Finance" },

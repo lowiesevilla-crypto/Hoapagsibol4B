@@ -684,3 +684,30 @@ Acceptance Criteria:
 
 Fix Summary:
 The shared transaction toast now captures URL-driven messages into client state, clears transient toast query parameters, supports close/Escape dismissal, and uses separate auto-dismiss delays for success and error notifications while preserving field-level validation messages.
+
+## Bug #048 – Billing Rule End Month Does Not Persist
+
+Module:
+Billing Rules
+
+Priority:
+Critical
+
+Status:
+Open
+
+Problem:
+When editing a Billing Rule and changing the Effective End Month to December, the saved rule still displays Open Ended.
+
+Expected Behavior:
+The selected Effective End Year and Effective End Month must persist and display correctly after saving.
+
+Acceptance Criteria:
+- End Year persists after save.
+- End Month persists after save.
+- December is stored as month 12.
+- Open Ended is shown only when both end year and end month are null.
+- Saving an existing rule must not clear its end period.
+- Editing other fields must preserve the end period.
+- Effective period validation remains enforced.
+- No historical bills are modified.

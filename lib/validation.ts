@@ -3,6 +3,8 @@ import { paymentMethodRequiresReference } from "@/lib/payment-methods";
 
 const currency = z.coerce.number().finite().nonnegative().max(10_000_000);
 const required = z.string().trim().min(1, "This field is required.").max(500);
+const emptyToUndefined = (value: unknown) => value === "" ? undefined : value;
+const optionalText = (max: number) => z.preprocess(emptyToUndefined, z.string().trim().max(max).optional());
 
 export const loginSchema = z.object({
   email: z.string().trim().toLowerCase().email("Enter a valid email."),
@@ -75,9 +77,13 @@ export const duesExemptionSchema = z.object({
 
 const periodMonthSchema = z.coerce.number().int().min(1).max(12);
 const periodYearSchema = z.coerce.number().int().min(1900).max(2200);
+const optionalPeriodMonthSchema = z.preprocess(emptyToUndefined, periodMonthSchema.optional());
+const optionalPeriodYearSchema = z.preprocess(emptyToUndefined, periodYearSchema.optional());
+const optionalDateSchema = z.preprocess(emptyToUndefined, z.string().date("Choose a valid date.").optional());
+const formBooleanSchema = z.preprocess((value) => value === undefined || value === "" ? "true" : value, z.enum(["true", "false"]).transform((value) => value === "true"));
 
 export const billingRuleSchema = z.object({
-  id: z.string().optional(),
+  id: z.preprocess(emptyToUndefined, z.string().optional()),
   recurringChargeType: z.enum(["MONTHLY_DUES", "SECURITY_FEE", "MAINTENANCE_FEE", "GARBAGE_FEE", "OTHER"]).default("MONTHLY_DUES"),
   amount: currency.positive("Amount must be greater than zero."),
   billingFrequency: z.enum(["MONTHLY", "QUARTERLY", "ANNUAL"]),
@@ -90,11 +96,12 @@ export const billingRuleSchema = z.object({
   penaltyFrequency: z.enum(["NONE", "MONTHLY"]),
   effectiveStartYear: periodYearSchema,
   effectiveStartMonth: periodMonthSchema,
-  effectiveEndYear: z.union([periodYearSchema, z.literal("").transform(() => undefined)]).optional(),
-  effectiveEndMonth: z.union([periodMonthSchema, z.literal("").transform(() => undefined)]).optional(),
-  resolutionReference: required.max(120),
-  resolutionDate: z.string().date().or(z.literal("")).optional(),
-  notes: z.string().trim().max(1000).optional(),
+  effectiveEndYear: optionalPeriodYearSchema,
+  effectiveEndMonth: optionalPeriodMonthSchema,
+  resolutionReference: required.max(120, "Resolution reference must not exceed 120 characters."),
+  resolutionDate: optionalDateSchema,
+  notes: optionalText(1000),
+  active: formBooleanSchema,
 }).superRefine((data, context) => {
   if ((data.effectiveEndYear && !data.effectiveEndMonth) || (!data.effectiveEndYear && data.effectiveEndMonth)) {
     context.addIssue({ code: "custom", path: ["effectiveEndMonth"], message: "Provide both end month and end year, or leave both blank." });

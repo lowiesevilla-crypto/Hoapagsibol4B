@@ -579,3 +579,54 @@ Acceptance Criteria:
 - Mobile-friendly.
 - Shows a clear “No homeowner found” state.
 - Existing bill creation behavior remains unchanged.
+
+## Bug #043 – Billing Rule Creation Failure
+
+Module:
+Billing Rules
+
+Priority:
+Critical
+
+Status:
+Fixed in Sprint 2.2 functional hotfix on 2026-07-11
+
+Problem:
+Completed Billing Rule submissions could show a vague failure message instead of explaining the exact validation or effective-period blocker.
+
+Fix Summary:
+Optional blank fields are normalized, numeric/date/enum values are parsed precisely, overlap failures name the existing active rule, and unexpected save errors are logged server-side with tenant-safe diagnostic context.
+
+## Bug #044 – Billing Rule Edit Values Missing
+
+Module:
+Billing Rules
+
+Priority:
+High
+
+Status:
+Fixed in Sprint 2.2 functional hotfix on 2026-07-11
+
+Problem:
+Editing a saved Billing Rule did not reliably expose every persisted value, especially inactive status and optional end/date/note fields.
+
+Fix Summary:
+Edit mode now loads tenant-scoped active or inactive rules and maps amount, enums, period fields, resolution reference/date, notes, and active status back into the form.
+
+## Bug #045 – Billing Rules Notification Cannot Be Dismissed
+
+Module:
+Billing Rules
+
+Priority:
+High
+
+Status:
+Fixed in Sprint 2.2 functional hotfix on 2026-07-11
+
+Problem:
+Billing settings pages rendered persistent inline query alerts alongside the shared toast, making notifications appear stuck.
+
+Fix Summary:
+Billing settings now rely on the shared transaction toast, which supports close button dismissal, Escape key dismissal, and timed auto-dismiss without permanently obscuring the page.

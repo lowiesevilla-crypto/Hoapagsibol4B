@@ -1,5 +1,43 @@
 # Session Progress
 
+## 2026-07-11 - Sprint 2.2 Billing Rules Functional Hotfix
+
+Branch:
+feature/billing-rules-engine
+
+Completed:
+
+- Fixed Billing Rule optional field parsing so blank end period, resolution date, and notes are normalized instead of producing vague failures.
+- Preserved tenant-scoped creates and updates while adding field-specific validation redirects for rule form errors.
+- Improved overlap errors to identify the existing active rule that blocks the submitted effective period.
+- Added server-side diagnostic logging for unexpected Billing Rule save failures without exposing secrets in the browser.
+- Updated edit mode to load inactive rules and populate every persisted Billing Rule field, including end period, resolution date, notes, and active status.
+- Removed permanent inline Billing Rules/Billing Exemptions notifications so the shared dismissible transaction toast is the single temporary notification.
+- Hardened toast dismissal with click, Escape key, and auto-dismiss behavior.
+
+Root causes:
+
+- Bug #043: The July 2026 UAT create attempt overlapped an existing active open-ended rule; the UI also collapsed validation/server failures into generic notification text.
+- Bug #044: Edit mode only fetched active records and the form did not expose the persisted `active` field, making inactive saved rules impossible to fully populate/edit.
+- Bug #045: Billing settings pages rendered permanent inline query alerts in addition to the shared dismissible toast, so messages appeared non-dismissible.
+
+Validation:
+
+- Focused Billing Rule parse/create/edit verification: Passed
+- pnpm exec prisma validate: Passed
+- pnpm exec prisma generate: Passed
+- pnpm typecheck: Passed
+- pnpm build: Passed
+- Mobile browser verification at 390px: Passed; toast close removed the error query and no horizontal overflow was detected.
+
+Not included:
+
+- No searchable homeowner selector.
+- No scheduled automatic billing.
+- No payment or receipt logic changes.
+- No tenant routing or authentication changes.
+- No new migration.
+
 ## 2026-07-11 - Sprint 2.2 Billing Rules Migration Safety Correction
 
 Branch:

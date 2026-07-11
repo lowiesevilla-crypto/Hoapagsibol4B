@@ -21,8 +21,6 @@ export default async function BillingExemptionsPage({ searchParams }: { searchPa
 
   return <>
     <PageHeader eyebrow="Finance settings" title="Billing exemptions" description="Create period-based monthly dues exemptions by homeowner/property. Deactivation preserves history." action={<Link className="btn-secondary" href="/admin/settings/billing-rules">Billing rules</Link>} />
-    {query.error && <div role="alert" className="mb-5 rounded-2xl border border-rose-200 bg-rose-50 p-4 text-sm font-semibold text-rose-800">{query.error}</div>}
-    {query.success && <div className="mb-5 rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-sm font-semibold text-emerald-800">Billing exemption updated.</div>}
 
     <form action={saveBillingExemptionAction} className="card mb-6">
       <div className="mb-5"><h2 className="text-lg font-black">Add exemption</h2><p className="text-sm leading-6 text-slate-500">The monthly dues generator skips active exemptions that cover the target billing month and logs the skip reason.</p></div>

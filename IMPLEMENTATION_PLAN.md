@@ -1,5 +1,21 @@
 # HOAHub v1.1 Implementation Plan
 
+## Sprint 2.2 Billing Rules Functional Hotfix
+
+- [x] Fix Bug #043: Billing Rule create submissions now parse blank optional fields safely and return precise validation/overlap errors.
+- [x] Fix Bug #044: Billing Rule edit mode now loads inactive records and populates persisted end period, resolution date, notes, and active status.
+- [x] Fix Bug #045: Billing settings notifications now rely on the dismissible shared toast instead of permanent inline query alerts.
+- [x] Add server-side diagnostic logging for unexpected Billing Rule save errors.
+- [x] Preserve tenant isolation for rule create/update/deactivate paths.
+- [x] Preserve manual/automatic generation-mode selection without adding scheduled automatic billing.
+- [x] Leave payment and receipt logic unchanged.
+- [x] Avoid any new migration; no schema mismatch was proven.
+- [x] Focused Billing Rule parse/create/edit verification.
+- [x] Run `pnpm exec prisma validate`.
+- [x] Run `pnpm exec prisma generate`.
+- [x] Run `pnpm typecheck`.
+- [x] Clean `.next` and run `pnpm build`.
+
 ## Sprint 2.2 Billing Rules Engine - Migration Safety Correction
 
 - [x] Remove `BillingRule.tenantId` hardcoded database default while keeping `tenantId` required.

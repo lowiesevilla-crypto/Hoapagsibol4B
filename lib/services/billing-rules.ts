@@ -50,7 +50,7 @@ export async function assertNoOverlappingBillingRule(input: {
     const ruleEnd = rule.effectiveEndYear && rule.effectiveEndMonth ? periodIndex(rule.effectiveEndYear, rule.effectiveEndMonth) : Number.POSITIVE_INFINITY;
     return start <= ruleEnd && ruleStart <= end;
   });
-  if (overlap) throw new Error(`This effective period overlaps active rule ${overlap.resolutionReference}. Deactivate or end the existing rule first.`);
+  if (overlap) throw new Error(`This billing rule overlaps an existing active rule: ${overlap.resolutionReference}. Deactivate or end the existing rule first.`);
 }
 
 export async function assertNoOverlappingExemption(input: {

@@ -630,3 +630,51 @@ Billing settings pages rendered persistent inline query alerts alongside the sha
 
 Fix Summary:
 Billing settings now rely on the shared transaction toast, which supports close button dismissal, Escape key dismissal, and timed auto-dismiss without permanently obscuring the page.
+## Bug #046 – Billing Rule Resolution Date Not Populated
+
+Module:
+Billing Rules
+
+Priority:
+High
+
+Status:
+Open
+
+Problem:
+The saved Resolution Date does not populate when editing a Billing Rule. The date input only displays its placeholder format.
+
+Expected Behavior:
+The saved date must appear in the HTML date input using `YYYY-MM-DD`.
+
+Acceptance Criteria:
+- Existing resolution date loads correctly.
+- Date input receives `YYYY-MM-DD`.
+- Saving without changing the date preserves the original value.
+- Empty resolution date remains optional.
+- No timezone shift changes the stored day.
+
+---
+
+## Bug #047 – Billing Rule Notifications Cannot Be Dismissed
+
+Module:
+Billing Rules Notifications
+
+Priority:
+High
+
+Status:
+Open
+
+Problem:
+Success and error notifications have no working close action and do not disappear automatically.
+
+Acceptance Criteria:
+- Visible close button.
+- Close action removes the notification immediately.
+- Success notification auto-dismisses.
+- Error notification auto-dismisses after a reasonable delay.
+- Keyboard accessible.
+- Mobile friendly.
+- Multiple messages do not permanently cover the screen.

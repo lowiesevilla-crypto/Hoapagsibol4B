@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { Archive, BellRing, ShieldCheck } from "lucide-react";
 import { BillArchiveForm } from "@/components/bill-archive-form";
+import { BillingPreviewTable } from "@/components/billing-preview-table";
 import { BillingGenerationScopeFields } from "@/components/billing-generation-scope-fields";
 import { BillForm } from "@/components/bill-form";
 import { BillRemarks } from "@/components/bill-remarks";
@@ -22,11 +23,11 @@ export default async function BillingPage({ searchParams }: { searchParams: Prom
   const edit = stringParam(query.edit);
   const generationInput = generationInputFromQuery(user, query);
   const [homeowners, bills, archivedBills, editBill, exemptions, tenant] = await Promise.all([
-    prisma.homeownerProfile.findMany({ where: { status: "ACTIVE" }, include: { user: true }, orderBy: { user: { name: "asc" } } }),
-    prisma.bill.findMany({ where: { archivedAt: null }, include: { homeowner: { include: { user: true } }, _count: { select: { payments: true, paymentRequests: true } } }, orderBy: [{ billingMonth: "desc" }, { dueDate: "desc" }] }),
-    prisma.bill.findMany({ where: { archivedAt: { not: null } }, include: { homeowner: { include: { user: true } }, archivedBy: true, _count: { select: { payments: true, paymentRequests: true } } }, orderBy: { archivedAt: "desc" }, take: 50 }),
-    edit ? prisma.bill.findFirst({ where: { id: edit, archivedAt: null } }) : null,
-    prisma.duesExemption.findMany({ where: { active: true }, include: { homeowner: { include: { user: true } }, createdBy: true }, orderBy: [{ billingMonth: "desc" }, { homeowner: { user: { name: "asc" } } }] }),
+    prisma.homeownerProfile.findMany({ where: { tenantId: user.tenantId, status: "ACTIVE" }, include: { user: true }, orderBy: { user: { name: "asc" } } }),
+    prisma.bill.findMany({ where: { tenantId: user.tenantId, archivedAt: null }, include: { homeowner: { include: { user: true } }, _count: { select: { payments: true, paymentRequests: true } } }, orderBy: [{ billingMonth: "desc" }, { dueDate: "desc" }] }),
+    prisma.bill.findMany({ where: { tenantId: user.tenantId, archivedAt: { not: null } }, include: { homeowner: { include: { user: true } }, archivedBy: true, _count: { select: { payments: true, paymentRequests: true } } }, orderBy: { archivedAt: "desc" }, take: 50 }),
+    edit ? prisma.bill.findFirst({ where: { id: edit, tenantId: user.tenantId, archivedAt: null } }) : null,
+    prisma.duesExemption.findMany({ where: { tenantId: user.tenantId, active: true }, include: { homeowner: { include: { user: true } }, createdBy: true }, orderBy: [{ billingMonth: "desc" }, { homeowner: { user: { name: "asc" } } }] }),
     prisma.tenant.findUnique({ where: { id: user.tenantId }, select: { name: true, shortName: true, slug: true } }),
   ]);
   const blocks = [...new Set(homeowners.map((homeowner) => homeowner.block).filter(Boolean))].sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
@@ -34,7 +35,7 @@ export default async function BillingPage({ searchParams }: { searchParams: Prom
   const homeownerOptions = homeowners.map((homeowner) => ({
     id: homeowner.id,
     label: `${homeowner.user.name} - Block ${homeowner.block}, Lot ${homeowner.lot}`,
-    search: `${homeowner.user.name} ${homeowner.block} ${homeowner.lot} ${homeowner.id}`.toLowerCase(),
+    search: `${homeowner.user.name} ${homeowner.user.email} block ${homeowner.block} lot ${homeowner.lot} account ${homeowner.id} ${homeowner.id}`.toLowerCase(),
   }));
   let preview: BillingGenerationSummary | null = null;
   let previewError = "";
@@ -84,12 +85,16 @@ export default async function BillingPage({ searchParams }: { searchParams: Prom
 
 function BillingPreview({ preview, input, tenantName }: { preview: BillingGenerationSummary; input: BillingGenerationInput; tenantName: string }) {
   return <div className="mt-6 border-t border-slate-100 pt-5">
+    {!preview.rule && <div role="alert" className="mb-4 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm font-bold text-amber-900">No effective Billing Rule configured.</div>}
     <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
       <PreviewStat label="Tenant" value={tenantName} />
       <PreviewStat label="Coverage period" value={monthLabel(preview.billingMonth)} />
-      <PreviewStat label="Effective rule" value={preview.rule ? preview.rule.resolutionReference : "No rule"} />
+      <PreviewStat label="Effective rule" value={preview.rule ? `${preview.rule.recurringChargeType.replaceAll("_", " ")} - ${preview.rule.billingFrequency}` : "No effective Billing Rule configured."} />
+      <PreviewStat label="Resolution reference" value={preview.rule?.resolutionReference ?? "-"} />
+      <PreviewStat label="Effective period" value={preview.rule ? rulePeriod(preview.rule) : "-"} />
       <PreviewStat label="Rule amount" value={preview.rule ? money(preview.rule.amount) : money(0)} />
       <PreviewStat label="Generation mode" value={preview.rule?.generationMode ?? "-"} />
+      <PreviewStat label="Penalty configuration" value={preview.rule ? penaltyConfiguration(preview.rule) : "None"} />
       <PreviewStat label="Eligible homeowners" value={preview.eligibleCount} />
       <PreviewStat label="Exempt homeowners" value={preview.exemptCount} />
       <PreviewStat label="Duplicate bills" value={preview.duplicateCount} />
@@ -111,7 +116,7 @@ function BillingPreview({ preview, input, tenantName }: { preview: BillingGenera
         <SubmitButton className="btn-primary min-h-10 px-4 py-2 text-sm">Generate for Eligible Homeowners</SubmitButton>
       </form>
     </div>
-    <div className="table-wrap mt-4 shadow-none"><table className="data-table min-w-[1150px]"><thead><tr><th>Homeowner</th><th>Block</th><th>Lot</th><th>Existing balance</th><th>Rule amount</th><th>Exemption status</th><th>Duplicate status</th><th>Final action</th><th>Message</th></tr></thead><tbody>{preview.rows.map((row) => <tr key={row.homeownerId}><td className="font-bold">{row.homeownerName}</td><td>{row.block}</td><td>{row.lot}</td><td>{money(row.existingBalance)}</td><td>{money(row.ruleAmount)}</td><td>{row.exemptionStatus}</td><td>{row.duplicateStatus}</td><td><span className={`rounded-full px-2.5 py-1 text-xs font-black ${actionTone(row.action)}`}>{row.action}</span></td><td className="max-w-xs text-sm text-slate-500">{row.message}</td></tr>)}{!preview.rows.length && <tr><td colSpan={9} className="py-10 text-center text-slate-500">No homeowners matched this generation scope.</td></tr>}</tbody></table></div>
+    <BillingPreviewTable rows={preview.rows} />
   </div>;
 }
 
@@ -155,10 +160,23 @@ function monthName(month: number) {
   return new Date(Date.UTC(2026, month - 1, 1)).toLocaleDateString("en-PH", { month: "long", timeZone: "UTC" });
 }
 
-function actionTone(action: string) {
-  if (action === "CREATE") return "bg-emerald-100 text-emerald-700";
-  if (action === "SKIP_EXEMPT") return "bg-blue-100 text-blue-700";
-  if (action === "SKIP_DUPLICATE") return "bg-amber-100 text-amber-800";
-  if (action === "ERROR") return "bg-rose-100 text-rose-700";
-  return "bg-slate-100 text-slate-700";
+function rulePeriod(rule: NonNullable<BillingGenerationSummary["rule"]>) {
+  const start = monthYear(rule.effectiveStartYear, rule.effectiveStartMonth);
+  const end = rule.effectiveEndYear === null && rule.effectiveEndMonth === null
+    ? "Open Ended"
+    : rule.effectiveEndYear && rule.effectiveEndMonth
+      ? monthYear(rule.effectiveEndYear, rule.effectiveEndMonth)
+      : "Incomplete end period";
+  return `${start} to ${end}`;
+}
+
+function monthYear(year: number, month: number) {
+  return new Date(Date.UTC(year, month - 1, 1)).toLocaleDateString("en-PH", { month: "long", year: "numeric", timeZone: "UTC" });
+}
+
+function penaltyConfiguration(rule: NonNullable<BillingGenerationSummary["rule"]>) {
+  if (rule.penaltyType === "NONE") return "None";
+  const value = Number(rule.penaltyValue);
+  const amount = rule.penaltyType === "PERCENTAGE" ? `${value}%` : money(value);
+  return `${rule.penaltyType.replaceAll("_", " ")} ${amount} ${rule.penaltyFrequency === "NONE" ? "" : rule.penaltyFrequency.replaceAll("_", " ").toLowerCase()}`.trim();
 }

@@ -756,15 +756,18 @@ Billing Rules now use a deterministic `MONTH_NAMES[month - 1]` helper for all mo
 
 ## Bug #050 – Resolution Reference Missing in Billing Preview
 Priority: Critical
-Status: Open
+Status: Fixed in Sprint 2.3A finance integration hotfix on 2026-07-11
 
 Preview Billing does not display the Billing Rule Resolution Reference before generation.
+
+Fix Summary:
+Billing Preview now displays the effective rule, Resolution Reference, effective period, rule amount, generation mode, penalty configuration, and a clear no-rule state. Preview rows carry the same Resolution Reference persisted on generated Bill records.
 
 ---
 
 ## Bug #051 – Individual Billing Generation Incomplete
 Priority: Critical
-Status: Open
+Status: Fixed in Sprint 2.3A finance integration hotfix on 2026-07-11
 
 Issues:
 - No Preview
@@ -773,37 +776,50 @@ Issues:
 - Resolution Reference not shown
 - Balance not updated
 
+Fix Summary:
+Individual preview and generation use the same shared Billing Rules service as all-homeowner generation. Rule-based individual bill creation persists billingRuleId, billingRuleSnapshot, resolutionReference, recurringChargeType, coverageYear, and coverageMonth while preserving tenant and duplicate checks.
+
 ---
 
 ## Bug #052 – Exemption Count Incorrect
 Priority: High
-Status: Open
+Status: Fixed in Sprint 2.3A finance integration hotfix on 2026-07-11
 
 Preview shows Exempt Homeowners = 0 even when SKIP_EXEMPT is correctly identified.
+
+Fix Summary:
+Preview and generation summaries now compute counts from the final normalized row actions through one helper, so SKIP_EXEMPT rows and Exempt Homeowners totals stay aligned.
 
 ---
 
 ## Bug #053 – Billing and Payment Synchronization
 Priority: Critical
-Status: Open
+Status: Fixed in Sprint 2.3A finance integration hotfix on 2026-07-11
 
 After billing generation:
 - Record Payment does not immediately reflect newly generated bills.
 - Newly billed homeowners are not searchable.
 - Outstanding balances are not refreshed.
 
+Fix Summary:
+Generated bills remain the balance source of truth, and Billing/Payments views are revalidated after generation. The payment posting path now scopes selected bills and created payments to the authenticated tenant.
+
 ---
 
 ## Bug #054 – Payment Search Dataset Incomplete
 Priority: High
-Status: Open
+Status: Fixed in Sprint 2.3A finance integration hotfix on 2026-07-11
 
 Record Payment search does not include all homeowners with outstanding balances.
+
+Fix Summary:
+Record Payment now queries tenant-scoped open bills and searchable homeowner options by name, block, lot, email, account ID, bill ID, resolution reference, and billing month.
 
 ---
 
 ## Improvement #055 – Billing Preview Search
 Priority: Medium
+Status: Completed in Sprint 2.3A finance integration hotfix on 2026-07-11
 
 Add:
 - Search
@@ -812,10 +828,14 @@ Add:
 
 to the Billing Preview table.
 
+Fix Summary:
+Billing Preview now has client-side full-result search, sorting, pagination, and responsive table handling while summary counts remain based on the complete preview dataset.
+
 ---
 
 ## Improvement #056 – Finance Navigation Redesign
 Priority: Medium
+Status: Completed in Sprint 2.3A finance integration hotfix on 2026-07-11
 
 Split the Payments module into:
 
@@ -826,3 +846,6 @@ Payments
 ├── Transaction History
 ├── Refunds
 └── Reports
+
+Fix Summary:
+Payments now provides mobile-friendly sub-navigation for Record Payment, Payment Requests, Active Payments, and Transaction History while preserving the existing route and actions.

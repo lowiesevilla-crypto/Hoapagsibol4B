@@ -1,5 +1,21 @@
 # HOAHub v1.1 Implementation Plan
 
+## Sprint 2.3A Finance Integration Hotfix
+
+- [x] Fix Bug #050: Billing Preview now displays the effective Billing Rule, Resolution Reference, effective period, rule amount, generation mode, penalty configuration, and no-rule state.
+- [x] Fix Bug #051: individual billing creation and preview use the shared Billing Rules generation service and persist Billing Rule linkage, snapshot, coverage fields, and Resolution Reference.
+- [x] Fix Bug #052: generation counts are computed from the final normalized preview rows through one summary helper.
+- [x] Fix Bug #053: generated bills remain the balance source of truth and Billing/Payments views are revalidated after generation.
+- [x] Fix Bug #054: Record Payment now searches tenant-scoped open balances by homeowner name, block, lot, email, account ID, bill ID, resolution reference, and billing month.
+- [x] Add Billing Preview search, sorting, pagination, and mobile table handling without changing summary counts.
+- [x] Add Payments sub-navigation for Record Payment, Payment Requests, Active Payments, and Transaction History.
+- [x] Preserve existing payment recording, receipt, exemption, duplicate-prevention, and audit behavior.
+- [x] Leave Prisma schema and migrations unchanged.
+- [x] Run `pnpm exec prisma validate`.
+- [x] Run `pnpm exec prisma generate`.
+- [x] Run `pnpm typecheck`.
+- [x] Clean `.next` and run `pnpm build`.
+
 ## Sprint 2.3 Automated Billing Generation Engine
 
 - [x] Reuse `lib/services/billing-rules.ts` as the single preview and generation engine.

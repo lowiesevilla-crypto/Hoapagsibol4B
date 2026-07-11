@@ -28,6 +28,9 @@ export type BillingGenerationRow = {
   phase: string | null;
   existingBalance: number;
   ruleAmount: number;
+  effectivePeriod: string | null;
+  resolutionReference: string | null;
+  penaltyConfiguration: string;
   exemptionStatus: string;
   duplicateStatus: string;
   action: BillingPreviewAction;
@@ -204,6 +207,9 @@ async function buildBillingGeneration(input: BillingGenerationInput, options: { 
       phase: homeowner.phase,
       existingBalance: balanceByHomeowner.get(homeowner.id) ?? 0,
       ruleAmount: amount,
+      effectivePeriod: rule ? effectivePeriodLabel(rule) : null,
+      resolutionReference: rule?.resolutionReference ?? null,
+      penaltyConfiguration: rule ? penaltyConfigurationLabel(rule) : "None",
     };
     if (!rule) return { ...base, exemptionStatus: exemption ? exemption.reason : "None", duplicateStatus: duplicate ? "Duplicate exists" : "None", action: "SKIP_NO_RULE", message: "No active billing rule covers this period.", exemptionId: exemption?.id };
     if (duplicate) return { ...base, exemptionStatus: exemption ? exemption.reason : "None", duplicateStatus: duplicate.archivedAt ? "Archived duplicate exists" : "Active duplicate exists", action: "SKIP_DUPLICATE", message: "A bill already exists for this homeowner, charge type, and coverage period.", exemptionId: exemption?.id };
@@ -276,8 +282,7 @@ async function buildBillingGeneration(input: BillingGenerationInput, options: { 
     });
   }
 
-  const createdRows = rows.filter((row) => row.action === "CREATE" && (!options.persist || row.billId));
-  const createPreviewRows = rows.filter((row) => row.action === "CREATE");
+  const summary = summarizeRows(rows, options.persist);
   return {
     tenantId: input.actor.tenantId,
     coverageYear: input.coverageYear,
@@ -288,14 +293,14 @@ async function buildBillingGeneration(input: BillingGenerationInput, options: { 
     scopeLabel: scopeLabel(input),
     rule,
     eligibleCount: candidates.length,
-    exemptCount: rows.filter((row) => row.action === "SKIP_EXEMPT").length,
-    duplicateCount: rows.filter((row) => row.action === "SKIP_DUPLICATE").length,
-    invalidCount: rows.filter((row) => row.action === "SKIP_NO_RULE" || row.action === "ERROR").length,
-    projectedNewBillCount: createPreviewRows.length,
-    projectedTotalAmount: createPreviewRows.reduce((sum, row) => sum + row.ruleAmount, 0),
-    createdCount: createdRows.length,
-    failedCount: rows.filter((row) => row.action === "ERROR").length,
-    totalBilledAmount: createdRows.reduce((sum, row) => sum + row.ruleAmount, 0),
+    exemptCount: summary.exemptCount,
+    duplicateCount: summary.duplicateCount,
+    invalidCount: summary.invalidCount,
+    projectedNewBillCount: summary.projectedNewBillCount,
+    projectedTotalAmount: summary.projectedTotalAmount,
+    createdCount: summary.createdCount,
+    failedCount: summary.failedCount,
+    totalBilledAmount: summary.totalBilledAmount,
     rows,
   };
 }
@@ -339,18 +344,57 @@ function scopeLabel(input: BillingGenerationInput) {
 
 function generationAuditMetadata(input: BillingGenerationInput, rule: NonNullable<Awaited<ReturnType<typeof findEffectiveBillingRule>>>, extra?: Record<string, unknown>) {
   return {
+    tenantId: input.actor.tenantId,
+    actor: { id: input.actor.id, name: input.actor.name, email: input.actor.email },
     coverageYear: input.coverageYear,
     coverageMonth: input.coverageMonth,
     generationScope: input.scope,
     block: input.block || null,
     phase: input.phase || null,
     selectedHomeownerCount: input.homeownerIds?.length ?? 0,
+    selectedHomeownerId: input.scope === "HOMEOWNER" ? input.homeownerIds?.[0] ?? null : null,
     ruleId: rule.id,
     resolutionReference: rule.resolutionReference,
     generationMode: rule.generationMode,
     amount: Number(rule.amount),
     ...extra,
   };
+}
+
+function summarizeRows(rows: BillingGenerationRow[], persist: boolean) {
+  const createRows = rows.filter((row) => row.action === "CREATE");
+  const createdRows = persist ? createRows.filter((row) => row.billId) : [];
+  return {
+    exemptCount: rows.filter((row) => row.action === "SKIP_EXEMPT").length,
+    duplicateCount: rows.filter((row) => row.action === "SKIP_DUPLICATE").length,
+    invalidCount: rows.filter((row) => row.action === "SKIP_NO_RULE" || row.action === "ERROR").length,
+    projectedNewBillCount: createRows.length,
+    projectedTotalAmount: createRows.reduce((sum, row) => sum + row.ruleAmount, 0),
+    createdCount: createdRows.length,
+    failedCount: rows.filter((row) => row.action === "ERROR").length,
+    totalBilledAmount: createdRows.reduce((sum, row) => sum + row.ruleAmount, 0),
+  };
+}
+
+function effectivePeriodLabel(rule: NonNullable<Awaited<ReturnType<typeof findEffectiveBillingRule>>>) {
+  const start = monthYearLabel(rule.effectiveStartYear, rule.effectiveStartMonth);
+  const end = rule.effectiveEndYear === null && rule.effectiveEndMonth === null
+    ? "Open Ended"
+    : rule.effectiveEndYear && rule.effectiveEndMonth
+      ? monthYearLabel(rule.effectiveEndYear, rule.effectiveEndMonth)
+      : "Incomplete end period";
+  return `${start} to ${end}`;
+}
+
+function monthYearLabel(year: number, month: number) {
+  return new Date(Date.UTC(year, month - 1, 1)).toLocaleDateString("en-PH", { month: "long", year: "numeric", timeZone: "UTC" });
+}
+
+function penaltyConfigurationLabel(rule: NonNullable<Awaited<ReturnType<typeof findEffectiveBillingRule>>>) {
+  if (rule.penaltyType === "NONE") return "None";
+  const value = Number(rule.penaltyValue);
+  const amount = rule.penaltyType === "PERCENTAGE" ? `${value}%` : `PHP ${value.toFixed(2)}`;
+  return `${rule.penaltyType.replaceAll("_", " ")} ${amount} ${rule.penaltyFrequency === "NONE" ? "" : rule.penaltyFrequency.replaceAll("_", " ").toLowerCase()}`.trim();
 }
 
 async function recordGenerationRowAudits(input: BillingGenerationInput, rule: NonNullable<Awaited<ReturnType<typeof findEffectiveBillingRule>>>, rows: BillingGenerationRow[]) {

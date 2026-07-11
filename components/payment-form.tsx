@@ -79,7 +79,7 @@ export function PaymentForm({ bills, today }: { bills: OpenBillChoice[]; today: 
               <span className="text-right text-sm font-black">{bill.balanceLabel}<span className={`block text-[10px] font-semibold uppercase ${selected ? "text-pine-100" : "text-slate-400"}`}>Balance</span></span>
             </button>;
           })}
-          {!matches.length && <p className="px-3 py-8 text-center text-sm text-slate-500">No open bills match that search.</p>}
+          {!matches.length && <p className="px-3 py-8 text-center text-sm text-slate-500">No homeowner found with an open balance.</p>}
         </div>
       </div>
       <div className="grid content-start gap-4 sm:grid-cols-2">

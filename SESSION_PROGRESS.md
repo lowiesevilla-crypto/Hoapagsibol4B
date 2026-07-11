@@ -1,5 +1,36 @@
 # Session Progress
 
+## 2026-07-11 - Sprint 2.3A Finance Integration Hotfix
+
+Branch:
+feature/billing-generation-engine
+
+Completed:
+
+- Fixed Bug #050 by displaying Billing Preview rule metadata: effective rule, Resolution Reference, effective period, amount, generation mode, penalty configuration, and no-rule state.
+- Fixed Bug #051 by keeping individual preview/generation on `lib/services/billing-rules.ts`; new individual bill creation now delegates to the shared service and persists Billing Rule linkage, snapshot, Resolution Reference, charge type, and coverage period.
+- Fixed Bug #052 by computing preview and generation counts from final normalized row actions through one summary helper.
+- Fixed Bug #053 by preserving Bill rows as the balance source of truth, revalidating Billing and Payments after generation, and keeping duplicate/exempt skips balance-neutral.
+- Fixed Bug #054 by tenant-scoping the Record Payment datasets and expanding search to homeowner name, block, lot, email, account ID, bill ID, Resolution Reference, and billing month.
+- Added Billing Preview table search, sorting, pagination, and responsive handling without changing full-dataset summary counts.
+- Added Payments sub-navigation for Record Payment, Payment Requests, Active Payments, and Transaction History.
+- Tightened payment posting, update, and void services so bill/payment/archive/audit writes use the authenticated tenant.
+- Left Prisma schema and migrations unchanged.
+
+Validation:
+
+- Pre-flight passed on `feature/billing-generation-engine`; working tree was clean and last commit was `70a51c2`.
+- `pnpm exec prisma validate`: Passed.
+- `pnpm exec prisma generate`: Initially hit a Windows Prisma DLL lock from two local Node processes in this checkout; after stopping those workspace-local processes, passed.
+- `pnpm typecheck`: Passed.
+- Clean build after `Remove-Item -Recurse -Force .next -ErrorAction SilentlyContinue`: Passed.
+
+Remaining issues:
+
+- Automatic scheduled billing remains deferred.
+- Payment gateway/webhook automation remains out of scope.
+- Refunds and Reports remain future Payments navigation placeholders.
+
 ## 2026-07-11 - Sprint 2.3 Automated Billing Generation Engine
 
 Branch:

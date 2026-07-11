@@ -752,3 +752,77 @@ Acceptance Criteria:
 
 Fix Summary:
 Billing Rules now use a deterministic `MONTH_NAMES[month - 1]` helper for all month labels, validation converts submitted blank end-period fields to `null` while preserving absent fields as undefined, and the update action uses `FormData.has()` to distinguish explicit clearing from omitted fields.
+# Sprint 2.3A – Finance Integration Hotfix
+
+## Bug #050 – Resolution Reference Missing in Billing Preview
+Priority: Critical
+Status: Open
+
+Preview Billing does not display the Billing Rule Resolution Reference before generation.
+
+---
+
+## Bug #051 – Individual Billing Generation Incomplete
+Priority: Critical
+Status: Open
+
+Issues:
+- No Preview
+- Cannot Generate Individual Bill
+- Billing Rule not linked
+- Resolution Reference not shown
+- Balance not updated
+
+---
+
+## Bug #052 – Exemption Count Incorrect
+Priority: High
+Status: Open
+
+Preview shows Exempt Homeowners = 0 even when SKIP_EXEMPT is correctly identified.
+
+---
+
+## Bug #053 – Billing and Payment Synchronization
+Priority: Critical
+Status: Open
+
+After billing generation:
+- Record Payment does not immediately reflect newly generated bills.
+- Newly billed homeowners are not searchable.
+- Outstanding balances are not refreshed.
+
+---
+
+## Bug #054 – Payment Search Dataset Incomplete
+Priority: High
+Status: Open
+
+Record Payment search does not include all homeowners with outstanding balances.
+
+---
+
+## Improvement #055 – Billing Preview Search
+Priority: Medium
+
+Add:
+- Search
+- Sort
+- Pagination
+
+to the Billing Preview table.
+
+---
+
+## Improvement #056 – Finance Navigation Redesign
+Priority: Medium
+
+Split the Payments module into:
+
+Payments
+├── Record Payment
+├── Payment Requests
+├── Active Payments
+├── Transaction History
+├── Refunds
+└── Reports

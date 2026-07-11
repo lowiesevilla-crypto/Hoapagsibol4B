@@ -85,6 +85,8 @@ Supported generation modes:
 - Selected Homeowners
 - Block / Phase (when supported)
 
+Individual homeowner billing is generated through the same preview and posting engine as bulk billing. The create workflow submits numeric `coverageYear` and `coverageMonth` values with `scope=HOMEOWNER`, previews the effective rule and skipped rows, then posts only through the shared generation service.
+
 Generation Process:
 
 1. Resolve Tenant
@@ -95,6 +97,8 @@ Generation Process:
 6. Create Bill
 7. Update Balances
 8. Record Audit Log
+
+Billing generation revalidates the Billing page, dedicated Payment routes, and affected homeowner detail pages so newly generated balances are immediately available for payment recording.
 
 ---
 
@@ -116,6 +120,15 @@ Configuration:
 
 # 7. Payments
 
+Payment routes:
+
+- `/admin/payments/record`
+- `/admin/payments/requests`
+- `/admin/payments/active`
+- `/admin/payments/history`
+
+The legacy `/admin/payments` route redirects to Record Payment.
+
 Record Payment supports:
 
 - Cash
@@ -132,6 +145,10 @@ Payment Posting:
 4. Generate Receipt
 5. Update Ledger
 6. Record Audit
+
+Record Payment uses a tenant-scoped server-side search over current open bill balances. Searchable fields include homeowner name, block, lot, account ID, email, bill ID, and resolution reference. Search results are not truncated by a small client-side limit.
+
+Payment Requests are tenant-scoped on submission, review, approval, rejection, and webhook approval. Approved monthly dues requests post through the existing payment process and update bill balances and receipts.
 
 ---
 
@@ -280,11 +297,10 @@ Completed
 - Billing Rules
 - Billing Exemptions
 - Billing Generation (Core)
-
-In Progress
-
 - Finance Integration
 - Payment Synchronization
+- Individual Billing Workflow
+- Split Payments Routes
 
 Planned
 
@@ -302,3 +318,4 @@ Planned
 | Version | Date | Description |
 |----------|------|-------------|
 | 1.0 | July 11, 2026 | Initial Finance Engine Documentation |
+| 1.1 | July 11, 2026 | Documented Sprint 2.3B individual billing and split payments workflow |

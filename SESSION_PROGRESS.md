@@ -365,3 +365,38 @@ Sprint 2.3A is not approved for merge.
 
 Next Task:
 Sprint 2.3B – Individual Billing and Payments Workflow Completion
+
+## 2026-07-11 - Sprint 2.3B Individual Billing and Payments Workflow Completion
+
+Branch:
+feature/billing-generation-engine
+
+Completed:
+
+- Fixed Bug #057 by replacing the legacy individual bill create path with a numeric coverage year/month preview form that submits to the Billing Generation Engine.
+- Fixed Bug #058 by routing individual homeowner billing through `scope=HOMEOWNER`, preserving Billing Rule linkage, snapshots, resolution references, coverage fields, generated amount, and bill balance updates.
+- Fixed Improvement #059 by adding a searchable full-dataset homeowner selector for individual billing with tenant-scoped options and no arbitrary small result limit.
+- Fixed Bug #060 by splitting Payments into `/admin/payments/record`, `/admin/payments/requests`, `/admin/payments/active`, and `/admin/payments/history`; `/admin/payments` now redirects to Record Payment.
+- Fixed Bug #061 by moving Record Payment bill lookup to server-side tenant-scoped search across homeowner name, block, lot, account ID, email, bill ID, and resolution reference.
+- Fixed Bug #062 by revalidating Billing and the dedicated Payment routes after billing generation and payment mutations so newly generated balances are immediately visible.
+- Tightened payment request approval, rejection, and webhook approval to resolve requests within the authenticated or resolved tenant.
+
+Root causes:
+
+- Individual billing still used a separate manual bill form that depended on date-like input conversion instead of the shared billing preview/generation service.
+- Payments navigation was visually separated but still rendered too many workflows in one page, and Record Payment relied on client-side filtered/truncated bill choices.
+- Newly generated bill visibility depended on revalidation of the old payments route instead of the dedicated payment workflows that now need current balances.
+
+Validation:
+
+- pnpm exec prisma validate: Passed
+- pnpm exec prisma generate: Passed
+- pnpm typecheck: Passed
+- Remove-Item -Recurse -Force .next -ErrorAction SilentlyContinue: Passed
+- pnpm build: Passed
+
+Not included:
+
+- No Prisma schema changes.
+- No migration changes.
+- No payment gateway, webhook implementation expansion, AI, refunds, scheduled billing, authentication, RBAC, tenant routing, or Billing Exemption logic changes.

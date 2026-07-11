@@ -37,7 +37,6 @@ export async function saveBillAction(formData: FormData) {
   const totalAmount = data.amount + data.penalty;
   const homeowner = await prisma.homeownerProfile.findFirst({ where: { id: data.homeownerId, tenantId: admin.tenantId }, select: { id: true } });
   if (!homeowner) throw new Error("Homeowner not found or access denied.");
-  let createdViaRuleEngine = false;
 
   if (data.id) {
     const existing = await prisma.bill.findFirst({ where: { id: data.id, tenantId: admin.tenantId } });
@@ -52,25 +51,16 @@ export async function saveBillAction(formData: FormData) {
       data: { tenantId: admin.tenantId, homeownerId: homeowner.id, billingMonth, recurringChargeType: RecurringChargeType.MONTHLY_DUES, coverageYear: period.year, coverageMonth: period.month, dueDate, amount: data.amount, penalty: data.penalty, totalAmount, balance, status, notes: data.notes || null },
     });
   } else {
-    const result = await generateBillingFromRules({
-      actor: admin,
-      coverageYear: period.year,
-      coverageMonth: period.month,
-      scope: "HOMEOWNER",
-      homeownerIds: [homeowner.id],
-    }, dueDate);
-    if (result.createdCount !== 1) {
-      const row = result.rows[0];
-      throw new Error(row?.message || "Individual bill could not be generated from the effective Billing Rule.");
-    }
-    createdViaRuleEngine = true;
+    throw new Error("Use Preview individual bill so the Billing Rules engine can validate the coverage period, exemption status, duplicate status, and rule amount before generation.");
   }
 
   const savedBill = await prisma.bill.findFirst({ where: { tenantId: admin.tenantId, homeownerId: homeowner.id, billingMonth }, include: { homeowner: { include: { user: true } } } });
-  if (savedBill && !createdViaRuleEngine) await sendEmailNotification({ recipientId: savedBill.homeowner.userId, email: savedBill.homeowner.user.email, subject: `HOA billing notice - ${savedBill.billingMonth.toLocaleDateString("en-PH", { month: "long", year: "numeric" })}`, heading: "Billing notification", message: `Hello ${savedBill.homeowner.user.name},\nA billing record of PHP ${Number(savedBill.totalAmount).toFixed(2)} is available in your homeowner portal. The due date is ${savedBill.dueDate.toLocaleDateString("en-PH")}.`, type: NotificationType.BILLING_NOTIFICATION, actionLabel: "View my billing", actionUrl: `${getAppUrl()}/portal/billing` }).catch(() => undefined);
+  if (savedBill) await sendEmailNotification({ recipientId: savedBill.homeowner.userId, email: savedBill.homeowner.user.email, subject: `HOA billing notice - ${savedBill.billingMonth.toLocaleDateString("en-PH", { month: "long", year: "numeric" })}`, heading: "Billing notification", message: `Hello ${savedBill.homeowner.user.name},\nA billing record of PHP ${Number(savedBill.totalAmount).toFixed(2)} is available in your homeowner portal. The due date is ${savedBill.dueDate.toLocaleDateString("en-PH")}.`, type: NotificationType.BILLING_NOTIFICATION, actionLabel: "View my billing", actionUrl: `${getAppUrl()}/portal/billing` }).catch(() => undefined);
 
   revalidatePath("/admin/billing");
   revalidatePath("/admin/payments");
+  revalidatePath("/admin/payments/record");
+  revalidatePath(`/admin/homeowners/${homeowner.id}`);
   revalidatePath("/portal/billing");
   revalidatePath("/portal/payments");
   redirect("/admin/billing?success=saved");
@@ -104,11 +94,16 @@ export async function generateBillingFromPreviewAction(formData: FormData) {
     const message = `${result.createdCount} bill(s) generated for ${periodLabel(input.coverageYear, input.coverageMonth)} from ${ruleLabel}. ${result.exemptCount} exempt, ${result.duplicateCount} duplicate, ${result.failedCount} failed.`;
     revalidatePath("/admin/billing");
     revalidatePath("/admin/payments");
+    revalidatePath("/admin/payments/record");
+    revalidatePath("/admin/payments/requests");
+    revalidatePath("/admin/payments/active");
+    revalidatePath("/admin/payments/history");
     revalidatePath("/admin/dashboard");
     revalidatePath("/portal/billing");
     revalidatePath("/portal/pay");
     revalidatePath("/portal/payments");
-    redirectUrl = `/admin/billing?success=generated&message=${encodeURIComponent(message)}&billingGenerated=1&coverageYear=${input.coverageYear}&coverageMonth=${input.coverageMonth}&scope=${input.scope}`;
+    input.homeownerIds?.forEach((id) => revalidatePath(`/admin/homeowners/${id}`));
+    redirectUrl = `/admin/billing?success=generated&message=${encodeURIComponent(message)}&billingGenerated=1&coverageYear=${input.coverageYear}&coverageMonth=${input.coverageMonth}&scope=${input.scope}${input.homeownerIds?.[0] ? `&homeownerId=${encodeURIComponent(input.homeownerIds[0])}` : ""}`;
   } catch (error) {
     redirect(`/admin/billing?error=${encodeURIComponent(error instanceof Error ? error.message : "Billing generation failed.")}`);
   }
@@ -118,6 +113,8 @@ export async function generateBillingFromPreviewAction(formData: FormData) {
 function parseGenerationForm(admin: Awaited<ReturnType<typeof requireBillingSettingsAccess>>, formData: FormData) {
   const coverageYear = Number(formData.get("coverageYear"));
   const coverageMonth = Number(formData.get("coverageMonth"));
+  if (!Number.isInteger(coverageYear) || coverageYear < 1900 || coverageYear > 2200) throw new Error("Enter a valid four-digit coverage year.");
+  if (!Number.isInteger(coverageMonth) || coverageMonth < 1 || coverageMonth > 12) throw new Error("Choose a coverage month from January through December.");
   const rawScope = String(formData.get("scope") || "ALL");
   const scope = billingGenerationScopes.includes(rawScope as BillingGenerationScope) ? rawScope as BillingGenerationScope : "ALL";
   const homeownerIds = formData.getAll("homeownerIds").map(String).filter(Boolean);
@@ -203,6 +200,10 @@ export async function archiveBillAction(formData: FormData) {
 
   revalidatePath("/admin/billing");
   revalidatePath("/admin/payments");
+  revalidatePath("/admin/payments/record");
+  revalidatePath("/admin/payments/requests");
+  revalidatePath("/admin/payments/active");
+  revalidatePath("/admin/payments/history");
   revalidatePath("/admin/dashboard");
   revalidatePath("/portal/billing");
   revalidatePath("/portal/pay");

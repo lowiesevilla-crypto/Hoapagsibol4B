@@ -34,7 +34,7 @@ export function BillingGenerationScopeFields({
   const selected = new Set(defaultHomeownerIds);
   const matches = useMemo(() => {
     const term = query.trim().toLowerCase();
-    return homeowners.filter((homeowner) => !term || homeowner.search.includes(term)).slice(0, 80);
+    return homeowners.filter((homeowner) => !term || homeowner.search.includes(term));
   }, [homeowners, query]);
 
   return <>

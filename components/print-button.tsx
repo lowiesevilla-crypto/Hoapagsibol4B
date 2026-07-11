@@ -10,11 +10,11 @@ export function PrintButton({ label = "Print", fallbackHref }: { label?: string;
         return;
       }
       window.focus();
-      requestAnimationFrame(() => window.print());
+      window.print();
     } catch {
       if (fallbackHref) window.location.assign(fallbackHref);
     }
   };
 
-  return <button type="button" className="btn-primary print-hidden" onClick={handlePrint}><Printer className="size-4" />{label}</button>;
+  return <button type="button" className="btn-primary print-hidden cursor-pointer focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-pine-700" onClick={handlePrint}><Printer className="size-4" />{label}</button>;
 }

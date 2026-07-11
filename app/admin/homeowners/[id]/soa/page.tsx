@@ -154,7 +154,7 @@ function SectionTitle({ title, count }: { title: string; count: number }) {
 }
 
 function ResponsiveTable({ children, minWidth }: { children: ReactNode; minWidth: string }) {
-  return <div className="overflow-x-auto rounded-lg border border-slate-200"><table className="data-table" style={{ minWidth }}>{children}</table></div>;
+  return <div className="soa-table-frame overflow-x-auto rounded-lg border border-slate-200"><table className="data-table soa-print-table" style={{ minWidth }}>{children}</table></div>;
 }
 
 function LedgerRow({ entry }: { entry: StatementLedgerEntry }) {

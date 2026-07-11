@@ -8,6 +8,11 @@ import { getStatementOfAccount, type StatementLedgerEntry } from "@/lib/services
 import { shortDate } from "@/lib/utils";
 
 type StatementOfAccount = Awaited<ReturnType<typeof getStatementOfAccount>>;
+const pageSize: [number, number] = [595.28, 841.89];
+const marginX = 36;
+const contentWidth = 523;
+const topY = 792;
+const bottomY = 54;
 
 export async function GET(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const user = await requireUser(Role.ADMIN);
@@ -20,7 +25,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   const qr = await pdf.embedPng(await QRCode.toBuffer(soa.verifyUrl, { type: "png", width: 300, margin: 1, errorCorrectionLevel: "M" }));
   const logoAsset = await getAssociationLogoAsset(soa.association.logoUrl);
   const logo = logoAsset.type === "jpg" ? await pdf.embedJpg(logoAsset.bytes) : await pdf.embedPng(logoAsset.bytes);
-  const doc = { pdf, page: pdf.addPage([595.28, 841.89]), regular, bold, y: 792 };
+  const doc = { pdf, page: pdf.addPage(pageSize), regular, bold, y: topY, pageNumber: 1 };
 
   drawHeader(doc, soa, logo, qr);
   drawInfoBlocks(doc, soa);
@@ -73,9 +78,10 @@ function drawInfoBlocks(doc: PdfDoc, soa: StatementOfAccount) {
     ["Status", soa.homeowner.status.replaceAll("_", " ")],
     ["Collection Status", soa.summary.collectionStatus],
   ];
-  drawKeyValues(doc, left, 36, doc.y, 245);
-  drawKeyValues(doc, right, 315, doc.y, 220);
-  doc.y -= 92;
+  const startY = doc.y;
+  const leftHeight = drawKeyValues(doc, left, marginX, startY, 250);
+  const rightHeight = drawKeyValues(doc, right, 312, startY, 247);
+  doc.y = startY - Math.max(leftHeight, rightHeight) - 22;
 
   sectionTitle(doc, "Account Summary");
   const summary = [
@@ -111,7 +117,7 @@ function drawAging(doc: PdfDoc, soa: StatementOfAccount) {
 }
 
 function drawLedger(doc: PdfDoc, ledger: StatementLedgerEntry[]) {
-  table(doc, "Running Ledger", ["Date", "Description", "Reference", "Debit", "Credit", "Balance", "Type"], [62, 145, 83, 60, 60, 67, 66], ledger.map((entry) => [
+  table(doc, "Running Ledger", ["Date", "Description", "Reference", "Debit", "Credit", "Balance", "Type"], [58, 138, 82, 62, 62, 68, 53], ledger.map((entry) => [
     shortDate(entry.date),
     entry.description,
     entry.reference,
@@ -123,7 +129,7 @@ function drawLedger(doc: PdfDoc, ledger: StatementLedgerEntry[]) {
 }
 
 function drawPayments(doc: PdfDoc, soa: StatementOfAccount) {
-  table(doc, "Payment History", ["Date", "OR No.", "Method", "Reference", "Coverage", "Amount", "Collector"], [58, 75, 65, 72, 130, 62, 71], soa.paymentHistory.map((payment) => [
+  table(doc, "Payment History", ["Date", "OR No.", "Method", "Reference", "Coverage", "Amount", "Collector"], [58, 82, 64, 72, 132, 62, 53], soa.paymentHistory.map((payment) => [
     shortDate(payment.paymentDate),
     payment.officialReceiptNo,
     payment.paymentMethod,
@@ -135,7 +141,7 @@ function drawPayments(doc: PdfDoc, soa: StatementOfAccount) {
 }
 
 function drawBilling(doc: PdfDoc, soa: StatementOfAccount) {
-  table(doc, "Billing History", ["Billing Date", "Type", "Coverage", "Amount", "Status"], [80, 95, 155, 80, 90], soa.billingHistory.map((bill) => [
+  table(doc, "Billing History", ["Billing Date", "Type", "Coverage", "Amount", "Status"], [92, 118, 145, 84, 84], soa.billingHistory.map((bill) => [
     shortDate(bill.billingDate),
     bill.billingType,
     bill.coverage,
@@ -145,29 +151,31 @@ function drawBilling(doc: PdfDoc, soa: StatementOfAccount) {
 }
 
 function drawFooter(doc: PdfDoc, soa: StatementOfAccount) {
-  ensureSpace(doc, 92);
+  ensureSpace(doc, 74);
   doc.page.drawLine({ start: { x: 72, y: doc.y - 52 }, end: { x: 238, y: doc.y - 52 }, thickness: 0.7, color: rgb(0.1, 0.1, 0.1) });
   doc.page.drawLine({ start: { x: 356, y: doc.y - 52 }, end: { x: 522, y: doc.y - 52 }, thickness: 0.7, color: rgb(0.1, 0.1, 0.1) });
   drawCenteredWithin(doc.page, "Prepared by HOAHub Finance Engine", doc.regular, 7, 72, 238, doc.y - 66, rgb(0.25, 0.28, 0.3));
   drawCenteredWithin(doc.page, "Treasurer / Authorized HOA Representative", doc.regular, 7, 356, 522, doc.y - 66, rgb(0.25, 0.28, 0.3));
-  drawCenteredWithin(doc.page, safe(`Generated for ${soa.homeowner.user.name} on ${shortDate(soa.statementDate)}.`), doc.regular, 6.5, 36, 559, 36, rgb(0.45, 0.48, 0.5));
+  drawCenteredWithin(doc.page, safe(`Generated for ${soa.homeowner.user.name} on ${shortDate(soa.statementDate)}. Page ${doc.pageNumber}`), doc.regular, 6.5, marginX, 559, 36, rgb(0.45, 0.48, 0.5));
 }
 
 function table(doc: PdfDoc, title: string, headers: string[], widths: number[], rows: string[][]) {
-  ensureSpace(doc, 62);
+  ensureSpace(doc, 72);
   sectionTitle(doc, title);
   drawTableHeader(doc, headers, widths);
   if (!rows.length) {
-    ensureSpace(doc, 22);
-    doc.page.drawText("No records found.", { x: 42, y: doc.y - 15, font: doc.regular, size: 8, color: rgb(0.35, 0.38, 0.4) });
-    doc.y -= 24;
+    const height = 30;
+    ensureSpace(doc, height + 20, () => drawTableHeader(doc, headers, widths));
+    doc.page.drawRectangle({ x: marginX, y: doc.y - height, width: contentWidth, height, borderColor: rgb(0.86, 0.88, 0.9), borderWidth: 0.35 });
+    doc.page.drawText("No records found.", { x: marginX + 8, y: doc.y - 18, font: doc.regular, size: 8, color: rgb(0.35, 0.38, 0.4) });
+    doc.y -= height + 22;
     return;
   }
   for (const row of rows) {
-    const lines = row.map((cell, index) => wrapText(safe(cell), doc.regular, 6.5, widths[index] - 8).slice(0, 3));
-    const height = Math.max(18, Math.max(...lines.map((line) => line.length)) * 8 + 8);
+    const lines = row.map((cell, index) => wrapText(safe(cell), doc.regular, 6.5, widths[index] - 8).slice(0, 4));
+    const height = Math.max(20, Math.max(...lines.map((line) => line.length)) * 8 + 8);
     ensureSpace(doc, height + 8, () => drawTableHeader(doc, headers, widths));
-    let x = 36;
+    let x = marginX;
     row.forEach((_, index) => {
       doc.page.drawRectangle({ x, y: doc.y - height, width: widths[index], height, borderColor: rgb(0.86, 0.88, 0.9), borderWidth: 0.35 });
       lines[index].forEach((line, lineIndex) => doc.page.drawText(line, { x: x + 4, y: doc.y - 11 - lineIndex * 8, font: doc.regular, size: 6.5, color: rgb(0.08, 0.1, 0.12) }));
@@ -180,13 +188,13 @@ function table(doc: PdfDoc, title: string, headers: string[], widths: number[], 
 
 function drawTableHeader(doc: PdfDoc, headers: string[], widths: number[]) {
   const pine = rgb(0.03, 0.24, 0.17);
-  let x = 36;
+  let x = marginX;
   for (let index = 0; index < headers.length; index++) {
-    doc.page.drawRectangle({ x, y: doc.y - 18, width: widths[index], height: 18, color: pine });
-    doc.page.drawText(headers[index], { x: x + 4, y: doc.y - 12, font: doc.bold, size: 6.5, color: rgb(1, 1, 1) });
+    doc.page.drawRectangle({ x, y: doc.y - 20, width: widths[index], height: 20, color: pine });
+    doc.page.drawText(headers[index], { x: x + 4, y: doc.y - 13, font: doc.bold, size: 6.5, color: rgb(1, 1, 1) });
     x += widths[index];
   }
-  doc.y -= 18;
+  doc.y -= 20;
 }
 
 function sectionTitle(doc: PdfDoc, title: string) {
@@ -196,18 +204,25 @@ function sectionTitle(doc: PdfDoc, title: string) {
 }
 
 function drawKeyValues(doc: PdfDoc, rows: string[][], x: number, y: number, width: number) {
-  rows.forEach(([label, value], index) => {
-    const rowY = y - index * 20;
-    doc.page.drawText(label.toUpperCase(), { x, y: rowY, font: doc.bold, size: 6.5, color: rgb(0.35, 0.38, 0.4) });
-    doc.page.drawText(safe(value), { x: x + 96, y: rowY, font: doc.regular, size: 8, color: rgb(0.05, 0.07, 0.09), maxWidth: width - 96 });
-    doc.page.drawLine({ start: { x: x + 96, y: rowY - 3 }, end: { x: x + width, y: rowY - 3 }, thickness: 0.35, color: rgb(0.75, 0.78, 0.8) });
-  });
+  let cursorY = y;
+  const labelWidth = 88;
+  for (const [label, value] of rows) {
+    const valueX = x + labelWidth + 8;
+    const valueWidth = width - labelWidth - 8;
+    const lines = wrapText(safe(value), doc.regular, 8, valueWidth);
+    const rowHeight = Math.max(18, lines.length * 10 + 6);
+    doc.page.drawText(label.toUpperCase(), { x, y: cursorY, font: doc.bold, size: 6.5, color: rgb(0.35, 0.38, 0.4), maxWidth: labelWidth });
+    lines.forEach((line, lineIndex) => doc.page.drawText(line, { x: valueX, y: cursorY - lineIndex * 10, font: doc.regular, size: 8, color: rgb(0.05, 0.07, 0.09) }));
+    doc.page.drawLine({ start: { x: valueX, y: cursorY - rowHeight + 5 }, end: { x: x + width, y: cursorY - rowHeight + 5 }, thickness: 0.35, color: rgb(0.75, 0.78, 0.8) });
+    cursorY -= rowHeight;
+  }
+  return y - cursorY;
 }
 
 function drawSummaryGrid(doc: PdfDoc, rows: string[][]) {
   const [outstanding, ...rest] = rows;
   const pine = rgb(0.03, 0.24, 0.17);
-  doc.page.drawRectangle({ x: 36, y: doc.y - 38, width: 523, height: 38, color: rgb(0.94, 0.98, 0.95), borderColor: pine, borderWidth: 1 });
+  doc.page.drawRectangle({ x: marginX, y: doc.y - 38, width: contentWidth, height: 38, color: rgb(0.94, 0.98, 0.95), borderColor: pine, borderWidth: 1 });
   doc.page.drawText(outstanding[0].toUpperCase(), { x: 46, y: doc.y - 16, font: doc.bold, size: 7, color: rgb(0.28, 0.34, 0.34) });
   drawRightAligned(doc.page, outstanding[1], doc.bold, 13, 546, doc.y - 24, pine);
   doc.y -= 48;
@@ -233,8 +248,11 @@ function labelValue(page: PDFPage, bold: PDFFont, regular: PDFFont, label: strin
 }
 
 function ensureSpace(doc: PdfDoc, needed: number, afterPage?: () => void) {
-  if (doc.y - needed >= 54) return;
-  doc.page = doc.pdf.addPage([595.28, 841.89]);
+  if (doc.y - needed >= bottomY) return;
+  doc.page = doc.pdf.addPage(pageSize);
+  doc.pageNumber += 1;
+  doc.y = topY;
+  doc.page.drawText(`Statement of Account - Page ${doc.pageNumber}`, { x: marginX, y: 812, font: doc.bold, size: 8, color: rgb(0.35, 0.38, 0.4) });
   doc.y = 792;
   afterPage?.();
 }
@@ -280,4 +298,5 @@ type PdfDoc = {
   regular: PDFFont;
   bold: PDFFont;
   y: number;
+  pageNumber: number;
 };

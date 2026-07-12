@@ -8,7 +8,7 @@ import { SubmitButton } from "@/components/ui";
 import { saveSystemSettingsAction, sendTestEmailAction } from "@/lib/actions/settings";
 import { requireUser } from "@/lib/auth";
 import { getAppUrl } from "@/lib/app-url";
-import { allSettingFields, getSystemSettingMap, maskedSecret, settingSections } from "@/lib/system-settings";
+import { allSettingFields, BOOTSTRAP_TENANT_ID, getSystemSettingMap, maskedSecret, settingSections } from "@/lib/system-settings";
 import { getMailConfiguration } from "@/lib/services/notifications";
 import { shortDate } from "@/lib/utils";
 
@@ -22,15 +22,17 @@ const icons = {
 };
 
 export default async function SystemSettingsPage({ searchParams }: { searchParams: Promise<{ error?: string; success?: string; message?: string }> }) {
-  await requireUser(Role.SYSTEM_ADMIN);
-  const [settings, query, mail] = await Promise.all([getSystemSettingMap(), searchParams, getMailConfiguration()]);
+  const user = await requireUser(Role.SYSTEM_ADMIN);
+  const [settings, query, mail] = await Promise.all([getSystemSettingMap(user.tenantId), searchParams, getMailConfiguration(user.tenantId)]);
   const environmentAliases: Record<string, string[]> = {
     MAIL_HOST: ["SMTP_HOST"], MAIL_PORT: ["SMTP_PORT"], MAIL_ENCRYPTION: ["SMTP_ENCRYPTION"],
     MAIL_USERNAME: ["SMTP_USERNAME"], MAIL_PASSWORD: ["SMTP_PASSWORD"],
   };
   const sourceFor = (category: SystemSettingCategory, key: string) => {
     const saved = settings.get(`${category}.${key}`)?.value?.trim();
-    const env = [...(environmentAliases[key] || []), key].map((name) => process.env[name]?.trim()).find(Boolean);
+    const env = user.tenantId === BOOTSTRAP_TENANT_ID
+      ? [...(environmentAliases[key] || []), key].map((name) => process.env[name]?.trim()).find(Boolean)
+      : undefined;
     if (env) return { source: "Environment variable", value: env };
     if (saved) return { source: "Database setting", value: saved };
     return { source: "Not configured", value: "" };
@@ -97,7 +99,7 @@ export default async function SystemSettingsPage({ searchParams }: { searchParam
     <section className="grid gap-6 xl:grid-cols-2">
       {settingSections.map((section) => {
         const Icon = icons[section.category];
-        return <form action={saveSystemSettingsAction} encType="multipart/form-data" className="card" key={section.category}>
+        return <form action={saveSystemSettingsAction} className="card" key={section.category}>
           <input type="hidden" name="category" value={section.category} />
           <div className="mb-5 flex items-start gap-3">
             <span className="grid size-11 shrink-0 place-items-center rounded-2xl bg-pine-50 text-pine-700"><Icon className="size-5" /></span>

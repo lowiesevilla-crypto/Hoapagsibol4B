@@ -420,6 +420,7 @@ async function sendBillingNotifications(homeowners: Array<{ homeownerId: string;
   const profiles = await prisma.homeownerProfile.findMany({ where: { tenantId, id: { in: homeowners.map((item) => item.homeownerId) } }, include: { user: true } });
   const amountByHomeowner = new Map(homeowners.map((item) => [item.homeownerId, item.amount]));
   await Promise.allSettled(profiles.map((homeowner) => sendEmailNotification({
+    tenantId,
     recipientId: homeowner.userId,
     email: homeowner.user.email,
     subject: `HOA billing notice - ${billingMonth.toLocaleDateString("en-PH", { month: "long", year: "numeric" })}`,

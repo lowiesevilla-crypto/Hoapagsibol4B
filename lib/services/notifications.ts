@@ -3,9 +3,10 @@ import nodemailer from "nodemailer";
 import { getAppUrl } from "@/lib/app-url";
 import { prisma } from "@/lib/db";
 import { decryptSettingSecret, isMaskedSecret } from "@/lib/setting-secrets";
-import { getAssociationSettings, getSystemSettingMap } from "@/lib/system-settings";
+import { BOOTSTRAP_TENANT_ID, getAssociationSettings, getSystemSettingMap } from "@/lib/system-settings";
 
 type EmailInput = {
+  tenantId: string;
   recipientId: string;
   email: string;
   subject: string;
@@ -33,11 +34,11 @@ export type MailConfiguration = {
   credentialSource: "environment" | "database" | "none";
 };
 
-export async function getMailConfiguration(): Promise<MailConfiguration> {
-  const settings = await getSystemSettingMap();
+export async function getMailConfiguration(tenantId: string): Promise<MailConfiguration> {
+  const settings = await getSystemSettingMap(tenantId);
   const savedRaw = (key: string) => settings.get(`${SystemSettingCategory.EMAIL}.${key}`)?.value || "";
   const saved = (key: string) => savedRaw(key).trim();
-  const environment = (...keys: string[]) => keys.map((key) => process.env[key]?.trim()).find(Boolean) || "";
+  const environment = (...keys: string[]) => tenantId === BOOTSTRAP_TENANT_ID ? keys.map((key) => process.env[key]?.trim()).find(Boolean) || "" : "";
   const value = (key: string, fallback = "", ...aliases: string[]) => environment(...aliases, key) || saved(key) || fallback;
   const rawProvider = value("MAIL_PROVIDER", "smtp").toLowerCase();
   const provider = rawProvider === "gmail" ? "gmail" : "smtp";
@@ -103,8 +104,8 @@ function debugMailConfiguration(operation: "send" | "verify", config: MailConfig
 }
 
 export async function sendEmailNotification(input: EmailInput) {
-  const association = await getAssociationSettings();
-  const config = await getMailConfiguration();
+  const association = await getAssociationSettings(input.tenantId);
+  const config = await getMailConfiguration(input.tenantId);
   const brandedMessage = `${input.message}\n\n--\n${association.name}${association.address ? `\n${association.address}` : ""}${association.contactNumber ? `\nContact: ${association.contactNumber}` : ""}${association.email ? `\nSupport: ${association.email}` : ""}`;
   let status: NotificationStatus = NotificationStatus.QUEUED;
   let sentAt: Date | undefined;
@@ -149,8 +150,8 @@ export async function sendEmailNotification(input: EmailInput) {
   });
 }
 
-export async function verifyMailConnection() {
-  const config = await getMailConfiguration();
+export async function verifyMailConnection(tenantId: string) {
+  const config = await getMailConfiguration(tenantId);
   if (!config.configured) throw new Error("SMTP is not fully configured. Check the mailbox username, password, and sender settings.");
   debugMailConfiguration("verify", config);
   const transporter = nodemailer.createTransport(smtpTransportOptions(config));

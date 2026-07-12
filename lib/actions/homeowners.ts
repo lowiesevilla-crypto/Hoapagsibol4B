@@ -79,6 +79,7 @@ export async function saveHomeownerAction(formData: FormData) {
       },
     });
     await sendEmailNotification({
+      tenantId: admin.tenantId,
       recipientId: created.id,
       email: created.email,
       subject: "Welcome to the HOA Digital Hub",

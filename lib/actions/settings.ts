@@ -93,8 +93,9 @@ export async function sendTestEmailAction(formData: FormData) {
   let outcome = "FAILED";
   let failure = "Test email could not be sent.";
   try {
-    await verifyMailConnection();
+    await verifyMailConnection(systemAdmin.tenantId);
     const log = await sendEmailNotification({
+      tenantId: systemAdmin.tenantId,
       recipientId: systemAdmin.id,
       email: parsed.data.email,
       subject: "HOA Digital Hub email test",

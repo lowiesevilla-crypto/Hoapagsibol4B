@@ -12,9 +12,9 @@ const pale = rgb(0.95, 0.98, 0.99);
 const gray = rgb(0.35, 0.42, 0.47);
 
 export async function GET(request: Request) {
-  await requireUser(Role.ADMIN);
+  const user = await requireUser(Role.ADMIN);
   const url = new URL(request.url);
-  const [report, association] = await Promise.all([getFinancialReport(url.searchParams.get("from"), url.searchParams.get("to")), getAssociationSettings()]);
+  const [report, association] = await Promise.all([getFinancialReport(url.searchParams.get("from"), url.searchParams.get("to")), getAssociationSettings(user.tenantId)]);
   const document = await PDFDocument.create();
   const regular = await document.embedFont(StandardFonts.Helvetica);
   const bold = await document.embedFont(StandardFonts.HelveticaBold);

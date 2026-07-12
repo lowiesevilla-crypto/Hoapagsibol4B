@@ -52,7 +52,7 @@ async function maintainTenant(tenantId: string, tenantSlug: string, billingEnabl
   for (const bill of bills) {
     const homeowner = bill.homeowner.user;
     if (alreadyNotified.has(homeowner.id) || sent.has(homeowner.id)) continue;
-    await sendEmailNotification({ recipientId: homeowner.id, email: homeowner.email, subject: "HOA monthly dues reminder", heading: bill.status === BillStatus.OVERDUE ? "Overdue account reminder" : "Upcoming due date", message: `Hello ${homeowner.name},\nYour outstanding HOA balance is PHP ${Number(bill.balance).toFixed(2)}. The due date is ${bill.dueDate.toLocaleDateString("en-PH", { timeZone: "UTC" })}.`, type: NotificationType.BILL_REMINDER, actionLabel: "Open HOA portal", actionUrl: `${getAppUrl()}/${tenantSlug}/login` });
+    await sendEmailNotification({ tenantId, recipientId: homeowner.id, email: homeowner.email, subject: "HOA monthly dues reminder", heading: bill.status === BillStatus.OVERDUE ? "Overdue account reminder" : "Upcoming due date", message: `Hello ${homeowner.name},\nYour outstanding HOA balance is PHP ${Number(bill.balance).toFixed(2)}. The due date is ${bill.dueDate.toLocaleDateString("en-PH", { timeZone: "UTC" })}.`, type: NotificationType.BILL_REMINDER, actionLabel: "Open HOA portal", actionUrl: `${getAppUrl()}/${tenantSlug}/login` });
     sent.add(homeowner.id);
   }
   await prisma.auditLog.create({ data: { tenantId, module: "CRON", action: "DAILY_MAINTENANCE", entityType: "System", metadata: { overdueUpdated: overdue.count, remindersAttempted: sent.size, resetAttemptsDeleted: attempts.count, resetTokensDeleted: tokens.count } } });

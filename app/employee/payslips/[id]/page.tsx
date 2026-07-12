@@ -21,7 +21,7 @@ export default async function EmployeePayslipPrintPage({ params }: { params: Pro
     include: { deductionType: true, employeeLoan: true },
     orderBy: { createdAt: "asc" },
   });
-  const association = await getAssociationSettings();
+  const association = await getAssociationSettings(user.tenantId);
 
   return <main className="print-document mx-auto min-h-screen max-w-3xl bg-white p-5 sm:p-10">
     <div className="print-hidden mb-6 flex flex-wrap justify-end gap-2">

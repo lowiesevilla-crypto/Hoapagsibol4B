@@ -35,7 +35,7 @@ export function PayByQrForm({ openBills, today }: { openBills: OpenBill[]; today
     setSelectedBills((current) => current.includes(id) ? current.filter((item) => item !== id) : [...current, id]);
   }
 
-  return <form action={submitPaymentRequestAction} encType="multipart/form-data" className="card">
+  return <form action={submitPaymentRequestAction} className="card">
     <div className="mb-5 flex items-start gap-3">
       <span className="grid size-11 shrink-0 place-items-center rounded-2xl bg-pine-50 text-pine-700"><ReceiptText className="size-5" /></span>
       <div>

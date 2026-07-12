@@ -11,7 +11,7 @@ export const runtime = "nodejs";
 
 export async function POST(request: Request) {
   const user = await requireUser();
-  const settings = await getChatSettings();
+  const settings = await getChatSettings(user.tenantId);
   const formData = await request.formData();
   const files = formData.getAll("files").filter((item): item is File => item instanceof File && item.size > 0);
   if (!files.length) return NextResponse.json({ error: "Choose at least one file to upload." }, { status: 400 });

@@ -12,9 +12,9 @@ const lightBlue = "EDF8FD";
 const money = (value: number) => new Intl.NumberFormat("en-PH", { style: "currency", currency: "PHP" }).format(Object.is(value, -0) ? 0 : value);
 
 export async function GET(request: Request) {
-  await requireUser(Role.ADMIN);
+  const user = await requireUser(Role.ADMIN);
   const url = new URL(request.url);
-  const [report, association] = await Promise.all([getFinancialReport(url.searchParams.get("from"), url.searchParams.get("to")), getAssociationSettings()]);
+  const [report, association] = await Promise.all([getFinancialReport(url.searchParams.get("from"), url.searchParams.get("to")), getAssociationSettings(user.tenantId)]);
   const logo = await getAssociationLogoAsset(association.logoUrl);
   const children = [
     new Paragraph({ alignment: AlignmentType.CENTER, spacing: { after: 80 }, children: [new TextRun({ text: "FINANCIAL REPORT", bold: true, size: 34, color: blue })] }),

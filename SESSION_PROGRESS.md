@@ -535,3 +535,26 @@ Validation commands:
 - pnpm typecheck: Passed.
 - Remove-Item -Recurse -Force .next -ErrorAction SilentlyContinue: Passed.
 - pnpm build: Passed.
+
+# Single Receipt UAT Blockers
+
+## Test Result
+
+The single-receipt architecture could not complete Product Owner UAT because Record Payment failed before transaction creation.
+
+## Blockers
+
+1. Payment amount is restricted to the selected bill total and does not allow overpayment.
+2. Same-tenant PaymentAllocation creation incorrectly triggers a cross-tenant validation block.
+
+## Required Outcome
+
+- Same-tenant payment allocation succeeds.
+- Cross-tenant protection remains enforced.
+- Overpayment is recorded as unapplied homeowner credit.
+- Receipt preview shows applied amount and unapplied credit.
+- Single receipt architecture is retested after correction.
+
+## Release Decision
+
+Do not merge to develop, main, or production until Bug #033 and Improvement #034 pass UAT.

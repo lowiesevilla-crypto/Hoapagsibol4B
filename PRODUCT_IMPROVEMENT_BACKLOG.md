@@ -1240,3 +1240,76 @@ Acceptance Criteria:
 
 Fix Summary:
 Successful Record Payment submissions now redirect to the persisted `/receipts/payment/{paymentId}` preview. The preview and PDF show all allocation lines, the transaction total, property/account details, remaining balance, reference, remarks, and collector, with Print Receipt, Return to Record Payment, and Return to Payments actions. Refresh and retry reuse the persisted transaction and do not allocate another receipt.
+## Bug #033 – Payment Allocation Cross-Tenant Validation False Positive
+
+Module:
+Payments and Payment Allocations
+
+Priority:
+Critical
+
+Status:
+Open
+
+Problem:
+Recording a payment for a valid homeowner and valid bills inside the authenticated tenant fails with:
+
+`Cross Tenant block for paymentallocation.payment`
+
+Observed Tenant:
+- Tenant slug: test-hoa
+- Payment initiated by the authenticated tenant administrator
+- Selected bills belong to the same tenant and homeowner
+
+Expected Behavior:
+A payment and its allocations must save successfully when Payment, PaymentAllocation, Bill, Homeowner, and authenticated session all belong to the same tenant.
+
+Acceptance Criteria:
+- Valid same-tenant payment succeeds.
+- Payment header tenantId comes from the authenticated session.
+- Allocation tenantId matches the Payment and Bill tenant.
+- Composite relation fields are populated consistently.
+- Cross-tenant payment attempts remain blocked.
+- Error messages identify the exact mismatched entity.
+- Single-bill, multi-bill, partial, and overpayment transactions work within the tenant.
+- Tenant isolation tests remain passing.
+
+---
+
+## Improvement #034 – Support Payment Overpayment and Unapplied Credit
+
+Module:
+Payments
+
+Priority:
+Critical
+
+Status:
+Open
+
+Business Requirement:
+The system must allow a homeowner to pay more than the total selected outstanding bills.
+
+Example:
+- Selected bills total: PHP 1,500
+- Payment received: PHP 2,000
+- Applied to bills: PHP 1,500
+- Unapplied credit: PHP 500
+
+Expected Behavior:
+The overpayment amount must be recorded as homeowner credit and available for future billing application.
+
+Acceptance Criteria:
+- Payment amount may exceed selected bill balances.
+- Allocations to selected bills cannot exceed their outstanding balances.
+- Difference between payment total and allocated total is stored as unapplied credit.
+- Receipt shows:
+  - total amount received
+  - amount applied to bills
+  - unapplied credit
+- Homeowner ledger shows the credit.
+- SOA includes the credit in the account summary.
+- Future billing may apply available credit through an authorized workflow.
+- Credit remains tenant-scoped and homeowner-scoped.
+- Voiding the payment reverses both allocations and unapplied credit.
+- Reports do not treat unapplied credit as duplicate collection.

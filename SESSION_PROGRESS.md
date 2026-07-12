@@ -558,3 +558,21 @@ The single-receipt architecture could not complete Product Owner UAT because Rec
 ## Release Decision
 
 Do not merge to develop, main, or production until Bug #033 and Improvement #034 pass UAT.
+
+# 2026-07-12 - Payment Tenant Validation and Overpayment Credit Hotfix
+
+## Completed
+
+- Fixed Bug #033: same-tenant PaymentAllocation writes inside an interactive transaction no longer fail because the newly created Payment is invisible to the base-client precheck.
+- Fixed Improvement #034: excess received funds remain as derived unapplied homeowner credit without a schema or migration change.
+- Added received/applied/credit totals to payment recording, amount editing, request approval, receipts, active/history views, portal payment history, SOA, and financial reports.
+- Preserved historical payments: all backfilled legacy allocations equal their payment headers, so historical unapplied credit remains zero.
+- Kept future credit application deferred; no automatic application to new bills was introduced.
+
+## Verification
+
+- Payment coverage harness: PASS 41, including PHP 1,100 received, PHP 600 applied, and PHP 500 unapplied credit on one receipt.
+- Payment lifecycle harness: PASS 11, including overpayment edit and void reversal.
+- Tenant isolation regression: PASS 22; malicious cross-tenant PaymentAllocation relationships remain blocked.
+- Browser: payment form wording and credit helper verified at desktop and 390px mobile with no horizontal overflow.
+- No Prisma schema or migration files changed.

@@ -36,10 +36,13 @@ export async function GET(request: Request) {
   row("Total operating expenses", -report.totalExpenses, true);
   row("NET OPERATING SURPLUS / (DEFICIT)", report.operatingSurplus, true);
   section("STATEMENT OF CASH RECEIPTS AND DISBURSEMENTS");
-  row("Monthly dues collections", report.duesIncome);
+  row("Monthly dues cash received", report.paymentCashReceived);
   row("Other fee collections", report.feeIncome);
   row("Refundable bonds received", report.bondsReceived);
   row("Total cash receipts", report.cashInflows, true);
+  section("PAYMENT ALLOCATION MEMORANDUM");
+  row("Amount applied to dues", report.duesIncome);
+  row("Unapplied homeowner credits", report.unappliedCredits);
   row("Operating expenses", -report.operatingExpenses);
   row("Employee payroll", -report.payrollExpense);
   row("Employee loans / cash advances issued", -report.employeeLoansIssued);

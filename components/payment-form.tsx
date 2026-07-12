@@ -33,6 +33,9 @@ export function PaymentForm({ bills, today, submissionKey, serverSearch = false 
   const selectedBills = bills.filter((bill) => selectedIds.includes(bill.id));
   const selectedHomeownerId = selectedBills[0]?.homeownerId;
   const total = selectedBills.reduce((sum, bill) => sum + bill.balance, 0);
+  const receivedAmount = Math.max(0, Number(amount) || 0);
+  const appliedAmount = Math.min(receivedAmount, total);
+  const unappliedCredit = Math.max(0, receivedAmount - appliedAmount);
   const selectedBillingMonths = selectedBills.map((bill) => bill.billingMonth).sort().join(",");
   const matches = useMemo(() => {
     const term = query.trim().toLowerCase();
@@ -86,7 +89,7 @@ export function PaymentForm({ bills, today, submissionKey, serverSearch = false 
       </div>
       <div className="grid content-start gap-4 sm:grid-cols-2">
         <div className="sm:col-span-2 rounded-xl border border-pine-100 bg-pine-50/60 p-3 text-sm">
-          {selectedBills.length ? <><p className="font-black text-pine-900">Selected billings</p><ul className="mt-2 space-y-1 text-pine-800">{selectedBills.map((bill) => <li key={bill.id} className="flex justify-between gap-3"><span>{bill.month}</span><b>{bill.balanceLabel}</b></li>)}</ul><p className="mt-3 flex justify-between border-t border-pine-200 pt-2 text-base font-black"><span>Total payment</span><span>{peso(total)}</span></p></> : <p className="text-slate-500">Select one or more open billings from the same homeowner.</p>}
+          {selectedBills.length ? <><p className="font-black text-pine-900">Selected billings</p><ul className="mt-2 space-y-1 text-pine-800">{selectedBills.map((bill) => <li key={bill.id} className="flex justify-between gap-3"><span>{bill.month}</span><b>{bill.balanceLabel}</b></li>)}</ul><p className="mt-3 flex justify-between border-t border-pine-200 pt-2 text-base font-black"><span>Selected bill total</span><span>{peso(total)}</span></p></> : <p className="text-slate-500">Select one or more open billings from the same homeowner.</p>}
         </div>
         <div><label className="label">Payment date</label><input className="field" name="paymentDate" type="date" defaultValue={today} required /></div>
         <div><label className="label">Method</label><select className="field" name="method" value={method} onChange={(event) => setMethod(event.target.value)}><option value="CASH">Cash</option><option value="BANK_TRANSFER">Bank transfer</option><option value="GCASH">GCash</option><option value="CHECK">Check</option><option value="OTHER">Other</option></select></div>
@@ -98,7 +101,8 @@ export function PaymentForm({ bills, today, submissionKey, serverSearch = false 
             <CoverageFields label="Coverage To" prefix="coverageTo" month={coverageToMonth} year={coverageToYear} onMonth={setCoverageToMonth} onYear={setCoverageToYear} />
           </div>
         </fieldset>
-        <div className="sm:col-span-2"><label className="label">Payment amount <span className="text-rose-600">*</span></label><input className="field text-right text-lg font-black text-pine-700" name="amount" type="number" min="0.01" max={total || undefined} step="0.01" value={amount} onChange={(event) => setAmount(event.target.value)} required placeholder="0.00" /><p className="mt-1 text-xs text-slate-500">Editable before saving. Partial payments are supported up to the selected outstanding balance.</p></div>
+        <div className="sm:col-span-2"><label className="label">Payment amount received <span className="text-rose-600">*</span></label><input className="field text-right text-lg font-black text-pine-700" name="amount" type="number" min="0.01" step="0.01" value={amount} onChange={(event) => setAmount(event.target.value)} required placeholder="0.00" /><p className="mt-1 text-xs text-slate-500">Enter the total received. Any amount above the selected balances remains available as homeowner credit.</p></div>
+        {selectedBills.length > 0 && <div className="sm:col-span-2 rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm"><p className="flex justify-between"><span>Amount received</span><b>{peso(receivedAmount)}</b></p><p className="mt-1 flex justify-between"><span>Amount applied</span><b>{peso(appliedAmount)}</b></p><p className="mt-1 flex justify-between"><span>Unapplied credit</span><b>{peso(unappliedCredit)}</b></p>{unappliedCredit > 0 && <p className="mt-3 rounded-lg bg-emerald-100 px-3 py-2 font-bold text-emerald-900">{formatPHP(unappliedCredit)} will be recorded as unapplied homeowner credit.</p>}</div>}
         <div className="sm:col-span-2"><label className="label">Reference number {referenceRequired && <span className="text-rose-600">*</span>}</label><input className="field" name="referenceNumber" required={referenceRequired} aria-required={referenceRequired} placeholder={referenceRequired ? "Required; must be unique" : "Optional for cash payments"} /><p className="mt-1 text-xs text-slate-500">{referenceRequired ? "Required for this payment method." : "Cash payments can be saved without a reference number."}</p></div>
         <div className="sm:col-span-2"><label className="label">Remarks</label><input className="field" name="remarks" placeholder="Optional notes shown in receipt audit trail" /></div>
         <div className="sm:col-span-2"><SubmitButton>Record payment - {peso(Number(amount) || 0)}</SubmitButton></div>
@@ -113,4 +117,8 @@ function CoverageFields({ label, prefix, month, year, onMonth, onYear }: { label
 
 function peso(value: number) {
   return new Intl.NumberFormat("en-PH", { style: "currency", currency: "PHP" }).format(value);
+}
+
+function formatPHP(value: number) {
+  return `PHP ${new Intl.NumberFormat("en-PH", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(value)}`;
 }

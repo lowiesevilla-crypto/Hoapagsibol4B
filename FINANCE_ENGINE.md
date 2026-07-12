@@ -334,3 +334,14 @@ Planned
 | 1.1 | July 11, 2026 | Documented Sprint 2.3B individual billing and split payments workflow |
 | 1.2 | July 11, 2026 | Documented final SOA browser print and PDF pagination rules |
 | 1.3 | July 12, 2026 | Documented one-header multi-bill payments, idempotency, receipt preview, and atomic voiding |
+| 1.4 | July 12, 2026 | Documented transaction-safe tenant validation and derived unapplied homeowner credit |
+
+## 18. Unapplied Homeowner Credit
+
+- `Payment.amount` is the total cash received.
+- The sum of active `PaymentAllocation.amount` values is the amount applied to bills.
+- The positive difference is unapplied credit owned by the same tenant and homeowner.
+- Allocations never exceed bill balances; excess cash is not automatically applied to future bills.
+- Voided payments are excluded from active credit balances and financial totals.
+- Dues revenue includes applied allocations only. Cash receipts include the full payment, with unapplied credit disclosed separately as a liability.
+- Historical migrated payments have matching header and allocation totals, so their derived unapplied credit is zero.

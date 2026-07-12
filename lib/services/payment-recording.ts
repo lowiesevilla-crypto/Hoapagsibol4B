@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { Prisma, type PaymentMethod } from "@prisma/client";
 import { buildPaymentCoveragePeriod, paymentCoverageLabel, type PaymentCoveragePeriod } from "@/lib/payment-coverage";
 import { normalizePaymentReference } from "@/lib/payment-methods";
+import { paymentAppliedAmount, paymentUnappliedCredit } from "@/lib/payment-credit";
 import { recalculateBillFromActivePayments } from "@/lib/services/payment-ledger";
 import { allocateReceiptNumber } from "@/lib/services/receipt";
 import { monthLabel } from "@/lib/utils";
@@ -25,7 +26,7 @@ export async function recordMonthlyDuesPayment(tx: Prisma.TransactionClient, inp
 
   const existing = await tx.payment.findFirst({
     where: { tenantId: input.actor.tenantId, idempotencyKey: input.idempotencyKey },
-    include: { homeowner: { include: { user: true } } },
+    include: { homeowner: { include: { user: true } }, allocations: true },
   });
   if (existing) return buildPaymentConfirmation(existing, true);
 
@@ -48,13 +49,12 @@ export async function recordMonthlyDuesPayment(tx: Prisma.TransactionClient, inp
     throw new Error("One or more selected billings do not belong to the authenticated tenant.");
   }
 
-  const selectedBalance = roundMoney(bills.reduce((sum, bill) => sum + Number(bill.balance), 0));
-  if (roundMoney(input.amount) > selectedBalance) throw new Error("Payment amount cannot exceed the selected outstanding balances.");
-
   const coverage = buildPaymentCoveragePeriod(input);
   const allocations = buildAllocations(bills, input.amount);
   const allocatedTotal = roundMoney(allocations.reduce((sum, allocation) => sum + allocation.amount, 0));
-  if (allocatedTotal !== roundMoney(input.amount)) throw new Error("The payment amount could not be fully allocated to the selected billings.");
+  const paymentTotal = roundMoney(input.amount);
+  if (allocatedTotal > paymentTotal) throw new Error("Allocated amount cannot exceed the total payment received.");
+  const unappliedCredit = roundMoney(paymentTotal - allocatedTotal);
 
   const receiptNumber = await allocateReceiptNumber(tx, input.actor.tenantId, input.paymentDate, "MD");
   const paymentBatchId = randomUUID();
@@ -63,7 +63,7 @@ export async function recordMonthlyDuesPayment(tx: Prisma.TransactionClient, inp
       tenantId: input.actor.tenantId,
       billId: null,
       homeownerId: bills[0].homeownerId,
-      amount: allocatedTotal,
+      amount: paymentTotal,
       paymentDate: input.paymentDate,
       method: input.method,
       referenceNumber,
@@ -107,7 +107,9 @@ export async function recordMonthlyDuesPayment(tx: Prisma.TransactionClient, inp
       entityId: payment.id,
       metadata: {
         receiptNumber,
-        totalAmount: allocatedTotal,
+        totalAmount: paymentTotal,
+        appliedAmount: allocatedTotal,
+        unappliedCredit,
         homeownerId: bills[0].homeownerId,
         paymentBatchId,
         idempotencyKey: input.idempotencyKey,
@@ -126,7 +128,7 @@ export async function recordMonthlyDuesPayment(tx: Prisma.TransactionClient, inp
     },
   });
 
-  return buildPaymentConfirmation({ ...payment, homeowner: bills[0].homeowner }, false);
+  return buildPaymentConfirmation({ ...payment, homeowner: bills[0].homeowner, allocations: allocations.map((allocation) => ({ amount: allocation.amount })) }, false);
 }
 
 function buildAllocations<T extends { balance: Prisma.Decimal }>(bills: T[], amount: number) {
@@ -139,7 +141,6 @@ function buildAllocations<T extends { balance: Prisma.Decimal }>(bills: T[], amo
     allocations.push({ bill, amount: allocatedAmount });
     remaining = roundMoney(remaining - allocatedAmount);
   }
-  if (remaining > 0) throw new Error("Payment amount cannot exceed the selected outstanding balances.");
   return allocations;
 }
 
@@ -153,8 +154,17 @@ export function buildPaymentConfirmation(payment: {
   coverageFromYear: number | null;
   coverageToMonth: number | null;
   coverageToYear: number | null;
+  allocations?: Array<{ amount: unknown }>;
   homeowner: { userId: string; user: { email: string; name: string } };
 }, reused: boolean) {
+  const coverageSource = {
+    paymentCoverageDisplay: payment.paymentCoverageDisplay,
+    coverageFromMonth: payment.coverageFromMonth,
+    coverageFromYear: payment.coverageFromYear,
+    coverageToMonth: payment.coverageToMonth,
+    coverageToYear: payment.coverageToYear,
+  };
+  const coverageLabel = paymentCoverageLabel(coverageSource);
   return {
     recipientId: payment.homeowner.userId,
     email: payment.homeowner.user.email,
@@ -164,8 +174,10 @@ export function buildPaymentConfirmation(payment: {
     paymentBatchId: payment.paymentBatchId,
     paymentId: payment.id,
     paymentIds: [payment.id],
-    coverageLabel: paymentCoverageLabel(payment),
-    coverageDisplay: payment.paymentCoverageDisplay || `Monthly Dues - ${paymentCoverageLabel(payment)}`,
+    coverageLabel,
+    coverageDisplay: payment.paymentCoverageDisplay || `Monthly Dues - ${coverageLabel}`,
+    appliedAmount: paymentAppliedAmount(payment),
+    unappliedCredit: paymentUnappliedCredit(payment),
     reused,
   };
 }

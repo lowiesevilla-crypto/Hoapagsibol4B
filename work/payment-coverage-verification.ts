@@ -161,12 +161,10 @@ async function main() {
       check(partialPayment.allocations.length === 1 && Number(partialPayment.allocations[0].amount) === 400, "duplicate bill IDs are normalized into one positive allocation");
       check(Number(partialPayment.amount) === 400 && Number(partialBill.amountPaid) === 400 && Number(partialBill.balance) === 600 && partialBill.status === "PARTIAL", "single-bill partial payment updates amount, balance, and status correctly");
 
-      let overAllocationRejected = false;
-      try {
-        await recordMonthlyDuesPayment(tx, {
+      const overpayment = await recordMonthlyDuesPayment(tx, {
           actor: { id: actor.id, tenantId: actor.tenantId, name: actor.name, email: actor.email },
           billIds: [bills[3].id],
-          amount: 601,
+          amount: 1100,
           paymentDate: new Date("2097-09-16T00:00:00.000Z"),
           method: PaymentMethod.CASH,
           idempotencyKey: `${marker}-over-allocation`,
@@ -177,10 +175,11 @@ async function main() {
           referenceNumber: "",
           remarks: marker,
         });
-      } catch (error) {
-        overAllocationRejected = error instanceof Error && error.message.includes("cannot exceed");
-      }
-      check(overAllocationRejected, "server rejects payment above the selected outstanding balance");
+      const overpaidPayment = await tx.payment.findUniqueOrThrow({ where: { id: overpayment.paymentId }, include: { allocations: true } });
+      check(Number(overpaidPayment.amount) === 1100, "overpayment stores the full amount received on one payment header");
+      check(overpaidPayment.allocations.length === 1 && Number(overpaidPayment.allocations[0].amount) === 600, "overpayment caps bill allocation at the outstanding balance");
+      check(overpayment.appliedAmount === 600 && overpayment.unappliedCredit === 500, "overpayment confirmation reports PHP 500.00 as unapplied credit");
+      check(await tx.payment.count({ where: { id: overpayment.paymentId } }) === 1 && Boolean(overpaidPayment.receiptNumber), "overpayment creates one payment and one official receipt number");
       throw rollback;
     }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable, timeout: 30_000 });
   } catch (error) {

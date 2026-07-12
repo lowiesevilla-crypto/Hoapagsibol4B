@@ -24,8 +24,10 @@ type ReceiptView = {
   reference: string | null;
   remarks: string | null;
   processedBy: string;
-  allocations: Array<{ id: string; coverage: string; amount: number }>;
+  allocations: Array<{ id: string; coverage: string; amount: number; remainingBalance: number | null }>;
   allocationTotal: number;
+  unappliedCredit: number;
+  homeownerCreditBalance: number | null;
   remainingBalance: number | null;
 };
 
@@ -57,8 +59,10 @@ export default async function ReceiptPage({ params }: { params: Promise<{ kind: 
         reference: item.referenceNumber,
         remarks: item.remarks,
         processedBy: item.createdBy.name,
-        allocations: [{ id: item.id, coverage: purpose, amount: Number(item.amount) }],
+        allocations: [{ id: item.id, coverage: purpose, amount: Number(item.amount), remainingBalance: null }],
         allocationTotal: Number(item.amount),
+        unappliedCredit: 0,
+        homeownerCreditBalance: null,
         remainingBalance: null,
       };
     }
@@ -110,12 +114,19 @@ export default async function ReceiptPage({ params }: { params: Promise<{ kind: 
 
         <div className="overflow-x-auto">
           <table className="w-full min-w-[520px] border-collapse text-sm">
-            <thead><tr><th className="border border-ink p-2 text-left">Covered billing / particulars</th><th className="w-40 border border-ink p-2 text-right">Allocated amount</th></tr></thead>
+            <thead><tr><th className="border border-ink p-2 text-left">Covered billing / particulars</th><th className="w-40 border border-ink p-2 text-right">Amount applied</th><th className="w-40 border border-ink p-2 text-right">Remaining bill balance</th></tr></thead>
             <tbody>
-              {receipt.allocations.map((allocation) => <tr key={allocation.id}><td className="border border-ink p-3 font-bold">{allocation.coverage}</td><td className="border border-ink p-3 text-right font-black">{money(allocation.amount)}</td></tr>)}
-              <tr><td className="border border-ink p-2 text-right font-black">TOTAL ALLOCATION</td><td className="border border-ink p-2 text-right text-lg font-black">{money(receipt.allocationTotal)}</td></tr>
+              {receipt.allocations.map((allocation) => <tr key={allocation.id}><td className="border border-ink p-3 font-bold">{allocation.coverage}</td><td className="border border-ink p-3 text-right font-black">{money(allocation.amount)}</td><td className="border border-ink p-3 text-right">{allocation.remainingBalance === null ? "-" : money(allocation.remainingBalance)}</td></tr>)}
+              <tr><td className="border border-ink p-2 text-right font-black">AMOUNT APPLIED TO BILLS</td><td className="border border-ink p-2 text-right text-lg font-black">{money(receipt.allocationTotal)}</td><td className="border border-ink p-2" /></tr>
             </tbody>
           </table>
+        </div>
+
+        <div className="mt-4 grid gap-2 border-y border-ink py-3 text-sm sm:grid-cols-2">
+          <Field label="Total Amount Received" value={money(receipt.amount)} />
+          <Field label="Amount Applied to Bills" value={money(receipt.allocationTotal)} />
+          <Field label="Unapplied Credit" value={money(receipt.unappliedCredit)} />
+          {receipt.homeownerCreditBalance !== null && <Field label="Homeowner Credit Balance" value={money(receipt.homeownerCreditBalance)} />}
         </div>
 
         {(receipt.remarks || receipt.reference) && <div className="mt-4 rounded border border-slate-300 p-3 text-sm">{receipt.remarks && <p><b>Remarks:</b> {receipt.remarks}</p>}{receipt.reference && <p><b>Reference:</b> {receipt.reference}</p>}</div>}

@@ -65,6 +65,8 @@ export default async function StatementOfAccountPage({ params }: { params: Promi
             <h2 className="mb-3 text-sm font-black uppercase tracking-wider text-pine-800">Account Summary</h2>
             <div className="space-y-2 text-sm">
               <Summary label="Current Outstanding Balance" value={money(soa.summary.currentOutstandingBalance)} strong />
+              <Summary label="Available Unapplied Credit" value={money(soa.summary.availableCredit)} strong />
+              <Summary label="Net Account Balance" value={money(soa.summary.netAccountBalance)} strong />
               <div className="soa-summary-grid grid gap-2 sm:grid-cols-2">
                 <Summary label="Total Amount Billed" value={money(soa.summary.totalAmountBilled)} />
                 <Summary label="Total Payments" value={money(soa.summary.totalPayments)} />
@@ -103,10 +105,10 @@ export default async function StatementOfAccountPage({ params }: { params: Promi
           <div>
             <SectionTitle title="Payment History" count={soa.paymentHistory.length} />
             <ResponsiveTable kind="payment" minWidth="760px">
-              <thead><tr><th>Payment Date</th><th>Official Receipt No.</th><th>Payment Method</th><th>Reference Number</th><th>Coverage</th><th className="text-right">Amount</th><th>Collector</th></tr></thead>
+              <thead><tr><th>Payment Date</th><th>Official Receipt No.</th><th>Payment Method</th><th>Reference Number</th><th>Coverage</th><th className="text-right">Received</th><th className="text-right">Applied</th><th className="text-right">Credit</th><th>Collector</th></tr></thead>
               <tbody>
-                {soa.paymentHistory.map((payment) => <tr key={payment.id}><td>{shortDate(payment.paymentDate)}</td><td className="font-mono text-xs font-bold">{payment.officialReceiptNo}</td><td>{payment.paymentMethod}</td><td>{payment.referenceNumber}</td><td>{payment.coverage}</td><td className="text-right font-black">{money(payment.amount)}</td><td>{payment.collector}</td></tr>)}
-                {!soa.paymentHistory.length && <tr><td colSpan={7} className="py-8 text-center text-slate-500">No active payments recorded.</td></tr>}
+                {soa.paymentHistory.map((payment) => <tr key={payment.id}><td>{shortDate(payment.paymentDate)}</td><td className="font-mono text-xs font-bold">{payment.officialReceiptNo}</td><td>{payment.paymentMethod}</td><td>{payment.referenceNumber}</td><td>{payment.coverage}</td><td className="text-right font-black">{money(payment.amount)}</td><td className="text-right">{money(payment.appliedAmount)}</td><td className="text-right">{money(payment.unappliedCredit)}</td><td>{payment.collector}</td></tr>)}
+                {!soa.paymentHistory.length && <tr><td colSpan={9} className="py-8 text-center text-slate-500">No active payments recorded.</td></tr>}
               </tbody>
             </ResponsiveTable>
           </div>

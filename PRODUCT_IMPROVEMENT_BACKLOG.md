@@ -597,7 +597,7 @@ Priority:
 High
 
 Status:
-Open
+Fixed (2026-07-12)
 
 Problem:
 The Create Individual Bill form displays homeowners in a standard dropdown. This becomes difficult to use when the tenant has many homeowners.
@@ -1274,6 +1274,9 @@ Acceptance Criteria:
 - Single-bill, multi-bill, partial, and overpayment transactions work within the tenant.
 - Tenant isolation tests remain passing.
 
+Fix Summary:
+Composite tenant relation checks now distinguish a committed cross-tenant target from a same-tenant row created inside the active interactive transaction. Existing cross-tenant targets are blocked with server-side entity diagnostics, while new Payment rows are validated atomically by the tenant-composite database foreign key. Same-tenant PaymentAllocation creation and the tenant isolation regression both pass.
+
 ---
 
 ## Improvement #034 – Support Payment Overpayment and Unapplied Credit
@@ -1285,7 +1288,7 @@ Priority:
 Critical
 
 Status:
-Open
+Fixed (2026-07-12)
 
 Business Requirement:
 The system must allow a homeowner to pay more than the total selected outstanding bills.
@@ -1313,3 +1316,6 @@ Acceptance Criteria:
 - Credit remains tenant-scoped and homeowner-scoped.
 - Voiding the payment reverses both allocations and unapplied credit.
 - Reports do not treat unapplied credit as duplicate collection.
+
+Fix Summary:
+Payment.amount stores the full cash received, PaymentAllocation totals store the applied amount, and their positive difference is the authoritative tenant- and homeowner-scoped unapplied credit. Recording, payment-request approval, controlled amount edits, voiding, receipts, SOA, portal history, receipt register, CSV/PDF/DOCX reports, and active/history views now preserve and display that distinction. Future automatic credit application remains intentionally deferred to a separately authorized workflow.

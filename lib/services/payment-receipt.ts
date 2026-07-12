@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/db";
 import { paymentCoverageDisplay } from "@/lib/payment-coverage";
+import { paymentAppliedAmount, paymentUnappliedCredit, totalUnappliedCredit } from "@/lib/payment-credit";
 import { monthLabel } from "@/lib/utils";
 
 export async function getPaymentReceiptData(id: string) {
@@ -20,14 +21,21 @@ export async function getPaymentReceiptData(id: string) {
         billId: allocation.billId,
         coverage: allocation.coverageLabel || monthLabel(allocation.bill.billingMonth),
         amount: Number(allocation.amount),
+        remainingBalance: Number(allocation.bill.balance),
       }))
     : payment.bill
-      ? [{ id: `legacy-${payment.id}`, billId: payment.bill.id, coverage: monthLabel(payment.bill.billingMonth), amount: Number(payment.amount) }]
+      ? [{ id: `legacy-${payment.id}`, billId: payment.bill.id, coverage: monthLabel(payment.bill.billingMonth), amount: Number(payment.amount), remainingBalance: Number(payment.bill.balance) }]
       : [];
-  const outstanding = await prisma.bill.aggregate({
-    where: { homeownerId: payment.homeownerId, archivedAt: null, balance: { gt: 0 } },
-    _sum: { balance: true },
-  });
+  const [outstanding, activePayments] = await Promise.all([
+    prisma.bill.aggregate({
+      where: { homeownerId: payment.homeownerId, archivedAt: null, balance: { gt: 0 } },
+      _sum: { balance: true },
+    }),
+    prisma.payment.findMany({
+      where: { homeownerId: payment.homeownerId, status: "ACTIVE" },
+      select: { amount: true, allocations: { select: { amount: true } } },
+    }),
+  ]);
 
   return {
     id: payment.id,
@@ -45,7 +53,9 @@ export async function getPaymentReceiptData(id: string) {
     remarks: payment.remarks,
     processedBy: payment.processedBy?.name ?? "Authorized HOA Treasurer / Collector",
     allocations,
-    allocationTotal: allocations.reduce((sum, allocation) => sum + allocation.amount, 0),
+    allocationTotal: paymentAppliedAmount(payment),
+    unappliedCredit: paymentUnappliedCredit(payment),
+    homeownerCreditBalance: totalUnappliedCredit(activePayments),
     remainingBalance: Number(outstanding._sum.balance ?? 0),
   };
 }

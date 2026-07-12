@@ -32,12 +32,13 @@ async function main() {
   ] });
 
   const actorInput = { id: actor.id, tenantId: actor.tenantId, name: actor.name, email: actor.email };
-  await runWithTenant(actor.tenantId, () => updatePaymentAmountLedger({ paymentId: payment.id, amount: 1200, actor: actorInput, reason: marker }), { role: actor.role, enabledModules: [TenantModule.BILLING] });
+  await runWithTenant(actor.tenantId, () => updatePaymentAmountLedger({ paymentId: payment.id, amount: 2500, actor: actorInput, reason: marker }), { role: actor.role, enabledModules: [TenantModule.BILLING] });
   const updated = await raw.payment.findUniqueOrThrow({ where: { id: payment.id }, include: { allocations: { orderBy: { coverageMonth: "asc" } } } });
   const updatedBills = await raw.bill.findMany({ where: { id: { in: ids.bills } }, orderBy: { coverageMonth: "asc" } });
-  check(Number(updated.amount) === 1200, "payment header amount updates once");
-  check(updated.allocations.length === 2 && Number(updated.allocations[0].amount) === 1000 && Number(updated.allocations[1].amount) === 200, "payment edit redistributes the transaction total across covered bills");
-  check(Number(updatedBills[0].balance) === 0 && Number(updatedBills[1].balance) === 800, "payment edit recalculates every affected bill");
+  check(Number(updated.amount) === 2500, "payment header amount updates once with the total received");
+  check(updated.allocations.length === 2 && Number(updated.allocations[0].amount) === 1000 && Number(updated.allocations[1].amount) === 1000, "payment edit caps allocations at covered bill balances");
+  check(Number(updated.amount) - updated.allocations.reduce((sum, item) => sum + Number(item.amount), 0) === 500, "payment edit preserves PHP 500.00 as unapplied credit");
+  check(updatedBills.every((bill) => Number(bill.balance) === 0), "payment edit recalculates every affected bill without a negative balance");
   check(await raw.auditLog.count({ where: { tenantId: actor.tenantId, entityId: payment.id, action: "UPDATE_PAYMENT_AMOUNT" } }) === 1, "payment edit writes one audit event");
 
   const voided = await runWithTenant(actor.tenantId, () => voidPaymentLedger({ paymentId: payment.id, actor: actorInput, reason: marker }), { role: actor.role, enabledModules: [TenantModule.BILLING] });
@@ -46,6 +47,7 @@ async function main() {
   const restoredBills = await raw.bill.findMany({ where: { id: { in: ids.bills } }, orderBy: { coverageMonth: "asc" } });
   check(voidedPayment.status === "VOIDED" && voidedPayment.receiptNumber === marker, "voiding preserves the receipt number and marks one transaction voided");
   check(voidedPayment.allocations.length === 2, "voiding preserves allocation history");
+  check(await raw.payment.count({ where: { homeownerId: homeowner.id, status: "ACTIVE" } }) === 0, "voiding removes the transaction's unapplied credit from the active account balance");
   check(restoredBills.every((bill) => Number(bill.amountPaid) === 0 && Number(bill.balance) === 1000), "voiding restores all covered bill balances");
   check(await raw.paymentArchive.count({ where: { originalPaymentId: payment.id } }) === 1, "voiding creates one transaction archive");
   check(await raw.auditLog.count({ where: { tenantId: actor.tenantId, action: "VOID_PAYMENT_TRANSACTION", metadata: { path: "$.originalPaymentId", equals: payment.id } } }) === 1, "voiding writes one transaction-level audit event");

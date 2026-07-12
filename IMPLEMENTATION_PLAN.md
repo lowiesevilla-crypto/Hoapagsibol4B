@@ -73,3 +73,17 @@
 ### Next Milestone
 
 Prepare the finance migration and SOA finalization for product-owner review before merge to `develop`.
+
+## Payment Tenant Validation and Overpayment Credit Hotfix
+
+### Completed
+
+- [x] Bug #033: allow same-tenant PaymentAllocation creation after its Payment header is created in the same interactive transaction.
+- [x] Preserve composite database foreign-key enforcement and server-side mismatch diagnostics for cross-tenant IDs.
+- [x] Improvement #034: represent unapplied credit as Payment amount received minus active allocation total.
+- [x] Cap bill allocations at each outstanding balance and preserve the remainder as homeowner credit.
+- [x] Support overpayment through direct recording, payment-request approval, controlled edits, and transaction voiding.
+- [x] Show received, applied, unapplied credit, and aggregate homeowner credit on receipts, SOA, portal/admin views, and reports.
+- [x] Keep unapplied credit out of dues income while retaining the full payment in cash receipts.
+- [x] Verify desktop/mobile UI, transaction lifecycle, tenant isolation, typecheck, and cleanup.
+- [x] Leave future credit application as a separate authorized workflow.

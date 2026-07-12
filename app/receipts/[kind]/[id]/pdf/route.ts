@@ -20,7 +20,10 @@ type PdfReceipt = {
   reference: string | null;
   remarks: string | null;
   processedBy: string;
-  allocations: Array<{ coverage: string; amount: number }>;
+  allocations: Array<{ coverage: string; amount: number; remainingBalance: number | null }>;
+  appliedAmount: number;
+  unappliedCredit: number;
+  homeownerCreditBalance: number | null;
   remainingBalance: number | null;
 };
 
@@ -48,6 +51,9 @@ export async function GET(_request: Request, { params }: { params: Promise<{ kin
       remarks: payment.remarks,
       processedBy: payment.processedBy,
       allocations: payment.allocations,
+      appliedAmount: payment.allocationTotal,
+      unappliedCredit: payment.unappliedCredit,
+      homeownerCreditBalance: payment.homeownerCreditBalance,
       remainingBalance: payment.remainingBalance,
     };
   } else if (kind === "collection") {
@@ -72,7 +78,10 @@ export async function GET(_request: Request, { params }: { params: Promise<{ kin
       reference: item.referenceNumber,
       remarks: item.remarks,
       processedBy: item.createdBy.name,
-      allocations: [{ coverage: purpose, amount: Number(item.amount) }],
+      allocations: [{ coverage: purpose, amount: Number(item.amount), remainingBalance: null }],
+      appliedAmount: Number(item.amount),
+      unappliedCredit: 0,
+      homeownerCreditBalance: null,
       remainingBalance: null,
     };
   } else {
@@ -132,14 +141,17 @@ function drawReceipt(page: PDFPage, receipt: PdfReceipt, association: Awaited<Re
       page.drawText(line, { x: 52, y: 355 - index * 10, font: regular, size: 7.5, color: rgb(.3, .34, .4) });
     }
   }
-  page.drawText("TOTAL", { x: 385, y: 390, font: bold, size: 9, color: navy });
+  page.drawText("TOTAL AMOUNT RECEIVED", { x: 330, y: 390, font: bold, size: 8, color: navy });
   page.drawText(safe(money(receipt.amount).replace("₱", "PHP ")), { x: 448, y: 390, font: bold, size: 10, color: navy, maxWidth: 95 });
 
   page.drawText("PAYMENT METHOD", { x: 42, y: 340, font: bold, size: 7, color: navy });
   page.drawText(safe(receipt.method.replaceAll("_", " ")), { x: 42, y: 323, font: bold, size: 9, color: rgb(.08, .1, .12) });
   page.drawText("REFERENCE NUMBER", { x: 250, y: 340, font: bold, size: 7, color: navy });
   page.drawText(safe(receipt.reference || (receipt.method === "CASH" ? "Not required for Cash" : "Not provided")), { x: 250, y: 323, font: regular, size: 9, color: rgb(.08, .1, .12) });
-  if (receipt.remainingBalance !== null) page.drawText(`REMAINING ACCOUNT BALANCE: ${safe(money(receipt.remainingBalance).replace("₱", "PHP "))}`, { x: 42, y: 292, font: bold, size: 7.5, color: navy });
+  page.drawText(`AMOUNT APPLIED TO BILLS: ${safe(money(receipt.appliedAmount).replace("₱", "PHP "))}`, { x: 42, y: 302, font: bold, size: 7.5, color: navy });
+  page.drawText(`UNAPPLIED CREDIT: ${safe(money(receipt.unappliedCredit).replace("₱", "PHP "))}`, { x: 250, y: 302, font: bold, size: 7.5, color: navy });
+  if (receipt.homeownerCreditBalance !== null) page.drawText(`HOMEOWNER CREDIT BALANCE: ${safe(money(receipt.homeownerCreditBalance).replace("₱", "PHP "))}`, { x: 42, y: 287, font: bold, size: 7.5, color: navy });
+  if (receipt.remainingBalance !== null) page.drawText(`REMAINING ACCOUNT BALANCE: ${safe(money(receipt.remainingBalance).replace("₱", "PHP "))}`, { x: 250, y: 287, font: bold, size: 7.5, color: navy });
   page.drawText("Received and acknowledged by:", { x: 354, y: 270, font: regular, size: 8, color: rgb(.3, .34, .4) });
   page.drawLine({ start: { x: 350, y: 210 }, end: { x: 535, y: 210 }, color: navy, thickness: .7 });
   drawCentered(page, safe(receipt.processedBy), 350, 535, 194, bold, 8, navy);

@@ -42,7 +42,7 @@ export async function recordPaymentAction(formData: FormData) {
       && error.code === "P2002"
       && JSON.stringify(error.meta?.target ?? "").includes("idempotencyKey");
     if (idempotencyCollision) {
-      const existing = await prisma.payment.findFirst({ where: { tenantId: admin.tenantId, idempotencyKey }, include: { homeowner: { include: { user: true } } } });
+      const existing = await prisma.payment.findFirst({ where: { tenantId: admin.tenantId, idempotencyKey }, include: { homeowner: { include: { user: true } }, allocations: true } });
       if (existing) confirmation = buildPaymentConfirmation(existing, true);
     }
     if (!confirmation) redirect(`/admin/payments/record?error=${encodeURIComponent(error instanceof Error ? error.message : "Payment could not be recorded.")}`);

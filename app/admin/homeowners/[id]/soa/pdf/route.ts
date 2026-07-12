@@ -88,6 +88,8 @@ function drawInfoBlocks(doc: PdfDoc, soa: StatementOfAccount) {
   sectionTitle(doc, "Account Summary");
   const summary = [
     ["Outstanding Balance", pdfMoney(soa.summary.currentOutstandingBalance)],
+    ["Available Unapplied Credit", pdfMoney(soa.summary.availableCredit)],
+    ["Net Account Balance", pdfMoney(soa.summary.netAccountBalance)],
     ["Total Amount Billed", pdfMoney(soa.summary.totalAmountBilled)],
     ["Total Payments", pdfMoney(soa.summary.totalPayments)],
     ["Total Credits", pdfMoney(soa.summary.totalCredits)],
@@ -131,13 +133,15 @@ function drawLedger(doc: PdfDoc, ledger: StatementLedgerEntry[]) {
 }
 
 function drawPayments(doc: PdfDoc, soa: StatementOfAccount) {
-  table(doc, "Payment History", ["Date", "OR No.", "Method", "Reference", "Coverage", "Amount", "Collector"], [58, 82, 64, 72, 132, 62, 53], soa.paymentHistory.map((payment) => [
+  table(doc, "Payment History", ["Date", "OR No.", "Method", "Reference", "Coverage", "Received", "Applied", "Credit", "Collector"], [50, 68, 52, 60, 90, 50, 50, 45, 58], soa.paymentHistory.map((payment) => [
     shortDate(payment.paymentDate),
     payment.officialReceiptNo,
     payment.paymentMethod,
     payment.referenceNumber,
     payment.coverage,
     pdfMoney(payment.amount),
+    pdfMoney(payment.appliedAmount),
+    pdfMoney(payment.unappliedCredit),
     payment.collector,
   ]));
 }

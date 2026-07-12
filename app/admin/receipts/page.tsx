@@ -2,6 +2,7 @@ import Link from "next/link";
 import { PageHeader } from "@/components/page-header";
 import { prisma } from "@/lib/db";
 import { paymentAllocationCoverageDisplay } from "@/lib/payment-coverage";
+import { paymentAppliedAmount, paymentUnappliedCredit } from "@/lib/payment-credit";
 import { collectionLabel, money, shortDate } from "@/lib/utils";
 
 export default async function ReceiptRegisterPage({ searchParams }: { searchParams: Promise<{ q?: string; series?: string }> }) {
@@ -14,7 +15,7 @@ export default async function ReceiptRegisterPage({ searchParams }: { searchPara
     prisma.collection.findMany({ where: { ...(prefix ? { receiptNumber: { contains: prefix } } : q ? { OR: [{ receiptNumber: { contains: q } }, { referenceNumber: { contains: q } }, { homeowner: { user: { name: { contains: q } } } }, { contractor: { companyName: { contains: q } } }] } : {}) }, include: { homeowner: { include: { user: true } }, contractor: true, createdBy: true }, orderBy: { createdAt: "desc" }, take: 200 }),
   ]);
   const rows = [
-    ...payments.map((item) => ({ id: item.id, kind: "payment", receipt: item.receiptNumber, series: "MD", date: item.paymentDate, payer: item.homeowner.user.name, purpose: paymentAllocationCoverageDisplay(item), amount: item.amount, reference: item.referenceNumber, processor: item.processedBy?.name || "Legacy / unspecified" })),
+    ...payments.map((item) => ({ id: item.id, kind: "payment", receipt: item.receiptNumber, series: "MD", date: item.paymentDate, payer: item.homeowner.user.name, purpose: `${paymentAllocationCoverageDisplay(item)} | Applied ${money(paymentAppliedAmount(item))} | Credit ${money(paymentUnappliedCredit(item))}`, amount: item.amount, reference: item.referenceNumber, processor: item.processedBy?.name || "Legacy / unspecified" })),
     ...collections.map((item) => ({ id: item.id, kind: "collection", receipt: item.receiptNumber, series: item.type === "CONSTRUCTION_BOND" ? "CB" : item.type === "CONTRACTOR_BOND" ? "CTB" : "OC", date: item.collectionDate, payer: item.homeowner?.user.name ?? item.contractor?.companyName ?? "Unknown", purpose: collectionLabel(item.type, item.description), amount: item.amount, reference: item.referenceNumber, processor: item.createdBy.name })),
   ].filter((item) => !series || item.series === series).sort((a, b) => b.date.valueOf() - a.date.valueOf());
   return <>

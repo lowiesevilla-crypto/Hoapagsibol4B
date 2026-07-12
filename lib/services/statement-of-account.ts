@@ -3,6 +3,7 @@ import "server-only";
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/db";
 import { paymentAllocationCoverageDisplay } from "@/lib/payment-coverage";
+import { paymentAppliedAmount, paymentUnappliedCredit, totalUnappliedCredit } from "@/lib/payment-credit";
 import { getAssociationSettings } from "@/lib/system-settings";
 import { collectionLabel, monthLabel } from "@/lib/utils";
 
@@ -45,6 +46,7 @@ export async function getStatementOfAccount(homeownerId: string, tenantId: strin
   const totalAmountBilled = bills.reduce((total, bill) => total + Number(bill.totalAmount), 0);
   const currentOutstandingBalance = bills.reduce((total, bill) => total + Number(bill.balance), 0);
   const totalPayments = payments.reduce((total, payment) => total + Number(payment.amount), 0);
+  const availableCredit = totalUnappliedCredit(payments);
   const totalPenalties = bills.reduce((total, bill) => total + Number(bill.penalty), 0);
   const totalCredits = ledger.reduce((total, entry) => total + entry.credit, 0);
   const lastPayment = payments.at(-1);
@@ -64,6 +66,8 @@ export async function getStatementOfAccount(homeownerId: string, tenantId: strin
     verifyUrl,
     summary: {
       currentOutstandingBalance,
+      availableCredit,
+      netAccountBalance: currentOutstandingBalance - availableCredit,
       totalAmountBilled,
       totalPayments,
       totalCredits,
@@ -80,6 +84,8 @@ export async function getStatementOfAccount(homeownerId: string, tenantId: strin
       referenceNumber: payment.referenceNumber || "-",
       coverage: paymentAllocationCoverageDisplay(payment),
       amount: Number(payment.amount),
+      appliedAmount: paymentAppliedAmount(payment),
+      unappliedCredit: paymentUnappliedCredit(payment),
       collector: payment.processedBy?.name ?? "Authorized HOA Collector",
     })),
     billingHistory: [...bills].reverse().map((bill) => ({

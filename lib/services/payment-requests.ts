@@ -24,7 +24,9 @@ export async function approvePaymentRequest(requestId: string, reviewerId?: stri
       if (bill.archivedAt) throw new Error("This billing record has been archived and can no longer accept payments.");
       const amount = Number(request.amount);
       const balance = Number(bill.balance);
-      if (amount > balance) throw new Error("Payment request exceeds the current bill balance.");
+      if (balance <= 0) throw new Error("This billing record no longer has an outstanding balance.");
+      const appliedAmount = Math.min(amount, balance);
+      const unappliedCredit = amount - appliedAmount;
       const receiptNumber = await allocateReceiptNumber(tx as unknown as Prisma.TransactionClient, request.tenantId, paymentDate, "MD");
       const coverage = buildPaymentCoverage([bill.billingMonth]);
       const payment = await tx.payment.create({
@@ -48,9 +50,9 @@ export async function approvePaymentRequest(requestId: string, reviewerId?: stri
           processedById: reviewerId ?? null,
         },
       });
-      await tx.paymentAllocation.create({ data: { tenantId: request.tenantId, paymentId: payment.id, billId: bill.id, amount, coverageYear: bill.coverageYear, coverageMonth: bill.coverageMonth, coverageLabel: monthLabel(bill.billingMonth) } });
+      await tx.paymentAllocation.create({ data: { tenantId: request.tenantId, paymentId: payment.id, billId: bill.id, amount: appliedAmount, coverageYear: bill.coverageYear, coverageMonth: bill.coverageMonth, coverageLabel: monthLabel(bill.billingMonth) } });
       const recalculated = await recalculateBillFromActivePayments(tx as unknown as Prisma.TransactionClient, bill);
-      await tx.auditLog.create({ data: { tenantId: request.tenantId, actorId: reviewerId ?? null, module: "PAYMENTS", action: "RECORD_PAYMENT_TRANSACTION", entityType: "Payment", entityId: payment.id, metadata: { receiptNumber, source: "PAYMENT_REQUEST", paymentType: "MONTHLY_DUES", totalAmount: amount, allocations: [{ billId: bill.id, amount, coverage: monthLabel(bill.billingMonth) }], coverageStart: coverage.coverageStart, coverageEnd: coverage.coverageEnd, coverageMonths: coverage.coverageMonths, paymentCoverageDisplay: coverage.paymentCoverageDisplay, homeownerId: bill.homeownerId, adminUserId: reviewerId ?? null, recalculated, timestamp: new Date().toISOString() } } });
+      await tx.auditLog.create({ data: { tenantId: request.tenantId, actorId: reviewerId ?? null, module: "PAYMENTS", action: "RECORD_PAYMENT_TRANSACTION", entityType: "Payment", entityId: payment.id, metadata: { receiptNumber, source: "PAYMENT_REQUEST", paymentType: "MONTHLY_DUES", totalAmount: amount, appliedAmount, unappliedCredit, allocations: [{ billId: bill.id, amount: appliedAmount, coverage: monthLabel(bill.billingMonth) }], coverageStart: coverage.coverageStart, coverageEnd: coverage.coverageEnd, coverageMonths: coverage.coverageMonths, paymentCoverageDisplay: coverage.paymentCoverageDisplay, homeownerId: bill.homeownerId, adminUserId: reviewerId ?? null, recalculated, timestamp: new Date().toISOString() } } });
       const approved = await tx.paymentRequest.update({
         where: { id: request.id },
         data: { status: PaymentRequestStatus.APPROVED, reviewedById: reviewerId ?? null, reviewedAt: new Date(), reviewRemarks: reviewRemarks || null, paymentId: payment.id },

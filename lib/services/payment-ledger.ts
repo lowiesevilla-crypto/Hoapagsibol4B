@@ -1,5 +1,6 @@
 import { BillStatus, Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
+import { paymentAppliedAmount, paymentUnappliedCredit } from "@/lib/payment-credit";
 import { monthLabel } from "@/lib/utils";
 
 type PaymentActor = { id: string; tenantId: string; name: string; email: string };
@@ -14,6 +15,8 @@ export async function updatePaymentAmountLedger({ paymentId, amount, actor, reas
     if (!payment) throw new Error("Payment record not found.");
     if (payment.status !== "ACTIVE") throw new Error("Voided payments cannot be changed.");
     const previousAmount = Number(payment.amount);
+    const previousAppliedAmount = paymentAppliedAmount(payment);
+    const previousUnappliedCredit = paymentUnappliedCredit(payment);
     if (Math.abs(previousAmount - amount) < 0.005) throw new Error("The payment amount has not changed.");
 
     const currentAllocations = payment.allocations.length
@@ -24,6 +27,8 @@ export async function updatePaymentAmountLedger({ paymentId, amount, actor, reas
     if (!currentAllocations.length) throw new Error("Payment allocations are missing and the transaction cannot be edited safely.");
 
     const allocationPlan = redistributeAmount(currentAllocations, amount);
+    const newAppliedAmount = roundMoney(allocationPlan.reduce((sum, allocation) => sum + allocation.amount, 0));
+    const newUnappliedCredit = roundMoney(amount - newAppliedAmount);
     await tx.payment.update({ where: { id: paymentId }, data: { amount } });
     await tx.paymentAllocation.deleteMany({ where: { tenantId: actor.tenantId, paymentId } });
     await tx.paymentAllocation.createMany({
@@ -53,6 +58,10 @@ export async function updatePaymentAmountLedger({ paymentId, amount, actor, reas
         metadata: {
           previousAmount,
           newAmount: amount,
+          previousAppliedAmount,
+          newAppliedAmount,
+          previousUnappliedCredit,
+          newUnappliedCredit,
           previousAllocations: currentAllocations.map((allocation) => ({ billId: allocation.bill.id, amount: allocation.amount })),
           newAllocations: allocationPlan.map((allocation) => ({ billId: allocation.bill.id, amount: allocation.amount })),
           updatedBy: { id: actor.id, name: actor.name, email: actor.email },
@@ -144,6 +153,8 @@ export async function voidPaymentLedger({ paymentId, actor, reason }: { paymentI
           receiptNumber: payment.receiptNumber,
           homeowner: payment.homeowner.user.name,
           amount: Number(payment.amount),
+          appliedAmount: paymentAppliedAmount(payment),
+          unappliedCreditReversed: paymentUnappliedCredit(payment),
           allocations: allocations.map((allocation) => ({ billId: allocation.bill.id, amount: allocation.amount, coverage: monthLabel(allocation.bill.billingMonth) })),
           referenceNumber: payment.referenceNumber,
           reason: reason || null,
@@ -176,8 +187,7 @@ export async function recalculateBillFromActivePayments(tx: Prisma.TransactionCl
 }
 
 function redistributeAmount<T extends { id: string; balance: Prisma.Decimal; billingMonth: Date; coverageYear: number; coverageMonth: number }>(current: Array<{ bill: T; amount: number }>, total: number) {
-  const available = roundMoney(current.reduce((sum, allocation) => sum + Number(allocation.bill.balance) + allocation.amount, 0));
-  if (total <= 0 || total > available) throw new Error("Payment amount cannot exceed the covered bills' available balances.");
+  if (total <= 0) throw new Error("Payment amount must be greater than zero.");
   let remaining = roundMoney(total);
   const plan: Array<{ bill: T; amount: number }> = [];
   for (const allocation of current) {
@@ -187,7 +197,6 @@ function redistributeAmount<T extends { id: string; balance: Prisma.Decimal; bil
     if (nextAmount > 0) plan.push({ bill: allocation.bill, amount: nextAmount });
     remaining = roundMoney(remaining - nextAmount);
   }
-  if (remaining > 0) throw new Error("Payment amount could not be allocated across the covered bills.");
   return plan;
 }
 

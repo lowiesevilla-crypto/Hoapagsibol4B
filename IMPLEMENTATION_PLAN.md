@@ -57,4 +57,19 @@
 
 ### Next Milestone
 
-Prepare SOA finalization for review and merge after product-owner UAT.
+## Urgent Finance Migration and Hotfix
+
+### Completed
+
+- [x] Bug #031: one Payment header and one receipt number per payment transaction.
+- [x] Improvement #032: successful Record Payment redirects to the persisted receipt preview.
+- [x] Added tenant-safe PaymentAllocation rows with positive per-bill amounts.
+- [x] Applied `20260712150000_payment_allocations_single_receipt` to the local development database only.
+- [x] Backfilled one allocation per legacy Payment without merging or renumbering historical receipts.
+- [x] Added tenant-scoped idempotency handling for Record Payment retries and concurrent duplicate submissions.
+- [x] Updated allocation-aware balance recalculation, amount editing, transaction voiding, receipts, SOA, payment history, and reports.
+- [x] Verified desktop, mobile, tenant isolation, RBAC, receipt PDF, edit, void, and cleanup behavior.
+
+### Next Milestone
+
+Prepare the finance migration and SOA finalization for product-owner review before merge to `develop`.

@@ -4,6 +4,7 @@ import { buildPaymentCoveragePeriod, paymentCoverageLabel, type PaymentCoverageP
 import { normalizePaymentReference } from "@/lib/payment-methods";
 import { recalculateBillFromActivePayments } from "@/lib/services/payment-ledger";
 import { allocateReceiptNumber } from "@/lib/services/receipt";
+import { monthLabel } from "@/lib/utils";
 
 type RecordMonthlyDuesInput = {
   actor: { id: string; tenantId: string; name: string; email: string };
@@ -11,6 +12,7 @@ type RecordMonthlyDuesInput = {
   amount: number;
   paymentDate: Date;
   method: PaymentMethod;
+  idempotencyKey: string;
   referenceNumber?: string | null;
   remarks?: string | null;
 } & PaymentCoveragePeriod;
@@ -19,8 +21,15 @@ export async function recordMonthlyDuesPayment(tx: Prisma.TransactionClient, inp
   const billIds = [...new Set(input.billIds.filter(Boolean))];
   if (!billIds.length) throw new Error("Select at least one open billing item.");
   if (!Number.isFinite(input.amount) || input.amount <= 0) throw new Error("Payment amount must be greater than zero.");
-  const referenceNumber = normalizePaymentReference(input.method, input.referenceNumber);
+  if (!input.idempotencyKey || input.idempotencyKey.length > 100) throw new Error("Payment submission token is invalid. Refresh the form and try again.");
 
+  const existing = await tx.payment.findFirst({
+    where: { tenantId: input.actor.tenantId, idempotencyKey: input.idempotencyKey },
+    include: { homeowner: { include: { user: true } } },
+  });
+  if (existing) return buildPaymentConfirmation(existing, true);
+
+  const referenceNumber = normalizePaymentReference(input.method, input.referenceNumber);
   if (referenceNumber) {
     const duplicatePayment = await tx.payment.findFirst({ where: { tenantId: input.actor.tenantId, referenceNumber } });
     if (duplicatePayment) throw new Error("This payment reference number has already been recorded.");
@@ -35,89 +44,132 @@ export async function recordMonthlyDuesPayment(tx: Prisma.TransactionClient, inp
   });
   if (bills.length !== billIds.length) throw new Error("One or more selected billings are no longer open.");
   if (new Set(bills.map((bill) => bill.homeownerId)).size !== 1) throw new Error("Record payments for one homeowner at a time.");
-
-  const coverage = buildPaymentCoveragePeriod(input);
-  const coverageLabel = paymentCoverageLabel(coverage);
-  const paymentBatchId = randomUUID();
-  let remainingAmount = roundMoney(input.amount);
-  let receiptIndex = 0;
-  const paymentIds: string[] = [];
-
-  for (const [index, bill] of bills.entries()) {
-    if (remainingAmount <= 0) break;
-    const amount = roundMoney(index === bills.length - 1 ? remainingAmount : Math.min(remainingAmount, Number(bill.balance)));
-    if (amount <= 0) continue;
-    receiptIndex += 1;
-    const receiptNumber = await allocateReceiptNumber(tx, input.actor.tenantId, input.paymentDate, "MD");
-    const payment = await tx.payment.create({
-      data: {
-        tenantId: input.actor.tenantId,
-        billId: bill.id,
-        homeownerId: bill.homeownerId,
-        amount,
-        paymentDate: input.paymentDate,
-        method: input.method,
-        referenceNumber,
-        paymentBatchId,
-        ...coverage,
-        remarks: [
-          input.remarks,
-          bills.length > 1 ? `Payment allocation ${receiptIndex} of ${bills.length}.` : null,
-          index === bills.length - 1 && amount > Number(bill.balance) ? `Includes ${formatPeso(amount - Number(bill.balance))} overpayment.` : null,
-        ].filter(Boolean).join(" ") || null,
-        receiptNumber,
-        processedById: input.actor.id,
-      },
-    });
-    paymentIds.push(payment.id);
-    await tx.auditLog.create({
-      data: {
-        tenantId: input.actor.tenantId,
-        actorId: input.actor.id,
-        module: "RECEIPTS",
-        action: "GENERATE_MD_RECEIPT",
-        entityType: "Payment",
-        entityId: payment.id,
-        metadata: {
-          receiptNumber,
-          amount,
-          homeownerId: bill.homeownerId,
-          paymentBatchId,
-          coverageStart: coverage.coverageStart,
-          coverageEnd: coverage.coverageEnd,
-          coverageMonths: coverage.coverageMonths,
-          paymentType: "MONTHLY_DUES",
-          paymentCoverageDisplay: coverage.paymentCoverageDisplay,
-          coverageFrom: { month: coverage.coverageFromMonth, year: coverage.coverageFromYear },
-          coverageTo: { month: coverage.coverageToMonth, year: coverage.coverageToYear },
-          homeowner: { id: bill.homeownerId, name: bill.homeowner.user.name },
-          adminUser: input.actor,
-          timestamp: new Date().toISOString(),
-        },
-      },
-    });
-    remainingAmount = roundMoney(remainingAmount - amount);
-    await recalculateBillFromActivePayments(tx, bill);
+  if (bills.some((bill) => bill.tenantId !== input.actor.tenantId || bill.homeowner.tenantId !== input.actor.tenantId)) {
+    throw new Error("One or more selected billings do not belong to the authenticated tenant.");
   }
 
-  if (remainingAmount > 0) throw new Error("The payment amount could not be fully allocated to the selected billings.");
+  const selectedBalance = roundMoney(bills.reduce((sum, bill) => sum + Number(bill.balance), 0));
+  if (roundMoney(input.amount) > selectedBalance) throw new Error("Payment amount cannot exceed the selected outstanding balances.");
+
+  const coverage = buildPaymentCoveragePeriod(input);
+  const allocations = buildAllocations(bills, input.amount);
+  const allocatedTotal = roundMoney(allocations.reduce((sum, allocation) => sum + allocation.amount, 0));
+  if (allocatedTotal !== roundMoney(input.amount)) throw new Error("The payment amount could not be fully allocated to the selected billings.");
+
+  const receiptNumber = await allocateReceiptNumber(tx, input.actor.tenantId, input.paymentDate, "MD");
+  const paymentBatchId = randomUUID();
+  const payment = await tx.payment.create({
+    data: {
+      tenantId: input.actor.tenantId,
+      billId: null,
+      homeownerId: bills[0].homeownerId,
+      amount: allocatedTotal,
+      paymentDate: input.paymentDate,
+      method: input.method,
+      referenceNumber,
+      paymentBatchId,
+      idempotencyKey: input.idempotencyKey,
+      ...coverage,
+      remarks: input.remarks || null,
+      receiptNumber,
+      processedById: input.actor.id,
+    },
+  });
+
+  await tx.paymentAllocation.createMany({
+    data: allocations.map((allocation) => ({
+      tenantId: input.actor.tenantId,
+      paymentId: payment.id,
+      billId: allocation.bill.id,
+      amount: allocation.amount,
+      coverageYear: allocation.bill.coverageYear,
+      coverageMonth: allocation.bill.coverageMonth,
+      coverageLabel: monthLabel(allocation.bill.billingMonth),
+    })),
+  });
+
+  const recalculatedBills = [];
+  for (const allocation of allocations) {
+    recalculatedBills.push({
+      billId: allocation.bill.id,
+      allocatedAmount: allocation.amount,
+      ...(await recalculateBillFromActivePayments(tx, allocation.bill)),
+    });
+  }
+
+  await tx.auditLog.create({
+    data: {
+      tenantId: input.actor.tenantId,
+      actorId: input.actor.id,
+      module: "PAYMENTS",
+      action: "RECORD_PAYMENT_TRANSACTION",
+      entityType: "Payment",
+      entityId: payment.id,
+      metadata: {
+        receiptNumber,
+        totalAmount: allocatedTotal,
+        homeownerId: bills[0].homeownerId,
+        paymentBatchId,
+        idempotencyKey: input.idempotencyKey,
+        selectedBillIds: billIds,
+        allocations: allocations.map((allocation) => ({ billId: allocation.bill.id, amount: allocation.amount, coverage: monthLabel(allocation.bill.billingMonth) })),
+        method: input.method,
+        referenceNumber,
+        coverageStart: coverage.coverageStart,
+        coverageEnd: coverage.coverageEnd,
+        paymentCoverageDisplay: coverage.paymentCoverageDisplay,
+        homeowner: { id: bills[0].homeownerId, name: bills[0].homeowner.user.name },
+        adminUser: input.actor,
+        recalculatedBills,
+        timestamp: new Date().toISOString(),
+      },
+    },
+  });
+
+  return buildPaymentConfirmation({ ...payment, homeowner: bills[0].homeowner }, false);
+}
+
+function buildAllocations<T extends { balance: Prisma.Decimal }>(bills: T[], amount: number) {
+  let remaining = roundMoney(amount);
+  const allocations: Array<{ bill: T; amount: number }> = [];
+  for (const bill of bills) {
+    if (remaining <= 0) break;
+    const allocatedAmount = roundMoney(Math.min(remaining, Number(bill.balance)));
+    if (allocatedAmount <= 0) continue;
+    allocations.push({ bill, amount: allocatedAmount });
+    remaining = roundMoney(remaining - allocatedAmount);
+  }
+  if (remaining > 0) throw new Error("Payment amount cannot exceed the selected outstanding balances.");
+  return allocations;
+}
+
+export function buildPaymentConfirmation(payment: {
+  id: string;
+  amount: Prisma.Decimal;
+  referenceNumber: string | null;
+  paymentBatchId: string | null;
+  paymentCoverageDisplay: string | null;
+  coverageFromMonth: number | null;
+  coverageFromYear: number | null;
+  coverageToMonth: number | null;
+  coverageToYear: number | null;
+  homeowner: { userId: string; user: { email: string; name: string } };
+}, reused: boolean) {
   return {
-    recipientId: bills[0].homeowner.userId,
-    email: bills[0].homeowner.user.email,
-    name: bills[0].homeowner.user.name,
-    amount: input.amount,
-    referenceNumber,
-    paymentBatchId,
-    paymentIds,
-    coverageLabel,
-    coverageDisplay: coverage.paymentCoverageDisplay,
+    recipientId: payment.homeowner.userId,
+    email: payment.homeowner.user.email,
+    name: payment.homeowner.user.name,
+    amount: Number(payment.amount),
+    referenceNumber: payment.referenceNumber,
+    paymentBatchId: payment.paymentBatchId,
+    paymentId: payment.id,
+    paymentIds: [payment.id],
+    coverageLabel: paymentCoverageLabel(payment),
+    coverageDisplay: payment.paymentCoverageDisplay || `Monthly Dues - ${paymentCoverageLabel(payment)}`,
+    reused,
   };
 }
 
 function roundMoney(value: number) {
   return Math.round((value + Number.EPSILON) * 100) / 100;
-}
-
-function formatPeso(value: number) {
-  return new Intl.NumberFormat("en-PH", { style: "currency", currency: "PHP" }).format(value);
 }

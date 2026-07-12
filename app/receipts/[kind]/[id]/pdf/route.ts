@@ -4,7 +4,7 @@ import { NextResponse } from "next/server";
 import { notFound } from "next/navigation";
 import { requireUser } from "@/lib/auth";
 import { prisma } from "@/lib/db";
-import { paymentCoverageDisplay } from "@/lib/payment-coverage";
+import { getPaymentReceiptData } from "@/lib/services/payment-receipt";
 import { getAssociationSettings } from "@/lib/system-settings";
 import { amountInWords, collectionLabel, money, shortDate } from "@/lib/utils";
 
@@ -20,6 +20,8 @@ type PdfReceipt = {
   reference: string | null;
   remarks: string | null;
   processedBy: string;
+  allocations: Array<{ coverage: string; amount: number }>;
+  remainingBalance: number | null;
 };
 
 export async function GET(_request: Request, { params }: { params: Promise<{ kind: string; id: string }> }) {
@@ -28,27 +30,25 @@ export async function GET(_request: Request, { params }: { params: Promise<{ kin
   let receipt: PdfReceipt | null = null;
 
   if (kind === "payment") {
-    const payment = await prisma.payment.findFirst({
-      where: { id, status: "ACTIVE" },
-      include: { homeowner: { include: { user: true } }, bill: true, processedBy: true },
-    });
+    const payment = await getPaymentReceiptData(id);
     if (!payment) notFound();
     if (user.role === Role.HOMEOWNER && user.homeownerProfile?.id !== payment.homeownerId) {
       return NextResponse.json({ error: "Receipt access denied." }, { status: 403 });
     }
-    const coverage = paymentCoverageDisplay(payment);
     receipt = {
-      number: payment.receiptNumber || `AR-${payment.id.slice(-8).toUpperCase()}`,
-      date: payment.paymentDate,
-      payer: payment.homeowner.user.name,
-      address: payment.homeowner.address,
-      paymentFor: coverage,
-      particulars: coverage,
-      amount: Number(payment.amount),
+      number: payment.number,
+      date: payment.date,
+      payer: payment.payer,
+      address: `${payment.address} | ${payment.property} | Account ${payment.account}`,
+      paymentFor: payment.purpose,
+      particulars: payment.purpose,
+      amount: payment.amount,
       method: payment.method,
-      reference: payment.referenceNumber,
+      reference: payment.reference,
       remarks: payment.remarks,
-      processedBy: payment.processedBy?.name ?? "Authorized HOA Treasurer / Collector",
+      processedBy: payment.processedBy,
+      allocations: payment.allocations,
+      remainingBalance: payment.remainingBalance,
     };
   } else if (kind === "collection") {
     const item = await prisma.collection.findUnique({
@@ -72,6 +72,8 @@ export async function GET(_request: Request, { params }: { params: Promise<{ kin
       reference: item.referenceNumber,
       remarks: item.remarks,
       processedBy: item.createdBy.name,
+      allocations: [{ coverage: purpose, amount: Number(item.amount) }],
+      remainingBalance: null,
     };
   } else {
     notFound();
@@ -83,6 +85,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ kin
   const regular = await pdf.embedFont(StandardFonts.Helvetica);
   const bold = await pdf.embedFont(StandardFonts.HelveticaBold);
   drawReceipt(page, receipt, association, regular, bold);
+  drawAllocationContinuationPages(pdf, receipt, association.name, regular, bold);
   pdf.setTitle(`${receipt.number} - Acknowledgement Receipt`);
   pdf.setAuthor(association.name);
   const bytes = await pdf.save();
@@ -117,15 +120,18 @@ function drawReceipt(page: PDFPage, receipt: PdfReceipt, association: Awaited<Re
   page.drawRectangle({ x: 42, y: 490, width: 511, height: 30, color: rgb(.94, .97, .94), borderColor: navy, borderWidth: .8 });
   page.drawText("PARTICULARS", { x: 52, y: 501, font: bold, size: 8, color: navy });
   page.drawText("AMOUNT", { x: 465, y: 501, font: bold, size: 8, color: navy });
-  for (const [index, line] of wrap(safe(receipt.particulars), regular, 9, 350).slice(0, 3).entries()) {
-    page.drawText(line, { x: 52, y: 465 - index * 14, font: index === 0 ? bold : regular, size: 9, color: rgb(.08, .1, .12) });
-  }
+  const allocationLines = receipt.allocations.slice(0, 9);
+  allocationLines.forEach((allocation, index) => {
+    const rowY = 467 - index * 10;
+    page.drawText(safe(allocation.coverage), { x: 52, y: rowY, font: regular, size: 7.5, color: rgb(.08, .1, .12), maxWidth: 350 });
+    page.drawText(safe(money(allocation.amount).replace("₱", "PHP ")), { x: 448, y: rowY, font: bold, size: 7.5, color: navy, maxWidth: 95 });
+  });
+  if (receipt.allocations.length > allocationLines.length) page.drawText(`${receipt.allocations.length - allocationLines.length} additional allocation(s) continue on the next page.`, { x: 52, y: 377, font: bold, size: 7, color: navy });
   if (receipt.remarks) {
-    for (const [index, line] of wrap(safe(receipt.remarks), regular, 7.5, 350).slice(0, 4).entries()) {
-      page.drawText(line, { x: 52, y: 415 - index * 12, font: regular, size: 7.5, color: rgb(.3, .34, .4) });
+    for (const [index, line] of wrap(safe(receipt.remarks), regular, 7.5, 350).slice(0, 2).entries()) {
+      page.drawText(line, { x: 52, y: 355 - index * 10, font: regular, size: 7.5, color: rgb(.3, .34, .4) });
     }
   }
-  page.drawText(safe(money(receipt.amount).replace("₱", "PHP ")), { x: 448, y: 462, font: bold, size: 11, color: navy, maxWidth: 95 });
   page.drawText("TOTAL", { x: 385, y: 390, font: bold, size: 9, color: navy });
   page.drawText(safe(money(receipt.amount).replace("₱", "PHP ")), { x: 448, y: 390, font: bold, size: 10, color: navy, maxWidth: 95 });
 
@@ -133,11 +139,38 @@ function drawReceipt(page: PDFPage, receipt: PdfReceipt, association: Awaited<Re
   page.drawText(safe(receipt.method.replaceAll("_", " ")), { x: 42, y: 323, font: bold, size: 9, color: rgb(.08, .1, .12) });
   page.drawText("REFERENCE NUMBER", { x: 250, y: 340, font: bold, size: 7, color: navy });
   page.drawText(safe(receipt.reference || (receipt.method === "CASH" ? "Not required for Cash" : "Not provided")), { x: 250, y: 323, font: regular, size: 9, color: rgb(.08, .1, .12) });
+  if (receipt.remainingBalance !== null) page.drawText(`REMAINING ACCOUNT BALANCE: ${safe(money(receipt.remainingBalance).replace("₱", "PHP "))}`, { x: 42, y: 292, font: bold, size: 7.5, color: navy });
   page.drawText("Received and acknowledged by:", { x: 354, y: 270, font: regular, size: 8, color: rgb(.3, .34, .4) });
   page.drawLine({ start: { x: 350, y: 210 }, end: { x: 535, y: 210 }, color: navy, thickness: .7 });
   drawCentered(page, safe(receipt.processedBy), 350, 535, 194, bold, 8, navy);
   drawCentered(page, "Authorized HOA processor", 350, 535, 181, regular, 7, rgb(.3, .34, .4));
   page.drawText(`Generated by ${safe(association.name)} HOA Digital Hub`, { x: 42, y: 62, font: regular, size: 7, color: rgb(.4, .44, .5) });
+}
+
+function drawAllocationContinuationPages(pdf: PDFDocument, receipt: PdfReceipt, associationName: string, regular: PDFFont, bold: PDFFont) {
+  const remaining = receipt.allocations.slice(9);
+  const pageSize = 30;
+  const navy = rgb(0.03, 0.16, 0.38);
+  for (let offset = 0; offset < remaining.length; offset += pageSize) {
+    const rows = remaining.slice(offset, offset + pageSize);
+    const page = pdf.addPage([595.28, 841.89]);
+    page.drawRectangle({ x: 26, y: 32, width: 543, height: 777, borderColor: navy, borderWidth: 1.5 });
+    page.drawText(safe(associationName), { x: 42, y: 775, font: bold, size: 14, color: navy, maxWidth: 350 });
+    page.drawText("OFFICIAL RECEIPT - ALLOCATION CONTINUATION", { x: 42, y: 754, font: bold, size: 8, color: rgb(.25, .3, .36) });
+    page.drawText(safe(receipt.number), { x: 430, y: 766, font: bold, size: 10, color: rgb(.8, 0, 0), maxWidth: 120 });
+    page.drawText(safe(receipt.payer), { x: 42, y: 730, font: regular, size: 9, color: rgb(.08, .1, .12), maxWidth: 350 });
+    page.drawRectangle({ x: 42, y: 95, width: 511, height: 610, borderColor: navy, borderWidth: .8 });
+    page.drawRectangle({ x: 42, y: 675, width: 511, height: 30, color: rgb(.94, .97, .94), borderColor: navy, borderWidth: .8 });
+    page.drawText("COVERED BILLING / PARTICULARS", { x: 52, y: 686, font: bold, size: 8, color: navy });
+    page.drawText("ALLOCATED AMOUNT", { x: 440, y: 686, font: bold, size: 8, color: navy });
+    rows.forEach((allocation, index) => {
+      const rowY = 655 - index * 18;
+      page.drawText(safe(allocation.coverage), { x: 52, y: rowY, font: regular, size: 8, color: rgb(.08, .1, .12), maxWidth: 350 });
+      page.drawText(safe(money(allocation.amount).replace("₱", "PHP ")), { x: 448, y: rowY, font: bold, size: 8, color: navy, maxWidth: 95 });
+      page.drawLine({ start: { x: 42, y: rowY - 6 }, end: { x: 553, y: rowY - 6 }, color: rgb(.82, .84, .86), thickness: .4 });
+    });
+    page.drawText(`Allocation lines ${10 + offset} to ${9 + offset + rows.length} of ${receipt.allocations.length}`, { x: 42, y: 62, font: regular, size: 7, color: rgb(.4, .44, .5) });
+  }
 }
 
 function drawField(page: PDFPage, label: string, value: string, y: number, regular: PDFFont, bold: PDFFont) {

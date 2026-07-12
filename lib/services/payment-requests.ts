@@ -1,8 +1,10 @@
 import { randomUUID } from "node:crypto";
-import { BillStatus, CollectionType, PaymentRequestStatus, PaymentRequestType, PayerType, Prisma, RefundStatus, Role } from "@prisma/client";
+import { CollectionType, PaymentRequestStatus, PaymentRequestType, PayerType, Prisma, RefundStatus, Role } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { buildPaymentCoverage } from "@/lib/payment-coverage";
+import { recalculateBillFromActivePayments } from "@/lib/services/payment-ledger";
 import { allocateReceiptNumber, collectionReceiptSeries } from "@/lib/services/receipt";
+import { monthLabel } from "@/lib/utils";
 
 const refundableTypes = new Set<CollectionType>([CollectionType.CONSTRUCTION_BOND, CollectionType.CONTRACTOR_BOND]);
 
@@ -23,20 +25,19 @@ export async function approvePaymentRequest(requestId: string, reviewerId?: stri
       const amount = Number(request.amount);
       const balance = Number(bill.balance);
       if (amount > balance) throw new Error("Payment request exceeds the current bill balance.");
-      const amountPaid = Number(bill.amountPaid) + amount;
-      const nextBalance = Number(bill.totalAmount) - amountPaid;
       const receiptNumber = await allocateReceiptNumber(tx as unknown as Prisma.TransactionClient, request.tenantId, paymentDate, "MD");
       const coverage = buildPaymentCoverage([bill.billingMonth]);
       const payment = await tx.payment.create({
         data: {
           tenantId: request.tenantId,
-          billId: bill.id,
+          billId: null,
           homeownerId: bill.homeownerId,
           amount,
           paymentDate,
           method: request.method,
           referenceNumber: request.referenceNumber,
           paymentBatchId: randomUUID(),
+          idempotencyKey: `payment-request:${request.id}`,
           ...coverage,
           remarks: [request.payerNotes, reviewRemarks].filter(Boolean).join("\n") || null,
           receiptNumber,
@@ -47,8 +48,9 @@ export async function approvePaymentRequest(requestId: string, reviewerId?: stri
           processedById: reviewerId ?? null,
         },
       });
-      await tx.auditLog.create({ data: { tenantId: request.tenantId, actorId: reviewerId ?? null, module: "RECEIPTS", action: "GENERATE_MD_RECEIPT", entityType: "Payment", entityId: payment.id, metadata: { receiptNumber, source: "PAYMENT_REQUEST", paymentType: "MONTHLY_DUES", amount, coverageStart: coverage.coverageStart, coverageEnd: coverage.coverageEnd, coverageMonths: coverage.coverageMonths, coverageFrom: { month: coverage.coverageFromMonth, year: coverage.coverageFromYear }, coverageTo: { month: coverage.coverageToMonth, year: coverage.coverageToYear }, paymentCoverageDisplay: coverage.paymentCoverageDisplay, homeownerId: bill.homeownerId, adminUserId: reviewerId ?? null, timestamp: new Date().toISOString() } } });
-      await tx.bill.update({ where: { id: bill.id }, data: { amountPaid, balance: nextBalance, status: nextBalance === 0 ? BillStatus.PAID : BillStatus.PARTIAL } });
+      await tx.paymentAllocation.create({ data: { tenantId: request.tenantId, paymentId: payment.id, billId: bill.id, amount, coverageYear: bill.coverageYear, coverageMonth: bill.coverageMonth, coverageLabel: monthLabel(bill.billingMonth) } });
+      const recalculated = await recalculateBillFromActivePayments(tx as unknown as Prisma.TransactionClient, bill);
+      await tx.auditLog.create({ data: { tenantId: request.tenantId, actorId: reviewerId ?? null, module: "PAYMENTS", action: "RECORD_PAYMENT_TRANSACTION", entityType: "Payment", entityId: payment.id, metadata: { receiptNumber, source: "PAYMENT_REQUEST", paymentType: "MONTHLY_DUES", totalAmount: amount, allocations: [{ billId: bill.id, amount, coverage: monthLabel(bill.billingMonth) }], coverageStart: coverage.coverageStart, coverageEnd: coverage.coverageEnd, coverageMonths: coverage.coverageMonths, paymentCoverageDisplay: coverage.paymentCoverageDisplay, homeownerId: bill.homeownerId, adminUserId: reviewerId ?? null, recalculated, timestamp: new Date().toISOString() } } });
       const approved = await tx.paymentRequest.update({
         where: { id: request.id },
         data: { status: PaymentRequestStatus.APPROVED, reviewedById: reviewerId ?? null, reviewedAt: new Date(), reviewRemarks: reviewRemarks || null, paymentId: payment.id },

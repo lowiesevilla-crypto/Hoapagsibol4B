@@ -19,7 +19,8 @@ async function fixture(suffix: string) {
   const homeowner = await raw.homeownerProfile.create({ data: { tenantId: tenant.id, userId: resident.id, address: "Shared test address", block: "ISO", lot: "1", phone: "09000000000", monthlyDuesAmount: 100 } });
   const contractor = await raw.contractorProfile.create({ data: { tenantId: tenant.id, companyName: `${marker} Builders`, contactPerson: "Test", phone: "09000000000", address: "Test" } });
   const bill = await raw.bill.create({ data: { tenantId: tenant.id, homeownerId: homeowner.id, billingMonth: new Date("2098-01-01T00:00:00.000Z"), coverageYear: 2098, coverageMonth: 1, amount: 100, totalAmount: 100, balance: 100, dueDate: new Date("2098-01-31T00:00:00.000Z") } });
-  const payment = await raw.payment.create({ data: { tenantId: tenant.id, billId: bill.id, homeownerId: homeowner.id, amount: 10, paymentDate: new Date("2098-01-10T00:00:00.000Z"), method: "CASH", receiptNumber: `${marker}-RECEIPT` } });
+  const payment = await raw.payment.create({ data: { tenantId: tenant.id, billId: null, homeownerId: homeowner.id, amount: 10, paymentDate: new Date("2098-01-10T00:00:00.000Z"), method: "CASH", receiptNumber: `${marker}-RECEIPT` } });
+  const paymentAllocation = await raw.paymentAllocation.create({ data: { tenantId: tenant.id, paymentId: payment.id, billId: bill.id, amount: 10, coverageYear: bill.coverageYear, coverageMonth: bill.coverageMonth, coverageLabel: "January 2098" } });
   const collection = await raw.collection.create({ data: { tenantId: tenant.id, type: "CONSTRUCTION_BOND", payerType: "HOMEOWNER", homeownerId: homeowner.id, amount: 100, collectionDate: new Date("2098-01-10T00:00:00.000Z"), method: "CASH", receiptNumber: `${marker}-COLLECTION`, refundable: true, refundStatus: "HELD", createdById: admin.id } });
   const vehicle = await raw.vehicle.create({ data: { tenantId: tenant.id, homeownerId: homeowner.id, plateNumber: `${marker}-PLATE`, vehicleType: "CAR", make: "Test", model: "Test", color: "White", stickerNumber: `${marker}-STICKER`, issuedAt: new Date("2098-01-01T00:00:00.000Z") } });
   const employee = await raw.employeeProfile.create({ data: { tenantId: tenant.id, employeeNumber: `${marker}-EMP`, name: `Employee ${suffix}`, position: "Tester", phone: "09000000000", address: "Test", hireDate: new Date("2098-01-01T00:00:00.000Z"), salaryType: "MONTHLY", baseRate: 1000 } });
@@ -34,7 +35,7 @@ async function fixture(suffix: string) {
   await raw.documentTemplate.create({ data: { tenantId: tenant.id, type: "CERTIFICATE_OF_RESIDENCY", title: "Shared template", body: "Test" } });
   await raw.systemSetting.create({ data: { tenantId: tenant.id, category: "ASSOCIATION", key: "ISOLATION_KEY", label: "Isolation", value: suffix } });
   const chat = await raw.chatConversation.create({ data: { tenantId: tenant.id, subject: "Isolation", homeownerId: resident.id, createdById: resident.id, participants: { create: { tenantId: tenant.id, userId: resident.id } } } });
-  return { tenant, admin, resident, homeowner, contractor, bill, payment, collection, vehicle, employee, attendance, payroll, loan, expense, announcement, event, document, chat };
+  return { tenant, admin, resident, homeowner, contractor, bill, payment, paymentAllocation, collection, vehicle, employee, attendance, payroll, loan, expense, announcement, event, document, chat };
 }
 
 async function cleanup(tenantId: string) {
@@ -48,6 +49,7 @@ async function cleanup(tenantId: string) {
   await raw.documentTemplate.deleteMany({ where: { tenantId } });
   await raw.paymentRequest.deleteMany({ where: { tenantId } });
   await raw.paymentArchive.deleteMany({ where: { tenantId } });
+  await raw.paymentAllocation.deleteMany({ where: { tenantId } });
   await raw.payment.deleteMany({ where: { tenantId } });
   await raw.bill.deleteMany({ where: { tenantId } });
   await raw.vehicle.deleteMany({ where: { tenantId } });
@@ -87,7 +89,7 @@ async function main() {
 
     await runWithTenant(a.tenant.id, async () => {
       const targets = [
-        ["billing", "bill", b!.bill.id], ["payments", "payment", b!.payment.id], ["construction", "collection", b!.collection.id],
+        ["billing", "bill", b!.bill.id], ["payments", "payment", b!.payment.id], ["payment allocations", "paymentAllocation", b!.paymentAllocation.id], ["construction", "collection", b!.collection.id],
         ["contractors", "contractorProfile", b!.contractor.id], ["vehicles", "vehicle", b!.vehicle.id], ["payroll", "payrollPeriod", b!.payroll.id],
         ["attendance", "attendance", b!.attendance.id], ["loans", "employeeLoan", b!.loan.id], ["reports", "expense", b!.expense.id],
         ["announcements", "announcement", b!.announcement.id], ["events", "event", b!.event.id], ["documents", "documentRequest", b!.document.id], ["chat", "chatConversation", b!.chat.id],
@@ -102,6 +104,10 @@ async function main() {
       let relationBlocked = false;
       try { await prisma.bill.create({ data: { homeownerId: b!.homeowner.id, billingMonth: new Date("2098-02-01T00:00:00.000Z"), coverageYear: 2098, coverageMonth: 2, amount: 1, totalAmount: 1, balance: 1, dueDate: new Date("2098-02-28T00:00:00.000Z") } }); } catch (error) { relationBlocked = error instanceof Error && error.message.includes("Cross-tenant relation blocked"); }
       check(relationBlocked, "cross-tenant scalar foreign keys are blocked before write");
+
+      let allocationRelationBlocked = false;
+      try { await prisma.paymentAllocation.create({ data: { tenantId: a!.tenant.id, paymentId: a!.payment.id, billId: b!.bill.id, amount: 1 } }); } catch (error) { allocationRelationBlocked = error instanceof Error && (error.message.includes("Cross-tenant relation blocked") || error.message.includes("Foreign key constraint")); }
+      check(allocationRelationBlocked, "payment allocations reject cross-tenant payment and bill relationships");
 
       const nested = await prisma.documentRequest.create({ data: { homeownerId: a!.homeowner.id, type: "GATE_PASS", histories: { create: { status: "SUBMITTED", actorId: a!.admin.id, note: marker } } }, include: { histories: true } });
       check(nested.tenantId === a!.tenant.id && nested.histories[0]?.tenantId === a!.tenant.id, "nested writes inherit the authenticated tenant automatically");

@@ -1,7 +1,7 @@
 import { Role } from "@prisma/client";
 import { requireUser } from "@/lib/auth";
 import { prisma } from "@/lib/db";
-import { paymentCoverageDisplay } from "@/lib/payment-coverage";
+import { paymentAllocationCoverageDisplay } from "@/lib/payment-coverage";
 import { collectionLabel } from "@/lib/utils";
 
 function cell(value: unknown) { return `"${String(value ?? "").replaceAll('"', '""')}"`; }
@@ -9,7 +9,7 @@ function cell(value: unknown) { return `"${String(value ?? "").replaceAll('"', '
 export async function GET() {
   await requireUser(Role.ADMIN);
   const [payments, collections, refunds, expenses, payrolls, employeeLoans, employeeLoanRepayments] = await Promise.all([
-    prisma.payment.findMany({ where: { status: "ACTIVE" }, include: { homeowner: { include: { user: true } }, bill: true }, orderBy: { paymentDate: "desc" } }),
+    prisma.payment.findMany({ where: { status: "ACTIVE" }, include: { homeowner: { include: { user: true } }, bill: true, allocations: { include: { bill: true }, orderBy: { bill: { billingMonth: "asc" } } } }, orderBy: { paymentDate: "desc" } }),
     prisma.collection.findMany({ include: { homeowner: { include: { user: true } }, contractor: true }, orderBy: { collectionDate: "desc" } }),
     prisma.bondRefund.findMany({ include: { collection: { include: { homeowner: { include: { user: true } }, contractor: true } } }, orderBy: { refundDate: "desc" } }),
     prisma.expense.findMany({ include: { category: true }, orderBy: { expenseDate: "desc" } }),
@@ -20,7 +20,7 @@ export async function GET() {
   const header = ["Transaction ID", "Document No.", "Transaction", "Category", "Party", "Date", "Method", "Reference", "Amount", "Payment Coverage", "Accounting treatment"];
   const rows = [
     header,
-    ...payments.map((item) => [item.id, item.receiptNumber ?? "", "Collection", "Monthly dues", item.homeowner.user.name, item.paymentDate.toISOString().slice(0, 10), item.method, item.referenceNumber ?? "", item.amount.toString(), paymentCoverageDisplay(item), "Income"]),
+    ...payments.map((item) => [item.id, item.receiptNumber ?? "", "Collection", "Monthly dues", item.homeowner.user.name, item.paymentDate.toISOString().slice(0, 10), item.method, item.referenceNumber ?? "", item.amount.toString(), paymentAllocationCoverageDisplay(item), "Income"]),
     ...collections.map((item) => [item.id, item.receiptNumber ?? "", "Collection", collectionLabel(item.type, item.description), item.homeowner?.user.name ?? item.contractor?.companyName ?? "Unknown", item.collectionDate.toISOString().slice(0, 10), item.method, item.referenceNumber ?? "", item.amount.toString(), "", item.refundable ? "Refundable liability" : "Income"]),
     ...collections.filter((item) => Number(item.amountForfeited) > 0).map((item) => [`${item.id}-forfeiture`, "", "Forfeiture", collectionLabel(item.type), item.homeowner?.user.name ?? item.contractor?.companyName ?? "Unknown", item.forfeitedAt?.toISOString().slice(0, 10) ?? "", "OTHER", "", item.amountForfeited.toString(), "", "Income"]),
     ...refunds.map((item) => [item.id, "", "Refund", collectionLabel(item.collection.type), item.collection.homeowner?.user.name ?? item.collection.contractor?.companyName ?? "Unknown", item.refundDate.toISOString().slice(0, 10), item.method, item.referenceNumber ?? "", `-${item.amount.toString()}`, "", "Liability reduction"]),

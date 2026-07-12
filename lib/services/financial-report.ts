@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/db";
-import { paymentCoverageLabel } from "@/lib/payment-coverage";
+import { paymentAllocationCoverageLabel } from "@/lib/payment-coverage";
 import { collectionLabel, inputDate } from "@/lib/utils";
 
 export async function getFinancialReport(fromInput?: string | null, toInput?: string | null) {
@@ -11,7 +11,7 @@ export async function getFinancialReport(fromInput?: string | null, toInput?: st
   if (from > to) throw new Error("Report start date must be on or before the end date.");
   const range = { gte: from, lte: to };
   const [payments, collections, refunds, expenses, payrolls, employeeLoanIssuances, employeeLoanRepaymentRowsRaw, allEmployeeLoanTotals, billSummary, statusCounts, allBondTotals] = await Promise.all([
-    prisma.payment.findMany({ where: { status: "ACTIVE", paymentDate: range }, include: { homeowner: { include: { user: true } }, bill: true }, orderBy: [{ paymentDate: "desc" }, { createdAt: "desc" }] }),
+    prisma.payment.findMany({ where: { status: "ACTIVE", paymentDate: range }, include: { homeowner: { include: { user: true } }, bill: true, allocations: { include: { bill: true }, orderBy: { bill: { billingMonth: "asc" } } } }, orderBy: [{ paymentDate: "desc" }, { createdAt: "desc" }] }),
     prisma.collection.findMany({ where: { OR: [{ collectionDate: range }, { forfeitedAt: range }] } }),
     prisma.bondRefund.findMany({ where: { refundDate: range } }),
     prisma.expense.findMany({ where: { expenseDate: range }, include: { category: true } }),
@@ -58,7 +58,7 @@ export async function getFinancialReport(fromInput?: string | null, toInput?: st
     employeeLoanOutstanding: Number(allEmployeeLoanTotals._sum.balance ?? 0),
     employeeLoanIssuanceRows: employeeLoanIssuances.map((item) => ({ id: item.id, employee: item.employee.name, type: item.type, description: item.description, amount: Number(item.principalAmount), issuedDate: item.issuedDate, balance: Number(item.balance) })),
     employeeLoanRepaymentRows: employeeLoanRepaymentRowsRaw.map((item) => ({ id: item.id, employee: item.employee.name, type: item.employeeLoan?.type ?? "OTHER", description: item.employeeLoan?.description ?? item.deductionType.name, amount: Number(item.amount), payDate: item.payroll.payDate, balance: Number(item.employeeLoan?.balance ?? 0) })),
-    duesCollectionRows: payments.map((item) => ({ id: item.id, receiptNumber: item.receiptNumber ?? "Legacy receipt", homeowner: item.homeowner.user.name, paymentDate: item.paymentDate, coverage: paymentCoverageLabel(item), amount: Number(item.amount) })),
+    duesCollectionRows: payments.map((item) => ({ id: item.id, receiptNumber: item.receiptNumber ?? "Legacy receipt", homeowner: item.homeowner.user.name, paymentDate: item.paymentDate, coverage: paymentAllocationCoverageLabel(item), amount: Number(item.amount) })),
     feeBreakdown: [...feeMap.entries()].map(([label, value]) => ({ label, value })),
     expenseBreakdown: [...expenseMap.entries()].map(([label, value]) => ({ label, value })),
     lifetimeBilled: Number(billSummary._sum.totalAmount ?? 0),

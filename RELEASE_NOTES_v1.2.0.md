@@ -16,6 +16,30 @@ This version is intended for development and internal User Acceptance Testing (U
 
 ---
 
+## One Payment / One Receipt Finance Hotfix
+
+### Completed
+
+- Added `PaymentAllocation` for tenant-safe bill-level allocation under one Payment transaction header.
+- Added local migration `20260712150000_payment_allocations_single_receipt` with one-for-one legacy allocation backfill.
+- Preserved all historical Payment IDs, amounts, batches, and receipt numbers without consolidating legacy duplicates.
+- Generated one tenant receipt number once per payment transaction.
+- Added tenant-scoped idempotency for retry and concurrent-submit safety.
+- Redirected successful Record Payment submissions to the persisted receipt preview.
+- Added multi-line browser/PDF receipt coverage, allocation total, property/account, remaining balance, collector, and return actions.
+- Updated payment editing and voiding to recalculate all covered bills atomically.
+- Updated receipt register, Active Payments, Transaction History, homeowner history, SOA, and reports to count each Payment once.
+
+### Local Verification
+
+- Migration preserved 12 Payments and backfilled 12 valid allocations.
+- Payment recording: PASS 38 checks.
+- Payment edit/void lifecycle: PASS 9 checks.
+- Tenant isolation: PASS 22 checks.
+- Desktop/mobile receipt, refresh safety, PDF response, RBAC, and temporary-data cleanup passed.
+
+---
+
 # Major Features Delivered
 
 ## Statement of Account (Sprint 2.1)

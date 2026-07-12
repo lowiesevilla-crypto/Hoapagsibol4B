@@ -19,7 +19,7 @@ export type OpenBillChoice = {
   search: string;
 };
 
-export function PaymentForm({ bills, today, serverSearch = false }: { bills: OpenBillChoice[]; today: string; serverSearch?: boolean }) {
+export function PaymentForm({ bills, today, submissionKey, serverSearch = false }: { bills: OpenBillChoice[]; today: string; submissionKey: string; serverSearch?: boolean }) {
   const [todayYear, todayMonth] = today.split("-").map(Number);
   const [query, setQuery] = useState("");
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
@@ -63,6 +63,7 @@ export function PaymentForm({ bills, today, serverSearch = false }: { bills: Ope
   }
 
   return <form action={recordPaymentAction} className="card mb-6">
+    <input type="hidden" name="idempotencyKey" value={submissionKey} />
     <div className="mb-5"><h2 className="text-lg font-black">Record a payment</h2><p className="text-sm text-slate-500">Search a homeowner, select one or more open billings, then record the payment. Reference numbers are optional for Cash and required for non-cash methods.</p></div>
     <div className="grid gap-5 xl:grid-cols-[1.15fr_1fr]">
       <div>
@@ -97,7 +98,7 @@ export function PaymentForm({ bills, today, serverSearch = false }: { bills: Ope
             <CoverageFields label="Coverage To" prefix="coverageTo" month={coverageToMonth} year={coverageToYear} onMonth={setCoverageToMonth} onYear={setCoverageToYear} />
           </div>
         </fieldset>
-        <div className="sm:col-span-2"><label className="label">Payment amount <span className="text-rose-600">*</span></label><input className="field text-right text-lg font-black text-pine-700" name="amount" type="number" min="0.01" step="0.01" value={amount} onChange={(event) => setAmount(event.target.value)} required placeholder="0.00" /><p className="mt-1 text-xs text-slate-500">Editable before saving. Partial payments and amounts above the selected balance are supported and recalculated automatically.</p></div>
+        <div className="sm:col-span-2"><label className="label">Payment amount <span className="text-rose-600">*</span></label><input className="field text-right text-lg font-black text-pine-700" name="amount" type="number" min="0.01" max={total || undefined} step="0.01" value={amount} onChange={(event) => setAmount(event.target.value)} required placeholder="0.00" /><p className="mt-1 text-xs text-slate-500">Editable before saving. Partial payments are supported up to the selected outstanding balance.</p></div>
         <div className="sm:col-span-2"><label className="label">Reference number {referenceRequired && <span className="text-rose-600">*</span>}</label><input className="field" name="referenceNumber" required={referenceRequired} aria-required={referenceRequired} placeholder={referenceRequired ? "Required; must be unique" : "Optional for cash payments"} /><p className="mt-1 text-xs text-slate-500">{referenceRequired ? "Required for this payment method." : "Cash payments can be saved without a reference number."}</p></div>
         <div className="sm:col-span-2"><label className="label">Remarks</label><input className="field" name="remarks" placeholder="Optional notes shown in receipt audit trail" /></div>
         <div className="sm:col-span-2"><SubmitButton>Record payment - {peso(Number(amount) || 0)}</SubmitButton></div>

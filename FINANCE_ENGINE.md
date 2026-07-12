@@ -139,12 +139,15 @@ Record Payment supports:
 
 Payment Posting:
 
-1. Validate Bill
-2. Apply Payment
-3. Update Balance
-4. Generate Receipt
-5. Update Ledger
-6. Record Audit
+1. Validate the payer, selected bills, current balances, reference rules, and idempotency key.
+2. Allocate one tenant receipt number.
+3. Create one Payment transaction header with the total amount.
+4. Create one or more PaymentAllocation rows for the covered bills.
+5. Recalculate every affected bill and ledger balance.
+6. Record one transaction-level audit event.
+7. Commit atomically and redirect to `/receipts/payment/{paymentId}`.
+
+`Payment.amount` must equal the sum of its positive allocation amounts. New payments use allocations as the authoritative bill links; the nullable legacy `Payment.billId` remains only for backward compatibility. Reads prefer allocations and fall back to the legacy bill link only when no allocations exist.
 
 Record Payment uses a tenant-scoped server-side search over current open bill balances. Searchable fields include homeowner name, block, lot, account ID, email, bill ID, and resolution reference. Search results are not truncated by a small client-side limit.
 
@@ -330,3 +333,4 @@ Planned
 | 1.0 | July 11, 2026 | Initial Finance Engine Documentation |
 | 1.1 | July 11, 2026 | Documented Sprint 2.3B individual billing and split payments workflow |
 | 1.2 | July 11, 2026 | Documented final SOA browser print and PDF pagination rules |
+| 1.3 | July 12, 2026 | Documented one-header multi-bill payments, idempotency, receipt preview, and atomic voiding |

@@ -19,6 +19,7 @@ import { prisma } from "@/lib/db";
 import { buildPaymentCoverage, migratedPaymentCoverageDisplay } from "@/lib/payment-coverage";
 import { recalculateBillFromActivePayments } from "@/lib/services/payment-ledger";
 import { allocateReceiptNumber, collectionReceiptSeries } from "@/lib/services/receipt";
+import { monthLabel } from "@/lib/utils";
 
 export type MigrationImportState = { success: boolean; message: string; imported: number; errors: string[] };
 
@@ -149,7 +150,8 @@ export async function postMigration(tx: Prisma.TransactionClient, input: Migrati
     const paymentDate = input.period ?? new Date();
     const receiptNumber = await allocateReceiptNumber(tx, tenantId, paymentDate, "MD");
     const coverage = buildPaymentCoverage([bill.billingMonth]);
-    const payment = await tx.payment.create({ data: { billId: bill.id, homeownerId: input.homeownerId!, amount: input.amount, paymentDate, method: PaymentMethod.OTHER, referenceNumber: input.referenceNumber, paymentBatchId: randomUUID(), ...coverage, paymentCoverageDisplay: migratedPaymentCoverageDisplay(), receiptNumber, remarks: note, processedById: actorId } });
+    const payment = await tx.payment.create({ data: { billId: null, homeownerId: input.homeownerId!, amount: input.amount, paymentDate, method: PaymentMethod.OTHER, referenceNumber: input.referenceNumber, paymentBatchId: randomUUID(), ...coverage, paymentCoverageDisplay: migratedPaymentCoverageDisplay(), receiptNumber, remarks: note, processedById: actorId } });
+    await tx.paymentAllocation.create({ data: { tenantId, paymentId: payment.id, billId: bill.id, amount: input.amount, coverageYear: bill.coverageYear, coverageMonth: bill.coverageMonth, coverageLabel: monthLabel(bill.billingMonth) } });
     await recalculateBillFromActivePayments(tx, bill);
     await receiptAudit(tx, actorId, "MD", "Payment", payment.id, receiptNumber, input.amount);
     postedRecordType = "Payment";

@@ -11,6 +11,7 @@ type CoverageSource = {
   paymentCoverageDisplay?: string | null;
   bill?: { billingMonth: Date | string } | null;
   billingMonth?: Date | string | null;
+  allocations?: Array<{ coverageLabel?: string | null; bill?: { billingMonth: Date | string } | null }>;
 };
 
 export type PaymentCoveragePeriod = {
@@ -79,6 +80,15 @@ export function paymentCoverageLabel(source: CoverageSource) {
 
 export function paymentCoverageDisplay(source: CoverageSource) {
   return source.paymentCoverageDisplay?.trim() || `Monthly Dues - ${paymentCoverageLabel(source)}`;
+}
+
+export function paymentAllocationCoverageLabel(source: CoverageSource) {
+  const labels = source.allocations?.map((allocation) => allocation.coverageLabel?.trim() || (allocation.bill ? monthLabel(allocation.bill.billingMonth) : "")).filter(Boolean) ?? [];
+  return labels.length ? labels.join(", ") : paymentCoverageLabel(source);
+}
+
+export function paymentAllocationCoverageDisplay(source: CoverageSource) {
+  return `Monthly Dues - ${paymentAllocationCoverageLabel(source)}`;
 }
 
 export function validatePaymentCoveragePeriod(period: PaymentCoveragePeriod) {

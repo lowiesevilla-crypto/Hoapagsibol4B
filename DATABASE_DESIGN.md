@@ -813,8 +813,25 @@ Production
 
 ---
 
-# 21. Document History
+# 21. Payment Header and Allocation Model
+
+`Payment` is the transaction header and Official Receipt entity. It stores one tenant, payer, total amount, payment method, reference, collector, transaction date, and receipt number. New multi-bill payments do not rely on the nullable legacy `Payment.billId` field.
+
+`PaymentAllocation` stores the bill-level application of that payment:
+
+- tenantId
+- paymentId
+- billId
+- allocated amount
+- coverage year, month, and label
+
+The allocation table enforces one row per payment/bill pair and composite tenant-safe foreign keys to `Payment` and `Bill`. Application validation requires the allocation sum to equal `Payment.amount`.
+
+Migration `20260712150000_payment_allocations_single_receipt` made `Payment.billId` nullable, added the tenant-scoped idempotency key and allocation table, and backfilled one allocation for every historical payment with a bill. Historical payment IDs, amounts, batches, and receipt numbers were not changed or consolidated.
+
+# 22. Document History
 
 | Version | Date | Description |
 |----------|------|-------------|
 | 1.0 | July 11, 2026 | Initial Database Design |
+| 1.1 | July 12, 2026 | Added Payment header and tenant-safe PaymentAllocation architecture |

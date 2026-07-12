@@ -606,8 +606,23 @@ Every new feature must satisfy:
 
 ---
 
+# 26. Payment Transaction Architecture
+
+Record Payment posts one financial transaction through the shared payment service:
+
+1. Resolve the authenticated tenant and authorized actor.
+2. Validate one payer, current bill balances, reference rules, amount, and idempotency key.
+3. Allocate one tenant receipt number.
+4. Create one `Payment` header.
+5. Create one or more tenant-safe `PaymentAllocation` rows.
+6. Recalculate every affected bill and write one transaction audit event.
+7. Commit in one serializable Prisma transaction and redirect to `/receipts/payment/{paymentId}`.
+
+Receipt preview, PDF, Active Payments, Registered Receipts, SOA, and reports count the Payment header once and use allocations for bill coverage. Voiding marks the complete payment transaction void, preserves allocation and receipt history, archives it once, and recalculates all covered bills atomically.
+
 # Document History
 
 | Version | Date | Description |
 |----------|------|-------------|
 | 1.0 | July 11, 2026 | Initial System Architecture |
+| 1.1 | July 12, 2026 | Documented one Payment header with multiple bill allocations |

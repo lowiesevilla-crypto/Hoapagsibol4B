@@ -88,7 +88,7 @@ export async function getActivePaymentsData(admin: AdminActor, query: PaymentQue
   const [payments, paymentCount, homeowners] = await Promise.all([
     prisma.payment.findMany({
       where,
-      include: { homeowner: { include: { user: true } }, bill: true },
+      include: { homeowner: { include: { user: true } }, bill: true, allocations: { include: { bill: true }, orderBy: { bill: { billingMonth: "asc" } } } },
       orderBy: paymentOrder,
       skip: (paymentPage - 1) * paymentPageSize,
       take: paymentPageSize,
@@ -114,7 +114,14 @@ export async function getPaymentHistoryData(admin: AdminActor, query: PaymentQue
     prisma.paymentArchive.count({ where }),
     homeownerFilterOptions(admin.tenantId),
   ]);
-  return { q, historyPage, archiveCount, paymentArchives, homeowners };
+  const allocationRows = paymentArchives.length ? await prisma.paymentAllocation.findMany({
+    where: { tenantId: admin.tenantId, paymentId: { in: paymentArchives.map((item) => item.originalPaymentId) } },
+    include: { bill: true },
+    orderBy: { bill: { billingMonth: "asc" } },
+  }) : [];
+  const allocationsByPayment = new Map<string, typeof allocationRows>();
+  for (const allocation of allocationRows) allocationsByPayment.set(allocation.paymentId, [...(allocationsByPayment.get(allocation.paymentId) ?? []), allocation]);
+  return { q, historyPage, archiveCount, paymentArchives: paymentArchives.map((item) => ({ ...item, allocations: allocationsByPayment.get(item.originalPaymentId) ?? [] })), homeowners };
 }
 
 export function preservedEntries(query: PaymentQuery, omit: string[] = []) {
@@ -169,7 +176,7 @@ function buildPaymentWhere(tenantId: string, query: PaymentQuery, q: string): Pr
     ...(query.homeownerId ? { homeownerId: query.homeownerId } : {}),
     ...(query.method ? { method: query.method as never } : {}),
     ...(Object.keys(range).length ? { paymentDate: range } : {}),
-    ...(q ? { OR: [{ id: { contains: q } }, { referenceNumber: { contains: q } }, { receiptNumber: { contains: q } }, { paymentCoverageDisplay: { contains: q } }, { bill: { resolutionReference: { contains: q } } }, ...homeownerSearch(q)] } : {}),
+    ...(q ? { OR: [{ id: { contains: q } }, { referenceNumber: { contains: q } }, { receiptNumber: { contains: q } }, { paymentCoverageDisplay: { contains: q } }, { bill: { resolutionReference: { contains: q } } }, { allocations: { some: { bill: { resolutionReference: { contains: q } } } } }, ...homeownerSearch(q)] } : {}),
   };
 }
 

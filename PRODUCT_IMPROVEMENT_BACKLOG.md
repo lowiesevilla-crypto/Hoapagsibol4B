@@ -566,7 +566,7 @@ Priority:
 Critical
 
 Status:
-Open
+Fixed in urgent finance migration and hotfix on 2026-07-12
 
 Problem:
 The tenant slug login URL link is not working when clicked from the HOAHub Platform on web and mobile.
@@ -1211,6 +1211,9 @@ Acceptance Criteria:
 - Payment history and SOA show the transaction consistently.
 - Tenant isolation and audit logging remain enforced.
 
+Fix Summary:
+`Payment` now represents one transaction header and Official Receipt, while tenant-safe `PaymentAllocation` rows represent the covered bills. Multi-bill recording allocates one receipt number once, creates one payment header, writes one transaction audit event, and recalculates every covered bill atomically. The local migration backfilled one allocation for each legacy payment without changing historical IDs, amounts, batches, or receipt numbers.
+
 ---
 
 ## Improvement #032 – Automatic Receipt Preview After Successful Payment
@@ -1222,7 +1225,7 @@ Priority:
 High
 
 Status:
-Open
+Fixed in urgent finance migration and hotfix on 2026-07-12
 
 Requirement:
 After a payment is successfully recorded, automatically open the generated Official Receipt preview for the administrator.
@@ -1234,3 +1237,6 @@ Acceptance Criteria:
 - Return to Record Payment and Return to Payments actions are available.
 - Refreshing the receipt does not generate another receipt.
 - Desktop and mobile are supported.
+
+Fix Summary:
+Successful Record Payment submissions now redirect to the persisted `/receipts/payment/{paymentId}` preview. The preview and PDF show all allocation lines, the transaction total, property/account details, remaining balance, reference, remarks, and collector, with Print Receipt, Return to Record Payment, and Return to Payments actions. Refresh and retry reuse the persisted transaction and do not allocate another receipt.

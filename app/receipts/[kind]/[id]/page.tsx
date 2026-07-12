@@ -1,12 +1,12 @@
 import { Role } from "@prisma/client";
-import { Download } from "lucide-react";
+import { ArrowLeft, Download, List } from "lucide-react";
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { AssociationLogo } from "@/components/association-logo";
 import { PrintButton } from "@/components/print-button";
 import { requireUser } from "@/lib/auth";
 import { prisma } from "@/lib/db";
-import { paymentCoverageDisplay } from "@/lib/payment-coverage";
+import { getPaymentReceiptData } from "@/lib/services/payment-receipt";
 import { getAssociationSettings } from "@/lib/system-settings";
 import { amountInWords, collectionLabel, money, shortDate } from "@/lib/utils";
 
@@ -14,14 +14,19 @@ type ReceiptView = {
   number: string;
   date: Date;
   payer: string;
+  homeownerId: string | null;
   address: string;
+  property: string;
+  account: string;
   purpose: string;
-  particulars: string;
-  amount: unknown;
+  amount: number;
   method: string;
   reference: string | null;
   remarks: string | null;
   processedBy: string;
+  allocations: Array<{ id: string; coverage: string; amount: number }>;
+  allocationTotal: number;
+  remainingBalance: number | null;
 };
 
 export default async function ReceiptPage({ params }: { params: Promise<{ kind: string; id: string }> }) {
@@ -30,58 +35,53 @@ export default async function ReceiptPage({ params }: { params: Promise<{ kind: 
   let receipt: ReceiptView | null = null;
 
   if (kind === "payment") {
-    const payment = await prisma.payment.findFirst({
-      where: { id, status: "ACTIVE" },
-      include: { homeowner: { include: { user: true } }, bill: true, processedBy: true },
-    });
-    if (!payment) notFound();
-    if (user.role === Role.HOMEOWNER && user.homeownerProfile?.id !== payment.homeownerId) redirect("/portal/dashboard");
-    const coverage = paymentCoverageDisplay(payment);
-    receipt = {
-      number: payment.receiptNumber || `AR-${payment.id.slice(-8).toUpperCase()}`,
-      date: payment.paymentDate,
-      payer: payment.homeowner.user.name,
-      address: payment.homeowner.address,
-      purpose: coverage,
-      particulars: coverage,
-      amount: payment.amount,
-      method: payment.method,
-      reference: payment.referenceNumber,
-      remarks: payment.remarks,
-      processedBy: payment.processedBy?.name ?? "Authorized HOA Treasurer / Collector",
-    };
+    receipt = await getPaymentReceiptData(id);
   } else if (kind === "collection") {
     const item = await prisma.collection.findUnique({
       where: { id },
       include: { homeowner: { include: { user: true } }, contractor: true, createdBy: true },
     });
-    if (!item) notFound();
-    if (user.role === Role.HOMEOWNER && user.homeownerProfile?.id !== item.homeownerId) redirect("/portal/dashboard");
-    receipt = {
-      number: item.receiptNumber || `AR-${item.id.slice(-8).toUpperCase()}`,
-      date: item.collectionDate,
-      payer: item.homeowner?.user.name ?? item.contractor?.companyName ?? "Unknown payer",
-      address: item.homeowner?.address ?? item.contractor?.address ?? "",
-      purpose: collectionLabel(item.type, item.description),
-      particulars: collectionLabel(item.type, item.description),
-      amount: item.amount,
-      method: item.method,
-      reference: item.referenceNumber,
-      remarks: item.remarks,
-      processedBy: item.createdBy.name,
-    };
+    if (item) {
+      const purpose = collectionLabel(item.type, item.description);
+      receipt = {
+        number: item.receiptNumber || `AR-${item.id.slice(-8).toUpperCase()}`,
+        date: item.collectionDate,
+        payer: item.homeowner?.user.name ?? item.contractor?.companyName ?? "Unknown payer",
+        homeownerId: item.homeownerId,
+        address: item.homeowner?.address ?? item.contractor?.address ?? "",
+        property: item.homeowner ? `Block ${item.homeowner.block}, Lot ${item.homeowner.lot}` : "Not applicable",
+        account: item.homeownerId ?? item.contractorId ?? "Not applicable",
+        purpose,
+        amount: Number(item.amount),
+        method: item.method,
+        reference: item.referenceNumber,
+        remarks: item.remarks,
+        processedBy: item.createdBy.name,
+        allocations: [{ id: item.id, coverage: purpose, amount: Number(item.amount) }],
+        allocationTotal: Number(item.amount),
+        remainingBalance: null,
+      };
+    }
   } else {
     notFound();
   }
 
+  if (!receipt) notFound();
+  if (user.role === Role.HOMEOWNER && user.homeownerProfile?.id !== receipt.homeownerId) redirect("/portal/dashboard");
+
   const association = await getAssociationSettings();
-  const amount = Number(receipt.amount);
   const contactLine = [association.contactNumber && `Contact: ${association.contactNumber}`, association.email && `Email: ${association.email}`].filter(Boolean).join(" | ");
   const registrationLine = [association.tinNumber && `TIN: ${association.tinNumber}`, association.secRegistrationNumber && `SEC Reg. No.: ${association.secRegistrationNumber}`].filter(Boolean).join(" | ");
 
   return (
     <main className="print-document mx-auto min-h-screen max-w-4xl bg-white p-4 sm:p-8">
-      <div className="print-hidden mb-5 flex flex-wrap justify-end gap-2"><Link className="btn-secondary" href={`/receipts/${kind}/${id}/pdf`}><Download className="size-4" /> Download PDF</Link><PrintButton label="Print acknowledgement receipt" /></div>
+      <div className="print-hidden mb-5 flex flex-wrap justify-end gap-2">
+        {kind === "payment" && user.role !== Role.HOMEOWNER && <Link className="btn-secondary" href="/admin/payments/record"><ArrowLeft className="size-4" /> Return to Record Payment</Link>}
+        {kind === "payment" && user.role !== Role.HOMEOWNER && <Link className="btn-secondary" href="/admin/payments/active"><List className="size-4" /> Return to Payments</Link>}
+        {kind === "payment" && user.role === Role.HOMEOWNER && <Link className="btn-secondary" href="/portal/payments"><ArrowLeft className="size-4" /> Return to My Payments</Link>}
+        <Link className="btn-secondary" href={`/receipts/${kind}/${id}/pdf`}><Download className="size-4" /> Download PDF</Link>
+        <PrintButton label="Print Receipt" />
+      </div>
       <section className="border-2 border-ink p-4 sm:p-7">
         <header className="grid gap-4 border-b-2 border-ink pb-5 sm:grid-cols-[auto_1fr_auto] sm:items-center">
           <AssociationLogo className="size-20" src={association.logoUrl} alt={`${association.name} logo`} />
@@ -103,22 +103,24 @@ export default async function ReceiptPage({ params }: { params: Promise<{ kind: 
         <div className="space-y-4 py-6 text-sm sm:text-base">
           <Field label="Received from" value={receipt.payer} />
           <Field label="Address" value={receipt.address} />
-          <Field label="The sum of" value={amountInWords(amount)} />
+          <Field label="Property / Account" value={`${receipt.property} | ${receipt.account}`} />
+          <Field label="The sum of" value={amountInWords(receipt.amount)} />
           <Field label="Payment For" value={receipt.purpose} />
         </div>
 
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[560px] border-collapse text-sm">
-            <thead><tr><th className="border border-ink p-2 text-left">Particulars</th><th className="w-40 border border-ink p-2 text-right">Amount</th></tr></thead>
+          <table className="w-full min-w-[520px] border-collapse text-sm">
+            <thead><tr><th className="border border-ink p-2 text-left">Covered billing / particulars</th><th className="w-40 border border-ink p-2 text-right">Allocated amount</th></tr></thead>
             <tbody>
-              <tr><td className="h-24 border border-ink p-3 align-top"><p className="font-bold">{receipt.particulars}</p>{receipt.remarks && <p className="mt-2 text-slate-600">{receipt.remarks}</p>}{receipt.reference && <p className="mt-2 text-xs">Reference: {receipt.reference}</p>}</td><td className="border border-ink p-3 text-right align-top text-lg font-black">{money(amount)}</td></tr>
-              <tr><td className="border border-ink p-2 text-right font-black">TOTAL</td><td className="border border-ink p-2 text-right text-lg font-black">{money(amount)}</td></tr>
+              {receipt.allocations.map((allocation) => <tr key={allocation.id}><td className="border border-ink p-3 font-bold">{allocation.coverage}</td><td className="border border-ink p-3 text-right font-black">{money(allocation.amount)}</td></tr>)}
+              <tr><td className="border border-ink p-2 text-right font-black">TOTAL ALLOCATION</td><td className="border border-ink p-2 text-right text-lg font-black">{money(receipt.allocationTotal)}</td></tr>
             </tbody>
           </table>
         </div>
 
+        {(receipt.remarks || receipt.reference) && <div className="mt-4 rounded border border-slate-300 p-3 text-sm">{receipt.remarks && <p><b>Remarks:</b> {receipt.remarks}</p>}{receipt.reference && <p><b>Reference:</b> {receipt.reference}</p>}</div>}
         <div className="mt-6 grid gap-6 sm:grid-cols-2">
-          <div><p className="text-xs font-bold uppercase tracking-wider text-slate-500">Payment method</p><p className="mt-2 font-bold">{receipt.method.replaceAll("_", " ")}</p>{receipt.reference && <p className="text-sm">Reference: {receipt.reference}</p>}</div>
+          <div><p className="text-xs font-bold uppercase tracking-wider text-slate-500">Payment method</p><p className="mt-2 font-bold">{receipt.method.replaceAll("_", " ")}</p>{receipt.remainingBalance !== null && <p className="mt-3 text-sm"><b>Remaining account balance:</b> {money(receipt.remainingBalance)}</p>}</div>
           <div className="text-right"><p className="mb-10 text-xs text-slate-500">Received and acknowledged by:</p><div className="border-t border-ink pt-2 text-center text-xs"><b>{receipt.processedBy}</b><br />Authorized HOA processor</div></div>
         </div>
         <div className="mt-10 grid gap-10 text-center text-xs sm:grid-cols-2">

@@ -8,7 +8,7 @@ import { getAppUrl } from "@/lib/app-url";
 import { prisma } from "@/lib/db";
 import { paymentAmountUpdateSchema, paymentSchema, paymentVoidSchema } from "@/lib/validation";
 import { updatePaymentAmountLedger, voidPaymentLedger } from "@/lib/services/payment-ledger";
-import { recordMonthlyDuesPayment } from "@/lib/services/payment-recording";
+import { buildPaymentConfirmation, recordMonthlyDuesPayment } from "@/lib/services/payment-recording";
 import { sendEmailNotification } from "@/lib/services/notifications";
 
 export async function recordPaymentAction(formData: FormData) {
@@ -18,12 +18,15 @@ export async function recordPaymentAction(formData: FormData) {
   const data = parsed.data;
   const billIds = [...new Set(formData.getAll("billIds").map(String).filter(Boolean))];
   if (!billIds.length) throw new Error("Select at least one open billing item.");
+  const idempotencyKey = String(formData.get("idempotencyKey") || "").trim();
+  if (!idempotencyKey || idempotencyKey.length > 100) throw new Error("Payment submission token is invalid. Refresh the form and try again.");
 
   let confirmation: Awaited<ReturnType<typeof recordMonthlyDuesPayment>> | null = null;
   try {
     confirmation = await prisma.$transaction((tx) => recordMonthlyDuesPayment(tx as unknown as Prisma.TransactionClient, {
       actor: { id: admin.id, tenantId: admin.tenantId, name: admin.name, email: admin.email },
       billIds,
+      idempotencyKey,
       amount: data.amount,
       paymentDate: new Date(`${data.paymentDate}T00:00:00.000Z`),
       method: data.method,
@@ -35,17 +38,26 @@ export async function recordPaymentAction(formData: FormData) {
       remarks: data.remarks,
     }), { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
   } catch (error) {
-    redirect(`/admin/payments/record?error=${encodeURIComponent(error instanceof Error ? error.message : "Payment could not be recorded.")}`);
+    const idempotencyCollision = error instanceof Prisma.PrismaClientKnownRequestError
+      && error.code === "P2002"
+      && JSON.stringify(error.meta?.target ?? "").includes("idempotencyKey");
+    if (idempotencyCollision) {
+      const existing = await prisma.payment.findFirst({ where: { tenantId: admin.tenantId, idempotencyKey }, include: { homeowner: { include: { user: true } } } });
+      if (existing) confirmation = buildPaymentConfirmation(existing, true);
+    }
+    if (!confirmation) redirect(`/admin/payments/record?error=${encodeURIComponent(error instanceof Error ? error.message : "Payment could not be recorded.")}`);
   }
 
-  if (confirmation) await sendEmailNotification({ recipientId: confirmation.recipientId, email: confirmation.email, subject: "HOA payment recorded", heading: "Payment confirmation", message: `Hello ${confirmation.name},\nYour HOA payment of PHP ${confirmation.amount.toFixed(2)} has been recorded successfully.\nPayment for: ${confirmation.coverageDisplay}\nReference: ${confirmation.referenceNumber || "Not required for cash payment"}`, type: NotificationType.PAYMENT_CONFIRMATION, actionLabel: "View payment history", actionUrl: `${getAppUrl()}/portal/payments` }).catch(() => undefined);
+  if (confirmation && !confirmation.reused) await sendEmailNotification({ recipientId: confirmation.recipientId, email: confirmation.email, subject: "HOA payment recorded", heading: "Payment confirmation", message: `Hello ${confirmation.name},\nYour HOA payment of PHP ${confirmation.amount.toFixed(2)} has been recorded successfully.\nPayment for: ${confirmation.coverageDisplay}\nReference: ${confirmation.referenceNumber || "Not required for cash payment"}`, type: NotificationType.PAYMENT_CONFIRMATION, actionLabel: "View payment history", actionUrl: `${getAppUrl()}/portal/payments` }).catch(() => undefined);
 
   revalidatePath("/admin/payments");
   revalidatePath("/admin/payments/record");
   revalidatePath("/admin/payments/active");
   revalidatePath("/admin/billing");
   revalidatePath("/admin/dashboard");
-  redirect("/admin/payments/record?success=recorded&message=Payment%20recorded%20successfully.");
+  if (!confirmation) redirect("/admin/payments/record?error=Payment%20could%20not%20be%20recorded.");
+  revalidatePath(`/receipts/payment/${confirmation.paymentId}`);
+  redirect(`/receipts/payment/${confirmation.paymentId}`);
 }
 
 export async function updatePaymentAmountAction(formData: FormData) {

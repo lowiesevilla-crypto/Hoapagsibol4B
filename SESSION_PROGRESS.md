@@ -1,5 +1,40 @@
 # Session Progress
 
+## 2026-07-12 - Urgent Finance Migration and Single Receipt Hotfix
+
+Branch:
+feature/soa-final
+
+Completed:
+
+- Fixed Bug #031 by retaining `Payment` as one transaction header/Official Receipt and adding tenant-safe `PaymentAllocation` children for covered bills.
+- Fixed Improvement #032 by redirecting successful Record Payment submissions to `/receipts/payment/{paymentId}`.
+- Added tenant-scoped idempotency keys so sequential retries and unique-key race collisions reuse the persisted transaction.
+- Updated Record Payment, payment-request approval, and prior-collection imports to create one Payment with one or more allocations.
+- Updated balance recalculation, controlled amount edits, and voiding to process all allocations atomically.
+- Updated receipt preview/PDF, Registered Receipts, Active Payments, Transaction History, homeowner payment history, SOA, and reports to prefer allocations without double counting headers.
+- Added Print Receipt, Return to Record Payment, and Return to Payments actions plus property/account, allocation total, and remaining balance details.
+
+Migration:
+
+- Applied `20260712150000_payment_allocations_single_receipt` to the local development database only.
+- Payment count remained `12` before and after migration.
+- Receipt identity fingerprint remained `72b83dabff06181a91672f28f0e1294c0ca5292b51dbd7b992216e6ae76bd337`.
+- Backfilled `12` allocations with zero amount mismatches, orphans, cross-tenant links, or duplicate payment/bill pairs.
+- Preserved the legacy four-payment batch and receipt numbers `AR-MD-2026-0000008` through `AR-MD-2026-0000011` without consolidation.
+
+Verification:
+
+- Payment recording verification: PASS 38 checks for single/multi-bill, partial, reference rules, idempotency, allocation totals, balances, statuses, and audit logging.
+- Payment edit/void lifecycle verification: PASS 9 checks with complete temporary-data cleanup.
+- Tenant isolation regression: PASS 22 checks, including cross-tenant PaymentAllocation rejection.
+- Live browser receipt: one Payment, one receipt, four `PHP 600` allocations, `PHP 2,400` total, `PHP 600` remaining balance, and one row in Registered Receipts and Active Payments.
+- Refresh preserved the same receipt and four allocations; SOA showed the payment once.
+- Mobile viewport at 390px had no horizontal overflow and preserved receipt controls/allocation lines.
+- Homeowner RBAC blocked admin payments and another homeowner's receipt while allowing the homeowner's own receipt.
+- Authenticated receipt PDF returned `200 application/pdf` and parsed as one page.
+- All browser and lifecycle fixtures, temporary users, bills, payments, allocations, audits, and test receipt counter were removed.
+
 ## 2026-07-12 - Sprint 2.4 Browser Print Pagination Final Hotfix
 
 Branch:

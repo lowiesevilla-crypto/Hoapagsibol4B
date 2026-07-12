@@ -2,7 +2,7 @@ import "server-only";
 
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/db";
-import { paymentCoverageDisplay } from "@/lib/payment-coverage";
+import { paymentAllocationCoverageDisplay } from "@/lib/payment-coverage";
 import { getAssociationSettings } from "@/lib/system-settings";
 import { collectionLabel, monthLabel } from "@/lib/utils";
 
@@ -28,7 +28,7 @@ export async function getStatementOfAccount(homeownerId: string, tenantId: strin
     }),
     prisma.payment.findMany({
       where: { homeownerId, tenantId, status: "ACTIVE" },
-      include: { bill: true, processedBy: true },
+      include: { bill: true, allocations: { include: { bill: true }, orderBy: { bill: { billingMonth: "asc" } } }, processedBy: true },
       orderBy: [{ paymentDate: "asc" }, { createdAt: "asc" }],
     }),
     prisma.collection.findMany({
@@ -78,7 +78,7 @@ export async function getStatementOfAccount(homeownerId: string, tenantId: strin
       officialReceiptNo: payment.receiptNumber || fallbackReference("OR", payment.id),
       paymentMethod: payment.method.replaceAll("_", " "),
       referenceNumber: payment.referenceNumber || "-",
-      coverage: paymentCoverageDisplay(payment),
+      coverage: paymentAllocationCoverageDisplay(payment),
       amount: Number(payment.amount),
       collector: payment.processedBy?.name ?? "Authorized HOA Collector",
     })),
@@ -110,6 +110,7 @@ function buildLedger(input: {
     referenceNumber: string | null;
     paymentCoverageDisplay: string | null;
     bill?: { billingMonth: Date } | null;
+    allocations?: Array<{ coverageLabel: string | null; bill: { billingMonth: Date } }>;
     coverageStart?: Date | null;
     coverageEnd?: Date | null;
     coverageMonths?: unknown;
@@ -188,7 +189,7 @@ function buildLedger(input: {
   for (const payment of input.payments) {
     entries.push({
       date: payment.paymentDate,
-      description: paymentCoverageDisplay(payment),
+      description: paymentAllocationCoverageDisplay(payment),
       reference: payment.receiptNumber || payment.referenceNumber || fallbackReference("PAY", payment.id),
       debit: 0,
       credit: Number(payment.amount),

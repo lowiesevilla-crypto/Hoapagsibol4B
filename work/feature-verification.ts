@@ -77,11 +77,13 @@ async function setAnnouncementImage(broken: boolean) {
 }
 
 async function verifyDatabase() {
-  const payment = await prisma.payment.findFirstOrThrow({ where: { referenceNumber: "REGGGS111" }, include: { bill: true } });
-  const totals = await prisma.payment.aggregate({ where: { billId: payment.billId }, _sum: { amount: true } });
+  const payment = await prisma.payment.findFirstOrThrow({ where: { referenceNumber: "REGGGS111" }, include: { bill: true, allocations: { include: { bill: true } } } });
+  const bill = payment.allocations[0]?.bill ?? payment.bill;
+  assert(Boolean(bill), "payment retains a legacy bill or allocation relationship");
+  const totals = await prisma.paymentAllocation.aggregate({ where: { billId: bill!.id, payment: { status: "ACTIVE" } }, _sum: { amount: true } });
   const sum = Number(totals._sum.amount ?? 0);
-  assert(Number(payment.bill.amountPaid) === sum, "bill paid amount equals the sum of payment amounts");
-  assert(Number(payment.bill.balance) === Math.max(0, Number(payment.bill.totalAmount) - sum), "bill unpaid balance was recalculated");
+  assert(Number(bill!.amountPaid) === sum, "bill paid amount equals the sum of active allocations");
+  assert(Number(bill!.balance) === Math.max(0, Number(bill!.totalAmount) - sum), "bill unpaid balance was recalculated");
   const logs = await prisma.auditLog.findMany({ where: { action: "UPDATE_PAYMENT_AMOUNT", entityId: payment.id }, orderBy: { createdAt: "desc" }, take: 2 });
   assert(logs.length === 2, "each verified payment amount change has an audit log");
   const metadata = logs.map((log) => log.metadata as Record<string, unknown>);

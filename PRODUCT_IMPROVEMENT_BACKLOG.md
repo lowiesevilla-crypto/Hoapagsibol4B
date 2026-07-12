@@ -1135,3 +1135,39 @@ Acceptance Criteria:
 
 Fix Summary:
 SOA PDF table flow now measures the first row with the header, uses compact empty-state rows, reduces excess table gaps, removes crowded decorative value lines, and draws the signature/footer block only after confirming measured remaining space. The verified 1-ledger / 0-payment / 1-billing sample renders as exactly one A4 page.
+
+## Bug #030 – Browser Print Preview Pagination and Horizontal Overflow
+
+Module:
+Statement of Account
+
+Priority:
+Critical
+
+Status:
+Open
+
+Problem:
+The SOA browser print preview produces three pages even though the content should fit more efficiently. The preview also reports horizontal overflow.
+
+Observed Result:
+- Page 1 ends after part of Account Summary.
+- Page 2 contains Aging Summary and Running Ledger with excessive unused space.
+- Page 3 contains Payment History, Billing History, and signatures.
+- Some table headers wrap awkwardly.
+- Browser print output differs significantly from the downloaded PDF layout.
+
+Expected Behavior:
+Browser printing must produce a professional A4 portrait statement with compact and natural pagination.
+
+Acceptance Criteria:
+- No horizontal overflow.
+- Account Summary remains together when space permits.
+- Sections do not force unnecessary page breaks.
+- Payment History and Billing History use remaining space before creating a new page.
+- No mostly empty intermediate page.
+- Table headers remain readable.
+- Signature block stays together.
+- Action buttons and application navigation remain hidden.
+- Chrome and Edge print previews are supported.
+- Long statements still paginate correctly.

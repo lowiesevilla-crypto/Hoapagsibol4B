@@ -1518,3 +1518,72 @@ Acceptance Criteria:
 
 Fix Summary:
 Bugs #035-#041 were verified locally on July 12, 2026. Receipts now use one tenant-authorized view model for preview, print, and PDF values; show public property/account details and persisted processor identity; preserve voided receipts; permit tenant-scoped replacement use of voided GCash and bank references; show one transaction-history row per Payment header; and represent complete payment void reversals in bills, active credit, SOA totals, and the running ledger. No Prisma schema or migration change was required.
+## Bug #045 – Browser Tab Title Uses Default Tenant
+
+Module:
+Multi-Tenant Branding
+
+Priority:
+High
+
+Status:
+Open
+
+Problem:
+When accessing:
+
+/test-hoa/login
+
+the browser tab still displays:
+
+Pagsibol Village PH2 4B East
+
+instead of:
+
+Test HOA
+
+Expected Behavior:
+
+The browser title must be generated from the current tenant.
+
+Acceptance Criteria:
+
+- Login page title matches tenant.
+- Admin pages title matches tenant.
+- Homeowner pages title matches tenant.
+- Browser tab updates correctly after tenant switch.
+- No default tenant title appears for authenticated or tenant-specific pages.
+- Favicon should also be tenant-aware if configured.
+## Bug #045 – Global Metadata Uses Hard-Coded Tenant Branding
+
+Module:
+Multi-Tenant Platform
+
+Priority:
+Critical
+
+Status:
+Open
+
+Problem:
+The root layout (`app/layout.tsx`) hard-codes:
+
+- Pagsibol Village PH2 4B East
+
+as the application title.
+
+Every tenant therefore sees the wrong browser tab title.
+
+Expected Behavior:
+
+Metadata must be tenant-aware.
+
+Acceptance Criteria:
+
+- Login page title matches current tenant.
+- Admin page title matches current tenant.
+- Homeowner portal title matches current tenant.
+- Browser tab updates correctly after login.
+- Default branding is only used during bootstrap.
+- Favicon supports tenant branding when configured.
+- Manifest/PWA name uses tenant branding.

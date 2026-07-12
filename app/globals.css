@@ -182,9 +182,17 @@ main, section, article, header, footer, aside, nav, form, div { min-width: 0; }
 @media print {
   @page { size: A4 portrait; margin: 5mm; }
   @page hoa-document { size: A4 portrait; margin: 0; }
+  html, body {
+    width: auto !important;
+    min-width: 0 !important;
+    max-width: none !important;
+    min-height: 0 !important;
+    overflow: visible !important;
+    background: #fff !important;
+  }
   body { background: white !important; }
   .print-hidden { display: none !important; }
-  .print-document { max-width: none !important; min-height: 0 !important; padding: 0 !important; }
+  .print-document { max-width: none !important; min-height: 0 !important; margin: 0 !important; padding: 0 !important; }
   .document-preview-page { min-height: 0 !important; overflow: visible !important; background: #fff !important; padding: 0 !important; }
   .document-preview-viewport { width: auto !important; max-height: none !important; overflow: visible !important; border: 0 !important; padding: 0 !important; }
   .document-preview-stage { width: 210mm !important; height: 297mm !important; margin: 0 !important; }
@@ -192,17 +200,183 @@ main, section, article, header, footer, aside, nav, form, div { min-width: 0; }
   .official-document-sheet { width: 210mm !important; height: 297mm !important; break-inside: avoid !important; page-break-inside: avoid !important; }
   .table-wrap { overflow: visible !important; box-shadow: none !important; }
   .data-table { min-width: 0 !important; font-size: 10pt !important; }
-  .soa-table-frame { overflow: visible !important; border-color: #cbd5e1 !important; break-inside: auto !important; page-break-inside: auto !important; }
-  .soa-print-table { width: 100% !important; min-width: 0 !important; table-layout: fixed !important; font-size: 7.5pt !important; }
-  .soa-print-table th, .soa-print-table td { padding: 4pt 5pt !important; overflow-wrap: anywhere !important; word-break: normal !important; vertical-align: top !important; }
   .card, .print-document section, tr { break-inside: avoid; page-break-inside: avoid; }
-  .soa-document { width: 100% !important; overflow: visible !important; color: #10354c !important; }
-  .soa-document .soa-sheet { border-width: 1px !important; padding: 6mm !important; }
-  .soa-document section { break-inside: auto !important; page-break-inside: auto !important; }
-  .soa-document .soa-table-frame { max-width: 100% !important; border-radius: 0 !important; }
-  .soa-document .soa-print-table thead { display: table-header-group; }
-  .soa-document .soa-print-table tr { break-inside: avoid !important; page-break-inside: avoid !important; }
-  .soa-document .soa-signature-footer { break-inside: avoid !important; page-break-inside: avoid !important; }
+  .soa-document {
+    width: 100% !important;
+    max-width: none !important;
+    min-width: 0 !important;
+    overflow: visible !important;
+    color: #10354c !important;
+  }
+  .soa-document *, .soa-document *::before, .soa-document *::after {
+    box-sizing: border-box !important;
+  }
+  .soa-document .soa-sheet {
+    width: 100% !important;
+    max-width: 100% !important;
+    min-width: 0 !important;
+    overflow: visible !important;
+    border-width: 1px !important;
+    padding: 3mm !important;
+    zoom: 0.96;
+  }
+  .soa-document .soa-print-header {
+    display: grid !important;
+    grid-template-columns: 16mm minmax(0, 1fr) 19mm !important;
+    align-items: center !important;
+    gap: 3mm !important;
+    padding-bottom: 2mm !important;
+    break-inside: avoid !important;
+    page-break-inside: avoid !important;
+  }
+  .soa-document .soa-print-header img,
+  .soa-document .soa-print-header svg {
+    max-width: 19mm !important;
+    max-height: 19mm !important;
+  }
+  .soa-document .soa-print-header h1 {
+    font-size: 13pt !important;
+    line-height: 1.12 !important;
+  }
+  .soa-document .soa-print-header p {
+    font-size: 7pt !important;
+    line-height: 1.25 !important;
+  }
+  .soa-document section {
+    display: block !important;
+    padding: 2mm 0 !important;
+    margin: 0 !important;
+    break-inside: auto !important;
+    page-break-inside: auto !important;
+  }
+  .soa-document .soa-info-summary {
+    display: grid !important;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) !important;
+    gap: 3mm !important;
+  }
+  .soa-document .soa-account-summary > .space-y-2 > * + * {
+    margin-top: 1.4mm !important;
+  }
+  .soa-document .soa-summary-grid {
+    display: grid !important;
+    grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+    gap: 1.4mm !important;
+  }
+  .soa-document .soa-summary-card,
+  .soa-document .soa-aging-card {
+    padding: 1.3mm !important;
+    border-width: 0.5pt !important;
+    border-radius: 0 !important;
+    break-inside: avoid !important;
+    page-break-inside: avoid !important;
+  }
+  .soa-document .soa-summary-card p,
+  .soa-document .soa-aging-card p,
+  .soa-document .soa-info-summary p {
+    font-size: 6.8pt !important;
+    line-height: 1.18 !important;
+  }
+  .soa-document .soa-summary-card .text-xl,
+  .soa-document .soa-summary-card .sm\:text-2xl,
+  .soa-document .soa-aging-card .text-lg {
+    font-size: 8pt !important;
+  }
+  .soa-document .soa-aging-grid {
+    display: grid !important;
+    grid-template-columns: repeat(5, minmax(0, 1fr)) !important;
+    gap: 1.4mm !important;
+  }
+  .soa-document .soa-print-history {
+    display: block !important;
+  }
+  .soa-document .soa-print-history > div + div {
+    margin-top: 2mm !important;
+  }
+  .soa-document .soa-section-title {
+    margin-bottom: 1.4mm !important;
+    break-inside: avoid !important;
+    page-break-inside: avoid !important;
+  }
+  .soa-document .soa-section-title h2,
+  .soa-document h2 {
+    font-size: 7.5pt !important;
+    line-height: 1.15 !important;
+    letter-spacing: 0 !important;
+  }
+  .soa-document .soa-section-title span {
+    padding: 0.7mm 1.6mm !important;
+    font-size: 6pt !important;
+  }
+  .soa-document .soa-table-frame {
+    max-width: 100% !important;
+    overflow: visible !important;
+    border-color: #cbd5e1 !important;
+    border-radius: 0 !important;
+    break-inside: auto !important;
+    page-break-inside: auto !important;
+  }
+  .soa-document .soa-print-table {
+    width: 100% !important;
+    max-width: 100% !important;
+    min-width: 0 !important;
+    table-layout: fixed !important;
+    border-collapse: collapse !important;
+    font-size: 6.2pt !important;
+    line-height: 1.16 !important;
+  }
+  .soa-document .soa-print-table thead {
+    display: table-header-group;
+  }
+  .soa-document .soa-print-table th,
+  .soa-document .soa-print-table td {
+    padding: 1.4pt 2pt !important;
+    overflow-wrap: break-word !important;
+    word-break: normal !important;
+    white-space: normal !important;
+    vertical-align: top !important;
+  }
+  .soa-document .soa-print-table th {
+    letter-spacing: 0 !important;
+  }
+  .soa-document .soa-print-table .font-mono {
+    font-size: 5.9pt !important;
+  }
+  .soa-document .soa-print-table tr {
+    break-inside: avoid !important;
+    page-break-inside: avoid !important;
+  }
+  .soa-ledger-table th:nth-child(1), .soa-ledger-table td:nth-child(1) { width: 11%; }
+  .soa-ledger-table th:nth-child(2), .soa-ledger-table td:nth-child(2) { width: 24%; }
+  .soa-ledger-table th:nth-child(3), .soa-ledger-table td:nth-child(3) { width: 14%; }
+  .soa-ledger-table th:nth-child(4), .soa-ledger-table td:nth-child(4),
+  .soa-ledger-table th:nth-child(5), .soa-ledger-table td:nth-child(5) { width: 10%; }
+  .soa-ledger-table th:nth-child(6), .soa-ledger-table td:nth-child(6) { width: 13%; }
+  .soa-ledger-table th:nth-child(7), .soa-ledger-table td:nth-child(7) { width: 18%; }
+  .soa-payment-table th:nth-child(1), .soa-payment-table td:nth-child(1) { width: 11%; }
+  .soa-payment-table th:nth-child(2), .soa-payment-table td:nth-child(2) { width: 15%; }
+  .soa-payment-table th:nth-child(3), .soa-payment-table td:nth-child(3) { width: 12%; }
+  .soa-payment-table th:nth-child(4), .soa-payment-table td:nth-child(4) { width: 14%; }
+  .soa-payment-table th:nth-child(5), .soa-payment-table td:nth-child(5) { width: 22%; }
+  .soa-payment-table th:nth-child(6), .soa-payment-table td:nth-child(6) { width: 12%; }
+  .soa-payment-table th:nth-child(7), .soa-payment-table td:nth-child(7) { width: 14%; }
+  .soa-billing-table th:nth-child(1), .soa-billing-table td:nth-child(1) { width: 14%; }
+  .soa-billing-table th:nth-child(2), .soa-billing-table td:nth-child(2) { width: 22%; }
+  .soa-billing-table th:nth-child(3), .soa-billing-table td:nth-child(3) { width: 30%; }
+  .soa-billing-table th:nth-child(4), .soa-billing-table td:nth-child(4) { width: 16%; }
+  .soa-billing-table th:nth-child(5), .soa-billing-table td:nth-child(5) { width: 18%; }
+  .soa-document .soa-signature-footer {
+    display: grid !important;
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    margin-top: 0 !important;
+    gap: 4mm !important;
+    font-size: 6.5pt !important;
+    line-height: 1.1 !important;
+    break-inside: auto !important;
+    page-break-inside: auto !important;
+  }
+  .soa-document .soa-signature-footer > div {
+    padding-top: 1.2mm !important;
+  }
   .document-copy, .pass-sheet, .residency-sheet, .clearance-sheet { break-inside: avoid; page-break-inside: avoid; }
 }
 

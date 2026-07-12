@@ -1145,7 +1145,7 @@ Priority:
 Critical
 
 Status:
-Open
+Fixed in Sprint 2.4 SOA finalization on 2026-07-12
 
 Problem:
 The SOA browser print preview produces three pages even though the content should fit more efficiently. The preview also reports horizontal overflow.
@@ -1171,3 +1171,6 @@ Acceptance Criteria:
 - Action buttons and application navigation remain hidden.
 - Chrome and Edge print previews are supported.
 - Long statements still paginate correctly.
+
+Fix Summary:
+Browser Print SOA now uses SOA-scoped print CSS for compact A4 flow, table-specific fixed column widths, normalized table wrapping, stacked print history sections, compact header/summary/footer spacing, and a small print-only sheet zoom for Chrome/Edge. Local verification for homeowner `ABAD, JOHN DARYL ENFANSO` produced 1 printed A4 page in both Chrome and Edge with no horizontal overflow and full statement content.

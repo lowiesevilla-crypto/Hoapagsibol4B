@@ -131,6 +131,7 @@ Resolved before this release candidate:
 - Exemption Summary Counter
 - SOA Print button activation
 - SOA short-PDF unnecessary second page
+- SOA browser print pagination and horizontal overflow
 
 ---
 

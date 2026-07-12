@@ -20,15 +20,15 @@ export default async function StatementOfAccountPage({ params }: { params: Promi
   const pdfHref = `/admin/homeowners/${soa.homeowner.id}/soa/pdf`;
 
   return (
-    <main className="soa-document print-document mx-auto min-h-screen max-w-6xl bg-white p-4 sm:p-8">
+    <main className="soa-document soa-print-root print-document mx-auto min-h-screen max-w-6xl bg-white p-4 sm:p-8">
       <div className="print-hidden mb-5 flex flex-wrap justify-end gap-2">
         <Link className="btn-secondary" href={`/admin/homeowners/${soa.homeowner.id}`}><ArrowLeft className="size-4" /> Return to Homeowner</Link>
         <a className="btn-secondary" href={pdfHref}><Download className="size-4" /> Download PDF</a>
         <SoaPrintButton />
       </div>
 
-      <section className="soa-sheet border-2 border-ink p-4 sm:p-7">
-        <header className="grid gap-5 border-b-2 border-ink pb-5 lg:grid-cols-[auto_1fr_auto] lg:items-center">
+      <section className="soa-sheet soa-print-sheet border-2 border-ink p-4 sm:p-7">
+        <header className="soa-print-header grid gap-5 border-b-2 border-ink pb-5 lg:grid-cols-[auto_1fr_auto] lg:items-center">
           <AssociationLogo className="size-24" src={soa.association.logoUrl} alt={`${soa.association.name} logo`} />
           <div className="text-center lg:text-left">
             <p className="text-xs font-bold uppercase tracking-widest text-pine-700">Statement of Account</p>
@@ -47,7 +47,7 @@ export default async function StatementOfAccountPage({ params }: { params: Promi
           </div>
         </header>
 
-        <section className="grid gap-5 border-b border-ink py-6 xl:grid-cols-[1fr_1fr]">
+        <section className="soa-info-summary grid gap-5 border-b border-ink py-6 xl:grid-cols-[1fr_1fr]">
           <div>
             <h2 className="mb-3 text-sm font-black uppercase tracking-wider text-pine-800">Homeowner Information</h2>
             <div className="grid gap-2 text-sm sm:grid-cols-2">
@@ -61,11 +61,11 @@ export default async function StatementOfAccountPage({ params }: { params: Promi
               <Info label="Status" value={soa.homeowner.status.replaceAll("_", " ")} />
             </div>
           </div>
-          <div>
+          <div className="soa-account-summary">
             <h2 className="mb-3 text-sm font-black uppercase tracking-wider text-pine-800">Account Summary</h2>
             <div className="space-y-2 text-sm">
               <Summary label="Current Outstanding Balance" value={money(soa.summary.currentOutstandingBalance)} strong />
-              <div className="grid gap-2 sm:grid-cols-2">
+              <div className="soa-summary-grid grid gap-2 sm:grid-cols-2">
                 <Summary label="Total Amount Billed" value={money(soa.summary.totalAmountBilled)} />
                 <Summary label="Total Payments" value={money(soa.summary.totalPayments)} />
                 <Summary label="Total Credits" value={money(soa.summary.totalCredits)} />
@@ -77,9 +77,9 @@ export default async function StatementOfAccountPage({ params }: { params: Promi
           </div>
         </section>
 
-        <section className="border-b border-ink py-6">
+        <section className="soa-print-section soa-aging-section border-b border-ink py-6">
           <h2 className="mb-3 text-sm font-black uppercase tracking-wider text-pine-800">Aging Summary</h2>
-          <div className="grid gap-2 sm:grid-cols-5">
+          <div className="soa-aging-grid grid gap-2 sm:grid-cols-5">
             <Aging label="Current" value={soa.aging.current} />
             <Aging label="30 Days" value={soa.aging.thirtyDays} />
             <Aging label="60 Days" value={soa.aging.sixtyDays} />
@@ -88,9 +88,9 @@ export default async function StatementOfAccountPage({ params }: { params: Promi
           </div>
         </section>
 
-        <section className="border-b border-ink py-6">
+        <section className="soa-print-section soa-ledger-section border-b border-ink py-6">
           <SectionTitle title="Running Ledger" count={soa.ledger.length} />
-          <ResponsiveTable minWidth="820px">
+          <ResponsiveTable kind="ledger" minWidth="820px">
             <thead><tr><th>Date</th><th>Description</th><th>Reference</th><th className="text-right">Debit</th><th className="text-right">Credit</th><th className="text-right">Running Balance</th><th>Transaction Type</th></tr></thead>
             <tbody>
               {soa.ledger.map((entry) => <LedgerRow key={`${entry.reference}-${entry.date.toISOString()}-${entry.sortOrder}`} entry={entry} />)}
@@ -99,10 +99,10 @@ export default async function StatementOfAccountPage({ params }: { params: Promi
           </ResponsiveTable>
         </section>
 
-        <section className="grid gap-6 py-6 xl:grid-cols-2">
+        <section className="soa-print-section soa-print-history grid gap-6 py-6 xl:grid-cols-2">
           <div>
             <SectionTitle title="Payment History" count={soa.paymentHistory.length} />
-            <ResponsiveTable minWidth="760px">
+            <ResponsiveTable kind="payment" minWidth="760px">
               <thead><tr><th>Payment Date</th><th>Official Receipt No.</th><th>Payment Method</th><th>Reference Number</th><th>Coverage</th><th className="text-right">Amount</th><th>Collector</th></tr></thead>
               <tbody>
                 {soa.paymentHistory.map((payment) => <tr key={payment.id}><td>{shortDate(payment.paymentDate)}</td><td className="font-mono text-xs font-bold">{payment.officialReceiptNo}</td><td>{payment.paymentMethod}</td><td>{payment.referenceNumber}</td><td>{payment.coverage}</td><td className="text-right font-black">{money(payment.amount)}</td><td>{payment.collector}</td></tr>)}
@@ -113,7 +113,7 @@ export default async function StatementOfAccountPage({ params }: { params: Promi
 
           <div>
             <SectionTitle title="Billing History" count={soa.billingHistory.length} />
-            <ResponsiveTable minWidth="620px">
+            <ResponsiveTable kind="billing" minWidth="620px">
               <thead><tr><th>Billing Date</th><th>Billing Type</th><th>Coverage</th><th className="text-right">Amount</th><th>Status</th></tr></thead>
               <tbody>
                 {soa.billingHistory.map((bill) => <tr key={bill.id}><td>{shortDate(bill.billingDate)}</td><td>{bill.billingType}</td><td>{bill.coverage}</td><td className="text-right font-black">{money(bill.amount)}</td><td><StatusBadge status={bill.status} /></td></tr>)}
@@ -123,7 +123,7 @@ export default async function StatementOfAccountPage({ params }: { params: Promi
           </div>
         </section>
 
-        <footer className="soa-signature-footer mt-8 grid gap-10 text-center text-xs sm:grid-cols-2">
+        <footer className="soa-signature-footer soa-print-signatures mt-8 grid gap-10 text-center text-xs sm:grid-cols-2">
           <div className="border-t border-ink pt-2">Prepared by HOAHub Finance Engine</div>
           <div className="border-t border-ink pt-2">Treasurer / Authorized HOA Representative</div>
         </footer>
@@ -137,7 +137,7 @@ function Info({ label, value, wide = false }: { label: string; value: string; wi
 }
 
 function Summary({ label, value, strong = false }: { label: string; value: string; strong?: boolean }) {
-  return <div className={strong ? "rounded-lg border-2 border-pine-700 bg-pine-50 p-3" : "rounded-lg border border-slate-200 p-3"}>
+  return <div className={strong ? "soa-summary-card rounded-lg border-2 border-pine-700 bg-pine-50 p-3" : "soa-summary-card rounded-lg border border-slate-200 p-3"}>
     <div className="grid grid-cols-1 items-start gap-1 sm:grid-cols-[minmax(0,1fr)_auto] sm:gap-3">
       <p className="min-w-0 text-[11px] font-black uppercase leading-4 text-slate-500">{label}</p>
       <p className={`${strong ? "text-xl text-pine-900 sm:text-2xl" : "text-sm text-ink"} max-w-full justify-self-end whitespace-nowrap text-right font-mono font-black tabular-nums leading-tight`}>{value}</p>
@@ -146,15 +146,23 @@ function Summary({ label, value, strong = false }: { label: string; value: strin
 }
 
 function Aging({ label, value }: { label: string; value: number }) {
-  return <div className="rounded-lg border border-slate-200 p-3 text-center"><p className="text-xs font-black uppercase text-slate-500">{label}</p><p className="mt-1 text-lg font-black text-ink">{money(value)}</p></div>;
+  return <div className="soa-aging-card rounded-lg border border-slate-200 p-3 text-center"><p className="text-xs font-black uppercase text-slate-500">{label}</p><p className="mt-1 text-lg font-black text-ink">{money(value)}</p></div>;
 }
 
 function SectionTitle({ title, count }: { title: string; count: number }) {
-  return <div className="mb-3 flex flex-wrap items-center justify-between gap-2"><h2 className="text-sm font-black uppercase tracking-wider text-pine-800">{title}</h2><span className="rounded-full bg-pine-50 px-3 py-1 text-xs font-bold text-pine-700">{count} record{count === 1 ? "" : "s"}</span></div>;
+  return <div className="soa-section-title mb-3 flex flex-wrap items-center justify-between gap-2"><h2 className="text-sm font-black uppercase tracking-wider text-pine-800">{title}</h2><span className="rounded-full bg-pine-50 px-3 py-1 text-xs font-bold text-pine-700">{count} record{count === 1 ? "" : "s"}</span></div>;
 }
 
-function ResponsiveTable({ children, minWidth }: { children: ReactNode; minWidth: string }) {
-  return <div className="soa-table-frame overflow-x-auto rounded-lg border border-slate-200"><table className="data-table soa-print-table" style={{ minWidth }}>{children}</table></div>;
+function ResponsiveTable({
+  children,
+  kind,
+  minWidth,
+}: {
+  children: ReactNode;
+  kind: "ledger" | "payment" | "billing";
+  minWidth: string;
+}) {
+  return <div className={`soa-table-frame soa-${kind}-table-frame overflow-x-auto rounded-lg border border-slate-200`}><table className={`data-table soa-print-table soa-${kind}-table`} style={{ minWidth }}>{children}</table></div>;
 }
 
 function LedgerRow({ entry }: { entry: StatementLedgerEntry }) {

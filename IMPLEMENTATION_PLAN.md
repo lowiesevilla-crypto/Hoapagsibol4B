@@ -48,6 +48,7 @@
 
 - [x] Bug #028: Print SOA opens through a dedicated client button with mouse, Enter, and Space activation.
 - [x] Bug #029: Short SOA PDF sample with 1 ledger row, 0 payment rows, and 1 billing row renders as exactly one A4 page.
+- [x] Bug #030: Browser Print SOA no longer creates blank/mostly blank carryover pages or horizontal overflow for the verified homeowner SOA.
 - [x] Signature lines and generated footer flow on the true final page.
 - [x] SOA print CSS hides action UI and allows tables to paginate without horizontal overflow.
 - [x] Prisma schema and migrations unchanged.

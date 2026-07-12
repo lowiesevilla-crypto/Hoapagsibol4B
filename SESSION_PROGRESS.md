@@ -1,5 +1,27 @@
 # Session Progress
 
+## 2026-07-12 - Sprint 2.4 Browser Print Pagination Final Hotfix
+
+Branch:
+feature/soa-final
+
+Completed:
+
+- Fixed Bug #030 by replacing fragile browser-print flow with SOA-scoped print layout rules for compact A4 output.
+- Added print-only SOA component hooks for the sheet, header, summary cards, aging cards, history section, and ledger/payment/billing tables.
+- Removed the named `@page` assignment that forced an extra Chromium page-context break.
+- Added table-specific print column widths, normal wrapping, compact section spacing, stacked print history sections, and a small print-only sheet zoom.
+- Left Prisma schema, migrations, SOA PDF generator, billing calculations, payment/receipt logic, authentication, RBAC, and tenant routing unchanged.
+
+Validation:
+
+- Homeowner `ABAD, JOHN DARYL ENFANSO` SOA rendered in Chrome and Edge from `/admin/homeowners/cmqzcqhgd00jjty6sj3aydog3/soa`.
+- Chrome browser print PDF: 1 page, no horizontal overflow, print button worked with mouse, Enter, and Space.
+- Edge browser print PDF: 1 page, no horizontal overflow, print button worked with mouse, Enter, and Space.
+- Extracted print PDF text confirmed the single printed page contains the full SOA content and no blank/mostly blank carryover page.
+- Mobile screen viewport at 390px had no horizontal overflow and preserved the Print SOA control.
+- Existing SOA PDF download route returned `200 application/pdf` and remained on the existing PDF generator path.
+
 ## 2026-07-11 - Sprint 2.3A Finance Integration Hotfix
 
 Branch:

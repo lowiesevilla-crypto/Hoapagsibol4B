@@ -1319,3 +1319,199 @@ Acceptance Criteria:
 
 Fix Summary:
 Payment.amount stores the full cash received, PaymentAllocation totals store the applied amount, and their positive difference is the authoritative tenant- and homeowner-scoped unapplied credit. Recording, payment-request approval, controlled amount edits, voiding, receipts, SOA, portal history, receipt register, CSV/PDF/DOCX reports, and active/history views now preserve and display that distinction. Future automatic credit application remains intentionally deferred to a separately authorized workflow.
+## Bug #035 – Receipt Uses Incorrect Tenant Branding
+
+Module:
+Official Receipts
+
+Priority:
+Critical
+
+Status:
+Open
+
+Problem:
+A receipt created in the `test-hoa` tenant displays branding and organization information from PAGSIBOL VILLAGE PH2 4B EAST.
+
+Expected Behavior:
+Receipt preview and PDF must use the authenticated transaction tenant's organization profile.
+
+Acceptance Criteria:
+- Tenant name is correct.
+- Tenant logo is correct.
+- Tenant address and contact details are correct.
+- Tenant registration and TIN values are correct when configured.
+- Receipt preview and PDF use the same tenant information.
+- No default or previously cached tenant branding appears.
+- Cross-tenant receipt access remains blocked.
+
+---
+
+## Bug #036 – Receipt Property and Account Information Incorrect
+
+Module:
+Official Receipts
+
+Priority:
+High
+
+Status:
+Open
+
+Problem:
+The Property / Account section displays an internal identifier such as:
+
+`Block 1, Lot 1 | cmrhb41ys0005tymwel3yfzcd`
+
+Expected Behavior:
+The receipt must display user-facing property and account details.
+
+Acceptance Criteria:
+- Show Block and Lot.
+- Show property address.
+- Show homeowner account number.
+- Do not expose internal database IDs.
+- Use the correct property linked to the payment homeowner.
+- Preview and PDF display the same information.
+
+---
+
+## Bug #037 – Authorized HOA Processor Shows Role Instead of Real Name
+
+Module:
+Official Receipts
+
+Priority:
+Critical
+
+Status:
+Open
+
+Problem:
+The receipt displays a role such as `Test Role` instead of the actual name of the authorized HOA processor.
+
+Expected Behavior:
+The receipt must show the full name of the authenticated user who processed or approved the transaction.
+
+Acceptance Criteria:
+- Printed processor name is the user's real display name.
+- Role or position may appear separately.
+- Signature/printed-name block does not use the role as the person's name.
+- Preview and PDF remain consistent.
+- Historical receipt processor identity remains immutable.
+
+---
+
+## Bug #038 – Voided Payment Reference Cannot Be Reused
+
+Module:
+Payments
+
+Priority:
+High
+
+Status:
+Open
+
+Problem:
+After a payment is voided, recording a replacement payment using the same external GCash or bank reference is rejected as already used.
+
+Business Rule:
+A voided transaction must not permanently block the external reference from being reused for its authorized replacement transaction.
+
+Acceptance Criteria:
+- Active non-voided transactions retain unique reference protection.
+- A reference belonging only to a voided transaction may be reused.
+- Reuse is tenant-scoped.
+- The new payment audit trail links or refers to the prior void when appropriate.
+- No duplicate active payment exists for the same reference.
+- GCash and Bank Transfer follow the same rule.
+
+---
+
+## Bug #039 – Transaction History Does Not Show Each Payment Transaction Clearly
+
+Module:
+Payments – Transaction History
+
+Priority:
+High
+
+Status:
+Open
+
+Problem:
+Transaction History combines or obscures separate Payment transactions and displays internal IDs as the primary transaction reference.
+
+Expected Behavior:
+Each Payment header must appear as one separate transaction row.
+
+Acceptance Criteria:
+- One row per Payment transaction.
+- Each row shows the Official Receipt number prominently.
+- Separate receipts such as `AR-MD-2026-0000002` and `AR-MD-2026-0000003` appear as separate rows.
+- Internal database ID is hidden or shown only as secondary technical detail.
+- Voided transactions remain visible and clearly marked Void.
+- Allocation details may be expandable.
+- Totals are not double-counted.
+
+---
+
+## Bug #040 – Voiding Does Not Update SOA and Homeowner Credit
+
+Module:
+Payments, SOA, and Ledger
+
+Priority:
+Critical
+
+Status:
+Open
+
+Problem:
+Voiding a payment reverses the transaction but does not correctly update the homeowner SOA, ledger, balances, or unapplied credit.
+
+Expected Behavior:
+Voiding must reverse the complete financial effect of the Payment transaction.
+
+Acceptance Criteria:
+- Every PaymentAllocation is reversed.
+- Covered bill balances are restored.
+- Bill statuses are recalculated.
+- Unapplied homeowner credit is reversed.
+- SOA outstanding balance is updated.
+- SOA payment history marks the payment void or excludes it from active totals according to policy.
+- Running Ledger reflects the reversal.
+- Account Summary credit value is corrected.
+- Registered Receipt remains preserved and marked Void.
+- One transaction-level void audit event is recorded.
+- No partial reversal remains.
+
+---
+
+## Bug #041 – Receipt Preview and PDF Layout Are Inconsistent
+
+Module:
+Official Receipts
+
+Priority:
+High
+
+Status:
+Open
+
+Problem:
+The downloaded receipt PDF uses a different layout or data composition from the on-screen receipt preview.
+
+Expected Behavior:
+Preview and PDF must display the same transaction data, allocation coverage, tenant branding, totals, processor identity, and receipt number.
+
+Acceptance Criteria:
+- Same tenant branding.
+- Same payer and property/account details.
+- Same receipt number.
+- Same allocations and coverage.
+- Same total received, applied amount, and unapplied credit.
+- Same processor name.
+- Professional A4 print layout.
+- No internal IDs exposed.

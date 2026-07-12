@@ -576,3 +576,36 @@ Do not merge to develop, main, or production until Bug #033 and Improvement #034
 - Tenant isolation regression: PASS 22; malicious cross-tenant PaymentAllocation relationships remain blocked.
 - Browser: payment form wording and credit helper verified at desktop and 390px mobile with no horizontal overflow.
 - No Prisma schema or migration files changed.
+# Payment Allocation and Receipt UAT – Remaining Blockers
+
+## Passed
+
+- Same-tenant single-bill payment
+- Same-tenant multi-bill payment
+- Cross-tenant false-positive fix
+- Overpayment acceptance
+- Applied amount calculation
+- Unapplied credit calculation
+- One Payment header
+- One persisted Official Receipt
+- Automatic receipt preview
+- Registered Receipts
+- Active Payments
+- Partial payment
+- Cash payment reference rule
+- Mobile layout
+
+## Failed
+
+- Receipt tenant branding
+- Property/account display
+- Authorized processor printed name
+- Reuse of an external reference after void
+- Transaction History separation and display
+- SOA update after void
+- Credit reversal after void
+- Receipt preview and PDF consistency
+
+## Release Decision
+
+Do not merge `feature/soa-final` into `develop`, `main`, or production until Bugs #035–#041 pass end-to-end UAT.

@@ -1174,3 +1174,63 @@ Acceptance Criteria:
 
 Fix Summary:
 Browser Print SOA now uses SOA-scoped print CSS for compact A4 flow, table-specific fixed column widths, normalized table wrapping, stacked print history sections, compact header/summary/footer spacing, and a small print-only sheet zoom for Chrome/Edge. Local verification for homeowner `ABAD, JOHN DARYL ENFANSO` produced 1 printed A4 page in both Chrome and Edge with no horizontal overflow and full statement content.
+## Bug #031 – Multiple Official Receipts Generated for One Payment Transaction
+
+Module:
+Payments and Official Receipts
+
+Priority:
+Critical
+
+Status:
+Open
+
+Problem:
+When an administrator records one payment covering multiple open bills, the system creates multiple receipt numbers instead of one receipt for the complete payment transaction.
+
+Business Rule:
+One payment transaction must create exactly one Official Receipt, regardless of how many bills or billing periods are covered.
+
+Expected Behavior:
+- One payment transaction
+- One Official Receipt number
+- One payment reference number
+- One payer
+- One total amount
+- Multiple bill allocations under the same transaction and receipt
+- Receipt coverage lists all selected bills or months
+- Receipt total equals the total payment
+
+Acceptance Criteria:
+- A single-bill payment creates one receipt.
+- A multi-bill payment creates one receipt.
+- All selected bill allocations reference the same receipt number.
+- Registered Receipts shows one receipt record for the transaction.
+- Active Payments and Transaction History do not double-count the transaction.
+- Reprinting or refreshing the receipt does not create another receipt.
+- Payment history and SOA show the transaction consistently.
+- Tenant isolation and audit logging remain enforced.
+
+---
+
+## Improvement #032 – Automatic Receipt Preview After Successful Payment
+
+Module:
+Payments and Official Receipts
+
+Priority:
+High
+
+Status:
+Open
+
+Requirement:
+After a payment is successfully recorded, automatically open the generated Official Receipt preview for the administrator.
+
+Acceptance Criteria:
+- Successful payment redirects to the generated receipt preview.
+- The receipt displays payer, total amount, covered bills, payment method, reference number, collector, and receipt number.
+- The administrator can print immediately.
+- Return to Record Payment and Return to Payments actions are available.
+- Refreshing the receipt does not generate another receipt.
+- Desktop and mobile are supported.

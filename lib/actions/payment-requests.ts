@@ -28,7 +28,7 @@ export async function submitPaymentRequestAction(formData: FormData) {
     const data = parsed.data;
     const paymentDate = new Date(`${data.paymentDate}T00:00:00.000Z`);
     const referenceNumber = data.referenceNumber.trim();
-    const duplicatePayment = await prisma.payment.findFirst({ where: { tenantId: user.tenantId, referenceNumber } });
+    const duplicatePayment = await prisma.payment.findFirst({ where: { tenantId: user.tenantId, referenceNumber, status: "ACTIVE" } });
     if (duplicatePayment) throw new Error("This payment reference number has already been recorded.");
     const duplicateRequest = await prisma.paymentRequest.findFirst({ where: { tenantId: user.tenantId, referenceNumber, status: { not: "REJECTED" } } });
     if (duplicateRequest) throw new Error("This payment reference number has already been submitted for verification.");

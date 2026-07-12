@@ -609,3 +609,24 @@ Do not merge to develop, main, or production until Bug #033 and Improvement #034
 ## Release Decision
 
 Do not merge `feature/soa-final` into `develop`, `main`, or production until Bugs #035–#041 pass end-to-end UAT.
+
+# 2026-07-12 - Finance Receipt, History, and Void Finalization
+
+## Completed
+
+- Fixed Bugs #035-#041 with no Prisma schema or migration change.
+- Added a shared, tenant-authorized payment receipt view model used by browser preview and PDF mapping.
+- Removed default-tenant branding fallbacks for non-default tenants, including missing or invalid logo handling.
+- Replaced internal homeowner IDs with `HOA-B{block}-L{lot}` account numbers and persisted property details.
+- Resolved processor name and role separately, preferring the immutable payment audit snapshot.
+- Enforced external-reference uniqueness only against active same-tenant payments; voided-only GCash and bank references can be reused by replacement receipts.
+- Rebuilt Transaction History at the Payment-header level and retained allocation drill-down.
+- Preserved voided receipts while excluding their value from active totals and adding explicit SOA ledger reversal rows.
+
+## Verification
+
+- Browser UAT: Test HOA receipt branding, active/void receipts, receipt register, transaction history, SOA ledger reversal, PDF endpoints, and 390px mobile layout passed.
+- Payment finalization harness: PASS 10.
+- Payment coverage harness: PASS 45.
+- Payment lifecycle harness: PASS 11.
+- Tenant isolation regression: PASS 22 with cleanup.

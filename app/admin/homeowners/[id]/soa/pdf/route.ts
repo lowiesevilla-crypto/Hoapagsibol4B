@@ -133,7 +133,7 @@ function drawLedger(doc: PdfDoc, ledger: StatementLedgerEntry[]) {
 }
 
 function drawPayments(doc: PdfDoc, soa: StatementOfAccount) {
-  table(doc, "Payment History", ["Date", "OR No.", "Method", "Reference", "Coverage", "Received", "Applied", "Credit", "Collector"], [50, 68, 52, 60, 90, 50, 50, 45, 58], soa.paymentHistory.map((payment) => [
+  table(doc, "Payment History", ["Date", "OR No.", "Method", "Reference", "Coverage", "Received", "Applied", "Credit", "Status", "Collector"], [45, 62, 47, 54, 78, 48, 48, 42, 42, 57], soa.paymentHistory.map((payment) => [
     shortDate(payment.paymentDate),
     payment.officialReceiptNo,
     payment.paymentMethod,
@@ -142,6 +142,7 @@ function drawPayments(doc: PdfDoc, soa: StatementOfAccount) {
     pdfMoney(payment.amount),
     pdfMoney(payment.appliedAmount),
     pdfMoney(payment.unappliedCredit),
+    payment.status,
     payment.collector,
   ]));
 }

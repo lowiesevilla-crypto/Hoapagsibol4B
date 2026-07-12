@@ -2,6 +2,7 @@ import "server-only";
 
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/db";
+import { homeownerAccountNumber } from "@/lib/homeowner-account";
 import { paymentAllocationCoverageDisplay } from "@/lib/payment-coverage";
 import { paymentAppliedAmount, paymentUnappliedCredit, totalUnappliedCredit } from "@/lib/payment-credit";
 import { getAssociationSettings } from "@/lib/system-settings";
@@ -28,7 +29,7 @@ export async function getStatementOfAccount(homeownerId: string, tenantId: strin
       orderBy: [{ billingMonth: "asc" }, { createdAt: "asc" }],
     }),
     prisma.payment.findMany({
-      where: { homeownerId, tenantId, status: "ACTIVE" },
+      where: { homeownerId, tenantId },
       include: { bill: true, allocations: { include: { bill: true }, orderBy: { bill: { billingMonth: "asc" } } }, processedBy: true },
       orderBy: [{ paymentDate: "asc" }, { createdAt: "asc" }],
     }),
@@ -43,13 +44,14 @@ export async function getStatementOfAccount(homeownerId: string, tenantId: strin
   if (!homeowner) notFound();
 
   const ledger = buildLedger({ bills, payments, collections });
+  const activePayments = payments.filter((payment) => payment.status === "ACTIVE");
   const totalAmountBilled = bills.reduce((total, bill) => total + Number(bill.totalAmount), 0);
   const currentOutstandingBalance = bills.reduce((total, bill) => total + Number(bill.balance), 0);
-  const totalPayments = payments.reduce((total, payment) => total + Number(payment.amount), 0);
-  const availableCredit = totalUnappliedCredit(payments);
+  const totalPayments = activePayments.reduce((total, payment) => total + Number(payment.amount), 0);
+  const availableCredit = totalUnappliedCredit(activePayments);
   const totalPenalties = bills.reduce((total, bill) => total + Number(bill.penalty), 0);
-  const totalCredits = ledger.reduce((total, entry) => total + entry.credit, 0);
-  const lastPayment = payments.at(-1);
+  const totalCredits = ledger.reduce((total, entry) => total + entry.credit - (entry.transactionType === "Payment Void" ? entry.debit : 0), 0);
+  const lastPayment = activePayments.at(-1);
   const today = new Date();
   const overdueBills = bills.filter((bill) => Number(bill.balance) > 0 && bill.dueDate < today);
   const collectionStatus = currentOutstandingBalance <= 0 ? "Current" : overdueBills.length ? "Overdue" : "Open Balance";
@@ -60,7 +62,7 @@ export async function getStatementOfAccount(homeownerId: string, tenantId: strin
   return {
     association,
     homeowner,
-    accountNumber: `HOA-${homeowner.block}-${homeowner.lot}-${homeowner.id.slice(-5).toUpperCase()}`,
+    accountNumber: homeownerAccountNumber(homeowner),
     statementDate,
     statementCode,
     verifyUrl,
@@ -86,6 +88,7 @@ export async function getStatementOfAccount(homeownerId: string, tenantId: strin
       amount: Number(payment.amount),
       appliedAmount: paymentAppliedAmount(payment),
       unappliedCredit: paymentUnappliedCredit(payment),
+      status: payment.status === "VOIDED" ? "Void" : "Active",
       collector: payment.processedBy?.name ?? "Authorized HOA Collector",
     })),
     billingHistory: [...bills].reverse().map((bill) => ({
@@ -112,6 +115,9 @@ function buildLedger(input: {
     id: string;
     paymentDate: Date;
     amount: unknown;
+    status: string;
+    voidedAt?: Date | null;
+    voidReason?: string | null;
     receiptNumber: string | null;
     referenceNumber: string | null;
     paymentCoverageDisplay: string | null;
@@ -202,6 +208,17 @@ function buildLedger(input: {
       transactionType: "Payment",
       sortOrder: 50,
     });
+    if (payment.status === "VOIDED" && payment.voidedAt) {
+      entries.push({
+        date: payment.voidedAt,
+        description: `Void receipt ${payment.receiptNumber || fallbackReference("PAY", payment.id)}${payment.voidReason ? ` - ${payment.voidReason}` : ""}`,
+        reference: payment.receiptNumber || payment.referenceNumber || fallbackReference("VOID", payment.id),
+        debit: Number(payment.amount),
+        credit: 0,
+        transactionType: "Payment Void",
+        sortOrder: 60,
+      });
+    }
   }
 
   let runningBalance = 0;

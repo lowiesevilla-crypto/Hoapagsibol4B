@@ -32,7 +32,7 @@ export async function recordMonthlyDuesPayment(tx: Prisma.TransactionClient, inp
 
   const referenceNumber = normalizePaymentReference(input.method, input.referenceNumber);
   if (referenceNumber) {
-    const duplicatePayment = await tx.payment.findFirst({ where: { tenantId: input.actor.tenantId, referenceNumber } });
+    const duplicatePayment = await tx.payment.findFirst({ where: { tenantId: input.actor.tenantId, referenceNumber, status: "ACTIVE" } });
     if (duplicatePayment) throw new Error("This payment reference number has already been recorded.");
     const duplicateRequest = await tx.paymentRequest.findFirst({ where: { tenantId: input.actor.tenantId, referenceNumber, status: { not: "REJECTED" } } });
     if (duplicateRequest) throw new Error("This reference number is already attached to a QR/GCash payment request.");
@@ -50,6 +50,9 @@ export async function recordMonthlyDuesPayment(tx: Prisma.TransactionClient, inp
   }
 
   const coverage = buildPaymentCoveragePeriod(input);
+  const replacedVoidedPayments = referenceNumber
+    ? await tx.payment.findMany({ where: { tenantId: input.actor.tenantId, referenceNumber, status: "VOIDED" }, select: { id: true, receiptNumber: true } })
+    : [];
   const allocations = buildAllocations(bills, input.amount);
   const allocatedTotal = roundMoney(allocations.reduce((sum, allocation) => sum + allocation.amount, 0));
   const paymentTotal = roundMoney(input.amount);
@@ -117,6 +120,7 @@ export async function recordMonthlyDuesPayment(tx: Prisma.TransactionClient, inp
         allocations: allocations.map((allocation) => ({ billId: allocation.bill.id, amount: allocation.amount, coverage: monthLabel(allocation.bill.billingMonth) })),
         method: input.method,
         referenceNumber,
+        replacesVoidedPayments: replacedVoidedPayments,
         coverageStart: coverage.coverageStart,
         coverageEnd: coverage.coverageEnd,
         paymentCoverageDisplay: coverage.paymentCoverageDisplay,

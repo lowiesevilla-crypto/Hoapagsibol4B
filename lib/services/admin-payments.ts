@@ -102,26 +102,29 @@ export async function getActivePaymentsData(admin: AdminActor, query: PaymentQue
 export async function getPaymentHistoryData(admin: AdminActor, query: PaymentQuery) {
   const q = query.q?.trim() || "";
   const historyPage = Math.max(1, Number(query.historyPage) || 1);
-  const where = buildPaymentArchiveWhere(admin.tenantId, query, q);
-  const [paymentArchives, archiveCount, homeowners] = await Promise.all([
-    prisma.paymentArchive.findMany({
+  const where = buildPaymentHistoryWhere(admin.tenantId, query, q);
+  const paymentOrder: Prisma.PaymentOrderByWithRelationInput[] = query.sort === "oldest"
+    ? [{ paymentDate: "asc" }, { createdAt: "asc" }]
+    : query.sort === "amount_high"
+      ? [{ amount: "desc" }]
+      : [{ paymentDate: "desc" }, { createdAt: "desc" }];
+  const [payments, paymentCount, homeowners] = await Promise.all([
+    prisma.payment.findMany({
       where,
-      include: { voidedBy: true },
-      orderBy: { voidedAt: "desc" },
+      include: {
+        homeowner: { include: { user: true } },
+        processedBy: { include: { employeeProfile: true } },
+        voidedBy: true,
+        allocations: { include: { bill: true }, orderBy: { bill: { billingMonth: "asc" } } },
+      },
+      orderBy: paymentOrder,
       skip: (historyPage - 1) * paymentPageSize,
       take: paymentPageSize,
     }),
-    prisma.paymentArchive.count({ where }),
+    prisma.payment.count({ where }),
     homeownerFilterOptions(admin.tenantId),
   ]);
-  const allocationRows = paymentArchives.length ? await prisma.paymentAllocation.findMany({
-    where: { tenantId: admin.tenantId, paymentId: { in: paymentArchives.map((item) => item.originalPaymentId) } },
-    include: { bill: true },
-    orderBy: { bill: { billingMonth: "asc" } },
-  }) : [];
-  const allocationsByPayment = new Map<string, typeof allocationRows>();
-  for (const allocation of allocationRows) allocationsByPayment.set(allocation.paymentId, [...(allocationsByPayment.get(allocation.paymentId) ?? []), allocation]);
-  return { q, historyPage, archiveCount, paymentArchives: paymentArchives.map((item) => ({ ...item, allocations: allocationsByPayment.get(item.originalPaymentId) ?? [] })), homeowners };
+  return { q, historyPage, paymentCount, payments, homeowners };
 }
 
 export function preservedEntries(query: PaymentQuery, omit: string[] = []) {
@@ -180,14 +183,15 @@ function buildPaymentWhere(tenantId: string, query: PaymentQuery, q: string): Pr
   };
 }
 
-function buildPaymentArchiveWhere(tenantId: string, query: PaymentQuery, q: string): Prisma.PaymentArchiveWhereInput {
+function buildPaymentHistoryWhere(tenantId: string, query: PaymentQuery, q: string): Prisma.PaymentWhereInput {
   const range = dateRange(query);
   return {
     tenantId,
     ...(query.homeownerId ? { homeownerId: query.homeownerId } : {}),
     ...(query.method ? { method: query.method as never } : {}),
     ...(Object.keys(range).length ? { paymentDate: range } : {}),
-    ...(q ? { OR: [{ originalPaymentId: { contains: q } }, { referenceNumber: { contains: q } }, { receiptNumber: { contains: q } }, { paymentCoverageDisplay: { contains: q } }, { homeownerName: { contains: q } }, { property: { contains: q } }, { homeownerId: { contains: q } }] } : {}),
+    ...(query.status ? { status: query.status as never } : {}),
+    ...(q ? { OR: [{ referenceNumber: { contains: q } }, { receiptNumber: { contains: q } }, { paymentCoverageDisplay: { contains: q } }, { allocations: { some: { bill: { resolutionReference: { contains: q } } } } }, ...homeownerSearch(q)] } : {}),
   };
 }
 

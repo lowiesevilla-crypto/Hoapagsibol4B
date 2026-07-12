@@ -87,3 +87,17 @@ Prepare the finance migration and SOA finalization for product-owner review befo
 - [x] Keep unapplied credit out of dues income while retaining the full payment in cash receipts.
 - [x] Verify desktop/mobile UI, transaction lifecycle, tenant isolation, typecheck, and cleanup.
 - [x] Leave future credit application as a separate authorized workflow.
+
+## Finance Receipt, History, and Void Finalization
+
+### Completed
+
+- [x] Bug #035: resolve receipt organization data from the persisted Payment tenant and prevent default-tenant branding leakage.
+- [x] Bug #036: show public account, block, lot, and property address without CUID/UUID values.
+- [x] Bug #037: print the persisted human processor name with role or position shown separately.
+- [x] Bug #038: block active duplicate references while permitting tenant-scoped reuse after void for GCash and Bank Transfer.
+- [x] Bug #039: query and paginate Transaction History as one row per Payment header with receipt-first references.
+- [x] Bug #040: preserve allocations and receipts while reversing bill balances, active credit, SOA totals, and ledger effect atomically.
+- [x] Bug #041: use one tenant-safe receipt view model for preview and PDF business values.
+- [x] Verify receipt register, Active/Void status, SOA and receipt PDF endpoints, desktop/mobile UI, tenant isolation, and payment regressions.
+- [x] Keep Prisma schema and migrations unchanged.

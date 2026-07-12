@@ -143,17 +143,21 @@ export async function getPaymentSettings(tenantId = currentTenantContext()?.tena
 
 export async function getAssociationSettings(tenantId = currentTenantContext()?.tenantId || "tenant_pagsibol4b_default") {
   const [map, tenant] = await Promise.all([getSystemSettingMap(tenantId), prisma.tenant.findUnique({ where: { id: tenantId } })]);
-  const value = (key: string, fallback = "") => map.get(`${SystemSettingCategory.ASSOCIATION}.${key}`)?.value?.trim() || process.env[key]?.trim() || fallback;
-  const name = value("ASSOCIATION_NAME", tenant?.name || "PAGSIBOL VILLAGE PH2 4B EAST");
-  const logoUrl = value("ASSOCIATION_LOGO_URL", tenant?.logoUrl || "/pagsibol-logo.png");
+  const useBootstrapDefaults = tenantId === "tenant_pagsibol4b_default";
+  const value = (key: string, fallback = "") =>
+    map.get(`${SystemSettingCategory.ASSOCIATION}.${key}`)?.value?.trim() ||
+    (useBootstrapDefaults ? process.env[key]?.trim() : "") ||
+    fallback;
+  const name = value("ASSOCIATION_NAME", tenant?.name || (useBootstrapDefaults ? "PAGSIBOL VILLAGE PH2 4B EAST" : "Homeowners Association"));
+  const logoUrl = value("ASSOCIATION_LOGO_URL", tenant?.logoUrl || (useBootstrapDefaults ? "/pagsibol-logo.png" : ""));
   return {
     name,
-    address: value("ASSOCIATION_ADDRESS", tenant?.address || "Pagsibol Village Phase 2 4B East"),
+    address: value("ASSOCIATION_ADDRESS", tenant?.address || (useBootstrapDefaults ? "Pagsibol Village Phase 2 4B East" : "")),
     contactNumber: value("ASSOCIATION_CONTACT_NUMBER", tenant?.contactNumber || ""),
     email: value("ASSOCIATION_EMAIL", tenant?.email || ""),
     tinNumber: value("ASSOCIATION_TIN_NUMBER", tenant?.tinNumber || ""),
     secRegistrationNumber: value("ASSOCIATION_SEC_REGISTRATION_NUMBER", tenant?.secRegistrationNumber || ""),
-    logoUrl: logoUrl || "/pagsibol-logo.png",
+    logoUrl,
     documentTitle: `${name} Homeowners Association`,
   };
 }

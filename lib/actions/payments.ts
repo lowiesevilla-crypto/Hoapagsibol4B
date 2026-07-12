@@ -88,26 +88,35 @@ export async function voidPaymentAction(formData: FormData) {
   if (!parsed.success) redirect(`/admin/payments/active?error=${encodeURIComponent(parsed.error.issues[0]?.message || "Payment could not be voided.")}`);
   const { id, reason } = parsed.data;
 
+  let homeownerId: string | undefined;
   try {
-    await voidPaymentLedger({ paymentId: id, actor: admin, reason });
+    const result = await voidPaymentLedger({ paymentId: id, actor: admin, reason });
+    homeownerId = result.homeownerId;
   } catch (error) {
     redirect(`/admin/payments/active?error=${encodeURIComponent(error instanceof Error ? error.message : "Payment could not be voided.")}`);
   }
 
-  revalidatePaymentPages(id);
+  revalidatePaymentPages(id, homeownerId);
   redirect("/admin/payments/active?success=deleted&message=Payment%20voided%2C%20archived%2C%20and%20billing%20totals%20recalculated.");
 }
 
-function revalidatePaymentPages(paymentId?: string) {
+function revalidatePaymentPages(paymentId?: string, homeownerId?: string) {
   revalidatePath("/admin/payments");
   revalidatePath("/admin/payments/record");
   revalidatePath("/admin/payments/requests");
   revalidatePath("/admin/payments/active");
   revalidatePath("/admin/payments/history");
   revalidatePath("/admin/billing");
+  revalidatePath("/admin/receipts");
+  revalidatePath("/admin/reports");
   revalidatePath("/admin/dashboard");
   revalidatePath("/portal/billing");
   revalidatePath("/portal/payments");
   revalidatePath("/portal/dashboard");
   if (paymentId) revalidatePath(`/receipts/payment/${paymentId}`);
+  if (homeownerId) {
+    revalidatePath(`/admin/homeowners/${homeownerId}`);
+    revalidatePath(`/admin/homeowners/${homeownerId}/soa`);
+    revalidatePath(`/admin/homeowners/${homeownerId}/soa/pdf`);
+  }
 }

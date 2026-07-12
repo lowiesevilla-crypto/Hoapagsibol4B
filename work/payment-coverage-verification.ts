@@ -2,6 +2,7 @@ import { PaymentMethod, Prisma, PrismaClient } from "@prisma/client";
 import { paymentCoverageLabel } from "../lib/payment-coverage";
 import { normalizePaymentReference } from "../lib/payment-methods";
 import { recordMonthlyDuesPayment } from "../lib/services/payment-recording";
+import { recalculateBillFromActivePayments } from "../lib/services/payment-ledger";
 import { paymentSchema } from "../lib/validation";
 
 const prisma = new PrismaClient();
@@ -73,7 +74,7 @@ async function main() {
           monthlyDuesAmount: 1000,
         },
       });
-      const months = [5, 6, 7, 8].map((month) => new Date(Date.UTC(2097, month, 1)));
+      const months = [5, 6, 7, 8, 9, 10].map((month) => new Date(Date.UTC(2097, month, 1)));
       const bills = await Promise.all(months.map((billingMonth) => tx.bill.create({
         data: {
           homeownerId: homeowner.id,
@@ -180,6 +181,46 @@ async function main() {
       check(overpaidPayment.allocations.length === 1 && Number(overpaidPayment.allocations[0].amount) === 600, "overpayment caps bill allocation at the outstanding balance");
       check(overpayment.appliedAmount === 600 && overpayment.unappliedCredit === 500, "overpayment confirmation reports PHP 500.00 as unapplied credit");
       check(await tx.payment.count({ where: { id: overpayment.paymentId } }) === 1 && Boolean(overpaidPayment.receiptNumber), "overpayment creates one payment and one official receipt number");
+
+      for (const [index, method] of [PaymentMethod.GCASH, PaymentMethod.BANK_TRANSFER].entries()) {
+        const bill = bills[4 + index];
+        const referenceNumber = `${marker}-${method}-REUSE`;
+        const original = await recordMonthlyDuesPayment(tx, {
+          actor: { id: actor.id, tenantId: actor.tenantId, name: actor.name, email: actor.email },
+          billIds: [bill.id],
+          amount: 500,
+          paymentDate: new Date(`2097-${10 + index}-15T00:00:00.000Z`),
+          method,
+          idempotencyKey: `${marker}-${method}-original`,
+          coverageFromMonth: 10 + index,
+          coverageFromYear: 2097,
+          coverageToMonth: 10 + index,
+          coverageToYear: 2097,
+          referenceNumber,
+          remarks: marker,
+        });
+        let activeDuplicateBlocked = false;
+        try {
+          await recordMonthlyDuesPayment(tx, {
+            actor: { id: actor.id, tenantId: actor.tenantId, name: actor.name, email: actor.email },
+            billIds: [bill.id], amount: 100, paymentDate: new Date(`2097-${10 + index}-16T00:00:00.000Z`), method,
+            idempotencyKey: `${marker}-${method}-duplicate`, coverageFromMonth: 10 + index, coverageFromYear: 2097,
+            coverageToMonth: 10 + index, coverageToYear: 2097, referenceNumber, remarks: marker,
+          });
+        } catch (error) {
+          activeDuplicateBlocked = error instanceof Error && error.message.includes("already been recorded");
+        }
+        check(activeDuplicateBlocked, `${method} active reference duplicate is blocked`);
+        await tx.payment.update({ where: { id: original.paymentId }, data: { status: "VOIDED", voidedAt: new Date() } });
+        await recalculateBillFromActivePayments(tx, bill);
+        const replacement = await recordMonthlyDuesPayment(tx, {
+          actor: { id: actor.id, tenantId: actor.tenantId, name: actor.name, email: actor.email },
+          billIds: [bill.id], amount: 100, paymentDate: new Date(`2097-${10 + index}-17T00:00:00.000Z`), method,
+          idempotencyKey: `${marker}-${method}-replacement`, coverageFromMonth: 10 + index, coverageFromYear: 2097,
+          coverageToMonth: 10 + index, coverageToYear: 2097, referenceNumber, remarks: marker,
+        });
+        check(replacement.paymentId !== original.paymentId && Boolean((await tx.payment.findUniqueOrThrow({ where: { id: replacement.paymentId } })).receiptNumber), `${method} voided-only reference is reusable on a new receipt`);
+      }
       throw rollback;
     }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable, timeout: 30_000 });
   } catch (error) {

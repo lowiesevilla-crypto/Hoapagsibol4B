@@ -164,7 +164,7 @@ export async function voidPaymentLedger({ paymentId, actor, reason }: { paymentI
         },
       },
     });
-    return { paymentId: payment.id, archiveId: archive.id, billIds: affectedBills.map((bill) => bill.id), recalculated };
+    return { paymentId: payment.id, homeownerId: payment.homeownerId, archiveId: archive.id, billIds: affectedBills.map((bill) => bill.id), recalculated };
   }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
 }
 

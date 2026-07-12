@@ -9,7 +9,7 @@ export default async function PaymentHistoryPage({ searchParams }: { searchParam
   const query = await searchParams;
   const data = await getPaymentHistoryData(admin, query);
   return <>
-    <PageHeader eyebrow="Payments" title="Transaction history" description="Review voided payment transactions preserved for audit and receipt traceability." />
+    <PageHeader eyebrow="Payments" title="Transaction history" description="Review active and voided payment transactions with receipt and allocation traceability." />
     <PaymentsNav />
     <PaymentHistoryView data={data} query={query} />
   </>;

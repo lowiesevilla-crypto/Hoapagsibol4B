@@ -161,6 +161,16 @@ Resolved before this release candidate:
 
 # Upcoming Sprint
 
+## Finance Finalization Hotfix
+
+- Corrected tenant-scoped receipt branding and eliminated cross-tenant bootstrap logo fallback.
+- Added public property/account presentation and stable processor identity to receipt preview and PDF data.
+- Added one-row-per-Payment Transaction History with Official Receipt, received/applied/credit totals, status, processor, and allocation details.
+- Allowed tenant-scoped GCash and Bank Transfer reference reuse after the prior transaction is voided while retaining active duplicate protection.
+- Completed payment void reversal across covered bills, active unapplied credit, SOA totals, receipt status, and running-ledger reversal entries.
+- Preserved all historical Payment, allocation, receipt, and audit records.
+- Verified receipt/SOA PDF routes, desktop and 390px mobile UI, payment regressions, and tenant isolation without a schema migration.
+
 ## Post-RC UAT
 
 Planned Deliverables

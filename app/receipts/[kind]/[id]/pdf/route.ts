@@ -4,11 +4,13 @@ import { NextResponse } from "next/server";
 import { notFound } from "next/navigation";
 import { requireUser } from "@/lib/auth";
 import { prisma } from "@/lib/db";
+import { homeownerAccountNumber, homeownerPropertyLabel } from "@/lib/homeowner-account";
 import { getPaymentReceiptData } from "@/lib/services/payment-receipt";
 import { getAssociationSettings } from "@/lib/system-settings";
 import { amountInWords, collectionLabel, money, shortDate } from "@/lib/utils";
 
 type PdfReceipt = {
+  association: Awaited<ReturnType<typeof getAssociationSettings>>;
   number: string;
   date: Date;
   payer: string;
@@ -19,8 +21,10 @@ type PdfReceipt = {
   method: string;
   reference: string | null;
   remarks: string | null;
-  processedBy: string;
-  allocations: Array<{ coverage: string; amount: number; remainingBalance: number | null }>;
+  processorName: string;
+  processorRole: string;
+  status: string;
+  allocations: Array<{ coverage: string; billType: string; amount: number; remainingBalance: number | null }>;
   appliedAmount: number;
   unappliedCredit: number;
   homeownerCreditBalance: number | null;
@@ -33,12 +37,13 @@ export async function GET(_request: Request, { params }: { params: Promise<{ kin
   let receipt: PdfReceipt | null = null;
 
   if (kind === "payment") {
-    const payment = await getPaymentReceiptData(id);
+    const payment = await getPaymentReceiptData(id, user.tenantId);
     if (!payment) notFound();
     if (user.role === Role.HOMEOWNER && user.homeownerProfile?.id !== payment.homeownerId) {
       return NextResponse.json({ error: "Receipt access denied." }, { status: 403 });
     }
     receipt = {
+      association: payment.association,
       number: payment.number,
       date: payment.date,
       payer: payment.payer,
@@ -49,16 +54,18 @@ export async function GET(_request: Request, { params }: { params: Promise<{ kin
       method: payment.method,
       reference: payment.reference,
       remarks: payment.remarks,
-      processedBy: payment.processedBy,
+      processorName: payment.processorName,
+      processorRole: payment.processorRole,
+      status: payment.status,
       allocations: payment.allocations,
-      appliedAmount: payment.allocationTotal,
+      appliedAmount: payment.appliedAmount,
       unappliedCredit: payment.unappliedCredit,
       homeownerCreditBalance: payment.homeownerCreditBalance,
       remainingBalance: payment.remainingBalance,
     };
   } else if (kind === "collection") {
-    const item = await prisma.collection.findUnique({
-      where: { id },
+    const item = await prisma.collection.findFirst({
+      where: { id, tenantId: user.tenantId },
       include: { homeowner: { include: { user: true } }, contractor: true, createdBy: true },
     });
     if (!item) notFound();
@@ -67,18 +74,21 @@ export async function GET(_request: Request, { params }: { params: Promise<{ kin
     }
     const purpose = collectionLabel(item.type, item.description);
     receipt = {
+      association: await getAssociationSettings(item.tenantId),
       number: item.receiptNumber || `AR-${item.id.slice(-8).toUpperCase()}`,
       date: item.collectionDate,
       payer: item.homeowner?.user.name ?? item.contractor?.companyName ?? "Unknown payer",
-      address: item.homeowner?.address ?? item.contractor?.address ?? "",
+      address: item.homeowner ? `${item.homeowner.address} | ${homeownerPropertyLabel(item.homeowner)} | Account ${homeownerAccountNumber(item.homeowner)}` : item.contractor?.address ?? "",
       paymentFor: purpose,
       particulars: purpose,
       amount: Number(item.amount),
       method: item.method,
       reference: item.referenceNumber,
       remarks: item.remarks,
-      processedBy: item.createdBy.name,
-      allocations: [{ coverage: purpose, amount: Number(item.amount), remainingBalance: null }],
+      processorName: item.createdBy.name || "Authorized HOA Processor",
+      processorRole: "Authorized HOA Processor",
+      status: "ACTIVE",
+      allocations: [{ coverage: purpose, billType: purpose, amount: Number(item.amount), remainingBalance: null }],
       appliedAmount: Number(item.amount),
       unappliedCredit: 0,
       homeownerCreditBalance: null,
@@ -88,7 +98,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ kin
     notFound();
   }
 
-  const association = await getAssociationSettings();
+  const association = receipt.association;
   const pdf = await PDFDocument.create();
   const page = pdf.addPage([595.28, 841.89]);
   const regular = await pdf.embedFont(StandardFonts.Helvetica);
@@ -117,6 +127,7 @@ function drawReceipt(page: PDFPage, receipt: PdfReceipt, association: Awaited<Re
   page.drawText("RECEIPT NO.", { x: 430, y: 774, font: bold, size: 7, color: navy });
   page.drawText(safe(receipt.number), { x: 430, y: 756, font: bold, size: 11, color: rgb(.8, 0, 0), maxWidth: 120 });
   page.drawText(`DATE: ${safe(shortDate(receipt.date))}`, { x: 430, y: 735, font: bold, size: 8, color: navy });
+  page.drawText(receipt.status === "VOIDED" ? "VOID" : "ACTIVE", { x: 430, y: 720, font: bold, size: 8, color: receipt.status === "VOIDED" ? rgb(.8, 0, 0) : rgb(0, .45, .2) });
   page.drawLine({ start: { x: 42, y: 710 }, end: { x: 553, y: 710 }, color: navy, thickness: 1 });
 
   let y = 680;
@@ -154,8 +165,8 @@ function drawReceipt(page: PDFPage, receipt: PdfReceipt, association: Awaited<Re
   if (receipt.remainingBalance !== null) page.drawText(`REMAINING ACCOUNT BALANCE: ${safe(money(receipt.remainingBalance).replace("₱", "PHP "))}`, { x: 250, y: 287, font: bold, size: 7.5, color: navy });
   page.drawText("Received and acknowledged by:", { x: 354, y: 270, font: regular, size: 8, color: rgb(.3, .34, .4) });
   page.drawLine({ start: { x: 350, y: 210 }, end: { x: 535, y: 210 }, color: navy, thickness: .7 });
-  drawCentered(page, safe(receipt.processedBy), 350, 535, 194, bold, 8, navy);
-  drawCentered(page, "Authorized HOA processor", 350, 535, 181, regular, 7, rgb(.3, .34, .4));
+  drawCentered(page, safe(receipt.processorName), 350, 535, 194, bold, 8, navy);
+  drawCentered(page, safe(receipt.processorRole), 350, 535, 181, regular, 7, rgb(.3, .34, .4));
   page.drawText(`Generated by ${safe(association.name)} HOA Digital Hub`, { x: 42, y: 62, font: regular, size: 7, color: rgb(.4, .44, .5) });
 }
 

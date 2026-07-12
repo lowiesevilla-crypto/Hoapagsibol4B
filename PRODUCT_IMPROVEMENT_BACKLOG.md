@@ -1328,7 +1328,7 @@ Priority:
 Critical
 
 Status:
-Open
+Fixed
 
 Problem:
 A receipt created in the `test-hoa` tenant displays branding and organization information from PAGSIBOL VILLAGE PH2 4B EAST.
@@ -1356,7 +1356,7 @@ Priority:
 High
 
 Status:
-Open
+Fixed
 
 Problem:
 The Property / Account section displays an internal identifier such as:
@@ -1385,7 +1385,7 @@ Priority:
 Critical
 
 Status:
-Open
+Fixed
 
 Problem:
 The receipt displays a role such as `Test Role` instead of the actual name of the authorized HOA processor.
@@ -1411,7 +1411,7 @@ Priority:
 High
 
 Status:
-Open
+Fixed
 
 Problem:
 After a payment is voided, recording a replacement payment using the same external GCash or bank reference is rejected as already used.
@@ -1438,7 +1438,7 @@ Priority:
 High
 
 Status:
-Open
+Fixed
 
 Problem:
 Transaction History combines or obscures separate Payment transactions and displays internal IDs as the primary transaction reference.
@@ -1466,7 +1466,7 @@ Priority:
 Critical
 
 Status:
-Open
+Fixed
 
 Problem:
 Voiding a payment reverses the transaction but does not correctly update the homeowner SOA, ledger, balances, or unapplied credit.
@@ -1498,7 +1498,7 @@ Priority:
 High
 
 Status:
-Open
+Fixed
 
 Problem:
 The downloaded receipt PDF uses a different layout or data composition from the on-screen receipt preview.
@@ -1515,3 +1515,6 @@ Acceptance Criteria:
 - Same processor name.
 - Professional A4 print layout.
 - No internal IDs exposed.
+
+Fix Summary:
+Bugs #035-#041 were verified locally on July 12, 2026. Receipts now use one tenant-authorized view model for preview, print, and PDF values; show public property/account details and persisted processor identity; preserve voided receipts; permit tenant-scoped replacement use of voided GCash and bank references; show one transaction-history row per Payment header; and represent complete payment void reversals in bills, active credit, SOA totals, and the running ledger. No Prisma schema or migration change was required.

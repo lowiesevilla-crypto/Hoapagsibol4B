@@ -6,11 +6,13 @@ import { AssociationLogo } from "@/components/association-logo";
 import { PrintButton } from "@/components/print-button";
 import { requireUser } from "@/lib/auth";
 import { prisma } from "@/lib/db";
+import { homeownerAccountNumber, homeownerPropertyLabel } from "@/lib/homeowner-account";
 import { getPaymentReceiptData } from "@/lib/services/payment-receipt";
 import { getAssociationSettings } from "@/lib/system-settings";
 import { amountInWords, collectionLabel, money, shortDate } from "@/lib/utils";
 
 type ReceiptView = {
+  association: Awaited<ReturnType<typeof getAssociationSettings>>;
   number: string;
   date: Date;
   payer: string;
@@ -23,9 +25,11 @@ type ReceiptView = {
   method: string;
   reference: string | null;
   remarks: string | null;
-  processedBy: string;
-  allocations: Array<{ id: string; coverage: string; amount: number; remainingBalance: number | null }>;
-  allocationTotal: number;
+  processorName: string;
+  processorRole: string;
+  status: string;
+  allocations: Array<{ key: string; coverage: string; billType: string; amount: number; remainingBalance: number | null }>;
+  appliedAmount: number;
   unappliedCredit: number;
   homeownerCreditBalance: number | null;
   remainingBalance: number | null;
@@ -37,30 +41,33 @@ export default async function ReceiptPage({ params }: { params: Promise<{ kind: 
   let receipt: ReceiptView | null = null;
 
   if (kind === "payment") {
-    receipt = await getPaymentReceiptData(id);
+    receipt = await getPaymentReceiptData(id, user.tenantId);
   } else if (kind === "collection") {
-    const item = await prisma.collection.findUnique({
-      where: { id },
+    const item = await prisma.collection.findFirst({
+      where: { id, tenantId: user.tenantId },
       include: { homeowner: { include: { user: true } }, contractor: true, createdBy: true },
     });
     if (item) {
       const purpose = collectionLabel(item.type, item.description);
       receipt = {
+        association: await getAssociationSettings(item.tenantId),
         number: item.receiptNumber || `AR-${item.id.slice(-8).toUpperCase()}`,
         date: item.collectionDate,
         payer: item.homeowner?.user.name ?? item.contractor?.companyName ?? "Unknown payer",
         homeownerId: item.homeownerId,
         address: item.homeowner?.address ?? item.contractor?.address ?? "",
-        property: item.homeowner ? `Block ${item.homeowner.block}, Lot ${item.homeowner.lot}` : "Not applicable",
-        account: item.homeownerId ?? item.contractorId ?? "Not applicable",
+        property: item.homeowner ? homeownerPropertyLabel(item.homeowner) : "Contractor account",
+        account: item.homeowner ? homeownerAccountNumber(item.homeowner) : item.contractor?.companyName ?? "Not applicable",
         purpose,
         amount: Number(item.amount),
         method: item.method,
         reference: item.referenceNumber,
         remarks: item.remarks,
-        processedBy: item.createdBy.name,
-        allocations: [{ id: item.id, coverage: purpose, amount: Number(item.amount), remainingBalance: null }],
-        allocationTotal: Number(item.amount),
+        processorName: item.createdBy.name || "Authorized HOA Processor",
+        processorRole: "Authorized HOA Processor",
+        status: "ACTIVE",
+        allocations: [{ key: item.id, coverage: purpose, billType: purpose, amount: Number(item.amount), remainingBalance: null }],
+        appliedAmount: Number(item.amount),
         unappliedCredit: 0,
         homeownerCreditBalance: null,
         remainingBalance: null,
@@ -73,7 +80,7 @@ export default async function ReceiptPage({ params }: { params: Promise<{ kind: 
   if (!receipt) notFound();
   if (user.role === Role.HOMEOWNER && user.homeownerProfile?.id !== receipt.homeownerId) redirect("/portal/dashboard");
 
-  const association = await getAssociationSettings();
+  const association = receipt.association;
   const contactLine = [association.contactNumber && `Contact: ${association.contactNumber}`, association.email && `Email: ${association.email}`].filter(Boolean).join(" | ");
   const registrationLine = [association.tinNumber && `TIN: ${association.tinNumber}`, association.secRegistrationNumber && `SEC Reg. No.: ${association.secRegistrationNumber}`].filter(Boolean).join(" | ");
 
@@ -101,6 +108,7 @@ export default async function ReceiptPage({ params }: { params: Promise<{ kind: 
             <p className="text-xs font-bold uppercase text-slate-500">Receipt No.</p>
             <p className="font-mono text-lg font-black text-rose-700 sm:text-xl">{receipt.number}</p>
             <p className="mt-1 text-sm"><b>Date:</b> {shortDate(receipt.date)}</p>
+            <p className={`mt-1 text-xs font-black uppercase ${receipt.status === "VOIDED" ? "text-rose-700" : "text-emerald-700"}`}>{receipt.status === "VOIDED" ? "Void" : "Active"}</p>
           </div>
         </header>
 
@@ -116,15 +124,15 @@ export default async function ReceiptPage({ params }: { params: Promise<{ kind: 
           <table className="w-full min-w-[520px] border-collapse text-sm">
             <thead><tr><th className="border border-ink p-2 text-left">Covered billing / particulars</th><th className="w-40 border border-ink p-2 text-right">Amount applied</th><th className="w-40 border border-ink p-2 text-right">Remaining bill balance</th></tr></thead>
             <tbody>
-              {receipt.allocations.map((allocation) => <tr key={allocation.id}><td className="border border-ink p-3 font-bold">{allocation.coverage}</td><td className="border border-ink p-3 text-right font-black">{money(allocation.amount)}</td><td className="border border-ink p-3 text-right">{allocation.remainingBalance === null ? "-" : money(allocation.remainingBalance)}</td></tr>)}
-              <tr><td className="border border-ink p-2 text-right font-black">AMOUNT APPLIED TO BILLS</td><td className="border border-ink p-2 text-right text-lg font-black">{money(receipt.allocationTotal)}</td><td className="border border-ink p-2" /></tr>
+              {receipt.allocations.map((allocation) => <tr key={allocation.key}><td className="border border-ink p-3 font-bold">{allocation.coverage}<span className="block text-xs font-normal text-slate-500">{allocation.billType}</span></td><td className="border border-ink p-3 text-right font-black">{money(allocation.amount)}</td><td className="border border-ink p-3 text-right">{allocation.remainingBalance === null ? "-" : money(allocation.remainingBalance)}</td></tr>)}
+              <tr><td className="border border-ink p-2 text-right font-black">AMOUNT APPLIED TO BILLS</td><td className="border border-ink p-2 text-right text-lg font-black">{money(receipt.appliedAmount)}</td><td className="border border-ink p-2" /></tr>
             </tbody>
           </table>
         </div>
 
         <div className="mt-4 grid gap-2 border-y border-ink py-3 text-sm sm:grid-cols-2">
           <Field label="Total Amount Received" value={money(receipt.amount)} />
-          <Field label="Amount Applied to Bills" value={money(receipt.allocationTotal)} />
+          <Field label="Amount Applied to Bills" value={money(receipt.appliedAmount)} />
           <Field label="Unapplied Credit" value={money(receipt.unappliedCredit)} />
           {receipt.homeownerCreditBalance !== null && <Field label="Homeowner Credit Balance" value={money(receipt.homeownerCreditBalance)} />}
         </div>
@@ -132,11 +140,11 @@ export default async function ReceiptPage({ params }: { params: Promise<{ kind: 
         {(receipt.remarks || receipt.reference) && <div className="mt-4 rounded border border-slate-300 p-3 text-sm">{receipt.remarks && <p><b>Remarks:</b> {receipt.remarks}</p>}{receipt.reference && <p><b>Reference:</b> {receipt.reference}</p>}</div>}
         <div className="mt-6 grid gap-6 sm:grid-cols-2">
           <div><p className="text-xs font-bold uppercase tracking-wider text-slate-500">Payment method</p><p className="mt-2 font-bold">{receipt.method.replaceAll("_", " ")}</p>{receipt.remainingBalance !== null && <p className="mt-3 text-sm"><b>Remaining account balance:</b> {money(receipt.remainingBalance)}</p>}</div>
-          <div className="text-right"><p className="mb-10 text-xs text-slate-500">Received and acknowledged by:</p><div className="border-t border-ink pt-2 text-center text-xs"><b>{receipt.processedBy}</b><br />Authorized HOA processor</div></div>
+          <div className="text-right"><p className="mb-10 text-xs text-slate-500">Received and acknowledged by:</p><div className="border-t border-ink pt-2 text-center text-xs"><b>{receipt.processorName}</b><br />{receipt.processorRole}</div></div>
         </div>
         <div className="mt-10 grid gap-10 text-center text-xs sm:grid-cols-2">
           <div className="border-t border-ink pt-2"><b>{receipt.payer}</b><br />Payer&apos;s signature / printed name</div>
-          <div className="border-t border-ink pt-2"><b>{receipt.processedBy}</b><br />HOA processor signature / printed name</div>
+          <div className="border-t border-ink pt-2"><b>{receipt.processorName}</b><br />{receipt.processorRole}</div>
         </div>
       </section>
     </main>

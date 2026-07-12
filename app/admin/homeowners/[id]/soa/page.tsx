@@ -105,10 +105,10 @@ export default async function StatementOfAccountPage({ params }: { params: Promi
           <div>
             <SectionTitle title="Payment History" count={soa.paymentHistory.length} />
             <ResponsiveTable kind="payment" minWidth="760px">
-              <thead><tr><th>Payment Date</th><th>Official Receipt No.</th><th>Payment Method</th><th>Reference Number</th><th>Coverage</th><th className="text-right">Received</th><th className="text-right">Applied</th><th className="text-right">Credit</th><th>Collector</th></tr></thead>
+              <thead><tr><th>Payment Date</th><th>Official Receipt No.</th><th>Payment Method</th><th>Reference Number</th><th>Coverage</th><th className="text-right">Received</th><th className="text-right">Applied</th><th className="text-right">Credit</th><th>Status</th><th>Collector</th></tr></thead>
               <tbody>
-                {soa.paymentHistory.map((payment) => <tr key={payment.id}><td>{shortDate(payment.paymentDate)}</td><td className="font-mono text-xs font-bold">{payment.officialReceiptNo}</td><td>{payment.paymentMethod}</td><td>{payment.referenceNumber}</td><td>{payment.coverage}</td><td className="text-right font-black">{money(payment.amount)}</td><td className="text-right">{money(payment.appliedAmount)}</td><td className="text-right">{money(payment.unappliedCredit)}</td><td>{payment.collector}</td></tr>)}
-                {!soa.paymentHistory.length && <tr><td colSpan={9} className="py-8 text-center text-slate-500">No active payments recorded.</td></tr>}
+                {soa.paymentHistory.map((payment) => <tr key={payment.id}><td>{shortDate(payment.paymentDate)}</td><td className="font-mono text-xs font-bold">{payment.officialReceiptNo}</td><td>{payment.paymentMethod}</td><td>{payment.referenceNumber}</td><td>{payment.coverage}</td><td className="text-right font-black">{money(payment.amount)}</td><td className="text-right">{money(payment.appliedAmount)}</td><td className="text-right">{money(payment.unappliedCredit)}</td><td className={payment.status === "Void" ? "font-black text-rose-700" : "font-bold text-emerald-700"}>{payment.status}</td><td>{payment.collector}</td></tr>)}
+                {!soa.paymentHistory.length && <tr><td colSpan={10} className="py-8 text-center text-slate-500">No payments recorded.</td></tr>}
               </tbody>
             </ResponsiveTable>
           </div>

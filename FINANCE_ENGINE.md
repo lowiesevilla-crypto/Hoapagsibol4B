@@ -335,6 +335,7 @@ Planned
 | 1.2 | July 11, 2026 | Documented final SOA browser print and PDF pagination rules |
 | 1.3 | July 12, 2026 | Documented one-header multi-bill payments, idempotency, receipt preview, and atomic voiding |
 | 1.4 | July 12, 2026 | Documented transaction-safe tenant validation and derived unapplied homeowner credit |
+| 1.5 | July 12, 2026 | Documented tenant-safe receipts, Payment-header history, reference reuse after void, and SOA reversal entries |
 
 ## 18. Unapplied Homeowner Credit
 
@@ -345,3 +346,13 @@ Planned
 - Voided payments are excluded from active credit balances and financial totals.
 - Dues revenue includes applied allocations only. Cash receipts include the full payment, with unapplied credit disclosed separately as a liability.
 - Historical migrated payments have matching header and allocation totals, so their derived unapplied credit is zero.
+
+## 19. Receipt and Payment Void Finalization
+
+- Receipt preview and PDF values are built from the persisted Payment tenant, payer, allocations, receipt number, processor audit snapshot, and Active/Void lifecycle status.
+- Non-default tenants never inherit bootstrap association branding. A missing tenant logo uses a neutral placeholder rather than another association's asset.
+- Public account numbers use the homeowner's block and lot; internal Payment, Bill, HomeownerProfile, and allocation IDs are not printed.
+- Transaction History queries Payment headers directly. Allocations are subordinate detail and cannot duplicate header totals or pagination counts.
+- External references remain unique among active same-tenant payments. A reference used only by voided payments may be reused by a replacement transaction, whose audit metadata records the prior voided payments.
+- Voiding preserves the Payment, receipt number, and allocation history; marks the header void; recalculates every covered bill; removes derived unapplied credit from active balances; and writes one transaction-level audit event.
+- SOA active totals exclude voided payments, while the running ledger preserves the original receipt credit and adds an equal Payment Void debit on the void date.

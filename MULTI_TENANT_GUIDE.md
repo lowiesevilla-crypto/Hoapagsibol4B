@@ -295,3 +295,26 @@ Sprint 6A portal reads explicitly apply tenant predicates for billing, payments,
 | Version | Date | Description |
 |----------|------|-------------|
 | 1.1 | July 15, 2026 | Added homeowner mobile tenant rules and PWA cache restrictions |
+
+---
+
+# 18. Tenant-Scoped Document Workflow Rules
+
+Document catalogs, templates, household members, requests, generated documents, and edit audits are tenant-owned.
+
+Rules:
+
+1. `tenantId` must come from the authenticated user context.
+2. Homeowner document subjects may be Self or an active `HouseholdMember` owned by the same tenant and homeowner.
+3. Client-submitted configuration IDs and household member IDs must be reloaded and validated server-side.
+4. `DocumentTypeConfiguration` may reference only a tenant-owned `DocumentTemplate`.
+5. `DocumentFieldConfiguration` must belong to the same tenant and configuration.
+6. Admin review and approval must load requests by authenticated tenant.
+7. Generated-document download validates tenant, homeowner ownership, payment lock, and archival state.
+8. Existing approved/generated documents remain immutable unless regenerated through the versioned workflow.
+
+Changing Test HOA document settings, household members, templates, or request data must not affect Pagsibol, and Pagsibol changes must not affect Test HOA.
+
+| Version | Date | Description |
+|----------|------|-------------|
+| 1.2 | July 15, 2026 | Added tenant-scoped document configuration, household subject, and snapshot rules |

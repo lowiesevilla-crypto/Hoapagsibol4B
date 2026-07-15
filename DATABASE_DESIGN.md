@@ -79,6 +79,28 @@ Purpose
 
 Represents one HOA organization.
 
+---
+
+# Sprint 6A Addendum - Document Workflow Architecture
+
+Migration `20260715120000_document_architecture_migration` adds tenant-scoped document workflow tables without deleting or rewriting historical requests.
+
+New models:
+
+- `HouseholdMember`: tenant/homeowner composite ownership for registered family or household members.
+- `DocumentTypeConfiguration`: one tenant-owned catalog entry per supported `DocumentType`, with delivery mode, fee, approval/payment flags, validity, copy limits, template, signatory, and version.
+- `DocumentFieldConfiguration`: tenant-safe child fields for each document type configuration.
+- `DocumentRequestEditAudit`: field-level admin review audit for document-visible changes.
+
+`DocumentRequest` now stores immutable request context:
+
+- configuration and template version snapshots
+- `subjectType` and optional tenant-owned `subjectMemberId`
+- `subjectSnapshot`, `requestDataSnapshot`, and `reviewedDataSnapshot`
+- delivery, approval, payment, fee, copy, issue-date, and ready-for-download snapshots
+
+Legacy status `GENERATED` is retained for compatibility. New generation workflows use `READY_FOR_DOWNLOAD`.
+
 Stores
 
 - HOA Name

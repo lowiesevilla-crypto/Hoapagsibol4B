@@ -286,3 +286,20 @@ Known limitations:
 - Offline access, push notifications, and app-install polish beyond manifest metadata are deferred to Sprint 6B.
 - Homeowner SOA PDF self-service remains deferred; the Sprint 6A route focuses on mobile screen review.
 - Product Owner mobile UAT is required before release approval.
+
+---
+
+# Sprint 6A Release Candidate - Tenant Document Workflows
+
+Status: Engineering ready for Product Owner UAT.
+
+- Added additive document architecture migration for tenant document configurations, fields, household/family subjects, snapshots, fees, delivery modes, and admin edit audits.
+- Added `/admin/settings/document-types` so tenants can enable or disable document types and configure fees, approval/payment rules, templates, signatories, copy limits, validity, and request fields.
+- Updated homeowner document requests to support Self or registered household/family member subjects with server-side tenant/homeowner ownership validation.
+- Stored immutable subject, request, configuration, template, delivery, fee, and reviewed-data snapshots.
+- Preserved existing generated documents and retained legacy `GENERATED` status compatibility.
+- Updated generated-document access checks to validate tenant ownership and block paid-document downloads until payment is confirmed.
+
+Known limitations:
+- Sprint 6A does not create accounting entries for paid documents. Fee/payment snapshots are stored and download remains blocked until Sprint 6B finance integration confirms payment.
+- Bug #062 and Improvements #063-#066 remain pending until Product Owner UAT passes.

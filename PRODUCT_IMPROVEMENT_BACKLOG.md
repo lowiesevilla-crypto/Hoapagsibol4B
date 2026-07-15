@@ -76,6 +76,122 @@ Requirements
 Expected Result
 
 Users understand the HOA status within 10 seconds after login.
+
+---
+
+# Bug #062
+
+Module
+
+Documents
+
+Priority
+
+🔴 Critical
+
+Status
+
+Testing
+
+Problem
+
+Certificate of Residency request can fail when document availability is controlled only by legacy templates and does not support tenant-configurable active/inactive policy, request subjects, or configured fields.
+
+Engineering Update
+
+Sprint 6A document architecture migration adds tenant document configurations, active/inactive catalog controls, household/family subjects, immutable snapshots, delivery modes, fees, and admin edit audit.
+
+Release Gate
+
+Do not mark fixed until Product Owner UAT verifies active Certificate of Residency submission, inactive hiding, subject selection, snapshots, and tenant isolation.
+
+# Improvement #063
+
+Module
+
+Documents
+
+Priority
+
+🟠 High
+
+Status
+
+Testing
+
+Problem
+
+Homeowners need to request documents for Self or authorized household/family members.
+
+Engineering Update
+
+Added `HouseholdMember`, Self/family request subject UI, and server-side tenant/homeowner ownership validation.
+
+# Improvement #064
+
+Module
+
+Documents
+
+Priority
+
+🟠 High
+
+Status
+
+Testing
+
+Problem
+
+Tenants need configurable document fees, fields, templates, approval rules, and delivery modes.
+
+Engineering Update
+
+Added `/admin/settings/document-types` backed by tenant-scoped configuration and field tables.
+
+# Improvement #065
+
+Module
+
+Documents
+
+Priority
+
+🟠 High
+
+Status
+
+Testing
+
+Problem
+
+Admin review needs editable document-visible values with audit history before approval.
+
+Engineering Update
+
+Added reviewed data snapshots and `DocumentRequestEditAudit` field-level records.
+
+# Improvement #066
+
+Module
+
+Documents / Finance
+
+Priority
+
+🟡 Medium
+
+Status
+
+Backlog
+
+Problem
+
+Paid document requests need complete accounting integration.
+
+Engineering Update
+
+Sprint 6A stores fee/payment snapshots and blocks download when payment is required. Full collection posting is deferred to Sprint 6B.
 # Improvement #002
 
 Dashboard KPI Cards

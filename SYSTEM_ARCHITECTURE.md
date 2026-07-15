@@ -78,6 +78,30 @@ Responsibilities
 - Responsive Design
 - Forms
 - Tables
+
+---
+
+# Sprint 6A Addendum - Tenant Document Workflows
+
+Document requests now flow through a shared tenant-scoped workflow:
+
+1. Admin configures an active `DocumentTypeConfiguration`.
+2. Admin defines required `DocumentFieldConfiguration` rows for the homeowner form.
+3. Homeowner selects Self or a registered household/family member.
+4. Server validates tenant, homeowner ownership, subject ownership, active configuration, required fields, fee mode, and template availability.
+5. The request stores immutable subject/configuration/data snapshots.
+6. Admin review writes final reviewed values and field-level `DocumentRequestEditAudit` entries.
+7. Generation uses reviewed snapshots when present and preserves generated versions.
+
+Delivery modes supported:
+
+- `INSTANT_DOWNLOAD`
+- `APPROVAL_REQUIRED`
+- `PAYMENT_REQUIRED`
+- `PAYMENT_AND_APPROVAL_REQUIRED`
+- `REQUEST_ONLY`
+
+Paid-document accounting is intentionally not posted in Sprint 6A. Requests store fee and payment-required snapshots and block homeowner downloads until a later finance integration confirms payment.
 - Dashboards
 - Mobile Support
 - Client Validation

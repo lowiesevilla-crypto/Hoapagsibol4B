@@ -304,16 +304,43 @@ enum DocumentType {
 enum DocumentRequestStatus {
   DRAFT
   SUBMITTED
+  PAYMENT_PENDING
+  PENDING_APPROVAL
   UNDER_REVIEW
   APPROVED
   REJECTED
+  READY_FOR_DOWNLOAD
   GENERATED
   DOWNLOADED
+  CANCELLED
 }
 
 enum DocumentOrigin {
   HOMEOWNER
   ADMIN
+}
+
+enum DocumentSubjectType {
+  SELF
+  HOUSEHOLD_MEMBER
+}
+
+enum DocumentDeliveryMode {
+  INSTANT_DOWNLOAD
+  APPROVAL_REQUIRED
+  PAYMENT_REQUIRED
+  PAYMENT_AND_APPROVAL_REQUIRED
+  REQUEST_ONLY
+}
+
+enum DocumentFieldType {
+  TEXT
+  TEXTAREA
+  DATE
+  NUMBER
+  MONEY
+  SELECT
+  CHECKBOX
 }
 
 model Tenant {
@@ -346,67 +373,69 @@ model Tenant {
 }
 
 model User {
-  tenantId                       String                       @default("tenant_pagsibol4b_default")
-  id                             String                       @id @default(cuid())
-  name                           String
-  email                          String
-  username                       String?
-  passwordHash                   String
-  role                           Role                         @default(HOMEOWNER)
-  active                         Boolean                      @default(true)
-  lastLoginAt                    DateTime?
-  homeownerProfile               HomeownerProfile?
-  employeeProfile                EmployeeProfile?             @relation("EmployeeUser")
-  announcementsCreated           Announcement[]               @relation("AnnouncementCreator")
-  eventsCreated                  Event[]                      @relation("EventCreator")
-  notificationLogs               NotificationLog[]            @relation("NotificationRecipient")
-  collectionsCreated             Collection[]                 @relation("CollectionCreator")
-  refundsProcessed               BondRefund[]                 @relation("RefundProcessor")
-  forfeituresProcessed           Collection[]                 @relation("ForfeitureProcessor")
-  payrollPeriodsCreated          PayrollPeriod[]              @relation("PayrollCreator")
-  expensesCreated                Expense[]                    @relation("ExpenseCreator")
-  duesExemptionsCreated          DuesExemption[]              @relation("DuesExemptionCreator")
-  createdAt                      DateTime                     @default(now())
-  updatedAt                      DateTime                     @updatedAt
-  systemSettingsUpdated          SystemSetting[]              @relation("SystemSettingUpdater")
-  paymentRequestsReviewed        PaymentRequest[]             @relation("PaymentRequestReviewer")
-  payrollAccesses                PayrollAccess[]              @relation("PayrollAccessUser")
-  payrollAccessGranted           PayrollAccess[]              @relation("PayrollAccessGrantedBy")
-  auditLogs                      AuditLog[]                   @relation("AuditActor")
-  calendarDaysCreated            PayrollCalendarDay[]         @relation("PayrollCalendarCreator")
-  schedulesCreated               EmployeeSchedule[]           @relation("EmployeeScheduleCreator")
-  attendanceAdjustmentsRequested AttendanceAdjustment[]       @relation("AttendanceAdjustmentRequester")
-  attendanceAdjustmentsReviewed  AttendanceAdjustment[]       @relation("AttendanceAdjustmentReviewer")
-  overtimeRecordsCreated         OvertimeRecord[]             @relation("OvertimeRecordCreator")
-  overtimeRecordsReviewed        OvertimeRecord[]             @relation("OvertimeRecordReviewer")
-  payrollArchivesDeleted         PayrollArchive[]             @relation("PayrollArchiveDeletedBy")
-  billsArchived                  Bill[]                       @relation("BillArchivedBy")
-  paymentsVoided                 Payment[]                    @relation("PaymentVoidedBy")
-  paymentsProcessed              Payment[]                    @relation("PaymentProcessor")
-  paymentArchivesVoided          PaymentArchive[]             @relation("PaymentArchiveVoidedBy")
-  dataMigrationsCreated          DataMigration[]              @relation("DataMigrationCreator")
-  billingRulesCreated            BillingRule[]                @relation("BillingRuleCreator")
-  billingRulesUpdated            BillingRule[]                @relation("BillingRuleUpdater")
-  documentTemplatesUpdated       DocumentTemplate[]           @relation("DocumentTemplateUpdater")
-  documentRequestsProcessed      DocumentRequest[]            @relation("DocumentRequestProcessor")
-  documentRequestsApproved       DocumentRequest[]            @relation("DocumentRequestApprover")
-  documentDownloadOverrides      DocumentRequest[]            @relation("DocumentDownloadOverride")
-  documentRequestsInitiated      DocumentRequest[]            @relation("DocumentInitiator")
-  documentRequestsArchived       DocumentRequest[]            @relation("DocumentArchiver")
-  documentVersionsGenerated      DocumentVersion[]            @relation("DocumentVersionGenerator")
-  documentRequestHistory         DocumentRequestHistory[]     @relation("DocumentRequestHistoryActor")
-  organizationOfficersUpdated    OrganizationOfficer[]        @relation("OrganizationOfficerUpdater")
-  organizationHistoryCreated     OrganizationOfficerHistory[] @relation("OrganizationOfficerHistoryActor")
-  chatConversationsHomeowner     ChatConversation[]           @relation("ChatConversationHomeowner")
-  chatConversationsCreated       ChatConversation[]           @relation("ChatConversationCreator")
-  chatConversationsAssigned      ChatConversation[]           @relation("ChatConversationAssignee")
-  chatParticipants               ChatParticipant[]
-  chatMessages                   ChatMessage[]                @relation("ChatMessageSender")
-  presence                       UserPresence?
-  passwordResetTokens            PasswordResetToken[]
-  userRoleAssignments            UserRoleAssignment[]
-  assignedRoleAssignments        UserRoleAssignment[]         @relation("UserRoleAssignmentAssignedBy")
-  tenant                         Tenant                       @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  tenantId                          String                       @default("tenant_pagsibol4b_default")
+  id                                String                       @id @default(cuid())
+  name                              String
+  email                             String
+  username                          String?
+  passwordHash                      String
+  role                              Role                         @default(HOMEOWNER)
+  active                            Boolean                      @default(true)
+  lastLoginAt                       DateTime?
+  homeownerProfile                  HomeownerProfile?
+  employeeProfile                   EmployeeProfile?             @relation("EmployeeUser")
+  announcementsCreated              Announcement[]               @relation("AnnouncementCreator")
+  eventsCreated                     Event[]                      @relation("EventCreator")
+  notificationLogs                  NotificationLog[]            @relation("NotificationRecipient")
+  collectionsCreated                Collection[]                 @relation("CollectionCreator")
+  refundsProcessed                  BondRefund[]                 @relation("RefundProcessor")
+  forfeituresProcessed              Collection[]                 @relation("ForfeitureProcessor")
+  payrollPeriodsCreated             PayrollPeriod[]              @relation("PayrollCreator")
+  expensesCreated                   Expense[]                    @relation("ExpenseCreator")
+  duesExemptionsCreated             DuesExemption[]              @relation("DuesExemptionCreator")
+  createdAt                         DateTime                     @default(now())
+  updatedAt                         DateTime                     @updatedAt
+  systemSettingsUpdated             SystemSetting[]              @relation("SystemSettingUpdater")
+  paymentRequestsReviewed           PaymentRequest[]             @relation("PaymentRequestReviewer")
+  payrollAccesses                   PayrollAccess[]              @relation("PayrollAccessUser")
+  payrollAccessGranted              PayrollAccess[]              @relation("PayrollAccessGrantedBy")
+  auditLogs                         AuditLog[]                   @relation("AuditActor")
+  calendarDaysCreated               PayrollCalendarDay[]         @relation("PayrollCalendarCreator")
+  schedulesCreated                  EmployeeSchedule[]           @relation("EmployeeScheduleCreator")
+  attendanceAdjustmentsRequested    AttendanceAdjustment[]       @relation("AttendanceAdjustmentRequester")
+  attendanceAdjustmentsReviewed     AttendanceAdjustment[]       @relation("AttendanceAdjustmentReviewer")
+  overtimeRecordsCreated            OvertimeRecord[]             @relation("OvertimeRecordCreator")
+  overtimeRecordsReviewed           OvertimeRecord[]             @relation("OvertimeRecordReviewer")
+  payrollArchivesDeleted            PayrollArchive[]             @relation("PayrollArchiveDeletedBy")
+  billsArchived                     Bill[]                       @relation("BillArchivedBy")
+  paymentsVoided                    Payment[]                    @relation("PaymentVoidedBy")
+  paymentsProcessed                 Payment[]                    @relation("PaymentProcessor")
+  paymentArchivesVoided             PaymentArchive[]             @relation("PaymentArchiveVoidedBy")
+  dataMigrationsCreated             DataMigration[]              @relation("DataMigrationCreator")
+  billingRulesCreated               BillingRule[]                @relation("BillingRuleCreator")
+  billingRulesUpdated               BillingRule[]                @relation("BillingRuleUpdater")
+  documentTemplatesUpdated          DocumentTemplate[]           @relation("DocumentTemplateUpdater")
+  documentTypeConfigurationsUpdated DocumentTypeConfiguration[]  @relation("DocumentTypeConfigurationUpdater")
+  documentRequestsProcessed         DocumentRequest[]            @relation("DocumentRequestProcessor")
+  documentRequestsApproved          DocumentRequest[]            @relation("DocumentRequestApprover")
+  documentDownloadOverrides         DocumentRequest[]            @relation("DocumentDownloadOverride")
+  documentRequestsInitiated         DocumentRequest[]            @relation("DocumentInitiator")
+  documentRequestsArchived          DocumentRequest[]            @relation("DocumentArchiver")
+  documentRequestEditAudits         DocumentRequestEditAudit[]   @relation("DocumentRequestEditAuditActor")
+  documentVersionsGenerated         DocumentVersion[]            @relation("DocumentVersionGenerator")
+  documentRequestHistory            DocumentRequestHistory[]     @relation("DocumentRequestHistoryActor")
+  organizationOfficersUpdated       OrganizationOfficer[]        @relation("OrganizationOfficerUpdater")
+  organizationHistoryCreated        OrganizationOfficerHistory[] @relation("OrganizationOfficerHistoryActor")
+  chatConversationsHomeowner        ChatConversation[]           @relation("ChatConversationHomeowner")
+  chatConversationsCreated          ChatConversation[]           @relation("ChatConversationCreator")
+  chatConversationsAssigned         ChatConversation[]           @relation("ChatConversationAssignee")
+  chatParticipants                  ChatParticipant[]
+  chatMessages                      ChatMessage[]                @relation("ChatMessageSender")
+  presence                          UserPresence?
+  passwordResetTokens               PasswordResetToken[]
+  userRoleAssignments               UserRoleAssignment[]
+  assignedRoleAssignments           UserRoleAssignment[]         @relation("UserRoleAssignmentAssignedBy")
+  tenant                            Tenant                       @relation(fields: [tenantId], references: [id], onDelete: Restrict)
 
   @@unique([tenantId, email])
   @@unique([tenantId, username])
@@ -496,9 +525,11 @@ model HomeownerProfile {
   vehicles          Vehicle[]
   dataMigrations    DataMigration[]
   documentRequests  DocumentRequest[]
+  householdMembers  HouseholdMember[]
   createdAt         DateTime          @default(now())
   updatedAt         DateTime          @updatedAt
 
+  @@unique([tenantId, id])
   @@unique([tenantId, block, lot])
   @@index([status])
   @@index([tenantId])
@@ -634,20 +665,20 @@ model DuesExemption {
 }
 
 model Payment {
-  tenantId               String           @default("tenant_pagsibol4b_default")
-  id                     String           @id @default(cuid())
+  tenantId               String              @default("tenant_pagsibol4b_default")
+  id                     String              @id @default(cuid())
   billId                 String?
-  bill                   Bill?            @relation(fields: [billId], references: [id], onDelete: SetNull)
+  bill                   Bill?               @relation(fields: [billId], references: [id], onDelete: SetNull)
   homeownerId            String
-  homeowner              HomeownerProfile @relation(fields: [homeownerId], references: [id], onDelete: Cascade)
-  amount                 Decimal          @db.Decimal(12, 2)
-  paymentDate            DateTime         @db.Date
+  homeowner              HomeownerProfile    @relation(fields: [homeownerId], references: [id], onDelete: Cascade)
+  amount                 Decimal             @db.Decimal(12, 2)
+  paymentDate            DateTime            @db.Date
   method                 PaymentMethod
   referenceNumber        String?
   paymentBatchId         String?
   idempotencyKey         String?
-  coverageStart          DateTime?        @db.Date
-  coverageEnd            DateTime?        @db.Date
+  coverageStart          DateTime?           @db.Date
+  coverageEnd            DateTime?           @db.Date
   coverageMonths         Json?
   coverageFromMonth      Int?
   coverageFromYear       Int?
@@ -660,16 +691,16 @@ model Payment {
   proofFileName          String?
   proofContentType       String?
   proofFileSize          Int?
-  status                 PaymentStatus    @default(ACTIVE)
+  status                 PaymentStatus       @default(ACTIVE)
   voidedAt               DateTime?
   voidedById             String?
-  voidedBy               User?            @relation("PaymentVoidedBy", fields: [voidedById], references: [id], onDelete: SetNull)
+  voidedBy               User?               @relation("PaymentVoidedBy", fields: [voidedById], references: [id], onDelete: SetNull)
   voidReason             String?
   processedById          String?
-  processedBy            User?            @relation("PaymentProcessor", fields: [processedById], references: [id], onDelete: SetNull)
+  processedBy            User?               @relation("PaymentProcessor", fields: [processedById], references: [id], onDelete: SetNull)
   paymentRequest         PaymentRequest?
   allocations            PaymentAllocation[]
-  createdAt              DateTime         @default(now())
+  createdAt              DateTime            @default(now())
 
   @@unique([tenantId, receiptNumber])
   @@unique([tenantId, idempotencyKey])
@@ -871,39 +902,140 @@ model DataMigration {
 }
 
 model DocumentTemplate {
-  tenantId    String       @default("tenant_pagsibol4b_default")
-  id          String       @id @default(cuid())
-  type        DocumentType
-  title       String
-  body        String       @db.Text
-  active      Boolean      @default(true)
-  version     Int          @default(1)
-  updatedById String?
-  updatedBy   User?        @relation("DocumentTemplateUpdater", fields: [updatedById], references: [id], onDelete: SetNull)
-  createdAt   DateTime     @default(now())
-  updatedAt   DateTime     @updatedAt
+  tenantId       String                      @default("tenant_pagsibol4b_default")
+  id             String                      @id @default(cuid())
+  type           DocumentType
+  title          String
+  body           String                      @db.Text
+  active         Boolean                     @default(true)
+  version        Int                         @default(1)
+  updatedById    String?
+  updatedBy      User?                       @relation("DocumentTemplateUpdater", fields: [updatedById], references: [id], onDelete: SetNull)
+  configurations DocumentTypeConfiguration[]
+  createdAt      DateTime                    @default(now())
+  updatedAt      DateTime                    @updatedAt
 
+  @@unique([tenantId, id])
   @@unique([tenantId, type])
   @@index([active])
   @@index([tenantId])
 }
 
+model HouseholdMember {
+  tenantId         String            @default("tenant_pagsibol4b_default")
+  id               String            @id @default(cuid())
+  homeownerId      String
+  homeowner        HomeownerProfile  @relation(fields: [tenantId, homeownerId], references: [tenantId, id], onDelete: Cascade)
+  fullName         String
+  relationship     String
+  birthDate        DateTime?         @db.Date
+  civilStatus      String?
+  nationality      String?
+  address          String?
+  active           Boolean           @default(true)
+  documentRequests DocumentRequest[]
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+
+  @@unique([tenantId, id])
+  @@index([tenantId, homeownerId, active])
+  @@index([tenantId])
+}
+
+model DocumentTypeConfiguration {
+  tenantId                 String                       @default("tenant_pagsibol4b_default")
+  id                       String                       @id @default(cuid())
+  type                     DocumentType
+  displayName              String
+  description              String?                      @db.Text
+  active                   Boolean                      @default(true)
+  templateId               String?
+  template                 DocumentTemplate?            @relation(fields: [tenantId, templateId], references: [tenantId, id])
+  deliveryMode             DocumentDeliveryMode         @default(APPROVAL_REQUIRED)
+  approvalRequired         Boolean                      @default(true)
+  paymentRequired          Boolean                      @default(false)
+  paymentBeforeApproval    Boolean                      @default(false)
+  allowImmediateDownload   Boolean                      @default(false)
+  allowRegeneration        Boolean                      @default(true)
+  requiresAdminReview      Boolean                      @default(true)
+  homeownerDownloadEnabled Boolean                      @default(true)
+  validityDays             Int?
+  maxCopies                Int                          @default(1)
+  feeAmount                Decimal                      @default(0) @db.Decimal(12, 2)
+  allowPayLater            Boolean                      @default(false)
+  signatoryOfficerId       String?
+  signatoryOfficer         OrganizationOfficer?         @relation("DocumentTypeConfigurationSignatory", fields: [tenantId, signatoryOfficerId], references: [tenantId, id])
+  version                  Int                          @default(1)
+  updatedById              String?
+  updatedBy                User?                        @relation("DocumentTypeConfigurationUpdater", fields: [updatedById], references: [id], onDelete: SetNull)
+  fields                   DocumentFieldConfiguration[]
+  requests                 DocumentRequest[]
+  createdAt                DateTime                     @default(now())
+  updatedAt                DateTime                     @updatedAt
+
+  @@unique([tenantId, id])
+  @@unique([tenantId, type])
+  @@index([tenantId, active])
+  @@index([templateId])
+  @@index([signatoryOfficerId])
+  @@index([updatedById])
+}
+
+model DocumentFieldConfiguration {
+  tenantId      String                    @default("tenant_pagsibol4b_default")
+  id            String                    @id @default(cuid())
+  configId      String
+  configuration DocumentTypeConfiguration @relation(fields: [tenantId, configId], references: [tenantId, id], onDelete: Cascade)
+  key           String
+  label         String
+  fieldType     DocumentFieldType
+  required      Boolean                   @default(false)
+  options       Json?
+  validation    Json?
+  displayOrder  Int                       @default(0)
+  active        Boolean                   @default(true)
+  createdAt     DateTime                  @default(now())
+  updatedAt     DateTime                  @updatedAt
+
+  @@unique([tenantId, configId, key])
+  @@index([tenantId, configId, active, displayOrder])
+  @@index([tenantId])
+}
+
 model DocumentRequest {
-  tenantId                    String                   @default("tenant_pagsibol4b_default")
-  id                          String                   @id @default(cuid())
+  tenantId                    String                     @default("tenant_pagsibol4b_default")
+  id                          String                     @id @default(cuid())
   documentNumber              String?
   homeownerId                 String
-  homeowner                   HomeownerProfile         @relation(fields: [homeownerId], references: [id], onDelete: Cascade)
-  origin                      DocumentOrigin           @default(HOMEOWNER)
+  homeowner                   HomeownerProfile           @relation(fields: [homeownerId], references: [id], onDelete: Cascade)
+  configurationId             String?
+  configuration               DocumentTypeConfiguration? @relation(fields: [tenantId, configurationId], references: [tenantId, id])
+  configurationVersion        Int?
+  templateIdSnapshot          String?
+  templateVersionSnapshot     Int?
+  subjectType                 DocumentSubjectType        @default(SELF)
+  subjectMemberId             String?
+  subjectMember               HouseholdMember?           @relation(fields: [tenantId, subjectMemberId], references: [tenantId, id])
+  subjectSnapshot             Json?
+  requestDataSnapshot         Json?
+  reviewedDataSnapshot        Json?
+  deliveryModeSnapshot        DocumentDeliveryMode?
+  approvalRequiredSnapshot    Boolean                    @default(true)
+  paymentRequiredSnapshot     Boolean                    @default(false)
+  feeAmountSnapshot           Decimal                    @default(0) @db.Decimal(12, 2)
+  numberOfCopies              Int                        @default(1)
+  issueDate                   DateTime?                  @db.Date
+  readyForDownloadAt          DateTime?
+  origin                      DocumentOrigin             @default(HOMEOWNER)
   initiatedById               String?
-  initiatedBy                 User?                    @relation("DocumentInitiator", fields: [initiatedById], references: [id], onDelete: SetNull)
+  initiatedBy                 User?                      @relation("DocumentInitiator", fields: [initiatedById], references: [id], onDelete: SetNull)
   type                        DocumentType
-  status                      DocumentRequestStatus    @default(SUBMITTED)
+  status                      DocumentRequestStatus      @default(SUBMITTED)
   purpose                     String?
   remarks                     String?
   adminRemarks                String?
-  validityDate                DateTime?                @db.Date
-  scheduledDate               DateTime?                @db.Date
+  validityDate                DateTime?                  @db.Date
+  scheduledDate               DateTime?                  @db.Date
   startTime                   String?
   endTime                     String?
   passType                    String?
@@ -912,46 +1044,50 @@ model DocumentRequest {
   contractorDetails           String?
   representativeName          String?
   propertyDetails             String?
-  outstandingBalanceAtRequest Decimal                  @default(0) @db.Decimal(12, 2)
-  allowDownloadDespiteBalance Boolean                  @default(false)
+  outstandingBalanceAtRequest Decimal                    @default(0) @db.Decimal(12, 2)
+  allowDownloadDespiteBalance Boolean                    @default(false)
   downloadOverrideReason      String?
   downloadOverrideAt          DateTime?
   downloadOverrideById        String?
-  downloadOverrideBy          User?                    @relation("DocumentDownloadOverride", fields: [downloadOverrideById], references: [id], onDelete: SetNull)
-  requestedAt                 DateTime                 @default(now())
+  downloadOverrideBy          User?                      @relation("DocumentDownloadOverride", fields: [downloadOverrideById], references: [id], onDelete: SetNull)
+  requestedAt                 DateTime                   @default(now())
   reviewedAt                  DateTime?
   approvedAt                  DateTime?
   generatedAt                 DateTime?
   downloadedAt                DateTime?
   processedById               String?
-  processedBy                 User?                    @relation("DocumentRequestProcessor", fields: [processedById], references: [id], onDelete: SetNull)
+  processedBy                 User?                      @relation("DocumentRequestProcessor", fields: [processedById], references: [id], onDelete: SetNull)
   approvedById                String?
-  approvedBy                  User?                    @relation("DocumentRequestApprover", fields: [approvedById], references: [id], onDelete: SetNull)
+  approvedBy                  User?                      @relation("DocumentRequestApprover", fields: [approvedById], references: [id], onDelete: SetNull)
   processedByOfficerId        String?
-  processedByOfficer          OrganizationOfficer?     @relation("DocumentProcessedOfficer", fields: [processedByOfficerId], references: [id], onDelete: SetNull)
+  processedByOfficer          OrganizationOfficer?       @relation("DocumentProcessedOfficer", fields: [processedByOfficerId], references: [id], onDelete: SetNull)
   approvedByOfficerId         String?
-  approvedByOfficer           OrganizationOfficer?     @relation("DocumentApprovedOfficer", fields: [approvedByOfficerId], references: [id], onDelete: SetNull)
+  approvedByOfficer           OrganizationOfficer?       @relation("DocumentApprovedOfficer", fields: [approvedByOfficerId], references: [id], onDelete: SetNull)
   templateVersion             Int?
-  templateSnapshot            String?                  @db.Text
-  generatedContent            String?                  @db.Text
+  templateSnapshot            String?                    @db.Text
+  generatedContent            String?                    @db.Text
   associationSnapshot         Json?
   homeownerSnapshot           Json?
   organizationSnapshot        Json?
   processedOfficerSnapshot    Json?
   approvedOfficerSnapshot     Json?
-  verificationCode            String?                  @unique
-  currentVersion              Int                      @default(0)
+  verificationCode            String?                    @unique
+  currentVersion              Int                        @default(0)
   versions                    DocumentVersion[]
   archivedAt                  DateTime?
   archivedById                String?
-  archivedBy                  User?                    @relation("DocumentArchiver", fields: [archivedById], references: [id], onDelete: SetNull)
+  archivedBy                  User?                      @relation("DocumentArchiver", fields: [archivedById], references: [id], onDelete: SetNull)
   archiveReason               String?
   histories                   DocumentRequestHistory[]
-  createdAt                   DateTime                 @default(now())
-  updatedAt                   DateTime                 @updatedAt
+  editAudits                  DocumentRequestEditAudit[]
+  createdAt                   DateTime                   @default(now())
+  updatedAt                   DateTime                   @updatedAt
 
+  @@unique([tenantId, id])
   @@unique([tenantId, documentNumber])
   @@index([homeownerId, requestedAt])
+  @@index([tenantId, configurationId])
+  @@index([tenantId, subjectMemberId])
   @@index([status, requestedAt])
   @@index([type, requestedAt])
   @@index([processedById])
@@ -990,28 +1126,30 @@ model DocumentVersion {
 }
 
 model OrganizationOfficer {
-  tenantId           String                       @default("tenant_pagsibol4b_default")
-  id                 String                       @id @default(cuid())
-  fullName           String
-  position           String
-  committee          String?
-  contactNumber      String?
-  email              String?
-  photoUrl           String?
-  signatureUrl       String?
-  displayOrder       Int                          @default(0)
-  active             Boolean                      @default(true)
-  effectiveDate      DateTime                     @db.Date
-  endDate            DateTime?                    @db.Date
-  archivedAt         DateTime?
-  updatedById        String?
-  updatedBy          User?                        @relation("OrganizationOfficerUpdater", fields: [updatedById], references: [id], onDelete: SetNull)
-  processedDocuments DocumentRequest[]            @relation("DocumentProcessedOfficer")
-  approvedDocuments  DocumentRequest[]            @relation("DocumentApprovedOfficer")
-  histories          OrganizationOfficerHistory[]
-  createdAt          DateTime                     @default(now())
-  updatedAt          DateTime                     @updatedAt
+  tenantId                   String                       @default("tenant_pagsibol4b_default")
+  id                         String                       @id @default(cuid())
+  fullName                   String
+  position                   String
+  committee                  String?
+  contactNumber              String?
+  email                      String?
+  photoUrl                   String?
+  signatureUrl               String?
+  displayOrder               Int                          @default(0)
+  active                     Boolean                      @default(true)
+  effectiveDate              DateTime                     @db.Date
+  endDate                    DateTime?                    @db.Date
+  archivedAt                 DateTime?
+  updatedById                String?
+  updatedBy                  User?                        @relation("OrganizationOfficerUpdater", fields: [updatedById], references: [id], onDelete: SetNull)
+  processedDocuments         DocumentRequest[]            @relation("DocumentProcessedOfficer")
+  approvedDocuments          DocumentRequest[]            @relation("DocumentApprovedOfficer")
+  documentTypeConfigurations DocumentTypeConfiguration[]  @relation("DocumentTypeConfigurationSignatory")
+  histories                  OrganizationOfficerHistory[]
+  createdAt                  DateTime                     @default(now())
+  updatedAt                  DateTime                     @updatedAt
 
+  @@unique([tenantId, id])
   @@index([active, archivedAt, displayOrder])
   @@index([effectiveDate, endDate])
   @@index([updatedById])
@@ -1046,6 +1184,24 @@ model DocumentRequestHistory {
   createdAt DateTime              @default(now())
 
   @@index([requestId, createdAt])
+  @@index([actorId])
+  @@index([tenantId])
+}
+
+model DocumentRequestEditAudit {
+  tenantId      String          @default("tenant_pagsibol4b_default")
+  id            String          @id @default(cuid())
+  requestId     String
+  request       DocumentRequest @relation(fields: [tenantId, requestId], references: [tenantId, id], onDelete: Cascade)
+  actorId       String?
+  actor         User?           @relation("DocumentRequestEditAuditActor", fields: [actorId], references: [id], onDelete: SetNull)
+  fieldName     String
+  previousValue Json?
+  newValue      Json?
+  note          String?
+  createdAt     DateTime        @default(now())
+
+  @@index([tenantId, requestId, createdAt])
   @@index([actorId])
   @@index([tenantId])
 }

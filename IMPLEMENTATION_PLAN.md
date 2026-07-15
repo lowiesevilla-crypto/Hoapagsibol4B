@@ -159,3 +159,23 @@ Prepare the finance migration and SOA finalization for product-owner review befo
 - [ ] Complete Product Owner UAT at 360px, 390px, 430px, tablet, and desktop widths.
 - [ ] Verify homeowner login, dashboard, profile, pay, SOA, receipts, documents, announcements, events, chat, tenant branding, tenant isolation, and admin/finance regressions.
 - [ ] Defer deeper native/offline behavior, richer push notifications, and full feature redesigns to Sprint 6B.
+
+## Sprint 6A - Document Architecture Migration
+
+### Engineering Scope
+
+- [x] Add tenant-scoped household/family members with composite homeowner ownership.
+- [x] Add tenant document type configurations, field configurations, delivery modes, fees, templates, signatories, validity, and copy limits.
+- [x] Add immutable request subject/configuration/template/data snapshots.
+- [x] Add admin-reviewed data snapshots and field-level edit audits.
+- [x] Add active tenant document catalog page at `/admin/settings/document-types`.
+- [x] Update homeowner document request flow for Self or registered household/family member subjects.
+- [x] Validate household member ownership and tenant membership server-side.
+- [x] Preserve legacy request compatibility and keep generated document snapshots immutable.
+- [x] Implement payment status/fee snapshots only; defer accounting collection integration.
+
+### Release Gate
+
+- [ ] Complete Product Owner UAT for Bug #062 and Improvements #063-#066.
+- [ ] Verify free instant download, paid download blocking, approval-only, paid-and-approved blocking, request-only, tenant-specific configuration differences, admin edit audit, and mobile workflow.
+- [ ] Do not mark Bug #062 or Improvements #063-#066 complete until Product Owner UAT passes.

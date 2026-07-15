@@ -725,3 +725,22 @@ Blocked:
 
 Decision:
 Do not merge Sprint 6A into develop until Bug #062 is resolved. Improvement #063 may be implemented in the same document-request hotfix.
+
+# 2026-07-15 - Sprint 6A Document Architecture Migration
+
+## Engineering Ready for Product Owner UAT
+
+- Added additive migration `20260715120000_document_architecture_migration`.
+- Added tenant document configurations, configurable request fields, household/family request subjects, request snapshots, fee/delivery snapshots, and admin edit audit rows.
+- Backfilled tenant document catalogs for supported document types and default field definitions.
+- Updated homeowner document requests to show active tenant document types only, ask "Who is this document for?", validate household-member ownership server-side, and snapshot submitted values.
+- Added household/family member management from the homeowner document screen.
+- Added `/admin/settings/document-types` for tenant document activation, fee, delivery mode, approval/payment rules, validity, copies, fields, template, and signatory controls.
+- Updated admin review to store reviewed values and field-level audit entries before approval/regeneration.
+- Preserved legacy `GENERATED` status compatibility while using `READY_FOR_DOWNLOAD` for new generated requests.
+- Paid-document accounting remains deferred; Sprint 6A stores fee/payment snapshots and blocks homeowner downloads until payment confirmation is integrated.
+
+## Release Gate
+
+- Product Owner UAT remains pending.
+- Do not mark Bug #062 or Improvements #063-#066 complete until local Product Owner UAT passes.

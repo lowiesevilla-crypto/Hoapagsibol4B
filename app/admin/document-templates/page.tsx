@@ -2,12 +2,14 @@ import Link from "next/link";
 import { PageHeader } from "@/components/page-header";
 import { SubmitButton } from "@/components/ui";
 import { saveDocumentTemplateAction } from "@/lib/actions/documents";
+import { requireUser } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { documentPlaceholders, documentTypeOptions } from "@/lib/services/documents";
 
 export default async function DocumentTemplatesPage({ searchParams }: { searchParams: Promise<{ error?: string; success?: string; message?: string }> }) {
+  const user = await requireUser();
   const query = await searchParams;
-  const templates = await prisma.documentTemplate.findMany();
+  const templates = await prisma.documentTemplate.findMany({ where: { tenantId: user.tenantId } });
   const byType = new Map(templates.map((item) => [item.type, item]));
   return <>
     <PageHeader eyebrow="Administration" title="Document templates" description="Edit the wording used for future generated documents. Previously generated snapshots remain unchanged." action={<Link className="btn-secondary" href="/admin/documents">Back to requests</Link>} />

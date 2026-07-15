@@ -46,6 +46,7 @@ export const adminLinks: LinkItem[] = [
   { href: "/admin/documents", label: "Document requests", icon: "documents", section: "Resident Services" },
   { href: "/admin/documents/generated", label: "Generated documents", icon: "documents", section: "Resident Services" },
   { href: "/admin/document-templates", label: "Document templates", icon: "documents", section: "Resident Services" },
+  { href: "/admin/settings/document-types", label: "Document types", icon: "documents", section: "Resident Services" },
   { href: "/admin/documents/archive", label: "Document archive", icon: "documents", section: "Resident Services" },
   { href: "/admin/announcements", label: "Announcements", icon: "announcements", section: "Resident Services" },
   { href: "/admin/events", label: "Events", icon: "events", section: "Resident Services" },

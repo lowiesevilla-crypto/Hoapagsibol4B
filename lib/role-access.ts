@@ -22,6 +22,7 @@ const billingManagerAllowedAdminPrefixes = [
   "/admin/receipts",
   "/admin/collections",
   "/admin/expenses",
+  "/admin/reports/dashboard",
 ];
 
 const staffAllowedAdminPrefixes = [

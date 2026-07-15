@@ -1759,3 +1759,27 @@ Acceptance Criteria:
 - Server-side or scalable pagination.
 - Tenant isolation remains enforced.
 - Mobile layout remains usable.
+
+---
+
+## Sprint 5A - Executive Finance Dashboard
+
+Module:
+Reports / Finance
+
+Priority:
+High
+
+Status:
+Ready for Product Owner UAT
+
+Delivery Criteria:
+- Tenant-scoped executive KPIs, reconciliation, monthly collection trend, receivables aging, payment-method mix, and billing-type performance are available at `/admin/reports/dashboard`.
+- Top delinquent homeowners support search and pagination; recent finance activity is bounded and excludes internal identifiers.
+- PDF and DOCX exports use the same date range and authoritative report service as the screen.
+- Access requires an authenticated tenant, an authorized finance or administrative role, and Billing plus Reports module entitlement where applicable.
+- No Prisma schema or migration change is required.
+
+Release Gate:
+- Product Owner must complete the Sprint 5A checklist in `FINANCE_UAT_CHECKLIST.md` before this dashboard is approved for release.
+- Existing Improvements #053-#055 retain their current statuses and are not changed by this delivery.

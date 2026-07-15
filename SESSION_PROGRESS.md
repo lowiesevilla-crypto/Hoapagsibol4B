@@ -630,3 +630,23 @@ Do not merge `feature/soa-final` into `develop`, `main`, or production until Bug
 - Payment coverage harness: PASS 45.
 - Payment lifecycle harness: PASS 11.
 - Tenant isolation regression: PASS 22 with cleanup.
+
+# 2026-07-15 - Sprint 5A Executive Finance Dashboard
+
+## Engineering Complete
+
+- Added `/admin/reports/dashboard` with one URL-persisted reporting range shared by the screen, PDF export, and DOCX export.
+- Added a reusable tenant-safe dashboard service with paged source reads, grouped calculations, bounded activity results, and no payroll queries.
+- Added ten KPI cards, visible reconciliation variance, a monthly trend with accessible table fallback, receivables aging, payment-method and billing-type breakdowns, searchable/paginated delinquency, and recent finance activity.
+- Reused the SOA aging classifier and excluded refundable bonds from revenue reporting.
+- Added finance/admin RBAC and module-entitlement enforcement. Client-provided tenant IDs are not accepted.
+- Added Reports navigation without removing the existing Reports page.
+- No Prisma schema or migration was required.
+
+## Verification Status
+
+- Focused dashboard harness: PASS 20 across two active tenants.
+- Browser: desktop and approximately 390px mobile layouts, filter validation, URL preservation, empty states, and PDF/DOCX downloads verified.
+- PDF: two A4 pages visually rendered and inspected with tenant branding, signatures, and page numbering.
+- DOCX: package structure and business values verified; local visual rendering remains unavailable because LibreOffice is not installed.
+- Product Owner UAT remains pending. Improvements #053-#055 were not marked complete by this sprint.

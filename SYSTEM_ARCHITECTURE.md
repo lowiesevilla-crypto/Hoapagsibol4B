@@ -626,3 +626,26 @@ Receipt preview, PDF, Active Payments, Registered Receipts, SOA, and reports cou
 |----------|------|-------------|
 | 1.0 | July 11, 2026 | Initial System Architecture |
 | 1.1 | July 12, 2026 | Documented one Payment header with multiple bill allocations |
+
+# 27. Executive Finance Reporting Architecture
+
+`/admin/reports/dashboard`, `/admin/reports/dashboard/pdf`, and `/admin/reports/dashboard/docx` share `lib/services/finance-dashboard.ts` as their authoritative business-value source.
+
+1. Server page or export resolves the authenticated user and tenant.
+2. `requireFinanceDashboardAccess` validates the approved role and Billing/Reports entitlements; SUPER_ADMIN follows the existing platform bypass, while PLATFORM_ADMIN remains platform-console only.
+3. The server parses and validates `from` and `to`; no tenant identifier is accepted from the URL or form.
+4. Explicit tenant predicates are applied to all bill, payment, allocation, request, audit, homeowner, and settings reads.
+5. Payment headers provide receipt counts and cash received; allocations provide applied amounts; their difference provides derived credit.
+6. Screen and exports consume the same normalized data contract so date range and business values cannot drift.
+
+Queries use pagination for large source sets, aggregate/group operations where supported, bounded recent activity, and one batched homeowner load to avoid N+1 access. Charts are lightweight HTML/CSS with accessible tables, avoiding a new client chart dependency.
+
+Exports contain tenant branding, report metadata, KPI and reconciliation summaries, trend and breakdown tables, delinquency, prepared/approved sign-off, and page numbering where the format supports it. Internal database IDs are omitted.
+
+Known constraints: DOCX page numbering depends on the viewer's field rendering; historical as-of reporting uses persisted payment and void timestamps plus current bill archival validity; Product Owner two-tenant UAT remains a release gate.
+
+# Document History Addendum
+
+| Version | Date | Description |
+|----------|------|-------------|
+| 1.2 | July 15, 2026 | Added shared tenant-scoped executive finance reporting and export architecture |

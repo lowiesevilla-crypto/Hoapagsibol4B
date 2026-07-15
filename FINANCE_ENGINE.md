@@ -356,3 +356,41 @@ Planned
 - External references remain unique among active same-tenant payments. A reference used only by voided payments may be reused by a replacement transaction, whose audit metadata records the prior voided payments.
 - Voiding preserves the Payment, receipt number, and allocation history; marks the header void; recalculates every covered bill; removes derived unapplied credit from active balances; and writes one transaction-level audit event.
 - SOA active totals exclude voided payments, while the running ledger preserves the original receipt credit and adds an equal Payment Void debit on the void date.
+
+## 20. Executive Finance Dashboard
+
+The dashboard reads one explicitly supplied authenticated `tenantId` through `lib/services/finance-dashboard.ts`. Every source query is tenant scoped; the service never accepts a client tenant ID and never reads payroll data.
+
+### KPI Definitions
+
+- Total billed: valid, non-archived bills whose billing date is inside the selected reporting period.
+- Active collections: non-voided Payment header amounts received inside the selected period.
+- Voided collections: voided Payment header amounts whose payment date is inside the selected period.
+- Net collections: active collections under the current accounting model.
+- Outstanding receivables: valid bill balances reconstructed as of the selected end date.
+- Collection rate: selected-period active allocations divided by selected-period billed amount. Unapplied credit is excluded.
+- Unapplied homeowner credit: selected-period active Payment amounts less their active allocations, never below zero.
+- Active and voided receipt counts: one count per Payment header in the selected period.
+- Pending payment requests: tenant requests with Pending status and a request date in the selected period.
+
+### Reconciliation
+
+`Active Payment Received = Amount Applied to Bills + Unapplied Credit`
+
+Variance is calculated from these values and displayed whenever its absolute value exceeds PHP 0.01. The dashboard does not hide non-zero variance.
+
+### Reporting Rules and Limitations
+
+- Payment-header totals and counts are computed separately from allocation sums to avoid join duplication.
+- Monthly series includes zero-value calendar months for continuity.
+- Aging uses Current, 30 Days, 60 Days, 90 Days, and 120+ Days through the same classifier used by SOA.
+- Refundable bonds are excluded from revenue/billing-type reporting because they are liabilities.
+- Collection rate can exceed 100% when payments in the selected period settle bills issued before that period.
+- Unapplied credit remains a derived balance; applying credit to later bills is outside this dashboard.
+- On-screen delinquency pages contain 10 rows; exports contain the top 25 by outstanding balance.
+
+# Document History
+
+| Version | Date | Description |
+|----------|------|-------------|
+| 1.6 | July 15, 2026 | Documented Sprint 5A dashboard KPI, reconciliation, tenant, aging, revenue, and export rules |

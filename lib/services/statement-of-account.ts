@@ -5,10 +5,9 @@ import { prisma } from "@/lib/db";
 import { homeownerAccountNumber } from "@/lib/homeowner-account";
 import { paymentAllocationCoverageDisplay } from "@/lib/payment-coverage";
 import { paymentAppliedAmount, paymentUnappliedCredit, totalUnappliedCredit } from "@/lib/payment-credit";
+import { receivablesAgingBucket } from "@/lib/services/receivables-aging";
 import { getAssociationSettings } from "@/lib/system-settings";
 import { collectionLabel, monthLabel } from "@/lib/utils";
-
-const dayMs = 24 * 60 * 60 * 1000;
 
 export type StatementLedgerEntry = {
   date: Date;
@@ -238,18 +237,9 @@ function buildAging(
   for (const bill of bills) {
     const balance = Number(bill.balance);
     if (balance <= 0) continue;
-    const daysPastDue = Math.floor((startOfDay(today).valueOf() - startOfDay(bill.dueDate).valueOf()) / dayMs);
-    if (daysPastDue <= 0) aging.current += balance;
-    else if (daysPastDue <= 30) aging.thirtyDays += balance;
-    else if (daysPastDue <= 60) aging.sixtyDays += balance;
-    else if (daysPastDue <= 90) aging.ninetyDays += balance;
-    else aging.overOneHundredTwenty += balance;
+    aging[receivablesAgingBucket(bill.dueDate, today)] += balance;
   }
   return aging;
-}
-
-function startOfDay(value: Date) {
-  return new Date(value.getFullYear(), value.getMonth(), value.getDate());
 }
 
 function fallbackReference(prefix: string, id: string) {

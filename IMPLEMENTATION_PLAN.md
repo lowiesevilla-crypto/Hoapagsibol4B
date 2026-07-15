@@ -101,3 +101,24 @@ Prepare the finance migration and SOA finalization for product-owner review befo
 - [x] Bug #041: use one tenant-safe receipt view model for preview and PDF business values.
 - [x] Verify receipt register, Active/Void status, SOA and receipt PDF endpoints, desktop/mobile UI, tenant isolation, and payment regressions.
 - [x] Keep Prisma schema and migrations unchanged.
+
+## Sprint 5A - Executive Finance Dashboard
+
+### Engineering Complete
+
+- [x] Add `/admin/reports/dashboard` and Finance Dashboard navigation.
+- [x] Enforce authenticated tenant, approved finance/admin role, and module entitlements.
+- [x] Centralize dashboard and export calculations in `lib/services/finance-dashboard.ts`.
+- [x] Apply one validated, URL-persisted date range to KPIs, charts, tables, PDF, and DOCX.
+- [x] Prevent allocation joins from duplicating Payment-header collection totals and receipt counts.
+- [x] Reconcile active payment receipts to applied allocations plus derived homeowner credit with PHP 0.01 tolerance.
+- [x] Reuse the authoritative SOA aging bucket classifier and selected end-date as-of rules.
+- [x] Exclude refundable bonds from revenue while retaining supported non-refundable collections.
+- [x] Add accessible table fallbacks, empty/error states, delinquency search/pagination, and 390px mobile containment.
+- [x] Add PDF and DOCX exports with matching values, tenant branding, sign-off fields, and supported page numbering.
+- [x] Keep Prisma schema and migrations unchanged.
+
+### Release Gate
+
+- [ ] Complete two-tenant Product Owner UAT in `FINANCE_UAT_CHECKLIST.md`.
+- [ ] Obtain Product Owner approval before changing any applicable Improvement #053-#055 status or merging for release.

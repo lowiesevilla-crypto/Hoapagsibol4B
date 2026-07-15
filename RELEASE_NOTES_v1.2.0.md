@@ -228,3 +228,24 @@ Status:
 HOAHub Development Team
 
 Version 1.2.0
+
+---
+
+# Sprint 5A Release Candidate - Executive Finance Dashboard
+
+Status: Engineering complete; Product Owner UAT pending.
+
+- Added a tenant-scoped Finance Dashboard under Reports with ten executive KPIs and one shared date range.
+- Added visible cash-to-allocation reconciliation with derived homeowner credit and PHP 0.01 variance tolerance.
+- Added monthly collection, aging, payment-method, and billing-type visualizations with accessible table fallbacks.
+- Added searchable and paginated top delinquent homeowners plus bounded recent finance activity.
+- Added matching PDF and DOCX exports with tenant branding, report metadata, sign-off fields, and supported page numbering.
+- Enforced finance/admin RBAC and Billing/Reports entitlements without exposing payroll data or accepting client tenant IDs.
+- Reused SOA aging rules, excluded refundable bonds from revenue, and avoided PaymentAllocation join double-counting.
+- No database migration was required.
+
+Known limitations:
+- Collection rate may exceed 100% when current-period receipts settle earlier-period bills.
+- Unapplied credit is reported as a derived liability; applying it to future bills is a separate workflow.
+- DOCX pagination is finalized by the document viewer; local visual rendering was unavailable without LibreOffice.
+- Product Owner two-tenant UAT is required before release approval or any applicable Improvement #053-#055 status change.

@@ -666,3 +666,17 @@ Do not merge `feature/soa-final` into `develop`, `main`, or production until Bug
 
 - Product Owner UAT remains pending.
 - Do not mark Bug #049 or Improvements #056-#058 complete until local Product Owner UAT passes.
+### Additional UAT Observation
+
+A UI/UX improvement was identified during Product Owner UAT.
+
+Improvement #061:
+Preserve viewport and keyboard focus on paginated tables after navigating between pages.
+
+Implementation is planned through the shared pagination component to benefit all current and future modules.
+
+2026-07-15 Engineering Update:
+- Added reusable URL-hash pagination focus restoration and client-side focus repair for Billing Preview.
+- Wired Finance Dashboard delinquency/activity pagination, shared admin payments pagination, and Billing Preview pagination.
+- Local checks passed for typecheck, clean build, authenticated Chromium dashboard/payment focus restoration, and 390px mobile dashboard focus restoration.
+- Product Owner UAT in Chrome and Edge remains pending.

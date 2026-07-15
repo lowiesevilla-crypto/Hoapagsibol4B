@@ -178,3 +178,7 @@ Status: PENDING PRODUCT OWNER UAT
 | 11 | Export parity | Finance Dashboard PDF and DOCX values match the screen for the selected date range |  |  |
 | 12 | Regression | Billing rules/exemptions/preview/generation, payments, receipts, SOA, voids, tenant branding, tenant isolation, RBAC, and mobile remain correct |  |  |
 | 13 | Product Owner decision | Product Owner records approval before Bug #049 or Improvements #056-#058 are marked complete |  |  |
+Additional UI Improvement Identified:
+
+- Improvement #061 – Preserve table focus after pagination across all paginated modules by enhancing the shared pagination component.
+- Engineering fix is ready for Product Owner UAT: verify Finance Dashboard, Active Payments, Transaction History, Payment Requests, and Billing Preview pagination in Chrome, Edge, and 390px mobile. Billing Rules and Billing Exemptions have no pagination controls in the current implementation.

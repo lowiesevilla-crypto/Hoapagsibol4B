@@ -1183,7 +1183,7 @@ Priority:
 Critical
 
 Status:
-Open
+Ready for Product Owner UAT
 
 Problem:
 When an administrator records one payment covering multiple open bills, the system creates multiple receipt numbers instead of one receipt for the complete payment transaction.
@@ -1790,3 +1790,49 @@ Delivery Criteria:
 Release Gate:
 - Product Owner must complete the Sprint 5A checklist in `FINANCE_UAT_CHECKLIST.md` before this dashboard is approved for release.
 - Existing Improvements #053-#055 retain their current statuses and are not changed by this delivery.
+## Improvement #061 – Preserve Table Focus During Pagination
+
+Module:
+Shared UI / Pagination Component
+
+Priority:
+High
+
+Status:
+Open
+
+Problem:
+When the user clicks Next or Previous on a paginated table, the browser scrolls away from the table and the user's reading position is lost. This requires the user to manually scroll back to continue reviewing the data.
+
+Affected Modules:
+- Finance Dashboard – Recent Finance Activity
+- Finance Dashboard – Top Delinquent Homeowners
+- Active Payments
+- Transaction History
+- Payment Requests
+- Billing Rules
+- Billing Exemptions
+- Billing Preview
+- Any future paginated tables
+
+Expected Behavior:
+After changing pages, the viewport should remain focused on the table that initiated the pagination.
+
+Acceptance Criteria:
+- Clicking Next or Previous keeps the table visible.
+- The table header remains in view.
+- Keyboard focus moves to the updated table or heading.
+- Search filters remain applied.
+- Date filters remain applied.
+- Sorting remains applied.
+- URL parameters remain synchronized.
+- Works on desktop and mobile.
+- No console or hydration errors.
+- Implement in the shared pagination component so all modules inherit the behavior automatically.
+
+Engineering Notes:
+- Added reusable pagination focus restoration using URL hash targets and keyboard-focus repair after navigation.
+- Applied to Finance Dashboard delinquency/activity pagination and the shared payments pager used by Active Payments, Transaction History, Payment Requests, and Record Payment.
+- Applied to client-side Billing Preview pagination.
+- Billing Rules and Billing Exemptions currently have no Next/Previous pagination controls; future pagination should use the shared focus target pattern.
+- Local verification completed in the authenticated Chromium in-app browser and 390px mobile viewport; Chrome and Edge Product Owner browser UAT remains pending.

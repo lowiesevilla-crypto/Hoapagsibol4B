@@ -69,3 +69,32 @@ The Finance module is approved for release only when all critical test cases pas
 | Exemption Reason | Saved correctly |  |  |
 | Approval Reference | Saved correctly |  |  |
 | Deactivate Exemption | Exemption becomes inactive |  |
+## Phase 3 Result – Payments and Receipts
+
+Status: CONDITIONAL PASS
+
+Passed:
+- Exact payment
+- Partial payment
+- Multi-bill payment
+- Overpayment
+- One payment header
+- One receipt per transaction
+- Receipt preview
+- Tenant branding
+- Property/account details
+- Processor identity
+- Registered Receipts
+- Active Payments
+- Transaction History
+- SOA update
+- Homeowner credit
+- Reference validation
+- Tenant isolation
+- Mobile
+
+Open Issue:
+- SOA browser Print Preview and downloaded PDF are not visually consistent
+
+Decision:
+Proceed to Phase 4 Void and Reversal UAT, but do not approve the Finance release until Bug #049 is resolved.

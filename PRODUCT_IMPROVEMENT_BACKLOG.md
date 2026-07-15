@@ -1587,3 +1587,109 @@ Acceptance Criteria:
 - Default branding is only used during bootstrap.
 - Favicon supports tenant branding when configured.
 - Manifest/PWA name uses tenant branding.
+## Improvement #046 – Add Search to Billing Rules
+
+Module:
+Billing Rules
+
+Priority:
+Medium
+
+Status:
+Open
+
+Problem:
+The Billing Rules page has pagination but no search function.
+
+Expected Behavior:
+Administrators should be able to search billing rules without manually browsing pages.
+
+Acceptance Criteria:
+- Search by resolution reference.
+- Search by recurring charge type.
+- Search by amount where practical.
+- Search by effective year and month.
+- Search by active or inactive status.
+- Search remains tenant-scoped.
+- Pagination works with search results.
+- Mobile layout remains usable.
+## Improvement #047 – Add Pagination to Billing Records
+
+Module:
+Billing
+
+Priority:
+Medium
+
+Status:
+Open
+
+Problem:
+The Billing table does not provide pagination for larger datasets.
+
+Acceptance Criteria:
+- Server-side or scalable pagination.
+- Page size control where appropriate.
+- Search and filters continue to work with pagination.
+- Tenant isolation is preserved.
+- Mobile layout remains usable.
+
+---
+
+## Improvement #048 – Add Processing State to Billing Preview and Generation
+
+Module:
+Billing
+
+Priority:
+High
+
+Status:
+Open
+
+Problem:
+When Preview Billing or Generate Billing is running, there is no visible progress or processing state.
+
+Expected Behavior:
+Users must receive immediate feedback that the request is being processed.
+
+Acceptance Criteria:
+- Preview button shows a loading state.
+- Generate button shows a loading state.
+- Buttons are disabled while processing.
+- Duplicate submissions are prevented.
+- Clear success or failure feedback appears.
+- Works for individual, selected, and all-homeowner generation.
+- Mobile layout remains usable.
+## Bug #049 – SOA Browser Print Preview and Downloaded PDF Are Inconsistent
+
+Module:
+Statement of Account
+
+Priority:
+High
+
+Status:
+Open
+
+Problem:
+The SOA browser Print Preview and the downloaded SOA PDF use different formatting and composition.
+
+Expected Behavior:
+Both outputs must present the same business data and a visually consistent statement structure.
+
+Acceptance Criteria:
+- Same tenant branding
+- Same homeowner information
+- Same account summary
+- Same outstanding balance
+- Same aging summary
+- Same running ledger
+- Same payment history
+- Same billing history
+- Same signature and footer content
+- Same ordering of sections
+- No data appears in one output but not the other
+- Print Preview remains optimized for browser printing
+- Downloaded PDF remains optimized for A4
+- Minor spacing differences are acceptable, but the document structure and data must match

@@ -1944,3 +1944,72 @@ Acceptance Criteria:
 - Approval workflow works for free and paid requests.
 - Tenant isolation is enforced.
 - Existing document requests remain unchanged.
+## Improvement #064 – Document Requests for Registered Family Members
+
+Module:
+Homeowner Document Requests
+
+Priority:
+High
+
+Status:
+Open
+
+Requirement:
+Homeowners may request eligible documents for themselves or registered household/family members linked to their account and property.
+
+Acceptance Criteria:
+- Subject selection supports self and registered household members.
+- Server validates homeowner, household-member, property, and tenant ownership.
+- Request stores a subject snapshot.
+- Another homeowner’s household members cannot be selected.
+- Mobile workflow is supported.
+- Existing generated documents remain unchanged if household data is later updated.
+
+---
+
+## Improvement #065 – Admin Review and Editing Before Document Approval
+
+Module:
+Document Administration
+
+Priority:
+Critical
+
+Status:
+Open
+
+Requirement:
+Authorized administrators must be able to review and edit all information that will appear in a requested document before approval.
+
+Acceptance Criteria:
+- Admin can edit subject, address, property, purpose, dates, copies, remarks, signatory, and document-specific fields.
+- Original and edited values are auditable.
+- Approved document uses the final reviewed values.
+- Only tenant-authorized roles can edit and approve.
+- Existing generated document snapshots remain immutable.
+
+---
+
+## Improvement #066 – Tenant-Configured Instant Download and Approval Rules
+
+Module:
+Tenant Document Configuration
+
+Priority:
+Critical
+
+Status:
+Open
+
+Requirement:
+Each tenant defines whether each document type is available for instant download, requires payment, requires approval, requires both, or is request-only.
+
+Acceptance Criteria:
+- Delivery mode is persisted per tenant document type.
+- Free instant documents may download after validated submission.
+- Paid documents enforce payment.
+- Approval documents enforce admin approval.
+- Payment-and-approval documents enforce both.
+- Request and status history are recorded for instant downloads.
+- Tenant isolation is enforced.

@@ -99,7 +99,7 @@ export async function processDocumentRequestAction(formData: FormData) {
       prisma.documentTemplate.findFirst({ where: { type: request.type } }),
       prisma.payment.aggregate({ where: { homeownerId: request.homeownerId, status: "ACTIVE" }, _sum: { amount: true } }),
       prisma.collection.findMany({ where: { homeownerId: request.homeownerId, type: "CONSTRUCTION_BOND", refundable: true } }),
-      getAssociationSettings(),
+      getAssociationSettings(admin.tenantId),
       getActiveOrganizationOfficers(),
     ]);
     if (!template?.active) return fail("The document template is inactive or missing.");
@@ -175,6 +175,7 @@ export async function processDocumentRequestAction(formData: FormData) {
     const approved = operation === "approve";
     const appUrl = getAppUrl();
     await sendEmailNotification({
+      tenantId: request.tenantId,
       recipientId: request.homeowner.user.id,
       email: request.homeowner.user.email,
       subject: approved ? "Your HOA document request was approved" : "Update on your HOA document request",

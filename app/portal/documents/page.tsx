@@ -18,7 +18,7 @@ export default async function PortalDocumentsPage({ searchParams }: { searchPara
     prisma.documentRequest.findMany({ where, include: { histories: { include: { actor: true }, orderBy: { createdAt: "desc" } } }, orderBy: { requestedAt: "desc" }, skip: (page - 1) * 10, take: 10 }),
     prisma.documentRequest.count({ where }),
     prisma.bill.aggregate({ where: { homeownerId, archivedAt: null, balance: { gt: 0 } }, _sum: { balance: true } }),
-    getPaymentSettings(),
+    getPaymentSettings(user.tenantId),
   ]);
   const unpaidBalance = Number(unpaid._sum.balance ?? 0);
   return <>

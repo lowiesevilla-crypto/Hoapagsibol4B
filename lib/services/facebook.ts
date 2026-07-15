@@ -1,5 +1,5 @@
 import { FacebookPostStatus, SystemSettingCategory } from "@prisma/client";
-import { getAssociationSettings, getSystemSettingValue } from "@/lib/system-settings";
+import { BOOTSTRAP_TENANT_ID, getAssociationSettings, getSystemSettingValue } from "@/lib/system-settings";
 
 export type FacebookPublishResult = {
   status: FacebookPostStatus;
@@ -8,10 +8,11 @@ export type FacebookPublishResult = {
   error?: string;
 };
 
-export async function publishToFacebookPage(message: string): Promise<FacebookPublishResult> {
-  const pageId = (await getSystemSettingValue(SystemSettingCategory.FACEBOOK, "FACEBOOK_PAGE_ID")) || process.env.FACEBOOK_PAGE_ID;
-  const accessToken = (await getSystemSettingValue(SystemSettingCategory.FACEBOOK, "FACEBOOK_PAGE_ACCESS_TOKEN")) || process.env.FACEBOOK_PAGE_ACCESS_TOKEN;
-  const version = (await getSystemSettingValue(SystemSettingCategory.FACEBOOK, "FACEBOOK_GRAPH_API_VERSION")) || process.env.FACEBOOK_GRAPH_API_VERSION || "v23.0";
+export async function publishToFacebookPage(message: string, tenantId: string): Promise<FacebookPublishResult> {
+  const bootstrapValue = (key: string) => tenantId === BOOTSTRAP_TENANT_ID ? process.env[key]?.trim() || "" : "";
+  const pageId = (await getSystemSettingValue(SystemSettingCategory.FACEBOOK, "FACEBOOK_PAGE_ID", tenantId)) || bootstrapValue("FACEBOOK_PAGE_ID");
+  const accessToken = (await getSystemSettingValue(SystemSettingCategory.FACEBOOK, "FACEBOOK_PAGE_ACCESS_TOKEN", tenantId)) || bootstrapValue("FACEBOOK_PAGE_ACCESS_TOKEN");
+  const version = (await getSystemSettingValue(SystemSettingCategory.FACEBOOK, "FACEBOOK_GRAPH_API_VERSION", tenantId)) || bootstrapValue("FACEBOOK_GRAPH_API_VERSION") || "v23.0";
   if (!pageId || !accessToken) return { status: FacebookPostStatus.SKIPPED, error: "Facebook Page posting is not configured. Add FACEBOOK_PAGE_ID and FACEBOOK_PAGE_ACCESS_TOKEN to the environment." };
   try {
     const response = await fetch(`https://graph.facebook.com/${version}/${encodeURIComponent(pageId)}/feed`, {
@@ -28,12 +29,12 @@ export async function publishToFacebookPage(message: string): Promise<FacebookPu
   }
 }
 
-export async function announcementFacebookMessage(title: string, content: string) {
-  const association = await getAssociationSettings();
+export async function announcementFacebookMessage(title: string, content: string, tenantId: string) {
+  const association = await getAssociationSettings(tenantId);
   return `${title}\n\n${content}\n\n${association.name} Homeowners Association`;
 }
 
-export async function eventFacebookMessage(event: { title: string; description: string; eventDate: Date; eventTime: string; location: string }) {
-  const association = await getAssociationSettings();
+export async function eventFacebookMessage(event: { title: string; description: string; eventDate: Date; eventTime: string; location: string }, tenantId: string) {
+  const association = await getAssociationSettings(tenantId);
   return `${event.title}\n\n${event.description}\n\nDate: ${event.eventDate.toLocaleDateString("en-PH", { month: "long", day: "numeric", year: "numeric", timeZone: "UTC" })}\nTime: ${event.eventTime}\nLocation: ${event.location}\n\n${association.name} Homeowners Association`;
 }

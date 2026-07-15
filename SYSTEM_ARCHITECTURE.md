@@ -606,8 +606,62 @@ Every new feature must satisfy:
 
 ---
 
+# 26. Payment Transaction Architecture
+
+Record Payment posts one financial transaction through the shared payment service:
+
+1. Resolve the authenticated tenant and authorized actor.
+2. Validate one payer, current bill balances, reference rules, amount, and idempotency key.
+3. Allocate one tenant receipt number.
+4. Create one `Payment` header.
+5. Create one or more tenant-safe `PaymentAllocation` rows.
+6. Recalculate every affected bill and write one transaction audit event.
+7. Commit in one serializable Prisma transaction and redirect to `/receipts/payment/{paymentId}`.
+
+Receipt preview, PDF, Active Payments, Registered Receipts, SOA, and reports count the Payment header once and use allocations for bill coverage. Voiding marks the complete payment transaction void, preserves allocation and receipt history, archives it once, and recalculates all covered bills atomically.
+
 # Document History
 
 | Version | Date | Description |
 |----------|------|-------------|
 | 1.0 | July 11, 2026 | Initial System Architecture |
+| 1.1 | July 12, 2026 | Documented one Payment header with multiple bill allocations |
+
+# 27. Executive Finance Reporting Architecture
+
+`/admin/reports/dashboard`, `/admin/reports/dashboard/pdf`, and `/admin/reports/dashboard/docx` share `lib/services/finance-dashboard.ts` as their authoritative business-value source.
+
+1. Server page or export resolves the authenticated user and tenant.
+2. `requireFinanceDashboardAccess` validates the approved role and Billing/Reports entitlements; SUPER_ADMIN follows the existing platform bypass, while PLATFORM_ADMIN remains platform-console only.
+3. The server parses and validates `from` and `to`; no tenant identifier is accepted from the URL or form.
+4. Explicit tenant predicates are applied to all bill, payment, allocation, request, audit, homeowner, and settings reads.
+5. Payment headers provide receipt counts and cash received; allocations provide applied amounts; their difference provides derived credit.
+6. Screen and exports consume the same normalized data contract so date range and business values cannot drift.
+
+Queries use pagination for large source sets, aggregate/group operations where supported, bounded recent activity, and one batched homeowner load to avoid N+1 access. Charts are lightweight HTML/CSS with accessible tables, avoiding a new client chart dependency.
+
+Exports contain tenant branding, report metadata, KPI and reconciliation summaries, trend and breakdown tables, delinquency, prepared/approved sign-off, and page numbering where the format supports it. Internal database IDs are omitted.
+
+Known constraints: DOCX page numbering depends on the viewer's field rendering; historical as-of reporting uses persisted payment and void timestamps plus current bill archival validity; Product Owner two-tenant UAT remains a release gate.
+
+# Document History Addendum
+
+| Version | Date | Description |
+|----------|------|-------------|
+| 1.2 | July 15, 2026 | Added shared tenant-scoped executive finance reporting and export architecture |
+
+## 28. Sprint 5B Finance Professionalization Architecture
+
+SOA browser print and SOA PDF are expected to consume `lib/services/statement-of-account.ts` as the shared tenant-safe view model. Browser and PDF renderers can differ in layout mechanics, but cannot introduce separate business values, section omissions, tenant branding fallbacks, or visible database-id-derived labels.
+
+The Finance Dashboard continues to use `lib/services/finance-dashboard.ts` for page and export values. Recent Finance Activity filters are URL-backed and service-applied, with search/status/type/date filters returning page-bounded rows and preserving the main reporting period. The Top Delinquent Homeowners SOA action routes through the existing homeowner SOA route and passes only a return URL, never a client tenant id.
+
+PDF and DOCX exports use the same report service values as the screen. Export layout should favor wrapped tables, right-aligned numeric values, internal-use footer text, and prepared/approved sign-off fields over unsupported chart objects.
+
+No database migration is required for Sprint 5B. Product Owner UAT remains the gate before Bug #049 or Improvements #056-#058 are marked complete.
+
+# Document History Addendum
+
+| Version | Date | Description |
+|----------|------|-------------|
+| 1.3 | July 15, 2026 | Documented Sprint 5B SOA parity, activity filters, SOA link, and export presentation architecture |

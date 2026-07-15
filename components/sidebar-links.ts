@@ -41,6 +41,7 @@ export const adminLinks: LinkItem[] = [
   { href: "/admin/payments/requests", label: "Payment requests", icon: "payments", section: "Payments" },
   { href: "/admin/payments/active", label: "Active payments", icon: "payments", section: "Payments" },
   { href: "/admin/payments/history", label: "Transaction history", icon: "payments", section: "Payments" },
+  { href: "/admin/reports/dashboard", label: "Finance Dashboard", icon: "dashboard", section: "Reports" },
   { href: "/admin/documents/new", label: "Generate document", icon: "documents", section: "Resident Services" },
   { href: "/admin/documents", label: "Document requests", icon: "documents", section: "Resident Services" },
   { href: "/admin/documents/generated", label: "Generated documents", icon: "documents", section: "Resident Services" },

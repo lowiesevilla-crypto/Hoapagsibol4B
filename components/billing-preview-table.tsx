@@ -2,6 +2,7 @@
 
 import { ArrowDown, ArrowUp, Search } from "lucide-react";
 import { useMemo, useState } from "react";
+import { PaginationFocusTarget, focusPaginationTarget } from "@/components/pagination-focus";
 import type { BillingGenerationRow } from "@/lib/services/billing-rules";
 import { money } from "@/lib/utils";
 
@@ -47,7 +48,13 @@ export function BillingPreviewTable({ rows }: { rows: BillingGenerationRow[] }) 
     setDirection("asc");
   }
 
+  function changePage(nextPage: number) {
+    setPage(nextPage);
+    focusPaginationTarget("billing-preview-table");
+  }
+
   return <div className="mt-4">
+    <PaginationFocusTarget id="billing-preview-table" label="Billing preview table" />
     <div className="mb-3 grid gap-3 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center">
       <label className="relative block">
         <span className="sr-only">Search billing preview</span>
@@ -88,9 +95,9 @@ export function BillingPreviewTable({ rows }: { rows: BillingGenerationRow[] }) 
       </table>
     </div>
     {pageCount > 1 && <nav className="mt-3 flex items-center justify-between gap-3 text-sm">
-      <button className="btn-secondary" type="button" disabled={safePage <= 1} onClick={() => setPage((current) => Math.max(1, current - 1))}>Previous</button>
+      <button className="btn-secondary" type="button" disabled={safePage <= 1} onClick={() => changePage(Math.max(1, safePage - 1))}>Previous</button>
       <span className="font-bold">Page {safePage} of {pageCount}</span>
-      <button className="btn-secondary" type="button" disabled={safePage >= pageCount} onClick={() => setPage((current) => Math.min(pageCount, current + 1))}>Next</button>
+      <button className="btn-secondary" type="button" disabled={safePage >= pageCount} onClick={() => changePage(Math.min(pageCount, safePage + 1))}>Next</button>
     </nav>}
   </div>;
 }

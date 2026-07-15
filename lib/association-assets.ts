@@ -8,9 +8,11 @@ export type AssociationLogoAsset = {
   type: "png" | "jpg";
 };
 
+const transparentPng = new Uint8Array(Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=", "base64"));
+
 export async function getAssociationLogoAsset(logoUrl: string): Promise<AssociationLogoAsset> {
-  const fallback = path.join(process.cwd(), "public", "pagsibol-logo.png");
   try {
+    if (!logoUrl.trim()) return { bytes: transparentPng, type: "png" };
     if (/^https?:\/\//i.test(logoUrl)) {
       const response = await fetch(logoUrl, { cache: "no-store" });
       if (!response.ok) throw new Error(`Logo returned HTTP ${response.status}.`);
@@ -21,6 +23,6 @@ export async function getAssociationLogoAsset(logoUrl: string): Promise<Associat
     const localPath = path.join(process.cwd(), "public", logoUrl.replace(/^\/+/, ""));
     return { bytes: await readFile(localPath), type: localPath.toLowerCase().endsWith(".jpg") || localPath.toLowerCase().endsWith(".jpeg") ? "jpg" : "png" };
   } catch {
-    return { bytes: await readFile(fallback), type: "png" };
+    return { bytes: transparentPng, type: "png" };
   }
 }

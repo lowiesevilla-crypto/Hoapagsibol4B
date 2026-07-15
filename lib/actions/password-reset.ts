@@ -56,6 +56,7 @@ export async function forgotPasswordAction(_state: ForgotPasswordState, formData
   ]);
   const resetUrl = `${requestBaseUrl(requestHeaders)}/reset-password?token=${encodeURIComponent(rawToken)}&tenantSlug=${encodeURIComponent(tenant.slug)}`;
   const log = await sendEmailNotification({
+    tenantId: tenant.id,
     recipientId: user.id,
     email: user.email,
     subject: "Reset your HOA Digital Hub password",

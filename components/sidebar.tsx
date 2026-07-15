@@ -111,6 +111,7 @@ function sectionIsActive(items: LinkItem[], pathname: string) {
 }
 
 function linkIsActive(href: string, pathname: string) {
+  if (href === "/admin/reports") return pathname === href;
   return pathname === href || pathname.startsWith(`${href}/`);
 }
 

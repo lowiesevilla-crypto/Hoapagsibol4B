@@ -13,7 +13,8 @@ import { shortDate } from "@/lib/utils";
 
 export async function GET(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const [{ user, request: documentRequest }, association] = await Promise.all([getAccessibleGeneratedDocument(id, { requireDownload: true }), getAssociationSettings()]);
+  const { user, request: documentRequest } = await getAccessibleGeneratedDocument(id, { requireDownload: true });
+  const association = await getAssociationSettings(user.tenantId);
   const host = request.headers.get("x-forwarded-host") || request.headers.get("host") || request.nextUrl.host;
   const proto = request.headers.get("x-forwarded-proto") || (host.includes("localhost") || host.startsWith("127.") ? "http" : "https");
   const verifyUrl = `${proto}://${host}/verify/documents/${documentRequest.verificationCode}`;

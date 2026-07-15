@@ -28,7 +28,7 @@ export async function submitPaymentRequestAction(formData: FormData) {
     const data = parsed.data;
     const paymentDate = new Date(`${data.paymentDate}T00:00:00.000Z`);
     const referenceNumber = data.referenceNumber.trim();
-    const duplicatePayment = await prisma.payment.findFirst({ where: { tenantId: user.tenantId, referenceNumber } });
+    const duplicatePayment = await prisma.payment.findFirst({ where: { tenantId: user.tenantId, referenceNumber, status: "ACTIVE" } });
     if (duplicatePayment) throw new Error("This payment reference number has already been recorded.");
     const duplicateRequest = await prisma.paymentRequest.findFirst({ where: { tenantId: user.tenantId, referenceNumber, status: { not: "REJECTED" } } });
     if (duplicateRequest) throw new Error("This payment reference number has already been submitted for verification.");
@@ -102,7 +102,7 @@ export async function approvePaymentRequestAction(formData: FormData) {
   if (!parsed.success) throw new Error(parsed.error.issues[0]?.message || "Invalid review details.");
   await approvePaymentRequest(parsed.data.id, admin.id, parsed.data.reviewRemarks, admin.tenantId);
   const approved = await prisma.paymentRequest.findUnique({ where: { id: parsed.data.id }, include: { homeowner: { include: { user: true } }, payment: true, collection: true } });
-  if (approved) await sendEmailNotification({ recipientId: approved.homeowner.userId, email: approved.homeowner.user.email, subject: "HOA payment confirmed", heading: "Payment confirmation", message: `Hello ${approved.homeowner.user.name},\nYour payment of PHP ${Number(approved.amount).toFixed(2)} has been verified and approved.\nReference: ${approved.referenceNumber || "Not provided"}\nReceipt: ${approved.payment?.receiptNumber || approved.collection?.receiptNumber || "Available from the HOA office"}`, type: NotificationType.PAYMENT_CONFIRMATION, actionLabel: "View payment history", actionUrl: `${getAppUrl()}/portal/payments` }).catch(() => undefined);
+  if (approved) await sendEmailNotification({ tenantId: admin.tenantId, recipientId: approved.homeowner.userId, email: approved.homeowner.user.email, subject: "HOA payment confirmed", heading: "Payment confirmation", message: `Hello ${approved.homeowner.user.name},\nYour payment of PHP ${Number(approved.amount).toFixed(2)} has been verified and approved.\nReference: ${approved.referenceNumber || "Not provided"}\nReceipt: ${approved.payment?.receiptNumber || approved.collection?.receiptNumber || "Available from the HOA office"}`, type: NotificationType.PAYMENT_CONFIRMATION, actionLabel: "View payment history", actionUrl: `${getAppUrl()}/portal/payments` }).catch(() => undefined);
   revalidatePaymentPages();
   redirect("/admin/payments/requests?success=approved&message=QR%20payment%20approved%20and%20officially%20recorded.");
 }

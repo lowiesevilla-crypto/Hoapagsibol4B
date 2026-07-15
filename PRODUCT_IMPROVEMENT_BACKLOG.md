@@ -1,3 +1,8 @@
+Library
+/
+PRODUCT_IMPROVEMENT_BACKLOG_RESOLVED.md
+
+
 # HOAHub Product Improvement Backlog
 
 Version: 1.1
@@ -419,6 +424,31 @@ Priority: 🔴 Critical
 
 🔴 Improvement #013 – Official Statement of Account
 Printable SOA with HOA branding, billing history, totals, QR verification, and PDF export.
+
+Sprint 2.1 Phase 1 Status:
+Development complete for SOA v1.
+
+Delivered:
+- Admin homeowner SOA route at `/admin/homeowners/[id]/soa`
+- Tenant-scoped financial view from existing bills, payments, collections, and bond refunds
+- HOA header, homeowner profile, account summary, running ledger, payment history, billing history, aging summary
+- Print SOA and Download PDF actions
+- Homeowner detail action for Statement of Account
+
+Remaining:
+- Persisted public SOA verification records
+- Homeowner portal self-service SOA route
+- Configurable SOA numbering policy
+- Treasurer signature workflow
+
+Hotfix #001:
+- Bug #028 Fixed: Print SOA now invokes browser printing and falls back to PDF when print is unavailable.
+- Bug #029 Fixed: Outstanding Balance and summary currency values now use non-overlapping right-aligned layouts on screen, print, and PDF.
+
+Hotfix #002:
+- Bug #028 Fixed: Print SOA now uses a dedicated SOA Client Component with a native `button type="button"` and direct `window.print()` click handler.
+- Bug #029 Fixed: SOA PDF signatures and generated footer now use exact remaining-space flow layout, keeping the 1-ledger / 0-payment / 1-billing sample on one A4 page and adding a page only when the footer block cannot fit.
+
 🔴 Improvement #014 – Monthly Dues Exemption Period
 Configurable exemption periods with reasons and audit logging.
 🔴 Improvement #015 – Billing Rules Engine
@@ -536,7 +566,7 @@ Priority:
 Critical
 
 Status:
-Open
+Fixed in urgent finance migration and hotfix on 2026-07-12
 
 Problem:
 The tenant slug login URL link is not working when clicked from the HOAHub Platform on web and mobile.
@@ -567,7 +597,7 @@ Priority:
 High
 
 Status:
-Open
+Fixed (2026-07-12)
 
 Problem:
 The Create Individual Bill form displays homeowners in a standard dropdown. This becomes difficult to use when the tenant has many homeowners.
@@ -1033,3 +1063,796 @@ Acceptance Criteria:
 
 Fix Summary:
 Billing generation and payment mutations now revalidate the dedicated payment routes. Record Payment reads current open bill balances from the database so newly generated bills are available immediately for payment posting and receipt generation.
+
+---
+
+# Payments Module Product Review
+
+## Current Assessment
+
+- Ease of Use: Very useful
+- Mobile Experience: Continue improving UI/UX for all screen and device sizes
+- Missing Feature: Tenant-specific payment webhook configuration
+- Business Process Requirement: Successful payments must automatically update related balances, reports, ledgers, and receipt records
+- AI Opportunity: A tenant-scoped Finance AI may answer payment-status questions only within the authenticated tenant and the user’s authorized access, in compliance with the Philippine Data Privacy Act of 2012
+
+---
+
+## Bug #028 – Print SOA Button
+
+Module:
+Statement of Account
+
+Priority:
+Critical
+
+Status:
+Fixed in Sprint 2.4 SOA finalization on 2026-07-11
+
+Problem:
+The Print SOA button remains visible but does not open the browser print dialog.
+
+Expected Behavior:
+Clicking Print SOA must open the browser print dialog.
+
+Acceptance Criteria:
+- Print control is interactive.
+- Browser print dialog opens.
+- Works in Chrome and Edge.
+- Keyboard accessible.
+- No console or hydration errors.
+- PDF download remains available.
+
+Fix Summary:
+Print SOA now uses a dedicated client button with `type="button"`, a direct `window.print()` mouse handler, and explicit Enter/Space keyboard activation. Chrome and Edge local verification confirmed print invocation, active pointer events, no disabled state, no runtime errors, and preserved PDF Download/Return links.
+
+---
+
+## Bug #029 – SOA PDF Pagination and Footer
+
+Module:
+Statement of Account
+
+Priority:
+Critical
+
+Status:
+Fixed in Sprint 2.4 SOA finalization on 2026-07-11
+
+Problem:
+Short SOA documents still create an unnecessary second page containing the signature or footer area.
+
+Expected Behavior:
+A short SOA should fit on one A4 portrait page when content allows.
+
+Acceptance Criteria:
+- Signature block remains on page 1 when space permits.
+- Footer remains on page 1 when space permits.
+- No nearly empty final page.
+- Long statements paginate correctly.
+- No overlapping text or decorative lines.
+- Tables remain aligned.
+
+Fix Summary:
+SOA PDF table flow now measures the first row with the header, uses compact empty-state rows, reduces excess table gaps, removes crowded decorative value lines, and draws the signature/footer block only after confirming measured remaining space. The verified 1-ledger / 0-payment / 1-billing sample renders as exactly one A4 page.
+
+## Bug #030 – Browser Print Preview Pagination and Horizontal Overflow
+
+Module:
+Statement of Account
+
+Priority:
+Critical
+
+Status:
+Fixed in Sprint 2.4 SOA finalization on 2026-07-12
+
+Problem:
+The SOA browser print preview produces three pages even though the content should fit more efficiently. The preview also reports horizontal overflow.
+
+Observed Result:
+- Page 1 ends after part of Account Summary.
+- Page 2 contains Aging Summary and Running Ledger with excessive unused space.
+- Page 3 contains Payment History, Billing History, and signatures.
+- Some table headers wrap awkwardly.
+- Browser print output differs significantly from the downloaded PDF layout.
+
+Expected Behavior:
+Browser printing must produce a professional A4 portrait statement with compact and natural pagination.
+
+Acceptance Criteria:
+- No horizontal overflow.
+- Account Summary remains together when space permits.
+- Sections do not force unnecessary page breaks.
+- Payment History and Billing History use remaining space before creating a new page.
+- No mostly empty intermediate page.
+- Table headers remain readable.
+- Signature block stays together.
+- Action buttons and application navigation remain hidden.
+- Chrome and Edge print previews are supported.
+- Long statements still paginate correctly.
+
+Fix Summary:
+Browser Print SOA now uses SOA-scoped print CSS for compact A4 flow, table-specific fixed column widths, normalized table wrapping, stacked print history sections, compact header/summary/footer spacing, and a small print-only sheet zoom for Chrome/Edge. Local verification for homeowner `ABAD, JOHN DARYL ENFANSO` produced 1 printed A4 page in both Chrome and Edge with no horizontal overflow and full statement content.
+## Bug #031 – Multiple Official Receipts Generated for One Payment Transaction
+
+Module:
+Payments and Official Receipts
+
+Priority:
+Critical
+
+Status:
+Ready for Product Owner UAT
+
+Problem:
+When an administrator records one payment covering multiple open bills, the system creates multiple receipt numbers instead of one receipt for the complete payment transaction.
+
+Business Rule:
+One payment transaction must create exactly one Official Receipt, regardless of how many bills or billing periods are covered.
+
+Expected Behavior:
+- One payment transaction
+- One Official Receipt number
+- One payment reference number
+- One payer
+- One total amount
+- Multiple bill allocations under the same transaction and receipt
+- Receipt coverage lists all selected bills or months
+- Receipt total equals the total payment
+
+Acceptance Criteria:
+- A single-bill payment creates one receipt.
+- A multi-bill payment creates one receipt.
+- All selected bill allocations reference the same receipt number.
+- Registered Receipts shows one receipt record for the transaction.
+- Active Payments and Transaction History do not double-count the transaction.
+- Reprinting or refreshing the receipt does not create another receipt.
+- Payment history and SOA show the transaction consistently.
+- Tenant isolation and audit logging remain enforced.
+
+Fix Summary:
+`Payment` now represents one transaction header and Official Receipt, while tenant-safe `PaymentAllocation` rows represent the covered bills. Multi-bill recording allocates one receipt number once, creates one payment header, writes one transaction audit event, and recalculates every covered bill atomically. The local migration backfilled one allocation for each legacy payment without changing historical IDs, amounts, batches, or receipt numbers.
+
+---
+
+## Improvement #032 – Automatic Receipt Preview After Successful Payment
+
+Module:
+Payments and Official Receipts
+
+Priority:
+High
+
+Status:
+Fixed in urgent finance migration and hotfix on 2026-07-12
+
+Requirement:
+After a payment is successfully recorded, automatically open the generated Official Receipt preview for the administrator.
+
+Acceptance Criteria:
+- Successful payment redirects to the generated receipt preview.
+- The receipt displays payer, total amount, covered bills, payment method, reference number, collector, and receipt number.
+- The administrator can print immediately.
+- Return to Record Payment and Return to Payments actions are available.
+- Refreshing the receipt does not generate another receipt.
+- Desktop and mobile are supported.
+
+Fix Summary:
+Successful Record Payment submissions now redirect to the persisted `/receipts/payment/{paymentId}` preview. The preview and PDF show all allocation lines, the transaction total, property/account details, remaining balance, reference, remarks, and collector, with Print Receipt, Return to Record Payment, and Return to Payments actions. Refresh and retry reuse the persisted transaction and do not allocate another receipt.
+## Bug #033 – Payment Allocation Cross-Tenant Validation False Positive
+
+Module:
+Payments and Payment Allocations
+
+Priority:
+Critical
+
+Status:
+Open
+
+Problem:
+Recording a payment for a valid homeowner and valid bills inside the authenticated tenant fails with:
+
+`Cross Tenant block for paymentallocation.payment`
+
+Observed Tenant:
+- Tenant slug: test-hoa
+- Payment initiated by the authenticated tenant administrator
+- Selected bills belong to the same tenant and homeowner
+
+Expected Behavior:
+A payment and its allocations must save successfully when Payment, PaymentAllocation, Bill, Homeowner, and authenticated session all belong to the same tenant.
+
+Acceptance Criteria:
+- Valid same-tenant payment succeeds.
+- Payment header tenantId comes from the authenticated session.
+- Allocation tenantId matches the Payment and Bill tenant.
+- Composite relation fields are populated consistently.
+- Cross-tenant payment attempts remain blocked.
+- Error messages identify the exact mismatched entity.
+- Single-bill, multi-bill, partial, and overpayment transactions work within the tenant.
+- Tenant isolation tests remain passing.
+
+Fix Summary:
+Composite tenant relation checks now distinguish a committed cross-tenant target from a same-tenant row created inside the active interactive transaction. Existing cross-tenant targets are blocked with server-side entity diagnostics, while new Payment rows are validated atomically by the tenant-composite database foreign key. Same-tenant PaymentAllocation creation and the tenant isolation regression both pass.
+
+---
+
+## Improvement #034 – Support Payment Overpayment and Unapplied Credit
+
+Module:
+Payments
+
+Priority:
+Critical
+
+Status:
+Fixed (2026-07-12)
+
+Business Requirement:
+The system must allow a homeowner to pay more than the total selected outstanding bills.
+
+Example:
+- Selected bills total: PHP 1,500
+- Payment received: PHP 2,000
+- Applied to bills: PHP 1,500
+- Unapplied credit: PHP 500
+
+Expected Behavior:
+The overpayment amount must be recorded as homeowner credit and available for future billing application.
+
+Acceptance Criteria:
+- Payment amount may exceed selected bill balances.
+- Allocations to selected bills cannot exceed their outstanding balances.
+- Difference between payment total and allocated total is stored as unapplied credit.
+- Receipt shows:
+  - total amount received
+  - amount applied to bills
+  - unapplied credit
+- Homeowner ledger shows the credit.
+- SOA includes the credit in the account summary.
+- Future billing may apply available credit through an authorized workflow.
+- Credit remains tenant-scoped and homeowner-scoped.
+- Voiding the payment reverses both allocations and unapplied credit.
+- Reports do not treat unapplied credit as duplicate collection.
+
+Fix Summary:
+Payment.amount stores the full cash received, PaymentAllocation totals store the applied amount, and their positive difference is the authoritative tenant- and homeowner-scoped unapplied credit. Recording, payment-request approval, controlled amount edits, voiding, receipts, SOA, portal history, receipt register, CSV/PDF/DOCX reports, and active/history views now preserve and display that distinction. Future automatic credit application remains intentionally deferred to a separately authorized workflow.
+## Bug #035 – Receipt Uses Incorrect Tenant Branding
+
+Module:
+Official Receipts
+
+Priority:
+Critical
+
+Status:
+Fixed
+
+Problem:
+A receipt created in the `test-hoa` tenant displays branding and organization information from PAGSIBOL VILLAGE PH2 4B EAST.
+
+Expected Behavior:
+Receipt preview and PDF must use the authenticated transaction tenant's organization profile.
+
+Acceptance Criteria:
+- Tenant name is correct.
+- Tenant logo is correct.
+- Tenant address and contact details are correct.
+- Tenant registration and TIN values are correct when configured.
+- Receipt preview and PDF use the same tenant information.
+- No default or previously cached tenant branding appears.
+- Cross-tenant receipt access remains blocked.
+
+---
+
+## Bug #036 – Receipt Property and Account Information Incorrect
+
+Module:
+Official Receipts
+
+Priority:
+High
+
+Status:
+Fixed
+
+Problem:
+The Property / Account section displays an internal identifier such as:
+
+`Block 1, Lot 1 | cmrhb41ys0005tymwel3yfzcd`
+
+Expected Behavior:
+The receipt must display user-facing property and account details.
+
+Acceptance Criteria:
+- Show Block and Lot.
+- Show property address.
+- Show homeowner account number.
+- Do not expose internal database IDs.
+- Use the correct property linked to the payment homeowner.
+- Preview and PDF display the same information.
+
+---
+
+## Bug #037 – Authorized HOA Processor Shows Role Instead of Real Name
+
+Module:
+Official Receipts
+
+Priority:
+Critical
+
+Status:
+Fixed
+
+Problem:
+The receipt displays a role such as `Test Role` instead of the actual name of the authorized HOA processor.
+
+Expected Behavior:
+The receipt must show the full name of the authenticated user who processed or approved the transaction.
+
+Acceptance Criteria:
+- Printed processor name is the user's real display name.
+- Role or position may appear separately.
+- Signature/printed-name block does not use the role as the person's name.
+- Preview and PDF remain consistent.
+- Historical receipt processor identity remains immutable.
+
+---
+
+## Bug #038 – Voided Payment Reference Cannot Be Reused
+
+Module:
+Payments
+
+Priority:
+High
+
+Status:
+Fixed
+
+Problem:
+After a payment is voided, recording a replacement payment using the same external GCash or bank reference is rejected as already used.
+
+Business Rule:
+A voided transaction must not permanently block the external reference from being reused for its authorized replacement transaction.
+
+Acceptance Criteria:
+- Active non-voided transactions retain unique reference protection.
+- A reference belonging only to a voided transaction may be reused.
+- Reuse is tenant-scoped.
+- The new payment audit trail links or refers to the prior void when appropriate.
+- No duplicate active payment exists for the same reference.
+- GCash and Bank Transfer follow the same rule.
+
+---
+
+## Bug #039 – Transaction History Does Not Show Each Payment Transaction Clearly
+
+Module:
+Payments – Transaction History
+
+Priority:
+High
+
+Status:
+Fixed
+
+Problem:
+Transaction History combines or obscures separate Payment transactions and displays internal IDs as the primary transaction reference.
+
+Expected Behavior:
+Each Payment header must appear as one separate transaction row.
+
+Acceptance Criteria:
+- One row per Payment transaction.
+- Each row shows the Official Receipt number prominently.
+- Separate receipts such as `AR-MD-2026-0000002` and `AR-MD-2026-0000003` appear as separate rows.
+- Internal database ID is hidden or shown only as secondary technical detail.
+- Voided transactions remain visible and clearly marked Void.
+- Allocation details may be expandable.
+- Totals are not double-counted.
+
+---
+
+## Bug #040 – Voiding Does Not Update SOA and Homeowner Credit
+
+Module:
+Payments, SOA, and Ledger
+
+Priority:
+Critical
+
+Status:
+Fixed
+
+Problem:
+Voiding a payment reverses the transaction but does not correctly update the homeowner SOA, ledger, balances, or unapplied credit.
+
+Expected Behavior:
+Voiding must reverse the complete financial effect of the Payment transaction.
+
+Acceptance Criteria:
+- Every PaymentAllocation is reversed.
+- Covered bill balances are restored.
+- Bill statuses are recalculated.
+- Unapplied homeowner credit is reversed.
+- SOA outstanding balance is updated.
+- SOA payment history marks the payment void or excludes it from active totals according to policy.
+- Running Ledger reflects the reversal.
+- Account Summary credit value is corrected.
+- Registered Receipt remains preserved and marked Void.
+- One transaction-level void audit event is recorded.
+- No partial reversal remains.
+
+---
+
+## Bug #041 – Receipt Preview and PDF Layout Are Inconsistent
+
+Module:
+Official Receipts
+
+Priority:
+High
+
+Status:
+Fixed
+
+Problem:
+The downloaded receipt PDF uses a different layout or data composition from the on-screen receipt preview.
+
+Expected Behavior:
+Preview and PDF must display the same transaction data, allocation coverage, tenant branding, totals, processor identity, and receipt number.
+
+Acceptance Criteria:
+- Same tenant branding.
+- Same payer and property/account details.
+- Same receipt number.
+- Same allocations and coverage.
+- Same total received, applied amount, and unapplied credit.
+- Same processor name.
+- Professional A4 print layout.
+- No internal IDs exposed.
+
+Fix Summary:
+Bugs #035-#041 were verified locally on July 12, 2026. Receipts now use one tenant-authorized view model for preview, print, and PDF values; show public property/account details and persisted processor identity; preserve voided receipts; permit tenant-scoped replacement use of voided GCash and bank references; show one transaction-history row per Payment header; and represent complete payment void reversals in bills, active credit, SOA totals, and the running ledger. No Prisma schema or migration change was required.
+## Bug #045 – Browser Tab Title Uses Default Tenant
+
+Module:
+Multi-Tenant Branding
+
+Priority:
+High
+
+Status:
+Open
+
+Problem:
+When accessing:
+
+/test-hoa/login
+
+the browser tab still displays:
+
+Pagsibol Village PH2 4B East
+
+instead of:
+
+Test HOA
+
+Expected Behavior:
+
+The browser title must be generated from the current tenant.
+
+Acceptance Criteria:
+
+- Login page title matches tenant.
+- Admin pages title matches tenant.
+- Homeowner pages title matches tenant.
+- Browser tab updates correctly after tenant switch.
+- No default tenant title appears for authenticated or tenant-specific pages.
+- Favicon should also be tenant-aware if configured.
+## Bug #045 – Global Metadata Uses Hard-Coded Tenant Branding
+
+Module:
+Multi-Tenant Platform
+
+Priority:
+Critical
+
+Status:
+Open
+
+Problem:
+The root layout (`app/layout.tsx`) hard-codes:
+
+- Pagsibol Village PH2 4B East
+
+as the application title.
+
+Every tenant therefore sees the wrong browser tab title.
+
+Expected Behavior:
+
+Metadata must be tenant-aware.
+
+Acceptance Criteria:
+
+- Login page title matches current tenant.
+- Admin page title matches current tenant.
+- Homeowner portal title matches current tenant.
+- Browser tab updates correctly after login.
+- Default branding is only used during bootstrap.
+- Favicon supports tenant branding when configured.
+- Manifest/PWA name uses tenant branding.
+## Improvement #046 – Add Search to Billing Rules
+
+Module:
+Billing Rules
+
+Priority:
+Medium
+
+Status:
+Open
+
+Problem:
+The Billing Rules page has pagination but no search function.
+
+Expected Behavior:
+Administrators should be able to search billing rules without manually browsing pages.
+
+Acceptance Criteria:
+- Search by resolution reference.
+- Search by recurring charge type.
+- Search by amount where practical.
+- Search by effective year and month.
+- Search by active or inactive status.
+- Search remains tenant-scoped.
+- Pagination works with search results.
+- Mobile layout remains usable.
+## Improvement #047 – Add Pagination to Billing Records
+
+Module:
+Billing
+
+Priority:
+Medium
+
+Status:
+Open
+
+Problem:
+The Billing table does not provide pagination for larger datasets.
+
+Acceptance Criteria:
+- Server-side or scalable pagination.
+- Page size control where appropriate.
+- Search and filters continue to work with pagination.
+- Tenant isolation is preserved.
+- Mobile layout remains usable.
+
+---
+
+## Improvement #048 – Add Processing State to Billing Preview and Generation
+
+Module:
+Billing
+
+Priority:
+High
+
+Status:
+Open
+
+Problem:
+When Preview Billing or Generate Billing is running, there is no visible progress or processing state.
+
+Expected Behavior:
+Users must receive immediate feedback that the request is being processed.
+
+Acceptance Criteria:
+- Preview button shows a loading state.
+- Generate button shows a loading state.
+- Buttons are disabled while processing.
+- Duplicate submissions are prevented.
+- Clear success or failure feedback appears.
+- Works for individual, selected, and all-homeowner generation.
+- Mobile layout remains usable.
+## Bug #049 – SOA Browser Print Preview and Downloaded PDF Are Inconsistent
+
+Module:
+Statement of Account
+
+Priority:
+High
+
+Status:
+Ready for Product Owner UAT
+
+Problem:
+The SOA browser Print Preview and the downloaded SOA PDF use different formatting and composition.
+
+Expected Behavior:
+Both outputs must present the same business data and a visually consistent statement structure.
+
+Acceptance Criteria:
+- Same tenant branding
+- Same homeowner information
+- Same account summary
+- Same outstanding balance
+- Same aging summary
+- Same running ledger
+- Same payment history
+- Same billing history
+- Same signature and footer content
+- Same ordering of sections
+- No data appears in one output but not the other
+- Print Preview remains optimized for browser printing
+- Downloaded PDF remains optimized for A4
+- Minor spacing differences are acceptable, but the document structure and data must match
+
+Sprint 5B Engineering Update:
+- SOA screen print and downloaded PDF now consume the same tenant-scoped SOA service values and avoid visible database-id-derived statement/reference labels.
+- Browser print payment-history columns were aligned to the same 10-column structure as the PDF, with generated footer content present in both outputs.
+- PDF rows wrap instead of truncating long cell content.
+- Status remains pending Product Owner UAT; do not mark Bug #049 complete until local print/PDF parity UAT passes.
+- Improvements #056-#058 must retain their current statuses until Product Owner UAT passes.
+## Improvement #050 – Add Search and Pagination to Active Payments
+
+Module:
+Payments – Active Payments
+
+Priority:
+Medium
+
+Status:
+Open
+
+Acceptance Criteria:
+- Search by homeowner name.
+- Search by receipt number.
+- Search by payment reference.
+- Search by payment method.
+- Filter by date range.
+- Server-side or scalable pagination.
+- Tenant isolation remains enforced.
+- Mobile layout remains usable.
+
+---
+
+## Improvement #051 – Add Search and Pagination to Transaction History
+
+Module:
+Payments – Transaction History
+
+Priority:
+Medium
+
+Status:
+Open
+
+Acceptance Criteria:
+- Search by homeowner name.
+- Search by receipt number.
+- Search by external reference.
+- Filter by Active and Void status.
+- Filter by date range and payment method.
+- One row per Payment transaction.
+- Server-side or scalable pagination.
+- Tenant isolation remains enforced.
+- Mobile layout remains usable.
+
+---
+
+## Improvement #052 – Add Search and Pagination to Payment Requests
+
+Module:
+Payments – Payment Requests
+
+Priority:
+Medium
+
+Status:
+Open
+
+Acceptance Criteria:
+- Search by homeowner name.
+- Search by request reference.
+- Filter by status.
+- Filter by payment method and date range.
+- Server-side or scalable pagination.
+- Tenant isolation remains enforced.
+- Mobile layout remains usable.
+
+---
+
+## Sprint 5A - Executive Finance Dashboard
+
+Module:
+Reports / Finance
+
+Priority:
+High
+
+Status:
+Ready for Product Owner UAT
+
+Delivery Criteria:
+- Tenant-scoped executive KPIs, reconciliation, monthly collection trend, receivables aging, payment-method mix, and billing-type performance are available at `/admin/reports/dashboard`.
+- Top delinquent homeowners support search and pagination; recent finance activity is bounded and excludes internal identifiers.
+- PDF and DOCX exports use the same date range and authoritative report service as the screen.
+- Access requires an authenticated tenant, an authorized finance or administrative role, and Billing plus Reports module entitlement where applicable.
+- No Prisma schema or migration change is required.
+
+Release Gate:
+- Product Owner must complete the Sprint 5A checklist in `FINANCE_UAT_CHECKLIST.md` before this dashboard is approved for release.
+- Existing Improvements #053-#055 retain their current statuses and are not changed by this delivery.
+## Improvement #061 – Preserve Table Focus During Pagination
+
+Module:
+Shared UI / Pagination Component
+
+Priority:
+High
+
+Status:
+Open
+
+Problem:
+When the user clicks Next or Previous on a paginated table, the browser scrolls away from the table and the user's reading position is lost. This requires the user to manually scroll back to continue reviewing the data.
+
+Affected Modules:
+- Finance Dashboard – Recent Finance Activity
+- Finance Dashboard – Top Delinquent Homeowners
+- Active Payments
+- Transaction History
+- Payment Requests
+- Billing Rules
+- Billing Exemptions
+- Billing Preview
+- Any future paginated tables
+
+Expected Behavior:
+After changing pages, the viewport should remain focused on the table that initiated the pagination.
+
+Acceptance Criteria:
+- Clicking Next or Previous keeps the table visible.
+- The table header remains in view.
+- Keyboard focus moves to the updated table or heading.
+- Search filters remain applied.
+- Date filters remain applied.
+- Sorting remains applied.
+- URL parameters remain synchronized.
+- Works on desktop and mobile.
+- No console or hydration errors.
+- Implement in the shared pagination component so all modules inherit the behavior automatically.
+
+Engineering Notes:
+- Added reusable pagination focus restoration using URL hash targets and keyboard-focus repair after navigation.
+- Applied to Finance Dashboard delinquency/activity pagination and the shared payments pager used by Active Payments, Transaction History, Payment Requests, and Record Payment.
+- Applied to client-side Billing Preview pagination.
+- Billing Rules and Billing Exemptions currently have no Next/Previous pagination controls; future pagination should use the shared focus target pattern.
+- Local verification completed in the authenticated Chromium in-app browser and 390px mobile viewport; Chrome and Edge Product Owner browser UAT remains pending.
+## Improvement #061 – Preserve Table Focus During Pagination
+
+Module:
+Shared UI / Pagination Component
+
+Priority:
+High
+
+Status:
+Completed
+
+Resolution:
+A reusable pagination focus helper was implemented and applied to the Finance Dashboard, Payments tables, Record Payment, and Billing Preview.
+
+Validated:
+- Viewport returns to the initiating table.
+- Keyboard focus moves to the updated table.
+- Search, date filters, sorting, and URL parameters persist.
+- Desktop and 390px mobile pass.
+- No console errors.

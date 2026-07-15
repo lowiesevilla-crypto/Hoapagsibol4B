@@ -2,7 +2,9 @@ import "server-only";
 
 import { SystemSettingCategory, type SystemSetting } from "@prisma/client";
 import { prisma } from "@/lib/db";
-import { currentTenantContext, withTenantContext } from "@/lib/tenant-context";
+import { withTenantContext } from "@/lib/tenant-context";
+
+export const BOOTSTRAP_TENANT_ID = "tenant_pagsibol4b_default";
 
 export type SettingField = {
   category: SystemSettingCategory;
@@ -100,7 +102,7 @@ export function settingField(category: SystemSettingCategory, key: string) {
   return allSettingFields.find((field) => field.category === category && field.key === key);
 }
 
-export async function getSystemSettingMap(tenantId = currentTenantContext()?.tenantId || "tenant_pagsibol4b_default") {
+export async function getSystemSettingMap(tenantId: string) {
   try {
     const settings = await withTenantContext(tenantId, async () => await prisma.systemSetting.findMany({ where: { tenantId } }));
     return new Map(settings.map((setting) => [`${setting.category}.${setting.key}`, setting]));
@@ -110,14 +112,17 @@ export async function getSystemSettingMap(tenantId = currentTenantContext()?.ten
   }
 }
 
-export async function getSystemSettingValue(category: SystemSettingCategory, key: string, tenantId = currentTenantContext()?.tenantId || "tenant_pagsibol4b_default") {
+export async function getSystemSettingValue(category: SystemSettingCategory, key: string, tenantId: string) {
   const setting = await withTenantContext(tenantId, async () => await prisma.systemSetting.findFirst({ where: { category, key }, select: { value: true } }));
   return setting?.value?.trim() || "";
 }
 
-export async function getPasswordPolicy(tenantId = currentTenantContext()?.tenantId || "tenant_pagsibol4b_default") {
+export async function getPasswordPolicy(tenantId: string) {
   const map = await getSystemSettingMap(tenantId);
-  const value = (key: string, fallback: string) => map.get(`${SystemSettingCategory.EMAIL}.${key}`)?.value?.trim() || process.env[key]?.trim() || fallback;
+  const value = (key: string, fallback: string) =>
+    map.get(`${SystemSettingCategory.EMAIL}.${key}`)?.value?.trim() ||
+    (tenantId === BOOTSTRAP_TENANT_ID ? process.env[key]?.trim() : "") ||
+    fallback;
   const enabled = (key: string, fallback = "true") => value(key, fallback).toLowerCase() === "true";
   return {
     minLength: Math.max(8, Math.min(72, Number(value("PASSWORD_MIN_LENGTH", "10")) || 10)),
@@ -129,7 +134,7 @@ export async function getPasswordPolicy(tenantId = currentTenantContext()?.tenan
   };
 }
 
-export async function getPaymentSettings(tenantId = currentTenantContext()?.tenantId || "tenant_pagsibol4b_default") {
+export async function getPaymentSettings(tenantId: string) {
   const map = await getSystemSettingMap(tenantId);
   const value = (key: string) => map.get(`${SystemSettingCategory.PAYMENT}.${key}`)?.value?.trim() || "";
   return {
@@ -141,24 +146,28 @@ export async function getPaymentSettings(tenantId = currentTenantContext()?.tena
   };
 }
 
-export async function getAssociationSettings(tenantId = currentTenantContext()?.tenantId || "tenant_pagsibol4b_default") {
+export async function getAssociationSettings(tenantId: string) {
   const [map, tenant] = await Promise.all([getSystemSettingMap(tenantId), prisma.tenant.findUnique({ where: { id: tenantId } })]);
-  const value = (key: string, fallback = "") => map.get(`${SystemSettingCategory.ASSOCIATION}.${key}`)?.value?.trim() || process.env[key]?.trim() || fallback;
-  const name = value("ASSOCIATION_NAME", tenant?.name || "PAGSIBOL VILLAGE PH2 4B EAST");
-  const logoUrl = value("ASSOCIATION_LOGO_URL", tenant?.logoUrl || "/pagsibol-logo.png");
+  const useBootstrapDefaults = tenantId === BOOTSTRAP_TENANT_ID;
+  const value = (key: string, fallback = "") =>
+    map.get(`${SystemSettingCategory.ASSOCIATION}.${key}`)?.value?.trim() ||
+    (useBootstrapDefaults ? process.env[key]?.trim() : "") ||
+    fallback;
+  const name = value("ASSOCIATION_NAME", tenant?.name || (useBootstrapDefaults ? "PAGSIBOL VILLAGE PH2 4B EAST" : "Homeowners Association"));
+  const logoUrl = value("ASSOCIATION_LOGO_URL", tenant?.logoUrl || (useBootstrapDefaults ? "/pagsibol-logo.png" : ""));
   return {
     name,
-    address: value("ASSOCIATION_ADDRESS", tenant?.address || "Pagsibol Village Phase 2 4B East"),
+    address: value("ASSOCIATION_ADDRESS", tenant?.address || (useBootstrapDefaults ? "Pagsibol Village Phase 2 4B East" : "")),
     contactNumber: value("ASSOCIATION_CONTACT_NUMBER", tenant?.contactNumber || ""),
     email: value("ASSOCIATION_EMAIL", tenant?.email || ""),
     tinNumber: value("ASSOCIATION_TIN_NUMBER", tenant?.tinNumber || ""),
     secRegistrationNumber: value("ASSOCIATION_SEC_REGISTRATION_NUMBER", tenant?.secRegistrationNumber || ""),
-    logoUrl: logoUrl || "/pagsibol-logo.png",
+    logoUrl,
     documentTitle: `${name} Homeowners Association`,
   };
 }
 
-export async function getChatSettings(tenantId = currentTenantContext()?.tenantId || "tenant_pagsibol4b_default") {
+export async function getChatSettings(tenantId: string) {
   const map = await getSystemSettingMap(tenantId);
   const value = (key: string, fallback: string) => map.get(`${SystemSettingCategory.CHAT}.${key}`)?.value?.trim() || fallback;
   const defaultTypes = [

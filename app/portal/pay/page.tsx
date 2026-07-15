@@ -10,7 +10,7 @@ import { collectionLabel, inputDate, money, monthLabel, shortDate } from "@/lib/
 export default async function PortalPayPage() {
   const profile = await requireHomeownerProfile();
   const [paymentSettings, openBills, requests] = await Promise.all([
-    getPaymentSettings(),
+    getPaymentSettings(profile.tenantId),
     prisma.bill.findMany({ where: { homeownerId: profile.id, balance: { gt: 0 }, archivedAt: null }, include: { paymentRequests: { where: { status: "PENDING_REVIEW" }, select: { id: true } } }, orderBy: [{ dueDate: "asc" }, { billingMonth: "desc" }] }),
     prisma.paymentRequest.findMany({ where: { homeownerId: profile.id }, include: { bill: true, payment: true, collection: true }, orderBy: [{ createdAt: "desc" }] }),
   ]);

@@ -28,11 +28,11 @@ export async function touchUserPresence(userId: string, context: string) {
   });
 }
 
-export async function getChatPayload(user: Pick<User, "id" | "role">, selectedConversationId?: string | null, search = "") {
+export async function getChatPayload(user: Pick<User, "id" | "role" | "tenantId">, selectedConversationId?: string | null, search = "") {
   await touchUserPresence(user.id, "HOA Chat Center");
   const scope = scopeForRole(user.role);
   const [settings, recipients, conversations] = await Promise.all([
-    getChatSettings(),
+    getChatSettings(user.tenantId),
     getRecipients(scope, user.id, search),
     prisma.chatConversation.findMany({
       where: { participants: { some: { userId: user.id, deletedAt: null } } },

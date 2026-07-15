@@ -98,3 +98,30 @@ Open Issue:
 
 Decision:
 Proceed to Phase 4 Void and Reversal UAT, but do not approve the Finance release until Bug #049 is resolved.
+## Phase 4 Result – Void and Reversal
+
+Status: PASS
+
+Validated:
+- Void action and confirmation
+- Original receipt preserved
+- Receipt marked Void
+- Active Payments excludes voided payment
+- Transaction History shows voided transaction
+- All allocations reversed
+- Bill balances restored
+- Bill statuses recalculated
+- Unapplied credit reversed
+- Homeowner balance corrected
+- SOA outstanding balance corrected
+- SOA payment history updated
+- SOA running ledger updated
+- Reports exclude voided collection
+- External reference reusable
+- Tenant isolation
+- No console errors
+
+Open Improvements:
+- Search and pagination for Active Payments
+- Search and pagination for Transaction History
+- Search and pagination for Payment Requests

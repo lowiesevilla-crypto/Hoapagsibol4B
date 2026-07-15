@@ -1693,3 +1693,69 @@ Acceptance Criteria:
 - Print Preview remains optimized for browser printing
 - Downloaded PDF remains optimized for A4
 - Minor spacing differences are acceptable, but the document structure and data must match
+## Improvement #050 – Add Search and Pagination to Active Payments
+
+Module:
+Payments – Active Payments
+
+Priority:
+Medium
+
+Status:
+Open
+
+Acceptance Criteria:
+- Search by homeowner name.
+- Search by receipt number.
+- Search by payment reference.
+- Search by payment method.
+- Filter by date range.
+- Server-side or scalable pagination.
+- Tenant isolation remains enforced.
+- Mobile layout remains usable.
+
+---
+
+## Improvement #051 – Add Search and Pagination to Transaction History
+
+Module:
+Payments – Transaction History
+
+Priority:
+Medium
+
+Status:
+Open
+
+Acceptance Criteria:
+- Search by homeowner name.
+- Search by receipt number.
+- Search by external reference.
+- Filter by Active and Void status.
+- Filter by date range and payment method.
+- One row per Payment transaction.
+- Server-side or scalable pagination.
+- Tenant isolation remains enforced.
+- Mobile layout remains usable.
+
+---
+
+## Improvement #052 – Add Search and Pagination to Payment Requests
+
+Module:
+Payments – Payment Requests
+
+Priority:
+Medium
+
+Status:
+Open
+
+Acceptance Criteria:
+- Search by homeowner name.
+- Search by request reference.
+- Filter by status.
+- Filter by payment method and date range.
+- Server-side or scalable pagination.
+- Tenant isolation remains enforced.
+- Mobile layout remains usable.

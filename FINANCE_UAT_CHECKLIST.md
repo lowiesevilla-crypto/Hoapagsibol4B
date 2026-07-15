@@ -156,3 +156,25 @@ Status: PENDING PRODUCT OWNER UAT
 | 20 | Finance regression | Billing rules/exemptions/preview/generation, exact/partial/multi/overpayment, one receipt, active/history/register, SOA, and void remain correct |  |  |
 | 21 | Responsive and console | Desktop and approximately 390px mobile have no root horizontal overflow, hydration error, or console error |  |  |
 | 22 | Product Owner decision | Product Owner records approval before release status or applicable Improvement #053-#055 status changes |  |  |
+
+---
+
+# Phase 5B - Finance Professionalization Product Owner UAT
+
+Status: PENDING PRODUCT OWNER UAT
+
+| # | Test Case | Expected Result | Status | Remarks |
+|---|---|---|---|---|
+| 1 | Branch and baseline | UAT is performed from `feature/finance-professionalization` with no unintended schema migration |  |  |
+| 2 | SOA print/PDF parity | Browser Print Preview and downloaded SOA PDF show the same tenant branding, homeowner data, statement number, account summary, aging, running ledger, payment history, billing history, signatures, footer, section order, and business values |  |  |
+| 3 | SOA identifiers | Statement number and visible references do not expose database ids; public account/date/resolution labels are used |  |  |
+| 4 | SOA pagination | Short SOAs do not create mostly blank pages and long SOAs paginate without clipped text or horizontal overflow |  |  |
+| 5 | Dashboard SOA link | Top Delinquent Homeowners shows `View SOA`, opens the correct tenant-safe homeowner SOA, and returns to the filtered dashboard where practical |  |  |
+| 6 | Recent Activity search | Search by homeowner, receipt number, and external reference filters tenant-scoped activity rows |  |  |
+| 7 | Recent Activity filters | Activity type, status, and date-range filters preserve URL parameters and return the expected rows |  |  |
+| 8 | Recent Activity pagination | Page controls work, rows are page-bounded, empty states are clear, and no internal ids are shown as primary references |  |  |
+| 9 | Aging verification | Dashboard aging matches SOA aging buckets as of the dashboard end date and respects partial payments/exclusions |  |  |
+| 10 | Dashboard exports | PDF and DOCX include tenant logo/name, reporting period, generated metadata, KPI summary, reconciliation, monthly collections, aging, payment method, billing type, top delinquency, observations, internal-use note, and prepared/approved sign-off |  |  |
+| 11 | Export parity | Finance Dashboard PDF and DOCX values match the screen for the selected date range |  |  |
+| 12 | Regression | Billing rules/exemptions/preview/generation, payments, receipts, SOA, voids, tenant branding, tenant isolation, RBAC, and mobile remain correct |  |  |
+| 13 | Product Owner decision | Product Owner records approval before Bug #049 or Improvements #056-#058 are marked complete |  |  |

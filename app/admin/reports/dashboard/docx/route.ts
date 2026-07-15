@@ -33,6 +33,8 @@ export async function GET(request: Request) {
       valueTable([
         ["Total billed", php(data.reconciliation.totalBilled)], ["Amount applied to bills", php(data.reconciliation.amountAppliedToBills)], ["Unapplied credit", php(data.reconciliation.unappliedCredit)], ["Total active payment received", php(data.reconciliation.activePaymentReceived)], ["Total voided payment received", php(data.reconciliation.voidedPaymentReceived)], ["Outstanding receivables", php(data.reconciliation.outstandingReceivables)], ["Reconciliation variance", php(data.reconciliation.variance)], ["Control status", data.reconciliation.balanced ? "Balanced" : "Variance requires review"],
       ]),
+      sectionHeading("Key Observations"),
+      ...dashboardObservations(data).map((text) => new Paragraph({ bullet: { level: 0 }, spacing: { after: 90, line: 260 }, children: [new TextRun({ text, size: 18 })] })),
       sectionHeading("Monthly Collection Trend"),
       dataTable(["Month", "Active", "Applied", "Credit", "Voided"], data.monthlyTrend.map((row) => [row.label, php(row.activeCollections), php(row.amountAppliedToBills), php(row.unappliedCredit), php(row.voidedCollections)])),
       sectionHeading("Aging Summary"),
@@ -54,7 +56,7 @@ export async function GET(request: Request) {
       sections: [{
         properties: { page: { margin: { top: 900, right: 720, bottom: 900, left: 720 } } },
         headers: { default: new Header({ children: [new Table({ width: { size: 100, type: WidthType.PERCENTAGE }, borders: noBorders(), rows: [new TableRow({ children: [new TableCell({ width: { size: 13, type: WidthType.PERCENTAGE }, borders: noBorders(), children: [new Paragraph({ children: [new ImageRun({ data: logo.bytes, transformation: { width: 58, height: 58 }, type: logo.type })] })] }), new TableCell({ width: { size: 87, type: WidthType.PERCENTAGE }, borders: noBorders(), verticalAlign: "center", children: [new Paragraph({ spacing: { after: 30 }, children: [new TextRun({ text: association.name, bold: true, size: 27, color: navy })] }), ...(association.address ? [new Paragraph({ children: [new TextRun({ text: association.address, size: 15, color: "60747E" })] })] : [])] })] })] })] }) },
-        footers: { default: new Footer({ children: [new Paragraph({ alignment: AlignmentType.CENTER, border: { top: { color: "BFDCEA", size: 4, style: BorderStyle.SINGLE, space: 8 } }, children: [new TextRun({ text: `${association.name} | Executive Finance Dashboard | Page `, size: 15, color: "60747E" }), new TextRun({ children: [PageNumber.CURRENT], size: 15, color: "60747E" }), new TextRun({ text: " of ", size: 15, color: "60747E" }), new TextRun({ children: [PageNumber.TOTAL_PAGES], size: 15, color: "60747E" })] })] }) },
+        footers: { default: new Footer({ children: [new Paragraph({ alignment: AlignmentType.CENTER, border: { top: { color: "BFDCEA", size: 4, style: BorderStyle.SINGLE, space: 8 } }, children: [new TextRun({ text: `${association.name} | Executive Finance Dashboard | Confidential internal-use report | Page `, size: 15, color: "60747E" }), new TextRun({ children: [PageNumber.CURRENT], size: 15, color: "60747E" }), new TextRun({ text: " of ", size: 15, color: "60747E" }), new TextRun({ children: [PageNumber.TOTAL_PAGES], size: 15, color: "60747E" })] })] }) },
         children,
       }],
     });
@@ -78,3 +80,12 @@ function cellMargins() { return { top: 85, bottom: 85, left: 90, right: 90 }; }
 function php(value: number) { return `PHP ${new Intl.NumberFormat("en-PH", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(Object.is(value, -0) ? 0 : value)}`; }
 function dateTime(value: Date) { return new Intl.DateTimeFormat("en-PH", { dateStyle: "medium", timeStyle: "short", timeZone: "Asia/Manila" }).format(value); }
 function noBorders() { return { top: { style: BorderStyle.NONE, size: 0, color: "FFFFFF" }, bottom: { style: BorderStyle.NONE, size: 0, color: "FFFFFF" }, left: { style: BorderStyle.NONE, size: 0, color: "FFFFFF" }, right: { style: BorderStyle.NONE, size: 0, color: "FFFFFF" }, insideHorizontal: { style: BorderStyle.NONE, size: 0, color: "FFFFFF" }, insideVertical: { style: BorderStyle.NONE, size: 0, color: "FFFFFF" } }; }
+
+function dashboardObservations(data: Awaited<ReturnType<typeof getFinanceDashboard>>) {
+  const observations: string[] = [];
+  observations.push(data.reconciliation.balanced ? "Reconciliation is within the PHP 0.01 tolerance." : `Reconciliation variance is ${php(data.reconciliation.variance)} and requires review.`);
+  if (data.kpis.collectionRate > 100) observations.push("Collection rate exceeds 100% because selected-period receipts may settle earlier-period bills.");
+  if (data.kpis.unappliedCredit > 0) observations.push(`${php(data.kpis.unappliedCredit)} is reported as unapplied homeowner credit and excluded from applied collections.`);
+  if (!data.delinquent.exportRows.length) observations.push("No delinquent homeowners appear in the selected period and as-of date.");
+  return observations;
+}

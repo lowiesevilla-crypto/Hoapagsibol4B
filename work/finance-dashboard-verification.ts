@@ -34,6 +34,10 @@ async function main() {
     check(report.paymentMethods.reduce((sum, row) => sum + row.transactionCount, 0) === activeHeaders, `${tenant.name}: payment method counts reconcile to active headers`);
     check(Math.abs(report.aging.reduce((sum, row) => sum + row.amount, 0) - report.kpis.outstandingReceivables) <= 0.01, `${tenant.name}: aging buckets reconcile to outstanding receivables`);
     check(report.delinquent.exportRows.every((row) => !row.accountNumber.includes(row.homeownerId)), `${tenant.name}: public account numbers do not expose homeowner IDs`);
+    check(report.recentActivity.page >= 1 && report.recentActivity.pageCount >= 1, `${tenant.name}: recent activity returns pagination metadata`);
+    check(report.recentActivity.rows.length <= report.recentActivity.pageSize, `${tenant.name}: recent activity rows are page-bounded`);
+    const paymentActivity = await runWithTenant(tenant.id, () => getFinanceDashboard({ tenantId: tenant.id, fromInput: range.fromText, toInput: range.toText, activityType: "Payment", activityPage: 1 }), { role: actor.role, enabledModules: Object.values(TenantModule) });
+    check(paymentActivity.recentActivity.rows.every((row) => row.type === "Payment"), `${tenant.name}: recent activity type filter is applied`);
   }
 
   const firstActor = await raw.user.findFirstOrThrow({ where: { tenantId: tenants[0].id, active: true } });

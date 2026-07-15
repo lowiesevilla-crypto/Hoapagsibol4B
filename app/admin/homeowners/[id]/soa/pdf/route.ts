@@ -185,7 +185,7 @@ function table(doc: PdfDoc, title: string, headers: string[], widths: number[], 
     return;
   }
   for (const row of rows) {
-    const lines = row.map((cell, index) => wrapText(safe(cell), doc.regular, 6.5, widths[index] - 8).slice(0, 4));
+    const lines = row.map((cell, index) => wrapText(safe(cell), doc.regular, 6.5, widths[index] - 8));
     const height = Math.max(18, Math.max(...lines.map((line) => line.length)) * 8 + 7);
     ensureSpace(doc, height + 8, () => drawTableHeader(doc, headers, widths));
     let x = marginX;
@@ -275,6 +275,23 @@ function wrapText(text: string, font: PDFFont, size: number, maxWidth: number) {
   const lines: string[] = [];
   let line = "";
   for (const word of words) {
+    if (font.widthOfTextAtSize(word, size) > maxWidth) {
+      if (line) {
+        lines.push(line);
+        line = "";
+      }
+      let chunk = "";
+      for (const char of word) {
+        const candidate = `${chunk}${char}`;
+        if (font.widthOfTextAtSize(candidate, size) <= maxWidth) chunk = candidate;
+        else {
+          if (chunk) lines.push(chunk);
+          chunk = char;
+        }
+      }
+      if (chunk) line = chunk;
+      continue;
+    }
     const candidate = line ? `${line} ${word}` : word;
     if (font.widthOfTextAtSize(candidate, size) <= maxWidth) line = candidate;
     else {
@@ -287,7 +304,7 @@ function wrapText(text: string, font: PDFFont, size: number, maxWidth: number) {
 }
 
 function rowHeight(doc: PdfDoc, row: string[], widths: number[]) {
-  const lines = row.map((cell, index) => wrapText(safe(cell), doc.regular, 6.5, widths[index] - 8).slice(0, 4));
+  const lines = row.map((cell, index) => wrapText(safe(cell), doc.regular, 6.5, widths[index] - 8));
   return Math.max(18, Math.max(...lines.map((line) => line.length)) * 8 + 7);
 }
 

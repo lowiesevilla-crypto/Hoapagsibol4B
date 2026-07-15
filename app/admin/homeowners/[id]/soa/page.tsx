@@ -11,9 +11,11 @@ import { getAppUrl } from "@/lib/app-url";
 import { getStatementOfAccount, type StatementLedgerEntry } from "@/lib/services/statement-of-account";
 import { money, shortDate } from "@/lib/utils";
 
-export default async function StatementOfAccountPage({ params }: { params: Promise<{ id: string }> }) {
+export default async function StatementOfAccountPage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams?: Promise<{ returnTo?: string }> }) {
   const user = await requireUser(Role.ADMIN);
   const { id } = await params;
+  const returnTo = (await searchParams)?.returnTo;
+  const backHref = returnTo && returnTo.startsWith("/admin/reports/dashboard") ? returnTo : `/admin/homeowners/${id}`;
   const soa = await getStatementOfAccount(id, user.tenantId, getAppUrl());
   const qr = await QRCode.toDataURL(soa.verifyUrl, { width: 180, margin: 1, errorCorrectionLevel: "M" });
   const contactLine = [soa.association.contactNumber && `Contact: ${soa.association.contactNumber}`, soa.association.email && `Email: ${soa.association.email}`].filter(Boolean).join(" | ");
@@ -22,7 +24,7 @@ export default async function StatementOfAccountPage({ params }: { params: Promi
   return (
     <main className="soa-document soa-print-root print-document mx-auto min-h-screen max-w-6xl bg-white p-4 sm:p-8">
       <div className="print-hidden mb-5 flex flex-wrap justify-end gap-2">
-        <Link className="btn-secondary" href={`/admin/homeowners/${soa.homeowner.id}`}><ArrowLeft className="size-4" /> Return to Homeowner</Link>
+        <Link className="btn-secondary" href={backHref}><ArrowLeft className="size-4" /> {backHref.startsWith("/admin/reports/dashboard") ? "Return to Dashboard" : "Return to Homeowner"}</Link>
         <a className="btn-secondary" href={pdfHref}><Download className="size-4" /> Download PDF</a>
         <SoaPrintButton />
       </div>
@@ -128,6 +130,7 @@ export default async function StatementOfAccountPage({ params }: { params: Promi
         <footer className="soa-signature-footer soa-print-signatures mt-8 grid gap-10 text-center text-xs sm:grid-cols-2">
           <div className="border-t border-ink pt-2">Prepared by HOAHub Finance Engine</div>
           <div className="border-t border-ink pt-2">Treasurer / Authorized HOA Representative</div>
+          <p className="soa-generated-footer text-center text-[11px] font-semibold text-slate-500 sm:col-span-2">Generated for {soa.homeowner.user.name} on {shortDate(soa.statementDate)}.</p>
         </footer>
       </section>
     </main>

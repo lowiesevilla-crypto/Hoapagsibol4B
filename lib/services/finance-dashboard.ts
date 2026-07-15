@@ -4,7 +4,8 @@ import { homeownerAccountNumber } from "@/lib/homeowner-account";
 import { paymentAppliedAmount, paymentUnappliedCredit } from "@/lib/payment-credit";
 import { receivablesAgingBucket, receivablesAgingBuckets, type ReceivablesAgingBucket } from "@/lib/services/receivables-aging";
 
-const pageSize = 10;
+const delinquentPageSize = 10;
+const activityPageSize = 10;
 const queryPageSize = 500;
 const selectedPaymentSelect = {
   id: true,
@@ -56,8 +57,15 @@ export async function getFinanceDashboard(input: {
   toInput?: string | null;
   delinquentSearch?: string | null;
   delinquentPage?: string | number | null;
+  activitySearch?: string | null;
+  activityType?: string | null;
+  activityStatus?: string | null;
+  activityFromInput?: string | null;
+  activityToInput?: string | null;
+  activityPage?: string | number | null;
 }) {
   const range = parseFinanceDashboardDateRange(input.fromInput, input.toInput);
+  const activityRange = parseFinanceDashboardDateRange(input.activityFromInput || range.fromText, input.activityToInput || range.toText);
   const tenantId = input.tenantId;
   const selectedCreatedRange = { gte: range.from, lte: range.to };
 
@@ -74,7 +82,7 @@ export async function getFinanceDashboard(input: {
       where: { tenantId, module: "BILLING", action: "GENERATE_MONTHLY_DUES", createdAt: selectedCreatedRange },
       select: { createdAt: true, metadata: true, actor: { select: { name: true } } },
       orderBy: { createdAt: "desc" },
-      take: 30,
+      take: queryPageSize,
     }),
     prisma.paymentRequest.findMany({
       where: { tenantId, createdAt: selectedCreatedRange },
@@ -87,7 +95,7 @@ export async function getFinanceDashboard(input: {
         reviewedBy: { select: { name: true } },
       },
       orderBy: { createdAt: "desc" },
-      take: 30,
+      take: queryPageSize,
     }),
   ]);
 
@@ -141,9 +149,9 @@ export async function getFinanceDashboard(input: {
     ? allDelinquent.filter((row) => [row.homeownerName, row.accountNumber, row.block, row.lot].some((value) => value.toLocaleLowerCase("en-PH").includes(normalizedSearch)))
     : allDelinquent;
   const requestedPage = positiveInteger(input.delinquentPage, 1);
-  const pageCount = Math.max(1, Math.ceil(filteredDelinquent.length / pageSize));
+  const pageCount = Math.max(1, Math.ceil(filteredDelinquent.length / delinquentPageSize));
   const currentPage = Math.min(requestedPage, pageCount);
-  const delinquentRows = filteredDelinquent.slice((currentPage - 1) * pageSize, currentPage * pageSize);
+  const delinquentRows = filteredDelinquent.slice((currentPage - 1) * delinquentPageSize, currentPage * delinquentPageSize);
 
   const monthlyTrend = createMonthlyTrend(range.from, range.to);
   const monthMap = new Map(monthlyTrend.map((row) => [row.key, row]));
@@ -193,7 +201,24 @@ export async function getFinanceDashboard(input: {
   const revenueBreakdown = [...revenueMap.values()].filter((row) => row.billedAmount || row.collectedAmount || row.outstandingAmount);
   if (otherCollectionAmount > 0) revenueBreakdown.push({ key: "OTHER_COLLECTIONS", label: "Other collections", billedAmount: otherCollectionAmount, collectedAmount: otherCollectionAmount, outstandingAmount: 0 });
 
-  const recentActivity = buildRecentActivity(payments, billingRuns, paymentRequests).slice(0, 30);
+  const allRecentActivity = buildRecentActivity(payments, billingRuns, paymentRequests);
+  const activityTypes = uniqueSorted(allRecentActivity.map((row) => row.type));
+  const activityStatuses = uniqueSorted(allRecentActivity.map((row) => row.status));
+  const activitySearch = (input.activitySearch ?? "").trim();
+  const normalizedActivitySearch = activitySearch.toLocaleLowerCase("en-PH");
+  const activityType = normalizeOption(input.activityType);
+  const activityStatus = normalizeOption(input.activityStatus);
+  const filteredActivity = allRecentActivity.filter((row) => {
+    if (row.date < activityRange.from || row.date > activityRange.to) return false;
+    if (activityType && row.type !== activityType) return false;
+    if (activityStatus && row.status !== activityStatus) return false;
+    if (!normalizedActivitySearch) return true;
+    return [row.homeowner, row.reference].some((value) => value.toLocaleLowerCase("en-PH").includes(normalizedActivitySearch));
+  });
+  const requestedActivityPage = positiveInteger(input.activityPage, 1);
+  const activityPageCount = Math.max(1, Math.ceil(filteredActivity.length / activityPageSize));
+  const currentActivityPage = Math.min(requestedActivityPage, activityPageCount);
+  const recentActivityRows = filteredActivity.slice((currentActivityPage - 1) * activityPageSize, currentActivityPage * activityPageSize);
   const reconciliationVariance = roundMoney(activeCollections - amountAppliedToBills - unappliedCredit);
 
   return {
@@ -230,12 +255,28 @@ export async function getFinanceDashboard(input: {
       search,
       page: currentPage,
       pageCount,
-      pageSize,
+      pageSize: delinquentPageSize,
       totalCount: filteredDelinquent.length,
       rows: delinquentRows,
       exportRows: allDelinquent.slice(0, 25),
     },
-    recentActivity,
+    recentActivity: {
+      filters: {
+        search: activitySearch,
+        type: activityType,
+        status: activityStatus,
+        fromText: activityRange.fromText,
+        toText: activityRange.toText,
+      },
+      page: currentActivityPage,
+      pageCount: activityPageCount,
+      pageSize: activityPageSize,
+      totalCount: filteredActivity.length,
+      rows: recentActivityRows,
+      exportRows: filteredActivity.slice(0, 25),
+      types: activityTypes,
+      statuses: activityStatuses,
+    },
   };
 }
 
@@ -370,6 +411,15 @@ function titleCase(value: string) {
 function positiveInteger(value: string | number | null | undefined, fallback: number) {
   const parsed = Number(value);
   return Number.isInteger(parsed) && parsed > 0 ? parsed : fallback;
+}
+
+function normalizeOption(value: string | null | undefined) {
+  const trimmed = (value ?? "").trim();
+  return trimmed && trimmed !== "ALL" ? trimmed : "";
+}
+
+function uniqueSorted(values: string[]) {
+  return [...new Set(values)].sort((left, right) => left.localeCompare(right));
 }
 
 function asRecord(value: unknown) {

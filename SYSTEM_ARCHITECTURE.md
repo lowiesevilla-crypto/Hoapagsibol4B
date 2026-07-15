@@ -649,3 +649,19 @@ Known constraints: DOCX page numbering depends on the viewer's field rendering; 
 | Version | Date | Description |
 |----------|------|-------------|
 | 1.2 | July 15, 2026 | Added shared tenant-scoped executive finance reporting and export architecture |
+
+## 28. Sprint 5B Finance Professionalization Architecture
+
+SOA browser print and SOA PDF are expected to consume `lib/services/statement-of-account.ts` as the shared tenant-safe view model. Browser and PDF renderers can differ in layout mechanics, but cannot introduce separate business values, section omissions, tenant branding fallbacks, or visible database-id-derived labels.
+
+The Finance Dashboard continues to use `lib/services/finance-dashboard.ts` for page and export values. Recent Finance Activity filters are URL-backed and service-applied, with search/status/type/date filters returning page-bounded rows and preserving the main reporting period. The Top Delinquent Homeowners SOA action routes through the existing homeowner SOA route and passes only a return URL, never a client tenant id.
+
+PDF and DOCX exports use the same report service values as the screen. Export layout should favor wrapped tables, right-aligned numeric values, internal-use footer text, and prepared/approved sign-off fields over unsupported chart objects.
+
+No database migration is required for Sprint 5B. Product Owner UAT remains the gate before Bug #049 or Improvements #056-#058 are marked complete.
+
+# Document History Addendum
+
+| Version | Date | Description |
+|----------|------|-------------|
+| 1.3 | July 15, 2026 | Documented Sprint 5B SOA parity, activity filters, SOA link, and export presentation architecture |

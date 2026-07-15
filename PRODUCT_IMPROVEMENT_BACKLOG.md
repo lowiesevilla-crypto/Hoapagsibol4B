@@ -1670,7 +1670,7 @@ Priority:
 High
 
 Status:
-Open
+Ready for Product Owner UAT
 
 Problem:
 The SOA browser Print Preview and the downloaded SOA PDF use different formatting and composition.
@@ -1693,6 +1693,13 @@ Acceptance Criteria:
 - Print Preview remains optimized for browser printing
 - Downloaded PDF remains optimized for A4
 - Minor spacing differences are acceptable, but the document structure and data must match
+
+Sprint 5B Engineering Update:
+- SOA screen print and downloaded PDF now consume the same tenant-scoped SOA service values and avoid visible database-id-derived statement/reference labels.
+- Browser print payment-history columns were aligned to the same 10-column structure as the PDF, with generated footer content present in both outputs.
+- PDF rows wrap instead of truncating long cell content.
+- Status remains pending Product Owner UAT; do not mark Bug #049 complete until local print/PDF parity UAT passes.
+- Improvements #056-#058 must retain their current statuses until Product Owner UAT passes.
 ## Improvement #050 – Add Search and Pagination to Active Payments
 
 Module:

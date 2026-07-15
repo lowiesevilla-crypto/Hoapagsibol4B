@@ -122,3 +122,21 @@ Prepare the finance migration and SOA finalization for product-owner review befo
 
 - [ ] Complete two-tenant Product Owner UAT in `FINANCE_UAT_CHECKLIST.md`.
 - [ ] Obtain Product Owner approval before changing any applicable Improvement #053-#055 status or merging for release.
+
+## Sprint 5B - Finance Professionalization
+
+### Engineering Scope
+
+- [x] Align SOA browser print and downloaded SOA PDF business content through the shared tenant-scoped statement service.
+- [x] Replace visible SOA database-id-derived statement/reference labels with public account/date/resolution labels.
+- [x] Add explicit `View SOA` actions from Top Delinquent Homeowners while preserving dashboard return filters.
+- [x] Add Recent Finance Activity search, type/status/date filters, URL persistence, page controls, and empty states.
+- [x] Verify aging bucket behavior with controlled sample dates and the shared receivables classifier.
+- [x] Improve Finance Dashboard PDF/DOCX exports with report observations, internal-use footer text, and safer wrapped tables.
+- [x] Keep Prisma schema and migrations unchanged.
+
+### Release Gate
+
+- [ ] Complete local Product Owner UAT for Bug #049 and Improvements #056-#058.
+- [ ] Verify SOA print/PDF parity, Finance Dashboard PDF/DOCX parity, tenant isolation, RBAC, and 390px mobile behavior before release approval.
+- [ ] Do not mark Bug #049 or Improvements #056-#058 complete until Product Owner UAT passes.

@@ -352,13 +352,16 @@ main, section, article, header, footer, aside, nav, form, div { min-width: 0; }
   .soa-ledger-table th:nth-child(5), .soa-ledger-table td:nth-child(5) { width: 10%; }
   .soa-ledger-table th:nth-child(6), .soa-ledger-table td:nth-child(6) { width: 13%; }
   .soa-ledger-table th:nth-child(7), .soa-ledger-table td:nth-child(7) { width: 18%; }
-  .soa-payment-table th:nth-child(1), .soa-payment-table td:nth-child(1) { width: 11%; }
-  .soa-payment-table th:nth-child(2), .soa-payment-table td:nth-child(2) { width: 15%; }
-  .soa-payment-table th:nth-child(3), .soa-payment-table td:nth-child(3) { width: 12%; }
-  .soa-payment-table th:nth-child(4), .soa-payment-table td:nth-child(4) { width: 14%; }
-  .soa-payment-table th:nth-child(5), .soa-payment-table td:nth-child(5) { width: 22%; }
-  .soa-payment-table th:nth-child(6), .soa-payment-table td:nth-child(6) { width: 12%; }
-  .soa-payment-table th:nth-child(7), .soa-payment-table td:nth-child(7) { width: 14%; }
+  .soa-payment-table th:nth-child(1), .soa-payment-table td:nth-child(1) { width: 8%; }
+  .soa-payment-table th:nth-child(2), .soa-payment-table td:nth-child(2) { width: 12%; }
+  .soa-payment-table th:nth-child(3), .soa-payment-table td:nth-child(3) { width: 9%; }
+  .soa-payment-table th:nth-child(4), .soa-payment-table td:nth-child(4) { width: 11%; }
+  .soa-payment-table th:nth-child(5), .soa-payment-table td:nth-child(5) { width: 17%; }
+  .soa-payment-table th:nth-child(6), .soa-payment-table td:nth-child(6) { width: 10%; }
+  .soa-payment-table th:nth-child(7), .soa-payment-table td:nth-child(7) { width: 10%; }
+  .soa-payment-table th:nth-child(8), .soa-payment-table td:nth-child(8) { width: 8%; }
+  .soa-payment-table th:nth-child(9), .soa-payment-table td:nth-child(9) { width: 7%; }
+  .soa-payment-table th:nth-child(10), .soa-payment-table td:nth-child(10) { width: 8%; }
   .soa-billing-table th:nth-child(1), .soa-billing-table td:nth-child(1) { width: 14%; }
   .soa-billing-table th:nth-child(2), .soa-billing-table td:nth-child(2) { width: 22%; }
   .soa-billing-table th:nth-child(3), .soa-billing-table td:nth-child(3) { width: 30%; }
@@ -376,6 +379,11 @@ main, section, article, header, footer, aside, nav, form, div { min-width: 0; }
   }
   .soa-document .soa-signature-footer > div {
     padding-top: 1.2mm !important;
+  }
+  .soa-document .soa-generated-footer {
+    margin-top: -2mm !important;
+    font-size: 6pt !important;
+    line-height: 1.1 !important;
   }
   .document-copy, .pass-sheet, .residency-sheet, .clearance-sheet { break-inside: avoid; page-break-inside: avoid; }
 }

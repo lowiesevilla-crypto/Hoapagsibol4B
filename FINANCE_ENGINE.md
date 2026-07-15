@@ -394,3 +394,15 @@ Variance is calculated from these values and displayed whenever its absolute val
 | Version | Date | Description |
 |----------|------|-------------|
 | 1.6 | July 15, 2026 | Documented Sprint 5A dashboard KPI, reconciliation, tenant, aging, revenue, and export rules |
+
+## 21. Finance Professionalization Rules
+
+Sprint 5B keeps SOA browser print and SOA PDF on the same tenant-scoped statement service. Statement numbers and visible fallback references must use public account/date/resolution labels rather than database id fragments. Browser print may use print-specific spacing, but tenant branding, homeowner information, account summary, aging, running ledger, payment history, billing history, signature lines, generated footer, and business values must remain aligned with the downloaded PDF.
+
+Finance Dashboard Recent Activity uses the dashboard tenant and selected report range, then applies URL-persisted search, activity type, status, and activity date filters. Pagination is page-bounded and does not change the KPI or reconciliation source values.
+
+The dashboard aging visualization and SOA use the shared receivables aging classifier. The selected dashboard end date is the as-of date for dashboard aging; fully paid, archived, invalid, or voided billing records are excluded according to the existing receivables policy.
+
+Finance Dashboard PDF and DOCX exports remain table-based for reliability. Both include tenant branding, report metadata, executive KPIs, reconciliation, key observations, monthly collections, aging, payment methods, billing types, top delinquency, internal-use footer text, and prepared/approved sign-off sections.
+
+Bug #049 and Improvements #056-#058 remain pending Product Owner UAT and must not be marked complete until local UAT passes.

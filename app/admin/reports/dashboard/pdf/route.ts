@@ -36,6 +36,7 @@ export async function GET(request: Request) {
     report.moneySection("Reconciliation Summary", [
       ["Total billed", data.reconciliation.totalBilled], ["Amount applied to bills", data.reconciliation.amountAppliedToBills], ["Unapplied credit", data.reconciliation.unappliedCredit], ["Total active payment received", data.reconciliation.activePaymentReceived], ["Total voided payment received", data.reconciliation.voidedPaymentReceived], ["Outstanding receivables", data.reconciliation.outstandingReceivables], ["Reconciliation variance", data.reconciliation.variance],
     ]);
+    report.textSection("Key Observations", dashboardObservations(data));
     report.table("Monthly Collection Trend", ["Month", "Active", "Applied", "Credit", "Voided"], data.monthlyTrend.map((row) => [row.label, pdfMoney(row.activeCollections), pdfMoney(row.amountAppliedToBills), pdfMoney(row.unappliedCredit), pdfMoney(row.voidedCollections)]), [88, 104, 104, 104, 104]);
     report.table("Aging Summary", ["Bucket", "Bill count", "Amount"], data.aging.map((row) => [row.label, String(row.billCount), pdfMoney(row.amount)]), [210, 100, 194]);
     report.table("Payment Method Breakdown", ["Method", "Transactions", "Amount", "Share"], data.paymentMethods.map((row) => [row.label, String(row.transactionCount), pdfMoney(row.totalAmount), `${row.percentage.toFixed(1)}%`]), [154, 100, 150, 100]);
@@ -95,17 +96,32 @@ class PdfReport {
     this.y -= 5;
   }
 
+  textSection(title: string, rows: string[]) {
+    this.section(title, 30 + rows.length * 18);
+    for (const row of rows.length ? rows : ["No notable exceptions for this reporting period."]) {
+      const lines = wrapText(safe(row), this.regular, 8.2, 486);
+      this.ensure(lines.length * 11 + 8);
+      lines.forEach((line, index) => this.page.drawText(index === 0 ? `- ${line}` : `  ${line}`, { x: 54, y: this.y - index * 10, size: 8.2, font: this.regular, color: navy }));
+      this.y -= lines.length * 10 + 6;
+    }
+    this.y -= 4;
+  }
+
   table(title: string, headers: string[], rows: string[][], widths: number[]) {
     this.section(title, 62);
     this.tableHeader(headers, widths);
-    if (!rows.length) this.tableRow(["No records", ...headers.slice(1).map(() => "-")], widths);
+    if (!rows.length) {
+      const emptyRow = ["No records", ...headers.slice(1).map(() => "-")];
+      this.tableRow(emptyRow, widths, this.tableRowHeight(emptyRow, widths));
+    }
     for (const row of rows) {
-      if (this.y < 72) {
+      const height = this.tableRowHeight(row, widths);
+      if (this.y - height < 72) {
         this.page = this.newPage();
         this.section(`${title} (continued)`, 62);
         this.tableHeader(headers, widths);
       }
-      this.tableRow(row, widths);
+      this.tableRow(row, widths, height);
     }
     this.y -= 8;
   }
@@ -124,7 +140,7 @@ class PdfReport {
   finish() {
     this.pages.forEach((page, index) => {
       page.drawLine({ start: { x: 42, y: 43 }, end: { x: 553, y: 43 }, thickness: 0.5, color: rgb(0.78, 0.84, 0.87) });
-      page.drawText(`${safe(this.associationName)} | Executive Finance Dashboard`, { x: 42, y: 28, size: 7.5, font: this.regular, color: gray, maxWidth: 390 });
+      page.drawText(`${safe(this.associationName)} | Executive Finance Dashboard | Confidential internal-use report`, { x: 42, y: 28, size: 7.2, font: this.regular, color: gray, maxWidth: 405 });
       drawRight(page, `Page ${index + 1} of ${this.pages.length}`, this.regular, 7.5, 553, 28, gray);
     });
   }
@@ -144,11 +160,25 @@ class PdfReport {
     this.y -= 20;
   }
 
-  private tableRow(values: string[], widths: number[]) {
+  private tableRow(values: string[], widths: number[], height: number) {
     let x = 42;
-    values.forEach((value, index) => { this.page.drawText(truncate(safe(value), widths[index], 7.2), { x: x + 4, y: this.y, size: 7.2, font: index === 0 ? this.bold : this.regular, color: navy }); x += widths[index]; });
-    this.page.drawLine({ start: { x: 42, y: this.y - 5 }, end: { x: 553, y: this.y - 5 }, thickness: 0.35, color: rgb(0.86, 0.89, 0.91) });
-    this.y -= 18;
+    values.forEach((value, index) => {
+      const lines = wrapText(safe(value), index === 0 ? this.bold : this.regular, 7.2, widths[index] - 8);
+      lines.forEach((line, lineIndex) => {
+        const y = this.y - lineIndex * 9;
+        const rightAligned = index > 0 && (line.startsWith("PHP ") || line.endsWith("%") || /^\d+$/.test(line));
+        if (rightAligned) drawRight(this.page, line, index === 0 ? this.bold : this.regular, 7.2, x + widths[index] - 4, y, navy);
+        else this.page.drawText(line, { x: x + 4, y, size: 7.2, font: index === 0 ? this.bold : this.regular, color: navy });
+      });
+      x += widths[index];
+    });
+    this.page.drawLine({ start: { x: 42, y: this.y - height + 5 }, end: { x: 553, y: this.y - height + 5 }, thickness: 0.35, color: rgb(0.86, 0.89, 0.91) });
+    this.y -= height;
+  }
+
+  private tableRowHeight(values: string[], widths: number[]) {
+    const lineCounts = values.map((value, index) => wrapText(safe(value), index === 0 ? this.bold : this.regular, 7.2, widths[index] - 8).length);
+    return Math.max(18, Math.max(...lineCounts) * 9 + 9);
   }
 
   private ensure(space: number) {
@@ -176,3 +206,46 @@ function dateTime(value: Date) { return new Intl.DateTimeFormat("en-PH", { dateS
 function safe(value: string) { return value.replace(/[^\x20-\x7E]/g, " ").replace(/\s+/g, " ").trim(); }
 function truncate(text: string, width: number, size: number) { const limit = Math.max(4, Math.floor(width / (size * 0.52))); return text.length > limit ? `${text.slice(0, Math.max(1, limit - 3))}...` : text; }
 function drawRight(page: PDFPage, text: string, font: PDFFont, size: number, x: number, y: number, color: ReturnType<typeof rgb>) { page.drawText(text, { x: x - font.widthOfTextAtSize(text, size), y, size, font, color }); }
+
+function dashboardObservations(data: FinanceDashboardData) {
+  const observations: string[] = [];
+  observations.push(data.reconciliation.balanced ? "Reconciliation is within the PHP 0.01 tolerance." : `Reconciliation variance is ${pdfMoney(data.reconciliation.variance)} and requires review.`);
+  if (data.kpis.collectionRate > 100) observations.push("Collection rate exceeds 100% because selected-period receipts may settle earlier-period bills.");
+  if (data.kpis.unappliedCredit > 0) observations.push(`${pdfMoney(data.kpis.unappliedCredit)} is reported as unapplied homeowner credit and excluded from applied collections.`);
+  if (!data.delinquent.exportRows.length) observations.push("No delinquent homeowners appear in the selected period and as-of date.");
+  return observations;
+}
+
+function wrapText(text: string, font: PDFFont, size: number, maxWidth: number) {
+  if (!text) return [""];
+  const words = text.split(/\s+/);
+  const lines: string[] = [];
+  let line = "";
+  for (const word of words) {
+    if (font.widthOfTextAtSize(word, size) > maxWidth) {
+      if (line) {
+        lines.push(line);
+        line = "";
+      }
+      let chunk = "";
+      for (const char of word) {
+        const candidate = `${chunk}${char}`;
+        if (font.widthOfTextAtSize(candidate, size) <= maxWidth) chunk = candidate;
+        else {
+          if (chunk) lines.push(chunk);
+          chunk = char;
+        }
+      }
+      if (chunk) line = chunk;
+      continue;
+    }
+    const candidate = line ? `${line} ${word}` : word;
+    if (font.widthOfTextAtSize(candidate, size) <= maxWidth) line = candidate;
+    else {
+      if (line) lines.push(line);
+      line = word;
+    }
+  }
+  if (line) lines.push(line);
+  return lines;
+}

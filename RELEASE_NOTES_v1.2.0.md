@@ -249,3 +249,20 @@ Known limitations:
 - Unapplied credit is reported as a derived liability; applying it to future bills is a separate workflow.
 - DOCX pagination is finalized by the document viewer; local visual rendering was unavailable without LibreOffice.
 - Product Owner two-tenant UAT is required before release approval or any applicable Improvement #053-#055 status change.
+
+---
+
+# Sprint 5B Release Candidate - Finance Professionalization
+
+Status: Engineering ready for Product Owner UAT.
+
+- Improved SOA browser print and downloaded SOA PDF parity by aligning both outputs to the shared tenant-scoped statement service values.
+- Replaced visible database-id-derived SOA statement/reference labels with public account, date, and resolution labels.
+- Added a `View SOA` action in Top Delinquent Homeowners with a filtered-dashboard return path.
+- Added Recent Finance Activity search, activity type/status/date filters, URL persistence, pagination, and clear empty states.
+- Added controlled-date aging verification for Current, 30 Days, 60 Days, 90 Days, and 120+ buckets without temporary database records.
+- Improved Finance Dashboard PDF and DOCX exports with key observations, internal-use footer text, and safer wrapped report tables.
+- No database migration was required.
+
+Release gate:
+- Bug #049 and Improvements #056-#058 must not be marked complete until local Product Owner UAT passes.

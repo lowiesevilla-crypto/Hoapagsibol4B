@@ -20,7 +20,7 @@ export type StatementLedgerEntry = {
   sortOrder: number;
 };
 
-export async function getStatementOfAccount(homeownerId: string, tenantId: string, baseUrl: string) {
+export async function getStatementOfAccount(homeownerId: string, tenantId: string, baseUrl: string, asOf = new Date()) {
   const [homeowner, bills, payments, collections, association] = await Promise.all([
     prisma.homeownerProfile.findFirst({ where: { id: homeownerId, tenantId }, include: { user: true } }),
     prisma.bill.findMany({
@@ -51,17 +51,18 @@ export async function getStatementOfAccount(homeownerId: string, tenantId: strin
   const totalPenalties = bills.reduce((total, bill) => total + Number(bill.penalty), 0);
   const totalCredits = ledger.reduce((total, entry) => total + entry.credit - (entry.transactionType === "Payment Void" ? entry.debit : 0), 0);
   const lastPayment = activePayments.at(-1);
-  const today = new Date();
+  const today = asOf;
   const overdueBills = bills.filter((bill) => Number(bill.balance) > 0 && bill.dueDate < today);
   const collectionStatus = currentOutstandingBalance <= 0 ? "Current" : overdueBills.length ? "Overdue" : "Open Balance";
   const statementDate = new Date();
-  const statementCode = `SOA-${homeowner.id.slice(-8).toUpperCase()}-${statementDate.toISOString().slice(0, 10).replaceAll("-", "")}`;
+  const accountNumber = homeownerAccountNumber(homeowner);
+  const statementCode = `SOA-${accountNumber.replace(/[^A-Z0-9]/gi, "").toUpperCase()}-${statementDate.toISOString().slice(0, 10).replaceAll("-", "")}`;
   const verifyUrl = `${baseUrl.replace(/\/$/, "")}/admin/homeowners/${homeowner.id}/soa`;
 
   return {
     association,
     homeowner,
-    accountNumber: homeownerAccountNumber(homeowner),
+    accountNumber,
     statementDate,
     statementCode,
     verifyUrl,
@@ -80,7 +81,7 @@ export async function getStatementOfAccount(homeownerId: string, tenantId: strin
     paymentHistory: [...payments].reverse().map((payment) => ({
       id: payment.id,
       paymentDate: payment.paymentDate,
-      officialReceiptNo: payment.receiptNumber || fallbackReference("OR", payment.id),
+      officialReceiptNo: payment.receiptNumber || payment.referenceNumber || paymentPublicReference(payment.paymentDate),
       paymentMethod: payment.method.replaceAll("_", " "),
       referenceNumber: payment.referenceNumber || "-",
       coverage: paymentAllocationCoverageDisplay(payment),
@@ -106,6 +107,9 @@ function buildLedger(input: {
   bills: Array<{
     id: string;
     billingMonth: Date;
+    coverageYear: number;
+    coverageMonth: number;
+    resolutionReference: string | null;
     totalAmount: unknown;
     penalty: unknown;
     createdAt: Date;
@@ -153,7 +157,7 @@ function buildLedger(input: {
     entries.push({
       date: bill.billingMonth,
       description: `Monthly dues - ${monthLabel(bill.billingMonth)}`,
-      reference: fallbackReference("BILL", bill.id),
+      reference: billPublicReference(bill),
       debit: Number(bill.totalAmount),
       credit: 0,
       transactionType: Number(bill.penalty) > 0 ? "Monthly Dues / Penalty" : "Monthly Dues",
@@ -166,7 +170,7 @@ function buildLedger(input: {
     entries.push({
       date: collection.collectionDate,
       description: label,
-      reference: collection.receiptNumber || collection.referenceNumber || fallbackReference("COL", collection.id),
+      reference: collection.receiptNumber || collection.referenceNumber || datedPublicReference("Collection", collection.collectionDate),
       debit: Number(collection.amount),
       credit: 0,
       transactionType: label,
@@ -177,7 +181,7 @@ function buildLedger(input: {
       entries.push({
         date: collection.collectionDate,
         description: `${label} forfeiture adjustment`,
-        reference: collection.referenceNumber || fallbackReference("ADJ", collection.id),
+        reference: collection.referenceNumber || datedPublicReference("Adjustment", collection.collectionDate),
         debit: 0,
         credit: forfeited,
         transactionType: "Adjustment",
@@ -188,7 +192,7 @@ function buildLedger(input: {
       entries.push({
         date: refund.refundDate,
         description: `${label} refund`,
-        reference: refund.referenceNumber || fallbackReference("REF", refund.id),
+        reference: refund.referenceNumber || datedPublicReference("Refund", refund.refundDate),
         debit: 0,
         credit: Number(refund.amount),
         transactionType: "Adjustment",
@@ -201,7 +205,7 @@ function buildLedger(input: {
     entries.push({
       date: payment.paymentDate,
       description: paymentAllocationCoverageDisplay(payment),
-      reference: payment.receiptNumber || payment.referenceNumber || fallbackReference("PAY", payment.id),
+      reference: payment.receiptNumber || payment.referenceNumber || paymentPublicReference(payment.paymentDate),
       debit: 0,
       credit: Number(payment.amount),
       transactionType: "Payment",
@@ -210,8 +214,8 @@ function buildLedger(input: {
     if (payment.status === "VOIDED" && payment.voidedAt) {
       entries.push({
         date: payment.voidedAt,
-        description: `Void receipt ${payment.receiptNumber || fallbackReference("PAY", payment.id)}${payment.voidReason ? ` - ${payment.voidReason}` : ""}`,
-        reference: payment.receiptNumber || payment.referenceNumber || fallbackReference("VOID", payment.id),
+        description: `Void receipt ${payment.receiptNumber || paymentPublicReference(payment.paymentDate)}${payment.voidReason ? ` - ${payment.voidReason}` : ""}`,
+        reference: payment.receiptNumber || payment.referenceNumber || datedPublicReference("Void", payment.voidedAt),
         debit: Number(payment.amount),
         credit: 0,
         transactionType: "Payment Void",
@@ -242,6 +246,14 @@ function buildAging(
   return aging;
 }
 
-function fallbackReference(prefix: string, id: string) {
-  return `${prefix}-${id.slice(-8).toUpperCase()}`;
+function billPublicReference(bill: { coverageYear: number; coverageMonth: number; resolutionReference: string | null }) {
+  return bill.resolutionReference || `Billing ${bill.coverageYear}-${String(bill.coverageMonth).padStart(2, "0")}`;
+}
+
+function paymentPublicReference(paymentDate: Date) {
+  return datedPublicReference("Payment", paymentDate);
+}
+
+function datedPublicReference(label: string, date: Date) {
+  return `${label} ${date.toISOString().slice(0, 10)}`;
 }

@@ -650,3 +650,19 @@ Do not merge `feature/soa-final` into `develop`, `main`, or production until Bug
 - PDF: two A4 pages visually rendered and inspected with tenant branding, signatures, and page numbering.
 - DOCX: package structure and business values verified; local visual rendering remains unavailable because LibreOffice is not installed.
 - Product Owner UAT remains pending. Improvements #053-#055 were not marked complete by this sprint.
+
+# 2026-07-15 - Sprint 5B Finance Professionalization
+
+## Engineering Ready for Product Owner UAT
+
+- Tightened SOA browser print and downloaded PDF parity by keeping both outputs on the shared tenant-scoped SOA view model, replacing visible database-id-derived statement/reference labels with public account/date/resolution labels, aligning print payment-history columns to the PDF structure, and adding generated footer content to the browser print output.
+- Added an explicit `View SOA` action to Top Delinquent Homeowners on `/admin/reports/dashboard`, using the existing tenant-safe homeowner SOA route and preserving the filtered dashboard return URL.
+- Added Recent Finance Activity search, type/status/date filters, URL persistence, page controls, empty states, and page-bounded rows.
+- Extended the dashboard verification harness for Recent Activity filtering and added a controlled-date aging harness that verifies Current, 30 Days, 60 Days, 90 Days, and 120+ buckets without creating database records.
+- Improved Finance Dashboard PDF/DOCX exports with key observations, internal-use footer notes, and safer wrapped PDF table rows.
+- No Prisma schema or migration change was required.
+
+## Release Gate
+
+- Product Owner UAT remains pending.
+- Do not mark Bug #049 or Improvements #056-#058 complete until local Product Owner UAT passes.

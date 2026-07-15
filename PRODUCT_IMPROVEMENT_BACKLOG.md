@@ -1836,3 +1836,23 @@ Engineering Notes:
 - Applied to client-side Billing Preview pagination.
 - Billing Rules and Billing Exemptions currently have no Next/Previous pagination controls; future pagination should use the shared focus target pattern.
 - Local verification completed in the authenticated Chromium in-app browser and 390px mobile viewport; Chrome and Edge Product Owner browser UAT remains pending.
+## Improvement #061 – Preserve Table Focus During Pagination
+
+Module:
+Shared UI / Pagination Component
+
+Priority:
+High
+
+Status:
+Completed
+
+Resolution:
+A reusable pagination focus helper was implemented and applied to the Finance Dashboard, Payments tables, Record Payment, and Billing Preview.
+
+Validated:
+- Viewport returns to the initiating table.
+- Keyboard focus moves to the updated table.
+- Search, date filters, sorting, and URL parameters persist.
+- Desktop and 390px mobile pass.
+- No console errors.

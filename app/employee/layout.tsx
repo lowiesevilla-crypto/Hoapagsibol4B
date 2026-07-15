@@ -1,4 +1,5 @@
 import { Suspense } from "react";
+import type { Metadata } from "next";
 import { Role } from "@prisma/client";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
@@ -7,9 +8,18 @@ import { employeeLinks } from "@/components/sidebar-links";
 import { TransactionFeedback } from "@/components/transaction-feedback";
 import { requireUser } from "@/lib/auth";
 import { filterLinksByModules, moduleForPath } from "@/lib/module-routing";
+import { routeTitle, tenantMetadata, tenantNameForMetadata } from "@/lib/metadata-title";
 import { getUnreadChatCount } from "@/lib/services/chat";
 import { getAssociationSettings } from "@/lib/system-settings";
 import { getEnabledTenantModules } from "@/lib/tenant";
+
+export async function generateMetadata(): Promise<Metadata> {
+  const user = await requireUser(Role.EMPLOYEE);
+  const pathname = (await headers()).get("x-hoa-pathname") || "/employee/attendance";
+  const association = await getAssociationSettings(user.tenantId);
+  const tenantName = await tenantNameForMetadata(user.tenantId, association.name);
+  return tenantMetadata(routeTitle(pathname, employeeLinks, "Attendance"), tenantName);
+}
 
 export default async function EmployeeLayout({ children }: { children: React.ReactNode }) {
   const user = await requireUser(Role.EMPLOYEE);

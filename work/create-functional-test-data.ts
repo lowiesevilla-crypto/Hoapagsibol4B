@@ -226,6 +226,8 @@ async function main() {
     const bill = await prisma.bill.upsert({
       where: { homeownerId_billingMonth: { homeownerId: item.homeowner.id, billingMonth: item.month } },
       update: {
+        coverageYear: item.month.getUTCFullYear(),
+        coverageMonth: item.month.getUTCMonth() + 1,
         amount: item.amount,
         penalty: 0,
         totalAmount: item.amount,
@@ -238,6 +240,8 @@ async function main() {
       create: {
         homeownerId: item.homeowner.id,
         billingMonth: item.month,
+        coverageYear: item.month.getUTCFullYear(),
+        coverageMonth: item.month.getUTCMonth() + 1,
         amount: item.amount,
         penalty: 0,
         totalAmount: item.amount,

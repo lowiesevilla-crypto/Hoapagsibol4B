@@ -109,6 +109,8 @@ async function main() {
         },
       },
       update: {
+        coverageYear: billingMonth.getUTCFullYear(),
+        coverageMonth: billingMonth.getUTCMonth() + 1,
         amount: totalAmount,
         penalty: 0,
         totalAmount,
@@ -121,6 +123,8 @@ async function main() {
       create: {
         homeownerId: profile.id,
         billingMonth,
+        coverageYear: billingMonth.getUTCFullYear(),
+        coverageMonth: billingMonth.getUTCMonth() + 1,
         amount: totalAmount,
         penalty: 0,
         totalAmount,

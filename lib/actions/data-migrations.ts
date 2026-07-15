@@ -19,6 +19,7 @@ import { prisma } from "@/lib/db";
 import { buildPaymentCoverage, migratedPaymentCoverageDisplay } from "@/lib/payment-coverage";
 import { recalculateBillFromActivePayments } from "@/lib/services/payment-ledger";
 import { allocateReceiptNumber, collectionReceiptSeries } from "@/lib/services/receipt";
+import { monthLabel } from "@/lib/utils";
 
 export type MigrationImportState = { success: boolean; message: string; imported: number; errors: string[] };
 
@@ -122,7 +123,7 @@ export async function importDataMigrationsAction(_state: MigrationImportState, f
 export async function postMigration(tx: Prisma.TransactionClient, input: MigrationInput, actorId: string, tenantId: string) {
   validateInput(input);
   const dedupeKey = migrationDedupeKey(input);
-  if (await tx.dataMigration.count({ where: { dedupeKey } })) throw new Error("This migration entry has already been posted.");
+  if (await tx.dataMigration.count({ where: { tenantId, dedupeKey } })) throw new Error("This migration entry has already been posted.");
   const tag = openingKinds.has(input.kind) ? DataMigrationTag.OPENING_BALANCE : input.kind.toString().includes("PREVIOUS_COLLECTION") ? DataMigrationTag.PREVIOUS_COLLECTION : DataMigrationTag.MIGRATED;
   const note = `[MIGRATED][${tag}] ${input.remarks}`;
   let postedRecordType = "";
@@ -132,22 +133,25 @@ export async function postMigration(tx: Prisma.TransactionClient, input: Migrati
 
   if (input.kind === DataMigrationKind.DUES_OPENING_BALANCE) {
     const period = input.period!;
-    if (await tx.bill.count({ where: { homeownerId: input.homeownerId!, billingMonth: period } })) throw new Error("A billing record already exists for this homeowner and period.");
+    if (await tx.bill.count({ where: { tenantId, homeownerId: input.homeownerId!, billingMonth: period } })) throw new Error("A billing record already exists for this homeowner and period.");
     const dueDate = monthEnd(period);
-    const bill = await tx.bill.create({ data: { homeownerId: input.homeownerId!, billingMonth: period, amount: input.amount, penalty: 0, totalAmount: input.amount, amountPaid: 0, balance: input.amount, dueDate, status: dueDate < todayUtc() ? BillStatus.OVERDUE : BillStatus.UNPAID, notes: note } });
+    const coverage = periodCoverage(period);
+    const bill = await tx.bill.create({ data: { tenantId, homeownerId: input.homeownerId!, billingMonth: period, ...coverage, amount: input.amount, penalty: 0, totalAmount: input.amount, amountPaid: 0, balance: input.amount, dueDate, status: dueDate < todayUtc() ? BillStatus.OVERDUE : BillStatus.UNPAID, notes: note } });
     postedRecordType = "Bill";
     postedRecordId = bill.id;
   } else if (input.kind === DataMigrationKind.DUES_PREVIOUS_COLLECTION) {
     const period = input.period!;
-    let bill = await tx.bill.findUnique({ where: { homeownerId_billingMonth: { homeownerId: input.homeownerId!, billingMonth: period } } });
+    let bill = await tx.bill.findFirst({ where: { tenantId, homeownerId: input.homeownerId!, billingMonth: period } });
     if (!bill) {
       const dueDate = monthEnd(period);
-      bill = await tx.bill.create({ data: { homeownerId: input.homeownerId!, billingMonth: period, amount: input.amount, penalty: 0, totalAmount: input.amount, amountPaid: 0, balance: input.amount, dueDate, status: BillStatus.UNPAID, notes: note } });
+      const coverage = periodCoverage(period);
+      bill = await tx.bill.create({ data: { tenantId, homeownerId: input.homeownerId!, billingMonth: period, ...coverage, amount: input.amount, penalty: 0, totalAmount: input.amount, amountPaid: 0, balance: input.amount, dueDate, status: BillStatus.UNPAID, notes: note } });
     }
     const paymentDate = input.period ?? new Date();
     const receiptNumber = await allocateReceiptNumber(tx, tenantId, paymentDate, "MD");
     const coverage = buildPaymentCoverage([bill.billingMonth]);
-    const payment = await tx.payment.create({ data: { billId: bill.id, homeownerId: input.homeownerId!, amount: input.amount, paymentDate, method: PaymentMethod.OTHER, referenceNumber: input.referenceNumber, paymentBatchId: randomUUID(), ...coverage, paymentCoverageDisplay: migratedPaymentCoverageDisplay(), receiptNumber, remarks: note, processedById: actorId } });
+    const payment = await tx.payment.create({ data: { billId: null, homeownerId: input.homeownerId!, amount: input.amount, paymentDate, method: PaymentMethod.OTHER, referenceNumber: input.referenceNumber, paymentBatchId: randomUUID(), ...coverage, paymentCoverageDisplay: migratedPaymentCoverageDisplay(), receiptNumber, remarks: note, processedById: actorId } });
+    await tx.paymentAllocation.create({ data: { tenantId, paymentId: payment.id, billId: bill.id, amount: input.amount, coverageYear: bill.coverageYear, coverageMonth: bill.coverageMonth, coverageLabel: monthLabel(bill.billingMonth) } });
     await recalculateBillFromActivePayments(tx, bill);
     await receiptAudit(tx, actorId, "MD", "Payment", payment.id, receiptNumber, input.amount);
     postedRecordType = "Payment";
@@ -234,6 +238,7 @@ function revalidateMigrationPages() {
   for (const path of ["/admin/data/migrations", "/admin/billing", "/admin/collections", "/admin/reports", "/portal/billing", "/portal/payments", "/portal/collections", "/portal/dashboard"]) revalidatePath(path);
 }
 function parseDate(input: string) { const date = new Date(`${input}T00:00:00.000Z`); if (!/^\d{4}-\d{2}-\d{2}$/.test(input) || Number.isNaN(date.valueOf())) throw new Error(`Invalid date: ${input}. Use YYYY-MM-DD.`); return date; }
+function periodCoverage(date: Date) { return { coverageYear: date.getUTCFullYear(), coverageMonth: date.getUTCMonth() + 1 }; }
 function todayUtc() { const now = new Date(); return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate())); }
 function monthEnd(date: Date) { return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth() + 1, 0)); }
 function clean(value: FormDataEntryValue | null) { return String(value || "").trim() || undefined; }

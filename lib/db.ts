@@ -45,6 +45,7 @@ const tenantModels = new Set(
 
 const modelModules: Partial<Record<string, TenantModule>> = {
   Bill: TenantModule.BILLING,
+  BillingRule: TenantModule.BILLING,
   DuesExemption: TenantModule.BILLING,
   Payment: TenantModule.BILLING,
   PaymentArchive: TenantModule.BILLING,
@@ -199,13 +200,41 @@ async function validateWriteData(model: string, value: unknown, tenantId: string
     const fromFields = field.relationFromFields ?? [];
     const toFields = field.relationToFields ?? [];
     if (tenantModels.has(field.type) && fromFields.length && fromFields.every((name) => data[name] !== undefined && data[name] !== null)) {
+      const entityType = `${model}.${field.name}`;
+      const compositeTenantIndex = fromFields.findIndex((name, index) => name === "tenantId" && toFields[index] === "tenantId");
+      if (compositeTenantIndex >= 0) {
+        const relationWhere: MutableRecord = {};
+        fromFields.forEach((name, index) => {
+          if (index !== compositeTenantIndex) relationWhere[toFields[index] || "id"] = data[name];
+        });
+        const actual = Object.keys(relationWhere).length
+          ? await delegateFor(field.type)?.findFirst({ where: relationWhere, select: { tenantId: true } })
+          : null;
+        if (actual && actual.tenantId !== tenantId) {
+          logTenantMismatch(entityType, tenantId, actual.tenantId);
+          throw new Error(`Cross-tenant relation blocked for ${entityType}.`);
+        }
+        // The composite foreign key validates new related rows that are still
+        // invisible to the base client outside this interactive transaction.
+        continue;
+      }
       const where: MutableRecord = { tenantId };
       fromFields.forEach((name, index) => { where[toFields[index] || "id"] = data[name]; });
       const related = await delegateFor(field.type)?.findFirst({ where, select: { tenantId: true } });
-      if (!related) throw new Error(`Cross-tenant relation blocked for ${model}.${field.name}.`);
+      if (!related) {
+        const relationWhere: MutableRecord = {};
+        fromFields.forEach((name, index) => { relationWhere[toFields[index] || "id"] = data[name]; });
+        const actual = await delegateFor(field.type)?.findFirst({ where: relationWhere, select: { tenantId: true } });
+        logTenantMismatch(entityType, tenantId, actual?.tenantId ?? "not-found");
+        throw new Error(`Cross-tenant relation blocked for ${entityType}.`);
+      }
     }
     if (field.name in data) await validateRelationEnvelope(field.type, data[field.name], tenantId);
   }
+}
+
+function logTenantMismatch(entityType: string, expectedTenantId: string, actualTenantId: string) {
+  console.error("[tenant-boundary] Cross-tenant relation blocked.", { entityType, expectedTenantId, actualTenantId });
 }
 
 function enforceModule(model: string) {

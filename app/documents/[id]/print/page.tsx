@@ -9,7 +9,8 @@ import { shortDate } from "@/lib/utils";
 
 export default async function PrintDocumentPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const [{ request }, currentAssociation, requestHeaders] = await Promise.all([getAccessibleGeneratedDocument(id, { requireDownload: true }), getAssociationSettings(), headers()]);
+  const { user, request } = await getAccessibleGeneratedDocument(id, { requireDownload: true });
+  const [currentAssociation, requestHeaders] = await Promise.all([getAssociationSettings(user.tenantId), headers()]);
   const association = request.associationSnapshot && typeof request.associationSnapshot === "object" ? { ...currentAssociation, ...request.associationSnapshot as Partial<typeof currentAssociation> } : currentAssociation;
   const host = requestHeaders.get("x-forwarded-host") || requestHeaders.get("host") || "localhost:3000";
   const proto = requestHeaders.get("x-forwarded-proto") || (host.includes("localhost") ? "http" : "https");

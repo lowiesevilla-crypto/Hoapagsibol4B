@@ -23,7 +23,7 @@ export default async function EventsPage({ searchParams }: { searchParams: Promi
 
   return <>
     <PageHeader eyebrow="Community" title="Events and activities" description="Create drafts, publish activities, archive old events, upload banners, and post to the HOA Facebook Page." />
-    <form action={saveEventAction} encType="multipart/form-data" className="card mb-6">
+    <form action={saveEventAction} className="card mb-6">
       {selected && <input type="hidden" name="id" value={selected.id} />}
       <input type="hidden" name="existingImageUrl" value={selected?.imageUrl ?? ""} />
       <div className="mb-5">

@@ -30,7 +30,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
   }
 
   const deductions = slip.payroll.deductions.filter((item) => item.employeeId === slip.employeeId);
-  const association = await getAssociationSettings();
+  const association = await getAssociationSettings(user.tenantId);
   const document = await PDFDocument.create();
   const regular = await document.embedFont(StandardFonts.Helvetica);
   const bold = await document.embedFont(StandardFonts.HelveticaBold);

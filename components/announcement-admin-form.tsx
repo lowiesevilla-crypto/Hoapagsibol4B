@@ -96,7 +96,7 @@ export function AnnouncementAdminForm({
     setPreviewUrl(objectUrl);
   }
 
-  return <form action={saveAnnouncementAction} encType="multipart/form-data" onSubmit={validateForm} className="card mb-6">
+  return <form action={saveAnnouncementAction} onSubmit={validateForm} className="card mb-6">
     {selected && <input type="hidden" name="id" value={selected.id} />}
     <input type="hidden" name="existingImageUrl" value={selected?.imageUrl ?? ""} />
     <div className="mb-5 flex flex-col justify-between gap-3 lg:flex-row lg:items-start">

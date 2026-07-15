@@ -6,12 +6,14 @@ import { NotificationType, PrismaClient, SystemSettingCategory } from "@prisma/c
 import { hash } from "bcryptjs";
 import { setTenantContext } from "../lib/tenant-context";
 
+const tenantId = "tenant_pagsibol4b_default";
+
 const prisma = new PrismaClient();
 const configKeys = ["MAIL_PROVIDER", "MAIL_HOST", "MAIL_PORT", "MAIL_ENCRYPTION", "MAIL_USERNAME", "MAIL_PASSWORD", "MAIL_FROM_NAME", "MAIL_FROM_ADDRESS"];
 const capturedMessages: string[] = [];
 
 async function main() {
-  setTenantContext({ tenantId: "tenant_pagsibol4b_default", platform: false });
+  setTenantContext({ tenantId, platform: false });
   const previousUnauthenticated = process.env.SMTP_ALLOW_UNAUTHENTICATED;
   process.env.SMTP_ALLOW_UNAUTHENTICATED = "true";
   const moduleLoader = Module as typeof Module & { _load: (request: string, parent: unknown, isMain: boolean) => unknown };
@@ -36,11 +38,11 @@ async function main() {
     await setConfig("MAIL_ENCRYPTION", "none");
     await setConfig("MAIL_FROM_NAME", "HOA Digital Hub QA");
     await setConfig("MAIL_FROM_ADDRESS", "qa-sender@example.test");
-    const log = await sendEmailNotification({ recipientId: user.id, email: user.email, subject: "HOA Digital Hub email test", heading: "SMTP verification", message: "This message verifies responsive branded SMTP delivery.", type: NotificationType.TEST_EMAIL, actionLabel: "Open test portal", actionUrl: "https://pagsibol-hoa.tail2abf68.ts.net/login" });
+    const log = await sendEmailNotification({ tenantId, recipientId: user.id, email: user.email, subject: "HOA Digital Hub email test", heading: "SMTP verification", message: "This message verifies responsive branded SMTP delivery.", type: NotificationType.TEST_EMAIL, actionLabel: "Open test portal", actionUrl: "https://pagsibol-hoa.tail2abf68.ts.net/login" });
     await waitFor(() => capturedMessages.length > 0);
     const raw = capturedMessages.join("\n");
-    const policy = await getPasswordPolicy();
-    const renderedHtml = emailHtml({ subject: "HOA Digital Hub email test", heading: "SMTP verification", message: "This message verifies responsive branded SMTP delivery.", actionLabel: "Open test portal", actionUrl: "https://pagsibol-hoa.tail2abf68.ts.net/login" }, await getAssociationSettings(), "https://pagsibol-hoa.tail2abf68.ts.net");
+    const policy = await getPasswordPolicy(tenantId);
+    const renderedHtml = emailHtml({ subject: "HOA Digital Hub email test", heading: "SMTP verification", message: "This message verifies responsive branded SMTP delivery.", actionLabel: "Open test portal", actionUrl: "https://pagsibol-hoa.tail2abf68.ts.net/login" }, await getAssociationSettings(tenantId), "https://pagsibol-hoa.tail2abf68.ts.net");
     const legacySecrets = await prisma.systemSetting.count({ where: { category: SystemSettingCategory.EMAIL, key: { in: ["RESEND_API_KEY", "SMTP_USER", "SMTP_PASSWORD"] } } });
     const encryptedPassword = encryptSettingSecret(" example password with spaces ");
     const sslOptions = smtpTransportOptions({ host: "smtp.hostinger.com", port: 465, encryption: "ssl", username: "support@hoahub.tech", password: "secret" });
@@ -54,7 +56,7 @@ async function main() {
     await setConfig("MAIL_PROVIDER", "support@hoahub.tech");
     await setConfig("MAIL_USERNAME", "support@hoahub.tech");
     await setConfig("MAIL_PASSWORD", encryptedPassword);
-    const databaseMail = await getMailConfiguration();
+    const databaseMail = await getMailConfiguration(tenantId);
     const checks = [
       [log.status === "SENT", "SMTP message status is SENT"],
       [Boolean(log.providerMessageId), "provider message id is logged"],

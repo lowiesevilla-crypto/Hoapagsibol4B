@@ -32,7 +32,7 @@ async function main() {
 
   try {
     const { archiveDocumentRequestAction, generateManualDocumentAction, processDocumentRequestAction, restoreDocumentRequestAction } = await import("../lib/actions/documents");
-    const testBill = await prisma.bill.create({ data: { homeownerId: homeowner.id, billingMonth: new Date("2099-05-01T00:00:00.000Z"), amount: 321, penalty: 0, totalAmount: 321, amountPaid: 0, balance: 321, dueDate: new Date("2099-05-31T00:00:00.000Z"), status: "UNPAID", notes: "DOCUMENT ACTION QA TEMPORARY" } });
+    const testBill = await prisma.bill.create({ data: { homeownerId: homeowner.id, billingMonth: new Date("2099-05-01T00:00:00.000Z"), coverageYear: 2099, coverageMonth: 5, amount: 321, penalty: 0, totalAmount: 321, amountPaid: 0, balance: 321, dueDate: new Date("2099-05-31T00:00:00.000Z"), status: "UNPAID", notes: "DOCUMENT ACTION QA TEMPORARY" } });
     testBillId = testBill.id;
     const submitted = await prisma.documentRequest.create({ data: { homeownerId: homeowner.id, type: DocumentType.GATE_PASS, status: "SUBMITTED", purpose: "Verification gate access", scheduledDate: new Date("2099-06-15T00:00:00.000Z"), startTime: "08:00", endTime: "17:00", partyName: "Original Visitor", vehicleDetails: "Original vehicle", histories: { create: { status: "SUBMITTED", actorId: homeowner.userId, note: "Verification submission" } } } });
     createdIds.push(submitted.id);

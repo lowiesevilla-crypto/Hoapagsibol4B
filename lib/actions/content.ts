@@ -34,9 +34,9 @@ export async function saveAnnouncementAction(formData: FormData) {
 
     if (data.sendEmail && !data.id && data.status === "PUBLISHED") {
       const recipients = await prisma.user.findMany({ where: { role: Role.HOMEOWNER, homeownerProfile: { status: "ACTIVE" } } });
-      await Promise.all(recipients.map((recipient) => sendEmailNotification({ recipientId: recipient.id, email: recipient.email, subject: announcement.title, message: announcement.content, type: NotificationType.ANNOUNCEMENT })));
+      await Promise.all(recipients.map((recipient) => sendEmailNotification({ tenantId: admin.tenantId, recipientId: recipient.id, email: recipient.email, subject: announcement.title, message: announcement.content, type: NotificationType.ANNOUNCEMENT })));
     }
-    if (data.postToFacebook && !data.id && data.status === "PUBLISHED") await updateAnnouncementFacebook(announcement.id, await announcementFacebookMessage(announcement.title, announcement.content));
+    if (data.postToFacebook && !data.id && data.status === "PUBLISHED") await updateAnnouncementFacebook(announcement.id, await announcementFacebookMessage(announcement.title, announcement.content, admin.tenantId), admin.tenantId);
   } catch (error) {
     redirect(contentErrorRedirect("/admin/announcements", error instanceof Error ? error.message : "Announcement could not be saved."));
   }
@@ -78,7 +78,7 @@ export async function saveEventAction(formData: FormData) {
     const event = data.id ? await prisma.event.update({ where: { id: data.id }, data: values }) : await prisma.event.create({ data: { ...values, facebookStatus: data.postToFacebook && data.status === "PUBLISHED" ? FacebookPostStatus.QUEUED : FacebookPostStatus.NOT_REQUESTED, createdById: admin.id } });
     eventId = event.id;
     await writeAuditLog({ actorId: admin.id, module: "CONTENT", action: data.id ? "UPDATE_EVENT" : "CREATE_EVENT", entityType: "Event", entityId: event.id, metadata: { status: event.status, imageUrl: event.imageUrl, uploadWarning: image.warning } });
-    if (data.postToFacebook && !data.id && data.status === "PUBLISHED") await updateEventFacebook(event.id, await eventFacebookMessage(event));
+    if (data.postToFacebook && !data.id && data.status === "PUBLISHED") await updateEventFacebook(event.id, await eventFacebookMessage(event, admin.tenantId), admin.tenantId);
   } catch (error) {
     redirect(contentErrorRedirect("/admin/events", error instanceof Error ? error.message : "Event could not be saved."));
   }
@@ -129,8 +129,8 @@ export async function setEventStatusAction(formData: FormData) {
 }
 
 export async function sendRemindersAction() {
-  await requireUser(Role.ADMIN);
-  const paymentSettings = await getPaymentSettings();
+  const admin = await requireUser(Role.ADMIN);
+  const paymentSettings = await getPaymentSettings(admin.tenantId);
   const bills = await prisma.bill.findMany({
     where: { archivedAt: null, balance: { gt: 0 }, status: { in: ["UNPAID", "PARTIAL", "OVERDUE"] }, homeowner: { status: "ACTIVE" } },
     include: { homeowner: { include: { user: true } } },
@@ -139,8 +139,8 @@ export async function sendRemindersAction() {
     const subject = `HOA dues reminder - ${bill.billingMonth.toLocaleDateString("en-PH", { month: "long", year: "numeric" })}`;
     const message = `Hello ${bill.homeowner.user.name},\n\nYour HOA balance is PHP ${Number(bill.balance).toFixed(2)}, due ${bill.dueDate.toLocaleDateString("en-PH")}.\n\n${paymentSettings.paymentInstructions || process.env.PAYMENT_INSTRUCTIONS || "Please contact the HOA office for payment instructions."}`;
     return [
-      sendEmailNotification({ recipientId: bill.homeowner.userId, email: bill.homeowner.user.email, subject, message, type: NotificationType.BILL_REMINDER }),
-      queueMessengerPlaceholder({ recipientId: bill.homeowner.userId, subject, message, type: NotificationType.BILL_REMINDER }),
+      sendEmailNotification({ tenantId: admin.tenantId, recipientId: bill.homeowner.userId, email: bill.homeowner.user.email, subject, message, type: NotificationType.BILL_REMINDER }),
+      queueMessengerPlaceholder({ tenantId: admin.tenantId, recipientId: bill.homeowner.userId, subject, message, type: NotificationType.BILL_REMINDER }),
     ];
   }));
   revalidatePath("/admin/billing");
@@ -148,33 +148,33 @@ export async function sendRemindersAction() {
 }
 
 export async function publishAnnouncementToFacebookAction(formData: FormData) {
-  await requireUser(Role.ADMIN);
+  const admin = await requireUser(Role.ADMIN);
   const announcement = await prisma.announcement.findUnique({ where: { id: String(formData.get("id") || "") } });
   if (!announcement) redirect(contentErrorRedirect("/admin/announcements", "Announcement not found."));
-  const result = await updateAnnouncementFacebook(announcement.id, await announcementFacebookMessage(announcement.title, announcement.content));
+  const result = await updateAnnouncementFacebook(announcement.id, await announcementFacebookMessage(announcement.title, announcement.content, admin.tenantId), admin.tenantId);
   revalidatePath("/admin/announcements");
   redirect(facebookRedirect("/admin/announcements", result.status, result.error, "Announcement posted to the HOA Facebook Page."));
 }
 
 export async function publishEventToFacebookAction(formData: FormData) {
-  await requireUser(Role.ADMIN);
+  const admin = await requireUser(Role.ADMIN);
   const event = await prisma.event.findUnique({ where: { id: String(formData.get("id") || "") } });
   if (!event) throw new Error("Event not found.");
-  const result = await updateEventFacebook(event.id, await eventFacebookMessage(event));
+  const result = await updateEventFacebook(event.id, await eventFacebookMessage(event, admin.tenantId), admin.tenantId);
   revalidatePath("/admin/events");
   redirect(facebookRedirect("/admin/events", result.status, result.error, "Event posted to the HOA Facebook Page."));
 }
 
-async function updateAnnouncementFacebook(id: string, message: string) {
+async function updateAnnouncementFacebook(id: string, message: string, tenantId: string) {
   await prisma.announcement.update({ where: { id }, data: { postToFacebook: true, facebookStatus: FacebookPostStatus.QUEUED, facebookError: null } });
-  const result = await publishToFacebookPage(message);
+  const result = await publishToFacebookPage(message, tenantId);
   await prisma.announcement.update({ where: { id }, data: { facebookStatus: result.status, facebookPostId: result.postId ?? null, facebookPublishedAt: result.publishedAt ?? null, facebookError: result.error ?? null } });
   return result;
 }
 
-async function updateEventFacebook(id: string, message: string) {
+async function updateEventFacebook(id: string, message: string, tenantId: string) {
   await prisma.event.update({ where: { id }, data: { postToFacebook: true, facebookStatus: FacebookPostStatus.QUEUED, facebookError: null } });
-  const result = await publishToFacebookPage(message);
+  const result = await publishToFacebookPage(message, tenantId);
   await prisma.event.update({ where: { id }, data: { facebookStatus: result.status, facebookPostId: result.postId ?? null, facebookPublishedAt: result.publishedAt ?? null, facebookError: result.error ?? null } });
   return result;
 }

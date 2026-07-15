@@ -19,7 +19,7 @@ export default async function OrganizationSettingsPage({ searchParams }: { searc
     <PageHeader eyebrow="System administration" title="Organization structure" description="Maintain officers, committees, display order, photos, and electronic signatures used across the portal and official documents." />
     {query.error && <Notice kind="error">{query.error}</Notice>}{query.success && <Notice kind="success">{query.success}</Notice>}
     <div className="grid gap-6 xl:grid-cols-[380px_1fr]">
-      <form action={saveOrganizationOfficerAction} encType="multipart/form-data" className="card h-fit">
+      <form action={saveOrganizationOfficerAction} className="card h-fit">
         {editing && <input type="hidden" name="id" value={editing.id} />}
         <h2 className="text-lg font-black">{editing ? "Edit officer" : "Add officer"}</h2>
         <p className="mb-5 text-sm text-slate-500">Changes affect future documents only. Generated records keep their saved snapshots.</p>

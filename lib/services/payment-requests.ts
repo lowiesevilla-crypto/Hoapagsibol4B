@@ -1,14 +1,18 @@
 import { randomUUID } from "node:crypto";
-import { BillStatus, CollectionType, PaymentRequestStatus, PaymentRequestType, PayerType, Prisma, RefundStatus, Role } from "@prisma/client";
+import { CollectionType, PaymentRequestStatus, PaymentRequestType, PayerType, Prisma, RefundStatus, Role } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { buildPaymentCoverage } from "@/lib/payment-coverage";
+import { recalculateBillFromActivePayments } from "@/lib/services/payment-ledger";
 import { allocateReceiptNumber, collectionReceiptSeries } from "@/lib/services/receipt";
+import { monthLabel } from "@/lib/utils";
 
 const refundableTypes = new Set<CollectionType>([CollectionType.CONSTRUCTION_BOND, CollectionType.CONTRACTOR_BOND]);
 
-export async function approvePaymentRequest(requestId: string, reviewerId?: string, reviewRemarks?: string) {
+export async function approvePaymentRequest(requestId: string, reviewerId?: string, reviewRemarks?: string, tenantId?: string) {
   return prisma.$transaction(async (tx) => {
-    const request = await tx.paymentRequest.findUnique({ where: { id: requestId } });
+    const request = tenantId
+      ? await tx.paymentRequest.findFirst({ where: { id: requestId, tenantId } })
+      : await tx.paymentRequest.findUnique({ where: { id: requestId } });
     if (!request) throw new Error("Payment request not found.");
     if (request.status !== PaymentRequestStatus.PENDING_REVIEW) throw new Error("This payment request has already been reviewed.");
 
@@ -16,24 +20,30 @@ export async function approvePaymentRequest(requestId: string, reviewerId?: stri
     if (request.type === PaymentRequestType.MONTHLY_DUES) {
       if (!request.billId) throw new Error("Payment request is missing a bill.");
       const bill = await tx.bill.findUnique({ where: { id: request.billId } });
-      if (!bill || bill.homeownerId !== request.homeownerId) throw new Error("The selected bill does not belong to this homeowner.");
+      if (!bill || bill.tenantId !== request.tenantId || bill.homeownerId !== request.homeownerId) throw new Error("The selected bill does not belong to this homeowner.");
       if (bill.archivedAt) throw new Error("This billing record has been archived and can no longer accept payments.");
       const amount = Number(request.amount);
+      if (request.referenceNumber) {
+        const activeDuplicate = await tx.payment.findFirst({ where: { tenantId: request.tenantId, referenceNumber: request.referenceNumber, status: "ACTIVE" }, select: { id: true } });
+        if (activeDuplicate) throw new Error("This payment reference number has already been recorded.");
+      }
       const balance = Number(bill.balance);
-      if (amount > balance) throw new Error("Payment request exceeds the current bill balance.");
-      const amountPaid = Number(bill.amountPaid) + amount;
-      const nextBalance = Number(bill.totalAmount) - amountPaid;
+      if (balance <= 0) throw new Error("This billing record no longer has an outstanding balance.");
+      const appliedAmount = Math.min(amount, balance);
+      const unappliedCredit = amount - appliedAmount;
       const receiptNumber = await allocateReceiptNumber(tx as unknown as Prisma.TransactionClient, request.tenantId, paymentDate, "MD");
       const coverage = buildPaymentCoverage([bill.billingMonth]);
       const payment = await tx.payment.create({
         data: {
-          billId: bill.id,
+          tenantId: request.tenantId,
+          billId: null,
           homeownerId: bill.homeownerId,
           amount,
           paymentDate,
           method: request.method,
           referenceNumber: request.referenceNumber,
           paymentBatchId: randomUUID(),
+          idempotencyKey: `payment-request:${request.id}`,
           ...coverage,
           remarks: [request.payerNotes, reviewRemarks].filter(Boolean).join("\n") || null,
           receiptNumber,
@@ -44,13 +54,16 @@ export async function approvePaymentRequest(requestId: string, reviewerId?: stri
           processedById: reviewerId ?? null,
         },
       });
-      await tx.auditLog.create({ data: { actorId: reviewerId ?? null, module: "RECEIPTS", action: "GENERATE_MD_RECEIPT", entityType: "Payment", entityId: payment.id, metadata: { receiptNumber, source: "PAYMENT_REQUEST", paymentType: "MONTHLY_DUES", amount, coverageStart: coverage.coverageStart, coverageEnd: coverage.coverageEnd, coverageMonths: coverage.coverageMonths, coverageFrom: { month: coverage.coverageFromMonth, year: coverage.coverageFromYear }, coverageTo: { month: coverage.coverageToMonth, year: coverage.coverageToYear }, paymentCoverageDisplay: coverage.paymentCoverageDisplay, homeownerId: bill.homeownerId, adminUserId: reviewerId ?? null, timestamp: new Date().toISOString() } } });
-      await tx.bill.update({ where: { id: bill.id }, data: { amountPaid, balance: nextBalance, status: nextBalance === 0 ? BillStatus.PAID : BillStatus.PARTIAL } });
+      await tx.paymentAllocation.create({ data: { tenantId: request.tenantId, paymentId: payment.id, billId: bill.id, amount: appliedAmount, coverageYear: bill.coverageYear, coverageMonth: bill.coverageMonth, coverageLabel: monthLabel(bill.billingMonth) } });
+      const recalculated = await recalculateBillFromActivePayments(tx as unknown as Prisma.TransactionClient, bill);
+      const reviewer = reviewerId ? await tx.user.findFirst({ where: { id: reviewerId, tenantId: request.tenantId }, select: { id: true, name: true, email: true, role: true } }) : null;
+      const replacedVoidedPayments = request.referenceNumber ? await tx.payment.findMany({ where: { tenantId: request.tenantId, referenceNumber: request.referenceNumber, status: "VOIDED" }, select: { id: true, receiptNumber: true } }) : [];
+      await tx.auditLog.create({ data: { tenantId: request.tenantId, actorId: reviewerId ?? null, module: "PAYMENTS", action: "RECORD_PAYMENT_TRANSACTION", entityType: "Payment", entityId: payment.id, metadata: { receiptNumber, source: "PAYMENT_REQUEST", paymentType: "MONTHLY_DUES", totalAmount: amount, appliedAmount, unappliedCredit, allocations: [{ billId: bill.id, amount: appliedAmount, coverage: monthLabel(bill.billingMonth) }], coverageStart: coverage.coverageStart, coverageEnd: coverage.coverageEnd, coverageMonths: coverage.coverageMonths, paymentCoverageDisplay: coverage.paymentCoverageDisplay, homeownerId: bill.homeownerId, adminUser: reviewer, replacesVoidedPayments: replacedVoidedPayments, recalculated, timestamp: new Date().toISOString() } } });
       const approved = await tx.paymentRequest.update({
         where: { id: request.id },
         data: { status: PaymentRequestStatus.APPROVED, reviewedById: reviewerId ?? null, reviewedAt: new Date(), reviewRemarks: reviewRemarks || null, paymentId: payment.id },
       });
-      await tx.auditLog.create({ data: { actorId: reviewerId ?? null, module: "PAYMENTS", action: "APPROVE_PAYMENT_REQUEST", entityType: "PaymentRequest", entityId: request.id, metadata: { oldValue: { status: request.status }, newValue: { status: "APPROVED", paymentId: payment.id, receiptNumber }, remarks: reviewRemarks } } });
+      await tx.auditLog.create({ data: { tenantId: request.tenantId, actorId: reviewerId ?? null, module: "PAYMENTS", action: "APPROVE_PAYMENT_REQUEST", entityType: "PaymentRequest", entityId: request.id, metadata: { oldValue: { status: request.status }, newValue: { status: "APPROVED", paymentId: payment.id, receiptNumber }, remarks: reviewRemarks } } });
       return approved;
     }
 
@@ -63,6 +76,7 @@ export async function approvePaymentRequest(requestId: string, reviewerId?: stri
     const receiptNumber = await allocateReceiptNumber(tx as unknown as Prisma.TransactionClient, request.tenantId, paymentDate, series);
     const collection = await tx.collection.create({
       data: {
+        tenantId: request.tenantId,
         type: request.collectionType,
         description: request.description || null,
         payerType: PayerType.HOMEOWNER,
@@ -78,26 +92,28 @@ export async function approvePaymentRequest(requestId: string, reviewerId?: stri
         createdById: adminId,
       },
     });
-    await tx.auditLog.create({ data: { actorId: adminId, module: "RECEIPTS", action: `GENERATE_${series}_RECEIPT`, entityType: "Collection", entityId: collection.id, metadata: { receiptNumber, source: "PAYMENT_REQUEST" } } });
+    await tx.auditLog.create({ data: { tenantId: request.tenantId, actorId: adminId, module: "RECEIPTS", action: `GENERATE_${series}_RECEIPT`, entityType: "Collection", entityId: collection.id, metadata: { receiptNumber, source: "PAYMENT_REQUEST" } } });
     const approved = await tx.paymentRequest.update({
       where: { id: request.id },
       data: { status: PaymentRequestStatus.APPROVED, reviewedById: reviewerId ?? null, reviewedAt: new Date(), reviewRemarks: reviewRemarks || null, collectionId: collection.id },
     });
-    await tx.auditLog.create({ data: { actorId: adminId, module: "PAYMENTS", action: "APPROVE_PAYMENT_REQUEST", entityType: "PaymentRequest", entityId: request.id, metadata: { oldValue: { status: request.status }, newValue: { status: "APPROVED", collectionId: collection.id, receiptNumber }, remarks: reviewRemarks } } });
+    await tx.auditLog.create({ data: { tenantId: request.tenantId, actorId: adminId, module: "PAYMENTS", action: "APPROVE_PAYMENT_REQUEST", entityType: "PaymentRequest", entityId: request.id, metadata: { oldValue: { status: request.status }, newValue: { status: "APPROVED", collectionId: collection.id, receiptNumber }, remarks: reviewRemarks } } });
     return approved;
   }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
 }
 
-export async function rejectPaymentRequest(requestId: string, reviewerId: string, reviewRemarks?: string) {
+export async function rejectPaymentRequest(requestId: string, reviewerId: string, reviewRemarks?: string, tenantId?: string) {
   return prisma.$transaction(async (tx) => {
-    const request = await tx.paymentRequest.findUnique({ where: { id: requestId } });
+    const request = tenantId
+      ? await tx.paymentRequest.findFirst({ where: { id: requestId, tenantId } })
+      : await tx.paymentRequest.findUnique({ where: { id: requestId } });
     if (!request) throw new Error("Payment request not found.");
     if (request.status !== PaymentRequestStatus.PENDING_REVIEW) throw new Error("This payment request has already been reviewed.");
     const rejected = await tx.paymentRequest.update({
       where: { id: requestId },
       data: { status: PaymentRequestStatus.REJECTED, reviewedById: reviewerId, reviewedAt: new Date(), reviewRemarks: reviewRemarks || "Rejected by administrator." },
     });
-    await tx.auditLog.create({ data: { actorId: reviewerId, module: "PAYMENTS", action: "REJECT_PAYMENT_REQUEST", entityType: "PaymentRequest", entityId: request.id, metadata: { oldValue: { status: request.status }, newValue: { status: "REJECTED" }, remarks: reviewRemarks } } });
+    await tx.auditLog.create({ data: { tenantId: request.tenantId, actorId: reviewerId, module: "PAYMENTS", action: "REJECT_PAYMENT_REQUEST", entityType: "PaymentRequest", entityId: request.id, metadata: { oldValue: { status: request.status }, newValue: { status: "REJECTED" }, remarks: reviewRemarks } } });
     return rejected;
   });
 }

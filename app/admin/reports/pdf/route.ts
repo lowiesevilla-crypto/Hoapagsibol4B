@@ -12,9 +12,9 @@ const pale = rgb(0.95, 0.98, 0.99);
 const gray = rgb(0.35, 0.42, 0.47);
 
 export async function GET(request: Request) {
-  await requireUser(Role.ADMIN);
+  const user = await requireUser(Role.ADMIN);
   const url = new URL(request.url);
-  const [report, association] = await Promise.all([getFinancialReport(url.searchParams.get("from"), url.searchParams.get("to")), getAssociationSettings()]);
+  const [report, association] = await Promise.all([getFinancialReport(url.searchParams.get("from"), url.searchParams.get("to")), getAssociationSettings(user.tenantId)]);
   const document = await PDFDocument.create();
   const regular = await document.embedFont(StandardFonts.Helvetica);
   const bold = await document.embedFont(StandardFonts.HelveticaBold);
@@ -36,10 +36,13 @@ export async function GET(request: Request) {
   row("Total operating expenses", -report.totalExpenses, true);
   row("NET OPERATING SURPLUS / (DEFICIT)", report.operatingSurplus, true);
   section("STATEMENT OF CASH RECEIPTS AND DISBURSEMENTS");
-  row("Monthly dues collections", report.duesIncome);
+  row("Monthly dues cash received", report.paymentCashReceived);
   row("Other fee collections", report.feeIncome);
   row("Refundable bonds received", report.bondsReceived);
   row("Total cash receipts", report.cashInflows, true);
+  section("PAYMENT ALLOCATION MEMORANDUM");
+  row("Amount applied to dues", report.duesIncome);
+  row("Unapplied homeowner credits", report.unappliedCredits);
   row("Operating expenses", -report.operatingExpenses);
   row("Employee payroll", -report.payrollExpense);
   row("Employee loans / cash advances issued", -report.employeeLoansIssued);

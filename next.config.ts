@@ -10,20 +10,21 @@ const nextConfig: NextConfig = {
     },
   },
   async headers() {
+    const isDevelopment = process.env.NODE_ENV !== "production";
     const contentSecurityPolicy = [
       "default-src 'self'",
       "base-uri 'self'",
       "form-action 'self'",
       "frame-ancestors 'self'",
       "object-src 'none'",
-      "script-src 'self' 'unsafe-inline'",
+      `script-src 'self' 'unsafe-inline'${isDevelopment ? " 'unsafe-eval'" : ""}`,
       "style-src 'self' 'unsafe-inline'",
       "img-src 'self' data: blob: https:",
       "font-src 'self' data:",
-      "connect-src 'self'",
+      `connect-src 'self'${isDevelopment ? " ws: http://localhost:* http://127.0.0.1:*" : ""}`,
       "frame-src 'self'",
-      "upgrade-insecure-requests",
-    ].join("; ");
+      !isDevelopment ? "upgrade-insecure-requests" : "",
+    ].filter(Boolean).join("; ");
     return [{
       source: "/:path*",
       headers: [

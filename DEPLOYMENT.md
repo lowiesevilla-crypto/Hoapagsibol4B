@@ -1,235 +1,389 @@
 # HOAHub Deployment Guide
 
-This is the authoritative deployment procedure for `https://hoahub.tech`. The recommended target is Hostinger's managed **Node.js Web App** connected directly to GitHub. The SSH/PM2 scripts under `scripts/` remain available only for a Hostinger VPS.
+**Product:** HOAHub – Multi-Tenant Digital Community Management Platform
 
-## Architecture
+**Version:** 1.0
 
-- Next.js 15 App Router with TypeScript and Tailwind CSS
-- Server Actions and Next.js route handlers
-- Prisma ORM with MySQL 8 migrations
-- bcrypt password hashing and signed HTTP-only session cookies
-- Hostinger Email through authenticated SMTP
-- persistent filesystem storage configured by `STORAGE_ROOT`
-- GitHub repository: `lowiesevilla-crypto/Hoapagsibol4B`
-- production branch: `main`
+**Last Updated:** July 11, 2026
 
-Hostinger managed Node Web Apps require Business Web Hosting or a Cloud plan. VPS hosting also works but requires the separate SSH/PM2 procedure.
+**Document Owner:** Lowie M. Sevilla
 
-## Local development
+---
 
-```powershell
-Copy-Item .env.example .env
-# Change APP_URL/BASE_URL/API_URL to localhost and use the local MySQL URL.
-docker compose up -d mysql
-pnpm install --frozen-lockfile
-pnpm db:generate
-pnpm db:migrate:deploy
-pnpm db:seed
-pnpm dev
-```
+# 1. Purpose
 
-Local URL: `http://localhost:3000/login`
+This document defines the official deployment process for HOAHub.
 
-Before pushing:
+Every deployment must follow this guide to ensure consistency, data integrity, and production stability.
 
-```powershell
+---
+
+# 2. Deployment Environments
+
+## Local Development
+
+Purpose
+
+- Feature Development
+- Unit Testing
+- Integration Testing
+- UAT
+
+Technology
+
+- Windows 11
+- VS Code
+- Next.js
+- Prisma
+- MySQL
+
+---
+
+## GitHub Repository
+
+Purpose
+
+- Version Control
+- Collaboration
+- Backup
+- Release Tracking
+
+Branch Strategy
+
+feature/*
+
+↓
+
+develop
+
+↓
+
+main
+
+---
+
+## Production
+
+Hosting Provider
+
+Hostinger
+
+Application
+
+Next.js
+
+Database
+
+MySQL
+
+---
+
+# 3. Standard Development Workflow
+
+Step 1
+
+Create Feature Branch
+
+Example
+
+feature/billing-generation-engine
+
+---
+
+Step 2
+
+Development
+
+Implement feature.
+
+---
+
+Step 3
+
+Local Testing
+
+Run
+
 pnpm exec prisma validate
+
+pnpm exec prisma generate
+
 pnpm typecheck
+
 pnpm build
-pnpm smoke:production -- http://127.0.0.1:3000
-```
 
-## GitHub update workflow
+---
 
-```powershell
-git switch main
-git pull --ff-only origin main
-git switch -c feature/short-description
-# Make and verify changes.
-git add <intended-files>
-git commit -m "feat(module): describe the change"
-git push -u origin feature/short-description
-gh pr create --draft --base main
-```
+Step 4
 
-Merge only after the `verify` GitHub check passes. Hostinger then pulls the new `main` revision and redeploys it.
+User Acceptance Testing
 
-## Hostinger managed Node setup
+Verify
 
-1. In hPanel open **Websites > Add Website > Node.js Web App**.
-2. Choose **Import Git Repository** and authorize the GitHub account `lowiesevilla-crypto`.
-3. Select `lowiesevilla-crypto/Hoapagsibol4B` and branch `main`.
-4. Select **Next.js**, package manager **pnpm**, and Node.js **22.x**.
-5. Use these commands:
+Business Process
 
-```text
-Install command: pnpm install --frozen-lockfile
-Build command: pnpm hostinger:build
-Start command: pnpm start
-Output directory: .next
-```
+UI
 
-6. Add all production environment variables listed below.
-7. Deploy. The build command generates Prisma Client, applies forward MySQL migrations, and builds Next.js.
-8. After deployment, open `/api/health`; it must return `status: ok` and `database: mysql`.
+Mobile
 
-Hostinger stores Next.js backend output under `/home/<username>/domains/<domain>/nodejs` and manages the web process/reverse proxy. Do not manually place the application in `public_html`.
+Regression
 
-## Domain and SSL
+---
 
-1. Add or connect `hoahub.tech` to the Node.js Web App.
-2. Point the domain to the nameservers or DNS records displayed by Hostinger.
-3. Enable the Hostinger SSL certificate for `hoahub.tech`.
-4. Force HTTPS in hPanel if that toggle is available.
-5. Keep `APP_URL`, `BASE_URL`, `API_URL`, and `ALLOWED_ORIGINS` set exactly as shown below.
+Step 5
 
-The application also canonicalizes production traffic to `https://hoahub.tech` and sends HSTS/security headers. Add `www.hoahub.tech` to `ALLOWED_ORIGINS` only if it will be served; otherwise redirect `www` to the apex domain in Hostinger.
+Documentation
 
-## Hostinger MySQL
+Update
 
-1. Open **Websites > Dashboard > Databases > Management**.
-2. Create a database and a dedicated user with a unique password.
-3. Copy the exact database name, username, hostname, and port shown by hPanel.
-4. URL-encode special characters in the password.
-5. Build `DATABASE_URL` using the actual hostname shown by hPanel:
+IMPLEMENTATION_PLAN.md
 
-```env
-DATABASE_URL="mysql://DB_USER:URL_ENCODED_PASSWORD@DB_HOST:3306/DB_NAME"
-```
+SESSION_PROGRESS.md
 
-Production schema updates use only:
+PRODUCT_IMPROVEMENT_BACKLOG.md
 
-```bash
-pnpm exec prisma migrate deploy
-```
+Release Notes
 
-Never run `prisma migrate reset` or `prisma db push` in production. New installations may run `pnpm db:seed`; the seed creates configuration/lookups only. Existing data migrations use `pnpm db:import -- backup.json` only during an approved maintenance window after a separate backup.
+Architecture documents when necessary
 
-## Production environment variables
+---
 
-Enter these in the Hostinger Node.js application environment screen. Do not create or commit a production `.env` file.
+Step 6
 
-```env
-NODE_ENV=production
-APP_URL=https://hoahub.tech
-BASE_URL=https://hoahub.tech
-API_URL=https://hoahub.tech/api
-ALLOWED_ORIGINS=https://hoahub.tech
-DATABASE_URL=mysql://DB_USER:URL_ENCODED_PASSWORD@DB_HOST:3306/DB_NAME
-AUTH_SECRET=GENERATE_A_UNIQUE_32_PLUS_CHARACTER_SECRET
-SESSION_MAX_AGE_SECONDS=28800
-CRON_SECRET=GENERATE_A_DIFFERENT_RANDOM_SECRET
-MONTHLY_DUES_DUE_DAY=15
+Commit
 
-MAIL_PROVIDER=smtp
-SMTP_HOST=smtp.hostinger.com
-SMTP_PORT=465
-SMTP_USERNAME=support@hoahub.tech
-SMTP_PASSWORD=HOSTINGER_EMAIL_PASSWORD
-SMTP_ENCRYPTION=ssl
-SMTP_ALLOW_DIFFERENT_FROM_ADDRESS=false
-MAIL_FROM_ADDRESS=support@hoahub.tech
-MAIL_FROM_NAME=HOAHUB
-MAIL_REPLY_TO=support@hoahub.tech
+Use meaningful commit messages.
 
-PASSWORD_RESET_EXPIRY_MINUTES=60
-PASSWORD_MIN_LENGTH=10
-PASSWORD_REQUIRE_UPPERCASE=true
-PASSWORD_REQUIRE_LOWERCASE=true
-PASSWORD_REQUIRE_NUMBER=true
-PASSWORD_REQUIRE_SPECIAL=true
+Example
 
-STORAGE_ROOT=/home/HOSTINGER_USERNAME/domains/hoahub.tech/storage
-UPLOAD_MAX_SIZE_MB=10
-```
+Add Billing Generation Engine
 
-Optional Facebook variables:
+---
 
-```env
-FACEBOOK_PAGE_ID=
-FACEBOOK_PAGE_ACCESS_TOKEN=
-FACEBOOK_GRAPH_API_VERSION=v23.0
-```
+Step 7
 
-Generate secrets locally without sharing the output:
+Merge
 
-```powershell
-[Convert]::ToBase64String([Security.Cryptography.RandomNumberGenerator]::GetBytes(48))
-```
+Feature Branch
 
-## SMTP and email
+↓
 
-1. In hPanel open **Emails** and confirm the `support@hoahub.tech` mailbox can sign in to Webmail.
-2. Use `smtp.hostinger.com`, SSL port `465`; STARTTLS port `587` is the fallback.
-3. Prefer `SMTP_PASSWORD` in Hostinger environment variables. System Admin may instead save it in Mail Settings, where it is encrypted using `SETTINGS_ENCRYPTION_KEY` or `AUTH_SECRET` and never displayed again.
-4. Keep `MAIL_FROM_ADDRESS=support@hoahub.tech` so the authenticated mailbox and sender address match.
-   The app automatically uses the authenticated username when Hostinger detects a different sender. Set `SMTP_ALLOW_DIFFERENT_FROM_ADDRESS=true` only after Hostinger has authorized the alternate sender or alias.
-5. Sign in as System Administrator and use **System Settings > Send test email**.
+Develop
 
-The notification service supports welcome messages, password resets, billing notices/reminders, payment/receipt confirmations, announcements/events, and document/pass approval updates. A dedicated account email-verification workflow and a separate service-request module are not currently present; they are product enhancements, not deployment settings.
+After approval
 
-## Persistent uploads
+↓
 
-Create this writable directory outside Hostinger's replaceable Node build directory:
+Main
 
-```text
-/home/HOSTINGER_USERNAME/domains/hoahub.tech/storage
-```
+After production readiness
 
-The application stores all new content under `STORAGE_ROOT/uploads`:
+---
 
-- payment proofs and receipts
-- announcement/event images
-- chat attachments and resident documents
-- organization photos/signatures
-- GCash QR/settings images
+# 4. Deployment Checklist
 
-Do not point `STORAGE_ROOT` inside `.next`, `nodejs`, a Git checkout, or `public_html`. Confirm the Node application user can write to it. Existing legacy files under `public/uploads` remain readable during migration.
+Before deployment
 
-## Scheduled jobs
+✓ Git Status Clean
 
-Hostinger cron schedules use UTC. In **Websites > Dashboard > Cron Jobs**, add custom POST commands using the same secret stored in `CRON_SECRET`.
+✓ Build Passed
 
-Daily maintenance and reminders at 00:15 UTC (08:15 Manila):
+✓ Typecheck Passed
 
-```bash
-curl -fsS -X POST https://hoahub.tech/api/cron/daily -H "Authorization: Bearer YOUR_CRON_SECRET"
-```
+✓ Prisma Validate Passed
 
-Monthly dues generation on day 1 at 00:30 UTC (08:30 Manila):
+✓ Prisma Generate Passed
 
-```bash
-curl -fsS -X POST https://hoahub.tech/api/cron/monthly-dues -H "Authorization: Bearer YOUR_CRON_SECRET"
-```
+✓ UAT Passed
 
-The monthly job is idempotent and respects dues exemptions. Both endpoints return HTTP 401 without the secret and write audit records when authorized.
+✓ Regression Passed
 
-## Backups
+✓ Documentation Updated
 
-1. Enable Hostinger automatic website/database backups in hPanel.
-2. Verify the backup timestamp daily and keep an off-account encrypted copy at least weekly.
-3. Before every schema deployment, export MySQL from hPanel or with `mysqldump --single-transaction`.
-4. Back up the entire `STORAGE_ROOT` directory with the database dump from the same maintenance window.
-5. Perform a quarterly restore drill in a staging database.
+✓ Product Owner Approval
 
-The `scripts/backup-production.sh`, immutable release, and rollback scripts are for Hostinger VPS/SSH deployments. Managed Node Web Apps should use hPanel backups and deployment history.
+---
 
-## Post-deployment test
+# 5. Environment Variables
 
-```bash
-pnpm smoke:production -- https://hoahub.tech
-```
+Production requires:
 
-Then test authenticated Admin, Homeowner, System Administrator, and Employee workflows from desktop and mobile. Send a real SMTP test, upload and retrieve a test image/PDF, verify PDF receipts/documents, and remove the test data afterward.
+DATABASE_URL
 
-## Troubleshooting
+NEXTAUTH_SECRET
 
-- Build cannot connect to MySQL: verify Hostinger DB hostname, user grants, encoded password, and whether the Node service may access that database.
-- MySQL returns `P1000` after database creation: set the database user's password from hPanel, update the encoded password in `DATABASE_URL`, and trigger a new GitHub deployment.
-- Prisma migration fails: stop deployment, keep the previous release active, inspect the migration SQL, and restore the pre-deployment backup if data changed.
-- Prisma engine returns `EACCES`: keep the build command set to `pnpm hostinger:build`; it restores Hostinger build permissions before running Prisma.
-- 403 after deployment: redeploy the Node.js app so Hostinger regenerates routing; do not manually overwrite `.htaccess`.
-- Uploads disappear: `STORAGE_ROOT` is inside the replaceable build directory or lacks write permission.
-- SMTP authentication fails: verify full mailbox username, password, port/encryption pair, and authorized From address.
-- Redirect loop: confirm Hostinger forwards `X-Forwarded-Proto: https` and all URL variables use exactly `https://hoahub.tech`.
-- Health returns 503: inspect Hostinger deployment logs and validate `DATABASE_URL`.
+NEXTAUTH_URL
+
+SMTP Settings
+
+Application URLs
+
+Payment Gateway Keys (Future)
+
+API Keys
+
+Never commit secrets into Git.
+
+---
+
+# 6. Database Deployment
+
+Always
+
+Backup Database
+
+↓
+
+Run Prisma Migration
+
+↓
+
+Validate
+
+↓
+
+Smoke Test
+
+Never manually edit production schema.
+
+---
+
+# 7. Rollback Procedure
+
+If deployment fails
+
+1. Stop deployment
+
+2. Restore previous application
+
+3. Restore database backup if required
+
+4. Validate
+
+5. Investigate
+
+6. Redeploy
+
+---
+
+# 8. Production Validation
+
+Verify
+
+Login
+
+Tenant Isolation
+
+Billing
+
+Payments
+
+Receipts
+
+SOA
+
+Documents
+
+Mobile
+
+AI (Future)
+
+---
+
+# 9. Disaster Recovery
+
+Maintain
+
+Database Backups
+
+Git Repository
+
+Release Tags
+
+Deployment History
+
+Rollback Plan
+
+---
+
+# 10. Release Process
+
+Feature Branch
+
+↓
+
+Develop
+
+↓
+
+QA / UAT
+
+↓
+
+Main
+
+↓
+
+Production
+
+---
+
+# 11. Production Rules
+
+Never deploy directly from:
+
+Feature Branch
+
+Only deploy from:
+
+Main
+
+Production deployment requires:
+
+Approval
+
+Testing
+
+Documentation
+
+---
+
+# 12. Monitoring
+
+Monitor
+
+Application Logs
+
+Database
+
+Performance
+
+Storage
+
+Errors
+
+Security Events
+
+---
+
+# 13. Future Improvements
+
+CI/CD Pipeline
+
+GitHub Actions
+
+Automated Testing
+
+Automated Deployment
+
+Blue/Green Deployment
+
+Monitoring Dashboard
+
+---
+
+# Document History
+
+| Version | Date | Description |
+|----------|------|-------------|
+| 1.0 | July 11, 2026 | Initial Deployment Guide |

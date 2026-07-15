@@ -19,7 +19,7 @@ export type OpenBillChoice = {
   search: string;
 };
 
-export function PaymentForm({ bills, today }: { bills: OpenBillChoice[]; today: string }) {
+export function PaymentForm({ bills, today, submissionKey, serverSearch = false }: { bills: OpenBillChoice[]; today: string; submissionKey: string; serverSearch?: boolean }) {
   const [todayYear, todayMonth] = today.split("-").map(Number);
   const [query, setQuery] = useState("");
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
@@ -33,11 +33,14 @@ export function PaymentForm({ bills, today }: { bills: OpenBillChoice[]; today: 
   const selectedBills = bills.filter((bill) => selectedIds.includes(bill.id));
   const selectedHomeownerId = selectedBills[0]?.homeownerId;
   const total = selectedBills.reduce((sum, bill) => sum + bill.balance, 0);
+  const receivedAmount = Math.max(0, Number(amount) || 0);
+  const appliedAmount = Math.min(receivedAmount, total);
+  const unappliedCredit = Math.max(0, receivedAmount - appliedAmount);
   const selectedBillingMonths = selectedBills.map((bill) => bill.billingMonth).sort().join(",");
   const matches = useMemo(() => {
     const term = query.trim().toLowerCase();
-    return bills.filter((bill) => !term || bill.search.includes(term)).slice(0, 12);
-  }, [bills, query]);
+    return serverSearch ? bills : bills.filter((bill) => !term || bill.search.includes(term));
+  }, [bills, query, serverSearch]);
 
   useEffect(() => {
     setAmount(total > 0 ? total.toFixed(2) : "");
@@ -63,11 +66,13 @@ export function PaymentForm({ bills, today }: { bills: OpenBillChoice[]; today: 
   }
 
   return <form action={recordPaymentAction} className="card mb-6">
+    <input type="hidden" name="idempotencyKey" value={submissionKey} />
     <div className="mb-5"><h2 className="text-lg font-black">Record a payment</h2><p className="text-sm text-slate-500">Search a homeowner, select one or more open billings, then record the payment. Reference numbers are optional for Cash and required for non-cash methods.</p></div>
     <div className="grid gap-5 xl:grid-cols-[1.15fr_1fr]">
       <div>
-        <label className="label" htmlFor="homeowner-bill-search">Search homeowner or property</label>
-        <div className="relative"><Search className="pointer-events-none absolute left-3.5 top-3 size-4 text-slate-400" /><input id="homeowner-bill-search" className="field pl-10" type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Type a name, block, lot, or billing month" autoComplete="off" /></div>
+        <label className="label" htmlFor="homeowner-bill-search">{serverSearch ? "Open billing results" : "Search homeowner or property"}</label>
+        {!serverSearch && <div className="relative"><Search className="pointer-events-none absolute left-3.5 top-3 size-4 text-slate-400" /><input id="homeowner-bill-search" className="field pl-10" type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Type a name, block, lot, or billing month" autoComplete="off" /></div>}
+        {serverSearch && <p className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-semibold text-slate-600">Use the search above to find homeowners by name, block, lot, account number, email, resolution reference, or bill ID.</p>}
         {selectedIds.map((id) => <input key={id} type="hidden" name="billIds" value={id} />)}
         <div className="mt-2 max-h-72 overflow-y-auto rounded-xl border border-slate-200 bg-slate-50/70 p-1.5">
           {matches.map((bill) => {
@@ -79,12 +84,12 @@ export function PaymentForm({ bills, today }: { bills: OpenBillChoice[]; today: 
               <span className="text-right text-sm font-black">{bill.balanceLabel}<span className={`block text-[10px] font-semibold uppercase ${selected ? "text-pine-100" : "text-slate-400"}`}>Balance</span></span>
             </button>;
           })}
-          {!matches.length && <p className="px-3 py-8 text-center text-sm text-slate-500">No open bills match that search.</p>}
+          {!matches.length && <p className="px-3 py-8 text-center text-sm text-slate-500">No homeowner found with an open balance.</p>}
         </div>
       </div>
       <div className="grid content-start gap-4 sm:grid-cols-2">
         <div className="sm:col-span-2 rounded-xl border border-pine-100 bg-pine-50/60 p-3 text-sm">
-          {selectedBills.length ? <><p className="font-black text-pine-900">Selected billings</p><ul className="mt-2 space-y-1 text-pine-800">{selectedBills.map((bill) => <li key={bill.id} className="flex justify-between gap-3"><span>{bill.month}</span><b>{bill.balanceLabel}</b></li>)}</ul><p className="mt-3 flex justify-between border-t border-pine-200 pt-2 text-base font-black"><span>Total payment</span><span>{peso(total)}</span></p></> : <p className="text-slate-500">Select one or more open billings from the same homeowner.</p>}
+          {selectedBills.length ? <><p className="font-black text-pine-900">Selected billings</p><ul className="mt-2 space-y-1 text-pine-800">{selectedBills.map((bill) => <li key={bill.id} className="flex justify-between gap-3"><span>{bill.month}</span><b>{bill.balanceLabel}</b></li>)}</ul><p className="mt-3 flex justify-between border-t border-pine-200 pt-2 text-base font-black"><span>Selected bill total</span><span>{peso(total)}</span></p></> : <p className="text-slate-500">Select one or more open billings from the same homeowner.</p>}
         </div>
         <div><label className="label">Payment date</label><input className="field" name="paymentDate" type="date" defaultValue={today} required /></div>
         <div><label className="label">Method</label><select className="field" name="method" value={method} onChange={(event) => setMethod(event.target.value)}><option value="CASH">Cash</option><option value="BANK_TRANSFER">Bank transfer</option><option value="GCASH">GCash</option><option value="CHECK">Check</option><option value="OTHER">Other</option></select></div>
@@ -96,7 +101,8 @@ export function PaymentForm({ bills, today }: { bills: OpenBillChoice[]; today: 
             <CoverageFields label="Coverage To" prefix="coverageTo" month={coverageToMonth} year={coverageToYear} onMonth={setCoverageToMonth} onYear={setCoverageToYear} />
           </div>
         </fieldset>
-        <div className="sm:col-span-2"><label className="label">Payment amount <span className="text-rose-600">*</span></label><input className="field text-right text-lg font-black text-pine-700" name="amount" type="number" min="0.01" step="0.01" value={amount} onChange={(event) => setAmount(event.target.value)} required placeholder="0.00" /><p className="mt-1 text-xs text-slate-500">Editable before saving. Partial payments and amounts above the selected balance are supported and recalculated automatically.</p></div>
+        <div className="sm:col-span-2"><label className="label">Payment amount received <span className="text-rose-600">*</span></label><input className="field text-right text-lg font-black text-pine-700" name="amount" type="number" min="0.01" step="0.01" value={amount} onChange={(event) => setAmount(event.target.value)} required placeholder="0.00" /><p className="mt-1 text-xs text-slate-500">Enter the total received. Any amount above the selected balances remains available as homeowner credit.</p></div>
+        {selectedBills.length > 0 && <div className="sm:col-span-2 rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm"><p className="flex justify-between"><span>Amount received</span><b>{peso(receivedAmount)}</b></p><p className="mt-1 flex justify-between"><span>Amount applied</span><b>{peso(appliedAmount)}</b></p><p className="mt-1 flex justify-between"><span>Unapplied credit</span><b>{peso(unappliedCredit)}</b></p>{unappliedCredit > 0 && <p className="mt-3 rounded-lg bg-emerald-100 px-3 py-2 font-bold text-emerald-900">{formatPHP(unappliedCredit)} will be recorded as unapplied homeowner credit.</p>}</div>}
         <div className="sm:col-span-2"><label className="label">Reference number {referenceRequired && <span className="text-rose-600">*</span>}</label><input className="field" name="referenceNumber" required={referenceRequired} aria-required={referenceRequired} placeholder={referenceRequired ? "Required; must be unique" : "Optional for cash payments"} /><p className="mt-1 text-xs text-slate-500">{referenceRequired ? "Required for this payment method." : "Cash payments can be saved without a reference number."}</p></div>
         <div className="sm:col-span-2"><label className="label">Remarks</label><input className="field" name="remarks" placeholder="Optional notes shown in receipt audit trail" /></div>
         <div className="sm:col-span-2"><SubmitButton>Record payment - {peso(Number(amount) || 0)}</SubmitButton></div>
@@ -111,4 +117,8 @@ function CoverageFields({ label, prefix, month, year, onMonth, onYear }: { label
 
 function peso(value: number) {
   return new Intl.NumberFormat("en-PH", { style: "currency", currency: "PHP" }).format(value);
+}
+
+function formatPHP(value: number) {
+  return `PHP ${new Intl.NumberFormat("en-PH", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(value)}`;
 }

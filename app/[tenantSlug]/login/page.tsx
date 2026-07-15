@@ -1,8 +1,15 @@
+import type { Metadata } from "next";
 import { notFound, redirect } from "next/navigation";
 import { Role } from "@prisma/client";
 import { defaultHomeForRole, readSession, sessionIsCurrent } from "@/lib/auth";
 import { resolveTenant, tenantCanSignIn } from "@/lib/tenant";
 import { TenantLoginScreen } from "@/components/tenant-login-screen";
+
+export async function generateMetadata({ params }: { params: Promise<{ tenantSlug: string }> }): Promise<Metadata> {
+  const { tenantSlug } = await params;
+  const tenant = await resolveTenant(tenantSlug);
+  return tenant ? { title: tenant.name } : { title: { absolute: "HOAHub" } };
+}
 
 export default async function TenantLoginPage({
   params,

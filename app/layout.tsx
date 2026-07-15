@@ -4,8 +4,8 @@ import "./globals.css";
 export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
-  title: { default: "Pagsibol Village PH2 4B East", template: "%s | Pagsibol Village PH2 4B East" },
-  description: "Secure homeowner billing and community portal",
+  title: { default: "HOAHub", template: "%s | HOAHub" },
+  description: "Secure multi-tenant HOA management platform",
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {

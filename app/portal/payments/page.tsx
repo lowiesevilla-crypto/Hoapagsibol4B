@@ -10,7 +10,7 @@ import { money, shortDate } from "@/lib/utils";
 export default async function PortalPaymentsPage() {
   const profile = await requireHomeownerProfile();
   const payments = await prisma.payment.findMany({
-    where: { homeownerId: profile.id, status: "ACTIVE" },
+    where: { tenantId: profile.tenantId, homeownerId: profile.id, status: "ACTIVE" },
     include: { bill: true, allocations: { include: { bill: true }, orderBy: { bill: { billingMonth: "asc" } } } },
     orderBy: [{ paymentDate: "desc" }, { createdAt: "desc" }],
   });

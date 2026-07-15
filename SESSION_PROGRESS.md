@@ -680,3 +680,20 @@ Implementation is planned through the shared pagination component to benefit all
 - Wired Finance Dashboard delinquency/activity pagination, shared admin payments pagination, and Billing Preview pagination.
 - Local checks passed for typecheck, clean build, authenticated Chromium dashboard/payment focus restoration, and 390px mobile dashboard focus restoration.
 - Product Owner UAT in Chrome and Edge remains pending.
+
+# 2026-07-15 - Sprint 6A Homeowner Mobile Foundation
+
+## Engineering Ready for Product Owner UAT
+
+- Added a homeowner mobile application shell with tenant logo/name, homeowner greeting, profile action, entitlement-aware chat indicator, safe-area bottom navigation, and active-route accessibility.
+- Added shared portal mobile components for headers, bottom navigation, page containers, summary cards, quick-action tiles, section headers, empty/error/skeleton states, and mobile list items.
+- Reworked `/portal/dashboard` into a mobile-first account overview using the existing SOA service for finance summary values and bounded tenant-scoped preview queries.
+- Added `/portal/soa` as a homeowner-facing statement route backed by `lib/services/statement-of-account.ts`.
+- Added quick actions for Pay Dues, View SOA, Receipts, Documents, Announcements, Chat, Vehicles, and Events, filtered by tenant module entitlement.
+- Tightened tenant-scoped reads across homeowner billing, payments, collections, documents, announcements, events, vehicles, organization officers, and related document officer lookups.
+- Added neutral HOAHub PWA manifest metadata without adding a service worker or offline caching for private financial data.
+- No Prisma schema or migration change was required.
+
+## Release Gate
+
+- Product Owner UAT remains pending for 360px, 390px, 430px, tablet, desktop, two-tenant branding isolation, homeowner login, dashboard, profile, payments, SOA, documents, announcements, events, chat, and desktop admin regression.

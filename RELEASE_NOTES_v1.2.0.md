@@ -266,3 +266,23 @@ Status: Engineering ready for Product Owner UAT.
 
 Release gate:
 - Bug #049 and Improvements #056-#058 must not be marked complete until local Product Owner UAT passes.
+
+---
+
+# Sprint 6A Release Candidate - Homeowner Mobile Foundation
+
+Status: Engineering ready for Product Owner UAT.
+
+- Added a mobile-first homeowner application shell with tenant logo/name, homeowner greeting, profile action, safe-area-aware bottom navigation, and active-route accessibility.
+- Added shared portal mobile components for summary cards, quick actions, section headers, empty/error/loading states, mobile list items, and responsive page containers.
+- Rebuilt the homeowner dashboard foundation around existing authoritative data, including SOA-backed outstanding balance, available credit, last payment, next due date, quick actions, and previews for announcements, events, payment requests, and document requests.
+- Added `/portal/soa` for homeowner-facing account statement review using the existing tenant-scoped SOA service.
+- Filtered quick actions and navigation by tenant module entitlement.
+- Tightened explicit tenant filters on homeowner portal reads for billing, payments, collections, documents, announcements, events, vehicles, HOA officers, and related document officer lookups.
+- Added neutral HOAHub PWA manifest metadata without service-worker caching of authenticated financial data.
+- No database migration was required.
+
+Known limitations:
+- Offline access, push notifications, and app-install polish beyond manifest metadata are deferred to Sprint 6B.
+- Homeowner SOA PDF self-service remains deferred; the Sprint 6A route focuses on mobile screen review.
+- Product Owner mobile UAT is required before release approval.

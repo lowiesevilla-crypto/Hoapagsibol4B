@@ -13,7 +13,7 @@ const icons: Record<IconName, LucideIcon> = { audit: ShieldCheck, dashboard: Lay
 type AssociationBrand = { name: string; logoUrl: string };
 const OPEN_SECTIONS_KEY = "hoahub.sidebar.openSections.v1";
 
-export function Sidebar({ user, links, roleLabel, association, initialChatUnreadCount = 0 }: { user: { name: string; email: string }; links: LinkItem[]; roleLabel: string; association: AssociationBrand; initialChatUnreadCount?: number }) {
+export function Sidebar({ user, links, roleLabel, association, initialChatUnreadCount = 0, desktopOnly = false }: { user: { name: string; email: string }; links: LinkItem[]; roleLabel: string; association: AssociationBrand; initialChatUnreadCount?: number; desktopOnly?: boolean }) {
   const pathname = usePathname();
   const mobileMenuRef = useRef<HTMLDetailsElement>(null);
   const [chatUnreadCount, setChatUnreadCount] = useState(initialChatUnreadCount);
@@ -62,8 +62,9 @@ export function Sidebar({ user, links, roleLabel, association, initialChatUnread
   const titleParts = association.name.split(/\s+/);
   const firstLine = titleParts.slice(0, 3).join(" ") || association.name;
   const secondLine = titleParts.slice(3).join(" ");
+  const asideClassName = `${desktopOnly ? "hidden lg:block" : "sticky"} top-0 z-40 border-b border-white/10 bg-gradient-to-b from-pine-900 via-pine-700 to-pine-900 text-white shadow-2xl lg:fixed lg:inset-y-0 lg:left-0 lg:w-72 lg:border-b-0 lg:border-r`;
   return (
-    <aside className="sticky top-0 z-40 border-b border-white/10 bg-gradient-to-b from-pine-900 via-pine-700 to-pine-900 text-white shadow-2xl lg:fixed lg:inset-y-0 lg:left-0 lg:w-72 lg:border-b-0 lg:border-r">
+    <aside className={asideClassName}>
       <span className="absolute inset-x-0 top-0 hidden h-1 bg-gradient-to-r from-leaf-500 via-white/80 to-pine-500 lg:block" />
       <div className="flex h-18 items-center justify-between px-5 lg:h-24">
         <Link href={links[0].href} className="flex min-w-0 items-center gap-3 font-black"><AssociationLogo className="size-12 lg:size-14" src={association.logoUrl} alt={`${association.name} logo`} /><span className="min-w-0 max-w-44 break-words text-sm leading-tight lg:text-base">{firstLine}<br />{secondLine && <span className="text-leaf-100">{secondLine}</span>}</span></Link>

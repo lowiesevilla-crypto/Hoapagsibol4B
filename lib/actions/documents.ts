@@ -36,18 +36,18 @@ export async function submitDocumentRequestAction(formData: FormData) {
   if (scheduledDate && scheduledDate < todayUtc()) redirect("/portal/documents?error=Pass%20and%20validity%20dates%20must%20be%20today%20or%20later.");
   if (type === DocumentType.MOVE_IN_OUT_PASS && !["MOVE_IN", "MOVE_OUT"].includes(passType || "")) redirect("/portal/documents?error=Select%20Move%20In%20or%20Move%20Out.");
 
-  const unpaid = await prisma.bill.aggregate({ where: { homeownerId, archivedAt: null, balance: { gt: 0 } }, _sum: { balance: true } });
+  const unpaid = await prisma.bill.aggregate({ where: { tenantId: user.tenantId, homeownerId, archivedAt: null, balance: { gt: 0 } }, _sum: { balance: true } });
   const outstandingBalance = Number(unpaid._sum.balance ?? 0);
-  const template = await prisma.documentTemplate.findFirst({ where: { type } });
+  const template = await prisma.documentTemplate.findFirst({ where: { tenantId: user.tenantId, type } });
   if (!template?.active) redirect("/portal/documents?error=This%20document%20type%20is%20currently%20unavailable.");
 
   const request = await prisma.documentRequest.create({
     data: {
-      homeownerId, type, purpose, remarks, scheduledDate, startTime, endTime, passType, origin: "HOMEOWNER", initiatedById: user.id,
+      tenantId: user.tenantId, homeownerId, type, purpose, remarks, scheduledDate, startTime, endTime, passType, origin: "HOMEOWNER", initiatedById: user.id,
       vehicleDetails, partyName, contractorDetails, representativeName, propertyDetails,
       outstandingBalanceAtRequest: outstandingBalance,
       status: DocumentRequestStatus.SUBMITTED,
-      histories: { create: { status: DocumentRequestStatus.SUBMITTED, actorId: user.id, note: outstandingBalance > 0 ? `Submitted with an outstanding balance of ${money(outstandingBalance)}. Download remains restricted until settlement or admin override.` : "Submitted by homeowner." } },
+      histories: { create: { tenantId: user.tenantId, status: DocumentRequestStatus.SUBMITTED, actorId: user.id, note: outstandingBalance > 0 ? `Submitted with an outstanding balance of ${money(outstandingBalance)}. Download remains restricted until settlement or admin override.` : "Submitted by homeowner." } },
     },
   });
   await prisma.auditLog.create({ data: { actorId: user.id, module: "DOCUMENTS", action: "SUBMIT_DOCUMENT_REQUEST", entityType: "DocumentRequest", entityId: request.id, metadata: { type, purpose, outstandingBalance, downloadRestricted: outstandingBalance > 0 } } });
@@ -64,7 +64,7 @@ export async function processDocumentRequestAction(formData: FormData) {
   const fail = (message: string): never => redirect(`${returnPath}?error=${encodeURIComponent(message)}`);
   const adminRemarks = clean(formData.get("adminRemarks"));
   const submittedValidityDate = optionalDate(formData.get("validityDate"));
-  const request = await prisma.documentRequest.findUnique({ where: { id }, include: { homeowner: { include: { user: true } } } });
+  const request = await prisma.documentRequest.findFirst({ where: { id, tenantId: admin.tenantId }, include: { homeowner: { include: { user: true } } } });
   if (!request) return fail("Document request not found.");
   const validityDate = submittedValidityDate || request.validityDate || (operation === "approve" && request.type === DocumentType.CERTIFICATE_OF_RESIDENCY ? oneYearFromToday() : undefined);
   const purpose = clean(formData.get("purpose")) || request.purpose;
@@ -95,12 +95,12 @@ export async function processDocumentRequestAction(formData: FormData) {
     if (!regenerating && request.status !== DocumentRequestStatus.SUBMITTED && request.status !== DocumentRequestStatus.UNDER_REVIEW) fail("Only pending requests can be approved.");
     if (regenerating && (!request.generatedContent || !request.documentNumber || !request.verificationCode || request.archivedAt)) fail("Only active generated documents can be regenerated.");
     const [unpaid, template, payments, constructionBonds, association, officers] = await Promise.all([
-      prisma.bill.aggregate({ where: { homeownerId: request.homeownerId, archivedAt: null, balance: { gt: 0 } }, _sum: { balance: true } }),
-      prisma.documentTemplate.findFirst({ where: { type: request.type } }),
-      prisma.payment.aggregate({ where: { homeownerId: request.homeownerId, status: "ACTIVE" }, _sum: { amount: true } }),
-      prisma.collection.findMany({ where: { homeownerId: request.homeownerId, type: "CONSTRUCTION_BOND", refundable: true } }),
+      prisma.bill.aggregate({ where: { tenantId: admin.tenantId, homeownerId: request.homeownerId, archivedAt: null, balance: { gt: 0 } }, _sum: { balance: true } }),
+      prisma.documentTemplate.findFirst({ where: { tenantId: admin.tenantId, type: request.type } }),
+      prisma.payment.aggregate({ where: { tenantId: admin.tenantId, homeownerId: request.homeownerId, status: "ACTIVE" }, _sum: { amount: true } }),
+      prisma.collection.findMany({ where: { tenantId: admin.tenantId, homeownerId: request.homeownerId, type: "CONSTRUCTION_BOND", refundable: true } }),
       getAssociationSettings(admin.tenantId),
-      getActiveOrganizationOfficers(),
+      getActiveOrganizationOfficers(admin.tenantId),
     ]);
     if (!template?.active) return fail("The document template is inactive or missing.");
     const outstandingBalance = Number(unpaid._sum.balance ?? 0);

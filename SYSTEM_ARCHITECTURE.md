@@ -665,3 +665,31 @@ No database migration is required for Sprint 5B. Product Owner UAT remains the g
 | Version | Date | Description |
 |----------|------|-------------|
 | 1.3 | July 15, 2026 | Documented Sprint 5B SOA parity, activity filters, SOA link, and export presentation architecture |
+
+## 29. Homeowner Mobile Shell Architecture
+
+The homeowner portal uses a server-rendered, authenticated shell at `app/portal/layout.tsx`. The layout resolves the homeowner with `requireUser(Role.HOMEOWNER)`, loads tenant branding through `getAssociationSettings(user.tenantId)`, applies module entitlement checks through `getEnabledTenantModules(user.tenantId)`, and never accepts tenant identifiers from the client.
+
+Mobile presentation is centralized in `components/portal-mobile-shell.tsx`:
+
+1. `PortalMobileHeader` renders tenant logo/name, homeowner greeting, profile access, and chat notification access only when Chat is entitled.
+2. `PortalBottomNavigation` provides Home, Payments, SOA, Documents, and More navigation with active-route and `aria-current` state.
+3. Shared summary cards, quick-action tiles, section headers, empty/error/skeleton states, and mobile list rows keep portal pages consistent.
+4. The existing `Sidebar` remains the desktop/tablet navigation and is hidden only for portal mobile layout usage.
+
+The dashboard foundation uses `lib/services/statement-of-account.ts` for homeowner finance summary values. Additional previews are bounded, tenant-scoped reads for open bills, recent bills, payment requests, document requests, announcements, events, and refundable bonds. `/portal/soa` consumes the same SOA service to avoid duplicate statement calculations.
+
+PWA support is limited to neutral HOAHub manifest metadata. No service worker or offline cache is introduced for authenticated homeowner finance data. Offline behavior, push notifications, and richer app-install polish are deferred to Sprint 6B.
+
+Security constraints:
+
+- Tenant ID comes from the authenticated session and homeowner profile only.
+- Module entitlements filter navigation and quick actions.
+- Homeowner ownership checks continue through `requireHomeownerProfile`.
+- Finance calculations, payment posting, receipt generation, billing generation, and SOA service calculations are unchanged.
+
+# Document History Addendum
+
+| Version | Date | Description |
+|----------|------|-------------|
+| 1.4 | July 15, 2026 | Documented Sprint 6A homeowner mobile shell, shared components, PWA foundation, and security constraints |

@@ -4,20 +4,22 @@ import { DocumentReviewActions } from "@/components/document-review-actions";
 import { PageHeader } from "@/components/page-header";
 import { ConfirmSubmitButton } from "@/components/ui";
 import { archiveDocumentRequestAction, processDocumentRequestAction } from "@/lib/actions/documents";
+import { requireUser } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { getActiveOrganizationOfficers } from "@/lib/organization";
 import { documentTypeLabel, isPassDocument } from "@/lib/services/documents";
 import { money, shortDate } from "@/lib/utils";
 
 export default async function AdminDocumentRequestPage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ error?: string; success?: string; message?: string }> }) {
+  const user = await requireUser();
   const { id } = await params;
   const query = await searchParams;
   const [request, officers] = await Promise.all([
-    prisma.documentRequest.findUnique({ where: { id }, include: { homeowner: { include: { user: true } }, initiatedBy: true, processedBy: true, approvedBy: true, processedByOfficer: true, approvedByOfficer: true, downloadOverrideBy: true, archivedBy: true, versions: { include: { generatedBy: true }, orderBy: { version: "desc" } }, histories: { include: { actor: true }, orderBy: { createdAt: "asc" } } } }),
-    getActiveOrganizationOfficers(),
+    prisma.documentRequest.findFirst({ where: { id, tenantId: user.tenantId }, include: { homeowner: { include: { user: true } }, initiatedBy: true, processedBy: true, approvedBy: true, processedByOfficer: true, approvedByOfficer: true, downloadOverrideBy: true, archivedBy: true, versions: { include: { generatedBy: true }, orderBy: { version: "desc" } }, histories: { include: { actor: true }, orderBy: { createdAt: "asc" } } } }),
+    getActiveOrganizationOfficers(user.tenantId),
   ]);
   if (!request) notFound();
-  const unpaid = await prisma.bill.aggregate({ where: { homeownerId: request.homeownerId, archivedAt: null, balance: { gt: 0 } }, _sum: { balance: true } });
+  const unpaid = await prisma.bill.aggregate({ where: { tenantId: user.tenantId, homeownerId: request.homeownerId, archivedAt: null, balance: { gt: 0 } }, _sum: { balance: true } });
   const currentBalance = Number(unpaid._sum.balance ?? 0);
   const pending = request.status === "SUBMITTED" || request.status === "UNDER_REVIEW";
   const generated = Boolean(request.generatedContent && request.documentNumber);

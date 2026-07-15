@@ -272,3 +272,26 @@ HOAHub complies with:
 | Version | Date | Description |
 |----------|------|-------------|
 | 1.0 | July 11, 2026 | Initial Multi-Tenant Guide |
+
+---
+
+# 17. Homeowner Mobile Tenant Rules
+
+The homeowner mobile shell is authenticated and tenant-scoped.
+
+Rules:
+
+1. Resolve the homeowner with `requireUser(Role.HOMEOWNER)` or `requireHomeownerProfile()`.
+2. Use `user.tenantId` or `profile.tenantId` explicitly for branding, module entitlements, and all portal reads.
+3. Do not read tenant branding through a default fallback after authentication.
+4. Do not accept `tenantId` from URL parameters, forms, local storage, or client state.
+5. Filter mobile navigation and quick actions by tenant module entitlement.
+6. Keep private homeowner financial data out of public caches and service-worker offline storage.
+
+Sprint 6A portal reads explicitly apply tenant predicates for billing, payments, collections, documents, announcements, events, vehicles, organization officers, and document officer lookups. Product Owner UAT must verify that Test HOA and Pagsibol homeowner sessions do not share branding, content, balances, requests, or receipts.
+
+# Document History Addendum
+
+| Version | Date | Description |
+|----------|------|-------------|
+| 1.1 | July 15, 2026 | Added homeowner mobile tenant rules and PWA cache restrictions |

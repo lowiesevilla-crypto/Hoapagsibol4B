@@ -1856,3 +1856,29 @@ Validated:
 - Search, date filters, sorting, and URL parameters persist.
 - Desktop and 390px mobile pass.
 - No console errors.
+
+---
+
+## Sprint 6A - Homeowner Mobile Foundation
+
+Module:
+Homeowner Portal / Mobile Shell
+
+Priority:
+High
+
+Status:
+Ready for Product Owner UAT
+
+Delivery Criteria:
+- Homeowner portal uses a mobile-first authenticated application shell with tenant branding, profile access, safe-area-aware bottom navigation, and active-route states.
+- Primary homeowner routes include `/portal/dashboard`, `/portal/profile`, `/portal/pay`, `/portal/soa`, `/portal/documents`, `/portal/announcements`, `/portal/events`, and `/portal/chat`.
+- Dashboard foundation uses the existing tenant-safe SOA service plus bounded homeowner, billing, payment request, document request, announcement, and event reads.
+- Quick actions are filtered by tenant module entitlements and never accept tenant IDs from client input.
+- Portal content reads were tightened with explicit tenant predicates for billing, payments, collections, documents, announcements, events, vehicles, and HOA officers.
+- PWA foundation adds neutral HOAHub install metadata without offline caching of authenticated financial data.
+- No Prisma schema or migration change is required.
+
+Release Gate:
+- Product Owner must verify the homeowner portal at 360px, 390px, 430px, tablet, and desktop widths before Sprint 6A is approved.
+- Sprint 6B remains responsible for deeper feature redesigns, offline strategy, and expanded native-app behaviors.

@@ -7,8 +7,8 @@ import { shortDate } from "@/lib/utils";
 import { ContentImage } from "@/components/content-image";
 
 export default async function PortalAnnouncementsPage() {
-  await requireHomeownerProfile();
-  const announcements = await prisma.announcement.findMany({ where: { status: "PUBLISHED" }, include: { createdBy: true }, orderBy: [{ createdAt: "desc" }] });
+  const profile = await requireHomeownerProfile();
+  const announcements = await prisma.announcement.findMany({ where: { tenantId: profile.tenantId, status: "PUBLISHED" }, include: { createdBy: true }, orderBy: [{ createdAt: "desc" }] });
   return <>
     <PageHeader eyebrow="Community" title="Announcements" description="Official published notices and neighborhood updates from your association." />
     <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">{announcements.map((item) => <article className="card overflow-hidden p-0" key={item.id}>

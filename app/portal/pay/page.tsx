@@ -11,8 +11,8 @@ export default async function PortalPayPage() {
   const profile = await requireHomeownerProfile();
   const [paymentSettings, openBills, requests] = await Promise.all([
     getPaymentSettings(profile.tenantId),
-    prisma.bill.findMany({ where: { homeownerId: profile.id, balance: { gt: 0 }, archivedAt: null }, include: { paymentRequests: { where: { status: "PENDING_REVIEW" }, select: { id: true } } }, orderBy: [{ dueDate: "asc" }, { billingMonth: "desc" }] }),
-    prisma.paymentRequest.findMany({ where: { homeownerId: profile.id }, include: { bill: true, payment: true, collection: true }, orderBy: [{ createdAt: "desc" }] }),
+    prisma.bill.findMany({ where: { tenantId: profile.tenantId, homeownerId: profile.id, balance: { gt: 0 }, archivedAt: null }, include: { paymentRequests: { where: { tenantId: profile.tenantId, status: "PENDING_REVIEW" }, select: { id: true } } }, orderBy: [{ dueDate: "asc" }, { billingMonth: "desc" }] }),
+    prisma.paymentRequest.findMany({ where: { tenantId: profile.tenantId, homeownerId: profile.id }, include: { bill: true, payment: true, collection: true }, orderBy: [{ createdAt: "desc" }] }),
   ]);
   const today = inputDate(new Date());
   const billChoices = openBills.map((bill) => ({ id: bill.id, month: monthLabel(bill.billingMonth), dueDate: shortDate(bill.dueDate), balance: Number(bill.balance), balanceLabel: money(bill.balance), hasPendingRequest: bill.paymentRequests.length > 0 }));

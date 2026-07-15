@@ -15,9 +15,10 @@ export type OfficerSnapshot = {
   displayOrder: number;
 };
 
-export async function getActiveOrganizationOfficers(at = new Date()) {
+export async function getActiveOrganizationOfficers(tenantId: string, at = new Date()) {
   return prisma.organizationOfficer.findMany({
     where: {
+      tenantId,
       active: true,
       archivedAt: null,
       effectiveDate: { lte: at },

@@ -140,3 +140,22 @@ Prepare the finance migration and SOA finalization for product-owner review befo
 - [ ] Complete local Product Owner UAT for Bug #049 and Improvements #056-#058.
 - [ ] Verify SOA print/PDF parity, Finance Dashboard PDF/DOCX parity, tenant isolation, RBAC, and 390px mobile behavior before release approval.
 - [ ] Do not mark Bug #049 or Improvements #056-#058 complete until Product Owner UAT passes.
+
+## Sprint 6A - Homeowner Mobile Foundation
+
+### Engineering Scope
+
+- [x] Add a homeowner mobile shell with tenant branding, greeting, profile action, entitlement-aware notification access, bottom navigation, and safe-area padding.
+- [x] Preserve desktop/tablet compatibility by keeping the existing sidebar on large screens.
+- [x] Create reusable portal mobile components for summary cards, quick-action tiles, section headers, empty/error/loading states, mobile list rows, and responsive page containers.
+- [x] Rebuild the homeowner dashboard foundation using existing tenant-safe services and bounded read queries.
+- [x] Add `/portal/soa` as the homeowner statement route backed by the shared SOA view model.
+- [x] Gate quick actions and navigation by module entitlement.
+- [x] Add neutral PWA manifest metadata without offline caching of private tenant or homeowner financial data.
+- [x] Keep Prisma schema, migrations, finance calculations, payment logic, receipt logic, and SOA calculations unchanged.
+
+### Release Gate
+
+- [ ] Complete Product Owner UAT at 360px, 390px, 430px, tablet, and desktop widths.
+- [ ] Verify homeowner login, dashboard, profile, pay, SOA, receipts, documents, announcements, events, chat, tenant branding, tenant isolation, and admin/finance regressions.
+- [ ] Defer deeper native/offline behavior, richer push notifications, and full feature redesigns to Sprint 6B.

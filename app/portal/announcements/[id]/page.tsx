@@ -8,9 +8,9 @@ import { shortDate } from "@/lib/utils";
 import { ContentImage } from "@/components/content-image";
 
 export default async function PortalAnnouncementDetailPage({ params }: { params: Promise<{ id: string }> }) {
-  await requireHomeownerProfile();
+  const profile = await requireHomeownerProfile();
   const { id } = await params;
-  const announcement = await prisma.announcement.findFirst({ where: { id, status: "PUBLISHED" }, include: { createdBy: true } });
+  const announcement = await prisma.announcement.findFirst({ where: { id, tenantId: profile.tenantId, status: "PUBLISHED" }, include: { createdBy: true } });
   if (!announcement) notFound();
 
   return <>

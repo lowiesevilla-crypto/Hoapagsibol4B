@@ -1882,3 +1882,65 @@ Delivery Criteria:
 Release Gate:
 - Product Owner must verify the homeowner portal at 360px, 390px, 430px, tablet, and desktop widths before Sprint 6A is approved.
 - Sprint 6B remains responsible for deeper feature redesigns, offline strategy, and expanded native-app behaviors.
+## Bug #062 – Available Document Type Cannot Be Requested
+
+Module:
+Homeowner Document Requests
+
+Priority:
+Critical
+
+Status:
+Open
+
+Problem:
+A homeowner can select Certificate of Residency and enter the purpose and remarks, but submission fails with:
+
+`This document type is currently unavailable`
+
+Expected Behavior:
+A document type displayed as selectable must be available for submission for the authenticated tenant.
+
+Acceptance Criteria:
+- Only active tenant document types appear in the homeowner request form.
+- Certificate of Residency can be requested when enabled.
+- Purpose and remarks are saved.
+- Request is created for the logged-in homeowner only.
+- Request belongs to the authenticated tenant.
+- Disabled document types are hidden or clearly marked unavailable.
+- No cross-tenant document templates or fees are exposed.
+- Mobile submission works.
+- Clear success and failure messages are displayed.
+
+---
+
+## Improvement #063 – Configurable Free or Paid Document Requests
+
+Module:
+Document Requests and Tenant Settings
+
+Priority:
+High
+
+Status:
+Open
+
+Business Requirement:
+Each tenant must be able to define whether a document type is free or paid and configure its fee.
+
+Example:
+- Certificate of Residency
+- Fee: PHP 150
+- Another tenant may configure the same certificate as free
+
+Acceptance Criteria:
+- Each document type has a tenant-scoped fee configuration.
+- Fee may be zero.
+- Admin can mark a document as free or paid.
+- Homeowner sees the fee before submission.
+- Request records preserve the fee snapshot at the time of request.
+- Paid requests show payment status.
+- Free requests do not require payment.
+- Approval workflow works for free and paid requests.
+- Tenant isolation is enforced.
+- Existing document requests remain unchanged.

@@ -697,3 +697,31 @@ Implementation is planned through the shared pagination component to benefit all
 ## Release Gate
 
 - Product Owner UAT remains pending for 360px, 390px, 430px, tablet, desktop, two-tenant branding isolation, homeowner login, dashboard, profile, payments, SOA, documents, announcements, events, chat, and desktop admin regression.
+## Sprint 6A Product Owner UAT
+
+Status:
+Conditional Pass
+
+Passed:
+- Mobile homeowner shell
+- Tenant branding
+- Bottom navigation
+- Responsive layouts
+- Portal dashboard
+- Profile
+- Payments
+- SOA
+- Announcements
+- Events
+- Chat
+- Vehicles
+- PWA foundation
+- Tenant isolation
+- No console errors
+
+Blocked:
+- Certificate of Residency request fails as unavailable
+- Tenant-configurable free or paid document fee is not yet available
+
+Decision:
+Do not merge Sprint 6A into develop until Bug #062 is resolved. Improvement #063 may be implemented in the same document-request hotfix.

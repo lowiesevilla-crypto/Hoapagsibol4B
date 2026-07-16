@@ -412,13 +412,18 @@ export async function saveDocumentDefinitionAction(formData: FormData) {
   const existingByCode = await prisma.documentDefinition.findFirst({ where: { tenantId: admin.tenantId, code, ...(id ? { id: { not: id } } : {}) }, select: { id: true } });
   if (existingByCode) fail("A document definition with this code already exists for this tenant.");
   const workflowPreset = String(formData.get("workflowPreset") || "FREE_APPROVAL");
-  const workflow = workflowFieldsForPreset(workflowPreset);
+  const workflowFields = workflowFieldsForPreset(workflowPreset);
+  if (!workflowFields) fail("Select a valid workflow.");
+  const workflow = workflowFields!;
   let feeAmount = "0.00";
   try {
     feeAmount = decimalFromForm(formData.get("feeAmount"));
   } catch (error) {
     fail(error instanceof Error ? error.message : "Enter a valid fee amount.");
   }
+  if (!workflow.paymentRequired && Number(feeAmount) !== 0) fail("Free workflows must have a zero fee.");
+  if (workflow.paymentRequired && Number(feeAmount) <= 0) fail("Paid workflows require a fee greater than zero.");
+  if (!workflow.paymentRequired) feeAmount = "0.00";
   const numberingFormat = String(formData.get("numberingFormat") || defaultNumberingFormat(code)).trim();
   const numbering = validateNumberingFormat(numberingFormat);
   if (!numbering.valid) fail(numbering.errors[0]);

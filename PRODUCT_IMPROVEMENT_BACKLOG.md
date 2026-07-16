@@ -2956,3 +2956,10 @@ Acceptance Criteria:
 - Clear explanatory text is shown beside the workflow.
 - Existing valid definitions remain unchanged.
 - Tenant isolation and RBAC remain enforced.
+
+Workflow Configuration Hotfix Engineering Note:
+- Document Definition workflow presets now derive payment requirement, approval requirement, payment timing, immediate download, and admin review flags server-side.
+- Free and Request Only workflows save with zero fee; paid workflows require a fee greater than zero.
+- The edit UI disables Fee Amount for non-paid workflows, requires it for paid workflows, and displays workflow-specific helper text.
+- Completeness validation now marks existing workflow/fee or workflow/flag mismatches as incomplete until edited.
+- Status remains Open until Product Owner UAT passes.

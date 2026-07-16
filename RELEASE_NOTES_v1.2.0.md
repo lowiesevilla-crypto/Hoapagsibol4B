@@ -411,3 +411,16 @@ Status: Engineering ready for Product Owner UAT.
 
 Release gate:
 - Bugs #091-#093 remain open until Product Owner UAT passes.
+
+# Document Workflow Configuration Hotfix
+
+Status: Engineering ready for Product Owner UAT.
+
+- Made Document Definition workflow presets the authoritative source for payment required, approval required, payment timing, immediate download, and admin review behavior.
+- Updated the definition edit UI so free/manual workflows disable Fee Amount and paid workflows require a positive fee.
+- Added workflow-specific explanation text for tenant admins.
+- Added server-side validation for invalid workflow strings and paid workflows without a positive fee.
+- Added completeness validation for existing workflow/fee and workflow/flag mismatches so inconsistent definitions are not requestable.
+
+Release gate:
+- Bug #096 remains open until Product Owner UAT passes.

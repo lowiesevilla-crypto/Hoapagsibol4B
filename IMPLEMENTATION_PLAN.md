@@ -366,3 +366,17 @@ Introduce the additive database foundation required for tenant-created documents
 - [x] Preserved legacy purpose behavior for enum/configuration-backed requests.
 - [x] Added `scripts/verify-document-field-validation-hotfix.ts`.
 - [ ] Keep Bugs #091-#093 open until Product Owner UAT passes.
+
+## Document Workflow Configuration Hotfix – Bug #096
+
+### Implementation Status
+
+- [x] Made the business workflow preset authoritative for payment, approval, timing, immediate-download, and admin-review flags.
+- [x] Disabled and zeroed Fee Amount for Free + Instant, Free + Approval, and Request Only.
+- [x] Required positive Fee Amount for Paid + Instant and Paid + Approval.
+- [x] Added workflow-specific explanation text in the Document Definition edit UI.
+- [x] Added server-side rejection for invalid workflow strings and paid workflows without a positive fee.
+- [x] Added completeness validation for workflow/fee and workflow/flag mismatches.
+- [x] Preserved Request Only as manual `SUBMITTED` status preparation.
+- [x] Added `scripts/verify-document-workflow-preset-hotfix.ts`.
+- [ ] Keep Bug #096 open until Product Owner UAT passes.

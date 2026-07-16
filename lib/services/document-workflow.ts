@@ -98,8 +98,8 @@ export function statusForConfiguration(config: Pick<DocumentTypeConfiguration, "
   if (config.paymentRequired || config.deliveryMode === DocumentDeliveryMode.PAYMENT_REQUIRED || config.deliveryMode === DocumentDeliveryMode.PAYMENT_AND_APPROVAL_REQUIRED) {
     return DocumentRequestStatus.PAYMENT_PENDING;
   }
-  if (config.approvalRequired || config.requiresAdminReview || config.deliveryMode === DocumentDeliveryMode.APPROVAL_REQUIRED) return DocumentRequestStatus.PENDING_APPROVAL;
   if (config.deliveryMode === DocumentDeliveryMode.REQUEST_ONLY) return DocumentRequestStatus.SUBMITTED;
+  if (config.approvalRequired || config.requiresAdminReview || config.deliveryMode === DocumentDeliveryMode.APPROVAL_REQUIRED) return DocumentRequestStatus.PENDING_APPROVAL;
   if (config.deliveryMode === DocumentDeliveryMode.INSTANT_DOWNLOAD && config.allowImmediateDownload) return DocumentRequestStatus.READY_FOR_DOWNLOAD;
   return DocumentRequestStatus.SUBMITTED;
 }

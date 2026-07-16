@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { DocumentDefinitionStatus, DocumentSequenceScope, DocumentType } from "@prisma/client";
 import { DocumentDefinitionFieldBuilder } from "@/components/document-definition-field-builder";
+import { DocumentDefinitionWorkflowControls } from "@/components/document-definition-workflow-controls";
 import { PageHeader } from "@/components/page-header";
 import { PaginationFocusTarget } from "@/components/pagination-focus";
 import { SubmitButton } from "@/components/ui";
@@ -86,8 +87,7 @@ function DefinitionForm({ definition, officers }: { definition: Awaited<ReturnTy
     <Field label="Category"><input className="field" name="category" defaultValue={definition?.category || ""} placeholder="Certificate" /></Field>
     <Field label="Display order"><input className="field" name="displayOrder" type="number" defaultValue={definition?.displayOrder ?? 0} /></Field>
     <div className="md:col-span-2 xl:col-span-4"><label className="label">Description</label><textarea className="field min-h-20" name="description" defaultValue={definition?.description || ""} /></div>
-    <Field label="Workflow"><select className="field" name="workflowPreset" defaultValue={definition ? workflowPresetForDefinition(definition) : "FREE_APPROVAL"}><option value="FREE_INSTANT">Free + Instant</option><option value="FREE_APPROVAL">Free + Approval</option><option value="PAID_INSTANT">Paid + Instant</option><option value="PAID_APPROVAL">Paid + Approval</option><option value="REQUEST_ONLY">Request Only</option></select></Field>
-    <Field label="Fee amount"><input className="field" name="feeAmount" type="number" min={0} step="0.01" defaultValue={Number(definition?.feeAmount ?? 0).toFixed(2)} /></Field>
+    <DocumentDefinitionWorkflowControls defaultPreset={definition ? workflowPresetForDefinition(definition) : "FREE_APPROVAL"} defaultFeeAmount={Number(definition?.feeAmount ?? 0).toFixed(2)} />
     <Field label="Currency"><input className="field" name="currency" defaultValue={definition?.currency || "PHP"} /></Field>
     <Field label="Finance classification"><input className="field" name="financeClassification" defaultValue={definition?.financeClassification || ""} /></Field>
     <Field label="Numbering format"><input className="field" name="numberingFormat" defaultValue={definition?.numberingFormat || defaultNumberingFormat(code || "DOC")} /></Field>

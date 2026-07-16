@@ -12,6 +12,7 @@ import {
 import { platformPrisma } from "@/lib/db";
 import { validateTemplateDefinition } from "@/lib/services/document-template-builder";
 import { defaultNumberingFormat, validateNumberingFormat } from "@/lib/services/document-numbering";
+import { workflowFieldsForPreset, workflowPresetForDeliveryMode } from "@/lib/services/document-workflow-presets";
 
 export const documentDefinitionInclude = {
   fields: {
@@ -142,9 +143,16 @@ export function evaluateDefinitionCompleteness(definition: DocumentDefinition & 
   if (status === "INACTIVE") errors.push("Definition is inactive.");
   if (!definition.code.trim()) errors.push("Code is required.");
   if (!definition.displayName.trim()) errors.push("Display name is required.");
-  if (definition.paymentRequired && Number(definition.feeAmount) <= 0) errors.push("Payment-required definitions must have a fee greater than zero.");
-  if (!definition.paymentRequired && Number(definition.feeAmount) > 0) warnings.push("A non-zero fee is configured while paymentRequired is off.");
-  if (definition.deliveryMode === DocumentDeliveryMode.INSTANT_DOWNLOAD && definition.approvalRequired) errors.push("Instant-download definitions cannot require approval.");
+  const expectedWorkflow = workflowFieldsForPreset(workflowPresetForDeliveryMode(definition.deliveryMode));
+  if (expectedWorkflow) {
+    if (expectedWorkflow.paymentRequired && Number(definition.feeAmount) <= 0) errors.push("Paid workflows require a fee greater than zero.");
+    if (!expectedWorkflow.paymentRequired && Number(definition.feeAmount) !== 0) errors.push("Free workflows must have a zero fee.");
+    if (definition.paymentRequired !== expectedWorkflow.paymentRequired) errors.push("Payment requirement does not match the selected workflow.");
+    if (definition.approvalRequired !== expectedWorkflow.approvalRequired) errors.push("Approval requirement does not match the selected workflow.");
+    if (definition.paymentBeforeApproval !== expectedWorkflow.paymentBeforeApproval) errors.push("Payment timing does not match the selected workflow.");
+    if (definition.allowImmediateDownload !== expectedWorkflow.allowImmediateDownload) errors.push("Immediate download setting does not match the selected workflow.");
+    if (definition.requiresAdminReview !== expectedWorkflow.requiresAdminReview) errors.push("Admin review setting does not match the selected workflow.");
+  }
   if (definition.maxCopies < 1 || definition.maxCopies > 25) errors.push("Maximum copies must be between 1 and 25.");
   if (definition.validityDays != null && definition.validityDays < 1) errors.push("Validity days must be blank or greater than zero.");
   const numbering = validateNumberingFormat(definition.numberingFormat);
@@ -196,21 +204,6 @@ export function workflowPresetForDefinition(definition: Pick<DocumentDefinition,
   return "FREE_INSTANT";
 }
 
-export function workflowFieldsForPreset(preset: string) {
-  switch (preset) {
-    case "FREE_INSTANT":
-      return { deliveryMode: DocumentDeliveryMode.INSTANT_DOWNLOAD, paymentRequired: false, approvalRequired: false, requiresAdminReview: false, allowImmediateDownload: true, paymentBeforeApproval: false };
-    case "PAID_INSTANT":
-      return { deliveryMode: DocumentDeliveryMode.PAYMENT_REQUIRED, paymentRequired: true, approvalRequired: false, requiresAdminReview: false, allowImmediateDownload: false, paymentBeforeApproval: true };
-    case "PAID_APPROVAL":
-      return { deliveryMode: DocumentDeliveryMode.PAYMENT_AND_APPROVAL_REQUIRED, paymentRequired: true, approvalRequired: true, requiresAdminReview: true, allowImmediateDownload: false, paymentBeforeApproval: true };
-    case "REQUEST_ONLY":
-      return { deliveryMode: DocumentDeliveryMode.REQUEST_ONLY, paymentRequired: false, approvalRequired: false, requiresAdminReview: false, allowImmediateDownload: false, paymentBeforeApproval: false };
-    case "FREE_APPROVAL":
-    default:
-      return { deliveryMode: DocumentDeliveryMode.APPROVAL_REQUIRED, paymentRequired: false, approvalRequired: true, requiresAdminReview: true, allowImmediateDownload: false, paymentBeforeApproval: false };
-  }
-}
-
 export const documentSequenceScopeOptions = Object.values(DocumentSequenceScope);
 export { defaultNumberingFormat, validateNumberingFormat };
+export { documentWorkflowPresetValues, isDocumentWorkflowPreset, workflowFieldsForPreset, workflowPresetForDeliveryMode, type DocumentWorkflowPreset } from "@/lib/services/document-workflow-presets";

@@ -954,3 +954,18 @@ Approved direction:
 - Paid workflows require a positive fee.
 - Approval and payment flags are derived from the selected workflow.
 - The UI must prevent contradictory configuration.
+
+# 2026-07-16 - Document Workflow Configuration Hotfix
+
+## Engineering Ready for Product Owner UAT
+
+- Fixed Bug #096 by making Document Definition workflow presets authoritative for payment requirement, approval requirement, payment timing, immediate download, and admin review flags.
+- Added workflow-aware Fee Amount UI behavior: non-paid workflows submit zero fee and disable the fee input; paid workflows require a positive fee.
+- Added workflow explanation text for Free + Instant, Free + Approval, Paid + Instant, Paid + Approval, and Request Only.
+- Server-side save validation rejects invalid workflow strings and paid workflows with zero or negative fees; non-paid workflows normalize to zero fee.
+- Completeness validation now blocks requestability when existing definitions have workflow/fee or workflow/flag mismatches.
+- Added `scripts/verify-document-workflow-preset-hotfix.ts`.
+
+## Release Gate
+
+- Bug #096 remains open until Product Owner UAT passes.

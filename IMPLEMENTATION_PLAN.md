@@ -272,3 +272,30 @@ Transform HOAHub Documents into a fully configurable tenant-owned platform.
 ### Exit Criteria
 
 Sprint 6B-1 may be approved only after Product Owner UAT confirms that a tenant can create and publish a custom document definition without code deployment.
+## Sprint 6B-1A – Document Definition Schema Migration
+
+### Objective
+
+Introduce the additive database foundation required for tenant-created documents, versioned templates, definition-specific numbering, and secure QR verification.
+
+### Scope
+
+- Add `DocumentDefinition`
+- Add `DocumentDefinitionField`
+- Add `DocumentTemplateSet`
+- Add `DocumentTemplateVersion`
+- Add `DocumentDefinitionCounter`
+- Add `DocumentVerificationToken`
+- Add nullable compatibility links to existing document models
+- Backfill system definitions for all existing tenants and legacy document types
+- Preserve legacy enum fields
+- Verify no historical data changes
+
+### Excluded
+
+- Visual template editor UI
+- Walk-in document issuance
+- Document payment integration
+- Release acknowledgment
+- Full QR verification UI
+- Removal of the legacy enum

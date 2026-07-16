@@ -857,3 +857,39 @@ Migration `20260712150000_payment_allocations_single_receipt` made `Payment.bill
 |----------|------|-------------|
 | 1.0 | July 11, 2026 | Initial Database Design |
 | 1.1 | July 12, 2026 | Added Payment header and tenant-safe PaymentAllocation architecture |
+## Enterprise Document Definition Migration
+
+### Decision
+
+The current `DocumentType` enum architecture is retained temporarily for backward compatibility but will no longer be the primary source of document behavior.
+
+A new tenant-owned `DocumentDefinition` aggregate will become the authoritative model for future document configuration and processing.
+
+### Migration Strategy
+
+The migration must be additive and phased:
+
+1. Add new definition, template-version, numbering, and verification models.
+2. Create one definition for every existing tenant and legacy document type.
+3. Link existing configurations and templates to their definitions.
+4. Link existing requests where ownership can be determined safely.
+5. Preserve all legacy enum fields and historical snapshots.
+6. Move new requests and generation workflows to `definitionId`.
+7. Remove legacy enum dependencies only in a future cleanup release.
+
+No existing document number, generated document, request snapshot, template snapshot, or workflow outcome may be rewritten.
+
+### New Models
+
+- `DocumentDefinition`
+- `DocumentDefinitionField`
+- `DocumentTemplateSet`
+- `DocumentTemplateVersion`
+- `DocumentDefinitionCounter`
+- `DocumentVerificationToken`
+
+### Compatibility
+
+Existing records remain readable through legacy fields and immutable snapshots.
+
+New records use tenant-owned definitions and published template versions.

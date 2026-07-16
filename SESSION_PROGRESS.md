@@ -856,3 +856,14 @@ Approved scope:
 Implementation rule:
 
 Codex must first review the current enum-based schema. If it cannot safely support custom document definitions, Codex must stop and provide an additive migration and backfill proposal before implementation.
+## Enterprise Document Definition Architecture Review
+
+Codex confirmed that the existing `DocumentType` enum architecture cannot safely support custom tenant-created documents.
+
+Approved direction:
+
+- Add a tenant-owned `DocumentDefinition` aggregate.
+- Retain legacy enum fields for compatibility.
+- Use additive migration and backfill.
+- Preserve all existing requests, generated documents, numbers, templates, and snapshots.
+- Move new workflows gradually to definition-based processing.

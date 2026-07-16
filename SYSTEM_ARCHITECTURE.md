@@ -746,3 +746,27 @@ It owns or references:
 Document requests and generated documents store immutable snapshots of the definition and published template version used at the time of processing.
 
 The platform must not use another tenant's definition, template, signatory, fee, numbering sequence, or workflow as a fallback.
+## Document Platform Transitional Architecture
+
+During migration, HOAHub will support two document paths:
+
+### Legacy Compatibility Path
+
+Used for existing requests and generated documents:
+
+- `DocumentType`
+- legacy template fields
+- stored request snapshots
+- stored generated content
+
+### Document Definition Path
+
+Used for new document configuration and future requests:
+
+- tenant-owned `DocumentDefinition`
+- versioned `DocumentTemplateVersion`
+- `DocumentDefinitionCounter`
+- secure `DocumentVerificationToken`
+- immutable definition and template snapshots
+
+The system must prefer stored snapshots for historical documents and must never regenerate historical content using current configuration.

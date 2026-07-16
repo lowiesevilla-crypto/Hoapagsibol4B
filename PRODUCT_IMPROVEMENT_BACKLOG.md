@@ -2389,3 +2389,6 @@ Acceptance Criteria:
 - Tenant isolation remains enforced.
 - No Prisma validation errors.
 - No partial update remains after a failed transaction.
+
+Engineering Update:
+Patched the document review, rejection, approval/generation, and instant generation write paths to validate tenant ownership with the tenant-scoped client, then perform atomic base-client transactions with `where: { id }`. Edit audit and history rows are now created as explicit transactional child writes instead of nested `create` payloads on `documentRequest.update()`. Bug #079 remains Open until Product Owner UAT passes.

@@ -794,3 +794,19 @@ Observed Error:
 
 Release Decision:
 Do not approve the Sprint 6A document workflow until Bug #079 passes Product Owner UAT.
+
+# 2026-07-16 - Sprint 6A Document Review and Approval Hotfix
+
+## Engineering Ready for Product Owner UAT
+
+- Fixed Bug #079 by removing tenant-scoped nested audit/history creates from document review and approval update calls.
+- Confirmed generated Prisma nested checked inputs require `actor` relation for nested `create`; scalar `actorId` is accepted in unchecked/createMany or top-level child writes.
+- Kept tenant-scoped request loading and added explicit validation for homeowner, configuration, template, and officer tenant ownership before base-client writes.
+- Moved review, rejection, approval/generation, document version, workflow history, edit audit, and audit log writes into atomic base-client transactions.
+- Added server-side authorization for outstanding-balance download overrides and preserved the required override reason.
+- Verified the review/audit/approval write shape with a rollback harness; no test rows remained.
+
+## Release Gate
+
+- Product Owner UAT remains pending.
+- Do not mark Bug #079 complete until Save Preview, Approve and Generate, balance override, tenant isolation, and mobile/homeowner regression checks pass locally.

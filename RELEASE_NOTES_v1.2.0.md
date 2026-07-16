@@ -320,3 +320,17 @@ Known limitations:
 - Custom tenant document types are not enabled in this hotfix because the current schema is still `DocumentType` enum-bound. An additive tenant catalog migration and backfill are required first.
 - Draft/published visual template storage and the full editor route remain a dedicated follow-up sprint.
 - Bug #074 and Improvements #075-#078 must not be marked complete until Product Owner UAT passes.
+
+---
+
+# Sprint 6A Hotfix - Document Review and Approval Writes
+
+Status: Engineering ready for Product Owner UAT.
+
+- Fixed document Save Preview, rejection, approval, and generation writes that failed when nested audit/history records used scalar `actorId` under tenant-scoped Prisma update calls.
+- Moved review, approval/generation, edit audit, workflow history, document version, and audit log writes into base-client transactions after explicit tenant validation.
+- Preserved reviewed snapshots, original request snapshots, generated document snapshots, template version snapshots, and document history.
+- Added server-side authorization for outstanding-balance download overrides.
+
+Known limitations:
+- Bug #079 remains pending until Product Owner UAT confirms Save Preview, Approve and Generate, balance override, tenant isolation, and homeowner document regressions.

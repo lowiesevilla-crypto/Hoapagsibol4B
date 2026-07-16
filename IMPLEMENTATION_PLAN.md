@@ -196,3 +196,21 @@ Prepare the finance migration and SOA finalization for product-owner review befo
 
 - [ ] Product Owner UAT for Bug #074 and Improvements #075-#078.
 - [ ] Next migration sprint must add tenant document catalog records, template draft/published version storage, and compatibility backfill before custom document types or full visual editing are enabled.
+
+## Sprint 6A - Document Review and Approval Hotfix
+
+### Engineering Scope
+
+- [x] Confirm generated Prisma API for `DocumentRequestEditAudit` and `DocumentRequestHistory` actor fields.
+- [x] Keep tenant-scoped request loading and explicit tenant ownership checks before mutation.
+- [x] Replace nested audit/history creates inside `documentRequest.update()` with base-client transactional child writes.
+- [x] Preserve reviewed data snapshots, field-level edit audits, request histories, document version snapshots, generated content snapshots, and audit logs.
+- [x] Keep approval/generation document-number allocation inside the same transaction.
+- [x] Require an authorized role and reason for outstanding-balance download override.
+- [x] Verify the write shape with a rollback harness that leaves no temporary records.
+
+### Release Gate
+
+- [ ] Product Owner UAT for Bug #079.
+- [ ] Verify Save Preview, Approve and Generate, rejection, balance override, tenant isolation, and homeowner document regressions.
+- [ ] Do not mark Bug #079 complete until Product Owner UAT passes.

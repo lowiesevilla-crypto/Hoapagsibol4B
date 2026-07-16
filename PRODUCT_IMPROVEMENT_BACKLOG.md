@@ -2169,3 +2169,82 @@ Acceptance Criteria:
 - Version increments correctly.
 - No Prisma validation errors.
 - Tenant isolation remains enforced.
+## Bug #074 – Active Document Configuration Cannot Resolve Active Template
+
+Module:
+Tenant Document Configuration and Homeowner Requests
+
+Priority:
+Critical
+
+Status:
+Open
+
+Problem:
+Certificate of Residency is active and visible to the homeowner, and an active template exists in the Test HOA Document Templates page. However, submission fails with:
+
+`This document type is currently unavailable because its template is inactive or missing.`
+
+Expected Behavior:
+An active tenant document configuration linked to an active tenant template must allow homeowner request submission.
+
+Acceptance Criteria:
+- DocumentTypeConfiguration is linked to the correct active template.
+- Configuration and template belong to the same tenant.
+- Configuration and template use the same document type.
+- Active template is resolved consistently by admin configuration and homeowner request flows.
+- If no template is linked, the admin page clearly requires template selection before activation.
+- A document type with missing or inactive template must not appear as requestable.
+- Certificate of Residency submission succeeds when the configuration and template are valid.
+- Purpose and remarks persist.
+- Request enters the configured workflow status.
+- No cross-tenant template fallback occurs.
+
+---
+
+## Improvement #075 – Clearly Label Household Member Birth Date
+
+Module:
+Household Member Management
+
+Priority:
+Medium
+
+Status:
+Open
+
+Problem:
+The household-member date field is not clearly identified. Users cannot determine whether it represents date of birth, registration date, or another date.
+
+Acceptance Criteria:
+- Label the field clearly as `Date of Birth`.
+- Add optional explanatory helper text.
+- Use an appropriate date input.
+- Preserve existing birthDate values.
+- Do not confuse system-created or registration dates with birth date.
+- Mobile layout remains usable.
+
+---
+
+## Improvement #076 – Edit Registered Household Members
+
+Module:
+Household Member Management
+
+Priority:
+High
+
+Status:
+Open
+
+Problem:
+After adding a household member, the homeowner or authorized administrator cannot edit the record.
+
+Acceptance Criteria:
+- Authorized homeowner may edit household members linked to their own account.
+- Authorized admin may edit household members within their tenant.
+- Editable fields include name, relationship, birth date, civil status, nationality, address, and active status.
+- Tenant and homeowner ownership are validated server-side.
+- Changes do not alter snapshots already stored in submitted or generated document requests.
+- Edit history is auditable where required.
+- Mobile and desktop workflows pass.

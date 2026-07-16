@@ -303,3 +303,20 @@ Status: Engineering ready for Product Owner UAT.
 Known limitations:
 - Sprint 6A does not create accounting entries for paid documents. Fee/payment snapshots are stored and download remains blocked until Sprint 6B finance integration confirms payment.
 - Bug #062 and Improvements #063-#066 remain pending until Product Owner UAT passes.
+
+---
+
+# Sprint 6A Hotfix - Document Platform Foundation
+
+Status: Engineering ready for Product Owner UAT.
+
+- Fixed document request availability so only complete tenant configurations with active linked same-tenant matching templates appear in homeowner request forms.
+- Added admin completeness labels for document configurations.
+- Added Date of Birth labeling and helper text for household/family members.
+- Added homeowner and admin household-member editing while preserving immutable request/generated snapshots.
+- Added a safe block-template schema foundation with allowlisted placeholders and QR verification placeholder support.
+
+Known limitations:
+- Custom tenant document types are not enabled in this hotfix because the current schema is still `DocumentType` enum-bound. An additive tenant catalog migration and backfill are required first.
+- Draft/published visual template storage and the full editor route remain a dedicated follow-up sprint.
+- Bug #074 and Improvements #075-#078 must not be marked complete until Product Owner UAT passes.

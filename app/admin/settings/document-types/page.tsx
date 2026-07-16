@@ -5,7 +5,7 @@ import { SubmitButton } from "@/components/ui";
 import { saveDocumentTypeConfigurationAction } from "@/lib/actions/documents";
 import { requireUser } from "@/lib/auth";
 import { prisma } from "@/lib/db";
-import { getTenantDocumentConfigurations } from "@/lib/services/document-workflow";
+import { documentConfigurationStatus, getTenantDocumentConfigurations } from "@/lib/services/document-workflow";
 import { documentTypeLabel } from "@/lib/services/documents";
 import { money } from "@/lib/utils";
 
@@ -25,6 +25,7 @@ export default async function DocumentTypesSettingsPage({ searchParams }: { sear
       {configs.map((config) => {
         const fieldsJson = JSON.stringify(config.fields.map((field) => ({ key: field.key, label: field.label, fieldType: field.fieldType, required: field.required, options: field.options ?? undefined, active: field.active })), null, 2);
         const matchingTemplates = templates.filter((template) => template.type === config.type);
+        const status = documentConfigurationStatus(config);
         return <form key={config.id} action={saveDocumentTypeConfigurationAction} className="card">
           <input type="hidden" name="id" value={config.id} />
           <div className="mb-5 flex flex-col justify-between gap-3 lg:flex-row lg:items-start">
@@ -32,6 +33,7 @@ export default async function DocumentTypesSettingsPage({ searchParams }: { sear
               <p className="text-xs font-black uppercase tracking-[.16em] text-pine-700">{documentTypeLabel(config.type)}</p>
               <h2 className="text-xl font-black">{config.displayName}</h2>
               <p className="text-sm text-slate-500">Current version {config.version} | Fee {money(Number(config.feeAmount))} | {config.deliveryMode.replaceAll("_", " ")}</p>
+              <p className={`mt-2 inline-flex rounded-full px-3 py-1 text-xs font-black ${status.requestable ? "bg-emerald-100 text-emerald-800" : "bg-amber-100 text-amber-900"}`}>{status.label}</p>
             </div>
             <label className="flex min-h-11 items-center gap-2 rounded-xl border px-3 text-sm font-bold"><input type="checkbox" name="active" defaultChecked={config.active} /> Active</label>
           </div>

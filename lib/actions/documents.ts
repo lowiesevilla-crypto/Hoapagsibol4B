@@ -10,7 +10,7 @@ import { platformPrisma, prisma } from "@/lib/db";
 import { getAssociationSettings } from "@/lib/system-settings";
 import { asJson, getActiveOrganizationOfficers, officerSnapshot } from "@/lib/organization";
 import { allocateDocumentNumber, documentTypeOptions, renderDocumentTemplate } from "@/lib/services/documents";
-import { buildSubjectSnapshot, canGenerateWithoutPayment, legacyRequestFields, needsTemplate, parseConfiguredFields, requestDataSnapshotJson, statusForConfiguration, subjectSnapshotJson } from "@/lib/services/document-workflow";
+import { buildSubjectSnapshot, canGenerateWithoutPayment, documentConfigurationStatus, legacyRequestFields, needsTemplate, parseConfiguredFields, requestDataSnapshotJson, statusForConfiguration, subjectSnapshotJson } from "@/lib/services/document-workflow";
 import { money, shortDate } from "@/lib/utils";
 import { sendEmailNotification } from "@/lib/services/notifications";
 
@@ -34,7 +34,8 @@ export async function submitDocumentRequestAction(formData: FormData) {
   const homeownerRecord = homeowner!;
   const configRecord = config!;
   if (numberOfCopies > configRecord.maxCopies) fail(`This document allows up to ${configRecord.maxCopies} copy${configRecord.maxCopies === 1 ? "" : "ies"} per request.`);
-  if (needsTemplate(configRecord) && !configRecord.template?.active) fail("This document type is currently unavailable because its template is inactive or missing.");
+  const availability = documentConfigurationStatus(configRecord);
+  if (!availability.requestable) fail(`This document type is currently unavailable: ${availability.label}.`);
   if (!canGenerateWithoutPayment(configRecord) && configRecord.deliveryMode === DocumentDeliveryMode.INSTANT_DOWNLOAD) fail("This paid document requires payment confirmation before download.");
 
   const member = subjectType === DocumentSubjectType.HOUSEHOLD_MEMBER
@@ -357,25 +358,54 @@ export async function saveHouseholdMemberAction(formData: FormData) {
   const relationship = String(formData.get("relationship") || "").trim();
   if (fullName.length < 2 || relationship.length < 2) redirect("/portal/documents?error=Enter%20the%20household%20member%27s%20name%20and%20relationship.");
   const data = {
-    tenantId: user.tenantId,
-    homeownerId,
     fullName,
     relationship,
     birthDate: optionalDate(formData.get("birthDate")),
     civilStatus: clean(formData.get("civilStatus")),
     nationality: clean(formData.get("nationality")),
     address: clean(formData.get("address")),
-    active: formData.get("active") !== "off",
+    active: id ? formData.get("active") === "on" : true,
   };
   if (id) {
     const existing = await prisma.householdMember.findFirst({ where: { id, tenantId: user.tenantId, homeownerId } });
     if (!existing) redirect("/portal/documents?error=Household%20member%20not%20found.");
-    await prisma.householdMember.update({ where: { id }, data });
+    await platformPrisma.householdMember.update({ where: { id }, data });
   } else {
-    await prisma.householdMember.create({ data });
+    await prisma.householdMember.create({ data: { ...data, tenantId: user.tenantId, homeownerId } });
   }
   revalidatePath("/portal/documents");
   redirect("/portal/documents?success=member&message=Household%20member%20saved.");
+}
+
+export async function saveAdminHouseholdMemberAction(formData: FormData) {
+  const admin = await requireUser(Role.ADMIN);
+  const homeownerId = String(formData.get("homeownerId") || "");
+  const id = String(formData.get("id") || "");
+  const fail = (message: string): never => redirect(`/admin/homeowners/${homeownerId}?error=${encodeURIComponent(message)}`);
+  if (!homeownerId || !id) fail("Household member not found.");
+  const [homeowner, member] = await Promise.all([
+    prisma.homeownerProfile.findFirst({ where: { id: homeownerId, tenantId: admin.tenantId }, select: { id: true } }),
+    prisma.householdMember.findFirst({ where: { id, tenantId: admin.tenantId, homeownerId } }),
+  ]);
+  if (!homeowner || !member) fail("Household member not found for this tenant.");
+  const fullName = String(formData.get("fullName") || "").trim();
+  const relationship = String(formData.get("relationship") || "").trim();
+  if (fullName.length < 2 || relationship.length < 2) fail("Enter the household member's name and relationship.");
+  await platformPrisma.householdMember.update({
+    where: { id },
+    data: {
+      fullName,
+      relationship,
+      birthDate: optionalDate(formData.get("birthDate")),
+      civilStatus: clean(formData.get("civilStatus")),
+      nationality: clean(formData.get("nationality")),
+      address: clean(formData.get("address")),
+      active: formData.get("active") === "on",
+    },
+  });
+  revalidatePath(`/admin/homeowners/${homeownerId}`);
+  revalidatePath("/portal/documents");
+  redirect(`/admin/homeowners/${homeownerId}?success=household&message=Household%20member%20saved.`);
 }
 
 export async function toggleHouseholdMemberAction(formData: FormData) {
@@ -385,7 +415,7 @@ export async function toggleHouseholdMemberAction(formData: FormData) {
   if (!homeownerId || !id) redirect("/portal/documents?error=Household%20member%20not%20found.");
   const member = await prisma.householdMember.findFirst({ where: { id, tenantId: user.tenantId, homeownerId } });
   if (!member) redirect("/portal/documents?error=Household%20member%20not%20found.");
-  await prisma.householdMember.update({ where: { id }, data: { active: !member.active } });
+  await platformPrisma.householdMember.update({ where: { id }, data: { active: !member.active } });
   revalidatePath("/portal/documents");
   redirect("/portal/documents?success=member&message=Household%20member%20status%20updated.");
 }

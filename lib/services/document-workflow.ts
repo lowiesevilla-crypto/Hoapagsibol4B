@@ -5,6 +5,7 @@ import {
   DocumentFieldType,
   DocumentRequestStatus,
   DocumentSubjectType,
+  type DocumentTemplate,
   type DocumentFieldConfiguration,
   type DocumentTypeConfiguration,
   type HomeownerProfile,
@@ -18,8 +19,15 @@ import { money } from "@/lib/utils";
 
 export type DocumentConfigurationWithFields = DocumentTypeConfiguration & {
   fields: DocumentFieldConfiguration[];
-  template: { id: string; title: string; version: number; active: boolean } | null;
+  template: Pick<DocumentTemplate, "id" | "tenantId" | "type" | "title" | "version" | "active"> | null;
 };
+
+export type DocumentConfigurationStatus =
+  | "COMPLETE"
+  | "INACTIVE"
+  | "MISSING_TEMPLATE"
+  | "INVALID_TEMPLATE"
+  | "DRAFT_ONLY";
 
 export type RequestSubjectSnapshot = {
   type: DocumentSubjectType;
@@ -47,9 +55,23 @@ const deliveryDescriptions: Record<DocumentDeliveryMode, string> = {
 export async function getTenantDocumentConfigurations(tenantId: string, activeOnly = false) {
   return prisma.documentTypeConfiguration.findMany({
     where: { tenantId, ...(activeOnly ? { active: true } : {}) },
-    include: { fields: { where: { active: true }, orderBy: [{ displayOrder: "asc" }, { label: "asc" }] }, template: { select: { id: true, title: true, version: true, active: true } } },
+    include: { fields: { where: { active: true }, orderBy: [{ displayOrder: "asc" }, { label: "asc" }] }, template: { select: { id: true, tenantId: true, type: true, title: true, version: true, active: true } } },
     orderBy: [{ displayName: "asc" }],
   });
+}
+
+export async function getRequestableTenantDocumentConfigurations(tenantId: string) {
+  const configurations = await getTenantDocumentConfigurations(tenantId, true);
+  return configurations.filter((config) => documentConfigurationStatus(config).status === "COMPLETE");
+}
+
+export function documentConfigurationStatus(config: DocumentConfigurationWithFields): { status: DocumentConfigurationStatus; label: string; requestable: boolean } {
+  if (!config.active) return { status: "INACTIVE", label: "Inactive", requestable: false };
+  if (needsTemplate(config) && !config.templateId) return { status: "MISSING_TEMPLATE", label: "Missing template", requestable: false };
+  if (needsTemplate(config) && !config.template) return { status: "MISSING_TEMPLATE", label: "Missing template", requestable: false };
+  if (config.template && (config.template.tenantId !== config.tenantId || config.template.type !== config.type)) return { status: "INVALID_TEMPLATE", label: "Invalid template", requestable: false };
+  if (config.template && !config.template.active) return { status: "DRAFT_ONLY", label: "Draft only", requestable: false };
+  return { status: "COMPLETE", label: "Complete", requestable: true };
 }
 
 export function deliveryModeDescription(mode: DocumentDeliveryMode) {

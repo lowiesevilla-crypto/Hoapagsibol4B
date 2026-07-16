@@ -179,3 +179,20 @@ Prepare the finance migration and SOA finalization for product-owner review befo
 - [ ] Complete Product Owner UAT for Bug #062 and Improvements #063-#066.
 - [ ] Verify free instant download, paid download blocking, approval-only, paid-and-approved blocking, request-only, tenant-specific configuration differences, admin edit audit, and mobile workflow.
 - [ ] Do not mark Bug #062 or Improvements #063-#066 complete until Product Owner UAT passes.
+
+## Sprint 6A - Document Platform Hotfix and Foundation
+
+### Engineering Scope
+
+- [x] Centralize document configuration availability and use it for homeowner request catalog filtering.
+- [x] Treat missing `templateId`, inactive templates, mismatched tenant/type, and inactive configurations as incomplete.
+- [x] Keep template assignment same-tenant and same-type only.
+- [x] Label household `birthDate` as Date of Birth with helper text.
+- [x] Allow homeowner and admin editing of scoped household-member fields without changing tenantId/homeownerId or historical snapshots.
+- [x] Add allowlisted visual-template block schema foundation.
+- [x] Document why custom tenant document types require an additive catalog migration before implementation.
+
+### Release Gate
+
+- [ ] Product Owner UAT for Bug #074 and Improvements #075-#078.
+- [ ] Next migration sprint must add tenant document catalog records, template draft/published version storage, and compatibility backfill before custom document types or full visual editing are enabled.

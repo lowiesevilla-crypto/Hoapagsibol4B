@@ -318,3 +318,18 @@ Changing Test HOA document settings, household members, templates, or request da
 | Version | Date | Description |
 |----------|------|-------------|
 | 1.2 | July 15, 2026 | Added tenant-scoped document configuration, household subject, and snapshot rules |
+
+## 19. Document Template Availability Rules
+
+Authenticated document configuration reads must use the user's tenant ID explicitly. A configuration is homeowner-requestable only when:
+
+1. the document type/configuration is active;
+2. a required template is linked through `templateId`;
+3. the linked template belongs to the same tenant;
+4. the linked template matches the configuration's system document type;
+5. the linked template is active/usable;
+6. required workflow and field settings are valid.
+
+The portal must not fall back to another tenant's template or infer a requestable template from display name alone. Admin screens may show incomplete configurations, but homeowner request forms must show only complete configurations.
+
+Future custom document catalog records must keep `code` unique per tenant only. System-seeded and custom tenant-created records must be read, edited, archived, and assigned to templates within the authenticated tenant boundary.

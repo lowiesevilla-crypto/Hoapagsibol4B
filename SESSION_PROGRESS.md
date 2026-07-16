@@ -753,3 +753,20 @@ New requirements identified during Product Owner review:
 - Template components must support editable branding, layout, colors, header, footer, body, signatory, and QR verification.
 - Existing generated documents must remain tied to the template version used at issuance.
 - The current hotfix will establish the safe foundation, while advanced visual editing may be completed in a dedicated follow-up sprint.
+
+# 2026-07-16 - Sprint 6A Document Platform Hotfix
+
+## Engineering Ready for Product Owner UAT
+
+- Fixed Bug #074 by centralizing document configuration availability and hiding incomplete configurations from homeowner request forms.
+- Added admin completeness labels: Complete, Missing template, Invalid template, Draft only, and Inactive.
+- Kept template assignment tenant/type validated; no cross-tenant template fallback was introduced.
+- Updated household Date of Birth labels and helper text.
+- Added homeowner and admin household-member editing with immutable tenantId/homeownerId and preserved request/generated snapshots.
+- Added safe block-template foundation with allowlisted blocks/placeholders and no arbitrary HTML/script execution.
+- Confirmed true custom tenant document types require an additive catalog migration because current records are enum-bound.
+
+## Release Gate
+
+- Product Owner UAT remains pending.
+- Do not mark Bug #074 or Improvements #075-#078 complete until Product Owner UAT passes.

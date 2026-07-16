@@ -717,3 +717,11 @@ Security constraints:
 | Version | Date | Description |
 |----------|------|-------------|
 | 1.4 | July 15, 2026 | Documented Sprint 6A homeowner mobile shell, shared components, PWA foundation, and security constraints |
+
+## 30. Document Template and Catalog Foundation
+
+Sprint 6A hotfix centralizes document configuration availability in `lib/services/document-workflow.ts`. A homeowner-requestable document configuration must be active, have a linked same-tenant matching-type template when generation is required, and the linked template must be active. Missing `templateId`, inactive templates, mismatched tenant/type, and inactive configurations are treated as incomplete and are hidden from homeowner request forms.
+
+The current schema remains enum-based through `DocumentType` on `DocumentTemplate`, `DocumentTypeConfiguration`, and `DocumentRequest`. True tenant-created custom document types require an additive catalog migration before implementation. The proposed catalog is a tenant-owned record with code, display name, description, system/legacy mapping, active/configurable/archive state, display order, and audit user fields. Existing enum records should be backfilled into catalog rows and linked through nullable compatibility fields while historical enum values and snapshots remain unchanged.
+
+Visual template editing is represented as a safe block schema foundation in `lib/services/document-template-builder.ts`: A4 portrait, allowlisted block types, allowlisted placeholders, no scripts, and deterministic validation. Draft/published storage, version tables, editor routes, and shared generated-document rendering require the next additive template-version migration.

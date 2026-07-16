@@ -2200,6 +2200,9 @@ Acceptance Criteria:
 - Request enters the configured workflow status.
 - No cross-tenant template fallback occurs.
 
+Engineering Update:
+Centralized availability validation now marks configurations as Complete, Missing template, Invalid template, Draft only, or Inactive. Homeowner request forms use only Complete configurations.
+
 ---
 
 ## Improvement #075 – Clearly Label Household Member Birth Date
@@ -2223,6 +2226,9 @@ Acceptance Criteria:
 - Preserve existing birthDate values.
 - Do not confuse system-created or registration dates with birth date.
 - Mobile layout remains usable.
+
+Engineering Update:
+Date fields in homeowner/admin household-member forms are labeled `Date of Birth` and include optional-use helper text.
 
 ---
 
@@ -2248,6 +2254,10 @@ Acceptance Criteria:
 - Changes do not alter snapshots already stored in submitted or generated document requests.
 - Edit history is auditable where required.
 - Mobile and desktop workflows pass.
+
+Engineering Update:
+Homeowner and admin edit forms now update only editable household-member fields after tenant/homeowner validation. Existing request snapshots remain unchanged.
+
 ## Improvement #077 – Create Custom Tenant Document Types
 
 Module:
@@ -2272,6 +2282,9 @@ Acceptance Criteria:
 - Existing default document types remain supported.
 - Tenant isolation and RBAC are enforced.
 - No code deployment is required to add a new tenant document type.
+
+Engineering Update:
+Current schema remains enum-bound, so this requires an additive tenant document catalog migration before implementation. Proposed compatibility strategy is documented in architecture notes.
 
 ---
 
@@ -2330,3 +2343,6 @@ Acceptance Criteria:
 - Published documents retain their original template version.
 - Draft and published template states are supported.
 - Tenant isolation and RBAC are enforced.
+
+Engineering Update:
+Added a safe block-template definition foundation with allowlisted blocks/placeholders and QR verification placeholder support. Draft/published storage and full editor route require the next additive template-version migration.

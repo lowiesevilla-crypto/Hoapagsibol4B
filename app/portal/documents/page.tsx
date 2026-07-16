@@ -5,7 +5,7 @@ import { DocumentRequestForm } from "@/components/document-request-form";
 import { saveHouseholdMemberAction, toggleHouseholdMemberAction } from "@/lib/actions/documents";
 import { requireUser } from "@/lib/auth";
 import { prisma } from "@/lib/db";
-import { configuredDocumentSummary, getTenantDocumentConfigurations, isReadyForDownload } from "@/lib/services/document-workflow";
+import { configuredDocumentSummary, getRequestableTenantDocumentConfigurations, isReadyForDownload } from "@/lib/services/document-workflow";
 import { documentTypeLabel } from "@/lib/services/documents";
 import { getPaymentSettings } from "@/lib/system-settings";
 import { money, shortDate } from "@/lib/utils";
@@ -21,7 +21,7 @@ export default async function PortalDocumentsPage({ searchParams }: { searchPara
     prisma.documentRequest.count({ where }),
     prisma.bill.aggregate({ where: { tenantId: user.tenantId, homeownerId, archivedAt: null, balance: { gt: 0 } }, _sum: { balance: true } }),
     getPaymentSettings(user.tenantId),
-    getTenantDocumentConfigurations(user.tenantId, true),
+    getRequestableTenantDocumentConfigurations(user.tenantId),
     prisma.householdMember.findMany({ where: { tenantId: user.tenantId, homeownerId }, orderBy: [{ active: "desc" }, { fullName: "asc" }] }),
   ]);
   const unpaidBalance = Number(unpaid._sum.balance ?? 0);
@@ -54,14 +54,14 @@ export default async function PortalDocumentsPage({ searchParams }: { searchPara
           <form action={saveHouseholdMemberAction} className="grid gap-3 md:grid-cols-2">
             <input className="field" name="fullName" placeholder="Full name" required />
             <input className="field" name="relationship" placeholder="Relationship" required />
-            <input className="field" name="birthDate" type="date" aria-label="Birth date" />
+            <label><span className="label">Date of Birth</span><input className="field" name="birthDate" type="date" /><span className="mt-1 block text-xs text-slate-500">Optional. Used only when required by the selected document type.</span></label>
             <input className="field" name="civilStatus" placeholder="Civil status" />
             <input className="field" name="nationality" placeholder="Nationality" />
             <input className="field md:col-span-2" name="address" placeholder="Address, if different from property address" />
             <button className="btn-secondary md:col-span-2">Add household member</button>
           </form>
           <div className="mt-4 space-y-2">
-            {members.length === 0 ? <p className="rounded-xl bg-slate-50 p-4 text-sm text-slate-500">No household members registered yet.</p> : members.map((member) => <div key={member.id} className="flex flex-col justify-between gap-2 rounded-xl bg-slate-50 p-3 text-sm sm:flex-row sm:items-center"><div><b>{member.fullName}</b><p className="text-xs text-slate-500">{member.relationship}{member.active ? "" : " | Inactive"}</p></div><form action={toggleHouseholdMemberAction}><input type="hidden" name="id" value={member.id} /><button className="btn-secondary min-h-9 px-3 py-1.5 text-xs">{member.active ? "Deactivate" : "Activate"}</button></form></div>)}
+            {members.length === 0 ? <p className="rounded-xl bg-slate-50 p-4 text-sm text-slate-500">No household members registered yet.</p> : members.map((member) => <details key={member.id} className="rounded-xl bg-slate-50 p-3 text-sm"><summary className="cursor-pointer font-bold">{member.fullName} <span className="text-xs font-normal text-slate-500">- {member.relationship}{member.active ? "" : " | Inactive"}</span></summary><form action={saveHouseholdMemberAction} className="mt-3 grid gap-3 md:grid-cols-2"><input type="hidden" name="id" value={member.id} /><input className="field" name="fullName" defaultValue={member.fullName} required /><input className="field" name="relationship" defaultValue={member.relationship} required /><label><span className="label">Date of Birth</span><input className="field" name="birthDate" type="date" defaultValue={member.birthDate?.toISOString().slice(0, 10)} /><span className="mt-1 block text-xs text-slate-500">Optional. Used only when required by the selected document type.</span></label><input className="field" name="civilStatus" defaultValue={member.civilStatus || ""} placeholder="Civil status" /><input className="field" name="nationality" defaultValue={member.nationality || ""} placeholder="Nationality" /><input className="field" name="address" defaultValue={member.address || ""} placeholder="Address" /><label className="flex min-h-11 items-center gap-2 rounded-xl border px-3 text-sm font-bold"><input type="checkbox" name="active" defaultChecked={member.active} /> Active</label><button className="btn-secondary">Save member</button></form><form action={toggleHouseholdMemberAction} className="mt-2"><input type="hidden" name="id" value={member.id} /><button className="btn-secondary min-h-9 px-3 py-1.5 text-xs">{member.active ? "Deactivate" : "Activate"}</button></form></details>)}
           </div>
         </section>
       </div>

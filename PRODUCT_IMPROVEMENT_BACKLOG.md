@@ -2392,3 +2392,32 @@ Acceptance Criteria:
 
 Engineering Update:
 Patched the document review, rejection, approval/generation, and instant generation write paths to validate tenant ownership with the tenant-scoped client, then perform atomic base-client transactions with `where: { id }`. Edit audit and history rows are now created as explicit transactional child writes instead of nested `create` payloads on `documentRequest.update()`. Bug #079 remains Open until Product Owner UAT passes.
+
+## Improvement #080 – Distinguish Admin Download from Homeowner Download
+
+Module:
+Document Requests / Download Tracking
+
+Priority:
+Medium
+
+Status:
+Open
+
+Problem:
+When an HOA administrator downloads a generated document, the request is marked as downloaded on the homeowner side.
+
+Expected Behavior:
+Admin preview/download activity must not be treated as homeowner receipt or homeowner download.
+
+Acceptance Criteria:
+- Track admin download separately from homeowner download.
+- Preserve `READY_FOR_DOWNLOAD` status after an admin download.
+- Set homeowner `DOWNLOADED` status only when the authorized homeowner downloads the document.
+- Store separate timestamps where practical:
+  - adminDownloadedAt
+  - homeownerDownloadedAt
+- Store the downloading actor.
+- Repeated admin downloads do not change homeowner status.
+- Homeowner history clearly shows when the homeowner actually downloaded the document.
+- Tenant isolation and ownership checks remain enforced.

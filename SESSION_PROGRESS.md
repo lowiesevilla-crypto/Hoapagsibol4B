@@ -810,3 +810,26 @@ Do not approve the Sprint 6A document workflow until Bug #079 passes Product Own
 
 - Product Owner UAT remains pending.
 - Do not mark Bug #079 complete until Save Preview, Approve and Generate, balance override, tenant isolation, and mobile/homeowner regression checks pass locally.
+## Bug #079 Product Owner Retest
+
+Status: PASS
+
+Validated:
+- Save Preview
+- UNDER_REVIEW transition
+- Reviewed data persistence
+- Officer selection
+- Field-level audit records
+- Review history
+- Approval and generation
+- Document number generation
+- READY_FOR_DOWNLOAD transition
+- Reviewed values in generated content
+- Outstanding-balance override
+- Homeowner download access
+- No duplicate generation
+- Tenant isolation
+- No console errors
+
+Additional Improvement:
+Improvement #080 – Admin downloads must be tracked separately from homeowner downloads.

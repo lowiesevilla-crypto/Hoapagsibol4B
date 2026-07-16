@@ -2792,3 +2792,89 @@ Sprint 6B-1B Final Hotfix Engineering Note:
 - Generation uses `DocumentDefinitionCounter` and the definition numbering format for custom definitions; legacy requests continue using `DocumentCounter`.
 - Historical request count, generated-content fingerprint, and document-number fingerprint remained unchanged after migration.
 - Status remains Open until Product Owner UAT passes.
+## Bug #091 – Dynamic Field Constraints Are Not Enforced Correctly
+
+Module:
+Custom Document Request Form
+
+Priority:
+Critical
+
+Status:
+Open
+
+Problem:
+Configured dynamic-field constraints are not consistently enforced in the homeowner form.
+
+Observed:
+- Numeric minimum and maximum rules fail.
+- Text minimum-length and maximum-length rules fail.
+- The UI allows values outside the configured constraints.
+
+Clarification:
+- `Minimum` and `Maximum` apply to NUMBER and MONEY fields.
+- `Minimum Length` and `Maximum Length` apply to TEXT and TEXTAREA fields.
+- A NUMBER field such as Years of Residency should use numeric minimum/maximum, not text length.
+
+Acceptance Criteria:
+- NUMBER and MONEY enforce minimum and maximum values.
+- TEXT and TEXTAREA enforce minimum and maximum length.
+- Client and server validation use the same normalized field rules.
+- Invalid values show field-specific messages.
+- Invalid requests cannot be submitted by bypassing browser validation.
+- Valid values persist in the request snapshot.
+## Bug #092 – SELECT Field Has No Usable Options
+
+Module:
+Custom Document Request Form
+
+Priority:
+Critical
+
+Status:
+Open
+
+Problem:
+A SELECT dynamic field appears in the homeowner request form, but the dropdown contains no usable values.
+
+Expected Behavior:
+Configured options such as Dog, Cat, and Bird must appear as selectable values.
+
+Acceptance Criteria:
+- Options stored as strings or `{ label, value }` objects are normalized.
+- Dropdown displays every active configured option.
+- Placeholder option is clearly shown.
+- Required SELECT cannot remain empty.
+- Submitted value must match the configured allowlist.
+- Selected value persists in the request snapshot.
+## Bug #093 – Hidden Legacy Purpose Requirement Blocks Custom Requests
+
+Module:
+Custom Document Requests
+
+Priority:
+Critical
+
+Status:
+Open
+
+Problem:
+Submitting a custom document request fails with:
+
+`Enter the purpose of the request.`
+
+However, no Purpose field is displayed in the custom request form.
+
+Root Cause Suspected:
+The request action still enforces the legacy `purpose` property even when the custom Document Definition does not expose or require a field mapped to purpose.
+
+Expected Behavior:
+Custom requests must be validated exclusively from their active DocumentDefinitionFields and workflow rules.
+
+Acceptance Criteria:
+- If the definition includes an active required purpose field, display and require it.
+- If the definition does not require purpose, submission must not enforce the legacy purpose field.
+- Legacy enum-backed requests retain their existing purpose behavior.
+- No hidden required fields.
+- Dynamic field values map consistently to request snapshots.
+- Custom request submits successfully.

@@ -97,7 +97,7 @@ export function isReadyForDownload(status: DocumentRequestStatus | string) {
   return status === DocumentRequestStatus.READY_FOR_DOWNLOAD || status === DocumentRequestStatus.GENERATED || status === DocumentRequestStatus.DOWNLOADED;
 }
 
-export function parseConfiguredFields(formData: FormData, fields: DocumentFieldConfiguration[]) {
+export function parseConfiguredFields(formData: FormData, fields: Array<Pick<DocumentFieldConfiguration, "key" | "label" | "fieldType" | "required">>) {
   const values: Record<string, string | boolean> = {};
   const errors: string[] = [];
   for (const field of fields) {

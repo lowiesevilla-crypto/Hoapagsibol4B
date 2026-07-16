@@ -309,3 +309,19 @@ Introduce the additive database foundation required for tenant-created documents
 - [x] Added `lib/services/document-definitions.ts` compatibility resolvers.
 - [x] Added `scripts/verify-document-definition-migration.ts` local verification harness.
 - [ ] Keep Improvements #081-#083 open until Product Owner UAT validates custom definition management, versioned templates, and requestability validation.
+
+## Sprint 6B-1B – Document Definition Catalog and Template Publishing
+
+### Implementation Status
+
+- [x] Added `/admin/settings/document-definitions` catalog with create, edit, duplicate, activate, deactivate, archive, search, filter, sort, pagination, completeness, requestability, workflow, fee, numbering, signatory, visibility, and dynamic field configuration.
+- [x] Added `/admin/settings/document-definitions/[id]/templates` for template-set/version history, draft creation, duplication, publishing, and retiring.
+- [x] Added `/admin/settings/document-definitions/[id]/templates/[versionId]/edit` structured block editor with A4 preview, block add/remove/reorder, placeholder selection, draft save, and publish.
+- [x] Added authoritative completeness and numbering validation services.
+- [x] Updated homeowner document requests to prefer complete active definition-backed request options.
+- [x] Preserved legacy enum/configuration compatibility for historical requests and generated documents.
+- [ ] Keep Improvements #081-#083 open until Product Owner UAT passes.
+
+### Known Limitation
+
+`DocumentRequest.type` remains a required legacy enum field for compatibility. Definition-backed homeowner submissions therefore require a `legacyType` bridge until a later additive cleanup makes enumless custom request records safe end-to-end.

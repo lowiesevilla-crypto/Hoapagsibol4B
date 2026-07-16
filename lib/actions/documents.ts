@@ -1,7 +1,7 @@
 "use server";
 
 import { randomUUID } from "node:crypto";
-import { DocumentDeliveryMode, DocumentFieldType, DocumentRequestStatus, DocumentSubjectType, DocumentType, NotificationType, Prisma, Role } from "@prisma/client";
+import { DocumentDefinitionStatus, DocumentDeliveryMode, DocumentFieldType, DocumentRequestStatus, DocumentSequenceScope, DocumentSubjectType, DocumentTemplateVersionStatus, DocumentType, NotificationType, Prisma, Role } from "@prisma/client";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { requireUser } from "@/lib/auth";
@@ -11,6 +11,8 @@ import { getAssociationSettings } from "@/lib/system-settings";
 import { asJson, getActiveOrganizationOfficers, officerSnapshot } from "@/lib/organization";
 import { allocateDocumentNumber, documentTypeOptions, renderDocumentTemplate } from "@/lib/services/documents";
 import { buildSubjectSnapshot, canGenerateWithoutPayment, documentConfigurationStatus, legacyRequestFields, needsTemplate, parseConfiguredFields, requestDataSnapshotJson, statusForConfiguration, subjectSnapshotJson } from "@/lib/services/document-workflow";
+import { defaultNumberingFormat, evaluateDefinitionCompleteness, validateNumberingFormat, workflowFieldsForPreset } from "@/lib/services/document-definitions";
+import { defaultTemplateDefinition, documentTemplateBlockTypes, normalizeTemplateDefinition, validateTemplateDefinition, type AllowedDocumentPlaceholder, type DocumentTemplateBlock, type DocumentTemplateBlockType } from "@/lib/services/document-template-builder";
 import { money, shortDate } from "@/lib/utils";
 import { sendEmailNotification } from "@/lib/services/notifications";
 
@@ -18,6 +20,7 @@ export async function submitDocumentRequestAction(formData: FormData) {
   const user = await requireUser(Role.HOMEOWNER);
   const homeownerId = user.homeownerProfile?.id;
   if (!homeownerId) redirect("/portal/documents?error=Homeowner%20profile%20not%20found.");
+  const definitionId = clean(formData.get("definitionId"));
   const configurationId = String(formData.get("configurationId") || "");
   const subjectType = String(formData.get("subjectType") || DocumentSubjectType.SELF) === DocumentSubjectType.HOUSEHOLD_MEMBER ? DocumentSubjectType.HOUSEHOLD_MEMBER : DocumentSubjectType.SELF;
   const subjectMemberId = clean(formData.get("subjectMemberId"));
@@ -25,24 +28,42 @@ export async function submitDocumentRequestAction(formData: FormData) {
   const fail = (message: string): never => redirect(`/portal/documents?error=${encodeURIComponent(message)}`);
   const [homeowner, config] = await Promise.all([
     prisma.homeownerProfile.findFirst({ where: { id: homeownerId, tenantId: user.tenantId }, include: { user: true } }),
-    prisma.documentTypeConfiguration.findFirst({
-      where: { id: configurationId, tenantId: user.tenantId, active: true },
-      include: { fields: { where: { active: true }, orderBy: [{ displayOrder: "asc" }, { label: "asc" }] }, template: true },
-    }),
+    definitionId
+      ? prisma.documentTypeConfiguration.findFirst({
+          where: { tenantId: user.tenantId, definitionId, active: true },
+          include: { fields: { where: { active: true }, orderBy: [{ displayOrder: "asc" }, { label: "asc" }] }, template: true },
+        })
+      : prisma.documentTypeConfiguration.findFirst({
+          where: { id: configurationId, tenantId: user.tenantId, active: true },
+          include: { fields: { where: { active: true }, orderBy: [{ displayOrder: "asc" }, { label: "asc" }] }, template: true },
+        }),
   ]);
-  if (!homeowner || !config) fail(!homeowner ? "Homeowner profile not found." : "Select an active document type.");
+  const definition = definitionId ? await prisma.documentDefinition.findFirst({
+    where: { id: definitionId, tenantId: user.tenantId, active: true, status: DocumentDefinitionStatus.ACTIVE, archivedAt: null },
+    include: { fields: { where: { active: true }, orderBy: [{ displayOrder: "asc" }, { label: "asc" }] }, assignedTemplateVersion: { include: { templateSet: true } } },
+  }) : null;
+  if (!homeowner || (!config && !definition)) fail(!homeowner ? "Homeowner profile not found." : "Select an active document type.");
   const homeownerRecord = homeowner!;
-  const configRecord = config!;
-  if (numberOfCopies > configRecord.maxCopies) fail(`This document allows up to ${configRecord.maxCopies} copy${configRecord.maxCopies === 1 ? "" : "ies"} per request.`);
-  const availability = documentConfigurationStatus(configRecord);
-  if (!availability.requestable) fail(`This document type is currently unavailable: ${availability.label}.`);
-  if (!canGenerateWithoutPayment(configRecord) && configRecord.deliveryMode === DocumentDeliveryMode.INSTANT_DOWNLOAD) fail("This paid document requires payment confirmation before download.");
+  const configRecord = config;
+  const definitionRecord = definition!;
+  if (definitionRecord && !definitionRecord.legacyType) fail("This custom document definition is not yet requestable until legacy enum cleanup is completed.");
+  const maxCopies = definitionRecord?.maxCopies ?? configRecord!.maxCopies;
+  if (numberOfCopies > maxCopies) fail(`This document allows up to ${maxCopies} copy${maxCopies === 1 ? "" : "ies"} per request.`);
+  if (definitionRecord) {
+    const availability = evaluateDefinitionCompleteness(definitionRecord);
+    if (!availability.requestable) fail(`This document type is currently unavailable: ${availability.errors[0] || availability.status}.`);
+  } else {
+    const availability = documentConfigurationStatus(configRecord!);
+    if (!availability.requestable) fail(`This document type is currently unavailable: ${availability.label}.`);
+  }
+  const workflowRecord = definitionRecord ?? configRecord!;
+  if (!canGenerateWithoutPayment(workflowRecord) && workflowRecord.deliveryMode === DocumentDeliveryMode.INSTANT_DOWNLOAD) fail("This paid document requires payment confirmation before download.");
 
   const member = subjectType === DocumentSubjectType.HOUSEHOLD_MEMBER
     ? await prisma.householdMember.findFirst({ where: { id: subjectMemberId, tenantId: user.tenantId, homeownerId, active: true } })
     : null;
   if (subjectType === DocumentSubjectType.HOUSEHOLD_MEMBER && !member) fail("Select a registered household or family member linked to your account.");
-  const parsed = parseConfiguredFields(formData, configRecord.fields);
+  const parsed = parseConfiguredFields(formData, definitionRecord?.fields ?? configRecord!.fields);
   if (parsed.errors.length) fail(parsed.errors[0]);
   const legacy = legacyRequestFields(parsed.values);
   const purpose = legacy.purpose?.trim();
@@ -52,26 +73,32 @@ export async function submitDocumentRequestAction(formData: FormData) {
   const purposeValue = purpose ?? "";
   if (purposeValue.length > 500 || (remarks?.length ?? 0) > 1000) fail("Request details are too long.");
   if (scheduledDate && scheduledDate < todayUtc()) fail("Pass and validity dates must be today or later.");
-  if (configRecord.type === DocumentType.MOVE_IN_OUT_PASS && legacy.passType && !["MOVE_IN", "MOVE_OUT"].includes(legacy.passType)) fail("Select Move In or Move Out.");
+  const legacyType = definitionRecord?.legacyType ?? configRecord!.type;
+  if (legacyType === DocumentType.MOVE_IN_OUT_PASS && legacy.passType && !["MOVE_IN", "MOVE_OUT"].includes(legacy.passType)) fail("Select Move In or Move Out.");
 
   const unpaid = await prisma.bill.aggregate({ where: { tenantId: user.tenantId, homeownerId, archivedAt: null, balance: { gt: 0 } }, _sum: { balance: true } });
   const outstandingBalance = Number(unpaid._sum.balance ?? 0);
-  const status = statusForConfiguration(configRecord);
+  const status = statusForConfiguration(workflowRecord);
   const subjectSnapshot = buildSubjectSnapshot({ subjectType, homeowner: homeownerRecord, member });
-  const requestDataSnapshot = requestDataSnapshotJson(configRecord, parsed.values, numberOfCopies);
+  const requestDataSnapshot = definitionRecord
+    ? asJson({ definitionId: definitionRecord.id, definitionVersion: definitionRecord.version, code: definitionRecord.code, displayName: definitionRecord.displayName, legacyType: definitionRecord.legacyType, fields: parsed.values, numberOfCopies })
+    : requestDataSnapshotJson(configRecord!, parsed.values, numberOfCopies);
   const duplicate = await prisma.documentRequest.findFirst({
-    where: { tenantId: user.tenantId, homeownerId, configurationId: configRecord.id, subjectType, subjectMemberId: member?.id ?? null, purpose: purposeValue, requestedAt: { gte: new Date(Date.now() - 15000) }, archivedAt: null },
+    where: { tenantId: user.tenantId, homeownerId, ...(definitionRecord ? { definitionId: definitionRecord.id } : { configurationId: configRecord!.id }), subjectType, subjectMemberId: member?.id ?? null, purpose: purposeValue, requestedAt: { gte: new Date(Date.now() - 15000) }, archivedAt: null },
     orderBy: { requestedAt: "desc" },
   });
   if (duplicate) redirect(`/portal/documents?success=submitted&message=${encodeURIComponent("Your recent document request is already recorded.")}`);
 
   const request = await prisma.documentRequest.create({
     data: {
-      tenantId: user.tenantId, homeownerId, type: configRecord.type, configurationId: configRecord.id, configurationVersion: configRecord.version,
-      templateIdSnapshot: configRecord.template?.id, templateVersionSnapshot: configRecord.template?.version, subjectType, subjectMemberId: member?.id,
-      subjectSnapshot: subjectSnapshotJson(subjectSnapshot), requestDataSnapshot, deliveryModeSnapshot: configRecord.deliveryMode,
-      approvalRequiredSnapshot: configRecord.approvalRequired || configRecord.requiresAdminReview, paymentRequiredSnapshot: configRecord.paymentRequired,
-      feeAmountSnapshot: configRecord.feeAmount, numberOfCopies, purpose: purposeValue, remarks, scheduledDate, startTime: legacy.startTime, endTime: legacy.endTime,
+      tenantId: user.tenantId, homeownerId, type: legacyType, configurationId: configRecord?.id, configurationVersion: configRecord?.version,
+      definitionId: definitionRecord?.id, definitionVersionSnapshot: definitionRecord?.version,
+      definitionSnapshot: definitionRecord ? asJson({ id: definitionRecord.id, code: definitionRecord.code, displayName: definitionRecord.displayName, version: definitionRecord.version, legacyType: definitionRecord.legacyType, deliveryMode: definitionRecord.deliveryMode, approvalRequired: definitionRecord.approvalRequired, paymentRequired: definitionRecord.paymentRequired, feeAmount: String(definitionRecord.feeAmount), numberingFormat: definitionRecord.numberingFormat }) : undefined,
+      templateVersionIdSnapshot: definitionRecord?.assignedTemplateVersion?.id, templateDefinitionSnapshot: definitionRecord?.assignedTemplateVersion?.definitionJson ?? undefined,
+      templateIdSnapshot: configRecord?.template?.id, templateVersionSnapshot: configRecord?.template?.version, subjectType, subjectMemberId: member?.id,
+      subjectSnapshot: subjectSnapshotJson(subjectSnapshot), requestDataSnapshot, deliveryModeSnapshot: workflowRecord.deliveryMode,
+      approvalRequiredSnapshot: workflowRecord.approvalRequired || workflowRecord.requiresAdminReview, paymentRequiredSnapshot: workflowRecord.paymentRequired,
+      feeAmountSnapshot: workflowRecord.feeAmount, numberOfCopies, purpose: purposeValue, remarks, scheduledDate, startTime: legacy.startTime, endTime: legacy.endTime,
       passType: legacy.passType, origin: "HOMEOWNER", initiatedById: user.id, vehicleDetails: legacy.vehicleDetails, partyName: legacy.partyName,
       contractorDetails: legacy.contractorDetails, representativeName: legacy.representativeName, propertyDetails: legacy.propertyDetails || homeownerRecord.address,
       outstandingBalanceAtRequest: outstandingBalance,
@@ -80,10 +107,10 @@ export async function submitDocumentRequestAction(formData: FormData) {
     },
     include: { homeowner: { include: { user: true } }, configuration: { include: { template: true } } },
   });
-  if (status === DocumentRequestStatus.READY_FOR_DOWNLOAD && configRecord.template?.active) {
+  if (status === DocumentRequestStatus.READY_FOR_DOWNLOAD && (configRecord?.template?.active || definitionRecord?.assignedTemplateVersion)) {
     await generateDocumentForRequest(request.id, user.id, "Instant document generated after valid homeowner submission.");
   }
-  await prisma.auditLog.create({ data: { actorId: user.id, module: "DOCUMENTS", action: "SUBMIT_DOCUMENT_REQUEST", entityType: "DocumentRequest", entityId: request.id, metadata: { type: configRecord.type, configurationId: configRecord.id, subjectType, subjectMemberId: member?.id, purpose: purposeValue, outstandingBalance, deliveryMode: configRecord.deliveryMode, paymentRequired: configRecord.paymentRequired } } });
+  await prisma.auditLog.create({ data: { actorId: user.id, module: "DOCUMENTS", action: "SUBMIT_DOCUMENT_REQUEST", entityType: "DocumentRequest", entityId: request.id, metadata: { type: legacyType, configurationId: configRecord?.id, definitionId: definitionRecord?.id, subjectType, subjectMemberId: member?.id, purpose: purposeValue, outstandingBalance, deliveryMode: workflowRecord.deliveryMode, paymentRequired: workflowRecord.paymentRequired } } });
   revalidateDocumentPages(request.id);
   redirect(`/portal/documents?success=submitted&message=${encodeURIComponent(status === DocumentRequestStatus.READY_FOR_DOWNLOAD ? "Document request submitted and prepared for download." : "Document request submitted successfully.")}`);
 }
@@ -365,6 +392,263 @@ export async function saveDocumentTypeConfigurationAction(formData: FormData) {
   redirect(`/admin/settings/document-types?success=saved&message=${encodeURIComponent(`${displayName} configuration saved.`)}`);
 }
 
+export async function saveDocumentDefinitionAction(formData: FormData) {
+  const admin = await requireUser(Role.ADMIN);
+  const id = clean(formData.get("id"));
+  const fail = (message: string): never => redirect(`/admin/settings/document-definitions?${id ? `edit=${id}&` : ""}error=${encodeURIComponent(message)}`);
+  const code = String(formData.get("code") || "").trim().toUpperCase().replace(/\s+/g, "_");
+  const displayName = String(formData.get("displayName") || "").trim();
+  if (!/^[A-Z][A-Z0-9_-]{1,60}$/.test(code)) fail("Code must start with a letter and use only letters, numbers, underscores, or hyphens.");
+  if (displayName.length < 3) fail("Display name must be at least 3 characters.");
+  const existingByCode = await prisma.documentDefinition.findFirst({ where: { tenantId: admin.tenantId, code, ...(id ? { id: { not: id } } : {}) }, select: { id: true } });
+  if (existingByCode) fail("A document definition with this code already exists for this tenant.");
+  const workflowPreset = String(formData.get("workflowPreset") || "FREE_APPROVAL");
+  const workflow = workflowFieldsForPreset(workflowPreset);
+  let feeAmount = "0.00";
+  try {
+    feeAmount = decimalFromForm(formData.get("feeAmount"));
+  } catch (error) {
+    fail(error instanceof Error ? error.message : "Enter a valid fee amount.");
+  }
+  const numberingFormat = String(formData.get("numberingFormat") || defaultNumberingFormat(code)).trim();
+  const numbering = validateNumberingFormat(numberingFormat);
+  if (!numbering.valid) fail(numbering.errors[0]);
+  const sequenceScope = String(formData.get("sequenceScope") || DocumentSequenceScope.ANNUAL) as DocumentSequenceScope;
+  if (!Object.values(DocumentSequenceScope).includes(sequenceScope)) fail("Select a valid sequence scope.");
+  const legacyTypeValue = clean(formData.get("legacyType")) as DocumentType | undefined;
+  if (legacyTypeValue && !Object.values(DocumentType).includes(legacyTypeValue)) fail("Select a valid legacy compatibility type.");
+  const signatoryOfficerId = clean(formData.get("signatoryOfficerId"));
+  if (signatoryOfficerId) {
+    const officer = await prisma.organizationOfficer.findFirst({ where: { tenantId: admin.tenantId, id: signatoryOfficerId, active: true, archivedAt: null }, select: { id: true } });
+    if (!officer) fail("Select an active tenant officer as signatory.");
+  }
+  const maxCopies = Math.max(1, Math.min(25, Number(formData.get("maxCopies")) || 1));
+  const validityDays = formData.get("validityDays") ? Math.max(1, Number(formData.get("validityDays")) || 0) : null;
+  const data = {
+    code,
+    displayName,
+    description: clean(formData.get("description")),
+    category: clean(formData.get("category")),
+    displayOrder: Number(formData.get("displayOrder")) || 0,
+    active: formData.get("active") === "on",
+    status: formData.get("active") === "on" ? DocumentDefinitionStatus.ACTIVE : DocumentDefinitionStatus.INACTIVE,
+    legacyType: legacyTypeValue,
+    ...workflow,
+    feeAmount,
+    currency: clean(formData.get("currency")) || "PHP",
+    receiptRequired: formData.get("receiptRequired") === "on",
+    financeClassification: clean(formData.get("financeClassification")),
+    allowPayLater: formData.get("allowPayLater") === "on",
+    releaseRequired: formData.get("releaseRequired") === "on",
+    homeownerDownloadEnabled: formData.get("homeownerDownloadEnabled") === "on",
+    walkInEnabled: formData.get("walkInEnabled") === "on",
+    householdMemberEnabled: formData.get("householdMemberEnabled") === "on",
+    manualSubjectEnabled: formData.get("manualSubjectEnabled") === "on",
+    allowRegeneration: formData.get("allowRegeneration") === "on",
+    numberingFormat,
+    sequenceScope,
+    validityDays,
+    maxCopies,
+    qrEnabled: formData.get("qrEnabled") === "on",
+    watermarkEnabled: formData.get("watermarkEnabled") === "on",
+    signatoryOfficerId,
+    updatedById: admin.id,
+  };
+  if (id) {
+    const existing = await prisma.documentDefinition.findFirst({ where: { id, tenantId: admin.tenantId }, select: { id: true, tenantId: true, version: true } });
+    if (!existing) fail("Document definition not found.");
+    await platformPrisma.$transaction([
+      platformPrisma.documentDefinition.update({ where: { id }, data: { ...data, version: { increment: 1 } } }),
+      platformPrisma.auditLog.create({ data: { tenantId: admin.tenantId, actorId: admin.id, module: "DOCUMENTS", action: "UPDATE_DOCUMENT_DEFINITION", entityType: "DocumentDefinition", entityId: id, metadata: { code, workflow: workflowPreset, feeAmount } } }),
+    ]);
+  } else {
+    const definition = await platformPrisma.documentDefinition.create({ data: { ...data, tenantId: admin.tenantId, systemKey: legacyTypeValue ? `CUSTOMIZED_${legacyTypeValue}` : null, createdById: admin.id } });
+    await platformPrisma.auditLog.create({ data: { tenantId: admin.tenantId, actorId: admin.id, module: "DOCUMENTS", action: "CREATE_DOCUMENT_DEFINITION", entityType: "DocumentDefinition", entityId: definition.id, metadata: { code, workflow: workflowPreset, feeAmount } } });
+  }
+  revalidatePath("/admin/settings/document-definitions");
+  revalidatePath("/portal/documents");
+  redirect(`/admin/settings/document-definitions?success=saved&message=${encodeURIComponent(`${displayName} definition saved.`)}`);
+}
+
+export async function changeDocumentDefinitionStatusAction(formData: FormData) {
+  const admin = await requireUser(Role.ADMIN);
+  const id = String(formData.get("id") || "");
+  const operation = String(formData.get("operation") || "");
+  const fail = (message: string): never => redirect(`/admin/settings/document-definitions?error=${encodeURIComponent(message)}`);
+  const definition = await prisma.documentDefinition.findFirst({ where: { id, tenantId: admin.tenantId }, include: { requests: { select: { id: true }, take: 1 }, documentVersions: { select: { id: true }, take: 1 } } });
+  if (!definition) fail("Document definition not found.");
+  const definitionRecord = definition!;
+  const data = operation === "activate"
+    ? { active: true, status: DocumentDefinitionStatus.ACTIVE, archivedAt: null }
+    : operation === "deactivate"
+      ? { active: false, status: DocumentDefinitionStatus.INACTIVE }
+      : operation === "archive"
+        ? { active: false, status: DocumentDefinitionStatus.ARCHIVED, archivedAt: new Date() }
+        : null;
+  if (!data) fail("Select a valid definition action.");
+  await platformPrisma.$transaction([
+    platformPrisma.documentDefinition.update({ where: { id }, data: { ...data, updatedById: admin.id, version: { increment: 1 } } }),
+    platformPrisma.auditLog.create({ data: { tenantId: admin.tenantId, actorId: admin.id, module: "DOCUMENTS", action: `DOCUMENT_DEFINITION_${operation.toUpperCase()}`, entityType: "DocumentDefinition", entityId: id, metadata: { code: definitionRecord.code, hadRequests: definitionRecord.requests.length > 0, hadVersions: definitionRecord.documentVersions.length > 0 } } }),
+  ]);
+  revalidatePath("/admin/settings/document-definitions");
+  revalidatePath("/portal/documents");
+  redirect(`/admin/settings/document-definitions?success=${operation}&message=${encodeURIComponent(`${definitionRecord.displayName} ${operation}d.`)}`);
+}
+
+export async function duplicateDocumentDefinitionAction(formData: FormData) {
+  const admin = await requireUser(Role.ADMIN);
+  const id = String(formData.get("id") || "");
+  const definition = await prisma.documentDefinition.findFirst({ where: { id, tenantId: admin.tenantId }, include: { fields: true } });
+  if (!definition) redirect("/admin/settings/document-definitions?error=Document%20definition%20not%20found.");
+  const definitionRecord = definition!;
+  const code = uniqueCopyCode(definitionRecord.code);
+  const copy = await platformPrisma.$transaction(async (tx) => {
+    const created = await tx.documentDefinition.create({
+      data: {
+        tenantId: admin.tenantId,
+        code,
+        displayName: `${definitionRecord.displayName} Copy`,
+        description: definitionRecord.description,
+        category: definitionRecord.category,
+        status: DocumentDefinitionStatus.DRAFT,
+        active: false,
+        displayOrder: definitionRecord.displayOrder + 1,
+        legacyType: definitionRecord.legacyType,
+        deliveryMode: definitionRecord.deliveryMode,
+        approvalRequired: definitionRecord.approvalRequired,
+        paymentRequired: definitionRecord.paymentRequired,
+        paymentBeforeApproval: definitionRecord.paymentBeforeApproval,
+        allowImmediateDownload: definitionRecord.allowImmediateDownload,
+        requiresAdminReview: definitionRecord.requiresAdminReview,
+        releaseRequired: definitionRecord.releaseRequired,
+        homeownerDownloadEnabled: definitionRecord.homeownerDownloadEnabled,
+        walkInEnabled: definitionRecord.walkInEnabled,
+        householdMemberEnabled: definitionRecord.householdMemberEnabled,
+        manualSubjectEnabled: definitionRecord.manualSubjectEnabled,
+        allowRegeneration: definitionRecord.allowRegeneration,
+        allowPayLater: definitionRecord.allowPayLater,
+        feeAmount: definitionRecord.feeAmount,
+        currency: definitionRecord.currency,
+        receiptRequired: definitionRecord.receiptRequired,
+        financeClassification: definitionRecord.financeClassification,
+        numberingFormat: defaultNumberingFormat(code),
+        sequenceScope: definitionRecord.sequenceScope,
+        validityDays: definitionRecord.validityDays,
+        maxCopies: definitionRecord.maxCopies,
+        qrEnabled: definitionRecord.qrEnabled,
+        watermarkEnabled: definitionRecord.watermarkEnabled,
+        signatoryOfficerId: definitionRecord.signatoryOfficerId,
+        createdById: admin.id,
+        updatedById: admin.id,
+      },
+    });
+    if (definitionRecord.fields.length) {
+      await tx.documentDefinitionField.createMany({ data: definitionRecord.fields.map((field) => ({ tenantId: admin.tenantId, definitionId: created.id, key: field.key, label: field.label, fieldType: field.fieldType, required: field.required, active: field.active, displayOrder: field.displayOrder, options: field.options ?? undefined, validation: field.validation ?? undefined, defaultValue: field.defaultValue ?? undefined })) });
+    }
+    await tx.auditLog.create({ data: { tenantId: admin.tenantId, actorId: admin.id, module: "DOCUMENTS", action: "DUPLICATE_DOCUMENT_DEFINITION", entityType: "DocumentDefinition", entityId: created.id, metadata: { sourceDefinitionId: definitionRecord.id, sourceCode: definitionRecord.code, code } } });
+    return created;
+  });
+  revalidatePath("/admin/settings/document-definitions");
+  redirect(`/admin/settings/document-definitions?edit=${copy.id}&success=duplicated&message=${encodeURIComponent(`${definitionRecord.displayName} duplicated.`)}`);
+}
+
+export async function saveDocumentDefinitionFieldsAction(formData: FormData) {
+  const admin = await requireUser(Role.ADMIN);
+  const definitionId = String(formData.get("definitionId") || "");
+  const fail = (message: string): never => redirect(`/admin/settings/document-definitions?edit=${definitionId}&error=${encodeURIComponent(message)}`);
+  const definition = await prisma.documentDefinition.findFirst({ where: { id: definitionId, tenantId: admin.tenantId }, include: { requests: { select: { id: true }, take: 1 } } });
+  if (!definition) fail("Document definition not found.");
+  const definitionRecord = definition!;
+  let fields: ReturnType<typeof parseFieldsJson> = [];
+  try {
+    fields = parseFieldsJson(String(formData.get("fieldsJson") || "[]"));
+  } catch (error) {
+    fail(error instanceof Error ? error.message : "Field definitions are invalid.");
+  }
+  if (fields.length === 0) fail("At least one field is required.");
+  const duplicateKey = firstDuplicate(fields.map((field) => field.key));
+  if (duplicateKey) fail(`Field key ${duplicateKey} is duplicated.`);
+  if (definitionRecord.requests.length) {
+    const existing = await prisma.documentDefinitionField.findMany({ where: { tenantId: admin.tenantId, definitionId }, select: { key: true } });
+    const existingKeys = new Set(existing.map((field) => field.key));
+    const removed = [...existingKeys].filter((key) => !fields.some((field) => field.key === key));
+    if (removed.length) fail("Field keys cannot be removed after requests exist. Deactivate the field instead.");
+  }
+  await platformPrisma.$transaction([
+    platformPrisma.documentDefinitionField.deleteMany({ where: { tenantId: admin.tenantId, definitionId } }),
+    platformPrisma.documentDefinitionField.createMany({ data: fields.map((field, index) => ({ ...field, tenantId: admin.tenantId, definitionId, displayOrder: index * 10 + 10 })) }),
+    platformPrisma.documentDefinition.update({ where: { id: definitionId }, data: { updatedById: admin.id, version: { increment: 1 } } }),
+    platformPrisma.auditLog.create({ data: { tenantId: admin.tenantId, actorId: admin.id, module: "DOCUMENTS", action: "UPDATE_DOCUMENT_DEFINITION_FIELDS", entityType: "DocumentDefinition", entityId: definitionId, metadata: { fieldCount: fields.length } } }),
+  ]);
+  revalidatePath("/admin/settings/document-definitions");
+  revalidatePath("/portal/documents");
+  redirect(`/admin/settings/document-definitions?edit=${definitionId}&success=fields&message=Definition%20fields%20saved.`);
+}
+
+export async function saveDocumentTemplateVersionAction(formData: FormData) {
+  const admin = await requireUser(Role.ADMIN);
+  const definitionId = String(formData.get("definitionId") || "");
+  const versionId = clean(formData.get("versionId"));
+  const operation = String(formData.get("operation") || "saveDraft");
+  const fail = (message: string): never => redirect(`/admin/settings/document-definitions/${definitionId}/templates${versionId ? `/${versionId}/edit` : ""}?error=${encodeURIComponent(message)}`);
+  const definition = await prisma.documentDefinition.findFirst({ where: { id: definitionId, tenantId: admin.tenantId }, include: { templateSets: { include: { versions: true } } } });
+  if (!definition) fail("Document definition not found.");
+  const definitionRecord = definition!;
+  if (operation === "createSet") {
+    const set = await platformPrisma.$transaction(async (tx) => {
+      const createdSet = await tx.documentTemplateSet.create({ data: { tenantId: admin.tenantId, definitionId, name: `${definitionRecord.displayName} Template`, description: definitionRecord.description, active: true } });
+      const draft = await tx.documentTemplateVersion.create({ data: { tenantId: admin.tenantId, templateSetId: createdSet.id, version: 1, status: DocumentTemplateVersionStatus.DRAFT, schemaVersion: 1, definitionJson: asJson(defaultTemplateDefinition(definitionRecord.displayName)), previewMetadata: asJson({ source: "definition-editor" }), createdById: admin.id } });
+      await tx.auditLog.create({ data: { tenantId: admin.tenantId, actorId: admin.id, module: "DOCUMENTS", action: "CREATE_TEMPLATE_SET", entityType: "DocumentTemplateSet", entityId: createdSet.id, metadata: { definitionId, draftVersionId: draft.id } } });
+      return { createdSet, draft };
+    });
+    redirect(`/admin/settings/document-definitions/${definitionId}/templates/${set.draft.id}/edit?success=created&message=Draft%20template%20created.`);
+  }
+  if (operation === "duplicateVersion") {
+    const sourceId = String(formData.get("sourceVersionId") || "");
+    const source = await prisma.documentTemplateVersion.findFirst({ where: { id: sourceId, tenantId: admin.tenantId, templateSet: { definitionId } }, include: { templateSet: true } });
+    if (!source) fail("Template version not found.");
+    const sourceRecord = source!;
+    const maxVersion = Math.max(0, ...(await prisma.documentTemplateVersion.findMany({ where: { tenantId: admin.tenantId, templateSetId: sourceRecord.templateSetId }, select: { version: true } })).map((item) => item.version));
+    const draft = await platformPrisma.documentTemplateVersion.create({ data: { tenantId: admin.tenantId, templateSetId: sourceRecord.templateSetId, version: maxVersion + 1, status: DocumentTemplateVersionStatus.DRAFT, schemaVersion: sourceRecord.schemaVersion, definitionJson: sourceRecord.definitionJson ?? asJson(defaultTemplateDefinition(definitionRecord.displayName)), previewMetadata: asJson({ duplicatedFrom: sourceRecord.id }), createdById: admin.id } });
+    await platformPrisma.auditLog.create({ data: { tenantId: admin.tenantId, actorId: admin.id, module: "DOCUMENTS", action: "DUPLICATE_TEMPLATE_VERSION", entityType: "DocumentTemplateVersion", entityId: draft.id, metadata: { definitionId, sourceId } } });
+    redirect(`/admin/settings/document-definitions/${definitionId}/templates/${draft.id}/edit?success=duplicated&message=Draft%20version%20created.`);
+  }
+  const current = versionId ? await prisma.documentTemplateVersion.findFirst({ where: { id: versionId, tenantId: admin.tenantId }, include: { templateSet: true } }) : null;
+  if (!current || current.templateSet.definitionId !== definitionId || current.templateSet.tenantId !== admin.tenantId) fail("Template version not found.");
+  const currentRecord = current!;
+  if (operation === "retire") {
+    if (currentRecord.status !== DocumentTemplateVersionStatus.PUBLISHED) fail("Only published versions can be retired.");
+    await platformPrisma.$transaction([
+      platformPrisma.documentTemplateVersion.update({ where: { id: currentRecord.id }, data: { status: DocumentTemplateVersionStatus.RETIRED } }),
+      platformPrisma.auditLog.create({ data: { tenantId: admin.tenantId, actorId: admin.id, module: "DOCUMENTS", action: "RETIRE_TEMPLATE_VERSION", entityType: "DocumentTemplateVersion", entityId: currentRecord.id, metadata: { definitionId, version: currentRecord.version } } }),
+    ]);
+    revalidatePath(`/admin/settings/document-definitions/${definitionId}/templates`);
+    redirect(`/admin/settings/document-definitions/${definitionId}/templates?success=retired&message=Template%20version%20retired.`);
+  }
+  const templateDefinition = templateDefinitionFromForm(formData, definitionRecord.displayName);
+  const validation = validateTemplateDefinition(templateDefinition);
+  if (!validation.valid) fail(validation.errors[0]);
+  if (operation === "publish") {
+    if (currentRecord.status !== DocumentTemplateVersionStatus.DRAFT) fail("Only draft versions can be published.");
+    await platformPrisma.$transaction(async (tx) => {
+      const published = await tx.documentTemplateVersion.update({ where: { id: currentRecord.id }, data: { status: DocumentTemplateVersionStatus.PUBLISHED, definitionJson: asJson(templateDefinition), publishedAt: new Date(), publishedById: admin.id } });
+      await tx.documentDefinition.update({ where: { id: definitionId }, data: { assignedTemplateVersionId: published.id, updatedById: admin.id, version: { increment: 1 } } });
+      await tx.auditLog.create({ data: { tenantId: admin.tenantId, actorId: admin.id, module: "DOCUMENTS", action: "PUBLISH_TEMPLATE_VERSION", entityType: "DocumentTemplateVersion", entityId: currentRecord.id, metadata: { definitionId, version: currentRecord.version } } });
+    });
+    revalidatePath(`/admin/settings/document-definitions/${definitionId}/templates`);
+    revalidatePath("/admin/settings/document-definitions");
+    revalidatePath("/portal/documents");
+    redirect(`/admin/settings/document-definitions/${definitionId}/templates?success=published&message=Template%20version%20published%20and%20assigned.`);
+  }
+  if (currentRecord.status !== DocumentTemplateVersionStatus.DRAFT) fail("Published versions are immutable. Duplicate this version to edit a new draft.");
+  await platformPrisma.$transaction([
+    platformPrisma.documentTemplateVersion.update({ where: { id: currentRecord.id }, data: { definitionJson: asJson(templateDefinition), previewMetadata: asJson({ updatedById: admin.id, updatedAt: new Date().toISOString() }) } }),
+    platformPrisma.auditLog.create({ data: { tenantId: admin.tenantId, actorId: admin.id, module: "DOCUMENTS", action: "SAVE_TEMPLATE_DRAFT", entityType: "DocumentTemplateVersion", entityId: currentRecord.id, metadata: { definitionId, version: currentRecord.version, operation } } }),
+  ]);
+  revalidatePath(`/admin/settings/document-definitions/${definitionId}/templates/${currentRecord.id}/edit`);
+  redirect(`/admin/settings/document-definitions/${definitionId}/templates/${currentRecord.id}/edit?success=saved&message=Draft%20saved.`);
+}
+
 export async function saveHouseholdMemberAction(formData: FormData) {
   const user = await requireUser(Role.HOMEOWNER);
   const homeownerId = user.homeownerProfile?.id;
@@ -507,6 +791,55 @@ function decimalFromForm(value: FormDataEntryValue | null) {
   return amount.toFixed(2);
 }
 
+function firstDuplicate(values: string[]) {
+  const seen = new Set<string>();
+  for (const value of values) {
+    if (seen.has(value)) return value;
+    seen.add(value);
+  }
+  return null;
+}
+
+function uniqueCopyCode(code: string) {
+  return `${code.replace(/_COPY(_[A-Z0-9]{4})?$/, "")}_COPY_${randomUUID().slice(0, 4).toUpperCase()}`;
+}
+
+function templateDefinitionFromForm(formData: FormData, title: string) {
+  const ids = formData.getAll("blockId").map((value) => String(value || "").trim()).filter(Boolean);
+  const types = formData.getAll("blockType").map(String);
+  const labels = formData.getAll("blockLabel").map(String);
+  const texts = formData.getAll("blockText").map(String);
+  const bindings = formData.getAll("blockBinding").map(String);
+  const visibleValues = new Set(formData.getAll("blockVisible").map(String));
+  const removeValues = new Set(formData.getAll("blockRemove").map(String));
+  const addType = String(formData.get("addBlockType") || "");
+  const operation = String(formData.get("operation") || "");
+  const blocks: DocumentTemplateBlock[] = ids.flatMap((id, index) => {
+    if (removeValues.has(id)) return [];
+    const type = documentTemplateBlockTypes.includes(types[index] as DocumentTemplateBlockType) ? types[index] as DocumentTemplateBlockType : "text";
+    const binding = bindings[index] as AllowedDocumentPlaceholder;
+    return [{
+      id,
+      type,
+      label: labels[index]?.trim() || undefined,
+      text: texts[index]?.trim() || undefined,
+      binding: binding || undefined,
+      order: (index + 1) * 10,
+      visible: visibleValues.has(id),
+    }];
+  });
+  const move = operation.match(/^move:(.+):(up|down)$/);
+  if (move) {
+    const index = blocks.findIndex((block) => block.id === move[1]);
+    const target = move[2] === "up" ? index - 1 : index + 1;
+    if (index >= 0 && target >= 0 && target < blocks.length) [blocks[index], blocks[target]] = [blocks[target], blocks[index]];
+  }
+  if (addType && documentTemplateBlockTypes.includes(addType as DocumentTemplateBlockType)) {
+    blocks.push({ id: `block-${randomUUID().slice(0, 8)}`, type: addType as DocumentTemplateBlockType, label: addType.replace(/([A-Z])/g, " $1"), text: "", binding: undefined, order: (blocks.length + 1) * 10, visible: true });
+  }
+  return normalizeTemplateDefinition({ schemaVersion: 1, page: { format: "A4", orientation: "portrait" }, blocks }, title);
+}
+
 function parseFieldsJson(raw: string) {
   let parsed: unknown;
   try {
@@ -544,8 +877,10 @@ async function generateDocumentForRequest(id: string, actorId: string, reason: s
     },
   });
   if (!request) throw new Error("Document request not found.");
+  const publishedTemplate = request.templateVersionIdSnapshot ? await prisma.documentTemplateVersion.findFirst({ where: { tenantId: request.tenantId, id: request.templateVersionIdSnapshot, status: DocumentTemplateVersionStatus.PUBLISHED } }) : null;
   const template = request.configuration?.template ?? await prisma.documentTemplate.findFirst({ where: { tenantId: request.tenantId, type: request.type } });
-  if (!template?.active) throw new Error("Document template is inactive or missing.");
+  const templateBody = template?.active ? template.body : structuredTemplateText(request.templateDefinitionSnapshot ?? publishedTemplate?.definitionJson);
+  if (!templateBody) throw new Error("Document template is inactive or missing.");
   const [payments, constructionBonds, association, officers] = await Promise.all([
     prisma.payment.aggregate({ where: { tenantId: request.tenantId, homeownerId: request.homeownerId, status: "ACTIVE" }, _sum: { amount: true } }),
     prisma.collection.findMany({ where: { tenantId: request.tenantId, homeownerId: request.homeownerId, type: "CONSTRUCTION_BOND", refundable: true } }),
@@ -564,7 +899,7 @@ async function generateDocumentForRequest(id: string, actorId: string, reason: s
     const subjectAddress = textValue(subject.address) || request.homeowner.address;
     const purpose = textValue(fields.purpose) || request.purpose || "official purposes";
     const validityDate = request.validityDate ?? (request.configuration?.validityDays ? new Date(now.getTime() + request.configuration.validityDays * 86400000) : null);
-    const content = renderDocumentTemplate(template.body, {
+    const content = renderDocumentTemplate(templateBody, {
       associationName: association.name,
       homeownerName: subjectName,
       propertyAddress: subjectAddress,
@@ -621,10 +956,10 @@ async function generateDocumentForRequest(id: string, actorId: string, reason: s
         generatedAt: now,
         readyForDownloadAt: now,
         issueDate: now,
-        templateVersion: template.version,
-        templateSnapshot: template.body,
-        templateVersionSnapshot: template.version,
-        templateIdSnapshot: template.id,
+        templateVersion: template?.version ?? request.templateVersionSnapshot ?? 1,
+        templateSnapshot: templateBody,
+        templateVersionSnapshot: template?.version ?? request.templateVersionSnapshot,
+        templateIdSnapshot: template?.id ?? request.templateIdSnapshot,
         generatedContent: content,
         verificationCode,
         currentVersion: nextVersion,
@@ -634,6 +969,16 @@ async function generateDocumentForRequest(id: string, actorId: string, reason: s
       },
     });
     await createDocumentHistories(tx, request.tenantId, request.id, [{ status: DocumentRequestStatus.READY_FOR_DOWNLOAD, actorId, note: reason }]);
-    await tx.documentVersion.create({ data: { tenantId: request.tenantId, requestId: request.id, version: nextVersion, documentNumber, verificationCode, templateVersion: template.version, templateSnapshot: template.body, generatedContent: content, requestSnapshot: snapshot, generatedById: actorId, reason } });
+    await tx.documentVersion.create({ data: { tenantId: request.tenantId, requestId: request.id, definitionId: request.definitionId, templateVersionId: publishedTemplate?.id ?? null, version: nextVersion, documentNumber, verificationCode, templateVersion: template?.version ?? request.templateVersionSnapshot ?? 1, templateSnapshot: templateBody, generatedContent: content, requestSnapshot: snapshot, definitionSnapshot: request.definitionSnapshot ?? undefined, templateDefinitionSnapshot: request.templateDefinitionSnapshot ?? publishedTemplate?.definitionJson ?? undefined, generatedById: actorId, reason } });
   });
+}
+
+function structuredTemplateText(value: unknown) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return "";
+  const definition = normalizeTemplateDefinition(value);
+  return definition.blocks.filter((block) => block.visible).map((block) => {
+    if (block.text) return block.text;
+    if (block.binding) return `{{${block.binding}}}`;
+    return block.label || block.type;
+  }).join("\n\n");
 }

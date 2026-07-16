@@ -772,3 +772,5 @@ Used for new document configuration and future requests:
 The system must prefer stored snapshots for historical documents and must never regenerate historical content using current configuration.
 
 Migration `20260716120000_document_definition_compatibility_schema` adds the transitional schema and backfills compatibility links while preserving legacy enum fields. Current portal/admin flows remain enum-compatible; future Sprint 6B work should migrate request creation, catalog management, completeness validation, and generation to the `DocumentDefinition` path through the compatibility service in `lib/services/document-definitions.ts`.
+
+Sprint 6B-1B adds the tenant administration layer for this path. The catalog route manages definitions, dynamic fields, workflow/fee/numbering/signatory settings, completeness validation, and template publishing. Template versions use the safe block schema from `lib/services/document-template-builder.ts`; drafts are editable, published versions are immutable, and homeowner request creation now prefers complete active definitions while retaining legacy enum fallback for historical records.

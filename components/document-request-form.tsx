@@ -43,7 +43,7 @@ export function DocumentRequestForm({ configs, members, disabled = false }: { co
     <fieldset disabled={disabled} className="grid gap-4 md:grid-cols-2 disabled:opacity-60">
       <div className="md:col-span-2">
         <label className="label">Document type</label>
-        <select className="field" name="configurationId" value={selected.id} onChange={(event) => setConfigurationId(event.target.value)}>
+        <select className="field" name="definitionId" value={selected.id} onChange={(event) => setConfigurationId(event.target.value)}>
           {configs.map((config) => <option key={config.id} value={config.id}>{config.displayName}</option>)}
         </select>
         <div className="mt-2 rounded-xl bg-pine-50 p-3 text-sm text-pine-950">

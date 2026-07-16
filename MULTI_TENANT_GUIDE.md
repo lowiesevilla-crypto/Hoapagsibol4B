@@ -348,3 +348,5 @@ Rules:
 - Generated documents must remain bound to their original tenant and template version.
 
 The additive document-definition migration keeps all compatibility relations tenant-first. `DocumentDefinition`, definition fields, template sets, template versions, definition counters, and verification tokens are tenant-scoped and must be resolved with an authenticated tenant ID. The local verification harness confirmed no cross-tenant links across configuration, field, template, request, or generated-version compatibility records.
+
+Document Definition administration must use the authenticated user's tenant ID for every catalog, field, template, publish, retire, and requestability operation. A published template can be assigned only when the template version, template set, and definition all share the same tenant and definition relationship. Homeowner request forms may show only complete active definitions for the authenticated tenant.

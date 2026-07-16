@@ -882,3 +882,21 @@ Approved direction:
 ## Release Gate
 
 - Improvements #081-#083 remain open until Product Owner UAT validates custom definition administration, versioned template publishing, and completeness/requestability validation.
+
+# 2026-07-16 - Sprint 6B-1B Document Definition Catalog and Template Publishing
+
+## Engineering Ready for Product Owner UAT
+
+- Added tenant-facing Document Definition catalog at `/admin/settings/document-definitions`.
+- Added create, edit, duplicate, activate, deactivate, archive, search, filter, sort, pagination, and requestability/completeness display.
+- Added workflow presets for Free + Instant, Free + Approval, Paid + Instant, Paid + Approval, and Request Only.
+- Added definition field JSON configuration with server-side validation and request-history safeguards.
+- Added template-set and template-version management routes with draft creation, duplication, publish, retire, and version history.
+- Added structured A4 template editor with safe block types, allowlisted placeholders, add/remove/reorder controls, draft save, and publish.
+- Added completeness validation and numbering format validation services plus a local numbering harness.
+- Updated homeowner request creation to use complete active `definitionId` options while preserving legacy enum/configuration fallback.
+
+## Release Gate
+
+- Improvements #081-#083 remain open until Product Owner UAT passes.
+- Fully enumless custom request generation remains deferred because `DocumentRequest.type` is still a required compatibility field.

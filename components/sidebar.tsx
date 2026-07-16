@@ -125,6 +125,7 @@ export const adminLinks: LinkItem[] = [
 ];
 export const systemAdminLinks: LinkItem[] = [
   { href: "/admin/settings", label: "System settings", icon: "settings", section: "System" },
+  { href: "/admin/settings/document-definitions", label: "Document definitions", icon: "documents", section: "System" },
   ...adminLinks,
 ];
 export const portalLinks: LinkItem[] = [

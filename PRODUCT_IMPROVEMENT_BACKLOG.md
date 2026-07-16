@@ -2472,6 +2472,10 @@ Acceptance Criteria:
 Sprint 6B-1A Engineering Note:
 - Additive compatibility schema and local backfill are implemented in migration `20260716120000_document_definition_compatibility_schema`.
 - The item remains Open because custom definition administration and Product Owner UAT are not complete.
+
+Sprint 6B-1B Engineering Note:
+- Tenant-facing definition catalog, workflow configuration, field configuration, completeness display, and template publishing foundation are implemented.
+- The item remains Open until Product Owner UAT confirms custom definition management end-to-end.
 ## Improvement #082 – Versioned Visual Document Template Platform
 
 Module:
@@ -2525,6 +2529,10 @@ Acceptance Criteria:
 Sprint 6B-1A Engineering Note:
 - `DocumentTemplateSet` and `DocumentTemplateVersion` now exist with published legacy backfill snapshots.
 - The item remains Open until the visual editor, publishing workflow, and Product Owner UAT are complete.
+
+Sprint 6B-1B Engineering Note:
+- Structured block editor, A4 preview, draft save, duplicate, publish, retire, and placeholder selection are implemented.
+- The item remains Open until Product Owner UAT passes.
 ## Improvement #083 – Document Definition Completeness Validation
 
 Module:
@@ -2568,3 +2576,7 @@ Only complete and active definitions may appear in the homeowner request catalog
 Sprint 6B-1A Engineering Note:
 - Compatibility links and verification harness are in place for tenant-safe definitions/templates.
 - The item remains Open until the requestability validator and Product Owner UAT are complete.
+
+Sprint 6B-1B Engineering Note:
+- Authoritative completeness validation now checks active/archive state, workflow, fees, numbering, assigned published template, template ownership, template JSON, placeholders, signatory, copies, validity, and QR configuration.
+- The item remains Open until Product Owner UAT passes.

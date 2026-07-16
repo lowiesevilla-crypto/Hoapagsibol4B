@@ -350,3 +350,23 @@ Status: Engineering complete locally; Product Owner UAT pending for later docume
 Known limitations:
 - Custom document-definition administration, visual editor publishing workflow, completeness validation UI, document payments, release workflow, and public QR verification remain future Sprint 6B work.
 - Improvements #081-#083 remain open until Product Owner UAT passes.
+
+---
+
+# Sprint 6B-1B - Document Definition Catalog and Template Publishing
+
+Status: Engineering ready for Product Owner UAT.
+
+- Added `/admin/settings/document-definitions` for tenant-owned document definition catalog management.
+- Added create, edit, duplicate, activate, deactivate, archive, search, filter, sort, pagination, completeness status, and requestability status.
+- Added server-side completeness validation for active/archive state, workflow, fees, numbering, assigned published template, tenant ownership, template JSON, placeholders, signatory, copies, validity, and QR configuration.
+- Added definition dynamic-field configuration.
+- Added template-set/version pages with draft creation, duplication, publish, retire, and version history.
+- Added a structured A4 block editor with add/remove/reorder controls, placeholder selectors, safe preview, save draft, and publish.
+- Updated homeowner document request creation to use complete active definition-backed options and snapshot definition/template-version data.
+- Added document numbering format validation and a local harness.
+
+Known limitations:
+- Walk-in issuance, document fee collection, release acknowledgment, public QR verification, and legacy enum removal remain deferred.
+- Fully custom enumless homeowner requests remain deferred because `DocumentRequest.type` is still required for legacy compatibility.
+- Improvements #081-#083 remain open until Product Owner UAT passes.

@@ -2896,3 +2896,63 @@ Final Validation Hotfix Engineering Note:
 - Definition-backed custom requests without a purpose field validate exclusively against active `DocumentDefinitionField` rules and can persist `purpose = null`.
 - If a custom definition exposes an active required purpose field, that field remains enforced through the dynamic-field validator.
 - Status remains Open until Product Owner UAT passes.
+## Bug #096 – Workflow and Fee Configuration Can Conflict
+
+Module:
+Document Definition Configuration
+
+Priority:
+Critical
+
+Status:
+Open
+
+Problem:
+The Document Definition screen allows invalid combinations such as:
+
+- Free + Approval with a non-zero fee
+- Free + Instant with a non-zero fee
+- Paid workflows with zero fee
+
+The current UI does not clearly expose whether payment is required or whether payment must happen before approval.
+
+Expected Behavior:
+The selected workflow must be the authoritative source for payment and approval behavior.
+
+Workflow Rules:
+
+- Free + Instant
+  - Fee must be 0
+  - Payment not required
+  - Approval not required
+  - Immediate generation/download allowed
+
+- Free + Approval
+  - Fee must be 0
+  - Payment not required
+  - Approval required
+
+- Paid + Instant
+  - Fee must be greater than 0
+  - Payment required
+  - Approval not required
+  - Generation/download only after payment confirmation
+
+- Paid + Approval
+  - Fee must be greater than 0
+  - Payment required
+  - Approval required
+  - Payment required before approval unless explicitly supported otherwise
+
+- Request Only
+  - Request is recorded for manual processing
+  - Automatic generation/download disabled
+
+Acceptance Criteria:
+- Free workflows disable or reset the Fee Amount field to 0.
+- Paid workflows enable Fee Amount and require an amount greater than 0.
+- Workflow selection automatically derives payment and approval flags.
+- Invalid combinations cannot be saved.
+- Clear explanatory text is shown beside the workflow.
+- Existing valid definitions remain unchanged.
+- Tenant isolation and RBAC remain enforced.

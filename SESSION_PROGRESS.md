@@ -944,3 +944,13 @@ Approved direction:
 ## Release Gate
 
 - Bugs #091-#093 remain open until Product Owner UAT passes.
+## Document Workflow Configuration Observation
+
+Product Owner UAT identified that the Document Definition screen allows inconsistent workflow and fee combinations.
+
+Approved direction:
+- Workflow preset is the single source of truth.
+- Free workflows require zero fee.
+- Paid workflows require a positive fee.
+- Approval and payment flags are derived from the selected workflow.
+- The UI must prevent contradictory configuration.

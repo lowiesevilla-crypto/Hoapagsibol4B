@@ -2703,3 +2703,74 @@ Sprint 6B-1B Hotfix Engineering Note:
 - Catalog filter apply and pagination now target the document definition catalog anchor and reuse the shared pagination focus helper.
 - Pagination links preserve search, status, sort, page, and URL hash state.
 - Status remains Open until Product Owner UAT verifies Chrome, Edge, and mobile focus behavior.
+## Bug #088 – Dynamic Field Rules Not Applied in Homeowner Request Form
+
+Module:
+Document Definition Dynamic Fields
+
+Priority:
+Critical
+
+Status:
+Open
+
+Problem:
+Dynamic fields appear in the homeowner request form, but several configured properties are not applied.
+
+Observed:
+- Default value is not populated.
+- Minimum and maximum validation are not enforced.
+- Pattern validation is not enforced.
+- SELECT field appears without options.
+- Required CHECKBOX does not block submission.
+- Submitted checkbox/select values cannot be verified because submission fails.
+
+Expected Behavior:
+The homeowner request form must render and validate every active field according to the saved DocumentDefinitionField configuration.
+
+Acceptance Criteria:
+- Default values populate correctly.
+- Minimum and maximum numeric validation work.
+- Minimum and maximum length validation work.
+- Pattern validation works.
+- SELECT options render as configured.
+- Required checkbox blocks submission when unchecked.
+- Field values are validated server-side.
+- Submitted values are stored in the immutable request snapshot.
+- Inactive fields remain hidden.
+- Tenant isolation remains enforced.
+- Mobile and desktop pass.
+
+---
+
+## Bug #089 – Custom Document Definition Cannot Create Request
+
+Module:
+Document Requests / Definition Migration
+
+Priority:
+Critical
+
+Status:
+Open
+
+Problem:
+Submitting a custom tenant-created document definition fails with:
+
+`This custom document definition is not yet requestable until legacy enum cleanup is complete`
+
+Root Cause:
+`DocumentRequest.type` remains a required legacy `DocumentType` enum field, so a definition without a legacy enum mapping cannot be persisted.
+
+Expected Behavior:
+A complete, active custom Document Definition must be requestable without requiring a legacy enum value.
+
+Acceptance Criteria:
+- New requests use `definitionId` as the authoritative document reference.
+- `DocumentRequest.type` becomes nullable or compatibility-only.
+- Legacy requests retain their existing enum values.
+- New custom requests may have no legacy type.
+- Existing requests and generated documents remain unchanged.
+- Reporting, admin queues, generation, print, and PDF resolve the definition safely.
+- No fallback to another document type is used.
+- Tenant isolation and snapshots remain enforced.

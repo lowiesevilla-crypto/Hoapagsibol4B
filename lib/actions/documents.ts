@@ -473,26 +473,26 @@ export async function saveDocumentDefinitionAction(formData: FormData) {
 export async function changeDocumentDefinitionStatusAction(formData: FormData) {
   const admin = await requireUser(Role.ADMIN);
   const id = String(formData.get("id") || "");
-  const operation = String(formData.get("operation") || "");
+  const operation = String(formData.get("operation") || "").trim().toUpperCase();
   const fail = (message: string): never => redirect(`/admin/settings/document-definitions?error=${encodeURIComponent(message)}`);
   const definition = await prisma.documentDefinition.findFirst({ where: { id, tenantId: admin.tenantId }, include: { requests: { select: { id: true }, take: 1 }, documentVersions: { select: { id: true }, take: 1 } } });
   if (!definition) fail("Document definition not found.");
   const definitionRecord = definition!;
-  const data = operation === "activate"
-    ? { active: true, status: DocumentDefinitionStatus.ACTIVE, archivedAt: null }
-    : operation === "deactivate"
-      ? { active: false, status: DocumentDefinitionStatus.INACTIVE }
-      : operation === "archive"
-        ? { active: false, status: DocumentDefinitionStatus.ARCHIVED, archivedAt: new Date() }
-        : null;
+  const operations = {
+    ACTIVATE: { data: { active: true, status: DocumentDefinitionStatus.ACTIVE }, pastTense: "activated" },
+    DEACTIVATE: { data: { active: false, status: DocumentDefinitionStatus.INACTIVE }, pastTense: "deactivated" },
+    ARCHIVE: { data: { active: false, status: DocumentDefinitionStatus.ARCHIVED, archivedAt: new Date() }, pastTense: "archived" },
+  } satisfies Record<string, { data: Prisma.DocumentDefinitionUpdateInput; pastTense: string }>;
+  const data = operations[operation as keyof typeof operations]?.data;
   if (!data) fail("Select a valid definition action.");
+  if ((definitionRecord.archivedAt || definitionRecord.status === DocumentDefinitionStatus.ARCHIVED) && operation !== "ARCHIVE") fail("Archived definitions cannot be activated or deactivated without a restore workflow.");
   await platformPrisma.$transaction([
     platformPrisma.documentDefinition.update({ where: { id }, data: { ...data, updatedById: admin.id, version: { increment: 1 } } }),
-    platformPrisma.auditLog.create({ data: { tenantId: admin.tenantId, actorId: admin.id, module: "DOCUMENTS", action: `DOCUMENT_DEFINITION_${operation.toUpperCase()}`, entityType: "DocumentDefinition", entityId: id, metadata: { code: definitionRecord.code, hadRequests: definitionRecord.requests.length > 0, hadVersions: definitionRecord.documentVersions.length > 0 } } }),
+    platformPrisma.auditLog.create({ data: { tenantId: admin.tenantId, actorId: admin.id, module: "DOCUMENTS", action: `DOCUMENT_DEFINITION_${operation}`, entityType: "DocumentDefinition", entityId: id, metadata: { code: definitionRecord.code, hadRequests: definitionRecord.requests.length > 0, hadVersions: definitionRecord.documentVersions.length > 0 } } }),
   ]);
   revalidatePath("/admin/settings/document-definitions");
   revalidatePath("/portal/documents");
-  redirect(`/admin/settings/document-definitions?success=${operation}&message=${encodeURIComponent(`${definitionRecord.displayName} ${operation}d.`)}`);
+  redirect(`/admin/settings/document-definitions?success=${operation.toLowerCase()}&message=${encodeURIComponent(`${definitionRecord.displayName} ${operations[operation as keyof typeof operations].pastTense}.`)}`);
 }
 
 export async function duplicateDocumentDefinitionAction(formData: FormData) {
@@ -863,6 +863,7 @@ function parseFieldsJson(raw: string) {
       required: Boolean(item.required),
       options: Array.isArray(item.options) ? asJson(item.options.map(String)) : undefined,
       validation: item.validation ? asJson(item.validation) : undefined,
+      defaultValue: Object.hasOwn(item, "defaultValue") && item.defaultValue !== "" && item.defaultValue !== undefined ? asJson(item.defaultValue) : undefined,
       active: item.active !== false,
     };
   });

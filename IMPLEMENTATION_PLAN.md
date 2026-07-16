@@ -325,3 +325,15 @@ Introduce the additive database foundation required for tenant-created documents
 ### Known Limitation
 
 `DocumentRequest.type` remains a required legacy enum field for compatibility. Definition-backed homeowner submissions therefore require a `legacyType` bridge until a later additive cleanup makes enumless custom request records safe end-to-end.
+
+## Sprint 6B-1B Hotfix – Catalog Actions and Field Builder
+
+### Implementation Status
+
+- [x] Normalize document definition catalog status actions to the explicit `ACTIVATE`, `DEACTIVATE`, and `ARCHIVE` allowlist.
+- [x] Keep tenant validation before status writes and update definitions by `id` only through the base Prisma client.
+- [x] Prevent archived definitions from being activated or deactivated without a future explicit restore workflow.
+- [x] Replace the raw dynamic-field JSON editor with structured add/edit/remove/reorder controls, required/active flags, select options, default values, and safe validation fields.
+- [x] Add `Document definitions` navigation from the System Settings Configuration Center.
+- [x] Preserve catalog table focus after filters and pagination using the shared pagination focus target.
+- [ ] Keep Bugs #084-#085 and Improvements #086-#087 open until Product Owner UAT passes.

@@ -1,8 +1,10 @@
 import Link from "next/link";
-import { DocumentDefinitionStatus, DocumentFieldType, DocumentSequenceScope, DocumentType } from "@prisma/client";
+import { DocumentDefinitionStatus, DocumentSequenceScope, DocumentType } from "@prisma/client";
+import { DocumentDefinitionFieldBuilder } from "@/components/document-definition-field-builder";
 import { PageHeader } from "@/components/page-header";
+import { PaginationFocusTarget } from "@/components/pagination-focus";
 import { SubmitButton } from "@/components/ui";
-import { changeDocumentDefinitionStatusAction, duplicateDocumentDefinitionAction, saveDocumentDefinitionAction, saveDocumentDefinitionFieldsAction } from "@/lib/actions/documents";
+import { changeDocumentDefinitionStatusAction, duplicateDocumentDefinitionAction, saveDocumentDefinitionAction } from "@/lib/actions/documents";
 import { requireUser } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { defaultNumberingFormat, evaluateDefinitionCompleteness, workflowPresetForDefinition } from "@/lib/services/document-definitions";
@@ -11,6 +13,7 @@ import { money, shortDate } from "@/lib/utils";
 type Query = { q?: string; status?: string; page?: string; sort?: string; edit?: string; error?: string; success?: string; message?: string };
 
 const pageSize = 12;
+const catalogTargetId = "definition-catalog";
 
 export default async function DocumentDefinitionsPage({ searchParams }: { searchParams: Promise<Query> }) {
   const user = await requireUser();
@@ -30,7 +33,15 @@ export default async function DocumentDefinitionsPage({ searchParams }: { search
     query.edit ? prisma.documentDefinition.findFirst({ where: { tenantId: user.tenantId, id: query.edit }, include: { fields: { orderBy: [{ displayOrder: "asc" }, { label: "asc" }] } } }) : null,
   ]);
   const pages = Math.max(1, Math.ceil(count / pageSize));
-  const editFieldsJson = JSON.stringify((editing?.fields ?? []).map((field) => ({ key: field.key, label: field.label, fieldType: field.fieldType, required: field.required, options: field.options ?? undefined, validation: field.validation ?? undefined, defaultValue: field.defaultValue ?? undefined, active: field.active })), null, 2);
+  const editFields = (editing?.fields ?? []).map((field) => ({ key: field.key, label: field.label, fieldType: field.fieldType, required: field.required, options: field.options ?? undefined, validation: field.validation ?? undefined, defaultValue: field.defaultValue ?? undefined, active: field.active }));
+  const pageHref = (targetPage: number) => {
+    const params = new URLSearchParams();
+    if (q) params.set("q", q);
+    if (query.status) params.set("status", query.status);
+    if (query.sort) params.set("sort", query.sort);
+    params.set("page", String(targetPage));
+    return `/admin/settings/document-definitions?${params.toString()}#${catalogTargetId}`;
+  };
   return <>
     <PageHeader eyebrow="Document platform" title="Document definitions" description="Create tenant-owned certificates, forms, permits, passes, workflows, fields, and template publishing rules." action={<div className="flex flex-wrap gap-2"><Link className="btn-secondary" href="/admin/settings/document-types">Legacy types</Link><Link className="btn-secondary" href="/admin/documents">Requests</Link></div>} />
     {query.error && <Notice kind="error">{query.error}</Notice>}
@@ -39,27 +50,30 @@ export default async function DocumentDefinitionsPage({ searchParams }: { search
       <details open={Boolean(editing) || !definitions.length}>
         <summary className="cursor-pointer text-lg font-black">{editing ? `Edit ${editing.displayName}` : "Create document definition"}</summary>
         <DefinitionForm definition={editing} officers={officers} />
-        {editing && <div className="mt-6 border-t pt-5"><h3 className="font-black">Dynamic fields</h3><p className="mt-1 text-sm text-slate-500">Keys are immutable once requests exist. Deactivate fields instead of deleting them when historical snapshots depend on them.</p><form action={saveDocumentDefinitionFieldsAction} className="mt-3"><input type="hidden" name="definitionId" value={editing.id} /><textarea className="field min-h-56 font-mono text-xs" name="fieldsJson" defaultValue={editFieldsJson} spellCheck={false} /><p className="mt-2 text-xs text-slate-500">Allowed fieldType values: {Object.values(DocumentFieldType).join(", ")}.</p><div className="mt-3"><SubmitButton>Save fields</SubmitButton></div></form></div>}
+        {editing && <div className="mt-6 border-t pt-5"><h3 className="font-black">Dynamic fields</h3><p className="mt-1 text-sm text-slate-500">Keys are immutable once requests exist. Deactivate fields instead of deleting them when historical snapshots depend on them.</p><DocumentDefinitionFieldBuilder definitionId={editing.id} fields={editFields} /></div>}
       </details>
     </section>
-    <form className="card mb-5 grid gap-3 md:grid-cols-[1fr_auto_auto_auto]">
+    <form className="card mb-5 grid gap-3 md:grid-cols-[1fr_auto_auto_auto]" method="get" action={`/admin/settings/document-definitions#${catalogTargetId}`}>
+      <input type="hidden" name="page" value="1" />
       <input className="field" name="q" defaultValue={q} placeholder="Search code, name, category" />
       <select className="field" name="status" defaultValue={query.status || ""}><option value="">All statuses</option>{Object.values(DocumentDefinitionStatus).map((status) => <option key={status} value={status}>{status.replaceAll("_", " ")}</option>)}</select>
       <select className="field" name="sort" defaultValue={query.sort || ""}><option value="">Display order</option><option value="code">Code</option><option value="updated">Recently updated</option></select>
       <button className="btn-secondary">Apply</button>
     </form>
+    <PaginationFocusTarget id={catalogTargetId} label="Document definition catalog" />
     <section className="card p-0 sm:p-0">
       <div className="table-wrap rounded-none shadow-none">
         <table className="data-table min-w-[1200px]"><thead><tr><th>Code</th><th>Display name</th><th>Category</th><th>Workflow</th><th>Fee</th><th>Status</th><th>Completeness</th><th>Published template</th><th>Updated</th><th>Actions</th></tr></thead><tbody>
           {definitions.map((definition) => {
             const completeness = evaluateDefinitionCompleteness(definition);
-            return <tr key={definition.id}><td className="font-mono text-xs font-bold">{definition.code}</td><td><p className="font-black">{definition.displayName}</p><p className="max-w-72 truncate text-xs text-slate-500">{definition.description || "No description"}</p></td><td>{definition.category || "General"}</td><td>{definition.deliveryMode.replaceAll("_", " ")}</td><td>{money(Number(definition.feeAmount))}</td><td><span className={`badge ${definition.active && !definition.archivedAt ? "badge-paid" : "badge-info"}`}>{definition.status}</span></td><td><p className={completeness.requestable ? "font-bold text-emerald-700" : "font-bold text-amber-700"}>{completeness.status}</p>{[...completeness.errors, ...completeness.warnings].slice(0, 2).map((item) => <p key={item} className="max-w-56 text-xs text-slate-500">{item}</p>)}</td><td>{definition.assignedTemplateVersion ? `v${definition.assignedTemplateVersion.version}` : "None"}</td><td>{shortDate(definition.updatedAt)}</td><td><div className="flex flex-wrap gap-2"><Link className="btn-secondary min-h-8 px-3 py-1 text-xs" href={`/admin/settings/document-definitions?edit=${definition.id}`}>Edit</Link><Link className="btn-secondary min-h-8 px-3 py-1 text-xs" href={`/admin/settings/document-definitions/${definition.id}/templates`}>Templates</Link><form action={duplicateDocumentDefinitionAction}><input type="hidden" name="id" value={definition.id} /><button className="btn-secondary min-h-8 px-3 py-1 text-xs">Duplicate</button></form><form action={changeDocumentDefinitionStatusAction}><input type="hidden" name="id" value={definition.id} /><button className="btn-secondary min-h-8 px-3 py-1 text-xs" name="operation" value={definition.active ? "deactivate" : "activate"}>{definition.active ? "Deactivate" : "Activate"}</button></form><form action={changeDocumentDefinitionStatusAction}><input type="hidden" name="id" value={definition.id} /><button className="btn-danger min-h-8 px-3 py-1 text-xs" name="operation" value="archive">Archive</button></form></div></td></tr>;
+            const archived = definition.status === DocumentDefinitionStatus.ARCHIVED || Boolean(definition.archivedAt);
+            return <tr key={definition.id}><td className="font-mono text-xs font-bold">{definition.code}</td><td><p className="font-black">{definition.displayName}</p><p className="max-w-72 truncate text-xs text-slate-500">{definition.description || "No description"}</p></td><td>{definition.category || "General"}</td><td>{definition.deliveryMode.replaceAll("_", " ")}</td><td>{money(Number(definition.feeAmount))}</td><td><span className={`badge ${definition.active && !definition.archivedAt ? "badge-paid" : "badge-info"}`}>{definition.status}</span></td><td><p className={completeness.requestable ? "font-bold text-emerald-700" : "font-bold text-amber-700"}>{completeness.status}</p>{[...completeness.errors, ...completeness.warnings].slice(0, 2).map((item) => <p key={item} className="max-w-56 text-xs text-slate-500">{item}</p>)}</td><td>{definition.assignedTemplateVersion ? `v${definition.assignedTemplateVersion.version}` : "None"}</td><td>{shortDate(definition.updatedAt)}</td><td><div className="flex flex-wrap gap-2"><Link className="btn-secondary min-h-8 px-3 py-1 text-xs" href={`/admin/settings/document-definitions?edit=${definition.id}`}>Edit</Link><Link className="btn-secondary min-h-8 px-3 py-1 text-xs" href={`/admin/settings/document-definitions/${definition.id}/templates`}>Templates</Link><form action={duplicateDocumentDefinitionAction}><input type="hidden" name="id" value={definition.id} /><button className="btn-secondary min-h-8 px-3 py-1 text-xs">Duplicate</button></form>{!archived && <form action={changeDocumentDefinitionStatusAction}><input type="hidden" name="id" value={definition.id} /><button className="btn-secondary min-h-8 px-3 py-1 text-xs" name="operation" value={definition.active ? "DEACTIVATE" : "ACTIVATE"}>{definition.active ? "Deactivate" : "Activate"}</button></form>}{!archived && <form action={changeDocumentDefinitionStatusAction}><input type="hidden" name="id" value={definition.id} /><button className="btn-danger min-h-8 px-3 py-1 text-xs" name="operation" value="ARCHIVE">Archive</button></form>}</div></td></tr>;
           })}
           {!definitions.length && <tr><td colSpan={10} className="py-12 text-center text-slate-500">No document definitions found.</td></tr>}
         </tbody></table>
       </div>
     </section>
-    {count > pageSize && <div className="mt-4 flex items-center justify-between text-sm"><Link className={`btn-secondary ${page <= 1 ? "pointer-events-none opacity-50" : ""}`} href={`?q=${encodeURIComponent(q)}&status=${query.status || ""}&sort=${query.sort || ""}&page=${page - 1}`}>Previous</Link><span>Page {page} of {pages}</span><Link className={`btn-secondary ${page >= pages ? "pointer-events-none opacity-50" : ""}`} href={`?q=${encodeURIComponent(q)}&status=${query.status || ""}&sort=${query.sort || ""}&page=${page + 1}`}>Next</Link></div>}
+    {count > pageSize && <div className="mt-4 flex items-center justify-between text-sm"><Link className={`btn-secondary ${page <= 1 ? "pointer-events-none opacity-50" : ""}`} href={pageHref(page - 1)}>Previous</Link><span>Page {page} of {pages}</span><Link className={`btn-secondary ${page >= pages ? "pointer-events-none opacity-50" : ""}`} href={pageHref(page + 1)}>Next</Link></div>}
   </>;
 }
 

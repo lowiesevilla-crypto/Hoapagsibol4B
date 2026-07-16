@@ -62,7 +62,7 @@ export default async function SystemSettingsPage({ searchParams }: { searchParam
   ] as const;
 
   return <>
-    <PageHeader eyebrow="System administration" title="Configuration center" description="Manage connection strings, email delivery, Facebook Page tokens, GCash QR payment settings, and association records." action={<Link className="btn-primary" href="/admin/settings/organization">Manage organization</Link>} />
+    <PageHeader eyebrow="System administration" title="Configuration center" description="Manage connection strings, email delivery, Facebook Page tokens, GCash QR payment settings, and association records." action={<div className="flex flex-wrap gap-2"><Link className="btn-secondary" href="/admin/settings/document-definitions">Document definitions</Link><Link className="btn-primary" href="/admin/settings/organization">Manage organization</Link></div>} />
     {query.error && <div role="alert" className="mb-5 rounded-2xl border border-rose-200 bg-rose-50 p-4 text-sm font-semibold text-rose-800">{query.error}</div>}
     {query.success && <div className="mb-5 rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-sm font-semibold text-emerald-800">{query.message || "Configuration updated successfully."}</div>}
     <section className="card mb-6 border-blue-100 bg-blue-50/60">

@@ -900,3 +900,17 @@ Approved direction:
 
 - Improvements #081-#083 remain open until Product Owner UAT passes.
 - Fully enumless custom request generation remains deferred because `DocumentRequest.type` is still a required compatibility field.
+
+# 2026-07-16 - Sprint 6B-1B Hotfix Document Definition Catalog Actions and Fields
+
+## Engineering Ready for Product Owner UAT
+
+- Fixed Bug #084 by aligning catalog action button values with the server-side allowlist for `ACTIVATE`, `DEACTIVATE`, and `ARCHIVE`.
+- Preserved tenant ownership validation before base-client status updates and blocked implicit reactivation/deactivation of archived definitions without a restore workflow.
+- Fixed Bug #085 by replacing the raw dynamic-field JSON textarea with structured controls for add, edit, activate/deactivate, required flag, select options, safe validation inputs, default values, remove, and move up/down ordering.
+- Improved System Settings navigation by adding a visible `Document definitions` action on the Configuration Center page.
+- Improved catalog focus retention by routing filter apply and pagination through the shared pagination focus anchor while preserving search, status, sort, and page parameters.
+
+## Release Gate
+
+- Bugs #084-#085 and Improvements #086-#087 remain open until Product Owner UAT passes.

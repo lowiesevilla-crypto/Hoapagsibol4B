@@ -2605,6 +2605,12 @@ Acceptance Criteria:
 - Status persists after refresh.
 - No console or Prisma errors.
 
+Sprint 6B-1B Hotfix Engineering Note:
+- Catalog action buttons now submit explicit uppercase action values and the server action normalizes and validates the allowlist `ACTIVATE`, `DEACTIVATE`, and `ARCHIVE`.
+- Archived definitions are no longer treated as ordinary activate/deactivate candidates; a separate restore workflow remains required.
+- Status writes still load the tenant-owned definition before using a base-client update by `id` only.
+- Status remains Open until Product Owner UAT confirms activate, deactivate, archive, refresh persistence, and tenant isolation.
+
 ---
 
 ## Bug #085 – Dynamic Field Builder UI Missing
@@ -2640,6 +2646,11 @@ Acceptance Criteria:
 - Tenant isolation remains enforced.
 - Mobile and desktop work.
 
+Sprint 6B-1B Hotfix Engineering Note:
+- Replaced the raw fields JSON textarea with a structured field builder for add, edit, activate/deactivate, required flag, select options, safe validation inputs, default value, remove, and move up/down ordering.
+- The builder posts through the existing tenant-scoped server action, which still rejects duplicate keys and prevents key removal after requests exist.
+- Status remains Open until Product Owner UAT confirms persistence and desktop/mobile usability.
+
 ---
 
 ## Improvement #086 – Show Document Definitions in System Settings Navigation
@@ -2662,6 +2673,10 @@ Acceptance Criteria:
 - Visibility respects RBAC and module entitlements.
 - Active navigation state works.
 
+Sprint 6B-1B Hotfix Engineering Note:
+- Added a visible `Document definitions` action from the System Settings Configuration Center in addition to the existing admin sidebar link.
+- Status remains Open until Product Owner UAT verifies visibility and route access for authorized roles.
+
 ---
 
 ## Improvement #087 – Preserve Table Focus After Applying Definition Filters
@@ -2683,3 +2698,8 @@ Acceptance Criteria:
 - Keyboard focus moves to the table heading.
 - Search, filter, sort, and URL parameters remain preserved.
 - Desktop and mobile pass.
+
+Sprint 6B-1B Hotfix Engineering Note:
+- Catalog filter apply and pagination now target the document definition catalog anchor and reuse the shared pagination focus helper.
+- Pagination links preserve search, status, sort, page, and URL hash state.
+- Status remains Open until Product Owner UAT verifies Chrome, Edge, and mobile focus behavior.

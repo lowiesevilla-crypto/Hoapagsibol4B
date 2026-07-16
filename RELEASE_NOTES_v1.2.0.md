@@ -370,3 +370,16 @@ Known limitations:
 - Walk-in issuance, document fee collection, release acknowledgment, public QR verification, and legacy enum removal remain deferred.
 - Fully custom enumless homeowner requests remain deferred because `DocumentRequest.type` is still required for legacy compatibility.
 - Improvements #081-#083 remain open until Product Owner UAT passes.
+
+# Sprint 6B-1B Hotfix - Document Definition Catalog Actions and Fields
+
+Status: Engineering ready for Product Owner UAT.
+
+- Fixed document definition Activate, Deactivate, and Archive actions by aligning submitted action values with the server-side allowlist.
+- Preserved tenant validation and base-client update behavior for definition status changes.
+- Replaced the raw dynamic-field JSON textarea with structured field-builder controls for add, edit, activate/deactivate, required fields, select options, default values, validation inputs, remove, and move up/down ordering.
+- Added a visible `Document definitions` action to the System Settings Configuration Center.
+- Preserved catalog focus after applying filters and paging by using the shared pagination focus target and URL hash.
+
+Release gate:
+- Bugs #084-#085 and Improvements #086-#087 remain open until Product Owner UAT passes.

@@ -2248,3 +2248,85 @@ Acceptance Criteria:
 - Changes do not alter snapshots already stored in submitted or generated document requests.
 - Edit history is auditable where required.
 - Mobile and desktop workflows pass.
+## Improvement #077 – Create Custom Tenant Document Types
+
+Module:
+Tenant Document Configuration
+
+Priority:
+Critical
+
+Status:
+Open
+
+Requirement:
+Authorized tenant administrators must be able to create new document and certification types beyond the system defaults.
+
+Acceptance Criteria:
+- Create a new tenant-scoped document type.
+- Configure unique internal code and display name.
+- Configure description, active status, workflow, fee, validity, copies, required fields, signatory, and template.
+- Custom document codes are unique within the tenant.
+- The same custom code may exist in another tenant without conflict.
+- New document types appear in the homeowner request catalog only when active and fully configured.
+- Existing default document types remain supported.
+- Tenant isolation and RBAC are enforced.
+- No code deployment is required to add a new tenant document type.
+
+---
+
+## Improvement #078 – Visual Document Template Builder
+
+Module:
+Document Templates
+
+Priority:
+Critical
+
+Status:
+Open
+
+Requirement:
+Authorized tenant administrators must be able to visually create, preview, and edit document templates.
+
+Configurable components:
+- tenant logo
+- association name
+- address
+- TIN
+- SEC registration number
+- document title
+- header
+- footer
+- body text
+- fonts
+- font sizes
+- colors
+- alignment
+- borders
+- spacing
+- tables
+- issue date
+- validity date
+- document number
+- subject information
+- property information
+- purpose
+- remarks
+- signatory
+- signature block
+- QR verification code
+- verification text
+
+Acceptance Criteria:
+- On-screen visual preview represents the generated document.
+- Template editor supports drag-and-drop or structured block positioning.
+- Admin can add, move, edit, resize, hide, and reorder components.
+- Template supports A4 portrait initially.
+- Template uses safe placeholders for dynamic data.
+- QR verification component can be positioned in the template.
+- Preview, print, and generated PDF use the same template definition.
+- Template versions are preserved.
+- Published documents retain their original template version.
+- Draft and published template states are supported.
+- Tenant isolation and RBAC are enforced.

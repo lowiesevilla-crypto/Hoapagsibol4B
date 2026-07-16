@@ -744,3 +744,12 @@ Do not merge Sprint 6A into develop until Bug #062 is resolved. Improvement #063
 
 - Product Owner UAT remains pending.
 - Do not mark Bug #062 or Improvements #063-#066 complete until local Product Owner UAT passes.
+## Additional Document Platform Requirements
+
+New requirements identified during Product Owner review:
+
+- Tenants must be able to create custom document and certification types.
+- Document templates require a real on-screen visual preview.
+- Template components must support editable branding, layout, colors, header, footer, body, signatory, and QR verification.
+- Existing generated documents must remain tied to the template version used at issuance.
+- The current hotfix will establish the safe foundation, while advanced visual editing may be completed in a dedicated follow-up sprint.

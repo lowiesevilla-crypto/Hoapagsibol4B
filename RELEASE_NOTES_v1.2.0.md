@@ -334,3 +334,19 @@ Status: Engineering ready for Product Owner UAT.
 
 Known limitations:
 - Bug #079 remains pending until Product Owner UAT confirms Save Preview, Approve and Generate, balance override, tenant isolation, and homeowner document regressions.
+
+---
+
+# Sprint 6B-1A - Document Definition Compatibility Schema
+
+Status: Engineering complete locally; Product Owner UAT pending for later document-definition product workflows.
+
+- Added additive schema for tenant-owned `DocumentDefinition`, definition fields, template sets, published template versions, definition counters, and verification tokens.
+- Kept existing `DocumentType` enum fields for backward compatibility.
+- Backfilled legacy configurations, fields, templates, requests, and generated document versions to new compatibility links without rewriting generated content or document numbers.
+- Added compatibility resolver service for definition lookup by id or tenant/legacy type.
+- Added a local verification harness for expected definition counts, link counts, tenant isolation, and historical fingerprints.
+
+Known limitations:
+- Custom document-definition administration, visual editor publishing workflow, completeness validation UI, document payments, release workflow, and public QR verification remain future Sprint 6B work.
+- Improvements #081-#083 remain open until Product Owner UAT passes.

@@ -346,3 +346,5 @@ Rules:
 - Cross-tenant signatory assignment is prohibited.
 - Requests must snapshot tenant-owned configuration before processing.
 - Generated documents must remain bound to their original tenant and template version.
+
+The additive document-definition migration keeps all compatibility relations tenant-first. `DocumentDefinition`, definition fields, template sets, template versions, definition counters, and verification tokens are tenant-scoped and must be resolved with an authenticated tenant ID. The local verification harness confirmed no cross-tenant links across configuration, field, template, request, or generated-version compatibility records.

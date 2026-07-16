@@ -2468,6 +2468,10 @@ Acceptance Criteria:
 - Existing requests and generated documents remain unchanged.
 - No code deployment is required to add future certificates, permits, forms, passes, or clearances.
 - Tenant isolation, RBAC, audit history, and immutable snapshots are preserved.
+
+Sprint 6B-1A Engineering Note:
+- Additive compatibility schema and local backfill are implemented in migration `20260716120000_document_definition_compatibility_schema`.
+- The item remains Open because custom definition administration and Product Owner UAT are not complete.
 ## Improvement #082 – Versioned Visual Document Template Platform
 
 Module:
@@ -2517,6 +2521,10 @@ Acceptance Criteria:
 - Placeholders are allowlisted and safe.
 - Arbitrary scripts, unsafe HTML, and executable expressions are prohibited.
 - Tenant isolation and RBAC are enforced.
+
+Sprint 6B-1A Engineering Note:
+- `DocumentTemplateSet` and `DocumentTemplateVersion` now exist with published legacy backfill snapshots.
+- The item remains Open until the visual editor, publishing workflow, and Product Owner UAT are complete.
 ## Improvement #083 – Document Definition Completeness Validation
 
 Module:
@@ -2556,3 +2564,7 @@ Statuses:
 - Archived
 
 Only complete and active definitions may appear in the homeowner request catalog.
+
+Sprint 6B-1A Engineering Note:
+- Compatibility links and verification harness are in place for tenant-safe definitions/templates.
+- The item remains Open until the requestability validator and Product Owner UAT are complete.

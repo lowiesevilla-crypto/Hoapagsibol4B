@@ -299,3 +299,13 @@ Introduce the additive database foundation required for tenant-created documents
 - Release acknowledgment
 - Full QR verification UI
 - Removal of the legacy enum
+
+### Implementation Status
+
+- [x] Added additive migration `20260716120000_document_definition_compatibility_schema`.
+- [x] Added tenant-owned definition, field, template set/version, counter, and verification token models.
+- [x] Added nullable compatibility links to legacy configurations, fields, templates, requests, and generated document versions.
+- [x] Backfilled 32 tenant/legacy-type definitions, 132 fields, 9 template sets, 9 published versions, 2 request links, and 1 generated-version link in local development.
+- [x] Added `lib/services/document-definitions.ts` compatibility resolvers.
+- [x] Added `scripts/verify-document-definition-migration.ts` local verification harness.
+- [ ] Keep Improvements #081-#083 open until Product Owner UAT validates custom definition management, versioned templates, and requestability validation.

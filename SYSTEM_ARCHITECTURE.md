@@ -770,3 +770,5 @@ Used for new document configuration and future requests:
 - immutable definition and template snapshots
 
 The system must prefer stored snapshots for historical documents and must never regenerate historical content using current configuration.
+
+Migration `20260716120000_document_definition_compatibility_schema` adds the transitional schema and backfills compatibility links while preserving legacy enum fields. Current portal/admin flows remain enum-compatible; future Sprint 6B work should migrate request creation, catalog management, completeness validation, and generation to the `DocumentDefinition` path through the compatibility service in `lib/services/document-definitions.ts`.

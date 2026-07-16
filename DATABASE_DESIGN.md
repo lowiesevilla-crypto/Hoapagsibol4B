@@ -865,6 +865,8 @@ The current `DocumentType` enum architecture is retained temporarily for backwar
 
 A new tenant-owned `DocumentDefinition` aggregate will become the authoritative model for future document configuration and processing.
 
+Migration `20260716120000_document_definition_compatibility_schema` implements this additive compatibility foundation. It does not remove enum fields, rewrite generated documents, renumber documents, or alter historical request/generated snapshots.
+
 ### Migration Strategy
 
 The migration must be additive and phased:
@@ -893,3 +895,7 @@ No existing document number, generated document, request snapshot, template snap
 Existing records remain readable through legacy fields and immutable snapshots.
 
 New records use tenant-owned definitions and published template versions.
+
+### Local Backfill Verification
+
+Local development backfill created 32 tenant/legacy-type definitions, 132 definition fields, 9 template sets, 9 published template versions, linked 32 configurations, linked 2 requests, and linked 1 generated document version. Cross-tenant compatibility checks returned no mismatches.

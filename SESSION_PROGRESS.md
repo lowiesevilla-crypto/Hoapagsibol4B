@@ -867,3 +867,18 @@ Approved direction:
 - Use additive migration and backfill.
 - Preserve all existing requests, generated documents, numbers, templates, and snapshots.
 - Move new workflows gradually to definition-based processing.
+
+# 2026-07-16 - Sprint 6B-1A Document Definition Compatibility Schema
+
+## Engineering Complete Locally
+
+- Added additive migration `20260716120000_document_definition_compatibility_schema`.
+- Added tenant-owned document definitions, definition fields, template sets, template versions, definition counters, and verification tokens.
+- Added nullable compatibility links from legacy configurations, fields, templates, requests, and generated document versions.
+- Backfilled 32 tenant/legacy-type definitions, 132 definition fields, 9 template sets, 9 published template versions, 2 request links, and 1 generated-version link in local development.
+- Added `lib/services/document-definitions.ts` for definition-by-id, legacy-type fallback, tenant ownership validation, and published-template-version lookup.
+- Added `scripts/verify-document-definition-migration.ts` to verify backfill counts, cross-tenant relation safety, and historical content/number fingerprints.
+
+## Release Gate
+
+- Improvements #081-#083 remain open until Product Owner UAT validates custom definition administration, versioned template publishing, and completeness/requestability validation.

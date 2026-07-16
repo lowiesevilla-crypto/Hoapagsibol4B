@@ -6,7 +6,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { requireUser } from "@/lib/auth";
 import { getAppUrl } from "@/lib/app-url";
-import { prisma } from "@/lib/db";
+import { platformPrisma, prisma } from "@/lib/db";
 import { getAssociationSettings } from "@/lib/system-settings";
 import { asJson, getActiveOrganizationOfficers, officerSnapshot } from "@/lib/organization";
 import { allocateDocumentNumber, documentTypeOptions, renderDocumentTemplate } from "@/lib/services/documents";
@@ -312,8 +312,8 @@ export async function saveDocumentTypeConfigurationAction(formData: FormData) {
     fail(error instanceof Error ? error.message : "Field definitions are invalid.");
   }
   if (!displayName || fields.length === 0) fail("Enter a display name and at least one field definition.");
-  await prisma.$transaction([
-    prisma.documentTypeConfiguration.update({
+  await platformPrisma.$transaction([
+    platformPrisma.documentTypeConfiguration.update({
       where: { id },
       data: {
         displayName,
@@ -335,10 +335,13 @@ export async function saveDocumentTypeConfigurationAction(formData: FormData) {
         signatoryOfficerId,
         updatedById: admin.id,
         version: { increment: 1 },
-        fields: { deleteMany: {}, create: fields.map((field, index) => ({ ...field, displayOrder: index * 10 + 10 })) },
       },
     }),
-    prisma.auditLog.create({ data: { actorId: admin.id, module: "DOCUMENTS", action: "UPDATE_DOCUMENT_TYPE_CONFIGURATION", entityType: "DocumentTypeConfiguration", entityId: id, metadata: { type: configRecord.type, deliveryMode, feeAmount, maxCopies, active: formData.get("active") === "on" } } }),
+    platformPrisma.documentFieldConfiguration.deleteMany({ where: { tenantId: admin.tenantId, configId: id } }),
+    platformPrisma.documentFieldConfiguration.createMany({
+      data: fields.map((field, index) => ({ ...field, tenantId: admin.tenantId, configId: id, displayOrder: index * 10 + 10 })),
+    }),
+    platformPrisma.auditLog.create({ data: { tenantId: admin.tenantId, actorId: admin.id, module: "DOCUMENTS", action: "UPDATE_DOCUMENT_TYPE_CONFIGURATION", entityType: "DocumentTypeConfiguration", entityId: id, metadata: { type: configRecord.type, deliveryMode, feeAmount, maxCopies, active: formData.get("active") === "on" } } }),
   ]);
   revalidatePath("/admin/settings/document-types");
   revalidatePath("/portal/documents");

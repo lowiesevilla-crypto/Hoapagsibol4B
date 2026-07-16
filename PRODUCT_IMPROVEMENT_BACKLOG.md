@@ -2129,3 +2129,43 @@ Acceptance Criteria:
 - Payment-and-approval documents enforce both.
 - Request and status history are recorded for instant downloads.
 - Tenant isolation is enforced.
+## Bug #073 – Document Type Configuration Cannot Be Updated
+
+Module:
+Tenant Document Configuration
+
+Priority:
+Critical
+
+Status:
+Open
+
+Problem:
+
+Saving an existing Document Type Configuration fails.
+
+Error:
+
+Unknown argument `tenantId`
+
+Observed During:
+
+Sprint 6A Product Owner UAT
+
+Expected:
+
+Tenant administrators can modify document configuration successfully.
+
+Root Cause:
+
+The update operation incorrectly passes tenantId into prisma.documentTypeConfiguration.update().
+
+Acceptance Criteria:
+
+- Document configuration saves successfully.
+- tenantId is never included in update data.
+- where clause uses only the primary key or Prisma compound unique selector.
+- Existing document fields update correctly.
+- Version increments correctly.
+- No Prisma validation errors.
+- Tenant isolation remains enforced.

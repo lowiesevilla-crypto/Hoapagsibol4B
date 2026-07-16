@@ -725,3 +725,24 @@ Sprint 6A hotfix centralizes document configuration availability in `lib/service
 The current schema remains enum-based through `DocumentType` on `DocumentTemplate`, `DocumentTypeConfiguration`, and `DocumentRequest`. True tenant-created custom document types require an additive catalog migration before implementation. The proposed catalog is a tenant-owned record with code, display name, description, system/legacy mapping, active/configurable/archive state, display order, and audit user fields. Existing enum records should be backfilled into catalog rows and linked through nullable compatibility fields while historical enum values and snapshots remain unchanged.
 
 Visual template editing is represented as a safe block schema foundation in `lib/services/document-template-builder.ts`: A4 portrait, allowlisted block types, allowlisted placeholders, no scripts, and deterministic validation. Draft/published storage, version tables, editor routes, and shared generated-document rendering require the next additive template-version migration.
+## Document Definition Aggregate
+
+The Document Definition is the root aggregate for tenant-configured documents.
+
+It owns or references:
+
+- Document metadata
+- Workflow configuration
+- Finance and fee policy
+- Field configuration
+- Template assignment
+- Published template version
+- Numbering rule
+- Signatory policy
+- Validity and copy rules
+- QR verification policy
+- Visibility and release settings
+
+Document requests and generated documents store immutable snapshots of the definition and published template version used at the time of processing.
+
+The platform must not use another tenant's definition, template, signatory, fee, numbering sequence, or workflow as a fallback.

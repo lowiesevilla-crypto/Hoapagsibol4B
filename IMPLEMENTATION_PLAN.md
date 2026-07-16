@@ -214,3 +214,61 @@ Prepare the finance migration and SOA finalization for product-owner review befo
 - [ ] Product Owner UAT for Bug #079.
 - [ ] Verify Save Preview, Approve and Generate, rejection, balance override, tenant isolation, and homeowner document regressions.
 - [ ] Do not mark Bug #079 complete until Product Owner UAT passes.
+## Sprint 6B-1 – Enterprise Document Definition Platform
+
+### Objective
+
+Transform HOAHub Documents into a fully configurable tenant-owned platform.
+
+### Phase 1 – Architecture Review
+
+- Review enum-based DocumentType usage.
+- Identify required relations and compatibility risks.
+- Propose additive DocumentDefinition architecture.
+- Preserve all existing requests, configurations, templates, versions, and generated documents.
+
+### Phase 2 – Document Definition Catalog
+
+- Create
+- Edit
+- Duplicate
+- Activate
+- Deactivate
+- Archive
+- Search
+- Filter
+- Sort
+- Pagination
+
+### Phase 3 – Workflow and Field Configuration
+
+- Free + Instant
+- Free + Approval
+- Paid + Instant
+- Paid + Approval
+- Request Only
+- Required and optional dynamic fields
+- Fee and payment rules
+- Approval and release rules
+
+### Phase 4 – Template Platform
+
+- JSON-backed versioned template definition
+- A4 preview
+- Safe component library
+- Placeholder library
+- Draft and publish workflow
+- Deterministic rendering
+
+### Phase 5 – Completeness and Security
+
+- Completeness validation
+- Tenant isolation
+- RBAC
+- Audit trail
+- Immutable issued-document snapshots
+- Performance and indexing
+
+### Exit Criteria
+
+Sprint 6B-1 may be approved only after Product Owner UAT confirms that a tenant can create and publish a custom document definition without code deployment.

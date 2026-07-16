@@ -333,3 +333,16 @@ Authenticated document configuration reads must use the user's tenant ID explici
 The portal must not fall back to another tenant's template or infer a requestable template from display name alone. Admin screens may show incomplete configurations, but homeowner request forms must show only complete configurations.
 
 Future custom document catalog records must keep `code` unique per tenant only. System-seeded and custom tenant-created records must be read, edited, archived, and assigned to templates within the authenticated tenant boundary.
+## Tenant-Owned Document Definitions
+
+Every Document Definition, template version, field configuration, workflow configuration, numbering rule, and signatory assignment must belong to one tenant.
+
+Rules:
+
+- Resolve tenantId from the authenticated session.
+- Never trust tenantId from client input.
+- Document codes are unique within a tenant, not globally.
+- Cross-tenant template assignment is prohibited.
+- Cross-tenant signatory assignment is prohibited.
+- Requests must snapshot tenant-owned configuration before processing.
+- Generated documents must remain bound to their original tenant and template version.

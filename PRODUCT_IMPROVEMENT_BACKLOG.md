@@ -2421,3 +2421,138 @@ Acceptance Criteria:
 - Repeated admin downloads do not change homeowner status.
 - Homeowner history clearly shows when the homeowner actually downloaded the document.
 - Tenant isolation and ownership checks remain enforced.
+## Improvement #081 – Enterprise Document Definition Platform
+
+Module:
+Document Management
+
+Priority:
+Critical
+
+Status:
+Open
+
+Requirement:
+Replace the fixed or partially enum-based document-type architecture with a tenant-owned Document Definition platform.
+
+Each tenant must be able to create, configure, publish, activate, deactivate, archive, and maintain document definitions without requiring code deployment.
+
+A Document Definition must control:
+
+- Internal code
+- Display name
+- Category
+- Description
+- Active and archived status
+- Display order
+- Workflow
+- Fee and payment policy
+- Approval policy
+- Required and optional fields
+- Assigned template
+- Template version
+- Signatory
+- Numbering format
+- Validity
+- Number of copies
+- QR verification
+- Watermark
+- Release requirements
+- Homeowner visibility
+- Admin-only issuance options
+
+Acceptance Criteria:
+- Custom document definitions are tenant-scoped.
+- The same document code may exist in separate tenants.
+- Existing system document types are backfilled safely.
+- Existing requests and generated documents remain unchanged.
+- No code deployment is required to add future certificates, permits, forms, passes, or clearances.
+- Tenant isolation, RBAC, audit history, and immutable snapshots are preserved.
+## Improvement #082 – Versioned Visual Document Template Platform
+
+Module:
+Document Templates
+
+Priority:
+Critical
+
+Status:
+Open
+
+Requirement:
+Provide a tenant-scoped, versioned visual template platform with an A4 on-screen preview and safe reusable components.
+
+Initial supported components:
+
+- Tenant logo
+- Association name
+- Address
+- TIN
+- SEC registration number
+- Document title
+- Header
+- Footer
+- Body text
+- Subject information
+- Property information
+- Purpose
+- Remarks
+- Issue date
+- Validity date
+- Document number
+- Signatory
+- Signature block
+- QR verification
+- Watermark
+- Divider
+- Spacer
+- Table
+- Page break
+
+Acceptance Criteria:
+- Draft and published template versions are separate.
+- Published versions are immutable.
+- Issued documents retain the template version and snapshot used at generation.
+- Preview, print, and PDF use the same authoritative template definition.
+- Placeholders are allowlisted and safe.
+- Arbitrary scripts, unsafe HTML, and executable expressions are prohibited.
+- Tenant isolation and RBAC are enforced.
+## Improvement #083 – Document Definition Completeness Validation
+
+Module:
+Document Configuration
+
+Priority:
+High
+
+Status:
+Open
+
+Requirement:
+The system must validate that a Document Definition is complete before it can be published or made requestable.
+
+Validation includes:
+
+- Active definition
+- Valid workflow
+- Valid fee and payment settings
+- Required fields configured
+- Published active template
+- Matching tenant ownership
+- Valid placeholders
+- Signatory where required
+- Numbering rule
+- Validity configuration
+- QR rule where required
+
+Statuses:
+
+- Complete
+- Incomplete
+- Draft Only
+- Missing Template
+- Invalid Template
+- Inactive
+- Archived
+
+Only complete and active definitions may appear in the homeowner request catalog.

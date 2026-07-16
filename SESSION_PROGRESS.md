@@ -833,3 +833,26 @@ Validated:
 
 Additional Improvement:
 Improvement #080 – Admin downloads must be tracked separately from homeowner downloads.
+## Sprint 6B-1 Planning – Enterprise Document Definition Platform
+
+The next document sprint will replace the fixed document-type approach with a tenant-owned Document Definition architecture.
+
+Approved scope:
+
+- Custom tenant document definitions
+- Configurable workflows
+- Dynamic fields
+- Fee and approval rules
+- Document numbering
+- Tenant-owned templates
+- Draft and published template versions
+- Structured visual template foundation
+- A4 preview
+- Placeholder library
+- Completeness validation
+- Immutable generated-document snapshots
+- QR verification architecture
+
+Implementation rule:
+
+Codex must first review the current enum-based schema. If it cannot safely support custom document definitions, Codex must stop and provide an additive migration and backfill proposal before implementation.

@@ -122,7 +122,7 @@ function toEditableField(field: InitialField, index: number): EditableField {
     fieldType: fieldTypes.includes(field.fieldType as FieldType) ? field.fieldType as FieldType : "TEXT",
     required: Boolean(field.required),
     active: field.active !== false,
-    optionsText: Array.isArray(field.options) ? field.options.map(String).join("\n") : "",
+    optionsText: Array.isArray(field.options) ? field.options.map(optionLine).filter(Boolean).join("\n") : "",
     defaultValue: field.defaultValue == null ? "" : String(field.defaultValue),
     minLength: validation.minLength == null ? "" : String(validation.minLength),
     maxLength: validation.maxLength == null ? "" : String(validation.maxLength),
@@ -146,7 +146,7 @@ function toServerField(row: EditableField) {
     fieldType: row.fieldType,
     required: row.required,
     active: row.active,
-    options: row.fieldType === "SELECT" ? row.optionsText.split(/\r?\n/).map((option) => option.trim()).filter(Boolean) : undefined,
+    options: row.fieldType === "SELECT" ? row.optionsText.split(/\r?\n/).map(parseOptionLine).filter(Boolean) : undefined,
     defaultValue: row.defaultValue.trim() || undefined,
     validation: Object.keys(validation).length ? validation : undefined,
   };
@@ -172,6 +172,22 @@ function numberOrUndefined(value: string) {
   if (!trimmed) return undefined;
   const numeric = Number(trimmed);
   return Number.isFinite(numeric) ? numeric : undefined;
+}
+
+function optionLine(option: unknown) {
+  if (isRecord(option)) {
+    const value = String(option.value ?? option.label ?? "").trim();
+    const label = String(option.label ?? option.value ?? "").trim();
+    return value && label && value !== label ? `${label}|${value}` : value || label;
+  }
+  return String(option ?? "").trim();
+}
+
+function parseOptionLine(line: string) {
+  const trimmed = line.trim();
+  if (!trimmed) return null;
+  const [label, value] = trimmed.includes("|") ? trimmed.split("|", 2).map((part) => part.trim()) : [trimmed, trimmed];
+  return value ? { label: label || value, value } : null;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

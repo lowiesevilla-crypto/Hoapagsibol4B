@@ -398,3 +398,16 @@ Status: Engineering ready for Product Owner UAT.
 
 Release gate:
 - Bugs #084, #088, and #089 remain open until Product Owner UAT passes.
+
+# Sprint 6B-1B Final Validation Hotfix - Field Constraints and Purpose Handling
+
+Status: Engineering ready for Product Owner UAT.
+
+- Enforced custom document dynamic-field constraints for numeric min/max, text min/max length, text pattern validation, required checkboxes, and SELECT allowlists.
+- Preserved SELECT option labels and values after structured field-builder save/refresh.
+- Removed hidden legacy purpose validation from definition-backed custom document requests that do not expose a purpose field.
+- Preserved legacy purpose validation for enum/configuration-backed document requests.
+- Added a focused local verification harness for dynamic constraints, SELECT option formats, required checkbox behavior, and custom no-purpose validation.
+
+Release gate:
+- Bugs #091-#093 remain open until Product Owner UAT passes.

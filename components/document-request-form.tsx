@@ -13,8 +13,8 @@ export type PortalDocumentField = {
   defaultValue: string | boolean | null;
   options: Array<{ label: string; value: string }>;
   validation: {
-    min?: number;
-    max?: number;
+    min?: number | string;
+    max?: number | string;
     minLength?: number;
     maxLength?: number;
     pattern?: string;
@@ -97,5 +97,7 @@ function ConfiguredField({ field }: { field: PortalDocumentField }) {
   if (field.fieldType === "SELECT") return <label className={span}><span className="label">{field.label}</span><select className="field" name={name} required={field.required} defaultValue={defaultText}><option value="">Select</option>{field.options.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></label>;
   if (field.fieldType === "CHECKBOX") return <label className="flex min-h-12 items-center gap-3 rounded-xl border border-slate-200 px-3 font-bold"><input type="checkbox" name={name} defaultChecked={field.defaultValue === true} required={field.required} /> {field.label}</label>;
   const type = field.fieldType === "DATE" ? "date" : field.fieldType === "NUMBER" || field.fieldType === "MONEY" ? "number" : "text";
-  return <label className={span}><span className="label">{field.label}</span><input className="field" name={name} type={type} step={field.fieldType === "MONEY" ? "0.01" : undefined} min={field.validation.min} max={field.validation.max} minLength={type === "text" ? field.validation.minLength : undefined} maxLength={type === "text" ? field.validation.maxLength : undefined} pattern={type === "text" ? field.validation.pattern : undefined} required={field.required} defaultValue={defaultText} /></label>;
+  const min = type === "date" && typeof field.validation.min === "string" ? field.validation.min : type === "number" && typeof field.validation.min === "number" ? field.validation.min : undefined;
+  const max = type === "date" && typeof field.validation.max === "string" ? field.validation.max : type === "number" && typeof field.validation.max === "number" ? field.validation.max : undefined;
+  return <label className={span}><span className="label">{field.label}</span><input className="field" name={name} type={type} step={field.fieldType === "MONEY" ? "0.01" : undefined} min={min} max={max} minLength={type === "text" ? field.validation.minLength : undefined} maxLength={type === "text" ? field.validation.maxLength : undefined} pattern={type === "text" ? field.validation.pattern : undefined} required={field.required} defaultValue={defaultText} /></label>;
 }

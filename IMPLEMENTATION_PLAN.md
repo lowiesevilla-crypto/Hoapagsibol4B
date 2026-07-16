@@ -352,3 +352,17 @@ Introduce the additive database foundation required for tenant-created documents
 - [x] Hardened definition action forms to submit hidden exact `ACTIVATE`, `DEACTIVATE`, and `ARCHIVE` values.
 - [x] Added rollback verification harness for exact action values and nullable custom request persistence.
 - [ ] Keep Bugs #084, #088, and #089 open until Product Owner UAT passes.
+
+## Sprint 6B-1B Final Validation Hotfix – Field Constraints and Purpose Handling
+
+### Implementation Status
+
+- [x] Added shared document dynamic-field validation for normalized request rendering, workflow parsing, and local verification.
+- [x] Enforced NUMBER/MONEY minimum and maximum constraints server-side.
+- [x] Enforced TEXT/TEXTAREA minimum length, maximum length, and safe pattern validation server-side.
+- [x] Preserved SELECT options as usable `{ label, value }` pairs after field-builder save/refresh.
+- [x] Rejected empty required SELECT values and invalid SELECT values outside the configured allowlist.
+- [x] Removed hidden legacy purpose enforcement from custom definition-backed requests without a purpose field.
+- [x] Preserved legacy purpose behavior for enum/configuration-backed requests.
+- [x] Added `scripts/verify-document-field-validation-hotfix.ts`.
+- [ ] Keep Bugs #091-#093 open until Product Owner UAT passes.

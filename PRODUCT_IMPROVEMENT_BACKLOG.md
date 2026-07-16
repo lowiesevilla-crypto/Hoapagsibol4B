@@ -2823,6 +2823,12 @@ Acceptance Criteria:
 - Invalid values show field-specific messages.
 - Invalid requests cannot be submitted by bypassing browser validation.
 - Valid values persist in the request snapshot.
+
+Final Validation Hotfix Engineering Note:
+- Added a shared dynamic-field validation service used by document workflow parsing and the local verification harness.
+- Server validation now enforces NUMBER/MONEY `min` and `max`, TEXT/TEXTAREA `minLength`, `maxLength`, and `pattern`, required CHECKBOX values, and field-specific error messages.
+- The homeowner form consumes normalized constraints for browser-supported validation while server-side validation remains authoritative.
+- Status remains Open until Product Owner UAT passes.
 ## Bug #092 – SELECT Field Has No Usable Options
 
 Module:
@@ -2847,6 +2853,12 @@ Acceptance Criteria:
 - Required SELECT cannot remain empty.
 - Submitted value must match the configured allowlist.
 - Selected value persists in the request snapshot.
+
+Final Validation Hotfix Engineering Note:
+- SELECT options now round-trip from the structured field builder as `{ label, value }` objects instead of becoming `[object Object]` after save/refresh.
+- Request rendering and server validation share the same normalization path for string arrays and `{ label, value }` arrays.
+- Required empty SELECT submissions return `Select a <field label>.`; invalid submitted values are rejected against the configured allowlist.
+- Status remains Open until Product Owner UAT passes.
 ## Bug #093 – Hidden Legacy Purpose Requirement Blocks Custom Requests
 
 Module:
@@ -2878,3 +2890,9 @@ Acceptance Criteria:
 - No hidden required fields.
 - Dynamic field values map consistently to request snapshots.
 - Custom request submits successfully.
+
+Final Validation Hotfix Engineering Note:
+- The document request action now requires the legacy hidden `purpose` field only for legacy/configuration-backed requests.
+- Definition-backed custom requests without a purpose field validate exclusively against active `DocumentDefinitionField` rules and can persist `purpose = null`.
+- If a custom definition exposes an active required purpose field, that field remains enforced through the dynamic-field validator.
+- Status remains Open until Product Owner UAT passes.

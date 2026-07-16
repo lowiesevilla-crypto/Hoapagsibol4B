@@ -930,3 +930,17 @@ Approved direction:
 ## Release Gate
 
 - Bugs #084, #088, and #089 remain open until Product Owner UAT passes.
+
+# 2026-07-16 - Sprint 6B-1B Final Validation Hotfix
+
+## Engineering Ready for Product Owner UAT
+
+- Fixed Bug #091 by moving document dynamic-field constraint enforcement into a shared validator used by request parsing and verification.
+- NUMBER and MONEY now enforce numeric minimum/maximum; TEXT and TEXTAREA enforce minimum length, maximum length, and safe pattern validation.
+- Fixed Bug #092 by preserving SELECT options as usable `{ label, value }` pairs from the structured field builder through homeowner rendering and server allowlist validation.
+- Fixed Bug #093 by removing the hidden legacy purpose requirement from custom definition-backed requests while preserving legacy purpose validation for enum/configuration-backed requests.
+- Added `scripts/verify-document-field-validation-hotfix.ts` to verify constraints, SELECT string/object options, required checkbox behavior, and custom no-purpose validation.
+
+## Release Gate
+
+- Bugs #091-#093 remain open until Product Owner UAT passes.

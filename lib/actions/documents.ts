@@ -68,11 +68,13 @@ export async function submitDocumentRequestAction(formData: FormData) {
   const purpose = legacy.purpose?.trim();
   const remarks = legacy.remarks?.trim();
   const scheduledDate = optionalDateFromString(legacy.scheduledDate);
-  if (!purpose || purpose.length < 3) fail("Enter the purpose of the request.");
-  const purposeValue = purpose ?? "";
-  if (purposeValue.length > 500 || (remarks?.length ?? 0) > 1000) fail("Request details are too long.");
-  if (scheduledDate && scheduledDate < todayUtc()) fail("Pass and validity dates must be today or later.");
   const legacyType = definitionRecord?.legacyType ?? configRecord?.type ?? null;
+  const requiresLegacyPurpose = !definitionRecord || Boolean(legacyType);
+  if (requiresLegacyPurpose && (!purpose || purpose.length < 3)) fail("Enter the purpose of the request.");
+  if (purpose && purpose.length < 3) fail("Purpose must be at least 3 characters.");
+  const purposeValue = purpose || null;
+  if ((purposeValue?.length ?? 0) > 500 || (remarks?.length ?? 0) > 1000) fail("Request details are too long.");
+  if (scheduledDate && scheduledDate < todayUtc()) fail("Pass and validity dates must be today or later.");
   if (legacyType === DocumentType.MOVE_IN_OUT_PASS && legacy.passType && !["MOVE_IN", "MOVE_OUT"].includes(legacy.passType)) fail("Select Move In or Move Out.");
 
   const unpaid = await prisma.bill.aggregate({ where: { tenantId: user.tenantId, homeownerId, archivedAt: null, balance: { gt: 0 } }, _sum: { balance: true } });

@@ -383,3 +383,18 @@ Status: Engineering ready for Product Owner UAT.
 
 Release gate:
 - Bugs #084-#085 and Improvements #086-#087 remain open until Product Owner UAT passes.
+
+# Sprint 6B-1B Final Hotfix - Dynamic Fields and Custom Requests
+
+Status: Engineering ready for Product Owner UAT.
+
+- Added migration `20260716174058_nullable_document_request_type` so custom definition-backed requests can persist with `DocumentRequest.type = null`.
+- Preserved legacy enum values for existing and legacy-backed document requests.
+- Added normalized dynamic field rendering and validation for default values, SELECT options, min/max, min/max length, pattern validation, and required checkboxes.
+- Added server-side rejection for unknown dynamic fields and invalid SELECT/checkbox submissions.
+- Added custom definition numbering through `DocumentDefinitionCounter` while preserving legacy `DocumentCounter`.
+- Updated document labels across portal/admin/PDF/print/verification paths to prefer document definitions before legacy enum labels.
+- Hardened Activate/Deactivate/Archive forms with exact hidden `operation` values and added a rollback verification harness.
+
+Release gate:
+- Bugs #084, #088, and #089 remain open until Product Owner UAT passes.

@@ -5,7 +5,7 @@ import { DocumentRequestForm } from "@/components/document-request-form";
 import { saveHouseholdMemberAction, toggleHouseholdMemberAction } from "@/lib/actions/documents";
 import { requireUser } from "@/lib/auth";
 import { prisma } from "@/lib/db";
-import { configuredDocumentSummary, isReadyForDownload } from "@/lib/services/document-workflow";
+import { configuredDocumentSummary, isReadyForDownload, normalizeDocumentFields } from "@/lib/services/document-workflow";
 import { getRequestableDocumentDefinitions } from "@/lib/services/document-definitions";
 import { documentTypeLabel } from "@/lib/services/documents";
 import { getPaymentSettings } from "@/lib/system-settings";
@@ -36,7 +36,7 @@ export default async function PortalDocumentsPage({ searchParams }: { searchPara
     approvalRequired: config.approvalRequired,
     paymentRequired: config.paymentRequired,
     maxCopies: config.maxCopies,
-    fields: config.fields.map((field) => ({ key: field.key, label: field.label, fieldType: field.fieldType, required: field.required, options: Array.isArray(field.options) ? field.options.map(String) : [] })),
+    fields: normalizeDocumentFields(config.fields).map((field) => ({ key: field.key, label: field.label, fieldType: field.fieldType, required: field.required, defaultValue: field.defaultValue, options: field.options, validation: field.validation })),
   }));
   const activeMembers = members.filter((member) => member.active).map((member) => ({ id: member.id, fullName: member.fullName, relationship: member.relationship }));
   return <>

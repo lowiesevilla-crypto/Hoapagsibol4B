@@ -324,7 +324,7 @@ Introduce the additive database foundation required for tenant-created documents
 
 ### Known Limitation
 
-`DocumentRequest.type` remains a required legacy enum field for compatibility. Definition-backed homeowner submissions therefore require a `legacyType` bridge until a later additive cleanup makes enumless custom request records safe end-to-end.
+`DocumentRequest.type` is now nullable for custom definition-backed requests. Legacy enum values remain in place for historical and legacy-backed requests until a later cleanup removes enum dependencies from older paths.
 
 ## Sprint 6B-1B Hotfix – Catalog Actions and Field Builder
 
@@ -337,3 +337,18 @@ Introduce the additive database foundation required for tenant-created documents
 - [x] Add `Document definitions` navigation from the System Settings Configuration Center.
 - [x] Preserve catalog table focus after filters and pagination using the shared pagination focus target.
 - [ ] Keep Bugs #084-#085 and Improvements #086-#087 open until Product Owner UAT passes.
+
+## Sprint 6B-1B Final Hotfix – Dynamic Rendering and Enumless Requests
+
+### Implementation Status
+
+- [x] Made `DocumentRequest.type` nullable through additive migration `20260716174058_nullable_document_request_type`.
+- [x] Preserved existing legacy `DocumentType` values and historical generated-document snapshots.
+- [x] Added normalized dynamic field view model and server-side validator for defaults, constraints, select allowlists, patterns, and required checkboxes.
+- [x] Updated homeowner rendering to use normalized field defaults, options, and validation constraints.
+- [x] Enabled custom definition-backed request creation with `definitionId` authoritative and `type = null` when no legacy type exists.
+- [x] Added definition-scoped numbering through `DocumentDefinitionCounter` for custom definitions.
+- [x] Updated document labels in admin, portal, print, PDF, and verification surfaces to prefer definition/configuration names before legacy enum labels.
+- [x] Hardened definition action forms to submit hidden exact `ACTIVATE`, `DEACTIVATE`, and `ARCHIVE` values.
+- [x] Added rollback verification harness for exact action values and nullable custom request persistence.
+- [ ] Keep Bugs #084, #088, and #089 open until Product Owner UAT passes.

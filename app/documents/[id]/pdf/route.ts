@@ -31,7 +31,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   if (isPassDocument(documentRequest.type)) drawPassSheet(pdf.addPage([595.28, 841.89]), drawInput);
   else if (documentRequest.type === "CERTIFICATE_OF_RESIDENCY") drawResidencyCertificate(pdf.addPage([595.28, 841.89]), drawInput);
   else drawDocumentPage(pdf.addPage([595.28, 841.89]), drawInput);
-  pdf.setTitle(`${documentRequest.documentNumber} - ${documentTypeLabel(documentRequest.type)}`);
+  pdf.setTitle(`${documentRequest.documentNumber} - ${documentRequestTitle(documentRequest)}`);
   pdf.setAuthor(association.name);
   pdf.setSubject("Official HOA document with online verification");
   const bytes = await pdf.save();
@@ -50,7 +50,7 @@ function drawPassSheet(page: PDFPage, input: DrawInput) {
   const navy = rgb(0.03, 0.16, 0.38);
   if (logo) page.drawImage(logo, { x: 28, y: 764, width: 58, height: 58 });
   page.drawRectangle({ x: 115, y: 787, width: 330, height: 30, color: navy });
-  drawCenteredWithin(page, safeText(documentTypeLabel(request.type).toUpperCase()), bold, 16, 115, 445, 796, rgb(1, 1, 1));
+  drawCenteredWithin(page, safeText(documentRequestTitle(request).toUpperCase()), bold, 16, 115, 445, 796, rgb(1, 1, 1));
   drawCenteredWithin(page, safeText(association.name), bold, 13, 92, 470, 766, navy);
   drawCenteredWithin(page, safeText(association.address), regular, 6.5, 92, 470, 753, rgb(.2, .25, .3));
   drawCenteredWithin(page, safeText([association.contactNumber, association.email].filter(Boolean).join(" | ")), regular, 6.5, 92, 470, 742, rgb(.2, .25, .3));
@@ -92,7 +92,7 @@ function drawPassSheet(page: PDFPage, input: DrawInput) {
 
 function passRows(request: DrawInput["documentRequest"], top: number): Array<[string, string, number, number, number]> {
   return [
-    ["TYPE OF PASS", request.passType?.replaceAll("_", "-") || documentTypeLabel(request.type), 116, top - 20, 100],
+    ["TYPE OF PASS", request.passType?.replaceAll("_", "-") || documentRequestTitle(request), 116, top - 20, 100],
     ["SCHEDULED DATE / TIME", `${request.scheduledDate ? shortDate(request.scheduledDate) : "-"} ${request.startTime || ""}-${request.endTime || ""}`, 235, top - 20, 130],
     ["VALID UNTIL", request.validityDate ? shortDate(request.validityDate) : "-", 383, top - 20, 95],
     ["HOMEOWNER", request.homeowner.user.name, 116, top - 54, 145],
@@ -230,7 +230,7 @@ function drawDocumentPage(page: PDFPage, input: DrawInput) {
   page.drawLine({ start: { x: 44, y: 681 }, end: { x: 551, y: 681 }, thickness: 1.5, color: pine });
   if (copy) page.drawText(copy, { x: 455, y: 786, font: bold, size: 8, color: pine });
   drawCentered(page, request.documentNumber!, bold, 8, 652, rgb(0.35, 0.35, 0.35));
-  drawCentered(page, safeText(documentTypeLabel(request.type).toUpperCase()), bold, 20, 625, pine);
+  drawCentered(page, safeText(documentRequestTitle(request).toUpperCase()), bold, 20, 625, pine);
   drawCentered(page, safeText(`Requested ${shortDate(request.requestedAt)} | Approved ${shortDate(request.approvedAt!)}${request.validityDate ? ` | Valid until ${shortDate(request.validityDate)}` : ""}`), regular, 7.5, 605, rgb(0.35, 0.35, 0.35));
   drawCentered(page, safeText(`${request.homeowner.user.name} - Block ${request.homeowner.block}, Lot ${request.homeowner.lot}`), bold, 8.5, 590, pine);
 
@@ -296,4 +296,5 @@ function wrapText(text: string, font: PDFFont, size: number, maxWidth: number) {
 }
 function drawCentered(page: PDFPage, text: string, font: PDFFont, size: number, y: number, color: ReturnType<typeof rgb>) { const width = font.widthOfTextAtSize(text, size); page.drawText(text, { x: Math.max(120, (595.28 - width) / 2), y, font, size, color }); }
 function drawCenteredWithin(page: PDFPage, text: string, font: PDFFont, size: number, x1: number, x2: number, y: number, color: ReturnType<typeof rgb>) { const width = font.widthOfTextAtSize(text, size); page.drawText(text, { x: x1 + Math.max(0, (x2 - x1 - width) / 2), y, font, size, color }); }
+function documentRequestTitle(request: Awaited<ReturnType<typeof getAccessibleGeneratedDocument>>["request"]) { return request.definition?.displayName || request.configuration?.displayName || documentTypeLabel(request.type); }
 function safeText(value: string) { return value.normalize("NFKD").replace(/[^\x20-\x7E]/g, ""); }

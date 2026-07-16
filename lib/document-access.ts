@@ -7,7 +7,7 @@ import { prisma } from "@/lib/db";
 
 export async function getAccessibleGeneratedDocument(id: string, options?: { requireDownload?: boolean }) {
   const user = await requireUser();
-  const request = await prisma.documentRequest.findFirst({ where: { id, tenantId: user.tenantId }, include: { homeowner: { include: { user: true } }, processedBy: true, approvedBy: true, processedByOfficer: true, approvedByOfficer: true, histories: { include: { actor: true }, orderBy: { createdAt: "asc" } } } });
+  const request = await prisma.documentRequest.findFirst({ where: { id, tenantId: user.tenantId }, include: { homeowner: { include: { user: true } }, definition: true, configuration: true, processedBy: true, approvedBy: true, processedByOfficer: true, approvedByOfficer: true, histories: { include: { actor: true }, orderBy: { createdAt: "asc" } } } });
   if (!request?.generatedContent || !request.documentNumber || !request.verificationCode) notFound();
   if (user.role === Role.HOMEOWNER && request.homeownerId !== user.homeownerProfile?.id) redirect("/portal/documents");
   if (user.role === Role.HOMEOWNER && request.archivedAt) redirect("/portal/documents?error=This%20document%20has%20been%20archived%20by%20the%20HOA%20office.");

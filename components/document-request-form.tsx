@@ -10,7 +10,15 @@ export type PortalDocumentField = {
   label: string;
   fieldType: "TEXT" | "TEXTAREA" | "DATE" | "NUMBER" | "MONEY" | "SELECT" | "CHECKBOX";
   required: boolean;
-  options: string[];
+  defaultValue: string | boolean | null;
+  options: Array<{ label: string; value: string }>;
+  validation: {
+    min?: number;
+    max?: number;
+    minLength?: number;
+    maxLength?: number;
+    pattern?: string;
+  };
 };
 
 export type PortalDocumentConfig = {
@@ -84,9 +92,10 @@ export function DocumentRequestForm({ configs, members, disabled = false }: { co
 function ConfiguredField({ field }: { field: PortalDocumentField }) {
   const name = `field_${field.key}`;
   const span = field.fieldType === "TEXTAREA" ? "md:col-span-2" : "";
-  if (field.fieldType === "TEXTAREA") return <label className={span}><span className="label">{field.label}</span><textarea className="field min-h-24" name={name} maxLength={field.key === "purpose" ? 500 : 1000} required={field.required} /></label>;
-  if (field.fieldType === "SELECT") return <label className={span}><span className="label">{field.label}</span><select className="field" name={name} required={field.required}><option value="">Select</option>{field.options.map((option) => <option key={option} value={option}>{option.replaceAll("_", " ")}</option>)}</select></label>;
-  if (field.fieldType === "CHECKBOX") return <label className="flex min-h-12 items-center gap-3 rounded-xl border border-slate-200 px-3 font-bold"><input type="checkbox" name={name} /> {field.label}</label>;
+  const defaultText = typeof field.defaultValue === "string" ? field.defaultValue : "";
+  if (field.fieldType === "TEXTAREA") return <label className={span}><span className="label">{field.label}</span><textarea className="field min-h-24" name={name} minLength={field.validation.minLength} maxLength={field.validation.maxLength ?? (field.key === "purpose" ? 500 : 1000)} required={field.required} defaultValue={defaultText} /></label>;
+  if (field.fieldType === "SELECT") return <label className={span}><span className="label">{field.label}</span><select className="field" name={name} required={field.required} defaultValue={defaultText}><option value="">Select</option>{field.options.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></label>;
+  if (field.fieldType === "CHECKBOX") return <label className="flex min-h-12 items-center gap-3 rounded-xl border border-slate-200 px-3 font-bold"><input type="checkbox" name={name} defaultChecked={field.defaultValue === true} required={field.required} /> {field.label}</label>;
   const type = field.fieldType === "DATE" ? "date" : field.fieldType === "NUMBER" || field.fieldType === "MONEY" ? "number" : "text";
-  return <label className={span}><span className="label">{field.label}</span><input className="field" name={name} type={type} step={field.fieldType === "MONEY" ? "0.01" : undefined} required={field.required} /></label>;
+  return <label className={span}><span className="label">{field.label}</span><input className="field" name={name} type={type} step={field.fieldType === "MONEY" ? "0.01" : undefined} min={field.validation.min} max={field.validation.max} minLength={type === "text" ? field.validation.minLength : undefined} maxLength={type === "text" ? field.validation.maxLength : undefined} pattern={type === "text" ? field.validation.pattern : undefined} required={field.required} defaultValue={defaultText} /></label>;
 }

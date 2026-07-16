@@ -41,7 +41,7 @@ async function collectExpectedPairs() {
   templates.forEach((row) => add(row.tenantId, row.type));
 
   const requests = await prisma.documentRequest.findMany({ select: { tenantId: true, type: true } });
-  requests.forEach((row) => add(row.tenantId, row.type));
+  requests.forEach((row) => { if (row.type) add(row.tenantId, row.type); });
 
   return [...pairs.values()].sort((a, b) => `${a.tenantId}:${a.type}`.localeCompare(`${b.tenantId}:${b.type}`));
 }

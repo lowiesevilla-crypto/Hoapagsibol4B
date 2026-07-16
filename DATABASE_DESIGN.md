@@ -899,3 +899,17 @@ New records use tenant-owned definitions and published template versions.
 ### Local Backfill Verification
 
 Local development backfill created 32 tenant/legacy-type definitions, 132 definition fields, 9 template sets, 9 published template versions, linked 32 configurations, linked 2 requests, and linked 1 generated document version. Cross-tenant compatibility checks returned no mismatches.
+
+## Sprint 6B-1B Nullable Document Request Type
+
+Migration `20260716174058_nullable_document_request_type` makes `DocumentRequest.type` nullable for custom tenant-owned document definitions. The legacy `DocumentType` enum remains available and existing historical request rows keep their original enum values.
+
+Compatibility rules:
+
+- Legacy-backed requests continue to store `DocumentRequest.type`.
+- Custom definition-backed requests store `definitionId` as the authoritative reference and may store `type = null`.
+- Definition, template version, request data, and subject snapshots remain immutable at submission/generation time.
+- Custom definition numbering uses `DocumentDefinitionCounter`; legacy numbering continues to use `DocumentCounter`.
+- Historical generated content and document numbers are not rewritten.
+
+Local verification after applying the migration preserved request count `2`, generated-content fingerprint `120b4b0526a4fc425ac961f7563279858d2ed75839c4432ab67e60f645e8ac84`, and document-number fingerprint `00a72e70fa81e3d02226fe9d213f0e7b0c7d23dad7fa240f8501c2c60a7920a7`.

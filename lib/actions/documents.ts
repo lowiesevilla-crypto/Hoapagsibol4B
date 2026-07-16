@@ -9,7 +9,7 @@ import { getAppUrl } from "@/lib/app-url";
 import { platformPrisma, prisma } from "@/lib/db";
 import { getAssociationSettings } from "@/lib/system-settings";
 import { asJson, getActiveOrganizationOfficers, officerSnapshot } from "@/lib/organization";
-import { allocateDocumentNumber, documentTypeOptions, renderDocumentTemplate } from "@/lib/services/documents";
+import { allocateDefinitionDocumentNumber, allocateDocumentNumber, documentTypeLabel, documentTypeOptions, renderDocumentTemplate } from "@/lib/services/documents";
 import { buildSubjectSnapshot, canGenerateWithoutPayment, documentConfigurationStatus, legacyRequestFields, needsTemplate, parseConfiguredFields, requestDataSnapshotJson, statusForConfiguration, subjectSnapshotJson } from "@/lib/services/document-workflow";
 import { defaultNumberingFormat, evaluateDefinitionCompleteness, validateNumberingFormat, workflowFieldsForPreset } from "@/lib/services/document-definitions";
 import { defaultTemplateDefinition, documentTemplateBlockTypes, normalizeTemplateDefinition, validateTemplateDefinition, type AllowedDocumentPlaceholder, type DocumentTemplateBlock, type DocumentTemplateBlockType } from "@/lib/services/document-template-builder";
@@ -46,7 +46,6 @@ export async function submitDocumentRequestAction(formData: FormData) {
   const homeownerRecord = homeowner!;
   const configRecord = config;
   const definitionRecord = definition!;
-  if (definitionRecord && !definitionRecord.legacyType) fail("This custom document definition is not yet requestable until legacy enum cleanup is completed.");
   const maxCopies = definitionRecord?.maxCopies ?? configRecord!.maxCopies;
   if (numberOfCopies > maxCopies) fail(`This document allows up to ${maxCopies} copy${maxCopies === 1 ? "" : "ies"} per request.`);
   if (definitionRecord) {
@@ -73,7 +72,7 @@ export async function submitDocumentRequestAction(formData: FormData) {
   const purposeValue = purpose ?? "";
   if (purposeValue.length > 500 || (remarks?.length ?? 0) > 1000) fail("Request details are too long.");
   if (scheduledDate && scheduledDate < todayUtc()) fail("Pass and validity dates must be today or later.");
-  const legacyType = definitionRecord?.legacyType ?? configRecord!.type;
+  const legacyType = definitionRecord?.legacyType ?? configRecord?.type ?? null;
   if (legacyType === DocumentType.MOVE_IN_OUT_PASS && legacy.passType && !["MOVE_IN", "MOVE_OUT"].includes(legacy.passType)) fail("Select Move In or Move Out.");
 
   const unpaid = await prisma.bill.aggregate({ where: { tenantId: user.tenantId, homeownerId, archivedAt: null, balance: { gt: 0 } }, _sum: { balance: true } });
@@ -124,7 +123,7 @@ export async function processDocumentRequestAction(formData: FormData) {
   const fail = (message: string): never => redirect(`${returnPath}?error=${encodeURIComponent(message)}`);
   const adminRemarks = clean(formData.get("adminRemarks"));
   const submittedValidityDate = optionalDate(formData.get("validityDate"));
-  const request = await prisma.documentRequest.findFirst({ where: { id, tenantId: admin.tenantId }, include: { homeowner: { include: { user: true } }, configuration: { include: { template: true, fields: { where: { active: true } } } } } });
+  const request = await prisma.documentRequest.findFirst({ where: { id, tenantId: admin.tenantId }, include: { homeowner: { include: { user: true } }, configuration: { include: { template: true, fields: { where: { active: true } } } }, definition: { include: { assignedTemplateVersion: { include: { templateSet: true } } } } } });
   if (!request) return fail("Document request not found.");
   const validityDate = submittedValidityDate || request.validityDate || (operation === "approve" && request.type === DocumentType.CERTIFICATE_OF_RESIDENCY ? oneYearFromToday() : undefined);
   const purpose = clean(formData.get("purpose")) || request.purpose;
@@ -146,7 +145,9 @@ export async function processDocumentRequestAction(formData: FormData) {
   const reviewableStatuses: DocumentRequestStatus[] = [DocumentRequestStatus.SUBMITTED, DocumentRequestStatus.PENDING_APPROVAL, DocumentRequestStatus.UNDER_REVIEW];
   if (request.homeowner.tenantId !== admin.tenantId) fail("Document request homeowner does not belong to this tenant.");
   if (request.configuration && request.configuration.tenantId !== admin.tenantId) fail("Document configuration does not belong to this tenant.");
-  if (request.configuration?.template && (request.configuration.template.tenantId !== admin.tenantId || request.configuration.template.type !== request.type)) fail("Document template does not belong to this tenant or document type.");
+  if (request.configuration?.template && (request.configuration.template.tenantId !== admin.tenantId || (request.type && request.configuration.template.type !== request.type))) fail("Document template does not belong to this tenant or document type.");
+  if (request.definition && request.definition.tenantId !== admin.tenantId) fail("Document definition does not belong to this tenant.");
+  if (request.definition?.assignedTemplateVersion && (request.definition.assignedTemplateVersion.tenantId !== admin.tenantId || request.definition.assignedTemplateVersion.templateSet.definitionId !== request.definition.id)) fail("Document template version does not belong to this definition.");
   if ((operation === "approve" || operation === "regenerate") && (request.type === DocumentType.GATE_PASS || request.type === DocumentType.MOVE_IN_OUT_PASS) && (!validityDate || !scheduledDate || !partyName)) fail("Pass validity date, scheduled date, and visitor or contractor name are required.");
   if (operation !== "reject" && ((validityDate && validityDate < todayUtc()) || (scheduledDate && scheduledDate < todayUtc()))) fail("Validity and scheduled dates must be today or later.");
   if (operation === "review") {
@@ -173,14 +174,16 @@ export async function processDocumentRequestAction(formData: FormData) {
     if (regenerating && (!request.generatedContent || !request.documentNumber || !request.verificationCode || request.archivedAt)) fail("Only active generated documents can be regenerated.");
     const [unpaid, template, payments, constructionBonds, association, officers] = await Promise.all([
       prisma.bill.aggregate({ where: { tenantId: admin.tenantId, homeownerId: request.homeownerId, archivedAt: null, balance: { gt: 0 } }, _sum: { balance: true } }),
-      request.configuration?.template?.active ? Promise.resolve(request.configuration.template) : prisma.documentTemplate.findFirst({ where: { tenantId: admin.tenantId, type: request.type } }),
+      request.configuration?.template?.active ? Promise.resolve(request.configuration.template) : request.type ? prisma.documentTemplate.findFirst({ where: { tenantId: admin.tenantId, type: request.type } }) : Promise.resolve(null),
       prisma.payment.aggregate({ where: { tenantId: admin.tenantId, homeownerId: request.homeownerId, status: "ACTIVE" }, _sum: { amount: true } }),
       prisma.collection.findMany({ where: { tenantId: admin.tenantId, homeownerId: request.homeownerId, type: "CONSTRUCTION_BOND", refundable: true } }),
       getAssociationSettings(admin.tenantId),
       getActiveOrganizationOfficers(admin.tenantId),
     ]);
-    if (!template?.active) return fail("The document template is inactive or missing.");
-    if (template.tenantId !== admin.tenantId || template.type !== request.type) fail("The document template does not belong to this tenant or document type.");
+    const definitionTemplate = request.definition?.assignedTemplateVersion?.status === DocumentTemplateVersionStatus.PUBLISHED ? request.definition.assignedTemplateVersion : null;
+    const templateBody = template?.active ? template.body : structuredTemplateText(request.templateDefinitionSnapshot ?? definitionTemplate?.definitionJson);
+    if (!templateBody) return fail("The document template is inactive or missing.");
+    if (template && (template.tenantId !== admin.tenantId || (request.type && template.type !== request.type))) fail("The document template does not belong to this tenant or document type.");
     const outstandingBalance = Number(unpaid._sum.balance ?? 0);
     if (allowDownloadDespiteBalance && !canOverrideOutstandingBalance(admin.role)) fail("Your role is not authorized to allow download despite an outstanding balance.");
     if (allowDownloadDespiteBalance && outstandingBalance > 0 && !downloadOverrideReason) fail("Enter a reason when allowing download despite an outstanding balance.");
@@ -191,9 +194,13 @@ export async function processDocumentRequestAction(formData: FormData) {
     const now = new Date();
     const verificationCode = randomUUID().replaceAll("-", "").slice(0, 20).toUpperCase();
     await platformPrisma.$transaction(async (tx) => {
-      const documentNumber = regenerating ? request.documentNumber! : await allocateDocumentNumber(tx as unknown as Prisma.TransactionClient, request.tenantId, request.type, now);
+      const documentNumber = regenerating ? request.documentNumber! : request.definition
+        ? await allocateDefinitionDocumentNumber(tx as unknown as Prisma.TransactionClient, request.tenantId, request.definition, now)
+        : request.type
+          ? await allocateDocumentNumber(tx as unknown as Prisma.TransactionClient, request.tenantId, request.type, now)
+          : fail("Document definition is required before generating a custom document.");
       const nextVersion = regenerating ? Math.max(1, request.currentVersion) + 1 : 1;
-      const content = renderDocumentTemplate(template.body, {
+      const content = renderDocumentTemplate(templateBody, {
         associationName: association.name,
         homeownerName: request.homeowner.user.name,
         propertyAddress: request.homeowner.address,
@@ -242,11 +249,11 @@ export async function processDocumentRequestAction(formData: FormData) {
         contact_number: request.homeowner.phone,
       });
       const requestSnapshot = asJson({ type: request.type, purpose, validityDate, scheduledDate, startTime, endTime, partyName, vehicleDetails, contractorDetails, representativeName, propertyDetails, passType, adminRemarks, processedByOfficerId: processedOfficer?.id, approvedByOfficerId: approvedOfficer?.id, allowDownloadDespiteBalance });
-      await tx.documentRequest.update({ where: { id: request.id }, data: { status: DocumentRequestStatus.READY_FOR_DOWNLOAD, documentNumber, purpose, validityDate, scheduledDate, startTime, endTime, partyName, vehicleDetails, contractorDetails, representativeName, propertyDetails, passType, outstandingBalanceAtRequest: outstandingBalance, allowDownloadDespiteBalance, downloadOverrideReason: allowDownloadDespiteBalance ? downloadOverrideReason : null, downloadOverrideAt: allowDownloadDespiteBalance ? now : null, downloadOverrideById: allowDownloadDespiteBalance ? admin.id : null, reviewedAt: request.reviewedAt ?? now, approvedAt: now, generatedAt: now, readyForDownloadAt: now, downloadedAt: null, processedById: admin.id, approvedById: admin.id, processedByOfficerId: processedOfficer?.id, approvedByOfficerId: approvedOfficer?.id, adminRemarks, reviewedDataSnapshot, templateVersion: template.version, templateVersionSnapshot: template.version, templateIdSnapshot: template.id, templateSnapshot: template.body, generatedContent: content, verificationCode, currentVersion: nextVersion, associationSnapshot: asJson(association), homeownerSnapshot: request.subjectSnapshot ?? asJson({ name: request.homeowner.user.name, email: request.homeowner.user.email, address: request.homeowner.address, block: request.homeowner.block, lot: request.homeowner.lot, phone: request.homeowner.phone, birthDate: request.homeowner.birthDate, civilStatus: request.homeowner.civilStatus, citizenship: request.homeowner.citizenship, occupation: request.homeowner.occupation, residencyDate: request.homeowner.residencyDate, phase: request.homeowner.phase, propertyType: request.homeowner.propertyType, occupancyStatus: request.homeowner.occupancyStatus }), organizationSnapshot: asJson(officers.map(officerSnapshot)), processedOfficerSnapshot: processedOfficer ? asJson(officerSnapshot(processedOfficer)) : undefined, approvedOfficerSnapshot: approvedOfficer ? asJson(officerSnapshot(approvedOfficer)) : undefined } });
+      await tx.documentRequest.update({ where: { id: request.id }, data: { status: DocumentRequestStatus.READY_FOR_DOWNLOAD, documentNumber, purpose, validityDate, scheduledDate, startTime, endTime, partyName, vehicleDetails, contractorDetails, representativeName, propertyDetails, passType, outstandingBalanceAtRequest: outstandingBalance, allowDownloadDespiteBalance, downloadOverrideReason: allowDownloadDespiteBalance ? downloadOverrideReason : null, downloadOverrideAt: allowDownloadDespiteBalance ? now : null, downloadOverrideById: allowDownloadDespiteBalance ? admin.id : null, reviewedAt: request.reviewedAt ?? now, approvedAt: now, generatedAt: now, readyForDownloadAt: now, downloadedAt: null, processedById: admin.id, approvedById: admin.id, processedByOfficerId: processedOfficer?.id, approvedByOfficerId: approvedOfficer?.id, adminRemarks, reviewedDataSnapshot, templateVersion: template?.version ?? definitionTemplate?.version ?? request.templateVersionSnapshot ?? 1, templateVersionSnapshot: template?.version ?? definitionTemplate?.version ?? request.templateVersionSnapshot, templateVersionIdSnapshot: definitionTemplate?.id ?? request.templateVersionIdSnapshot, templateIdSnapshot: template?.id ?? request.templateIdSnapshot, templateSnapshot: templateBody, templateDefinitionSnapshot: request.templateDefinitionSnapshot ?? definitionTemplate?.definitionJson ?? undefined, generatedContent: content, verificationCode, currentVersion: nextVersion, associationSnapshot: asJson(association), homeownerSnapshot: request.subjectSnapshot ?? asJson({ name: request.homeowner.user.name, email: request.homeowner.user.email, address: request.homeowner.address, block: request.homeowner.block, lot: request.homeowner.lot, phone: request.homeowner.phone, birthDate: request.homeowner.birthDate, civilStatus: request.homeowner.civilStatus, citizenship: request.homeowner.citizenship, occupation: request.homeowner.occupation, residencyDate: request.homeowner.residencyDate, phase: request.homeowner.phase, propertyType: request.homeowner.propertyType, occupancyStatus: request.homeowner.occupancyStatus }), organizationSnapshot: asJson(officers.map(officerSnapshot)), processedOfficerSnapshot: processedOfficer ? asJson(officerSnapshot(processedOfficer)) : undefined, approvedOfficerSnapshot: approvedOfficer ? asJson(officerSnapshot(approvedOfficer)) : undefined } });
       await createDocumentEditAudits(tx, request.tenantId, request.id, editAudits);
       await createDocumentHistories(tx, request.tenantId, request.id, regenerating ? [{ status: DocumentRequestStatus.READY_FOR_DOWNLOAD, actorId: admin.id, note: `Regenerated ${documentNumber} as version ${nextVersion}. Previous versions remain archived.` }] : [{ status: DocumentRequestStatus.APPROVED, actorId: admin.id, note: adminRemarks || "Approved by administrator." }, { status: DocumentRequestStatus.READY_FOR_DOWNLOAD, actorId: admin.id, note: `Generated as ${documentNumber}, version 1.${outstandingBalance > 0 && !allowDownloadDespiteBalance ? " Download restricted while balance remains unpaid." : ""}` }]);
-      await tx.documentVersion.create({ data: { tenantId: request.tenantId, requestId: request.id, version: nextVersion, documentNumber, verificationCode, templateVersion: template.version, templateSnapshot: template.body, generatedContent: content, requestSnapshot, generatedById: admin.id, reason: regenerating ? adminRemarks || "Approved document edited and regenerated." : request.origin === "ADMIN" ? "Admin-initiated document generation." : "Homeowner request approved and generated." } });
-      await tx.auditLog.create({ data: { tenantId: request.tenantId, actorId: admin.id, module: "DOCUMENTS", action: regenerating ? "EDIT_AND_REGENERATE" : request.origin === "ADMIN" ? "ADMIN_GENERATE_DOCUMENT" : "APPROVE_AND_GENERATE", entityType: "DocumentRequest", entityId: request.id, metadata: { documentNumber, version: nextVersion, templateVersion: template.version, verificationCode, outstandingBalance, allowDownloadDespiteBalance, downloadOverrideReason, oldValue: regenerating ? { version: request.currentVersion, purpose: request.purpose, validityDate: request.validityDate, propertyDetails: request.propertyDetails, vehicleDetails: request.vehicleDetails, partyName: request.partyName, contractorDetails: request.contractorDetails } : null, newValue: requestSnapshot, role: admin.role, remarks: adminRemarks } } });
+      await tx.documentVersion.create({ data: { tenantId: request.tenantId, requestId: request.id, definitionId: request.definitionId, templateVersionId: definitionTemplate?.id ?? null, version: nextVersion, documentNumber, verificationCode, templateVersion: template?.version ?? definitionTemplate?.version ?? request.templateVersionSnapshot ?? 1, templateSnapshot: templateBody, generatedContent: content, requestSnapshot, definitionSnapshot: request.definitionSnapshot ?? undefined, templateDefinitionSnapshot: request.templateDefinitionSnapshot ?? definitionTemplate?.definitionJson ?? undefined, generatedById: admin.id, reason: regenerating ? adminRemarks || "Approved document edited and regenerated." : request.origin === "ADMIN" ? "Admin-initiated document generation." : "Homeowner request approved and generated." } });
+      await tx.auditLog.create({ data: { tenantId: request.tenantId, actorId: admin.id, module: "DOCUMENTS", action: regenerating ? "EDIT_AND_REGENERATE" : request.origin === "ADMIN" ? "ADMIN_GENERATE_DOCUMENT" : "APPROVE_AND_GENERATE", entityType: "DocumentRequest", entityId: request.id, metadata: { documentNumber, version: nextVersion, templateVersion: template?.version ?? definitionTemplate?.version ?? request.templateVersionSnapshot ?? 1, verificationCode, outstandingBalance, allowDownloadDespiteBalance, downloadOverrideReason, oldValue: regenerating ? { version: request.currentVersion, purpose: request.purpose, validityDate: request.validityDate, propertyDetails: request.propertyDetails, vehicleDetails: request.vehicleDetails, partyName: request.partyName, contractorDetails: request.contractorDetails } : null, newValue: requestSnapshot, role: admin.role, remarks: adminRemarks } } });
       if (allowDownloadDespiteBalance && outstandingBalance > 0) await tx.auditLog.create({ data: { tenantId: request.tenantId, actorId: admin.id, module: "DOCUMENTS", action: "DOWNLOAD_BALANCE_OVERRIDE", entityType: "DocumentRequest", entityId: request.id, metadata: { documentNumber, outstandingBalance, reason: downloadOverrideReason } } });
     });
   } else {
@@ -261,7 +268,7 @@ export async function processDocumentRequestAction(formData: FormData) {
       email: request.homeowner.user.email,
       subject: approved ? "Your HOA document request was approved" : "Update on your HOA document request",
       heading: approved ? "Document approved" : "Document request rejected",
-      message: approved ? `Hello ${request.homeowner.user.name},\nYour ${request.type.replaceAll("_", " ").toLowerCase()} request has been approved and generated. You can review it in the homeowner portal.` : `Hello ${request.homeowner.user.name},\nYour ${request.type.replaceAll("_", " ").toLowerCase()} request was not approved.\nReason: ${adminRemarks || "Please contact the HOA office for details."}`,
+      message: approved ? `Hello ${request.homeowner.user.name},\nYour ${documentRequestLabel(request).toLowerCase()} request has been approved and generated. You can review it in the homeowner portal.` : `Hello ${request.homeowner.user.name},\nYour ${documentRequestLabel(request).toLowerCase()} request was not approved.\nReason: ${adminRemarks || "Please contact the HOA office for details."}`,
       type: approved ? NotificationType.DOCUMENT_APPROVED : NotificationType.DOCUMENT_REJECTED,
       actionLabel: "View document requests",
       actionUrl: `${appUrl}/portal/documents`,
@@ -861,7 +868,15 @@ function parseFieldsJson(raw: string) {
       label,
       fieldType,
       required: Boolean(item.required),
-      options: Array.isArray(item.options) ? asJson(item.options.map(String)) : undefined,
+      options: Array.isArray(item.options) ? asJson(item.options.map((option) => {
+        if (option && typeof option === "object" && !Array.isArray(option)) {
+          const value = String(record(option).value ?? record(option).label ?? "").trim();
+          const label = String(record(option).label ?? record(option).value ?? "").trim();
+          return value ? { label: label || value, value } : null;
+        }
+        const value = String(option ?? "").trim();
+        return value || null;
+      }).filter(Boolean)) : undefined,
       validation: item.validation ? asJson(item.validation) : undefined,
       defaultValue: Object.hasOwn(item, "defaultValue") && item.defaultValue !== "" && item.defaultValue !== undefined ? asJson(item.defaultValue) : undefined,
       active: item.active !== false,
@@ -875,11 +890,12 @@ async function generateDocumentForRequest(id: string, actorId: string, reason: s
     include: {
       homeowner: { include: { user: true } },
       configuration: { include: { template: true } },
+      definition: { include: { assignedTemplateVersion: { include: { templateSet: true } } } },
     },
   });
   if (!request) throw new Error("Document request not found.");
   const publishedTemplate = request.templateVersionIdSnapshot ? await prisma.documentTemplateVersion.findFirst({ where: { tenantId: request.tenantId, id: request.templateVersionIdSnapshot, status: DocumentTemplateVersionStatus.PUBLISHED } }) : null;
-  const template = request.configuration?.template ?? await prisma.documentTemplate.findFirst({ where: { tenantId: request.tenantId, type: request.type } });
+  const template = request.configuration?.template ?? (request.type ? await prisma.documentTemplate.findFirst({ where: { tenantId: request.tenantId, type: request.type } }) : null);
   const templateBody = template?.active ? template.body : structuredTemplateText(request.templateDefinitionSnapshot ?? publishedTemplate?.definitionJson);
   if (!templateBody) throw new Error("Document template is inactive or missing.");
   const [payments, constructionBonds, association, officers] = await Promise.all([
@@ -894,7 +910,11 @@ async function generateDocumentForRequest(id: string, actorId: string, reason: s
   const now = new Date();
   const verificationCode = randomUUID().replaceAll("-", "").slice(0, 20).toUpperCase();
   await platformPrisma.$transaction(async (tx) => {
-    const documentNumber = request.documentNumber ?? await allocateDocumentNumber(tx as unknown as Prisma.TransactionClient, request.tenantId, request.type, now);
+    const documentNumber = request.documentNumber ?? (request.definition
+      ? await allocateDefinitionDocumentNumber(tx as unknown as Prisma.TransactionClient, request.tenantId, request.definition, now)
+      : request.type
+        ? await allocateDocumentNumber(tx as unknown as Prisma.TransactionClient, request.tenantId, request.type, now)
+        : (() => { throw new Error("Document definition is required before generating a custom document."); })());
     const nextVersion = request.currentVersion > 0 ? request.currentVersion + 1 : 1;
     const subjectName = textValue(subject.fullName) || request.homeowner.user.name;
     const subjectAddress = textValue(subject.address) || request.homeowner.address;
@@ -957,10 +977,12 @@ async function generateDocumentForRequest(id: string, actorId: string, reason: s
         generatedAt: now,
         readyForDownloadAt: now,
         issueDate: now,
-        templateVersion: template?.version ?? request.templateVersionSnapshot ?? 1,
+        templateVersion: template?.version ?? publishedTemplate?.version ?? request.templateVersionSnapshot ?? 1,
         templateSnapshot: templateBody,
-        templateVersionSnapshot: template?.version ?? request.templateVersionSnapshot,
+        templateVersionSnapshot: template?.version ?? publishedTemplate?.version ?? request.templateVersionSnapshot,
+        templateVersionIdSnapshot: publishedTemplate?.id ?? request.templateVersionIdSnapshot,
         templateIdSnapshot: template?.id ?? request.templateIdSnapshot,
+        templateDefinitionSnapshot: request.templateDefinitionSnapshot ?? publishedTemplate?.definitionJson ?? undefined,
         generatedContent: content,
         verificationCode,
         currentVersion: nextVersion,
@@ -970,7 +992,7 @@ async function generateDocumentForRequest(id: string, actorId: string, reason: s
       },
     });
     await createDocumentHistories(tx, request.tenantId, request.id, [{ status: DocumentRequestStatus.READY_FOR_DOWNLOAD, actorId, note: reason }]);
-    await tx.documentVersion.create({ data: { tenantId: request.tenantId, requestId: request.id, definitionId: request.definitionId, templateVersionId: publishedTemplate?.id ?? null, version: nextVersion, documentNumber, verificationCode, templateVersion: template?.version ?? request.templateVersionSnapshot ?? 1, templateSnapshot: templateBody, generatedContent: content, requestSnapshot: snapshot, definitionSnapshot: request.definitionSnapshot ?? undefined, templateDefinitionSnapshot: request.templateDefinitionSnapshot ?? publishedTemplate?.definitionJson ?? undefined, generatedById: actorId, reason } });
+    await tx.documentVersion.create({ data: { tenantId: request.tenantId, requestId: request.id, definitionId: request.definitionId, templateVersionId: publishedTemplate?.id ?? null, version: nextVersion, documentNumber, verificationCode, templateVersion: template?.version ?? publishedTemplate?.version ?? request.templateVersionSnapshot ?? 1, templateSnapshot: templateBody, generatedContent: content, requestSnapshot: snapshot, definitionSnapshot: request.definitionSnapshot ?? undefined, templateDefinitionSnapshot: request.templateDefinitionSnapshot ?? publishedTemplate?.definitionJson ?? undefined, generatedById: actorId, reason } });
   });
 }
 
@@ -982,4 +1004,9 @@ function structuredTemplateText(value: unknown) {
     if (block.binding) return `{{${block.binding}}}`;
     return block.label || block.type;
   }).join("\n\n");
+}
+
+function documentRequestLabel(request: { type?: DocumentType | null; definition?: { displayName: string } | null; definitionSnapshot?: unknown; configuration?: { displayName: string | null } | null }) {
+  const snapshot = record(request.definitionSnapshot);
+  return String(snapshot.displayName || request.definition?.displayName || request.configuration?.displayName || documentTypeLabel(request.type));
 }

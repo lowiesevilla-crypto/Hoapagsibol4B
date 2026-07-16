@@ -914,3 +914,19 @@ Approved direction:
 ## Release Gate
 
 - Bugs #084-#085 and Improvements #086-#087 remain open until Product Owner UAT passes.
+
+# 2026-07-16 - Sprint 6B-1B Final Hotfix Dynamic Fields and Custom Requests
+
+## Engineering Ready for Product Owner UAT
+
+- Fixed Bug #088 by normalizing document definition fields into one view model for portal rendering, server validation, and immutable request snapshots.
+- SELECT options now support string arrays and `{ label, value }` objects; invalid submitted SELECT values are rejected server-side.
+- Required checkboxes now render with browser `required` and are also rejected server-side when missing or false.
+- Fixed Bug #089 with additive migration `20260716174058_nullable_document_request_type`; custom definition-backed requests may persist `type = null` while legacy-backed requests keep their enum values.
+- Added definition-scoped document numbering through `DocumentDefinitionCounter`; legacy requests still use `DocumentCounter`.
+- Hardened Bug #084 by posting exact hidden `operation` values and verifying `ACTIVATE`, `DEACTIVATE`, and `ARCHIVE` through a rollback harness.
+- Pre/post local fingerprints matched: request count `2`, generated content hash `120b4b0526a4fc425ac961f7563279858d2ed75839c4432ab67e60f645e8ac84`, document number hash `00a72e70fa81e3d02226fe9d213f0e7b0c7d23dad7fa240f8501c2c60a7920a7`.
+
+## Release Gate
+
+- Bugs #084, #088, and #089 remain open until Product Owner UAT passes.

@@ -2611,6 +2611,11 @@ Sprint 6B-1B Hotfix Engineering Note:
 - Status writes still load the tenant-owned definition before using a base-client update by `id` only.
 - Status remains Open until Product Owner UAT confirms activate, deactivate, archive, refresh persistence, and tenant isolation.
 
+Sprint 6B-1B Final Hotfix Engineering Note:
+- Action forms now post the exact action through hidden `operation` inputs so server actions receive `ACTIVATE`, `DEACTIVATE`, or `ARCHIVE` independent of submit-button serialization.
+- A local rollback verification harness confirms all three exact values and status transitions.
+- Status remains Open until Product Owner UAT passes.
+
 ---
 
 ## Bug #085 – Dynamic Field Builder UI Missing
@@ -2741,6 +2746,12 @@ Acceptance Criteria:
 - Tenant isolation remains enforced.
 - Mobile and desktop pass.
 
+Sprint 6B-1B Final Hotfix Engineering Note:
+- Added one normalized field view model for homeowner rendering and server validation with `defaultValue`, `options`, and `validation` fields.
+- SELECT options now support normalized strings and `{ label, value }` objects; request submission rejects values outside the configured allowlist.
+- Server-side validation now rejects unknown fields, inactive-field submissions, missing required values, unchecked required checkboxes, numeric min/max violations, length violations, and invalid pattern matches.
+- Status remains Open until Product Owner UAT passes.
+
 ---
 
 ## Bug #089 – Custom Document Definition Cannot Create Request
@@ -2774,3 +2785,10 @@ Acceptance Criteria:
 - Reporting, admin queues, generation, print, and PDF resolve the definition safely.
 - No fallback to another document type is used.
 - Tenant isolation and snapshots remain enforced.
+
+Sprint 6B-1B Final Hotfix Engineering Note:
+- Migration `20260716174058_nullable_document_request_type` makes `DocumentRequest.type` nullable while preserving the legacy `DocumentType` enum and all existing enum values.
+- Custom requests now persist `definitionId`, definition snapshots, template-version snapshots, and `type = null` when no legacy type exists.
+- Generation uses `DocumentDefinitionCounter` and the definition numbering format for custom definitions; legacy requests continue using `DocumentCounter`.
+- Historical request count, generated-content fingerprint, and document-number fingerprint remained unchanged after migration.
+- Status remains Open until Product Owner UAT passes.

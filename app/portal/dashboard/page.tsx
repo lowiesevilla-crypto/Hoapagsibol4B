@@ -9,6 +9,7 @@ import { getAppUrl } from "@/lib/app-url";
 import { prisma } from "@/lib/db";
 import { requireHomeownerProfile } from "@/lib/portal";
 import { getStatementOfAccount } from "@/lib/services/statement-of-account";
+import { documentTypeLabel } from "@/lib/services/documents";
 import { getEnabledTenantModules } from "@/lib/tenant";
 import { collectionLabel, money, monthLabel, shortDate } from "@/lib/utils";
 
@@ -24,7 +25,7 @@ export default async function PortalDashboard() {
     prisma.collection.aggregate({ _sum: { amount: true, amountRefunded: true, amountForfeited: true }, where: { tenantId: profile.tenantId, homeownerId: profile.id, refundable: true } }),
     prisma.announcement.findFirst({ where: { tenantId: profile.tenantId, status: "PUBLISHED" }, orderBy: { createdAt: "desc" } }),
     prisma.event.findFirst({ where: { tenantId: profile.tenantId, status: "PUBLISHED", eventDate: { gte: today } }, orderBy: { eventDate: "asc" } }),
-    prisma.documentRequest.findFirst({ where: { tenantId: profile.tenantId, homeownerId: profile.id, archivedAt: null, status: { in: ["SUBMITTED", "UNDER_REVIEW", "APPROVED", "GENERATED"] } }, orderBy: { requestedAt: "desc" } }),
+    prisma.documentRequest.findFirst({ where: { tenantId: profile.tenantId, homeownerId: profile.id, archivedAt: null, status: { in: ["SUBMITTED", "UNDER_REVIEW", "APPROVED", "GENERATED"] } }, include: { definition: true, configuration: true }, orderBy: { requestedAt: "desc" } }),
     prisma.paymentRequest.findFirst({ where: { tenantId: profile.tenantId, homeownerId: profile.id, status: "PENDING_REVIEW" }, orderBy: { createdAt: "desc" } }),
     getEnabledTenantModules(profile.tenantId),
   ]);
@@ -92,7 +93,7 @@ export default async function PortalDashboard() {
           <PortalSectionHeader eyebrow="Requests" title="Active requests" />
           <div className="space-y-3">
             {paymentRequest && <PortalMobileListItem title={paymentRequest.type === "MONTHLY_DUES" ? "Payment request under review" : collectionLabel(String(paymentRequest.collectionType), paymentRequest.description)} meta={`${shortDate(paymentRequest.createdAt)} · ${paymentRequest.status.replaceAll("_", " ")}`} value={money(paymentRequest.amount)} href="/portal/pay" icon={QrCode} />}
-            {documentRequest && <PortalMobileListItem title="Document request" meta={`${shortDate(documentRequest.requestedAt)} · ${documentRequest.type.replaceAll("_", " ")} · ${documentRequest.status.replaceAll("_", " ")}`} href="/portal/documents" icon={FileText} />}
+            {documentRequest && <PortalMobileListItem title="Document request" meta={`${shortDate(documentRequest.requestedAt)} · ${documentRequest.definition?.displayName || documentRequest.configuration?.displayName || documentTypeLabel(documentRequest.type)} · ${documentRequest.status.replaceAll("_", " ")}`} href="/portal/documents" icon={FileText} />}
             {!paymentRequest && !documentRequest && <PortalEmptyState title="No active requests" description="Payment and document requests that need attention will appear here." />}
           </div>
         </section>

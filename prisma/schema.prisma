@@ -1224,7 +1224,7 @@ model DocumentRequest {
   origin                      DocumentOrigin             @default(HOMEOWNER)
   initiatedById               String?
   initiatedBy                 User?                      @relation("DocumentInitiator", fields: [initiatedById], references: [id], onDelete: SetNull)
-  type                        DocumentType
+  type                        DocumentType?
   status                      DocumentRequestStatus      @default(SUBMITTED)
   purpose                     String?
   remarks                     String?

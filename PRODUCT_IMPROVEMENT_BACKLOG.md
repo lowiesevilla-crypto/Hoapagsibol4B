@@ -2580,3 +2580,106 @@ Sprint 6B-1A Engineering Note:
 Sprint 6B-1B Engineering Note:
 - Authoritative completeness validation now checks active/archive state, workflow, fees, numbering, assigned published template, template ownership, template JSON, placeholders, signatory, copies, validity, and QR configuration.
 - The item remains Open until Product Owner UAT passes.
+## Bug #084 – Document Definition Actions Fail
+
+Module:
+Document Definition Catalog
+
+Priority:
+Critical
+
+Status:
+Open
+
+Problem:
+Activate, Deactivate, and Archive actions fail with:
+
+`Select a valid definition action.`
+
+Acceptance Criteria:
+- Activate succeeds.
+- Deactivate succeeds.
+- Archive succeeds.
+- Action value is validated correctly.
+- Tenant ownership remains enforced.
+- Status persists after refresh.
+- No console or Prisma errors.
+
+---
+
+## Bug #085 – Dynamic Field Builder UI Missing
+
+Module:
+Document Definition Fields
+
+Priority:
+Critical
+
+Status:
+Open
+
+Problem:
+The Document Definition page does not provide usable controls for dynamic fields.
+
+Missing capabilities:
+- Add field
+- Edit field
+- Activate/deactivate field
+- Required flag
+- Select options
+- Display order
+- Move up/down
+- Duplicate key validation
+
+Acceptance Criteria:
+- All field-builder controls are available.
+- Changes persist.
+- Duplicate keys are rejected.
+- Select options can be configured.
+- Field order can be changed.
+- Tenant isolation remains enforced.
+- Mobile and desktop work.
+
+---
+
+## Improvement #086 – Show Document Definitions in System Settings Navigation
+
+Module:
+Navigation
+
+Priority:
+High
+
+Status:
+Open
+
+Problem:
+`/admin/settings/document-definitions` exists but is not visible in the System Settings navigation.
+
+Acceptance Criteria:
+- Add `Document Definitions` under System Settings.
+- Link opens the correct route.
+- Visibility respects RBAC and module entitlements.
+- Active navigation state works.
+
+---
+
+## Improvement #087 – Preserve Table Focus After Applying Definition Filters
+
+Module:
+Document Definition Catalog
+
+Priority:
+Medium
+
+Status:
+Open
+
+Problem:
+After clicking Apply on catalog filters, focus is lost from the table.
+
+Acceptance Criteria:
+- After Apply, the viewport returns to the catalog table.
+- Keyboard focus moves to the table heading.
+- Search, filter, sort, and URL parameters remain preserved.
+- Desktop and mobile pass.

@@ -770,3 +770,27 @@ New requirements identified during Product Owner review:
 
 - Product Owner UAT remains pending.
 - Do not mark Bug #074 or Improvements #075-#078 complete until Product Owner UAT passes.
+## Document Architecture UAT – Admin Review Blocker
+
+Passed:
+- Certificate of Residency request for self
+- Active-template resolution
+- Free + Approval configuration
+- Purpose and remarks persistence
+- PENDING_APPROVAL status
+- Homeowner and admin queues
+- Inactive and invalid-template handling
+- Household-member creation and homeowner editing
+- Tenant isolation
+
+Blocked:
+- Save Preview / Start Review
+- Admin editing of requested information
+- Approve and Generate
+- Outstanding-balance download override
+
+Observed Error:
+`Unknown argument actorId. Did you mean actor?`
+
+Release Decision:
+Do not approve the Sprint 6A document workflow until Bug #079 passes Product Owner UAT.

@@ -2346,3 +2346,46 @@ Acceptance Criteria:
 
 Engineering Update:
 Added a safe block-template definition foundation with allowlisted blocks/placeholders and QR verification placeholder support. Draft/published storage and full editor route require the next additive template-version migration.
+## Bug #079 – Document Review and Approval Fail on Nested Audit Actor Fields
+
+Module:
+Document Administration
+
+Priority:
+Critical
+
+Status:
+Open
+
+Problem:
+Saving reviewed document information and approving/generating a document fail with:
+
+`Unknown argument actorId. Did you mean actor?`
+
+The failure occurs during `prisma.documentRequest.update()` when nested `editAudits.create` and `histories.create` records include `actorId` and `tenantId`.
+
+Affected Workflows:
+- Save Preview / Begin Review
+- Admin editing of document-visible request information
+- Approve and Generate
+- Outstanding-balance download override
+- Document history creation
+- Field-level edit audit creation
+
+Expected Behavior:
+Authorized administrators must be able to review, edit, approve, and generate tenant-scoped documents successfully.
+
+Acceptance Criteria:
+- Save Preview succeeds.
+- Request status changes to `UNDER_REVIEW`.
+- Reviewed values persist.
+- Field-level edit audit records are created.
+- Audit records store the correct actor.
+- Approval succeeds.
+- Generated document receives its document number.
+- Request becomes `READY_FOR_DOWNLOAD`.
+- Outstanding-balance override works when authorized.
+- Approval and generation history records are created.
+- Tenant isolation remains enforced.
+- No Prisma validation errors.
+- No partial update remains after a failed transaction.

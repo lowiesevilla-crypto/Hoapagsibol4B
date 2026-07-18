@@ -2963,3 +2963,41 @@ Workflow Configuration Hotfix Engineering Note:
 - The edit UI disables Fee Amount for non-paid workflows, requires it for paid workflows, and displays workflow-specific helper text.
 - Completeness validation now marks existing workflow/fee or workflow/flag mismatches as incomplete until edited.
 - Status remains Open until Product Owner UAT passes.
+## Bug #097 – Document Definition Configuration Does Not Persist
+
+Module:
+Document Definition Configuration
+
+Priority:
+Critical
+
+Status:
+Open
+
+Problem:
+After editing and saving a Document Definition, several values revert after refresh.
+
+Observed:
+- Workflow returns to the previous value.
+- Active flag reverts.
+- Other configuration values may not persist.
+- Homeowner behavior may use stale values instead of the most recently saved configuration.
+
+Expected Behavior:
+Every editable field must persist exactly as saved and must be the authoritative source for request behavior.
+
+Acceptance Criteria:
+- Workflow persists after refresh.
+- Active flag persists after refresh.
+- Fee persists.
+- Visibility flags persist.
+- Workflow-derived flags persist.
+- Generation settings persist.
+- Approval and release settings persist.
+- Signatory selection persists.
+- Numbering settings persist.
+- Dynamic field changes persist.
+- Completeness recalculates from the saved values.
+- Homeowner request behavior matches the saved configuration.
+- Tenant isolation remains enforced.
+- No console or Prisma errors.

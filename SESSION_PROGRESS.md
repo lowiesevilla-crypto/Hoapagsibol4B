@@ -969,3 +969,17 @@ Approved direction:
 ## Release Gate
 
 - Bug #096 remains open until Product Owner UAT passes.
+
+## Document Workflow UAT – Configuration Persistence Blocker
+
+Scenario tested:
+Free + Instant
+
+Observed:
+- Fee saved as zero.
+- Workflow reverted to Free + Approval after refresh.
+- Active flag reverted.
+- Other settings may not have persisted.
+
+Decision:
+Stop remaining workflow UAT until Bug #097 is resolved.

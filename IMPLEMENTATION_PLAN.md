@@ -460,3 +460,39 @@ Introduce the additive database foundation required for tenant-created documents
 - [x] Added authorized admin allow/revoke balance override actions with audit and history records.
 - [x] Added `scripts/verify-document-balance-policy-hotfix.ts`.
 - [ ] Keep Bug #098 open until Product Owner UAT passes.
+
+## Document Template Editor Reconstruction – Phase 2
+
+### Architecture
+
+- Authoritative models remain `DocumentDefinition`, `DocumentDefinitionField`, `DocumentTemplateSet`, `DocumentTemplateVersion`, request snapshots, generated document snapshots, verification tokens, and document counters.
+- The selected editor foundation is a custom React structured editor using existing project dependencies. No TipTap, ProseMirror, Lexical, Slate, Quill, or Editor.js dependency was added.
+- The editor stores schema version 2 JSON in `DocumentTemplateVersion.definitionJson`. Legacy schema version 1 `blocks` normalize into schema version 2 `header`, `body`, and `footer` sections.
+- Draft save, publish, retire, duplicate, restore-as-draft, immutable published history, and assigned published template behavior continue through the existing template version workflow.
+- Draft save and publish now include a loaded `updatedAt` token to reject stale overwrites.
+- Template image uploads are tenant-scoped under existing upload storage and referenced from safe `/uploads/tenants/<tenant>/settings/document-templates/...` paths.
+- Template administration uses a stricter document-template admin role gate instead of broad `Role.ADMIN` access.
+
+### Implemented Editor Scope
+
+- [x] Top app bar with template/version status, save draft, publish, print preview, and version navigation.
+- [x] Ribbon tabs: Home, Insert, Layout, Table, Header/Footer, Dynamic Fields, Review.
+- [x] Centered page preview with zoom, page size, orientation, margins, columns, page border, background, watermark, header, body, and footer.
+- [x] Formatting controls for font family, font size, bold, italic, underline, alignment, text color, highlight, spacing, indentation, and line height.
+- [x] Insertable blocks for text, text box, table, horizontal/vertical line, image, tenant logo, signature, QR placeholder, header, footer, and page break.
+- [x] Allowlisted placeholder picker grouped by Tenant, Document, Subject, Property, Request, Signatory, and Verification.
+- [x] Validation rejects unknown placeholders, unsupported block types, unsafe script-like content, unsafe colors, and unsafe image sources.
+- [x] Focused verification harness `scripts/verify-professional-template-editor.ts`.
+
+### Deferred Phase 3 Scope
+
+- [ ] Exact Word-style pagination and page navigator.
+- [ ] Ruler and tab stops.
+- [ ] Merge/split table cells and repeated table header behavior.
+- [ ] Full WYSIWYG PDF renderer that preserves all visual formatting.
+- [ ] DOCX export parity for rich template styling.
+- [ ] Public QR verification route.
+
+### Release Gate
+
+- [ ] Keep the professional template editor improvement open until Product Owner UAT confirms editor usability, publish history, snapshot immutability, security, and generated output expectations.

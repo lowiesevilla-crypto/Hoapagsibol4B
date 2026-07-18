@@ -477,3 +477,22 @@ Deferred:
 
 Release gate:
 - Bug #098 remains open until Product Owner UAT passes.
+
+# Professional Document Template Editor Reconstruction
+
+Status: Engineering ready for Product Owner UAT.
+
+- Replaced the technical template block editor with a structured professional authoring surface for document definitions.
+- Added ribbon-style controls for formatting, inserting content, page layout, tables, headers, footers, dynamic fields, and validation review.
+- Added page size, orientation, margin, column, border, background, watermark, header, footer, and zoom support in the live preview.
+- Added schema version 2 template JSON while keeping legacy schema version 1 templates compatible through normalization.
+- Added draft stale-write protection before save and publish.
+- Added tenant-scoped template image upload handling.
+- Tightened template administration access so homeowners and payroll-only users cannot edit or publish document templates.
+- Added focused verification coverage for editor dependencies, schema normalization, placeholder safety, role restrictions, and published-template tenant invariants.
+
+Deferred:
+- Full rich-style PDF/DOCX parity, exact Word pagination, rulers, advanced table layout, and public QR verification are not included in this release slice.
+
+Release gate:
+- Professional template editor reconstruction remains open until Product Owner UAT passes.

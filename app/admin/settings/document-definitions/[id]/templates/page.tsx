@@ -2,12 +2,12 @@ import Link from "next/link";
 import { DocumentTemplateVersionStatus } from "@prisma/client";
 import { PageHeader } from "@/components/page-header";
 import { saveDocumentTemplateVersionAction } from "@/lib/actions/documents";
-import { requireUser } from "@/lib/auth";
+import { requireDocumentTemplateAdmin } from "@/lib/document-template-admin";
 import { prisma } from "@/lib/db";
 import { shortDate } from "@/lib/utils";
 
 export default async function DefinitionTemplatesPage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ error?: string; success?: string; message?: string }> }) {
-  const admin = await requireUser();
+  const admin = await requireDocumentTemplateAdmin();
   const { id } = await params;
   const query = await searchParams;
   const definition = await prisma.documentDefinition.findFirst({

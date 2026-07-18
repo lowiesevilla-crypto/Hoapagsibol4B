@@ -1,19 +1,23 @@
 "use server";
 
 import { randomUUID } from "node:crypto";
+import { mkdir, writeFile } from "node:fs/promises";
+import path from "node:path";
 import { DocumentDefinitionStatus, DocumentDeliveryMode, DocumentFieldType, DocumentOutstandingBalancePolicy, DocumentRequestStatus, DocumentSequenceScope, DocumentSubjectType, DocumentTemplateVersionStatus, DocumentType, NotificationType, Prisma, Role } from "@prisma/client";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { requireUser } from "@/lib/auth";
 import { getAppUrl } from "@/lib/app-url";
 import { platformPrisma, prisma } from "@/lib/db";
+import { requireDocumentTemplateAdmin } from "@/lib/document-template-admin";
 import { getAssociationSettings } from "@/lib/system-settings";
 import { asJson, getActiveOrganizationOfficers, officerSnapshot } from "@/lib/organization";
 import { allocateDefinitionDocumentNumber, allocateDocumentNumber, documentTypeLabel, documentTypeOptions, renderDocumentTemplate } from "@/lib/services/documents";
 import { buildSubjectSnapshot, canGenerateWithoutPayment, documentConfigurationStatus, legacyRequestFields, needsTemplate, parseConfiguredFields, requestDataSnapshotJson, statusForConfiguration, subjectSnapshotJson } from "@/lib/services/document-workflow";
 import { defaultNumberingFormat, evaluateDefinitionCompleteness, validateNumberingFormat, workflowFieldsForPreset } from "@/lib/services/document-definitions";
 import { balancePolicyLockMessage, canOverrideDocumentBalancePolicy, getQualifyingHomeownerBalance, normalizeOutstandingBalancePolicy, policyForDocumentRequest } from "@/lib/services/document-balance-policy";
-import { defaultTemplateDefinition, documentTemplateBlockTypes, normalizeTemplateDefinition, validateTemplateDefinition, type AllowedDocumentPlaceholder, type DocumentTemplateBlock, type DocumentTemplateBlockType } from "@/lib/services/document-template-builder";
+import { defaultTemplateDefinition, documentTemplateBlockTypes, documentTemplateSchemaVersion, normalizeTemplateDefinition, renderTemplateDefinitionText, validateTemplateDefinition, type AllowedDocumentPlaceholder, type DocumentTemplateBlock, type DocumentTemplateBlockType } from "@/lib/services/document-template-builder";
+import { tenantUploadDirectory } from "@/lib/storage";
 import { money, shortDate } from "@/lib/utils";
 import { sendEmailNotification } from "@/lib/services/notifications";
 
@@ -375,7 +379,7 @@ export async function restoreDocumentRequestAction(formData: FormData) {
 }
 
 export async function saveDocumentTemplateAction(formData: FormData) {
-  const admin = await requireUser(Role.ADMIN);
+  const admin = await requireDocumentTemplateAdmin();
   const type = String(formData.get("type") || "") as DocumentType;
   const title = String(formData.get("title") || "").trim();
   const body = String(formData.get("body") || "").trim();
@@ -390,7 +394,7 @@ export async function saveDocumentTemplateAction(formData: FormData) {
 }
 
 export async function saveDocumentTypeConfigurationAction(formData: FormData) {
-  const admin = await requireUser(Role.ADMIN);
+  const admin = await requireDocumentTemplateAdmin();
   const id = String(formData.get("id") || "");
   const fail = (message: string): never => redirect(`/admin/settings/document-types?error=${encodeURIComponent(message)}`);
   const config = await prisma.documentTypeConfiguration.findFirst({ where: { id, tenantId: admin.tenantId }, include: { fields: true } });
@@ -464,7 +468,7 @@ export async function saveDocumentTypeConfigurationAction(formData: FormData) {
 }
 
 export async function saveDocumentDefinitionAction(formData: FormData) {
-  const admin = await requireUser(Role.ADMIN);
+  const admin = await requireDocumentTemplateAdmin();
   const id = clean(formData.get("id"));
   const fail = (message: string): never => redirect(`/admin/settings/document-definitions?${id ? `edit=${id}&` : ""}error=${encodeURIComponent(message)}`);
   const code = String(formData.get("code") || "").trim().toUpperCase().replace(/\s+/g, "_");
@@ -562,7 +566,7 @@ export async function saveDocumentDefinitionAction(formData: FormData) {
 }
 
 export async function changeDocumentDefinitionStatusAction(formData: FormData) {
-  const admin = await requireUser(Role.ADMIN);
+  const admin = await requireDocumentTemplateAdmin();
   const id = String(formData.get("id") || "");
   const operation = String(formData.get("operation") || "").trim().toUpperCase();
   const fail = (message: string): never => redirect(`/admin/settings/document-definitions?error=${encodeURIComponent(message)}`);
@@ -587,7 +591,7 @@ export async function changeDocumentDefinitionStatusAction(formData: FormData) {
 }
 
 export async function duplicateDocumentDefinitionAction(formData: FormData) {
-  const admin = await requireUser(Role.ADMIN);
+  const admin = await requireDocumentTemplateAdmin();
   const id = String(formData.get("id") || "");
   const definition = await prisma.documentDefinition.findFirst({ where: { id, tenantId: admin.tenantId }, include: { fields: true } });
   if (!definition) redirect("/admin/settings/document-definitions?error=Document%20definition%20not%20found.");
@@ -645,7 +649,7 @@ export async function duplicateDocumentDefinitionAction(formData: FormData) {
 }
 
 export async function saveDocumentDefinitionFieldsAction(formData: FormData) {
-  const admin = await requireUser(Role.ADMIN);
+  const admin = await requireDocumentTemplateAdmin();
   const definitionId = String(formData.get("definitionId") || "");
   const fail = (message: string): never => redirect(`/admin/settings/document-definitions?edit=${definitionId}&error=${encodeURIComponent(message)}`);
   const definition = await prisma.documentDefinition.findFirst({ where: { id: definitionId, tenantId: admin.tenantId }, include: { requests: { select: { id: true }, take: 1 } } });
@@ -678,7 +682,7 @@ export async function saveDocumentDefinitionFieldsAction(formData: FormData) {
 }
 
 export async function saveDocumentTemplateVersionAction(formData: FormData) {
-  const admin = await requireUser(Role.ADMIN);
+  const admin = await requireDocumentTemplateAdmin();
   const definitionId = String(formData.get("definitionId") || "");
   const versionId = clean(formData.get("versionId"));
   const operation = String(formData.get("operation") || "saveDraft");
@@ -689,7 +693,7 @@ export async function saveDocumentTemplateVersionAction(formData: FormData) {
   if (operation === "createSet") {
     const set = await platformPrisma.$transaction(async (tx) => {
       const createdSet = await tx.documentTemplateSet.create({ data: { tenantId: admin.tenantId, definitionId, name: `${definitionRecord.displayName} Template`, description: definitionRecord.description, active: true } });
-      const draft = await tx.documentTemplateVersion.create({ data: { tenantId: admin.tenantId, templateSetId: createdSet.id, version: 1, status: DocumentTemplateVersionStatus.DRAFT, schemaVersion: 1, definitionJson: asJson(defaultTemplateDefinition(definitionRecord.displayName)), previewMetadata: asJson({ source: "definition-editor" }), createdById: admin.id } });
+      const draft = await tx.documentTemplateVersion.create({ data: { tenantId: admin.tenantId, templateSetId: createdSet.id, version: 1, status: DocumentTemplateVersionStatus.DRAFT, schemaVersion: documentTemplateSchemaVersion, definitionJson: asJson(defaultTemplateDefinition(definitionRecord.displayName)), previewMetadata: asJson({ source: "professional-document-editor" }), createdById: admin.id } });
       await tx.auditLog.create({ data: { tenantId: admin.tenantId, actorId: admin.id, module: "DOCUMENTS", action: "CREATE_TEMPLATE_SET", entityType: "DocumentTemplateSet", entityId: createdSet.id, metadata: { definitionId, draftVersionId: draft.id } } });
       return { createdSet, draft };
     });
@@ -730,14 +734,16 @@ export async function saveDocumentTemplateVersionAction(formData: FormData) {
     revalidatePath("/admin/documents");
     redirect(`/admin/settings/document-definitions/${definitionId}/templates?success=discarded&message=Draft%20retired%20without%20deleting%20version%20history.`);
   }
-  const templateDefinition = templateDefinitionFromForm(formData, definitionRecord.displayName);
+  const loadedUpdatedAt = clean(formData.get("loadedUpdatedAt"));
+  if ((operation === "saveDraft" || operation === "publish") && loadedUpdatedAt && currentRecord.updatedAt.toISOString() !== loadedUpdatedAt) fail("This draft changed in another session. Reload before saving to avoid overwriting someone else's work.");
+  const templateDefinition = await templateDefinitionFromForm(formData, definitionRecord.displayName, admin.tenant.slug);
   const validation = validateTemplateDefinition(templateDefinition);
   if (!validation.valid) fail(validation.errors[0]);
   if (operation === "publish") {
     if (currentRecord.status !== DocumentTemplateVersionStatus.DRAFT) fail("Only draft versions can be published.");
     await platformPrisma.$transaction(async (tx) => {
       await tx.documentTemplateVersion.updateMany({ where: { tenantId: admin.tenantId, templateSetId: currentRecord.templateSetId, status: DocumentTemplateVersionStatus.PUBLISHED, id: { not: currentRecord.id } }, data: { status: DocumentTemplateVersionStatus.RETIRED } });
-      const published = await tx.documentTemplateVersion.update({ where: { id: currentRecord.id }, data: { status: DocumentTemplateVersionStatus.PUBLISHED, definitionJson: asJson(templateDefinition), publishedAt: new Date(), publishedById: admin.id } });
+      const published = await tx.documentTemplateVersion.update({ where: { id: currentRecord.id }, data: { status: DocumentTemplateVersionStatus.PUBLISHED, schemaVersion: documentTemplateSchemaVersion, definitionJson: asJson(templateDefinition), publishedAt: new Date(), publishedById: admin.id } });
       await tx.documentDefinition.update({ where: { id: definitionId }, data: { assignedTemplateVersionId: published.id, updatedById: admin.id, version: { increment: 1 } } });
       await tx.auditLog.create({ data: { tenantId: admin.tenantId, actorId: admin.id, module: "DOCUMENTS", action: "PUBLISH_TEMPLATE_VERSION", entityType: "DocumentTemplateVersion", entityId: currentRecord.id, metadata: { definitionId, version: currentRecord.version } } });
     });
@@ -749,7 +755,7 @@ export async function saveDocumentTemplateVersionAction(formData: FormData) {
   }
   if (currentRecord.status !== DocumentTemplateVersionStatus.DRAFT) fail("Published versions are immutable. Duplicate this version to edit a new draft.");
   await platformPrisma.$transaction([
-    platformPrisma.documentTemplateVersion.update({ where: { id: currentRecord.id }, data: { definitionJson: asJson(templateDefinition), previewMetadata: asJson({ updatedById: admin.id, updatedAt: new Date().toISOString() }) } }),
+    platformPrisma.documentTemplateVersion.update({ where: { id: currentRecord.id }, data: { schemaVersion: documentTemplateSchemaVersion, definitionJson: asJson(templateDefinition), previewMetadata: asJson({ updatedById: admin.id, updatedAt: new Date().toISOString(), editor: "professional-document-editor" }) } }),
     platformPrisma.auditLog.create({ data: { tenantId: admin.tenantId, actorId: admin.id, module: "DOCUMENTS", action: "SAVE_TEMPLATE_DRAFT", entityType: "DocumentTemplateVersion", entityId: currentRecord.id, metadata: { definitionId, version: currentRecord.version, operation } } }),
   ]);
   revalidatePath(`/admin/settings/document-definitions/${definitionId}/templates/${currentRecord.id}/edit`);
@@ -963,7 +969,18 @@ function uniqueCopyCode(code: string) {
   return `${code.replace(/_COPY(_[A-Z0-9]{4})?$/, "")}_COPY_${randomUUID().slice(0, 4).toUpperCase()}`;
 }
 
-function templateDefinitionFromForm(formData: FormData, title: string) {
+async function templateDefinitionFromForm(formData: FormData, title: string, tenantSlug: string) {
+  const json = clean(formData.get("templateDefinitionJson"));
+  if (json) {
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(json);
+    } catch {
+      throw new Error("Template definition payload is invalid.");
+    }
+    const definition = normalizeTemplateDefinition(parsed, title);
+    return applyTemplateImageUpload(definition, formData, tenantSlug);
+  }
   const ids = formData.getAll("blockId").map((value) => String(value || "").trim()).filter(Boolean);
   const types = formData.getAll("blockType").map(String);
   const labels = formData.getAll("blockLabel").map(String);
@@ -980,7 +997,9 @@ function templateDefinitionFromForm(formData: FormData, title: string) {
     return [{
       id,
       type,
+      section: "body",
       label: labels[index]?.trim() || undefined,
+      content: texts[index]?.trim() || undefined,
       text: texts[index]?.trim() || undefined,
       binding: binding || undefined,
       order: (index + 1) * 10,
@@ -994,9 +1013,31 @@ function templateDefinitionFromForm(formData: FormData, title: string) {
     if (index >= 0 && target >= 0 && target < blocks.length) [blocks[index], blocks[target]] = [blocks[target], blocks[index]];
   }
   if (addType && documentTemplateBlockTypes.includes(addType as DocumentTemplateBlockType)) {
-    blocks.push({ id: `block-${randomUUID().slice(0, 8)}`, type: addType as DocumentTemplateBlockType, label: addType.replace(/([A-Z])/g, " $1"), text: "", binding: undefined, order: (blocks.length + 1) * 10, visible: true });
+    blocks.push({ id: `block-${randomUUID().slice(0, 8)}`, section: "body", type: addType as DocumentTemplateBlockType, label: addType.replace(/([A-Z])/g, " $1"), content: "", text: "", binding: undefined, order: (blocks.length + 1) * 10, visible: true });
   }
-  return normalizeTemplateDefinition({ schemaVersion: 1, page: { format: "A4", orientation: "portrait" }, blocks }, title);
+  return normalizeTemplateDefinition({ schemaVersion: documentTemplateSchemaVersion, page: { format: "A4", orientation: "portrait" }, blocks }, title);
+}
+
+async function applyTemplateImageUpload(definition: ReturnType<typeof normalizeTemplateDefinition>, formData: FormData, tenantSlug: string) {
+  const uploadBlockId = clean(formData.get("imageUploadBlockId"));
+  const upload = formData.get("imageFile");
+  if (!uploadBlockId || !upload || typeof upload !== "object" || !("arrayBuffer" in upload) || !("size" in upload) || Number(upload.size) <= 0) return definition;
+  const file = upload as File;
+  if (file.size > 5 * 1024 * 1024) throw new Error("Template image must be 5MB or smaller.");
+  const extension = file.type === "image/png" ? "png" : file.type === "image/jpeg" ? "jpg" : file.type === "image/webp" ? "webp" : "";
+  if (!extension) throw new Error("Template image must be PNG, JPEG, or WebP.");
+  const directory = tenantUploadDirectory(tenantSlug, "settings", "document-templates");
+  await mkdir(directory, { recursive: true });
+  const fileName = `${randomUUID()}.${extension}`;
+  const target = path.join(directory, fileName);
+  await writeFile(target, Buffer.from(await file.arrayBuffer()));
+  const publicPath = `/uploads/settings/${tenantSlug}/document-templates/${fileName}`;
+  const sections = {
+    header: definition.sections.header.map((block) => block.id === uploadBlockId ? { ...block, image: { ...block.image, src: publicPath, alt: block.image?.alt || block.label || "Template image" } } : block),
+    body: definition.sections.body.map((block) => block.id === uploadBlockId ? { ...block, image: { ...block.image, src: publicPath, alt: block.image?.alt || block.label || "Template image" } } : block),
+    footer: definition.sections.footer.map((block) => block.id === uploadBlockId ? { ...block, image: { ...block.image, src: publicPath, alt: block.image?.alt || block.label || "Template image" } } : block),
+  };
+  return normalizeTemplateDefinition({ ...definition, sections }, definition.blocks.find((block) => block.type === "documentTitle")?.content || "Official HOA Document");
 }
 
 function parseFieldsJson(raw: string) {
@@ -1150,12 +1191,7 @@ async function generateDocumentForRequest(id: string, actorId: string, reason: s
 
 function structuredTemplateText(value: unknown) {
   if (!value || typeof value !== "object" || Array.isArray(value)) return "";
-  const definition = normalizeTemplateDefinition(value);
-  return definition.blocks.filter((block) => block.visible).map((block) => {
-    if (block.text) return block.text;
-    if (block.binding) return `{{${block.binding}}}`;
-    return block.label || block.type;
-  }).join("\n\n");
+  return renderTemplateDefinitionText(value);
 }
 
 function documentRequestLabel(request: { type?: DocumentType | null; definition?: { displayName: string } | null; definitionSnapshot?: unknown; configuration?: { displayName: string | null } | null }) {

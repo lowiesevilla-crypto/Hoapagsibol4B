@@ -7,7 +7,7 @@ import { PageHeader } from "@/components/page-header";
 import { PaginationFocusTarget } from "@/components/pagination-focus";
 import { SubmitButton } from "@/components/ui";
 import { changeDocumentDefinitionStatusAction, duplicateDocumentDefinitionAction, saveDocumentDefinitionAction } from "@/lib/actions/documents";
-import { requireUser } from "@/lib/auth";
+import { requireDocumentTemplateAdmin } from "@/lib/document-template-admin";
 import { prisma } from "@/lib/db";
 import { defaultNumberingFormat, evaluateDefinitionCompleteness, workflowPresetForDefinition } from "@/lib/services/document-definitions";
 import { documentOutstandingBalancePolicyOptions } from "@/lib/services/document-balance-policy";
@@ -22,7 +22,7 @@ const pageSize = 12;
 const catalogTargetId = "definition-catalog";
 
 export default async function DocumentDefinitionsPage({ searchParams }: { searchParams: Promise<Query> }) {
-  const user = await requireUser();
+  const user = await requireDocumentTemplateAdmin();
   const query = await searchParams;
   const page = Math.max(1, Number(query.page) || 1);
   const q = query.q?.trim() || "";

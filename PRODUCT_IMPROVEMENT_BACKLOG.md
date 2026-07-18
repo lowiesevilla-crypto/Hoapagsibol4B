@@ -3259,6 +3259,28 @@ Acceptance Criteria:
 - Tenant isolation is enforced.
 - Unauthorized users cannot edit or publish templates.
 - No existing issued-document history is mutated.
+
+## Document Template Editor Reconstruction - Phase 2
+
+Status: Engineering implementation ready for Product Owner UAT.
+
+- Replaced the technical block/JSON edit screen with a professional structured editor using the existing React and lucide stack; no overlapping editor dependency was added.
+- Added ribbon sections for Home, Insert, Layout, Table, Header/Footer, Dynamic Fields, and Review.
+- Added a centered page preview with configurable page size, orientation, margins, columns, border, background, watermark, zoom, header, body, and footer.
+- Added controlled formatting for font family, font size, bold, italic, underline, alignment, text color, highlight, spacing, indentation, and line height.
+- Added structured insertion for text, text box, table, line, image, tenant logo, signature, QR placeholder, header, footer, and dynamic placeholders.
+- Updated template storage to schema version 2 while normalizing legacy schema version 1 blocks forward.
+- Added stale draft detection using the loaded `updatedAt` timestamp before draft save or publish.
+- Added tenant-scoped image upload handling for template image blocks.
+- Added stricter template-administration authorization that excludes homeowners and payroll-only users from definition/template configuration and publishing.
+- Added `scripts/verify-professional-template-editor.ts`.
+
+Deferred:
+- Exact Word pagination, rulers, multi-page page navigator, merge/split table cells, full DOCX-style page rendering, and exact rich-style PDF parity remain Phase 3 work.
+- Generated document PDFs still consume the shared structured template text contract; rich visual styling is preserved in template JSON and editor preview but is not yet a full WYSIWYG PDF renderer.
+
+Release gate:
+- Do not mark this improvement complete until Product Owner UAT validates the editor workflow, published snapshots, tenant isolation, and generated output expectations.
 ## Improvement #099 – Professional Word-Style Document Template Editor
 
 Module:

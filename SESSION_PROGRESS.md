@@ -1063,6 +1063,28 @@ Tracked as Bug #098.
 
 - Bug #097 is technically fixed but final workflow UAT continues under Bug #098.
 - Bug #098 remains open until Product Owner UAT passes.
+
+# 2026-07-18 - Professional Document Template Editor Reconstruction
+
+## Engineering Ready for Product Owner UAT
+
+- Reconstructed `/admin/settings/document-definitions/[id]/templates/[versionId]/edit` into a professional structured authoring screen with top app bar, ribbon tabs, document outline, centered page preview, and properties/dynamic-field/review panels.
+- Selected the existing React + lucide foundation because the project has no current rich-text editor library and the authoritative document model already stores safe JSON template definitions.
+- Kept template storage under `DocumentTemplateVersion.definitionJson`; schema version 1 templates normalize to schema version 2 without changing published history.
+- Added header/body/footer sections, page layout settings, formatting controls, table/image/signature/QR/document-field blocks, and an allowlisted placeholder picker.
+- Added stale draft detection before save or publish and kept one published version per template set through the existing publish workflow.
+- Added tenant-scoped image upload support for template image blocks.
+- Added stricter template-administration authorization; homeowners and payroll-only users cannot access template admin or publish actions.
+- Added `scripts/verify-professional-template-editor.ts`.
+
+## Verification Notes
+
+- Focused editor harness passed for dependency audit, schema normalization, placeholder safety, role restrictions, one-published-version invariant, and tenant-scoped assigned templates.
+- Full rich-style PDF parity is not claimed yet; generated PDFs continue using the shared structured text rendering contract while the richer visual renderer remains a Phase 3 item.
+
+## Release Gate
+
+- Professional template editor reconstruction remains open until Product Owner UAT passes.
 ## Approved Document Template Editor Direction
 
 The Product Owner approved reconstructing the Document Template Editor as a

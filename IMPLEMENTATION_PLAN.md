@@ -380,3 +380,18 @@ Introduce the additive database foundation required for tenant-created documents
 - [x] Preserved Request Only as manual `SUBMITTED` status preparation.
 - [x] Added `scripts/verify-document-workflow-preset-hotfix.ts`.
 - [ ] Keep Bug #096 open until Product Owner UAT passes.
+
+## Document Definition Persistence Hotfix – Bug #097
+
+### Implementation Status
+
+- [x] Kept `/admin/settings/document-definitions` reads authoritative to `DocumentDefinition`.
+- [x] Reconstructed workflow dropdown values from persisted `deliveryMode`.
+- [x] Added explicit hidden/checkbox boolean serialization for editable definition booleans.
+- [x] Parsed definition booleans server-side with `FormData.getAll()` so unchecked values persist.
+- [x] Redirected saves back to `?edit=<definitionId>` and revalidated admin and portal document paths.
+- [x] Added persisted configuration summary panel from saved database values.
+- [x] Synchronized legacy `DocumentTypeConfiguration` compatibility fields only when `legacyType` exists.
+- [x] Preserved assigned template and dynamic field records during definition edits.
+- [x] Added `scripts/verify-document-definition-persistence-hotfix.ts`.
+- [ ] Keep Bug #097 open until Product Owner UAT passes.

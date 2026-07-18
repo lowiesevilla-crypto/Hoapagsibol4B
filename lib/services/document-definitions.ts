@@ -2,7 +2,6 @@ import "server-only";
 
 import {
   DocumentDefinitionStatus,
-  DocumentDeliveryMode,
   DocumentSequenceScope,
   DocumentTemplateVersionStatus,
   type DocumentDefinition,
@@ -197,11 +196,7 @@ export async function getRequestableDocumentDefinitions(tenantId: string) {
 }
 
 export function workflowPresetForDefinition(definition: Pick<DocumentDefinition, "deliveryMode" | "paymentRequired" | "approvalRequired" | "requiresAdminReview" | "allowImmediateDownload">) {
-  if (definition.deliveryMode === DocumentDeliveryMode.REQUEST_ONLY) return "REQUEST_ONLY";
-  if (definition.paymentRequired && definition.approvalRequired) return "PAID_APPROVAL";
-  if (definition.paymentRequired) return "PAID_INSTANT";
-  if (definition.approvalRequired || definition.requiresAdminReview) return "FREE_APPROVAL";
-  return "FREE_INSTANT";
+  return workflowPresetForDeliveryMode(definition.deliveryMode);
 }
 
 export const documentSequenceScopeOptions = Object.values(DocumentSequenceScope);

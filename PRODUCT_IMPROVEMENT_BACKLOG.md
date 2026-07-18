@@ -3001,3 +3001,11 @@ Acceptance Criteria:
 - Homeowner request behavior matches the saved configuration.
 - Tenant isolation remains enforced.
 - No console or Prisma errors.
+
+Persistence Hotfix Engineering Note:
+- The Document Definition edit screen now reopens the saved definition after Save, preventing the create form defaults from appearing as reverted values.
+- Workflow reconstruction now uses persisted `DocumentDefinition.deliveryMode` as the workflow source instead of deriving the dropdown from potentially stale low-level flags.
+- Boolean fields now submit explicit `false` and `true` values and the server parses all submitted values reliably.
+- Legacy `DocumentTypeConfiguration` rows are synchronized only from the saved definition for compatibility when a definition has `legacyType`; the Document Definition screen continues to read from `DocumentDefinition`.
+- A persisted configuration summary now displays saved database values for workflow, fee, status, active state, template, completeness, requestability, and last updated.
+- Status remains Open until Product Owner UAT passes.

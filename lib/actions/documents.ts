@@ -411,6 +411,8 @@ export async function saveDocumentDefinitionAction(formData: FormData) {
   if (displayName.length < 3) fail("Display name must be at least 3 characters.");
   const existingByCode = await prisma.documentDefinition.findFirst({ where: { tenantId: admin.tenantId, code, ...(id ? { id: { not: id } } : {}) }, select: { id: true } });
   if (existingByCode) fail("A document definition with this code already exists for this tenant.");
+  const existingDefinition = id ? await prisma.documentDefinition.findFirst({ where: { id, tenantId: admin.tenantId }, select: { id: true, tenantId: true, legacyType: true, archivedAt: true, status: true, version: true } }) : null;
+  if (id && !existingDefinition) fail("Document definition not found.");
   const workflowPreset = String(formData.get("workflowPreset") || "FREE_APPROVAL");
   const workflowFields = workflowFieldsForPreset(workflowPreset);
   if (!workflowFields) fail("Select a valid workflow.");
@@ -429,59 +431,70 @@ export async function saveDocumentDefinitionAction(formData: FormData) {
   if (!numbering.valid) fail(numbering.errors[0]);
   const sequenceScope = String(formData.get("sequenceScope") || DocumentSequenceScope.ANNUAL) as DocumentSequenceScope;
   if (!Object.values(DocumentSequenceScope).includes(sequenceScope)) fail("Select a valid sequence scope.");
-  const legacyTypeValue = clean(formData.get("legacyType")) as DocumentType | undefined;
+  const legacyTypeValue = nullableText(formData.get("legacyType")) as DocumentType | null;
   if (legacyTypeValue && !Object.values(DocumentType).includes(legacyTypeValue)) fail("Select a valid legacy compatibility type.");
-  const signatoryOfficerId = clean(formData.get("signatoryOfficerId"));
+  const signatoryOfficerId = nullableText(formData.get("signatoryOfficerId"));
   if (signatoryOfficerId) {
     const officer = await prisma.organizationOfficer.findFirst({ where: { tenantId: admin.tenantId, id: signatoryOfficerId, active: true, archivedAt: null }, select: { id: true } });
     if (!officer) fail("Select an active tenant officer as signatory.");
   }
   const maxCopies = Math.max(1, Math.min(25, Number(formData.get("maxCopies")) || 1));
   const validityDays = formData.get("validityDays") ? Math.max(1, Number(formData.get("validityDays")) || 0) : null;
+  const active = booleanFromForm(formData, "active");
+  const archived = Boolean(existingDefinition?.archivedAt || existingDefinition?.status === DocumentDefinitionStatus.ARCHIVED);
   const data = {
     code,
     displayName,
-    description: clean(formData.get("description")),
-    category: clean(formData.get("category")),
+    description: nullableText(formData.get("description")),
+    category: nullableText(formData.get("category")),
     displayOrder: Number(formData.get("displayOrder")) || 0,
-    active: formData.get("active") === "on",
-    status: formData.get("active") === "on" ? DocumentDefinitionStatus.ACTIVE : DocumentDefinitionStatus.INACTIVE,
+    active: archived ? false : active,
+    status: archived ? DocumentDefinitionStatus.ARCHIVED : active ? DocumentDefinitionStatus.ACTIVE : DocumentDefinitionStatus.INACTIVE,
     legacyType: legacyTypeValue,
     ...workflow,
     feeAmount,
     currency: clean(formData.get("currency")) || "PHP",
-    receiptRequired: formData.get("receiptRequired") === "on",
-    financeClassification: clean(formData.get("financeClassification")),
-    allowPayLater: formData.get("allowPayLater") === "on",
-    releaseRequired: formData.get("releaseRequired") === "on",
-    homeownerDownloadEnabled: formData.get("homeownerDownloadEnabled") === "on",
-    walkInEnabled: formData.get("walkInEnabled") === "on",
-    householdMemberEnabled: formData.get("householdMemberEnabled") === "on",
-    manualSubjectEnabled: formData.get("manualSubjectEnabled") === "on",
-    allowRegeneration: formData.get("allowRegeneration") === "on",
+    receiptRequired: workflow.paymentRequired && booleanFromForm(formData, "receiptRequired"),
+    financeClassification: nullableText(formData.get("financeClassification")),
+    allowPayLater: workflow.paymentRequired && booleanFromForm(formData, "allowPayLater"),
+    releaseRequired: booleanFromForm(formData, "releaseRequired"),
+    homeownerDownloadEnabled: booleanFromForm(formData, "homeownerDownloadEnabled"),
+    walkInEnabled: booleanFromForm(formData, "walkInEnabled"),
+    householdMemberEnabled: booleanFromForm(formData, "householdMemberEnabled"),
+    manualSubjectEnabled: booleanFromForm(formData, "manualSubjectEnabled"),
+    allowRegeneration: booleanFromForm(formData, "allowRegeneration"),
     numberingFormat,
     sequenceScope,
     validityDays,
     maxCopies,
-    qrEnabled: formData.get("qrEnabled") === "on",
-    watermarkEnabled: formData.get("watermarkEnabled") === "on",
+    qrEnabled: booleanFromForm(formData, "qrEnabled"),
+    watermarkEnabled: booleanFromForm(formData, "watermarkEnabled"),
     signatoryOfficerId,
     updatedById: admin.id,
   };
   if (id) {
-    const existing = await prisma.documentDefinition.findFirst({ where: { id, tenantId: admin.tenantId }, select: { id: true, tenantId: true, version: true } });
-    if (!existing) fail("Document definition not found.");
-    await platformPrisma.$transaction([
-      platformPrisma.documentDefinition.update({ where: { id }, data: { ...data, version: { increment: 1 } } }),
-      platformPrisma.auditLog.create({ data: { tenantId: admin.tenantId, actorId: admin.id, module: "DOCUMENTS", action: "UPDATE_DOCUMENT_DEFINITION", entityType: "DocumentDefinition", entityId: id, metadata: { code, workflow: workflowPreset, feeAmount } } }),
-    ]);
+    await platformPrisma.$transaction(async (tx) => {
+      await tx.documentDefinition.update({ where: { id }, data: { ...data, version: { increment: 1 } } });
+      if (existingDefinition?.legacyType && existingDefinition.legacyType !== legacyTypeValue) {
+        await tx.documentTypeConfiguration.updateMany({ where: { tenantId: admin.tenantId, type: existingDefinition.legacyType, definitionId: id }, data: { definitionId: null, updatedById: admin.id, version: { increment: 1 } } });
+      }
+      if (legacyTypeValue) await syncLegacyDefinitionConfiguration(tx, admin.tenantId, legacyTypeValue, id, data, admin.id);
+      await tx.auditLog.create({ data: { tenantId: admin.tenantId, actorId: admin.id, module: "DOCUMENTS", action: "UPDATE_DOCUMENT_DEFINITION", entityType: "DocumentDefinition", entityId: id, metadata: { code, workflow: workflowPreset, feeAmount } } });
+    });
   } else {
-    const definition = await platformPrisma.documentDefinition.create({ data: { ...data, tenantId: admin.tenantId, systemKey: legacyTypeValue ? `CUSTOMIZED_${legacyTypeValue}` : null, createdById: admin.id } });
-    await platformPrisma.auditLog.create({ data: { tenantId: admin.tenantId, actorId: admin.id, module: "DOCUMENTS", action: "CREATE_DOCUMENT_DEFINITION", entityType: "DocumentDefinition", entityId: definition.id, metadata: { code, workflow: workflowPreset, feeAmount } } });
+    const definition = await platformPrisma.$transaction(async (tx) => {
+      const created = await tx.documentDefinition.create({ data: { ...data, tenantId: admin.tenantId, systemKey: legacyTypeValue ? `CUSTOMIZED_${legacyTypeValue}` : null, createdById: admin.id } });
+      if (legacyTypeValue) await syncLegacyDefinitionConfiguration(tx, admin.tenantId, legacyTypeValue, created.id, data, admin.id);
+      await tx.auditLog.create({ data: { tenantId: admin.tenantId, actorId: admin.id, module: "DOCUMENTS", action: "CREATE_DOCUMENT_DEFINITION", entityType: "DocumentDefinition", entityId: created.id, metadata: { code, workflow: workflowPreset, feeAmount } } });
+      return created;
+    });
+    revalidatePath("/admin/settings/document-definitions");
+    revalidatePath("/portal/documents");
+    redirect(`/admin/settings/document-definitions?edit=${definition.id}&success=saved&message=${encodeURIComponent(`${displayName} definition saved.`)}`);
   }
   revalidatePath("/admin/settings/document-definitions");
   revalidatePath("/portal/documents");
-  redirect(`/admin/settings/document-definitions?success=saved&message=${encodeURIComponent(`${displayName} definition saved.`)}`);
+  redirect(`/admin/settings/document-definitions?edit=${id}&success=saved&message=${encodeURIComponent(`${displayName} definition saved.`)}`);
 }
 
 export async function changeDocumentDefinitionStatusAction(formData: FormData) {
@@ -740,6 +753,7 @@ function optionalDateFromString(value: string | undefined) { if (!value) return 
 function todayUtc() { const now = new Date(); return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate())); }
 function oneYearFromToday() { const date = todayUtc(); date.setUTCFullYear(date.getUTCFullYear() + 1); return date; }
 function clean(value: FormDataEntryValue | null) { return String(value || "").trim() || undefined; }
+function nullableText(value: FormDataEntryValue | null) { const text = String(value || "").trim(); return text || null; }
 function ordinal(day: number) { const suffix = day % 100 >= 11 && day % 100 <= 13 ? "th" : day % 10 === 1 ? "st" : day % 10 === 2 ? "nd" : day % 10 === 3 ? "rd" : "th"; return `${day}${suffix}`; }
 function ageAt(birthDate: Date, at: Date) { let age = at.getUTCFullYear() - birthDate.getUTCFullYear(); if (at.getUTCMonth() < birthDate.getUTCMonth() || (at.getUTCMonth() === birthDate.getUTCMonth() && at.getUTCDate() < birthDate.getUTCDate())) age -= 1; return Math.max(0, age); }
 function requestStatusNote(status: DocumentRequestStatus, outstandingBalance: number) {
@@ -803,6 +817,61 @@ function decimalFromForm(value: FormDataEntryValue | null) {
   const amount = Number(raw);
   if (!Number.isFinite(amount) || amount < 0) throw new Error("Enter a valid fee amount.");
   return amount.toFixed(2);
+}
+
+function booleanFromForm(formData: FormData, name: string) {
+  return formData.getAll(name).some((value) => ["true", "on", "1", "yes"].includes(String(value).toLowerCase()));
+}
+
+async function syncLegacyDefinitionConfiguration(
+  tx: Prisma.TransactionClient,
+  tenantId: string,
+  type: DocumentType,
+  definitionId: string,
+  data: {
+    displayName: string;
+    description: string | null;
+    active: boolean;
+    deliveryMode: DocumentDeliveryMode;
+    approvalRequired: boolean;
+    paymentRequired: boolean;
+    paymentBeforeApproval: boolean;
+    allowImmediateDownload: boolean;
+    requiresAdminReview: boolean;
+    allowRegeneration: boolean;
+    homeownerDownloadEnabled: boolean;
+    validityDays: number | null;
+    maxCopies: number;
+    feeAmount: string;
+    allowPayLater: boolean;
+    signatoryOfficerId: string | null;
+  },
+  adminId: string,
+) {
+  await tx.documentTypeConfiguration.updateMany({
+    where: { tenantId, type },
+    data: {
+      definitionId,
+      displayName: data.displayName,
+      description: data.description,
+      active: data.active,
+      deliveryMode: data.deliveryMode,
+      approvalRequired: data.approvalRequired,
+      paymentRequired: data.paymentRequired,
+      paymentBeforeApproval: data.paymentBeforeApproval,
+      allowImmediateDownload: data.allowImmediateDownload,
+      allowRegeneration: data.allowRegeneration,
+      requiresAdminReview: data.requiresAdminReview,
+      homeownerDownloadEnabled: data.homeownerDownloadEnabled,
+      validityDays: data.validityDays,
+      maxCopies: data.maxCopies,
+      feeAmount: data.feeAmount,
+      allowPayLater: data.allowPayLater,
+      signatoryOfficerId: data.signatoryOfficerId,
+      updatedById: adminId,
+      version: { increment: 1 },
+    },
+  });
 }
 
 function firstDuplicate(values: string[]) {

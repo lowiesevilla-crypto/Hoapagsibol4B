@@ -983,3 +983,19 @@ Observed:
 
 Decision:
 Stop remaining workflow UAT until Bug #097 is resolved.
+
+# 2026-07-18 - Document Definition Persistence Hotfix
+
+## Engineering Ready for Product Owner UAT
+
+- Fixed Bug #097 by keeping `DocumentDefinition` as the authoritative source for the Document Definition administration screen.
+- Updated workflow reconstruction so the edit dropdown is derived from saved `deliveryMode`, not from stale or mismatched low-level flags.
+- Added explicit checkbox serialization and server-side boolean parsing so every boolean field can persist true-to-false and false-to-true changes.
+- Redirected successful saves back to the saved edit record with a success message, so hard refresh and normal navigation load persisted values.
+- Added a persisted configuration summary panel showing workflow, fee, status, active state, assigned template, completeness, requestable state, and last updated from the database.
+- Added legacy compatibility synchronization from saved definitions to matching legacy configurations when `legacyType` exists, without reading legacy configuration back into the definition UI.
+- Added `scripts/verify-document-definition-persistence-hotfix.ts` rollback verification for custom and legacy-backed definitions, boolean flips, workflow reconstruction, signatory/max copy changes, tenant scope, and single version increments.
+
+## Release Gate
+
+- Bug #097 remains open until Product Owner UAT passes.

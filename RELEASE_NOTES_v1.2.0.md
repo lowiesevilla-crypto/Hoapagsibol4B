@@ -424,3 +424,17 @@ Status: Engineering ready for Product Owner UAT.
 
 Release gate:
 - Bug #096 remains open until Product Owner UAT passes.
+
+# Document Definition Persistence Hotfix
+
+Status: Engineering ready for Product Owner UAT.
+
+- Kept Document Definition administration authoritative to saved `DocumentDefinition` records.
+- Reconstructed workflow dropdown values from persisted delivery mode so saved workflows survive refresh.
+- Added explicit boolean serialization and server-side boolean parsing for definition checkboxes.
+- Redirected successful saves back to the saved edit record and added a persisted configuration summary panel.
+- Synchronized legacy compatibility configuration from saved definitions only when a legacy type exists.
+- Added rollback verification for custom and legacy-backed definition persistence, boolean changes, workflow reconstruction, version increments, and tenant scope.
+
+Release gate:
+- Bug #097 remains open until Product Owner UAT passes.

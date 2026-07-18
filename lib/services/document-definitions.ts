@@ -225,6 +225,25 @@ export async function getRequestableDocumentDefinitions(tenantId: string) {
   return definitions.filter((definition) => evaluateDocumentDefinitionVisibility(definition).visibleToHomeowners);
 }
 
+export async function getWalkInDocumentDefinitions(tenantId: string) {
+  const definitions = await platformPrisma.documentDefinition.findMany({
+    where: {
+      tenantId,
+      active: true,
+      archivedAt: null,
+      status: DocumentDefinitionStatus.ACTIVE,
+      walkInEnabled: true,
+    },
+    include: {
+      fields: { where: { active: true }, orderBy: [{ displayOrder: "asc" }, { label: "asc" }] },
+      assignedTemplateVersion: { include: { templateSet: true } },
+      signatoryOfficer: true,
+    },
+    orderBy: [{ displayOrder: "asc" }, { displayName: "asc" }],
+  });
+  return definitions.filter((definition) => evaluateDefinitionCompleteness(definition).requestable);
+}
+
 export function workflowPresetForDefinition(definition: Pick<DocumentDefinition, "deliveryMode" | "paymentRequired" | "approvalRequired" | "requiresAdminReview" | "allowImmediateDownload">) {
   return workflowPresetForDeliveryMode(definition.deliveryMode);
 }

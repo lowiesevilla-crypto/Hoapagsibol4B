@@ -3260,6 +3260,16 @@ Acceptance Criteria:
 - Unauthorized users cannot edit or publish templates.
 - No existing issued-document history is mutated.
 
+## Document Management UX and Walk-In Architecture - Phase 2A
+
+Status: Engineering ready for Product Owner UAT.
+
+- Removed duplicate inventory cards from the normal Document Management view; diagnostics remain available in an authorized expandable panel.
+- Added tenant-safe Certificate of Indigency repair/seed behavior and preserved definition relationships and historical references.
+- Walk-In / Office Request now uses complete, active, walk-in-enabled Document Definitions with published templates.
+- Workflow-aware request summaries and next actions prevent the form from implying unconditional direct generation.
+- The professional editor, walk-in payment, release acknowledgement, and public QR verification remain deferred.
+
 ## Document Template Editor Reconstruction - Phase 2
 
 Status: Engineering implementation ready for Product Owner UAT.

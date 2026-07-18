@@ -496,3 +496,12 @@ Deferred:
 
 Release gate:
 - Professional template editor reconstruction remains open until Product Owner UAT passes.
+
+# Document Management UX and Walk-In Architecture Phase 2A
+
+- Consolidated normal document administration around the Document Management hub and moved expected-type diagnostics into an authorized expandable panel.
+- Added tenant-safe, auditable Certificate of Indigency repair/seed behavior without rewriting historical references.
+- Updated Walk-In / Office Request to use complete tenant-owned Document Definitions and published template versions.
+- Added workflow-aware policy summaries and request status preparation; unsafe unconditional generation is no longer implied.
+
+Deferred: full walk-in workflow reconstruction, payment processing, release acknowledgement, public QR verification, and the professional editor remain outside this phase.

@@ -13,7 +13,7 @@ import { requireDocumentTemplateAdmin } from "@/lib/document-template-admin";
 import { getAssociationSettings } from "@/lib/system-settings";
 import { asJson, getActiveOrganizationOfficers, officerSnapshot } from "@/lib/organization";
 import { allocateDefinitionDocumentNumber, allocateDocumentNumber, documentTypeLabel, documentTypeOptions, renderDocumentTemplate } from "@/lib/services/documents";
-import { buildSubjectSnapshot, canGenerateWithoutPayment, documentConfigurationStatus, legacyRequestFields, needsTemplate, parseConfiguredFields, requestDataSnapshotJson, statusForConfiguration, subjectSnapshotJson } from "@/lib/services/document-workflow";
+import { buildSubjectSnapshot, canGenerateWithoutPayment, documentConfigurationStatus, legacyRequestFields, parseConfiguredFields, requestDataSnapshotJson, statusForConfiguration, subjectSnapshotJson } from "@/lib/services/document-workflow";
 import { defaultNumberingFormat, evaluateDefinitionCompleteness, validateNumberingFormat, workflowFieldsForPreset } from "@/lib/services/document-definitions";
 import { balancePolicyLockMessage, canOverrideDocumentBalancePolicy, getQualifyingHomeownerBalance, normalizeOutstandingBalancePolicy, policyForDocumentRequest } from "@/lib/services/document-balance-policy";
 import { defaultTemplateDefinition, documentTemplateBlockTypes, documentTemplateSchemaVersion, normalizeTemplateDefinition, renderTemplateDefinitionText, validateTemplateDefinition, type AllowedDocumentPlaceholder, type DocumentTemplateBlock, type DocumentTemplateBlockType } from "@/lib/services/document-template-builder";
@@ -289,25 +289,62 @@ export async function processDocumentRequestAction(formData: FormData) {
   redirect(`${returnPath}?success=${operation}&message=${encodeURIComponent(operation === "approve" ? "Document approved and generated successfully." : operation === "regenerate" ? "Document updated and regenerated. The previous version was preserved." : operation === "review" ? "Review details saved successfully." : "Request rejected successfully.")}`);
 }
 
+export async function repairDocumentDefinitionAction(formData: FormData) {
+  const admin = await requireDocumentTemplateAdmin();
+  const code = clean(formData.get("code"))?.toUpperCase();
+  const displayName = clean(formData.get("displayName"));
+  if (!code || !displayName) redirect("/admin/documents?error=Document%20diagnostic%20repair%20is%20missing%20the%20expected%20definition.");
+  const aliases = code === "CERTIFICATE_OF_INDIGENCY" ? ["CERTIFICATE_OF_IDIGENCY"] : [];
+  const [correct, typo, existingRequests] = await Promise.all([
+    prisma.documentDefinition.findFirst({ where: { tenantId: admin.tenantId, code }, select: { id: true, code: true, displayName: true } }),
+    aliases.length ? prisma.documentDefinition.findFirst({ where: { tenantId: admin.tenantId, code: { in: aliases } }, select: { id: true, code: true, displayName: true } }) : null,
+    prisma.documentRequest.count({ where: { tenantId: admin.tenantId, definition: { code } } }),
+  ]);
+  if (correct && typo) redirect("/admin/documents?error=Both%20the%20correct%20and%20typo%20definitions%20exist.%20Resolve%20the%20duplicate%20manually.");
+  if (correct) redirect("/admin/documents?success=diagnostic&message=The%20expected%20document%20definition%20already%20exists.");
+  if (typo) {
+    const updated = await platformPrisma.documentDefinition.update({ where: { id: typo.id }, data: { code, displayName, systemKey: code, updatedById: admin.id, version: { increment: 1 } } });
+    await platformPrisma.auditLog.create({ data: { tenantId: admin.tenantId, actorId: admin.id, module: "DOCUMENTS", action: "REPAIR_DOCUMENT_DEFINITION_ALIAS", entityType: "DocumentDefinition", entityId: updated.id, metadata: { oldCode: typo.code, code, oldDisplayName: typo.displayName, displayName, preservedRequestCount: existingRequests } } });
+    revalidatePath("/admin/documents");
+    redirect(`/admin/documents?success=diagnostic&message=${encodeURIComponent(`${displayName} was corrected without changing its definition ID or historical relationships.`)}`);
+  }
+  const created = await platformPrisma.documentDefinition.create({ data: { tenantId: admin.tenantId, code, displayName, category: "Certificate", systemKey: code, status: DocumentDefinitionStatus.DRAFT, active: false, homeownerDownloadEnabled: false, walkInEnabled: false, createdById: admin.id, updatedById: admin.id } });
+  await platformPrisma.auditLog.create({ data: { tenantId: admin.tenantId, actorId: admin.id, module: "DOCUMENTS", action: "SEED_DOCUMENT_DEFINITION_REPAIR", entityType: "DocumentDefinition", entityId: created.id, metadata: { code, displayName, active: false, reason: "Missing expected document definition; administrator review required." } } });
+  revalidatePath("/admin/documents");
+  redirect(`/admin/documents?success=diagnostic&message=${encodeURIComponent(`${displayName} was added as an inactive draft for administrator review.`)}`);
+}
+
 export async function generateManualDocumentAction(formData: FormData) {
   const admin = await requireUser(Role.ADMIN);
   const homeownerId = String(formData.get("homeownerId") || "");
-  const type = String(formData.get("type") || "") as DocumentType;
+  const definitionId = clean(formData.get("definitionId"));
   const purpose = clean(formData.get("purpose"));
-  if (!homeownerId || !documentTypeOptions.some((item) => item.value === type) || !purpose) redirect("/admin/documents/new?error=Select%20a%20homeowner%2C%20document%20type%2C%20and%20enter%20a%20purpose.");
-  const [homeowner, config] = await Promise.all([
+  if (!homeownerId || !definitionId || !purpose) redirect("/admin/documents/new?error=Select%20a%20homeowner%2C%20document%20type%2C%20and%20enter%20a%20purpose.");
+  const [homeowner, definition] = await Promise.all([
     prisma.homeownerProfile.findFirst({ where: { id: homeownerId, tenantId: admin.tenantId }, include: { user: true } }),
-    prisma.documentTypeConfiguration.findFirst({ where: { tenantId: admin.tenantId, type, active: true }, include: { template: true, fields: true } }),
+    prisma.documentDefinition.findFirst({ where: { id: definitionId, tenantId: admin.tenantId }, include: { fields: { where: { active: true }, orderBy: [{ displayOrder: "asc" }] }, assignedTemplateVersion: { include: { templateSet: true } } } }),
   ]);
   if (!homeowner) redirect("/admin/documents/new?error=Homeowner%20not%20found.");
-  if (config && needsTemplate(config) && !config.template?.active) redirect("/admin/documents/new?error=This%20document%20type%20does%20not%20have%20an%20active%20template.");
-  const unpaid = await prisma.bill.aggregate({ where: { tenantId: admin.tenantId, homeownerId, archivedAt: null, balance: { gt: 0 } }, _sum: { balance: true } });
-  const requestValues = { purpose, remarks: clean(formData.get("remarks")) || "", validityDate: String(formData.get("validityDate") || ""), scheduledDate: String(formData.get("scheduledDate") || ""), startTime: clean(formData.get("startTime")) || "", endTime: clean(formData.get("endTime")) || "", passType: clean(formData.get("passType")) || "", vehicleDetails: clean(formData.get("vehicleDetails")) || "", partyName: clean(formData.get("partyName")) || "", contractorDetails: clean(formData.get("contractorDetails")) || "", representativeName: clean(formData.get("representativeName")) || "", propertyDetails: clean(formData.get("propertyDetails")) || homeowner.address };
-  const subjectSnapshot = buildSubjectSnapshot({ subjectType: DocumentSubjectType.SELF, homeowner });
-  const request = await prisma.documentRequest.create({ data: { tenantId: admin.tenantId, homeownerId, type, configurationId: config?.id, configurationVersion: config?.version, templateIdSnapshot: config?.template?.id, templateVersionSnapshot: config?.template?.version, subjectType: DocumentSubjectType.SELF, subjectSnapshot: subjectSnapshotJson(subjectSnapshot), requestDataSnapshot: asJson({ type, fields: requestValues, numberOfCopies: 1 }), deliveryModeSnapshot: config?.deliveryMode ?? DocumentDeliveryMode.APPROVAL_REQUIRED, approvalRequiredSnapshot: true, paymentRequiredSnapshot: config?.paymentRequired ?? false, feeAmountSnapshot: config?.feeAmount ?? 0, numberOfCopies: 1, origin: "ADMIN", initiatedById: admin.id, status: DocumentRequestStatus.SUBMITTED, purpose, remarks: requestValues.remarks, validityDate: optionalDate(formData.get("validityDate")), scheduledDate: optionalDate(formData.get("scheduledDate")), startTime: requestValues.startTime, endTime: requestValues.endTime, passType: requestValues.passType, vehicleDetails: requestValues.vehicleDetails, partyName: requestValues.partyName, contractorDetails: requestValues.contractorDetails, representativeName: requestValues.representativeName, propertyDetails: requestValues.propertyDetails, outstandingBalanceAtRequest: Number(unpaid._sum.balance ?? 0), histories: { create: { tenantId: admin.tenantId, status: DocumentRequestStatus.SUBMITTED, actorId: admin.id, note: "Created by administrator for a walk-in or office transaction." } } } });
-  await prisma.auditLog.create({ data: { actorId: admin.id, module: "DOCUMENTS", action: "ADMIN_INITIATE_DOCUMENT", entityType: "DocumentRequest", entityId: request.id, metadata: { homeownerId, type, role: admin.role, purpose } } });
-  formData.set("id", request.id); formData.set("operation", "approve"); formData.set("returnTo", `/admin/documents/${request.id}`);
-  return processDocumentRequestAction(formData);
+  if (!definition || !definition.active || definition.status !== DocumentDefinitionStatus.ACTIVE || definition.archivedAt || !definition.walkInEnabled) redirect("/admin/documents/new?error=This%20document%20type%20is%20not%20available%20for%20walk-in%20requests.");
+  const completeness = evaluateDefinitionCompleteness(definition);
+  if (!completeness.requestable) redirect(`/admin/documents/new?error=${encodeURIComponent(`This document type is not ready for walk-in requests: ${completeness.errors[0] || completeness.status}.`)}`);
+  const requestValues = { purpose, remarks: clean(formData.get("remarks")) || "", validityDate: String(formData.get("validityDate") || ""), scheduledDate: String(formData.get("scheduledDate") || ""), startTime: clean(formData.get("startTime")) || "", endTime: clean(formData.get("endTime")) || "", passType: clean(formData.get("passType")) || "", vehicleDetails: clean(formData.get("vehicleDetails")) || "", partyName: clean(formData.get("partyName")) || "", contractorDetails: clean(formData.get("contractorDetails")) || "", representativeName: clean(formData.get("representativeName")) || "", propertyDetails: clean(formData.get("propertyDetails")) || homeowner!.address };
+  const outstandingBalance = await getQualifyingHomeownerBalance(admin.tenantId, homeownerId);
+  if (definition.outstandingBalancePolicy === DocumentOutstandingBalancePolicy.BLOCK_REQUEST && outstandingBalance > 0) redirect(`/admin/documents/new?error=${encodeURIComponent(balancePolicyLockMessage(definition.outstandingBalancePolicy, outstandingBalance))}`);
+  const expectedStatus = statusForConfiguration(definition);
+  const initialStatus = expectedStatus === DocumentRequestStatus.READY_FOR_DOWNLOAD ? DocumentRequestStatus.SUBMITTED : expectedStatus;
+  const subjectSnapshot = buildSubjectSnapshot({ subjectType: DocumentSubjectType.SELF, homeowner: homeowner! });
+  const request = await platformPrisma.$transaction(async (tx) => {
+    const created = await tx.documentRequest.create({ data: { tenantId: admin.tenantId, homeownerId, type: definition!.legacyType, definitionId: definition!.id, definitionVersionSnapshot: definition!.version, definitionSnapshot: asJson({ id: definition!.id, code: definition!.code, displayName: definition!.displayName, version: definition!.version, deliveryMode: definition!.deliveryMode, approvalRequired: definition!.approvalRequired, paymentRequired: definition!.paymentRequired, feeAmount: String(definition!.feeAmount), outstandingBalancePolicy: definition!.outstandingBalancePolicy }), templateVersionIdSnapshot: definition!.assignedTemplateVersion!.id, templateDefinitionSnapshot: definition!.assignedTemplateVersion!.definitionJson ?? undefined, subjectType: DocumentSubjectType.SELF, subjectSnapshot: subjectSnapshotJson(subjectSnapshot), requestDataSnapshot: asJson({ definitionId: definition!.id, fields: requestValues, numberOfCopies: 1 }), deliveryModeSnapshot: definition!.deliveryMode, approvalRequiredSnapshot: definition!.approvalRequired || definition!.requiresAdminReview, paymentRequiredSnapshot: definition!.paymentRequired, feeAmountSnapshot: definition!.feeAmount, numberOfCopies: 1, origin: "ADMIN", initiatedById: admin.id, status: initialStatus, purpose, remarks: requestValues.remarks, validityDate: optionalDate(formData.get("validityDate")), scheduledDate: optionalDate(formData.get("scheduledDate")), startTime: requestValues.startTime, endTime: requestValues.endTime, passType: requestValues.passType, vehicleDetails: requestValues.vehicleDetails, partyName: requestValues.partyName, contractorDetails: requestValues.contractorDetails, representativeName: requestValues.representativeName, propertyDetails: requestValues.propertyDetails, outstandingBalanceAtRequest: outstandingBalance } });
+    await tx.documentRequestHistory.create({ data: { tenantId: admin.tenantId, requestId: created.id, status: initialStatus, actorId: admin.id, note: "Created by administrator for a walk-in or office transaction." } });
+    await tx.auditLog.create({ data: { tenantId: admin.tenantId, actorId: admin.id, module: "DOCUMENTS", action: "ADMIN_INITIATE_DOCUMENT", entityType: "DocumentRequest", entityId: created.id, metadata: { homeownerId, definitionId: definition!.id, code: definition!.code, role: admin.role, purpose, status: initialStatus } } });
+    return created;
+  });
+  if (expectedStatus === DocumentRequestStatus.READY_FOR_DOWNLOAD) {
+    formData.set("id", request.id); formData.set("operation", "approve"); formData.set("returnTo", `/admin/documents/${request.id}`);
+    return processDocumentRequestAction(formData);
+  }
+  redirect(`/admin/documents/${request.id}?success=created&message=${encodeURIComponent(`Walk-In / Office Request created. Next step: ${expectedStatus === DocumentRequestStatus.PENDING_APPROVAL ? "Submit for approval." : expectedStatus === DocumentRequestStatus.PAYMENT_PENDING ? "Confirm the document fee payment." : "Manual processing."}`)}`);
 }
 
 export async function updateDocumentBalanceOverrideAction(formData: FormData) {

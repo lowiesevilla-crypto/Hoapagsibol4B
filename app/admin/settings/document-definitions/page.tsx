@@ -56,6 +56,7 @@ export default async function DocumentDefinitionsPage({ searchParams }: { search
       <details open={Boolean(editing) || !definitions.length}>
         <summary className="cursor-pointer text-lg font-black">{editing ? `Edit ${editing.displayName}` : "Create document definition"}</summary>
         {editing && <PersistedDefinitionSummary definition={editing} />}
+        {editing && <DefinitionConfigurationNav definitionId={editing.id} />}
         <DefinitionForm definition={editing} officers={officers} />
         {editing && <div className="mt-6 border-t pt-5"><h3 className="font-black">Dynamic fields</h3><p className="mt-1 text-sm text-slate-500">Keys are immutable once requests exist. Deactivate fields instead of deleting them when historical snapshots depend on them.</p><DocumentDefinitionFieldBuilder definitionId={editing.id} fields={editFields} /></div>}
       </details>
@@ -118,6 +119,20 @@ function DefinitionForm({ definition, officers }: { definition: EditableDefiniti
     </div>
     <div className="md:col-span-2 xl:col-span-4"><SubmitButton>{definition ? "Save definition" : "Create definition"}</SubmitButton></div>
   </form>;
+}
+
+function DefinitionConfigurationNav({ definitionId }: { definitionId: string }) {
+  const links = [
+    ["General", "#general"],
+    ["Workflow and Fees", "#workflow"],
+    ["Request Policy", "#request-policy"],
+    ["Required Information", "#required-information"],
+    ["Template", `/admin/settings/document-definitions/${definitionId}/templates`],
+    ["Preview", `/admin/settings/document-definitions/${definitionId}/templates`],
+    ["Version History", `/admin/settings/document-definitions/${definitionId}/templates`],
+    ["Advanced", "#advanced"],
+  ] as const;
+  return <nav className="mt-5 flex flex-wrap gap-2 border-y border-slate-200 py-3" aria-label="Document definition configuration sections">{links.map(([label, href]) => href.startsWith("#") ? <a key={label} className="rounded-lg bg-slate-100 px-3 py-2 text-xs font-black text-slate-700 hover:bg-slate-200" href={href}>{label}</a> : <Link key={label} className="rounded-lg bg-slate-100 px-3 py-2 text-xs font-black text-slate-700 hover:bg-slate-200" href={href}>{label}</Link>)}</nav>;
 }
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {

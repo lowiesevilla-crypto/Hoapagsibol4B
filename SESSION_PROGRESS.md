@@ -1085,6 +1085,15 @@ Tracked as Bug #098.
 ## Release Gate
 
 - Professional template editor reconstruction remains open until Product Owner UAT passes.
+
+## 2026-07-18 - Document Management UX and Walk-In Architecture Phase 2A
+
+- Normal `/admin/documents?section=types` is table-first; expected-type inventory moved into an authorized diagnostics panel.
+- Added tenant-safe, idempotent repair action for the Certificate of Indigency typo and inactive seeding for genuinely missing expected definitions.
+- `/admin/documents/new` is now titled Create Walk-In / Office Request and loads only complete active walk-in-enabled definitions with published templates.
+- Walk-in request creation preserves definition/template/workflow/balance-policy snapshots and creates the workflow-appropriate request status before any safe instant generation.
+- Added `scripts/verify-document-management-phase-2a.ts`.
+- Walk-In Workflow Reconstruction and Bug #098 remain open until Product Owner UAT passes.
 ## Approved Document Template Editor Direction
 
 The Product Owner approved reconstructing the Document Template Editor as a

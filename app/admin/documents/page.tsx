@@ -2,8 +2,8 @@ import Link from "next/link";
 import { DocumentDefinitionStatus, DocumentRequestStatus, DocumentTemplateVersionStatus, DocumentType, type Prisma } from "@prisma/client";
 import { PageHeader } from "@/components/page-header";
 import { PaginationFocusTarget } from "@/components/pagination-focus";
-import { changeDocumentDefinitionStatusAction, saveDocumentTemplateVersionAction } from "@/lib/actions/documents";
-import { requireUser } from "@/lib/auth";
+import { changeDocumentDefinitionStatusAction, repairDocumentDefinitionAction, saveDocumentTemplateVersionAction } from "@/lib/actions/documents";
+import { requireDocumentTemplateAdmin } from "@/lib/document-template-admin";
 import { prisma } from "@/lib/db";
 import { evaluateDocumentDefinitionVisibility, workflowPresetForDefinition } from "@/lib/services/document-definitions";
 import { documentOutstandingBalancePolicyOptions } from "@/lib/services/document-balance-policy";
@@ -50,7 +50,7 @@ const expectedDefinitions = [
 ];
 
 export default async function AdminDocumentsPage({ searchParams }: { searchParams: Promise<Query> }) {
-  const user = await requireUser();
+  const user = await requireDocumentTemplateAdmin();
   const query = await searchParams;
   const section = ["types", "templates", "requests", "issued"].includes(query.section || "") ? query.section! : "types";
   const q = query.q?.trim() || "";
@@ -79,7 +79,7 @@ export default async function AdminDocumentsPage({ searchParams }: { searchParam
   const requestPages = Math.max(1, Math.ceil(requestCount / requestPageSize));
   const filters = new URLSearchParams(Object.entries({ section: "requests", q, status: status || "", type: type || "", date: query.date || "" }).filter(([, value]) => value));
   return <>
-    <PageHeader eyebrow="Document management" title="Documents" description="Manage document types, templates, homeowner requests, and issued HOA documents from one tenant-scoped workspace." action={<div className="flex flex-wrap gap-2"><Link className="btn-primary" href="/admin/documents/new">Generate new document</Link><Link className="btn-secondary" href="/admin/documents/archive">Archive</Link></div>} />
+    <PageHeader eyebrow="Resident services" title="Document Management" description="Manage document types, templates, homeowner requests, and issued HOA documents from one tenant-scoped workspace." action={<div className="flex flex-wrap gap-2"><Link className="btn-primary" href="/admin/documents/new">Create Walk-In / Office Request</Link><Link className="btn-secondary" href="/admin/documents/archive">Archive</Link></div>} />
     {query.notice === "legacy-templates" && <Notice kind="success">The legacy template screen now redirects here. Use Templates for draft, publishing, and version history.</Notice>}
     {query.error && <Notice kind="error">{query.error}</Notice>}
     {query.success && <Notice kind="success">{query.message || "Document request updated."}</Notice>}
@@ -98,25 +98,21 @@ export default async function AdminDocumentsPage({ searchParams }: { searchParam
 
 function DocumentTypesSection({ definitions, inventory }: { definitions: DefinitionRow[]; inventory: ReturnType<typeof buildInventory> }) {
   return <>
-    <section className="card mb-5">
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-        <div><h2 className="text-lg font-black">Expected document type inventory</h2><p className="text-sm text-slate-500">Tenant catalog health for common HOA certificates, passes, and clearances.</p></div>
-        <Link className="btn-secondary" href="/admin/settings/document-definitions">Create or configure type</Link>
-      </div>
-      <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
-        {inventory.map((item) => <div key={item.code} className="rounded-xl border border-slate-200 bg-slate-50 p-3"><p className="font-black">{item.label}</p><p className="mt-1 text-xs font-bold text-slate-500">{item.code}</p><p className={`mt-2 text-sm font-black ${item.status === "present and complete" ? "text-emerald-700" : item.status === "missing" ? "text-rose-700" : "text-amber-700"}`}>{item.status}</p>{item.reason && <p className="mt-1 text-xs text-slate-500">{item.reason}</p>}</div>)}
-      </div>
-    </section>
+    <details className="card mb-5">
+      <summary className="cursor-pointer text-lg font-black">Document Definition Diagnostics</summary>
+      <p className="mt-2 text-sm text-slate-500">Administrator-only inventory health checks. Repair actions preserve historical relationships and seed missing definitions inactive for review.</p>
+      <div className="mt-4 divide-y divide-slate-200">{inventory.map((item) => <div key={item.code} className="flex flex-col gap-3 py-3 sm:flex-row sm:items-center sm:justify-between"><div><p className="font-black">{item.label}</p><p className="text-xs font-bold text-slate-500">{item.code}</p><p className={`mt-1 text-sm font-black ${item.status === "present and complete" ? "text-emerald-700" : item.status === "missing" ? "text-rose-700" : "text-amber-700"}`}>{item.status}</p>{item.reason && <p className="text-xs text-slate-500">{item.reason}</p>}</div><div className="flex flex-wrap gap-2"><Link className="btn-secondary min-h-8 px-3 py-1 text-xs" href={`/admin/settings/document-definitions?${item.definitionId ? `edit=${item.definitionId}` : ""}`}>{item.definitionId ? "Configure" : "Review catalog"}</Link>{(item.status === "missing" || item.status === "legacy-only" || item.alias) && <form action={repairDocumentDefinitionAction}><input type="hidden" name="code" value={item.code} /><input type="hidden" name="displayName" value={item.label} /><button className="btn-secondary min-h-8 px-3 py-1 text-xs">Repair or seed</button></form>}</div></div>)}</div>
+    </details>
     <PaginationFocusTarget id="document-type-catalog" label="Document type catalog" />
     <section className="card p-0 sm:p-0">
       <div className="table-wrap rounded-none shadow-none">
-        <table className="data-table min-w-[1380px]"><thead><tr><th>Document type</th><th>Code</th><th>Category</th><th>Status</th><th>Homeowner visibility</th><th>Workflow</th><th>Fee</th><th>Balance policy</th><th>Active published template</th><th>Completeness</th><th>Requestability</th><th>Actions</th></tr></thead><tbody>
+        <table className="data-table min-w-[1520px]"><thead><tr><th>Document type</th><th>Code</th><th>Category</th><th>Status</th><th>Homeowner visibility</th><th>Walk-In availability</th><th>Workflow</th><th>Fee</th><th>Balance policy</th><th>Active published template</th><th>Completeness</th><th>Requestability</th><th>Actions</th></tr></thead><tbody>
           {definitions.map((definition) => {
             const visibility = evaluateDocumentDefinitionVisibility(definition);
             const archived = definition.status === DocumentDefinitionStatus.ARCHIVED || Boolean(definition.archivedAt);
-            return <tr key={definition.id}><td><p className="font-black">{definition.displayName}</p><p className="max-w-72 truncate text-xs text-slate-500">{definition.description || "No description"}</p></td><td className="font-mono text-xs font-bold">{definition.code}</td><td>{definition.category || "General"}</td><td><span className={`badge ${definition.active && !definition.archivedAt ? "badge-paid" : "badge-info"}`}>{definition.status.replaceAll("_", " ")}</span></td><td>{definition.homeownerDownloadEnabled ? "Visible" : "Hidden"}</td><td>{workflowLabel(workflowPresetForDefinition(definition))}</td><td>{money(Number(definition.feeAmount))}</td><td>{balancePolicyLabel(definition.outstandingBalancePolicy)}</td><td>{definition.assignedTemplateVersion ? `Published v${definition.assignedTemplateVersion.version}` : "None"}</td><td><p className={visibility.requestable ? "font-bold text-emerald-700" : "font-bold text-amber-700"}>{visibility.status}</p>{[...visibility.errors, ...visibility.warnings].slice(0, 2).map((item) => <p key={item} className="max-w-56 text-xs text-slate-500">{item}</p>)}</td><td>{visibility.visibleToHomeowners ? <span className="font-bold text-emerald-700">Requestable</span> : <div>{visibility.hiddenReasons.length ? visibility.hiddenReasons.map((reason) => <p key={reason} className="text-xs font-bold text-amber-700">{reason}</p>) : <p className="text-xs font-bold text-amber-700">Not requestable</p>}</div>}</td><td><div className="flex flex-wrap gap-2"><Link className="btn-secondary min-h-8 px-3 py-1 text-xs" href={`/admin/settings/document-definitions?edit=${definition.id}`}>Configure</Link><Link className="btn-secondary min-h-8 px-3 py-1 text-xs" href={`/admin/settings/document-definitions/${definition.id}/templates`}>Edit Template</Link><Link className="btn-secondary min-h-8 px-3 py-1 text-xs" href={`/admin/settings/document-definitions/${definition.id}/templates`}>Preview</Link>{!archived && <form action={changeDocumentDefinitionStatusAction}><input type="hidden" name="id" value={definition.id} /><input type="hidden" name="operation" value={definition.active ? "DEACTIVATE" : "ACTIVATE"} /><button className="btn-secondary min-h-8 px-3 py-1 text-xs">{definition.active ? "Deactivate" : "Activate"}</button></form>}{!archived && <form action={changeDocumentDefinitionStatusAction}><input type="hidden" name="id" value={definition.id} /><input type="hidden" name="operation" value="ARCHIVE" /><button className="btn-danger min-h-8 px-3 py-1 text-xs">Archive</button></form>}</div></td></tr>;
+            return <tr key={definition.id}><td><p className="font-black">{definition.displayName}</p><p className="max-w-72 truncate text-xs text-slate-500">{definition.description || "No description"}</p></td><td className="font-mono text-xs font-bold">{definition.code}</td><td>{definition.category || "General"}</td><td><span className={`badge ${definition.active && !definition.archivedAt ? "badge-paid" : "badge-info"}`}>{definition.status.replaceAll("_", " ")}</span></td><td>{definition.homeownerDownloadEnabled ? "Visible" : "Hidden"}</td><td>{definition.walkInEnabled ? "Walk-In Enabled" : "Walk-In Disabled"}</td><td>{workflowLabel(workflowPresetForDefinition(definition))}</td><td>{money(Number(definition.feeAmount))}</td><td>{balancePolicyLabel(definition.outstandingBalancePolicy)}</td><td>{definition.assignedTemplateVersion ? `Published v${definition.assignedTemplateVersion.version}` : "None"}</td><td><p className={visibility.requestable ? "font-bold text-emerald-700" : "font-bold text-amber-700"}>{visibility.status}</p>{[...visibility.errors, ...visibility.warnings].slice(0, 2).map((item) => <p key={item} className="max-w-56 text-xs text-slate-500">{item}</p>)}</td><td>{visibility.visibleToHomeowners ? <span className="font-bold text-emerald-700">Requestable</span> : <div>{visibility.hiddenReasons.length ? visibility.hiddenReasons.map((reason) => <p key={reason} className="text-xs font-bold text-amber-700">{reason}</p>) : <p className="text-xs font-bold text-amber-700">Not requestable</p>}</div>}</td><td><div className="flex flex-wrap gap-2"><Link className="btn-secondary min-h-8 px-3 py-1 text-xs" href={`/admin/settings/document-definitions?edit=${definition.id}`}>Configure</Link><Link className="btn-secondary min-h-8 px-3 py-1 text-xs" href={`/admin/settings/document-definitions/${definition.id}/templates`}>Edit Template</Link><Link className="btn-secondary min-h-8 px-3 py-1 text-xs" href={`/admin/settings/document-definitions/${definition.id}/templates`}>Preview</Link>{!archived && <form action={changeDocumentDefinitionStatusAction}><input type="hidden" name="id" value={definition.id} /><input type="hidden" name="operation" value={definition.active ? "DEACTIVATE" : "ACTIVATE"} /><button className="btn-secondary min-h-8 px-3 py-1 text-xs">{definition.active ? "Deactivate" : "Activate"}</button></form>}{!archived && <form action={changeDocumentDefinitionStatusAction}><input type="hidden" name="id" value={definition.id} /><input type="hidden" name="operation" value="ARCHIVE" /><button className="btn-danger min-h-8 px-3 py-1 text-xs">Archive</button></form>}</div></td></tr>;
           })}
-          {!definitions.length && <tr><td colSpan={12} className="py-12 text-center text-slate-500">No document types found.</td></tr>}
+          {!definitions.length && <tr><td colSpan={13} className="py-12 text-center text-slate-500">No document types found.</td></tr>}
         </tbody></table>
       </div>
     </section>
@@ -166,18 +162,18 @@ function buildInventory(definitions: DefinitionRow[], legacyConfigs: { type: Doc
     const aliasWarning = !exactMatches.length && aliasMatches.length ? `Possible typo: found ${aliasMatches[0].displayName} (${aliasMatches[0].code}).` : "";
     const legacyConfig = expected.legacyType ? legacyConfigs.find((config) => config.type === expected.legacyType) : null;
     const legacyTemplate = expected.legacyType ? legacyTemplates.find((template) => template.type === expected.legacyType) : null;
-    if (matches.length > 1) return { ...expected, status: "duplicate", reason: `${matches.length} definitions match this expected type.` };
+    if (matches.length > 1) return { ...expected, status: "duplicate", reason: `${matches.length} definitions match this expected type.`, definitionId: matches[0]?.id, alias: false };
     const definition = matches[0];
     if (!definition) {
-      if (legacyConfig || legacyTemplate) return { ...expected, status: "legacy-only", reason: "Legacy configuration or template exists without a document definition." };
-      return { ...expected, status: "missing", reason: expected.legacyType ? "No definition found for the legacy type." : "No custom definition found." };
+      if (legacyConfig || legacyTemplate) return { ...expected, status: "legacy-only", reason: "Legacy configuration or template exists without a document definition.", definitionId: undefined, alias: false };
+      return { ...expected, status: "missing", reason: expected.legacyType ? "No definition found for the legacy type." : "No custom definition found.", definitionId: undefined, alias: false };
     }
     const visibility = evaluateDocumentDefinitionVisibility(definition);
-    if (definition.archivedAt || definition.status === DocumentDefinitionStatus.ARCHIVED) return { ...expected, status: "present but hidden", reason: [aliasWarning, "Archived."].filter(Boolean).join(" ") };
-    if (!definition.active || definition.status === DocumentDefinitionStatus.INACTIVE) return { ...expected, status: "present but inactive", reason: [aliasWarning, "Inactive."].filter(Boolean).join(" ") };
-    if (!definition.homeownerDownloadEnabled) return { ...expected, status: "present but hidden", reason: [aliasWarning, "Homeowner visibility disabled."].filter(Boolean).join(" ") };
-    if (!visibility.requestable) return { ...expected, status: "present but incomplete", reason: [aliasWarning, [...visibility.errors, ...visibility.warnings][0] || "Not requestable."].filter(Boolean).join(" ") };
-    return { ...expected, status: "present and complete", reason: aliasWarning };
+    if (definition.archivedAt || definition.status === DocumentDefinitionStatus.ARCHIVED) return { ...expected, status: "present but hidden", reason: [aliasWarning, "Archived."].filter(Boolean).join(" "), definitionId: definition.id, alias: Boolean(aliasWarning) };
+    if (!definition.active || definition.status === DocumentDefinitionStatus.INACTIVE) return { ...expected, status: "present but inactive", reason: [aliasWarning, "Inactive."].filter(Boolean).join(" "), definitionId: definition.id, alias: Boolean(aliasWarning) };
+    if (!definition.homeownerDownloadEnabled) return { ...expected, status: "present but hidden", reason: [aliasWarning, "Homeowner visibility disabled."].filter(Boolean).join(" "), definitionId: definition.id, alias: Boolean(aliasWarning) };
+    if (!visibility.requestable) return { ...expected, status: "present but incomplete", reason: [aliasWarning, [...visibility.errors, ...visibility.warnings][0] || "Not requestable."].filter(Boolean).join(" "), definitionId: definition.id, alias: Boolean(aliasWarning) };
+    return { ...expected, status: "present and complete", reason: aliasWarning, definitionId: definition.id, alias: Boolean(aliasWarning) };
   });
 }
 

@@ -496,3 +496,20 @@ Introduce the additive database foundation required for tenant-created documents
 ### Release Gate
 
 - [ ] Keep the professional template editor improvement open until Product Owner UAT confirms editor usability, publish history, snapshot immutability, security, and generated output expectations.
+
+## Document Management UX and Walk-In Architecture - Phase 2A
+
+Target lifecycle:
+
+Document Type Configuration -> Template Draft -> Template Publication -> Homeowner, Household Member, or Walk-In Request -> Document Fee Payment when required -> Approval when required -> Generation using an immutable template snapshot -> Download or Office Release -> Receipt and Release Acknowledgement -> Verification and Audit History
+
+Implemented in this phase:
+
+- Document Management is the single administrator entry point; the legacy template route redirects to its Templates section.
+- Operational document types are shown in one table, with diagnostics separated from normal operations.
+- Walk-In / Office Request reads authoritative Document Definitions and filters by tenant, active state, archive state, walk-in availability, completeness, and published template availability.
+- Current hardcoded walk-in fields remain compatibility-mode fields until the dynamic form reconstruction phase.
+
+Deferred next phase:
+
+- Full dynamic walk-in fields, document payment processing, release acknowledgement, public QR verification, and the professional editor remain separate work items.

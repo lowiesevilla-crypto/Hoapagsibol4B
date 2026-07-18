@@ -196,17 +196,44 @@ const defaultPage: DocumentTemplateDefinition["page"] = {
   watermark: { enabled: false, text: "", opacity: 0.08 },
 };
 
-export function validateTemplateDefinition(definition: DocumentTemplateDefinition) {
+export function validateTemplateDefinition(value: unknown) {
   const errors: string[] = [];
-  if (definition.schemaVersion !== documentTemplateSchemaVersion) errors.push("Unsupported template schema version.");
-  if (!["A4", "LETTER", "LEGAL"].includes(definition.page.format)) errors.push("Unsupported page size.");
-  if (!["portrait", "landscape"].includes(definition.page.orientation)) errors.push("Unsupported page orientation.");
-  for (const margin of Object.values(definition.page.margins)) {
-    if (!Number.isFinite(margin) || margin < 5 || margin > 60) errors.push("Page margins must be between 5mm and 60mm.");
+  if (!isRecord(value)) return { valid: false, errors: ["Template definition is missing."] };
+  const definition = value;
+  if (definition.schemaVersion !== documentTemplateSchemaVersion && definition.schemaVersion !== 1) errors.push("Unsupported template schema version.");
+
+  const page = isRecord(definition.page) ? definition.page : null;
+  if (!page) {
+    errors.push("Missing page settings.");
+  } else {
+    if (!["A4", "LETTER", "LEGAL"].includes(String(page.format))) errors.push("Unsupported page size.");
+    if (!["portrait", "landscape"].includes(String(page.orientation))) errors.push("Unsupported page orientation.");
+    const margins = isRecord(page.margins) ? page.margins : null;
+    if (!margins) {
+      errors.push("Missing margins.");
+    } else {
+      for (const side of ["top", "right", "bottom", "left"]) {
+        const margin = Number(margins[side]);
+        if (!Number.isFinite(margin) || margin < 5 || margin > 60) errors.push("Page margins must be between 5mm and 60mm.");
+      }
+    }
+    if (typeof page.backgroundColor === "string" && !isSafeColor(page.backgroundColor)) errors.push("Page background color must be a safe hex value.");
+    const border = isRecord(page.border) ? page.border : null;
+    if (border?.enabled === true && !isSafeColor(String(border.color || ""))) errors.push("Page border color must be a safe hex value.");
   }
-  if (!isSafeColor(definition.page.backgroundColor)) errors.push("Page background color must be a safe hex value.");
-  if (definition.page.border.enabled && !isSafeColor(definition.page.border.color)) errors.push("Page border color must be a safe hex value.");
-  const blocks = flattenSections(definition.sections);
+
+  const sections = isRecord(definition.sections) ? definition.sections : null;
+  const legacyBlocks = Array.isArray(definition.blocks) ? definition.blocks : [];
+  const sectionBlocks = sections ? [
+    ...sectionValidationBlocks(sections.header, "header", errors),
+    ...sectionValidationBlocks(sections.body, "body", errors),
+    ...sectionValidationBlocks(sections.footer, "footer", errors),
+  ] : [];
+  if (!sections && legacyBlocks.length === 0) errors.push("Missing layout.");
+  if (sections && !Array.isArray(sections.header)) errors.push("Missing header.");
+  if (sections && !Array.isArray(sections.body)) errors.push("Missing body.");
+  if (sections && !Array.isArray(sections.footer)) errors.push("Missing footer.");
+  const blocks = sectionBlocks.length ? sectionBlocks : sectionValidationBlocks(legacyBlocks, "body", errors);
   if (!blocks.some((block) => block.visible && block.type !== "spacer" && block.type !== "divider")) errors.push("Template must contain at least one visible content block.");
   for (const block of blocks) {
     if (!documentTemplateBlockTypes.includes(block.type)) errors.push(`Unsupported block type: ${block.type}`);
@@ -224,7 +251,7 @@ export function validateTemplateDefinition(definition: DocumentTemplateDefinitio
     if (block.image?.src && !isSafeImageSource(block.image.src)) errors.push(`Unsafe image source in block ${block.id}.`);
     if (block.table?.rows && (block.table.rows.length > 40 || block.table.rows.some((row) => row.length > 12))) errors.push(`Table block ${block.id} is too large.`);
   }
-  return { valid: errors.length === 0, errors: Array.from(new Set(errors)) };
+  return { valid: errors.length === 0, errors: [...new Set(errors)] };
 }
 
 export function extractPlaceholders(text: string) {
@@ -335,6 +362,35 @@ function normalizeBlocks(values: unknown[], section: DocumentTemplateSectionName
   return values.map((value, index) => normalizeBlock(value, section, index)).sort((a, b) => a.order - b.order).map((block, index) => ({ ...block, order: (index + 1) * 10 }));
 }
 
+function sectionValidationBlocks(value: unknown, fallbackSection: DocumentTemplateSectionName, errors: string[]) {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((entry, index): DocumentTemplateBlock[] => {
+    if (!isRecord(entry)) {
+      errors.push(`Invalid block in ${fallbackSection} section.`);
+      return [];
+    }
+    const type = typeof entry.type === "string" ? entry.type as DocumentTemplateBlockType : "text";
+    const section = ["header", "body", "footer"].includes(String(entry.section)) ? entry.section as DocumentTemplateSectionName : fallbackSection;
+    const style = isRecord(entry.style) ? entry.style as NonNullable<DocumentTemplateBlock["style"]> : undefined;
+    const image = isRecord(entry.image) ? entry.image as DocumentTemplateBlock["image"] : undefined;
+    const table = isRecord(entry.table) && Array.isArray(entry.table.rows) ? { rows: entry.table.rows.filter(Array.isArray).map((row) => row.map((cell) => String(cell ?? ""))) } : undefined;
+    return [{
+      id: typeof entry.id === "string" && entry.id ? entry.id : `${fallbackSection}-block-${index + 1}`,
+      type,
+      section,
+      label: typeof entry.label === "string" ? entry.label : undefined,
+      text: typeof entry.text === "string" ? entry.text : undefined,
+      content: typeof entry.content === "string" ? entry.content : undefined,
+      binding: typeof entry.binding === "string" ? entry.binding as AllowedDocumentPlaceholder : undefined,
+      order: Number.isFinite(Number(entry.order)) ? Number(entry.order) : (index + 1) * 10,
+      visible: entry.visible !== false,
+      style,
+      image,
+      table,
+    }];
+  });
+}
+
 function normalizeBlock(value: unknown, fallbackSection: DocumentTemplateSectionName, index: number): DocumentTemplateBlock {
   const item = value && typeof value === "object" && !Array.isArray(value) ? value as Partial<DocumentTemplateBlock> : {};
   const type = documentTemplateBlockTypes.includes(item.type as DocumentTemplateBlockType) ? item.type as DocumentTemplateBlockType : "text";
@@ -382,8 +438,8 @@ function normalizeBlock(value: unknown, fallbackSection: DocumentTemplateSection
   };
 }
 
-function flattenSections(sections: Record<DocumentTemplateSectionName, DocumentTemplateBlock[]>) {
-  return (["header", "body", "footer"] as const).flatMap((section) => sections[section].map((block) => ({ ...block, section })));
+function flattenSections(sections: Partial<Record<DocumentTemplateSectionName, DocumentTemplateBlock[]>>) {
+  return (["header", "body", "footer"] as const).flatMap((section) => (Array.isArray(sections[section]) ? sections[section] : []).map((block) => ({ ...block, section })));
 }
 
 function clampNumber(value: unknown, min: number, max: number, fallback: number): number;
@@ -408,4 +464,8 @@ function isSafeColor(value: string) {
 
 function isSafeImageSource(value: string) {
   return value === "{{tenant.logo}}" || value.startsWith("/uploads/") || value.startsWith("/api/");
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value && typeof value === "object" && !Array.isArray(value));
 }

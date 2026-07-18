@@ -177,7 +177,10 @@ export function evaluateDefinitionCompleteness(definition: DocumentDefinition & 
   else if (!definition.assignedTemplateVersion.templateSet.active) errors.push("Assigned template set is inactive.");
   else {
     const template = validateTemplateDefinition(definition.assignedTemplateVersion.definitionJson as never);
-    if (!template.valid) errors.push(...template.errors);
+    if (!template.valid) {
+      errors.push(...template.errors);
+      if (status === "COMPLETE") status = "INVALID_TEMPLATE";
+    }
     if (definition.assignedTemplateVersion.status !== DocumentTemplateVersionStatus.PUBLISHED) errors.push("Assigned template version is not published.");
   }
 

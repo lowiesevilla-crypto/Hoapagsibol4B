@@ -78,6 +78,11 @@ async function main() {
     blocks: [{ id: "unsafe-html", section: "body", type: "text", order: 10, visible: true, content: "<script>alert(1)</script>" }],
   };
   assert(!validateTemplateDefinition(unsafeHtml).valid, "unsafe script-like content is rejected before publish");
+  assert(!validateTemplateDefinition(null).valid, "missing template payload returns validation errors instead of throwing");
+  assert(validateTemplateDefinition({ schemaVersion: documentTemplateSchemaVersion }).errors.includes("Missing page settings."), "missing page settings are reported as incomplete");
+  assert(validateTemplateDefinition({ schemaVersion: documentTemplateSchemaVersion, page: { format: "A4", orientation: "portrait" }, sections: { body: [] } }).errors.includes("Missing margins."), "missing margins are reported as incomplete");
+  assert(validateTemplateDefinition({ schemaVersion: documentTemplateSchemaVersion, page: { format: "A4", orientation: "portrait", margins: { top: 10, right: 10, bottom: 10, left: 10 } } }).errors.includes("Missing layout."), "missing layout is reported as incomplete");
+  assert(validateTemplateDefinition({ schemaVersion: documentTemplateSchemaVersion, page: { format: "A4", orientation: "portrait", margins: { top: 10, right: 10, bottom: 10, left: 10 } }, sections: { header: [], body: [], footer: [] } }).errors.includes("Template must contain at least one visible content block."), "empty sections are reported as incomplete");
 
   assert(canManageDocumentTemplates(Role.ADMIN), "ADMIN can manage document templates");
   assert(canManageDocumentTemplates(Role.HOA_ADMIN), "HOA_ADMIN can manage document templates");
@@ -110,6 +115,12 @@ async function main() {
     WHERE d.assignedTemplateVersionId IS NOT NULL AND v.status <> 'PUBLISHED'
   `;
   assert(nonPublishedAssigned.length === 0, "assigned template versions are published");
+
+  const definitions = await prisma.documentDefinition.findMany({
+    include: { assignedTemplateVersion: true },
+  });
+  for (const definition of definitions) validateTemplateDefinition(definition.assignedTemplateVersion?.definitionJson ?? null);
+  assert(true, "all current assigned and missing definition templates validate defensively without crashing");
 }
 
 main().catch((error) => {

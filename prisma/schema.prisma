@@ -356,6 +356,12 @@ enum DocumentTemplateVersionStatus {
   RETIRED
 }
 
+enum DocumentTemplateOwnership {
+  CERTIFIED
+  TENANT
+  CUSTOM
+}
+
 enum DocumentVerificationStatus {
   VALID
   REVOKED
@@ -949,6 +955,15 @@ model DocumentTemplate {
   body                       String                      @db.Text
   active                     Boolean                     @default(true)
   version                    Int                         @default(1)
+  ownershipType              DocumentTemplateOwnership  @default(TENANT)
+  certifiedKey               String?
+  sourceTemplateId           String?
+  sourceTemplateVersion      Int?
+  clonedAt                   DateTime?
+  upgradeCompatible          Boolean                    @default(true)
+  restorable                 Boolean                    @default(true)
+  editable                   Boolean                    @default(true)
+  createdById                String?
   definitionId               String?
   definition                 DocumentDefinition?         @relation("DocumentTemplateDefinition", fields: [tenantId, definitionId], references: [tenantId, id], onDelete: Restrict, onUpdate: Cascade)
   templateSetId              String?
@@ -967,6 +982,9 @@ model DocumentTemplate {
   @@index([tenantId, definitionId])
   @@index([tenantId, templateSetId])
   @@index([tenantId, publishedTemplateVersionId])
+  @@index([tenantId, ownershipType, active])
+  @@index([tenantId, sourceTemplateId])
+  @@index([certifiedKey])
   @@index([tenantId])
 }
 
@@ -1159,6 +1177,15 @@ model DocumentTemplateSet {
   name            String
   description     String?                   @db.Text
   active          Boolean                   @default(true)
+  ownershipType   DocumentTemplateOwnership @default(TENANT)
+  certifiedKey    String?
+  sourceTemplateSetId    String?
+  sourceTemplateVersionId String?
+  upgradeCompatible Boolean                  @default(true)
+  restorable      Boolean                    @default(true)
+  editable        Boolean                    @default(true)
+  createdById     String?
+  updatedById     String?
   versions        DocumentTemplateVersion[]
   legacyTemplates DocumentTemplate[]        @relation("LegacyDocumentTemplateSet")
   createdAt       DateTime                  @default(now())
@@ -1166,6 +1193,10 @@ model DocumentTemplateSet {
 
   @@unique([tenantId, id])
   @@index([tenantId, definitionId, active])
+  @@index([tenantId, ownershipType, active])
+  @@index([tenantId, sourceTemplateSetId])
+  @@index([tenantId, sourceTemplateVersionId])
+  @@index([certifiedKey])
   @@index([tenantId])
 }
 
@@ -1177,6 +1208,7 @@ model DocumentTemplateVersion {
   templateSet              DocumentTemplateSet           @relation(fields: [tenantId, templateSetId], references: [tenantId, id], onDelete: Cascade)
   version                  Int
   status                   DocumentTemplateVersionStatus @default(DRAFT)
+  ownershipType            DocumentTemplateOwnership    @default(TENANT)
   schemaVersion            Int                           @default(1)
   definitionJson           Json
   previewMetadata          Json?
@@ -1190,11 +1222,18 @@ model DocumentTemplateVersion {
   documentVersions         DocumentVersion[]
   createdAt                DateTime                      @default(now())
   updatedAt                DateTime                      @updatedAt
+  sourceVersionId          String?
+  cloneSourceVersion       Int?
+  clonedAt                 DateTime?
+  upgradeCompatible       Boolean                       @default(true)
+  restorable               Boolean                       @default(true)
 
   @@unique([tenantId, id])
   @@unique([tenantId, templateSetId, version])
   @@index([tenantId, templateSetId, status])
   @@index([tenantId, status])
+  @@index([tenantId, ownershipType, status])
+  @@index([tenantId, sourceVersionId])
   @@index([publishedById])
   @@index([createdById])
 }

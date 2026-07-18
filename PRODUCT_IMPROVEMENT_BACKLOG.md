@@ -3260,6 +3260,16 @@ Acceptance Criteria:
 - Unauthorized users cannot edit or publish templates.
 - No existing issued-document history is mutated.
 
+## Certified Template Foundation - Phase 2B.1
+
+Status: Engineering ready for Product Owner UAT.
+
+- Added explicit Certified, Tenant, and Custom ownership metadata to the existing template architecture.
+- Added tenant-safe, idempotent certified-template clone foundation with source lineage and audit logging.
+- Added backend restore-as-new-draft foundation with backup metadata; historical versions remain immutable.
+- Added custom template-set foundation for future modules without introducing a competing template system.
+- HOAHub certified templates are server-enforced read-only; tenant copies remain editable and upgrade-safe.
+
 ## Document Management UX and Walk-In Architecture - Phase 2A
 
 Status: Engineering ready for Product Owner UAT.

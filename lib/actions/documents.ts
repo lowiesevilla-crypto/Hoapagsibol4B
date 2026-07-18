@@ -3,7 +3,7 @@
 import { randomUUID } from "node:crypto";
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { DocumentDefinitionStatus, DocumentDeliveryMode, DocumentFieldType, DocumentOutstandingBalancePolicy, DocumentRequestStatus, DocumentSequenceScope, DocumentSubjectType, DocumentTemplateVersionStatus, DocumentType, NotificationType, Prisma, Role } from "@prisma/client";
+import { DocumentDefinitionStatus, DocumentDeliveryMode, DocumentFieldType, DocumentOutstandingBalancePolicy, DocumentRequestStatus, DocumentSequenceScope, DocumentSubjectType, DocumentTemplateOwnership, DocumentTemplateVersionStatus, DocumentType, NotificationType, Prisma, Role } from "@prisma/client";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { requireUser } from "@/lib/auth";
@@ -18,6 +18,7 @@ import { defaultNumberingFormat, evaluateDefinitionCompleteness, validateNumberi
 import { balancePolicyLockMessage, canOverrideDocumentBalancePolicy, getQualifyingHomeownerBalance, normalizeOutstandingBalancePolicy, policyForDocumentRequest } from "@/lib/services/document-balance-policy";
 import { defaultTemplateDefinition, documentTemplateBlockTypes, documentTemplateSchemaVersion, normalizeTemplateDefinition, renderTemplateDefinitionText, validateTemplateDefinition, type AllowedDocumentPlaceholder, type DocumentTemplateBlock, type DocumentTemplateBlockType } from "@/lib/services/document-template-builder";
 import { tenantUploadDirectory } from "@/lib/storage";
+import { assertEditableTemplateOwnership } from "@/lib/services/document-template-ownership";
 import { money, shortDate } from "@/lib/utils";
 import { sendEmailNotification } from "@/lib/services/notifications";
 
@@ -423,7 +424,8 @@ export async function saveDocumentTemplateAction(formData: FormData) {
   const active = formData.get("active") === "on";
   if (!documentTypeOptions.some((item) => item.value === type) || title.length < 3 || body.length < 20) redirect("/admin/document-templates?error=Enter%20a%20valid%20title%20and%20template%20body.");
   const existing = await prisma.documentTemplate.findFirst({ where: { type } });
-  const template = await prisma.documentTemplate.upsert({ where: { tenantId_type: { tenantId: admin.tenantId, type } }, create: { tenantId: admin.tenantId, type, title, body, active, updatedById: admin.id }, update: { title, body, active, updatedById: admin.id, version: { increment: 1 } } });
+  if (existing?.tenantId === admin.tenantId && existing.ownershipType === DocumentTemplateOwnership.CERTIFIED) redirect("/admin/document-templates?error=HOAHub%20certified%20templates%20are%20read-only.%20Clone%20the%20template%20before%20editing.");
+  const template = await prisma.documentTemplate.upsert({ where: { tenantId_type: { tenantId: admin.tenantId, type } }, create: { tenantId: admin.tenantId, type, title, body, active, ownershipType: DocumentTemplateOwnership.TENANT, editable: true, restorable: true, upgradeCompatible: true, createdById: admin.id, updatedById: admin.id }, update: { title, body, active, updatedById: admin.id, version: { increment: 1 } } });
   await prisma.auditLog.create({ data: { actorId: admin.id, module: "DOCUMENTS", action: existing ? "UPDATE_TEMPLATE" : "CREATE_TEMPLATE", entityType: "DocumentTemplate", entityId: template.id, metadata: { type, version: template.version, active } } });
   revalidatePath("/admin/document-templates");
   revalidatePath("/portal/documents");
@@ -729,8 +731,8 @@ export async function saveDocumentTemplateVersionAction(formData: FormData) {
   const definitionRecord = definition!;
   if (operation === "createSet") {
     const set = await platformPrisma.$transaction(async (tx) => {
-      const createdSet = await tx.documentTemplateSet.create({ data: { tenantId: admin.tenantId, definitionId, name: `${definitionRecord.displayName} Template`, description: definitionRecord.description, active: true } });
-      const draft = await tx.documentTemplateVersion.create({ data: { tenantId: admin.tenantId, templateSetId: createdSet.id, version: 1, status: DocumentTemplateVersionStatus.DRAFT, schemaVersion: documentTemplateSchemaVersion, definitionJson: asJson(defaultTemplateDefinition(definitionRecord.displayName)), previewMetadata: asJson({ source: "professional-document-editor" }), createdById: admin.id } });
+      const createdSet = await tx.documentTemplateSet.create({ data: { tenantId: admin.tenantId, definitionId, name: `${definitionRecord.displayName} Template`, description: definitionRecord.description, active: true, ownershipType: DocumentTemplateOwnership.TENANT, editable: true, restorable: true, upgradeCompatible: true, createdById: admin.id, updatedById: admin.id } });
+      const draft = await tx.documentTemplateVersion.create({ data: { tenantId: admin.tenantId, templateSetId: createdSet.id, version: 1, status: DocumentTemplateVersionStatus.DRAFT, ownershipType: DocumentTemplateOwnership.TENANT, schemaVersion: documentTemplateSchemaVersion, definitionJson: asJson(defaultTemplateDefinition(definitionRecord.displayName)), previewMetadata: asJson({ source: "professional-document-editor" }), createdById: admin.id, upgradeCompatible: true, restorable: true } });
       await tx.auditLog.create({ data: { tenantId: admin.tenantId, actorId: admin.id, module: "DOCUMENTS", action: "CREATE_TEMPLATE_SET", entityType: "DocumentTemplateSet", entityId: createdSet.id, metadata: { definitionId, draftVersionId: draft.id } } });
       return { createdSet, draft };
     });
@@ -743,7 +745,7 @@ export async function saveDocumentTemplateVersionAction(formData: FormData) {
     if (!source) fail("Template version not found.");
     const sourceRecord = source!;
     const maxVersion = Math.max(0, ...(await prisma.documentTemplateVersion.findMany({ where: { tenantId: admin.tenantId, templateSetId: sourceRecord.templateSetId }, select: { version: true } })).map((item) => item.version));
-    const draft = await platformPrisma.documentTemplateVersion.create({ data: { tenantId: admin.tenantId, templateSetId: sourceRecord.templateSetId, version: maxVersion + 1, status: DocumentTemplateVersionStatus.DRAFT, schemaVersion: sourceRecord.schemaVersion, definitionJson: sourceRecord.definitionJson ?? asJson(defaultTemplateDefinition(definitionRecord.displayName)), previewMetadata: asJson({ duplicatedFrom: sourceRecord.id }), createdById: admin.id } });
+    const draft = await platformPrisma.documentTemplateVersion.create({ data: { tenantId: admin.tenantId, templateSetId: sourceRecord.templateSetId, version: maxVersion + 1, status: DocumentTemplateVersionStatus.DRAFT, ownershipType: sourceRecord.templateSet.ownershipType, schemaVersion: sourceRecord.schemaVersion, definitionJson: sourceRecord.definitionJson ?? asJson(defaultTemplateDefinition(definitionRecord.displayName)), previewMetadata: asJson({ duplicatedFrom: sourceRecord.id }), createdById: admin.id, sourceVersionId: sourceRecord.id, cloneSourceVersion: sourceRecord.version, clonedAt: new Date(), upgradeCompatible: sourceRecord.templateSet.upgradeCompatible, restorable: sourceRecord.templateSet.restorable } });
     await platformPrisma.auditLog.create({ data: { tenantId: admin.tenantId, actorId: admin.id, module: "DOCUMENTS", action: "DUPLICATE_TEMPLATE_VERSION", entityType: "DocumentTemplateVersion", entityId: draft.id, metadata: { definitionId, sourceId } } });
     revalidatePath("/admin/documents");
     redirect(`/admin/settings/document-definitions/${definitionId}/templates/${draft.id}/edit?success=duplicated&message=Draft%20version%20created.`);
@@ -751,6 +753,7 @@ export async function saveDocumentTemplateVersionAction(formData: FormData) {
   const current = versionId ? await prisma.documentTemplateVersion.findFirst({ where: { id: versionId, tenantId: admin.tenantId }, include: { templateSet: true } }) : null;
   if (!current || current.templateSet.definitionId !== definitionId || current.templateSet.tenantId !== admin.tenantId) fail("Template version not found.");
   const currentRecord = current!;
+  try { assertEditableTemplateOwnership(currentRecord.ownershipType === DocumentTemplateOwnership.CERTIFIED || currentRecord.templateSet.ownershipType === DocumentTemplateOwnership.CERTIFIED ? DocumentTemplateOwnership.CERTIFIED : currentRecord.ownershipType); } catch (error) { fail(error instanceof Error ? error.message : "Certified templates are read-only."); }
   if (operation === "retire") {
     if (currentRecord.status !== DocumentTemplateVersionStatus.PUBLISHED) fail("Only published versions can be retired.");
     await platformPrisma.$transaction([

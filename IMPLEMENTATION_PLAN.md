@@ -513,3 +513,15 @@ Implemented in this phase:
 Deferred next phase:
 
 - Full dynamic walk-in fields, document payment processing, release acknowledgement, public QR verification, and the professional editor remain separate work items.
+
+## Certified Template Foundation - Phase 2B.1
+
+Ownership architecture:
+
+- `CERTIFIED` is the HOAHub-owned, immutable source category.
+- `TENANT` is an editable tenant working copy with certified source lineage.
+- `CUSTOM` is an editable tenant-owned template set with no certified source requirement.
+
+The existing template set/version models remain authoritative. Additive metadata stores ownership, certified keys, source set/version references, clone version, clone date, upgrade compatibility, restorability, and editability. Existing rows backfill to `TENANT` through database defaults.
+
+Certified updates create or prepare a new tenant draft; they never overwrite tenant drafts, published versions, or generated-document snapshots. Restore is backend-only in this phase and creates a new draft with backup metadata and an audit entry. Published versions remain immutable, and the existing document generation path continues to use the version snapshot already stored on each request/version.

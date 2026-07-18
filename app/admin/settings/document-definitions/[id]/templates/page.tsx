@@ -1,10 +1,11 @@
 import Link from "next/link";
-import { DocumentTemplateVersionStatus } from "@prisma/client";
+import { DocumentTemplateOwnership, DocumentTemplateVersionStatus } from "@prisma/client";
 import { PageHeader } from "@/components/page-header";
 import { saveDocumentTemplateVersionAction } from "@/lib/actions/documents";
 import { requireDocumentTemplateAdmin } from "@/lib/document-template-admin";
 import { prisma } from "@/lib/db";
 import { shortDate } from "@/lib/utils";
+import { getTemplateOwnershipMetadata } from "@/lib/services/document-template-ownership";
 
 export default async function DefinitionTemplatesPage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ error?: string; success?: string; message?: string }> }) {
   const admin = await requireDocumentTemplateAdmin();
@@ -19,10 +20,13 @@ export default async function DefinitionTemplatesPage({ params, searchParams }: 
   const published = definition.assignedTemplateVersion ? versions.find((version) => version.id === definition.assignedTemplateVersionId) ?? null : versions.find((version) => version.status === DocumentTemplateVersionStatus.PUBLISHED) ?? null;
   const draft = versions.find((version) => version.status === DocumentTemplateVersionStatus.DRAFT) ?? null;
   const history = versions.filter((version) => version.status !== DocumentTemplateVersionStatus.DRAFT);
+  const currentSet = published?.set ?? draft?.set ?? definition.templateSets[0] ?? null;
+  const ownership = currentSet ? getTemplateOwnershipMetadata(currentSet, currentSet.versions) : null;
   return <>
     <PageHeader eyebrow="Document templates" title={definition.displayName} description="Manage the draft, published version, and immutable version history for this document type." action={<div className="flex flex-wrap gap-2"><Link className="btn-secondary" href="/admin/documents?section=templates">Document Management</Link><Link className="btn-secondary" href="/admin/settings/document-definitions">Back to definitions</Link></div>} />
     {query.error && <Notice kind="error">{query.error}</Notice>}
     {query.success && <Notice kind="success">{query.message || "Template updated."}</Notice>}
+    {ownership && <section className="card mb-5"><h2 className="text-lg font-black">Template ownership</h2><p className="mt-1 text-sm text-slate-500">Ownership and lineage are stored with the template architecture and remain separate from document generation.</p><div className="mt-4 grid gap-3 text-sm sm:grid-cols-2 xl:grid-cols-4"><Info label="Template type" value={ownership.ownershipType === DocumentTemplateOwnership.CERTIFIED ? "Certified" : ownership.ownershipType === DocumentTemplateOwnership.CUSTOM ? "Custom" : "Tenant"} /><Info label="Template owner" value={ownership.ownerLabel} /><Info label="Current version" value={ownership.currentVersion ? `v${ownership.currentVersion}` : "None"} /><Info label="Published version" value={ownership.currentPublishedVersion ? `v${ownership.currentPublishedVersion}` : "None"} /><Info label="Draft version" value={ownership.draftVersion ? `v${ownership.draftVersion}` : "None"} /><Info label="Upgrade compatible" value={ownership.upgradeCompatible ? "Yes" : "No"} /><Info label="Restorable" value={ownership.restorable ? "Yes" : "No"} /><Info label="Editable" value={ownership.editable ? "Yes" : "Read only"} /></div>{ownership.sourceTemplateVersionId && <p className="mt-3 rounded-xl bg-slate-50 p-3 text-sm font-semibold text-slate-700">This tenant template preserves a relationship with its HOAHub certified source. Certified source updates never overwrite this tenant copy.</p>}</section>}
     <div className="grid gap-5 xl:grid-cols-3">
       <section className="card">
         <h2 className="text-lg font-black">Current Published Template</h2>

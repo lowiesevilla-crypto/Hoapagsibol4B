@@ -1107,6 +1107,15 @@ The editor must not resemble Canva, Figma, or a technical block/JSON editor.
 
 Implementation will begin only after Document Module Architecture
 Consolidation Phase 1 is completed and verified.
+
+## 2026-07-18 - Certified Template Foundation Phase 2B.1
+
+- Added additive ownership metadata to existing `DocumentTemplateSet` and `DocumentTemplateVersion` records.
+- Existing template records default to `TENANT`; no template content, generated snapshot, or historical version was rewritten.
+- Added backend foundations for HOAHub certified sources, tenant working-copy cloning, custom template sets, restore-as-new-draft, source lineage, upgrade compatibility, and audit events.
+- Certified sources are read-only at the server boundary; tenant and custom copies remain editable and survive certified upgrades.
+- Added `scripts/verify-certified-template-foundation.ts`.
+- Phase 2B.1 is engineering-ready for Product Owner UAT; editor and generation behavior were intentionally left unchanged.
 ## Approved Document Template Editor Direction
 
 The Product Owner approved reconstructing the Document Template Editor as a

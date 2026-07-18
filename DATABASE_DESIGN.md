@@ -913,3 +913,13 @@ Compatibility rules:
 - Historical generated content and document numbers are not rewritten.
 
 Local verification after applying the migration preserved request count `2`, generated-content fingerprint `120b4b0526a4fc425ac961f7563279858d2ed75839c4432ab67e60f645e8ac84`, and document-number fingerprint `00a72e70fa81e3d02226fe9d213f0e7b0c7d23dad7fa240f8501c2c60a7920a7`.
+
+## Document Generation Lifecycle
+
+Migration `20260718210000_document_generation_engine` adds `DocumentGenerationAttempt` and additive immutable generation metadata to `DocumentVersion`.
+
+`DocumentGenerationAttempt` is tenant/request scoped and records mode, deterministic state, idempotency key, attempt number, timestamps, safe failure data, output format, correlation ID, renderer metadata, actor, and resulting version. Composite foreign keys reinforce tenant ownership for requests, versions, and actors. Unique tenant/request/mode/key and tenant/version constraints prevent retry duplication.
+
+`DocumentVersion` now records generation mode, native output format and content type, output size, renderer identity, capabilities, policy/workflow/resolved-data snapshots, correlation and idempotency values, and template lineage. Existing generated content, numbers, verification codes, and historical snapshots are unchanged. No legacy columns or enums were removed.
+
+Recovery note: take a database backup before rollout and deploy the matching application and migration together. Because the migration is additive, application rollback can continue reading legacy `DocumentVersion` fields. Do not drop `DocumentGenerationAttempt` or the added snapshot columns after any Milestone 3 issuance; they become part of the audit and immutable-document record. In a pre-issuance local failure only, restore the backup or remove the additive objects using reviewed SQL after confirming the attempt table is empty.

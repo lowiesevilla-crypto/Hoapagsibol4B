@@ -2,6 +2,7 @@ import "server-only";
 
 import type { OrganizationOfficer, Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
+import { withTenantContext } from "@/lib/tenant-context";
 
 export type OfficerSnapshot = {
   id: string;
@@ -16,7 +17,7 @@ export type OfficerSnapshot = {
 };
 
 export async function getActiveOrganizationOfficers(tenantId: string, at = new Date()) {
-  return prisma.organizationOfficer.findMany({
+  return withTenantContext(tenantId, async () => await prisma.organizationOfficer.findMany({
     where: {
       tenantId,
       active: true,
@@ -25,7 +26,7 @@ export async function getActiveOrganizationOfficers(tenantId: string, at = new D
       OR: [{ endDate: null }, { endDate: { gte: at } }],
     },
     orderBy: [{ displayOrder: "asc" }, { position: "asc" }, { fullName: "asc" }],
-  });
+  }));
 }
 
 export function officerSnapshot(officer: OrganizationOfficer): OfficerSnapshot {

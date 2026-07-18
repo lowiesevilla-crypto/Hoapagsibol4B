@@ -1124,6 +1124,17 @@ Consolidation Phase 1 is completed and verified.
 - Runtime writes validate tenant ownership before base Prisma transactions; published template versions and document history remain immutable.
 - Added notification metadata migration and read-only runtime verification harness.
 - No administrator UI, certified-template seed data, payment accounting, or public QR page was added in this milestone.
+
+## 2026-07-18 - Document Generation Engine Milestone 3
+
+- Added a tenant-safe generation orchestrator for PREVIEW, VALIDATE, ISSUE, and REISSUE with no document-specific conditionals.
+- Added the additive `DocumentGenerationAttempt` lifecycle and expanded immutable `DocumentVersion` generation metadata.
+- Added safe HTML rendering, QR payload generation, hashed verification persistence, content hashing, exact template lineage, and redacted snapshots.
+- Added retry-safe idempotency and database-backed concurrency protection; simultaneous ISSUE verification created exactly one official version.
+- Added an idempotent release service and reissue lineage without changing original issued content.
+- Applied local migration `20260718210000_document_generation_engine`; no production migration, push, merge, or deployment was performed.
+- Added `scripts/verify-document-generation-engine.ts`; all 29 focused checks passed and cleanup left no verification definitions or attempts.
+- Existing generation, PDF, print, and download flows remain functional compatibility paths pending later route integration approval.
 ## Approved Document Template Editor Direction
 
 The Product Owner approved reconstructing the Document Template Editor as a

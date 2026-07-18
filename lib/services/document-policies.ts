@@ -11,6 +11,7 @@ export type PolicyEvaluationResult = {
   policyId: string;
   policyCode: string;
   policyType: DocumentPolicyType;
+  policyVersion: number;
   status: PolicyEvaluationStatus;
   blocking: boolean;
   severity: DocumentPolicySeverity;
@@ -75,8 +76,8 @@ export async function evaluateDocumentPolicies(context: DocumentExecutionContext
   return Promise.all(definition.policyAssignments.map(async (assignment) => evaluatePolicy(context, assignment.policy, input, evaluatedAt)));
 }
 
-async function evaluatePolicy(context: DocumentExecutionContext, policy: { id: string; code: string; type: DocumentPolicyType; enabled: boolean; severity: DocumentPolicySeverity; blocking: boolean; parameters: Prisma.JsonValue | null }, input: { homeownerId?: string; membershipStatus?: string }, evaluatedAt: Date): Promise<PolicyEvaluationResult> {
-  const base = { policyId: policy.id, policyCode: policy.code, policyType: policy.type, blocking: policy.blocking, severity: policy.severity, evaluatedAt, evaluatorVersion: "1" } as const;
+async function evaluatePolicy(context: DocumentExecutionContext, policy: { id: string; code: string; type: DocumentPolicyType; enabled: boolean; severity: DocumentPolicySeverity; blocking: boolean; parameters: Prisma.JsonValue | null; version: number }, input: { homeownerId?: string; membershipStatus?: string }, evaluatedAt: Date): Promise<PolicyEvaluationResult> {
+  const base = { policyId: policy.id, policyCode: policy.code, policyType: policy.type, policyVersion: policy.version, blocking: policy.blocking, severity: policy.severity, evaluatedAt, evaluatorVersion: "1" } as const;
   if (!policy.enabled) return { ...base, status: "SKIPPED", summary: "Policy is disabled.", reasons: [], relevantMetadata: {} };
   try {
     if (policy.type === DocumentPolicyType.OUTSTANDING_BALANCE) {

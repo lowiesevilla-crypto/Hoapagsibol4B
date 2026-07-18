@@ -434,6 +434,32 @@ enum DocumentIssuedStatus {
   REVOKED
 }
 
+enum DocumentGenerationMode {
+  PREVIEW
+  VALIDATE
+  ISSUE
+  REISSUE
+}
+
+enum DocumentGenerationState {
+  NOT_STARTED
+  VALIDATING
+  BLOCKED
+  READY
+  RENDERING
+  GENERATED
+  ISSUED
+  RELEASE_PENDING
+  RELEASED
+  FAILED
+  REVOKED
+  REISSUED
+}
+
+enum DocumentOutputFormat {
+  HTML
+}
+
 model Tenant {
   id                         String                               @id @default(cuid())
   name                       String
@@ -462,6 +488,7 @@ model Tenant {
   documentTemplateVersions   DocumentTemplateVersion[]
   documentDefinitionCounters DocumentDefinitionCounter[]
   documentVerificationTokens DocumentVerificationToken[]
+  documentGenerationAttempts DocumentGenerationAttempt[]
   documentPolicies           DocumentPolicy[]
   documentPolicyAssignments  DocumentDefinitionPolicyAssignment[]
   documentWorkflows          DocumentWorkflowDefinition[]
@@ -533,6 +560,7 @@ model User {
   documentTemplateVersionsCreated       DocumentTemplateVersion[]        @relation("DocumentTemplateVersionCreator")
   documentTemplateVersionsPublished     DocumentTemplateVersion[]        @relation("DocumentTemplateVersionPublisher")
   documentVerificationTokensRevoked     DocumentVerificationToken[]      @relation("DocumentVerificationTokenRevoker")
+  documentGenerationAttempts            DocumentGenerationAttempt[]      @relation("DocumentGenerationAttemptActor")
   documentWorkflowDefinitionsCreated    DocumentWorkflowDefinition[]     @relation("DocumentWorkflowDefinitionCreator")
   documentWorkflowDefinitionsUpdated    DocumentWorkflowDefinition[]     @relation("DocumentWorkflowDefinitionUpdater")
   documentWorkflowStepsCreated          DocumentWorkflowStep[]           @relation("DocumentWorkflowStepCreator")
@@ -1403,6 +1431,7 @@ model DocumentRequest {
   archiveReason               String?
   histories                   DocumentRequestHistory[]
   editAudits                  DocumentRequestEditAudit[]
+  generationAttempts          DocumentGenerationAttempt[]
   createdAt                   DateTime                    @default(now())
   updatedAt                   DateTime                    @updatedAt
 
@@ -1427,41 +1456,56 @@ model DocumentRequest {
 }
 
 model DocumentVersion {
-  tenantId                   String                      @default("tenant_pagsibol4b_default")
-  id                         String                      @id @default(cuid())
-  requestId                  String
-  request                    DocumentRequest             @relation(fields: [requestId], references: [id], onDelete: Cascade)
-  definitionId               String?
-  definition                 DocumentDefinition?         @relation(fields: [tenantId, definitionId], references: [tenantId, id], onDelete: Restrict, onUpdate: Cascade)
-  templateVersionId          String?
-  templateVersionRecord      DocumentTemplateVersion?    @relation(fields: [tenantId, templateVersionId], references: [tenantId, id], onDelete: Restrict, onUpdate: Cascade)
-  version                    Int
-  documentNumber             String
-  verificationCode           String
-  templateVersion            Int
-  templateSnapshot           String                      @db.Text
-  generatedContent           String                      @db.Text
-  requestSnapshot            Json
-  definitionSnapshot         Json?
-  templateDefinitionSnapshot Json?
-  generatedById              String?
-  generatedBy                User?                       @relation("DocumentVersionGenerator", fields: [generatedById], references: [id], onDelete: SetNull)
-  issuedStatus               DocumentIssuedStatus        @default(ISSUED)
-  issuedAt                   DateTime?
-  releasedAt                 DateTime?
-  releasedById               String?
-  releasedBy                 User?                       @relation("DocumentVersionReleaser", fields: [releasedById], references: [id], onDelete: SetNull)
-  revokedAt                  DateTime?
-  revokedById                String?
-  revokedBy                  User?                       @relation("DocumentVersionRevoker", fields: [revokedById], references: [id], onDelete: SetNull)
-  revocationReason           String?
-  contentHash                String?
-  reissueOfId                String?
-  reissueOf                  DocumentVersion?            @relation("DocumentVersionReissues", fields: [tenantId, reissueOfId], references: [tenantId, id], onDelete: Restrict, onUpdate: Cascade)
-  reissues                   DocumentVersion[]           @relation("DocumentVersionReissues")
-  verificationTokens         DocumentVerificationToken[]
-  reason                     String?
-  createdAt                  DateTime                    @default(now())
+  tenantId                        String                      @default("tenant_pagsibol4b_default")
+  id                              String                      @id @default(cuid())
+  requestId                       String
+  request                         DocumentRequest             @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  definitionId                    String?
+  definition                      DocumentDefinition?         @relation(fields: [tenantId, definitionId], references: [tenantId, id], onDelete: Restrict, onUpdate: Cascade)
+  templateVersionId               String?
+  templateVersionRecord           DocumentTemplateVersion?    @relation(fields: [tenantId, templateVersionId], references: [tenantId, id], onDelete: Restrict, onUpdate: Cascade)
+  version                         Int
+  documentNumber                  String
+  verificationCode                String
+  templateVersion                 Int
+  templateSnapshot                String                      @db.Text
+  generatedContent                String                      @db.Text
+  requestSnapshot                 Json
+  definitionSnapshot              Json?
+  templateDefinitionSnapshot      Json?
+  generatedById                   String?
+  generatedBy                     User?                       @relation("DocumentVersionGenerator", fields: [generatedById], references: [id], onDelete: SetNull)
+  issuedStatus                    DocumentIssuedStatus        @default(ISSUED)
+  issuedAt                        DateTime?
+  releasedAt                      DateTime?
+  releasedById                    String?
+  releasedBy                      User?                       @relation("DocumentVersionReleaser", fields: [releasedById], references: [id], onDelete: SetNull)
+  revokedAt                       DateTime?
+  revokedById                     String?
+  revokedBy                       User?                       @relation("DocumentVersionRevoker", fields: [revokedById], references: [id], onDelete: SetNull)
+  revocationReason                String?
+  contentHash                     String?
+  reissueOfId                     String?
+  reissueOf                       DocumentVersion?            @relation("DocumentVersionReissues", fields: [tenantId, reissueOfId], references: [tenantId, id], onDelete: Restrict, onUpdate: Cascade)
+  reissues                        DocumentVersion[]           @relation("DocumentVersionReissues")
+  verificationTokens              DocumentVerificationToken[]
+  generationAttempts              DocumentGenerationAttempt[]
+  generationMode                  DocumentGenerationMode      @default(ISSUE)
+  outputFormat                    DocumentOutputFormat        @default(HTML)
+  contentType                     String                      @default("text/html; charset=utf-8")
+  outputSize                      Int?
+  rendererName                    String?
+  rendererVersion                 String?
+  capabilitiesSnapshot            Json?
+  policySnapshot                  Json?
+  workflowSnapshot                Json?
+  resolvedDataSnapshot            Json?
+  generationCorrelationId         String?
+  idempotencyKey                  String?
+  templateSetIdSnapshot           String?
+  sourceTemplateVersionIdSnapshot String?
+  reason                          String?
+  createdAt                       DateTime                    @default(now())
 
   @@unique([tenantId, id])
   @@unique([requestId, version])
@@ -1472,7 +1516,44 @@ model DocumentVersion {
   @@index([tenantId, documentNumber])
   @@index([tenantId, issuedStatus, createdAt])
   @@index([tenantId, reissueOfId])
+  @@index([tenantId, requestId, idempotencyKey])
+  @@index([tenantId, generationCorrelationId])
   @@index([tenantId])
+}
+
+model DocumentGenerationAttempt {
+  tenantId          String                  @default("tenant_pagsibol4b_default")
+  id                String                  @id @default(cuid())
+  tenant            Tenant                  @relation(fields: [tenantId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  requestId         String
+  request           DocumentRequest         @relation(fields: [tenantId, requestId], references: [tenantId, id], onDelete: Restrict, onUpdate: Cascade)
+  mode              DocumentGenerationMode
+  state             DocumentGenerationState @default(NOT_STARTED)
+  idempotencyKey    String?
+  attemptNumber     Int                     @default(1)
+  startedAt         DateTime?
+  completedAt       DateTime?
+  failureCode       String?
+  failureMessage    String?                 @db.Text
+  outputFormat      DocumentOutputFormat    @default(HTML)
+  correlationId     String
+  rendererName      String?
+  rendererVersion   String?
+  documentVersionId String?
+  documentVersion   DocumentVersion?        @relation(fields: [tenantId, documentVersionId], references: [tenantId, id], onDelete: Restrict, onUpdate: Cascade)
+  actorId           String?
+  actor             User?                   @relation("DocumentGenerationAttemptActor", fields: [tenantId, actorId], references: [tenantId, id], onDelete: Restrict, onUpdate: Cascade)
+  metadata          Json?
+  createdAt         DateTime                @default(now())
+  updatedAt         DateTime                @updatedAt
+
+  @@unique([tenantId, id])
+  @@unique([tenantId, requestId, mode, idempotencyKey])
+  @@unique([tenantId, documentVersionId])
+  @@index([tenantId, requestId, state, createdAt])
+  @@index([tenantId, correlationId])
+  @@index([tenantId, actorId, createdAt])
+  @@index([tenantId, state, updatedAt])
 }
 
 model OrganizationOfficer {

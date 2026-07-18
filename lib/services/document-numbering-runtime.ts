@@ -26,6 +26,18 @@ export async function previewNextDocumentNumber(context: DocumentExecutionContex
 
 export async function allocateNextDocumentNumber(context: DocumentExecutionContext, definitionId: string, tx: Prisma.TransactionClient, date = new Date()) {
   requireDocumentPermission(context, "MANAGE_NUMBERING");
+  return allocateDocumentNumber(context, definitionId, tx, date);
+}
+
+// Generation authorization is established by the orchestrator before this
+// server-only adapter is called. It deliberately does not grant access to
+// numbering configuration or manual overrides.
+export async function allocateNextDocumentNumberForGeneration(context: DocumentExecutionContext, definitionId: string, tx: Prisma.TransactionClient, date = new Date()) {
+  requireDocumentPermission(context, "VALIDATE_GENERATION");
+  return allocateDocumentNumber(context, definitionId, tx, date);
+}
+
+async function allocateDocumentNumber(context: DocumentExecutionContext, definitionId: string, tx: Prisma.TransactionClient, date: Date) {
   const definition = await getDefinition(context, definitionId, tx);
   const config = await tx.documentNumberingConfiguration.findFirst({ where: { tenantId: context.tenantId, definitionId } });
   let number: string;

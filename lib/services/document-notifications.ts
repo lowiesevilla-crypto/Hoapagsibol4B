@@ -38,8 +38,8 @@ export async function notifyDocumentRoles(input: { context: DocumentExecutionCon
   return { attempted: recipients.length, recorded: results.filter(Boolean).length };
 }
 
-export async function notifyDocumentOwner(context: DocumentExecutionContext, recipientId: string, event: DocumentNotificationEvent, subject: string, message: string, entityId: string, metadata?: unknown) {
-  return recordDocumentNotification({ context, recipientId, event, subject, message, entityType: "DocumentRequest", entityId, metadata });
+export async function notifyDocumentOwner(context: DocumentExecutionContext, recipientId: string, event: DocumentNotificationEvent, subject: string, message: string, entityId: string, metadata?: unknown, eventKey?: string) {
+  return recordDocumentNotification({ context, recipientId, event, subject, message, entityType: "DocumentRequest", entityId, metadata, eventKey });
 }
 
 function toJson(value: unknown) {

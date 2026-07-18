@@ -84,6 +84,7 @@ const modelModules: Partial<Record<string, TenantModule>> = {
   DocumentCounter: TenantModule.DOCUMENTS,
   DocumentDefinitionCounter: TenantModule.DOCUMENTS,
   DocumentVerificationToken: TenantModule.DOCUMENTS,
+  DocumentGenerationAttempt: TenantModule.DOCUMENTS,
   Vehicle: TenantModule.VEHICLES,
   ContractorProfile: TenantModule.CONTRACTORS,
   Announcement: TenantModule.ANNOUNCEMENTS,

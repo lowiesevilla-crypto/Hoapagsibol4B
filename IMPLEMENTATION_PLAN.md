@@ -529,3 +529,16 @@ Certified updates create or prepare a new tenant draft; they never overwrite ten
 ## Document Platform Runtime Services - Milestone 2
 
 The runtime foundation is organized behind authenticated `DocumentExecutionContext` services. Definitions resolve capabilities, templates use draft/published/retired versions, placeholders are allowlisted, policies return structured evaluations, workflows use `DocumentRequestHistory`, numbering uses tenant-definition counters, verification stores hashed random tokens, and notifications are idempotent `NotificationLog` events. These services are compatibility adapters around the current routes and do not replace the existing legacy request or generation flows until a later approved integration phase.
+
+## Document Generation Engine - Milestone 3
+
+- [x] Added one configuration-driven `generateDocument` coordinator for PREVIEW, VALIDATE, ISSUE, and REISSUE.
+- [x] Added a renderer-neutral model and safe native HTML renderer using the existing template and QR foundations.
+- [x] Added tenant-scoped generation attempts, typed states, retry-safe idempotency, correlation IDs, failure diagnostics, and renderer metadata.
+- [x] Persisted immutable capability, policy, workflow, resolved-data, template lineage, output, and content-hash metadata on `DocumentVersion`.
+- [x] Kept number allocation, final rendering, token-hash persistence, version creation, request status, and critical audit events atomic.
+- [x] Added idempotent release and immutable reissue services.
+- [x] Added cleanup-backed integration verification for preview, validation, failure retry, issuance, concurrency, release, reissue, privacy, and tenant isolation.
+- [x] Retained existing generation/PDF/print routes as documented legacy compatibility paths.
+- [ ] Migrate approved request entry points only in a later Product Owner-approved integration milestone.
+- [ ] Keep Certificate of Residency wording and certified-template seeding deferred.

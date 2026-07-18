@@ -1,6 +1,6 @@
 import "server-only";
 
-import { DocumentTemplateOwnership, DocumentTemplateVersionStatus, Prisma } from "@prisma/client";
+import { DocumentGenerationMode, DocumentTemplateOwnership, DocumentTemplateVersionStatus, Prisma } from "@prisma/client";
 import { platformPrisma } from "@/lib/db";
 import {
   assertEditableTemplateOwnership,
@@ -139,6 +139,24 @@ export async function resolveActiveDocumentTemplate(context: DocumentExecutionCo
     if (assigned) return assigned;
   }
   return platformPrisma.documentTemplateVersion.findFirst({ where: { tenantId: context.tenantId, status: DocumentTemplateVersionStatus.PUBLISHED, templateSet: { tenantId: context.tenantId, definitionId, active: true } }, orderBy: { version: "desc" } });
+}
+
+export async function resolveDocumentTemplateForGeneration(context: DocumentExecutionContext, input: { definitionId: string; mode: DocumentGenerationMode; requestTemplateVersionId?: string | null; draftTemplateVersionId?: string | null }) {
+  await assertDefinition(context, input.definitionId);
+  if (input.draftTemplateVersionId) {
+    if (input.mode !== DocumentGenerationMode.PREVIEW) throw new Error("Draft templates may be used only for an explicit preview.");
+    requireDocumentPermission(context, "MANAGE_TENANT_TEMPLATES");
+    const draft = await platformPrisma.documentTemplateVersion.findFirst({ where: { tenantId: context.tenantId, id: input.draftTemplateVersionId, status: DocumentTemplateVersionStatus.DRAFT, templateSet: { tenantId: context.tenantId, definitionId: input.definitionId, active: true, editable: true } }, include: { templateSet: true } });
+    if (!draft) throw new Error("Draft template was not found for this tenant and definition.");
+    return draft;
+  }
+  if (input.requestTemplateVersionId) {
+    const captured = await platformPrisma.documentTemplateVersion.findFirst({ where: { tenantId: context.tenantId, id: input.requestTemplateVersionId, status: { in: [DocumentTemplateVersionStatus.PUBLISHED, DocumentTemplateVersionStatus.RETIRED] }, templateSet: { tenantId: context.tenantId, definitionId: input.definitionId } }, include: { templateSet: true } });
+    if (captured) return captured;
+  }
+  const active = await platformPrisma.documentTemplateVersion.findFirst({ where: { tenantId: context.tenantId, status: DocumentTemplateVersionStatus.PUBLISHED, templateSet: { tenantId: context.tenantId, definitionId: input.definitionId, active: true } }, include: { templateSet: true }, orderBy: { version: "desc" } });
+  if (!active) throw new Error("No valid published template is available for this document definition.");
+  return active;
 }
 
 async function assertDefinition(context: DocumentExecutionContext, definitionId: string) {

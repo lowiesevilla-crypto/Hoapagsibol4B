@@ -3009,3 +3009,63 @@ Persistence Hotfix Engineering Note:
 - Legacy `DocumentTypeConfiguration` rows are synchronized only from the saved definition for compatibility when a definition has `legacyType`; the Document Definition screen continues to read from `DocumentDefinition`.
 - A persisted configuration summary now displays saved database values for workflow, fee, status, active state, template, completeness, requestability, and last updated.
 - Status remains Open until Product Owner UAT passes.
+## Bug #098 – Outstanding Balance Lock Overrides Document Workflow Without Configurable Policy
+
+Module:
+Document Definitions / Homeowner Documents
+
+Priority:
+Critical
+
+Status:
+Open
+
+Problem:
+A Document Definition configured as Free + Instant successfully accepts the
+request, but download and printing remain locked whenever the homeowner has an
+existing HOA account balance.
+
+Observed message:
+"Download and print are locked while the current balance of 800.00 remains
+unpaid. You can still view and verify this record."
+
+The Document Definition does not currently expose a clear policy controlling
+how unrelated homeowner balances affect requesting, generating, downloading,
+or printing the document.
+
+Required Behavior:
+Each Document Definition must explicitly define its outstanding-balance policy.
+
+Supported policies:
+
+- IGNORE_BALANCE
+  - Existing HOA balances do not prevent request, generation, preview,
+    download, or printing.
+
+- BLOCK_DOWNLOAD
+  - The request and generation are allowed.
+  - Preview may remain available.
+  - Download and printing are blocked until the balance is settled or an
+    authorized override is granted.
+
+- BLOCK_REQUEST
+  - The homeowner cannot submit the request while a qualifying balance exists.
+
+- ALLOW_ADMIN_OVERRIDE
+  - The configured restriction applies by default.
+  - An authorized Admin may override it for an individual request with a
+    mandatory reason and audit record.
+
+Acceptance Criteria:
+- Balance policy is configurable per Document Definition.
+- The selected policy persists after refresh.
+- The edit-page summary shows the active balance policy.
+- Free + Instant with IGNORE_BALANCE permits immediate download.
+- Free + Instant with BLOCK_DOWNLOAD generates the document but locks download.
+- BLOCK_REQUEST prevents submission and displays a clear reason.
+- Admin override requires authorization, reason, timestamp, and audit record.
+- Balance checks use the logged-in homeowner and current tenant only.
+- Household-member requests check the owning homeowner account.
+- No cross-tenant balance access is possible.
+- Legacy documents retain their existing behavior until explicitly configured.
+

@@ -999,3 +999,20 @@ Stop remaining workflow UAT until Bug #097 is resolved.
 ## Release Gate
 
 - Bug #097 remains open until Product Owner UAT passes.
+
+## Document Workflow UAT – Balance Restriction Finding
+
+Bug #097 persistence retest passed for the tested configuration fields.
+
+A separate workflow issue was identified:
+
+- Definition workflow: Free + Instant
+- Document fee: 0
+- Request submission: successful
+- Existing homeowner balance: 800
+- Download and printing: locked
+
+Decision:
+Introduce an explicit per-definition Outstanding Balance Policy rather than
+allowing a hidden global balance rule to override document behavior.
+Tracked as Bug #098.

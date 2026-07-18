@@ -20,7 +20,7 @@ export const documentDefinitionInclude = {
     where: { active: true },
     orderBy: [{ displayOrder: "asc" }, { label: "asc" }],
   },
-  assignedTemplateVersion: true,
+  assignedTemplateVersion: { include: { templateSet: true } },
   templateSets: {
     where: { active: true },
     include: {

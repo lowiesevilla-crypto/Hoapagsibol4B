@@ -223,6 +223,7 @@ enum NotificationType {
   DOCUMENT_READY_FOR_DOWNLOAD
   DOCUMENT_RELEASED
   DOCUMENT_REVOKED
+  DOCUMENT_RETURNED
 }
 
 enum NotificationChannel {
@@ -2213,10 +2214,16 @@ model NotificationLog {
   sentAt            DateTime?
   providerMessageId String?
   errorMessage      String?
+  entityType        String?
+  entityId          String?
+  eventKey          String?
+  metadata          Json?
   createdAt         DateTime            @default(now())
 
   @@index([recipientId, createdAt])
   @@index([status])
+  @@index([tenantId, recipientId, eventKey])
+  @@index([tenantId, entityType, entityId])
   @@index([tenantId])
 }
 

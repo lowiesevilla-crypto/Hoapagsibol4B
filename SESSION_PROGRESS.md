@@ -1116,6 +1116,14 @@ Consolidation Phase 1 is completed and verified.
 - Certified sources are read-only at the server boundary; tenant and custom copies remain editable and survive certified upgrades.
 - Added `scripts/verify-certified-template-foundation.ts`.
 - Phase 2B.1 is engineering-ready for Product Owner UAT; editor and generation behavior were intentionally left unchanged.
+
+## 2026-07-18 - Document Platform Runtime Services Foundation
+
+- Added tenant-bound runtime context, permission checks, redacted document audit writes, and explicit capability resolution.
+- Added registry, template lifecycle, placeholder, policy, workflow, approval, numbering, verification-token, and notification services.
+- Runtime writes validate tenant ownership before base Prisma transactions; published template versions and document history remain immutable.
+- Added notification metadata migration and read-only runtime verification harness.
+- No administrator UI, certified-template seed data, payment accounting, or public QR page was added in this milestone.
 ## Approved Document Template Editor Direction
 
 The Product Owner approved reconstructing the Document Template Editor as a

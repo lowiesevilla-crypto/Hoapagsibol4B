@@ -525,3 +525,7 @@ Ownership architecture:
 The existing template set/version models remain authoritative. Additive metadata stores ownership, certified keys, source set/version references, clone version, clone date, upgrade compatibility, restorability, and editability. Existing rows backfill to `TENANT` through database defaults.
 
 Certified updates create or prepare a new tenant draft; they never overwrite tenant drafts, published versions, or generated-document snapshots. Restore is backend-only in this phase and creates a new draft with backup metadata and an audit entry. Published versions remain immutable, and the existing document generation path continues to use the version snapshot already stored on each request/version.
+
+## Document Platform Runtime Services - Milestone 2
+
+The runtime foundation is organized behind authenticated `DocumentExecutionContext` services. Definitions resolve capabilities, templates use draft/published/retired versions, placeholders are allowlisted, policies return structured evaluations, workflows use `DocumentRequestHistory`, numbering uses tenant-definition counters, verification stores hashed random tokens, and notifications are idempotent `NotificationLog` events. These services are compatibility adapters around the current routes and do not replace the existing legacy request or generation flows until a later approved integration phase.

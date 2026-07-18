@@ -9,7 +9,7 @@ export function LoginForm({ tenantSlug = "pagsibol4b" }: { tenantSlug?: string }
   const [state, action, pending] = useActionState(loginAction, {});
 
   return (
-    <form action={action} className="space-y-4">
+    <form action={action} className="space-y-3 sm:space-y-4">
       <input type="hidden" name="tenantSlug" value={tenantSlug} />
 
       <div>

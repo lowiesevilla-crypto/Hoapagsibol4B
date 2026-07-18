@@ -218,6 +218,11 @@ enum NotificationType {
   BILLING_NOTIFICATION
   TEST_EMAIL
   EVENT
+  DOCUMENT_REQUEST_SUBMITTED
+  DOCUMENT_APPROVAL_REQUIRED
+  DOCUMENT_READY_FOR_DOWNLOAD
+  DOCUMENT_RELEASED
+  DOCUMENT_REVOKED
 }
 
 enum NotificationChannel {
@@ -379,22 +384,71 @@ enum DocumentOutstandingBalancePolicy {
   ALLOW_ADMIN_OVERRIDE
 }
 
+enum DocumentPolicyType {
+  OUTSTANDING_BALANCE
+  MEMBERSHIP_STATUS
+  VIOLATION_STATUS
+  BOND_CLEARANCE
+  PROPERTY_OWNERSHIP
+  ACTIVE_RESIDENT
+  CUSTOM_TENANT_POLICY
+}
+
+enum DocumentPolicySeverity {
+  INFO
+  WARNING
+  BLOCKING
+}
+
+enum DocumentWorkflowApprovalMode {
+  SEQUENTIAL
+  PARALLEL
+  CONDITIONAL
+}
+
+enum DocumentWorkflowStepType {
+  APPROVAL
+  REVIEW
+  PAYMENT
+  RELEASE
+  NOTIFICATION
+}
+
+enum DocumentApprovalDecision {
+  PENDING
+  APPROVED
+  REJECTED
+  SKIPPED
+  OVERRIDDEN
+}
+
+enum DocumentPlaceholderOwnership {
+  PLATFORM
+  TENANT
+}
+
+enum DocumentIssuedStatus {
+  ISSUED
+  RELEASED
+  REVOKED
+}
+
 model Tenant {
-  id                         String                      @id @default(cuid())
+  id                         String                               @id @default(cuid())
   name                       String
   shortName                  String
-  slug                       String                      @unique
+  slug                       String                               @unique
   logoUrl                    String?
-  address                    String?                     @db.Text
+  address                    String?                              @db.Text
   contactNumber              String?
   email                      String?
   secRegistrationNumber      String?
   tinNumber                  String?
-  status                     TenantStatus                @default(ACTIVE)
-  subscriptionPlan           String                      @default("STANDARD")
-  subscriptionStatus         TenantSubscriptionStatus    @default(TRIAL)
-  createdAt                  DateTime                    @default(now())
-  updatedAt                  DateTime                    @updatedAt
+  status                     TenantStatus                         @default(ACTIVE)
+  subscriptionPlan           String                               @default("STANDARD")
+  subscriptionStatus         TenantSubscriptionStatus             @default(TRIAL)
+  createdAt                  DateTime                             @default(now())
+  updatedAt                  DateTime                             @updatedAt
   users                      User[]
   moduleEntitlements         TenantModuleEntitlement[]
   advisories                 TenantAdvisory[]
@@ -407,6 +461,12 @@ model Tenant {
   documentTemplateVersions   DocumentTemplateVersion[]
   documentDefinitionCounters DocumentDefinitionCounter[]
   documentVerificationTokens DocumentVerificationToken[]
+  documentPolicies           DocumentPolicy[]
+  documentPolicyAssignments  DocumentDefinitionPolicyAssignment[]
+  documentWorkflows          DocumentWorkflowDefinition[]
+  documentWorkflowSteps      DocumentWorkflowStep[]
+  documentNumberingConfigs   DocumentNumberingConfiguration[]
+  documentPlaceholders       DocumentPlaceholderDefinition[]
 
   @@index([name])
   @@index([status, subscriptionStatus])
@@ -414,77 +474,91 @@ model Tenant {
 }
 
 model User {
-  tenantId                          String                       @default("tenant_pagsibol4b_default")
-  id                                String                       @id @default(cuid())
-  name                              String
-  email                             String
-  username                          String?
-  passwordHash                      String
-  role                              Role                         @default(HOMEOWNER)
-  active                            Boolean                      @default(true)
-  lastLoginAt                       DateTime?
-  homeownerProfile                  HomeownerProfile?
-  employeeProfile                   EmployeeProfile?             @relation("EmployeeUser")
-  announcementsCreated              Announcement[]               @relation("AnnouncementCreator")
-  eventsCreated                     Event[]                      @relation("EventCreator")
-  notificationLogs                  NotificationLog[]            @relation("NotificationRecipient")
-  collectionsCreated                Collection[]                 @relation("CollectionCreator")
-  refundsProcessed                  BondRefund[]                 @relation("RefundProcessor")
-  forfeituresProcessed              Collection[]                 @relation("ForfeitureProcessor")
-  payrollPeriodsCreated             PayrollPeriod[]              @relation("PayrollCreator")
-  expensesCreated                   Expense[]                    @relation("ExpenseCreator")
-  duesExemptionsCreated             DuesExemption[]              @relation("DuesExemptionCreator")
-  createdAt                         DateTime                     @default(now())
-  updatedAt                         DateTime                     @updatedAt
-  systemSettingsUpdated             SystemSetting[]              @relation("SystemSettingUpdater")
-  paymentRequestsReviewed           PaymentRequest[]             @relation("PaymentRequestReviewer")
-  payrollAccesses                   PayrollAccess[]              @relation("PayrollAccessUser")
-  payrollAccessGranted              PayrollAccess[]              @relation("PayrollAccessGrantedBy")
-  auditLogs                         AuditLog[]                   @relation("AuditActor")
-  calendarDaysCreated               PayrollCalendarDay[]         @relation("PayrollCalendarCreator")
-  schedulesCreated                  EmployeeSchedule[]           @relation("EmployeeScheduleCreator")
-  attendanceAdjustmentsRequested    AttendanceAdjustment[]       @relation("AttendanceAdjustmentRequester")
-  attendanceAdjustmentsReviewed     AttendanceAdjustment[]       @relation("AttendanceAdjustmentReviewer")
-  overtimeRecordsCreated            OvertimeRecord[]             @relation("OvertimeRecordCreator")
-  overtimeRecordsReviewed           OvertimeRecord[]             @relation("OvertimeRecordReviewer")
-  payrollArchivesDeleted            PayrollArchive[]             @relation("PayrollArchiveDeletedBy")
-  billsArchived                     Bill[]                       @relation("BillArchivedBy")
-  paymentsVoided                    Payment[]                    @relation("PaymentVoidedBy")
-  paymentsProcessed                 Payment[]                    @relation("PaymentProcessor")
-  paymentArchivesVoided             PaymentArchive[]             @relation("PaymentArchiveVoidedBy")
-  dataMigrationsCreated             DataMigration[]              @relation("DataMigrationCreator")
-  billingRulesCreated               BillingRule[]                @relation("BillingRuleCreator")
-  billingRulesUpdated               BillingRule[]                @relation("BillingRuleUpdater")
-  documentTemplatesUpdated          DocumentTemplate[]           @relation("DocumentTemplateUpdater")
-  documentTypeConfigurationsUpdated DocumentTypeConfiguration[]  @relation("DocumentTypeConfigurationUpdater")
-  documentRequestsProcessed         DocumentRequest[]            @relation("DocumentRequestProcessor")
-  documentRequestsApproved          DocumentRequest[]            @relation("DocumentRequestApprover")
-  documentDownloadOverrides         DocumentRequest[]            @relation("DocumentDownloadOverride")
-  documentRequestsInitiated         DocumentRequest[]            @relation("DocumentInitiator")
-  documentRequestsArchived          DocumentRequest[]            @relation("DocumentArchiver")
-  documentRequestEditAudits         DocumentRequestEditAudit[]   @relation("DocumentRequestEditAuditActor")
-  documentVersionsGenerated         DocumentVersion[]            @relation("DocumentVersionGenerator")
-  documentRequestHistory            DocumentRequestHistory[]     @relation("DocumentRequestHistoryActor")
-  documentDefinitionsCreated        DocumentDefinition[]         @relation("DocumentDefinitionCreator")
-  documentDefinitionsUpdated        DocumentDefinition[]         @relation("DocumentDefinitionUpdater")
-  documentTemplateVersionsCreated   DocumentTemplateVersion[]    @relation("DocumentTemplateVersionCreator")
-  documentTemplateVersionsPublished DocumentTemplateVersion[]    @relation("DocumentTemplateVersionPublisher")
-  documentVerificationTokensRevoked DocumentVerificationToken[]  @relation("DocumentVerificationTokenRevoker")
-  organizationOfficersUpdated       OrganizationOfficer[]        @relation("OrganizationOfficerUpdater")
-  organizationHistoryCreated        OrganizationOfficerHistory[] @relation("OrganizationOfficerHistoryActor")
-  chatConversationsHomeowner        ChatConversation[]           @relation("ChatConversationHomeowner")
-  chatConversationsCreated          ChatConversation[]           @relation("ChatConversationCreator")
-  chatConversationsAssigned         ChatConversation[]           @relation("ChatConversationAssignee")
-  chatParticipants                  ChatParticipant[]
-  chatMessages                      ChatMessage[]                @relation("ChatMessageSender")
-  presence                          UserPresence?
-  passwordResetTokens               PasswordResetToken[]
-  userRoleAssignments               UserRoleAssignment[]
-  assignedRoleAssignments           UserRoleAssignment[]         @relation("UserRoleAssignmentAssignedBy")
-  tenant                            Tenant                       @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  tenantId                              String                           @default("tenant_pagsibol4b_default")
+  id                                    String                           @id @default(cuid())
+  name                                  String
+  email                                 String
+  username                              String?
+  passwordHash                          String
+  role                                  Role                             @default(HOMEOWNER)
+  active                                Boolean                          @default(true)
+  lastLoginAt                           DateTime?
+  homeownerProfile                      HomeownerProfile?
+  employeeProfile                       EmployeeProfile?                 @relation("EmployeeUser")
+  announcementsCreated                  Announcement[]                   @relation("AnnouncementCreator")
+  eventsCreated                         Event[]                          @relation("EventCreator")
+  notificationLogs                      NotificationLog[]                @relation("NotificationRecipient")
+  collectionsCreated                    Collection[]                     @relation("CollectionCreator")
+  refundsProcessed                      BondRefund[]                     @relation("RefundProcessor")
+  forfeituresProcessed                  Collection[]                     @relation("ForfeitureProcessor")
+  payrollPeriodsCreated                 PayrollPeriod[]                  @relation("PayrollCreator")
+  expensesCreated                       Expense[]                        @relation("ExpenseCreator")
+  duesExemptionsCreated                 DuesExemption[]                  @relation("DuesExemptionCreator")
+  createdAt                             DateTime                         @default(now())
+  updatedAt                             DateTime                         @updatedAt
+  systemSettingsUpdated                 SystemSetting[]                  @relation("SystemSettingUpdater")
+  paymentRequestsReviewed               PaymentRequest[]                 @relation("PaymentRequestReviewer")
+  payrollAccesses                       PayrollAccess[]                  @relation("PayrollAccessUser")
+  payrollAccessGranted                  PayrollAccess[]                  @relation("PayrollAccessGrantedBy")
+  auditLogs                             AuditLog[]                       @relation("AuditActor")
+  calendarDaysCreated                   PayrollCalendarDay[]             @relation("PayrollCalendarCreator")
+  schedulesCreated                      EmployeeSchedule[]               @relation("EmployeeScheduleCreator")
+  attendanceAdjustmentsRequested        AttendanceAdjustment[]           @relation("AttendanceAdjustmentRequester")
+  attendanceAdjustmentsReviewed         AttendanceAdjustment[]           @relation("AttendanceAdjustmentReviewer")
+  overtimeRecordsCreated                OvertimeRecord[]                 @relation("OvertimeRecordCreator")
+  overtimeRecordsReviewed               OvertimeRecord[]                 @relation("OvertimeRecordReviewer")
+  payrollArchivesDeleted                PayrollArchive[]                 @relation("PayrollArchiveDeletedBy")
+  billsArchived                         Bill[]                           @relation("BillArchivedBy")
+  paymentsVoided                        Payment[]                        @relation("PaymentVoidedBy")
+  paymentsProcessed                     Payment[]                        @relation("PaymentProcessor")
+  paymentArchivesVoided                 PaymentArchive[]                 @relation("PaymentArchiveVoidedBy")
+  dataMigrationsCreated                 DataMigration[]                  @relation("DataMigrationCreator")
+  billingRulesCreated                   BillingRule[]                    @relation("BillingRuleCreator")
+  billingRulesUpdated                   BillingRule[]                    @relation("BillingRuleUpdater")
+  documentTemplatesUpdated              DocumentTemplate[]               @relation("DocumentTemplateUpdater")
+  documentTypeConfigurationsUpdated     DocumentTypeConfiguration[]      @relation("DocumentTypeConfigurationUpdater")
+  documentRequestsProcessed             DocumentRequest[]                @relation("DocumentRequestProcessor")
+  documentRequestsApproved              DocumentRequest[]                @relation("DocumentRequestApprover")
+  documentDownloadOverrides             DocumentRequest[]                @relation("DocumentDownloadOverride")
+  documentRequestsInitiated             DocumentRequest[]                @relation("DocumentInitiator")
+  documentRequestsArchived              DocumentRequest[]                @relation("DocumentArchiver")
+  documentRequestEditAudits             DocumentRequestEditAudit[]       @relation("DocumentRequestEditAuditActor")
+  documentVersionsGenerated             DocumentVersion[]                @relation("DocumentVersionGenerator")
+  documentVersionsReleased              DocumentVersion[]                @relation("DocumentVersionReleaser")
+  documentVersionsRevoked               DocumentVersion[]                @relation("DocumentVersionRevoker")
+  documentRequestHistory                DocumentRequestHistory[]         @relation("DocumentRequestHistoryActor")
+  documentDefinitionsCreated            DocumentDefinition[]             @relation("DocumentDefinitionCreator")
+  documentDefinitionsUpdated            DocumentDefinition[]             @relation("DocumentDefinitionUpdater")
+  documentTemplateVersionsCreated       DocumentTemplateVersion[]        @relation("DocumentTemplateVersionCreator")
+  documentTemplateVersionsPublished     DocumentTemplateVersion[]        @relation("DocumentTemplateVersionPublisher")
+  documentVerificationTokensRevoked     DocumentVerificationToken[]      @relation("DocumentVerificationTokenRevoker")
+  documentWorkflowDefinitionsCreated    DocumentWorkflowDefinition[]     @relation("DocumentWorkflowDefinitionCreator")
+  documentWorkflowDefinitionsUpdated    DocumentWorkflowDefinition[]     @relation("DocumentWorkflowDefinitionUpdater")
+  documentWorkflowStepsCreated          DocumentWorkflowStep[]           @relation("DocumentWorkflowStepCreator")
+  documentWorkflowStepsUpdated          DocumentWorkflowStep[]           @relation("DocumentWorkflowStepUpdater")
+  documentPoliciesCreated               DocumentPolicy[]                 @relation("DocumentPolicyCreator")
+  documentPoliciesUpdated               DocumentPolicy[]                 @relation("DocumentPolicyUpdater")
+  documentNumberingConfigsCreated       DocumentNumberingConfiguration[] @relation("DocumentNumberingConfigurationCreator")
+  documentNumberingConfigsUpdated       DocumentNumberingConfiguration[] @relation("DocumentNumberingConfigurationUpdater")
+  documentPlaceholderDefinitionsCreated DocumentPlaceholderDefinition[]  @relation("DocumentPlaceholderDefinitionCreator")
+  documentPlaceholderDefinitionsUpdated DocumentPlaceholderDefinition[]  @relation("DocumentPlaceholderDefinitionUpdater")
+  documentWorkflowApproverSteps         DocumentWorkflowStep[]           @relation("DocumentWorkflowStepApprover")
+  organizationOfficersUpdated           OrganizationOfficer[]            @relation("OrganizationOfficerUpdater")
+  organizationHistoryCreated            OrganizationOfficerHistory[]     @relation("OrganizationOfficerHistoryActor")
+  chatConversationsHomeowner            ChatConversation[]               @relation("ChatConversationHomeowner")
+  chatConversationsCreated              ChatConversation[]               @relation("ChatConversationCreator")
+  chatConversationsAssigned             ChatConversation[]               @relation("ChatConversationAssignee")
+  chatParticipants                      ChatParticipant[]
+  chatMessages                          ChatMessage[]                    @relation("ChatMessageSender")
+  presence                              UserPresence?
+  passwordResetTokens                   PasswordResetToken[]
+  userRoleAssignments                   UserRoleAssignment[]
+  assignedRoleAssignments               UserRoleAssignment[]             @relation("UserRoleAssignmentAssignedBy")
+  tenant                                Tenant                           @relation(fields: [tenantId], references: [id], onDelete: Restrict)
 
   @@unique([tenantId, email])
   @@unique([tenantId, username])
+  @@unique([tenantId, id])
   @@index([role])
   @@index([tenantId, active, role])
   @@index([tenantId])
@@ -955,14 +1029,14 @@ model DocumentTemplate {
   body                       String                      @db.Text
   active                     Boolean                     @default(true)
   version                    Int                         @default(1)
-  ownershipType              DocumentTemplateOwnership  @default(TENANT)
+  ownershipType              DocumentTemplateOwnership   @default(TENANT)
   certifiedKey               String?
   sourceTemplateId           String?
   sourceTemplateVersion      Int?
   clonedAt                   DateTime?
-  upgradeCompatible          Boolean                    @default(true)
-  restorable                 Boolean                    @default(true)
-  editable                   Boolean                    @default(true)
+  upgradeCompatible          Boolean                     @default(true)
+  restorable                 Boolean                     @default(true)
+  editable                   Boolean                     @default(true)
   createdById                String?
   definitionId               String?
   definition                 DocumentDefinition?         @relation("DocumentTemplateDefinition", fields: [tenantId, definitionId], references: [tenantId, id], onDelete: Restrict, onUpdate: Cascade)
@@ -1076,62 +1150,66 @@ model DocumentFieldConfiguration {
 }
 
 model DocumentDefinition {
-  tenantId                  String                           @default("tenant_pagsibol4b_default")
-  id                        String                           @id @default(cuid())
-  tenant                    Tenant                           @relation(fields: [tenantId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  tenantId                  String                               @default("tenant_pagsibol4b_default")
+  id                        String                               @id @default(cuid())
+  tenant                    Tenant                               @relation(fields: [tenantId], references: [id], onDelete: Restrict, onUpdate: Cascade)
   code                      String
   displayName               String
-  description               String?                          @db.Text
+  description               String?                              @db.Text
   category                  String?
-  status                    DocumentDefinitionStatus         @default(DRAFT)
-  active                    Boolean                          @default(false)
+  status                    DocumentDefinitionStatus             @default(DRAFT)
+  active                    Boolean                              @default(false)
   archivedAt                DateTime?
-  displayOrder              Int                              @default(0)
+  displayOrder              Int                                  @default(0)
   systemKey                 String?
   legacyType                DocumentType?
-  deliveryMode              DocumentDeliveryMode             @default(APPROVAL_REQUIRED)
-  approvalRequired          Boolean                          @default(true)
-  paymentRequired           Boolean                          @default(false)
-  paymentBeforeApproval     Boolean                          @default(false)
-  allowImmediateDownload    Boolean                          @default(false)
-  requiresAdminReview       Boolean                          @default(true)
-  releaseRequired           Boolean                          @default(false)
-  homeownerDownloadEnabled  Boolean                          @default(true)
-  outstandingBalancePolicy  DocumentOutstandingBalancePolicy @default(BLOCK_DOWNLOAD)
-  walkInEnabled             Boolean                          @default(false)
-  householdMemberEnabled    Boolean                          @default(true)
-  manualSubjectEnabled      Boolean                          @default(false)
-  allowRegeneration         Boolean                          @default(true)
-  allowPayLater             Boolean                          @default(false)
-  feeAmount                 Decimal                          @default(0) @db.Decimal(12, 2)
-  currency                  String                           @default("PHP")
-  receiptRequired           Boolean                          @default(false)
+  deliveryMode              DocumentDeliveryMode                 @default(APPROVAL_REQUIRED)
+  approvalRequired          Boolean                              @default(true)
+  paymentRequired           Boolean                              @default(false)
+  paymentBeforeApproval     Boolean                              @default(false)
+  allowImmediateDownload    Boolean                              @default(false)
+  requiresAdminReview       Boolean                              @default(true)
+  releaseRequired           Boolean                              @default(false)
+  homeownerDownloadEnabled  Boolean                              @default(true)
+  outstandingBalancePolicy  DocumentOutstandingBalancePolicy     @default(BLOCK_DOWNLOAD)
+  walkInEnabled             Boolean                              @default(false)
+  householdMemberEnabled    Boolean                              @default(true)
+  manualSubjectEnabled      Boolean                              @default(false)
+  allowRegeneration         Boolean                              @default(true)
+  allowPayLater             Boolean                              @default(false)
+  feeAmount                 Decimal                              @default(0) @db.Decimal(12, 2)
+  currency                  String                               @default("PHP")
+  receiptRequired           Boolean                              @default(false)
   financeClassification     String?
-  numberingFormat           String                           @default("{PREFIX}-{YYYY}-{SEQUENCE:6}")
-  sequenceScope             DocumentSequenceScope            @default(ANNUAL)
+  numberingFormat           String                               @default("{PREFIX}-{YYYY}-{SEQUENCE:6}")
+  sequenceScope             DocumentSequenceScope                @default(ANNUAL)
   validityDays              Int?
-  maxCopies                 Int                              @default(1)
-  qrEnabled                 Boolean                          @default(true)
-  watermarkEnabled          Boolean                          @default(false)
+  maxCopies                 Int                                  @default(1)
+  qrEnabled                 Boolean                              @default(true)
+  watermarkEnabled          Boolean                              @default(false)
   signatoryOfficerId        String?
-  signatoryOfficer          OrganizationOfficer?             @relation("DocumentDefinitionSignatory", fields: [tenantId, signatoryOfficerId], references: [tenantId, id], onDelete: Restrict, onUpdate: Cascade)
+  signatoryOfficer          OrganizationOfficer?                 @relation("DocumentDefinitionSignatory", fields: [tenantId, signatoryOfficerId], references: [tenantId, id], onDelete: Restrict, onUpdate: Cascade)
   assignedTemplateVersionId String?
-  assignedTemplateVersion   DocumentTemplateVersion?         @relation("DocumentDefinitionAssignedTemplateVersion", fields: [tenantId, assignedTemplateVersionId], references: [tenantId, id], onDelete: Restrict, onUpdate: Cascade)
-  version                   Int                              @default(1)
+  assignedTemplateVersion   DocumentTemplateVersion?             @relation("DocumentDefinitionAssignedTemplateVersion", fields: [tenantId, assignedTemplateVersionId], references: [tenantId, id], onDelete: Restrict, onUpdate: Cascade)
+  workflowDefinitionId      String?
+  workflowDefinition        DocumentWorkflowDefinition?          @relation(fields: [tenantId, workflowDefinitionId], references: [tenantId, id], onDelete: Restrict, onUpdate: Cascade)
+  version                   Int                                  @default(1)
   createdById               String?
-  createdBy                 User?                            @relation("DocumentDefinitionCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  createdBy                 User?                                @relation("DocumentDefinitionCreator", fields: [createdById], references: [id], onDelete: SetNull)
   updatedById               String?
-  updatedBy                 User?                            @relation("DocumentDefinitionUpdater", fields: [updatedById], references: [id], onDelete: SetNull)
+  updatedBy                 User?                                @relation("DocumentDefinitionUpdater", fields: [updatedById], references: [id], onDelete: SetNull)
   fields                    DocumentDefinitionField[]
   templateSets              DocumentTemplateSet[]
-  legacyTemplates           DocumentTemplate[]               @relation("DocumentTemplateDefinition")
-  legacyConfigurations      DocumentTypeConfiguration[]      @relation("DocumentTypeConfigurationDefinition")
+  legacyTemplates           DocumentTemplate[]                   @relation("DocumentTemplateDefinition")
+  legacyConfigurations      DocumentTypeConfiguration[]          @relation("DocumentTypeConfigurationDefinition")
   requests                  DocumentRequest[]
   documentVersions          DocumentVersion[]
   counters                  DocumentDefinitionCounter[]
   verificationTokens        DocumentVerificationToken[]
-  createdAt                 DateTime                         @default(now())
-  updatedAt                 DateTime                         @updatedAt
+  policyAssignments         DocumentDefinitionPolicyAssignment[]
+  numberingConfiguration    DocumentNumberingConfiguration?
+  createdAt                 DateTime                             @default(now())
+  updatedAt                 DateTime                             @updatedAt
 
   @@unique([tenantId, id])
   @@unique([tenantId, code])
@@ -1140,6 +1218,7 @@ model DocumentDefinition {
   @@index([tenantId, displayOrder, displayName])
   @@index([tenantId, signatoryOfficerId])
   @@index([tenantId, assignedTemplateVersionId])
+  @@index([tenantId, workflowDefinitionId])
   @@index([createdById])
   @@index([updatedById])
 }
@@ -1169,27 +1248,27 @@ model DocumentDefinitionField {
 }
 
 model DocumentTemplateSet {
-  tenantId        String                    @default("tenant_pagsibol4b_default")
-  id              String                    @id @default(cuid())
-  tenant          Tenant                    @relation(fields: [tenantId], references: [id], onDelete: Restrict, onUpdate: Cascade)
-  definitionId    String
-  definition      DocumentDefinition        @relation(fields: [tenantId, definitionId], references: [tenantId, id], onDelete: Cascade)
-  name            String
-  description     String?                   @db.Text
-  active          Boolean                   @default(true)
-  ownershipType   DocumentTemplateOwnership @default(TENANT)
-  certifiedKey    String?
-  sourceTemplateSetId    String?
+  tenantId                String                    @default("tenant_pagsibol4b_default")
+  id                      String                    @id @default(cuid())
+  tenant                  Tenant                    @relation(fields: [tenantId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  definitionId            String
+  definition              DocumentDefinition        @relation(fields: [tenantId, definitionId], references: [tenantId, id], onDelete: Cascade)
+  name                    String
+  description             String?                   @db.Text
+  active                  Boolean                   @default(true)
+  ownershipType           DocumentTemplateOwnership @default(TENANT)
+  certifiedKey            String?
+  sourceTemplateSetId     String?
   sourceTemplateVersionId String?
-  upgradeCompatible Boolean                  @default(true)
-  restorable      Boolean                    @default(true)
-  editable        Boolean                    @default(true)
-  createdById     String?
-  updatedById     String?
-  versions        DocumentTemplateVersion[]
-  legacyTemplates DocumentTemplate[]        @relation("LegacyDocumentTemplateSet")
-  createdAt       DateTime                  @default(now())
-  updatedAt       DateTime                  @updatedAt
+  upgradeCompatible       Boolean                   @default(true)
+  restorable              Boolean                   @default(true)
+  editable                Boolean                   @default(true)
+  createdById             String?
+  updatedById             String?
+  versions                DocumentTemplateVersion[]
+  legacyTemplates         DocumentTemplate[]        @relation("LegacyDocumentTemplateSet")
+  createdAt               DateTime                  @default(now())
+  updatedAt               DateTime                  @updatedAt
 
   @@unique([tenantId, id])
   @@index([tenantId, definitionId, active])
@@ -1208,7 +1287,7 @@ model DocumentTemplateVersion {
   templateSet              DocumentTemplateSet           @relation(fields: [tenantId, templateSetId], references: [tenantId, id], onDelete: Cascade)
   version                  Int
   status                   DocumentTemplateVersionStatus @default(DRAFT)
-  ownershipType            DocumentTemplateOwnership    @default(TENANT)
+  ownershipType            DocumentTemplateOwnership     @default(TENANT)
   schemaVersion            Int                           @default(1)
   definitionJson           Json
   previewMetadata          Json?
@@ -1225,7 +1304,7 @@ model DocumentTemplateVersion {
   sourceVersionId          String?
   cloneSourceVersion       Int?
   clonedAt                 DateTime?
-  upgradeCompatible       Boolean                       @default(true)
+  upgradeCompatible        Boolean                       @default(true)
   restorable               Boolean                       @default(true)
 
   @@unique([tenantId, id])
@@ -1366,6 +1445,19 @@ model DocumentVersion {
   templateDefinitionSnapshot Json?
   generatedById              String?
   generatedBy                User?                       @relation("DocumentVersionGenerator", fields: [generatedById], references: [id], onDelete: SetNull)
+  issuedStatus               DocumentIssuedStatus        @default(ISSUED)
+  issuedAt                   DateTime?
+  releasedAt                 DateTime?
+  releasedById               String?
+  releasedBy                 User?                       @relation("DocumentVersionReleaser", fields: [releasedById], references: [id], onDelete: SetNull)
+  revokedAt                  DateTime?
+  revokedById                String?
+  revokedBy                  User?                       @relation("DocumentVersionRevoker", fields: [revokedById], references: [id], onDelete: SetNull)
+  revocationReason           String?
+  contentHash                String?
+  reissueOfId                String?
+  reissueOf                  DocumentVersion?            @relation("DocumentVersionReissues", fields: [tenantId, reissueOfId], references: [tenantId, id], onDelete: Restrict, onUpdate: Cascade)
+  reissues                   DocumentVersion[]           @relation("DocumentVersionReissues")
   verificationTokens         DocumentVerificationToken[]
   reason                     String?
   createdAt                  DateTime                    @default(now())
@@ -1376,6 +1468,9 @@ model DocumentVersion {
   @@index([tenantId, templateVersionId])
   @@index([requestId, createdAt])
   @@index([generatedById])
+  @@index([tenantId, documentNumber])
+  @@index([tenantId, issuedStatus, createdAt])
+  @@index([tenantId, reissueOfId])
   @@index([tenantId])
 }
 
@@ -1428,18 +1523,28 @@ model OrganizationOfficerHistory {
 }
 
 model DocumentRequestHistory {
-  tenantId  String                @default("tenant_pagsibol4b_default")
-  id        String                @id @default(cuid())
-  requestId String
-  request   DocumentRequest       @relation(fields: [requestId], references: [id], onDelete: Cascade)
-  status    DocumentRequestStatus
-  note      String?
-  actorId   String?
-  actor     User?                 @relation("DocumentRequestHistoryActor", fields: [actorId], references: [id], onDelete: SetNull)
-  createdAt DateTime              @default(now())
+  tenantId        String                    @default("tenant_pagsibol4b_default")
+  id              String                    @id @default(cuid())
+  requestId       String
+  request         DocumentRequest           @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  status          DocumentRequestStatus
+  note            String?
+  actorId         String?
+  actor           User?                     @relation("DocumentRequestHistoryActor", fields: [actorId], references: [id], onDelete: SetNull)
+  workflowVersion Int?
+  workflowStepId  String?
+  workflowStep    DocumentWorkflowStep?     @relation(fields: [tenantId, workflowStepId], references: [tenantId, id], onDelete: Restrict, onUpdate: Cascade)
+  decision        DocumentApprovalDecision?
+  actingRole      Role?
+  decisionAt      DateTime?
+  override        Boolean                   @default(false)
+  overrideReason  String?
+  createdAt       DateTime                  @default(now())
 
   @@index([requestId, createdAt])
   @@index([actorId])
+  @@index([tenantId, workflowStepId, createdAt])
+  @@index([tenantId, decision, createdAt])
   @@index([tenantId])
 }
 
@@ -1503,6 +1608,8 @@ model DocumentVerificationToken {
   revokedAt         DateTime?
   revokedById       String?
   revokedBy         User?                      @relation("DocumentVerificationTokenRevoker", fields: [revokedById], references: [id], onDelete: SetNull)
+  verificationCount Int                        @default(0)
+  lastVerifiedAt    DateTime?
   createdAt         DateTime                   @default(now())
   updatedAt         DateTime                   @updatedAt
 
@@ -1511,6 +1618,169 @@ model DocumentVerificationToken {
   @@index([tenantId, documentVersionId, status])
   @@index([tenantId, definitionId])
   @@index([revokedById])
+}
+
+model DocumentPolicy {
+  tenantId    String                               @default("tenant_pagsibol4b_default")
+  id          String                               @id @default(cuid())
+  tenant      Tenant                               @relation(fields: [tenantId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  code        String
+  name        String
+  description String?                              @db.Text
+  type        DocumentPolicyType
+  enabled     Boolean                              @default(true)
+  severity    DocumentPolicySeverity               @default(WARNING)
+  blocking    Boolean                              @default(false)
+  parameters  Json?
+  version     Int                                  @default(1)
+  createdById String?
+  createdBy   User?                                @relation("DocumentPolicyCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  updatedById String?
+  updatedBy   User?                                @relation("DocumentPolicyUpdater", fields: [updatedById], references: [id], onDelete: SetNull)
+  assignments DocumentDefinitionPolicyAssignment[]
+  createdAt   DateTime                             @default(now())
+  updatedAt   DateTime                             @updatedAt
+
+  @@unique([tenantId, id])
+  @@unique([tenantId, code])
+  @@index([tenantId, type, enabled])
+  @@index([tenantId, severity, blocking])
+}
+
+model DocumentDefinitionPolicyAssignment {
+  tenantId        String             @default("tenant_pagsibol4b_default")
+  id              String             @id @default(cuid())
+  tenant          Tenant             @relation(fields: [tenantId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  definitionId    String
+  definition      DocumentDefinition @relation(fields: [tenantId, definitionId], references: [tenantId, id], onDelete: Restrict, onUpdate: Cascade)
+  policyId        String
+  policy          DocumentPolicy     @relation(fields: [tenantId, policyId], references: [tenantId, id], onDelete: Restrict, onUpdate: Cascade)
+  evaluationOrder Int                @default(0)
+  enabled         Boolean            @default(true)
+  required        Boolean            @default(false)
+  version         Int                @default(1)
+  createdAt       DateTime           @default(now())
+  updatedAt       DateTime           @updatedAt
+
+  @@unique([tenantId, id])
+  @@unique([tenantId, definitionId, policyId])
+  @@index([tenantId, definitionId, enabled, evaluationOrder])
+  @@index([tenantId, policyId])
+}
+
+model DocumentWorkflowDefinition {
+  tenantId            String                       @default("tenant_pagsibol4b_default")
+  id                  String                       @id @default(cuid())
+  tenant              Tenant                       @relation(fields: [tenantId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  code                String
+  name                String
+  description         String?                      @db.Text
+  active              Boolean                      @default(true)
+  version             Int                          @default(1)
+  approvalMode        DocumentWorkflowApprovalMode @default(SEQUENTIAL)
+  conditionalMetadata Json?
+  definitions         DocumentDefinition[]
+  steps               DocumentWorkflowStep[]
+  createdById         String?
+  createdBy           User?                        @relation("DocumentWorkflowDefinitionCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  updatedById         String?
+  updatedBy           User?                        @relation("DocumentWorkflowDefinitionUpdater", fields: [updatedById], references: [id], onDelete: SetNull)
+  createdAt           DateTime                     @default(now())
+  updatedAt           DateTime                     @updatedAt
+
+  @@unique([tenantId, id])
+  @@unique([tenantId, code])
+  @@index([tenantId, active, version])
+  @@index([tenantId, code, active])
+}
+
+model DocumentWorkflowStep {
+  tenantId                 String                       @default("tenant_pagsibol4b_default")
+  id                       String                       @id @default(cuid())
+  tenant                   Tenant                       @relation(fields: [tenantId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  workflowId               String
+  workflow                 DocumentWorkflowDefinition   @relation(fields: [tenantId, workflowId], references: [tenantId, id], onDelete: Restrict, onUpdate: Cascade)
+  stepOrder                Int
+  stepType                 DocumentWorkflowStepType
+  approvalMode             DocumentWorkflowApprovalMode @default(SEQUENTIAL)
+  conditionalMetadata      Json?
+  approverRole             Role?
+  approverUserId           String?
+  approverUser             User?                        @relation("DocumentWorkflowStepApprover", fields: [tenantId, approverUserId], references: [tenantId, id], onDelete: Restrict, onUpdate: Cascade)
+  required                 Boolean                      @default(true)
+  slaTargetHours           Int?
+  overrideEligible         Boolean                      @default(false)
+  mandatoryOverrideRemarks Boolean                      @default(false)
+  createdById              String?
+  createdBy                User?                        @relation("DocumentWorkflowStepCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  updatedById              String?
+  updatedBy                User?                        @relation("DocumentWorkflowStepUpdater", fields: [updatedById], references: [id], onDelete: SetNull)
+  requestHistories         DocumentRequestHistory[]
+  createdAt                DateTime                     @default(now())
+  updatedAt                DateTime                     @updatedAt
+
+  @@unique([tenantId, id])
+  @@unique([tenantId, workflowId, stepOrder])
+  @@index([tenantId, workflowId, required, stepOrder])
+  @@index([tenantId, approverRole, approverUserId])
+}
+
+model DocumentNumberingConfiguration {
+  tenantId              String                @default("tenant_pagsibol4b_default")
+  id                    String                @id @default(cuid())
+  tenant                Tenant                @relation(fields: [tenantId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  definitionId          String
+  definition            DocumentDefinition    @relation(fields: [tenantId, definitionId], references: [tenantId, id], onDelete: Restrict, onUpdate: Cascade)
+  prefix                String
+  yearFormat            String                @default("YYYY")
+  sequenceLength        Int                   @default(6)
+  resetRule             DocumentSequenceScope @default(ANNUAL)
+  currentSequence       Int                   @default(0)
+  lastResetAt           DateTime?
+  separator             String                @default("-")
+  suffix                String?
+  manualOverrideAllowed Boolean               @default(false)
+  version               Int                   @default(1)
+  createdById           String?
+  createdBy             User?                 @relation("DocumentNumberingConfigurationCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  updatedById           String?
+  updatedBy             User?                 @relation("DocumentNumberingConfigurationUpdater", fields: [updatedById], references: [id], onDelete: SetNull)
+  createdAt             DateTime              @default(now())
+  updatedAt             DateTime              @updatedAt
+
+  @@unique([tenantId, id])
+  @@unique([tenantId, definitionId])
+  @@index([tenantId, definitionId, resetRule])
+  @@index([tenantId, prefix])
+}
+
+model DocumentPlaceholderDefinition {
+  tenantId              String?
+  id                    String                       @id @default(cuid())
+  tenant                Tenant?                      @relation(fields: [tenantId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  ownership             DocumentPlaceholderOwnership @default(PLATFORM)
+  key                   String
+  category              String
+  displayName           String
+  description           String?                      @db.Text
+  dataType              String
+  formatHint            String?
+  exampleValue          String?
+  sensitivity           String?
+  active                Boolean                      @default(true)
+  resolverIdentifier    String
+  aiExplanationMetadata Json?
+  createdById           String?
+  createdBy             User?                        @relation("DocumentPlaceholderDefinitionCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  updatedById           String?
+  updatedBy             User?                        @relation("DocumentPlaceholderDefinitionUpdater", fields: [updatedById], references: [id], onDelete: SetNull)
+  createdAt             DateTime                     @default(now())
+  updatedAt             DateTime                     @updatedAt
+
+  @@unique([tenantId, key])
+  @@index([tenantId, ownership, active])
+  @@index([tenantId, category, active])
+  @@index([tenantId, resolverIdentifier])
 }
 
 model EmployeeProfile {
@@ -1633,20 +1903,28 @@ model PayrollAccess {
 }
 
 model AuditLog {
-  tenantId   String   @default("tenant_pagsibol4b_default")
-  id         String   @id @default(cuid())
-  actorId    String?
-  actor      User?    @relation("AuditActor", fields: [actorId], references: [id], onDelete: SetNull)
-  module     String
-  action     String
-  entityType String?
-  entityId   String?
-  metadata   Json?
-  createdAt  DateTime @default(now())
+  tenantId      String   @default("tenant_pagsibol4b_default")
+  id            String   @id @default(cuid())
+  actorId       String?
+  actor         User?    @relation("AuditActor", fields: [actorId], references: [id], onDelete: SetNull)
+  module        String
+  action        String
+  entityType    String?
+  entityId      String?
+  metadata      Json?
+  reason        String?  @db.Text
+  correlationId String?
+  ipAddress     String?
+  userAgent     String?  @db.Text
+  aiAction      Boolean  @default(false)
+  createdAt     DateTime @default(now())
 
   @@index([module, createdAt])
   @@index([actorId, createdAt])
   @@index([entityType, entityId])
+  @@index([tenantId, createdAt])
+  @@index([tenantId, entityType, entityId])
+  @@index([correlationId])
   @@index([tenantId])
 }
 

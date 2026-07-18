@@ -1076,3 +1076,16 @@ The editor must not resemble Canva, Figma, or a technical block/JSON editor.
 
 Implementation will begin only after Document Module Architecture
 Consolidation Phase 1 is completed and verified.
+## Approved Document Template Editor Direction
+
+The Product Owner approved reconstructing the Document Template Editor as a
+simplified Microsoft Word-style editor.
+
+The editor must support professional page layout, formatting, tables, lines,
+images, dynamic placeholders, header, footer, multiple pages, live preview,
+drafts, publishing, and immutable issued-document snapshots.
+
+The editor must not resemble Canva, Figma, or a technical block/JSON editor.
+
+Implementation will begin only after Document Module Architecture
+Consolidation Phase 1 is completed and verified.

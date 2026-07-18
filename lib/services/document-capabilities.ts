@@ -16,9 +16,11 @@ export type DocumentCapabilities = {
   supportsDownload: boolean;
   supportsAttachments: false;
   tenantCustomizable: true;
+  automaticRelease: boolean;
+  automaticIssuance: boolean;
 };
 
-export function resolveDocumentCapabilities(definition: Pick<DocumentDefinition, "active" | "archivedAt" | "homeownerDownloadEnabled" | "walkInEnabled" | "paymentRequired" | "approvalRequired" | "requiresAdminReview" | "qrEnabled" | "numberingFormat" | "allowRegeneration">): DocumentCapabilities {
+export function resolveDocumentCapabilities(definition: Pick<DocumentDefinition, "active" | "archivedAt" | "homeownerDownloadEnabled" | "walkInEnabled" | "paymentRequired" | "approvalRequired" | "requiresAdminReview" | "qrEnabled" | "numberingFormat" | "allowRegeneration" | "releaseRequired" | "allowImmediateDownload">): DocumentCapabilities {
   const active = definition.active && !definition.archivedAt;
   return {
     supportsHomeownerRequest: active && definition.homeownerDownloadEnabled,
@@ -34,5 +36,7 @@ export function resolveDocumentCapabilities(definition: Pick<DocumentDefinition,
     supportsDownload: active && definition.homeownerDownloadEnabled,
     supportsAttachments: false,
     tenantCustomizable: true,
+    automaticRelease: !definition.releaseRequired,
+    automaticIssuance: definition.allowImmediateDownload && !definition.paymentRequired && !definition.approvalRequired && !definition.requiresAdminReview,
   };
 }

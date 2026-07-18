@@ -4,7 +4,7 @@ import { NotificationChannel, NotificationType, Prisma, Role } from "@prisma/cli
 import { platformPrisma } from "@/lib/db";
 import { requireDocumentPermission, type DocumentExecutionContext } from "@/lib/services/document-runtime-context";
 
-export type DocumentNotificationEvent = "REQUEST_SUBMITTED" | "APPROVAL_REQUIRED" | "APPROVED" | "REJECTED" | "RETURNED" | "READY_FOR_DOWNLOAD" | "RELEASED" | "REVOKED";
+export type DocumentNotificationEvent = "REQUEST_SUBMITTED" | "APPROVAL_REQUIRED" | "APPROVED" | "REJECTED" | "RETURNED" | "READY_FOR_DOWNLOAD" | "RELEASED" | "REVOKED" | "REISSUED";
 
 const eventType: Record<DocumentNotificationEvent, NotificationType> = {
   REQUEST_SUBMITTED: NotificationType.DOCUMENT_REQUEST_SUBMITTED,
@@ -15,6 +15,7 @@ const eventType: Record<DocumentNotificationEvent, NotificationType> = {
   READY_FOR_DOWNLOAD: NotificationType.DOCUMENT_READY_FOR_DOWNLOAD,
   RELEASED: NotificationType.DOCUMENT_RELEASED,
   REVOKED: NotificationType.DOCUMENT_REVOKED,
+  REISSUED: NotificationType.DOCUMENT_REISSUED,
 };
 
 export async function recordDocumentNotification(input: { context: DocumentExecutionContext; recipientId: string; event: DocumentNotificationEvent; subject: string; message: string; entityType?: string; entityId?: string; eventKey?: string; metadata?: unknown }) {

@@ -11,6 +11,8 @@ export const allowedDocumentPlaceholders = [
   "document.number",
   "document.title",
   "document.issueDate",
+  "document.issuePlace",
+  "document.status",
   "document.validUntil",
   "subject.fullName",
   "subject.relationship",
@@ -18,10 +20,14 @@ export const allowedDocumentPlaceholders = [
   "subject.birthDate",
   "subject.civilStatus",
   "subject.nationality",
+  "subject.status",
+  "subject.residencyStartDate",
   "property.block",
   "property.lot",
   "property.address",
   "property.accountLabel",
+  "property.phase",
+  "property.subdivision",
   "request.purpose",
   "request.remarks",
   "request.copies",
@@ -29,6 +35,8 @@ export const allowedDocumentPlaceholders = [
   "signatory.position",
   "verification.url",
   "verification.code",
+  "system.generatedAt",
+  "system.platformName",
 ] as const;
 
 export type AllowedDocumentPlaceholder = typeof allowedDocumentPlaceholders[number];
@@ -47,6 +55,8 @@ export const placeholderGroups: { group: string; items: { key: AllowedDocumentPl
     { key: "document.number", label: "Document number", sample: "COR-2026-000001" },
     { key: "document.title", label: "Document title", sample: "Certificate of Residency" },
     { key: "document.issueDate", label: "Issue date", sample: "July 18, 2026" },
+    { key: "document.issuePlace", label: "Issue place", sample: "Test HOA Office" },
+    { key: "document.status", label: "Document status", sample: "Issued" },
     { key: "document.validUntil", label: "Valid until", sample: "July 18, 2027" },
   ] },
   { group: "Subject", items: [
@@ -56,12 +66,16 @@ export const placeholderGroups: { group: string; items: { key: AllowedDocumentPl
     { key: "subject.birthDate", label: "Date of birth", sample: "January 1, 1990" },
     { key: "subject.civilStatus", label: "Civil status", sample: "Married" },
     { key: "subject.nationality", label: "Nationality", sample: "Filipino" },
+    { key: "subject.status", label: "Residency status", sample: "Owner occupied" },
+    { key: "subject.residencyStartDate", label: "Residency start date", sample: "January 1, 2020" },
   ] },
   { group: "Property", items: [
     { key: "property.block", label: "Block", sample: "1" },
     { key: "property.lot", label: "Lot", sample: "2" },
     { key: "property.address", label: "Property address", sample: "Block 1 Lot 2, Test HOA" },
     { key: "property.accountLabel", label: "Account label", sample: "Block 1 Lot 2" },
+    { key: "property.phase", label: "Phase", sample: "Phase 2" },
+    { key: "property.subdivision", label: "Subdivision", sample: "Test HOA" },
   ] },
   { group: "Request", items: [
     { key: "request.purpose", label: "Purpose", sample: "For official purposes" },
@@ -75,6 +89,10 @@ export const placeholderGroups: { group: string; items: { key: AllowedDocumentPl
   { group: "Verification", items: [
     { key: "verification.url", label: "Verification URL", sample: "https://example.test/verify/abc123" },
     { key: "verification.code", label: "Verification code", sample: "VERIFY123" },
+  ] },
+  { group: "System", items: [
+    { key: "system.generatedAt", label: "Generated date", sample: "July 18, 2026" },
+    { key: "system.platformName", label: "Platform name", sample: "HOAHub" },
   ] },
 ];
 
@@ -127,6 +145,7 @@ export type DocumentTemplateBlock = {
   binding?: AllowedDocumentPlaceholder;
   order: number;
   visible: boolean;
+  required?: boolean;
   style?: {
     align?: "left" | "center" | "right" | "justify";
     fontFamily?: SafeFontFamily;
@@ -180,6 +199,7 @@ export type DocumentTemplateDefinition = {
   meta: {
     editor: "professional-document-editor";
     revisionNote?: string;
+    requiresSignatory?: boolean;
   };
 };
 
@@ -284,7 +304,7 @@ export function normalizeTemplateDefinition(value: unknown, title = "Official HO
     page,
     sections,
     blocks,
-    meta: { editor: "professional-document-editor", revisionNote: typeof source.meta?.revisionNote === "string" ? source.meta.revisionNote : undefined },
+    meta: { editor: "professional-document-editor", revisionNote: typeof source.meta?.revisionNote === "string" ? source.meta.revisionNote : undefined, requiresSignatory: source.meta?.requiresSignatory === true },
   };
 }
 
@@ -384,6 +404,7 @@ function sectionValidationBlocks(value: unknown, fallbackSection: DocumentTempla
       binding: typeof entry.binding === "string" ? entry.binding as AllowedDocumentPlaceholder : undefined,
       order: Number.isFinite(Number(entry.order)) ? Number(entry.order) : (index + 1) * 10,
       visible: entry.visible !== false,
+      required: entry.required !== false,
       style,
       image,
       table,
@@ -410,6 +431,7 @@ function normalizeBlock(value: unknown, fallbackSection: DocumentTemplateSection
     binding: allowedDocumentPlaceholders.includes(item.binding as AllowedDocumentPlaceholder) ? item.binding as AllowedDocumentPlaceholder : undefined,
     order: Number.isFinite(Number(item.order)) ? Number(item.order) : (index + 1) * 10,
     visible: item.visible !== false,
+    required: item.required !== false,
     style: {
       align: ["left", "center", "right", "justify"].includes(String(style.align)) ? style.align as NonNullable<DocumentTemplateBlock["style"]>["align"] : undefined,
       fontFamily: safeFontFamilies.includes(style.fontFamily as SafeFontFamily) ? style.fontFamily as SafeFontFamily : undefined,

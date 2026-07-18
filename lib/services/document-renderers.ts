@@ -59,7 +59,8 @@ function renderBlock(block: DocumentRenderBlock, qrDataUrl: string | null) {
   if (block.type === "verticalLine") return `<div class="vertical-line" style="${style}"></div>`;
   if (block.type === "spacer") return `<div aria-hidden="true" style="height:${Math.max(4, block.style?.height ?? 16)}px"></div>`;
   if (block.type === "qrVerification") return qrDataUrl ? `<figure class="qr-block" style="${style}"><img src="${qrDataUrl}" alt="Document verification QR code"><figcaption>${escapeHtml(block.content)}</figcaption></figure>` : "";
-  if ((block.type === "logo" || block.type === "image") && block.image?.src) return `<figure style="${style}"><img src="${escapeAttribute(block.image.src)}" alt="${escapeAttribute(block.image.alt ?? block.label ?? "Document image")}" width="${Math.round(block.image.width ?? block.style?.width ?? 96)}" height="${Math.round(block.image.height ?? block.style?.height ?? 96)}"></figure>`;
+  const imageSource = block.image?.src || (block.type === "logo" ? block.content : "");
+  if ((block.type === "logo" || block.type === "image") && imageSource) return `<figure style="${style}"><img src="${escapeAttribute(imageSource)}" alt="${escapeAttribute(block.image?.alt ?? block.label ?? "Document image")}" width="${Math.round(block.image?.width ?? block.style?.width ?? 96)}" height="${Math.round(block.image?.height ?? block.style?.height ?? 96)}"></figure>`;
   if (block.table?.rows?.length) return `<table style="${style}"><tbody>${block.table.rows.map((row) => `<tr>${row.map((cell) => `<td>${escapeHtml(cell)}</td>`).join("")}</tr>`).join("")}</tbody></table>`;
   const tag = block.type === "documentTitle" || block.type === "tenantName" ? "h1" : "div";
   return `<${tag} class="block block-${escapeAttribute(block.type)}" style="${style}">${escapeHtml(block.content).replaceAll("\n", "<br>")}</${tag}>`;

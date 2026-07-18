@@ -56,17 +56,21 @@ export function buildDocumentRenderModel(input: {
   const resolvedValues: Record<string, string> = {};
   const resolveText = (value: string) => {
     const result = resolveDocumentPlaceholders(value, input.placeholderContext, input.mode === "PREVIEW" ? "PREVIEW" : "GENERATE", input.placeholderDefinitions);
+    return result;
+  };
+  const collect = (result: ReturnType<typeof resolveText>) => {
     result.unresolvedPlaceholders.forEach((item) => unresolved.add(item));
     result.unauthorizedPlaceholders.forEach((item) => unauthorized.add(item));
     result.warnings.forEach((item) => warnings.add(item));
     Object.assign(resolvedValues, result.resolvedValues);
-    return result.resolvedContent;
   };
-  const section = (name: "header" | "body" | "footer") => template.sections[name].map((block) => ({
-    ...block,
-    content: resolveText(block.content ?? block.text ?? (block.binding ? `{{${block.binding}}}` : block.label ?? "")),
-    table: block.table ? { rows: block.table.rows.map((row) => row.map(resolveText)) } : undefined,
-  }));
+  const section = (name: "header" | "body" | "footer") => template.sections[name].map((block) => {
+    const result = resolveText(block.content ?? block.text ?? (block.binding ? `{{${block.binding}}}` : block.label ?? ""));
+    const omit = block.required === false && (result.unresolvedPlaceholders.length > 0 || result.unauthorizedPlaceholders.length > 0);
+    if (!omit) collect(result);
+    const table = block.table ? { rows: block.table.rows.map((row) => row.map((cell) => { const cellResult = resolveText(cell); collect(cellResult); return cellResult.resolvedContent; })) } : undefined;
+    return { ...block, visible: block.visible && !omit, content: omit ? "" : result.resolvedContent, table };
+  });
   const page = input.mode === "PREVIEW"
     ? { ...template.page, watermark: { enabled: true, text: "PREVIEW - NOT AN OFFICIAL DOCUMENT", opacity: 0.12 } }
     : template.page;

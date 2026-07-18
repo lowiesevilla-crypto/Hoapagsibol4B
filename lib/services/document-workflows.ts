@@ -53,8 +53,13 @@ export async function assignWorkflowToDefinition(context: DocumentExecutionConte
 }
 
 export async function startDocumentWorkflow(context: DocumentExecutionContext, requestId: string): Promise<WorkflowState | null> {
-  requireDocumentPermission(context, "APPROVE_REQUESTS");
   const request = await platformPrisma.documentRequest.findFirst({ where: { id: requestId, tenantId: context.tenantId }, include: { definition: { include: { workflowDefinition: { include: { steps: { orderBy: { stepOrder: "asc" } } } } } }, histories: { orderBy: { createdAt: "asc" } } } });
+  if (context.role === Role.HOMEOWNER) {
+    const owned = request && await platformPrisma.homeownerProfile.findFirst({ where: { id: request.homeownerId, tenantId: context.tenantId, userId: context.authenticatedUserId }, select: { id: true } });
+    if (!owned) throw new Error("Homeowners may start only their own tenant-scoped document workflow.");
+  } else {
+    requireDocumentPermission(context, "APPROVE_REQUESTS");
+  }
   const workflow = request?.definition?.workflowDefinition;
   if (!request || !workflow) return null;
   const prior = request.histories.find((item) => item.workflowVersion === workflow.version && item.workflowStepId);
@@ -73,8 +78,10 @@ export async function getWorkflowState(context: DocumentExecutionContext, reques
   const workflow = request?.definition?.workflowDefinition;
   if (!request || !workflow) return null;
   const records = request.histories.filter((item) => item.workflowVersion === workflow.version && item.workflowStepId);
-  const approved = new Set(records.filter((item) => item.decision === DocumentApprovalDecision.APPROVED || item.decision === DocumentApprovalDecision.SKIPPED || item.decision === DocumentApprovalDecision.OVERRIDDEN).map((item) => item.workflowStepId));
-  const rejected = records.some((item) => item.decision === DocumentApprovalDecision.REJECTED);
+  const latestByStep = new Map<string, (typeof records)[number]>();
+  for (const record of records) if (record.workflowStepId) latestByStep.set(record.workflowStepId, record);
+  const approved = new Set([...latestByStep.values()].filter((item) => item.decision === DocumentApprovalDecision.APPROVED || item.decision === DocumentApprovalDecision.SKIPPED || item.decision === DocumentApprovalDecision.OVERRIDDEN).map((item) => item.workflowStepId));
+  const rejected = [...latestByStep.values()].some((item) => item.decision === DocumentApprovalDecision.REJECTED);
   const currentStepIds = rejected ? [] : workflow.steps.filter((step) => !approved.has(step.id) && (workflow.approvalMode === DocumentWorkflowApprovalMode.PARALLEL || workflow.steps.slice(0, step.stepOrder - 1).every((prior) => !prior.required || approved.has(prior.id)))).map((step) => step.id);
   return { workflowId: workflow.id, workflowVersion: workflow.version, completed: !rejected && currentStepIds.length === 0, currentStepIds, timeline: records.map((item) => ({ stepId: item.workflowStepId, decision: item.decision, status: item.status, note: item.note, createdAt: item.createdAt })) };
 }

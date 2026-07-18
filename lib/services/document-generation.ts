@@ -58,6 +58,8 @@ export async function generateDocument(context: DocumentExecutionContext, reques
     }
     const effective = await resolveEffectiveDocumentDefinition(context, { definitionId: request.definitionId ?? undefined });
     const issues = validateGenerationEligibility({ context, request, capabilities: effective.capabilities, mode: options.mode });
+    const tenant = await platformPrisma.tenant.findUnique({ where: { id: context.tenantId }, select: { status: true } });
+    if (!tenant || tenant.status !== "ACTIVE") issues.push(issue("TENANT_INACTIVE", "AUTHORIZATION", "The issuing tenant is not active.", true));
     const policySummary = request.definitionId ? await evaluateDocumentPolicies(context, request.definitionId, { homeownerId: request.homeownerId, requestId: request.id }) : [];
     for (const result of policySummary) {
       if (result.status === "ERROR" || (result.blocking && result.status !== "PASS")) issues.push(issue("POLICY_BLOCKED", "POLICY", result.summary, true, "Resolve or validly override the blocking policy before issuance.", { policyCode: result.policyCode, policyVersion: result.policyVersion, evaluatorVersion: result.evaluatorVersion }));
@@ -71,7 +73,9 @@ export async function generateDocument(context: DocumentExecutionContext, reques
     const placeholders = await listDocumentPlaceholders(context);
     const association = await getAssociationSettings(context.tenantId);
     const officers = await getActiveOrganizationOfficers(context.tenantId);
-    const signatory = request.definition?.signatoryOfficer ?? officers[0] ?? null;
+    const templateRequiresSignatory = Boolean(record(template.definitionJson).meta && record(record(template.definitionJson).meta).requiresSignatory === true);
+    const signatory = request.definition?.signatoryOfficer ?? (templateRequiresSignatory ? null : officers[0] ?? { fullName: "Authorized HOA Officer", position: "Authorized Signatory" });
+    if (validatesOfficialReadiness && templateRequiresSignatory && !signatory) issues.push(issue("SIGNATORY_MISSING", "DEFINITION", "A valid authorized signatory is required for official issuance.", true, "Assign an active tenant officer to this document definition."));
     const issueDate = new Date();
     const previewNumber = options.mode === DocumentGenerationMode.PREVIEW ? "PREVIEW" : "PENDING";
     const validationVerificationUrl = validatesOfficialReadiness && effective.capabilities.supportsQRVerification
@@ -189,12 +193,13 @@ function placeholderContext(request: GenerationRequestRecord, association: Await
   const fields = record(requestData.fields ?? requestData);
   return {
     tenant: { name: association.name, address: association.address, tin: association.tinNumber, secRegistration: association.secRegistrationNumber, contactNumber: association.contactNumber, email: association.email, logo: association.logoUrl },
-    document: { number: documentNumber, title: request.definition?.displayName ?? "Official HOA Document", issueDate: shortDate(issueDate), validUntil: request.validityDate ? shortDate(request.validityDate) : undefined },
-    subject: { fullName: text(subject.fullName) || request.homeowner.user.name, relationship: text(subject.relationship) || "Homeowner", address: text(subject.address) || request.homeowner.address, birthDate: text(subject.birthDate), civilStatus: text(subject.civilStatus) || request.homeowner.civilStatus || undefined, nationality: text(subject.nationality) || request.homeowner.citizenship || undefined },
-    property: { block: text(subject.block) || request.homeowner.block, lot: text(subject.lot) || request.homeowner.lot, address: text(subject.propertyAddress) || request.homeowner.address, accountLabel: text(subject.accountLabel) || `Block ${request.homeowner.block}, Lot ${request.homeowner.lot}` },
+    document: { number: documentNumber, title: request.definition?.displayName ?? "Official HOA Document", issueDate: shortDate(issueDate), issuePlace: association.address || association.name, status: documentNumber === "PREVIEW" ? "Preview" : "Issued", validUntil: request.validityDate ? shortDate(request.validityDate) : undefined },
+    subject: { fullName: text(subject.fullName) || request.homeowner.user.name, relationship: text(subject.relationship) || "Homeowner", address: text(subject.address) || request.homeowner.address, birthDate: text(subject.birthDate), civilStatus: text(subject.civilStatus) || request.homeowner.civilStatus || undefined, nationality: text(subject.nationality) || request.homeowner.citizenship || undefined, status: request.homeowner.occupancyStatus || request.homeowner.propertyType || undefined, residencyStartDate: request.homeowner.residencyDate ? shortDate(request.homeowner.residencyDate) : undefined },
+    property: { block: text(subject.block) || request.homeowner.block, lot: text(subject.lot) || request.homeowner.lot, address: text(subject.propertyAddress) || request.homeowner.address, accountLabel: text(subject.accountLabel) || `Block ${request.homeowner.block}, Lot ${request.homeowner.lot}`, phase: request.homeowner.phase || undefined, subdivision: association.name },
     request: { purpose: text(fields.purpose) || request.purpose || undefined, remarks: text(fields.remarks) || request.remarks || undefined, copies: request.numberOfCopies },
-    signatory: { name: signatory?.fullName ?? "Authorized HOA Officer", position: signatory?.position ?? "Authorized Signatory" },
+    signatory: { name: signatory?.fullName, position: signatory?.position },
     verification: { url: verificationUrl ?? undefined, code: verificationUrl ? "Scan to verify" : undefined },
+    system: { generatedAt: shortDate(issueDate), platformName: "HOAHub" },
     permissions: new Set(context.role === Role.HOMEOWNER ? ["DOCUMENT_PLACEHOLDER:PERSONAL"] : ["DOCUMENT_PLACEHOLDER:PERSONAL", "DOCUMENT_PLACEHOLDER:FINANCIAL", "DOCUMENT_PLACEHOLDER:VIOLATION"]),
   };
 }

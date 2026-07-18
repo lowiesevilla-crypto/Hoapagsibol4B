@@ -29,6 +29,7 @@ export function ManualDocumentForm({ homeowners, officers, definitions }: { home
         <Field label="Document type"><select className="field" name="definitionId" value={definitionId} onChange={(event) => setDefinitionId(event.target.value)} required>{definitions.map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}</select></Field>
         <Field label="Validity date"><input className="field" type="date" name="validityDate" required={pass} /></Field>
         <Field label="Purpose"><input className="field" name="purpose" required /></Field>
+        <Field label="Office request reason"><input className="field" name="onBehalfReason" placeholder="Why the HOA office is creating this request" required /></Field>
         <Field label="Property information"><input className="field" name="propertyDetails" /></Field>
         <Officer label="Approving officer" name="approvedByOfficerId" officers={officers} />
         <Officer label="Processed by" name="processedByOfficerId" officers={officers} />

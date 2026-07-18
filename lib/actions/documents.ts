@@ -3,7 +3,7 @@
 import { randomUUID } from "node:crypto";
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { DocumentDefinitionStatus, DocumentDeliveryMode, DocumentFieldType, DocumentOutstandingBalancePolicy, DocumentRequestStatus, DocumentSequenceScope, DocumentSubjectType, DocumentTemplateOwnership, DocumentTemplateVersionStatus, DocumentType, NotificationType, Prisma, Role } from "@prisma/client";
+import { DocumentDefinitionStatus, DocumentDeliveryMode, DocumentFieldType, DocumentGenerationMode, DocumentOutstandingBalancePolicy, DocumentRequestStatus, DocumentSequenceScope, DocumentSubjectType, DocumentTemplateOwnership, DocumentTemplateVersionStatus, DocumentType, NotificationType, Prisma, Role } from "@prisma/client";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { requireUser } from "@/lib/auth";
@@ -21,6 +21,11 @@ import { tenantUploadDirectory } from "@/lib/storage";
 import { assertEditableTemplateOwnership } from "@/lib/services/document-template-ownership";
 import { money, shortDate } from "@/lib/utils";
 import { sendEmailNotification } from "@/lib/services/notifications";
+import { CERTIFICATE_OF_RESIDENCY_CODE } from "@/lib/services/certificate-of-residency";
+import { generateDocument } from "@/lib/services/document-generation";
+import { recordDocumentNotification } from "@/lib/services/document-notifications";
+import { documentContextFromUser } from "@/lib/services/document-runtime-context";
+import { startDocumentWorkflow } from "@/lib/services/document-workflows";
 
 export async function submitDocumentRequestAction(formData: FormData) {
   const user = await requireUser(Role.HOMEOWNER);
@@ -115,8 +120,17 @@ export async function submitDocumentRequestAction(formData: FormData) {
     },
     include: { homeowner: { include: { user: true } }, configuration: { include: { template: true } } },
   });
+  const context = documentContextFromUser(user);
+  const platformCertificate = definitionRecord?.code === CERTIFICATE_OF_RESIDENCY_CODE;
+  if (platformCertificate && definitionRecord.workflowDefinitionId) await startDocumentWorkflow(context, request.id);
+  await recordDocumentNotification({ context, recipientId: user.id, event: "REQUEST_SUBMITTED", subject: "Document request submitted", message: `${definitionRecord?.displayName ?? configRecord?.displayName ?? "Document"} was submitted successfully.`, entityType: "DocumentRequest", entityId: request.id, eventKey: `REQUEST_SUBMITTED:DocumentRequest:${request.id}` });
+  if (status === DocumentRequestStatus.PENDING_APPROVAL) {
+    const approvers = await platformPrisma.user.findMany({ where: { tenantId: user.tenantId, active: true, role: { in: [Role.ADMIN, Role.HOA_ADMIN, Role.SYSTEM_ADMIN] } }, select: { id: true } });
+    await Promise.all(approvers.map((recipient) => recordDocumentNotification({ context, recipientId: recipient.id, event: "APPROVAL_REQUIRED", subject: "Document approval required", message: `${definitionRecord?.displayName ?? configRecord?.displayName ?? "Document"} requires tenant review.`, entityType: "DocumentRequest", entityId: request.id, eventKey: `APPROVAL_REQUIRED:DocumentRequest:${request.id}:${recipient.id}` })));
+  }
   if (status === DocumentRequestStatus.READY_FOR_DOWNLOAD && (configRecord?.template?.active || definitionRecord?.assignedTemplateVersion)) {
-    await generateDocumentForRequest(request.id, user.id, "Instant document generated after valid homeowner submission.");
+    if (platformCertificate) await generateDocument(context, request.id, { mode: DocumentGenerationMode.ISSUE, idempotencyKey: `instant:${request.id}` });
+    else await generateDocumentForRequest(request.id, user.id, "Instant document generated after valid homeowner submission.");
   }
   await prisma.auditLog.create({ data: { actorId: user.id, module: "DOCUMENTS", action: "SUBMIT_DOCUMENT_REQUEST", entityType: "DocumentRequest", entityId: request.id, metadata: { type: legacyType, configurationId: configRecord?.id, definitionId: definitionRecord?.id, subjectType, subjectMemberId: member?.id, purpose: purposeValue, outstandingBalance, deliveryMode: workflowRecord.deliveryMode, paymentRequired: workflowRecord.paymentRequired } } });
   revalidateDocumentPages(request.id);
@@ -320,7 +334,8 @@ export async function generateManualDocumentAction(formData: FormData) {
   const homeownerId = String(formData.get("homeownerId") || "");
   const definitionId = clean(formData.get("definitionId"));
   const purpose = clean(formData.get("purpose"));
-  if (!homeownerId || !definitionId || !purpose) redirect("/admin/documents/new?error=Select%20a%20homeowner%2C%20document%20type%2C%20and%20enter%20a%20purpose.");
+  const onBehalfReason = clean(formData.get("onBehalfReason"));
+  if (!homeownerId || !definitionId || !purpose || !onBehalfReason) redirect("/admin/documents/new?error=Select%20a%20homeowner%2C%20document%20type%2C%20purpose%2C%20and%20office%20request%20reason.");
   const [homeowner, definition] = await Promise.all([
     prisma.homeownerProfile.findFirst({ where: { id: homeownerId, tenantId: admin.tenantId }, include: { user: true } }),
     prisma.documentDefinition.findFirst({ where: { id: definitionId, tenantId: admin.tenantId }, include: { fields: { where: { active: true }, orderBy: [{ displayOrder: "asc" }] }, assignedTemplateVersion: { include: { templateSet: true } } } }),
@@ -337,11 +352,17 @@ export async function generateManualDocumentAction(formData: FormData) {
   const subjectSnapshot = buildSubjectSnapshot({ subjectType: DocumentSubjectType.SELF, homeowner: homeowner! });
   const request = await platformPrisma.$transaction(async (tx) => {
     const created = await tx.documentRequest.create({ data: { tenantId: admin.tenantId, homeownerId, type: definition!.legacyType, definitionId: definition!.id, definitionVersionSnapshot: definition!.version, definitionSnapshot: asJson({ id: definition!.id, code: definition!.code, displayName: definition!.displayName, version: definition!.version, deliveryMode: definition!.deliveryMode, approvalRequired: definition!.approvalRequired, paymentRequired: definition!.paymentRequired, feeAmount: String(definition!.feeAmount), outstandingBalancePolicy: definition!.outstandingBalancePolicy }), templateVersionIdSnapshot: definition!.assignedTemplateVersion!.id, templateDefinitionSnapshot: definition!.assignedTemplateVersion!.definitionJson ?? undefined, subjectType: DocumentSubjectType.SELF, subjectSnapshot: subjectSnapshotJson(subjectSnapshot), requestDataSnapshot: asJson({ definitionId: definition!.id, fields: requestValues, numberOfCopies: 1 }), deliveryModeSnapshot: definition!.deliveryMode, approvalRequiredSnapshot: definition!.approvalRequired || definition!.requiresAdminReview, paymentRequiredSnapshot: definition!.paymentRequired, feeAmountSnapshot: definition!.feeAmount, numberOfCopies: 1, origin: "ADMIN", initiatedById: admin.id, status: initialStatus, purpose, remarks: requestValues.remarks, validityDate: optionalDate(formData.get("validityDate")), scheduledDate: optionalDate(formData.get("scheduledDate")), startTime: requestValues.startTime, endTime: requestValues.endTime, passType: requestValues.passType, vehicleDetails: requestValues.vehicleDetails, partyName: requestValues.partyName, contractorDetails: requestValues.contractorDetails, representativeName: requestValues.representativeName, propertyDetails: requestValues.propertyDetails, outstandingBalanceAtRequest: outstandingBalance } });
-    await tx.documentRequestHistory.create({ data: { tenantId: admin.tenantId, requestId: created.id, status: initialStatus, actorId: admin.id, note: "Created by administrator for a walk-in or office transaction." } });
-    await tx.auditLog.create({ data: { tenantId: admin.tenantId, actorId: admin.id, module: "DOCUMENTS", action: "ADMIN_INITIATE_DOCUMENT", entityType: "DocumentRequest", entityId: created.id, metadata: { homeownerId, definitionId: definition!.id, code: definition!.code, role: admin.role, purpose, status: initialStatus } } });
+    await tx.documentRequestHistory.create({ data: { tenantId: admin.tenantId, requestId: created.id, status: initialStatus, actorId: admin.id, note: `Created by administrator for an office-assisted transaction. Reason: ${onBehalfReason}` } });
+    await tx.auditLog.create({ data: { tenantId: admin.tenantId, actorId: admin.id, module: "DOCUMENTS", action: "ADMIN_INITIATE_DOCUMENT", entityType: "DocumentRequest", entityId: created.id, reason: onBehalfReason, metadata: { homeownerId, definitionId: definition!.id, code: definition!.code, role: admin.role, status: initialStatus } } });
     return created;
   });
+  if (definition.code === CERTIFICATE_OF_RESIDENCY_CODE && definition.workflowDefinitionId) await startDocumentWorkflow(documentContextFromUser(admin), request.id);
+  await recordDocumentNotification({ context: documentContextFromUser(admin), recipientId: homeowner.user.id, event: "REQUEST_SUBMITTED", subject: "Office-assisted document request created", message: `${definition.displayName} was created by the HOA office.`, entityType: "DocumentRequest", entityId: request.id, eventKey: `REQUEST_SUBMITTED:DocumentRequest:${request.id}` });
   if (expectedStatus === DocumentRequestStatus.READY_FOR_DOWNLOAD) {
+    if (definition.code === CERTIFICATE_OF_RESIDENCY_CODE) {
+      await generateDocument(documentContextFromUser(admin), request.id, { mode: DocumentGenerationMode.ISSUE, idempotencyKey: `walkin:${request.id}` });
+      redirect(`/admin/documents/${request.id}?success=created&message=Walk-In%20request%20issued%20through%20the%20document%20orchestrator.`);
+    }
     formData.set("id", request.id); formData.set("operation", "approve"); formData.set("returnTo", `/admin/documents/${request.id}`);
     return processDocumentRequestAction(formData);
   }

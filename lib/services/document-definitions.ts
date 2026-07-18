@@ -166,7 +166,12 @@ export function evaluateDefinitionCompleteness(definition: DocumentDefinition & 
   const numbering = validateNumberingFormat(definition.numberingFormat);
   errors.push(...numbering.errors);
   if (definition.qrEnabled && !definition.numberingFormat.includes("{SEQUENCE")) errors.push("QR-enabled definitions need a valid numbering sequence.");
-  if (definition.requiresAdminReview && !definition.signatoryOfficerId) warnings.push("No default signatory is assigned; approving officer will be used where supported.");
+  const templateMeta = definition.assignedTemplateVersion?.definitionJson && typeof definition.assignedTemplateVersion.definitionJson === "object" && !Array.isArray(definition.assignedTemplateVersion.definitionJson)
+    ? (definition.assignedTemplateVersion.definitionJson as Record<string, Prisma.JsonValue>).meta
+    : null;
+  const templateRequiresSignatory = Boolean(templateMeta && typeof templateMeta === "object" && !Array.isArray(templateMeta) && (templateMeta as Record<string, Prisma.JsonValue>).requiresSignatory === true);
+  if (templateRequiresSignatory && !definition.signatoryOfficerId) errors.push("A valid authorized signatory is required by the published template.");
+  else if (definition.requiresAdminReview && !definition.signatoryOfficerId) warnings.push("No default signatory is assigned.");
   if (definition.signatoryOfficer && (!definition.signatoryOfficer.active || definition.signatoryOfficer.archivedAt)) errors.push("Assigned signatory is inactive or archived.");
 
   const requiredFields = (definition.fields ?? []).filter((field) => field.active && field.required);

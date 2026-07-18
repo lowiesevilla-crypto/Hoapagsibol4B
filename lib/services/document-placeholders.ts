@@ -9,12 +9,13 @@ export type PlaceholderMode = "VALIDATE" | "PREVIEW" | "GENERATE";
 export type PlaceholderDefinition = { key: string; category: string; displayName: string; description: string; dataType: string; sample: string; sensitivity: string | null; ownership: DocumentPlaceholderOwnership };
 export type PlaceholderResolutionContext = {
   tenant?: { name?: string; address?: string; tin?: string; secRegistration?: string; contactNumber?: string; email?: string; logo?: string };
-  document?: { number?: string; title?: string; issueDate?: string; validUntil?: string };
-  subject?: { fullName?: string; relationship?: string; address?: string; birthDate?: string; civilStatus?: string; nationality?: string };
-  property?: { block?: string; lot?: string; address?: string; accountLabel?: string };
+  document?: { number?: string; title?: string; issueDate?: string; issuePlace?: string; status?: string; validUntil?: string };
+  subject?: { fullName?: string; relationship?: string; address?: string; birthDate?: string; civilStatus?: string; nationality?: string; status?: string; residencyStartDate?: string };
+  property?: { block?: string; lot?: string; address?: string; accountLabel?: string; phase?: string; subdivision?: string };
   request?: { purpose?: string; remarks?: string; copies?: string | number };
   signatory?: { name?: string; position?: string };
   verification?: { url?: string; code?: string };
+  system?: { generatedAt?: string; platformName?: string };
   permissions?: ReadonlySet<string>;
   customResolvers?: Record<string, (context: PlaceholderResolutionContext) => unknown>;
 };
@@ -92,7 +93,7 @@ export function resolveDocumentPlaceholders(content: string, context: Placeholde
 
 function readKnownValue(key: string, context: PlaceholderResolutionContext) {
   const [namespace, name] = key.split(".");
-  const source = namespace === "tenant" ? context.tenant : namespace === "document" ? context.document : namespace === "subject" ? context.subject : namespace === "property" ? context.property : namespace === "request" ? context.request : namespace === "signatory" ? context.signatory : namespace === "verification" ? context.verification : undefined;
+  const source = namespace === "tenant" ? context.tenant : namespace === "document" ? context.document : namespace === "subject" ? context.subject : namespace === "property" ? context.property : namespace === "request" ? context.request : namespace === "signatory" ? context.signatory : namespace === "verification" ? context.verification : namespace === "system" ? context.system : undefined;
   if (source && name in source) return (source as Record<string, unknown>)[name];
   const resolver = context.customResolvers?.[key];
   return resolver ? resolver(context) : undefined;

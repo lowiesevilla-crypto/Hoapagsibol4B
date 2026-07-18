@@ -352,3 +352,9 @@ The additive document-definition migration keeps all compatibility relations ten
 Document Definition administration must use the authenticated user's tenant ID for every catalog, field, template, publish, retire, and requestability operation. A published template can be assigned only when the template version, template set, and definition all share the same tenant and definition relationship. Homeowner request forms may show only complete active definitions for the authenticated tenant.
 
 Custom definition-backed requests remain tenant-scoped even when `DocumentRequest.type` is null. The server must load the definition by authenticated `tenantId`, validate every dynamic field against the tenant-owned `DocumentDefinitionField` rows, snapshot the definition/template version, and allocate document numbers through the tenant + definition scoped `DocumentDefinitionCounter`. No client-submitted tenant, definition, field, template, or counter identifier may be trusted without reloading it inside the authenticated tenant boundary.
+
+## Certificate of Residency Tenant Rules
+
+The certified source is platform-read-only and anchored by a stable certified key. Tenant clones, drafts, published versions, workflows, policies, fields, numbering, signatory assignments, requests, versions, releases, and audits remain tenant-owned. Provisioning requires an explicit tenant slug and a same-tenant authorized administrator; it never loops through every tenant or overwrites a tenant-published template.
+
+Homeowner request ownership comes from the authenticated profile. Office-assisted requests reload the tenant homeowner and definition and record the acting administrator and reason. Issuance, release, download, reissue, revocation, workflow history, and audit reads reject cross-tenant IDs. Platform roles still need explicit tenant context.

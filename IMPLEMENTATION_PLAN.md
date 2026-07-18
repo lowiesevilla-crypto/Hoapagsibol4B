@@ -542,3 +542,13 @@ The runtime foundation is organized behind authenticated `DocumentExecutionConte
 - [x] Retained existing generation/PDF/print routes as documented legacy compatibility paths.
 - [ ] Migrate approved request entry points only in a later Product Owner-approved integration milestone.
 - [ ] Keep Certificate of Residency wording and certified-template seeding deferred.
+
+## Certificate of Residency - Milestone 4
+
+- [x] Reuse the platform definition, template, policy, workflow, numbering, orchestrator, renderer, version, verification, audit, notification, and release services.
+- [x] Add stable-code, idempotent local provisioning without overwriting tenant templates or historical records.
+- [x] Seed one published read-only certified source and tenant-owned baseline inheritance.
+- [x] Implement homeowner and office-assisted request entry, correction, approval, issue, release, download, reissue, revoke, and public verification.
+- [x] Preserve legacy Certificate requests/routes as compatibility paths while routing new definition-backed Certificate operations through platform services.
+- [x] Verify 33 focused database/service/security/privacy cases with disposable tenant fixtures and cleanup.
+- [ ] Product Owner executes the nine local UAT scenarios before Milestone 4 approval.

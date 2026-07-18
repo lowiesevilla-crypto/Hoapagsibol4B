@@ -73,7 +73,15 @@ export async function evaluateDocumentPolicies(context: DocumentExecutionContext
   const definition = await platformPrisma.documentDefinition.findFirst({ where: { id: definitionId, tenantId: context.tenantId }, include: { policyAssignments: { where: { enabled: true }, orderBy: { evaluationOrder: "asc" }, include: { policy: true } } } });
   if (!definition) throw new Error("Document definition was not found for the authenticated tenant.");
   const evaluatedAt = new Date();
-  return Promise.all(definition.policyAssignments.map(async (assignment) => evaluatePolicy(context, assignment.policy, input, evaluatedAt)));
+  const results = await Promise.all(definition.policyAssignments.map(async (assignment) => evaluatePolicy(context, assignment.policy, input, evaluatedAt)));
+  await writeDocumentAudit({
+    context,
+    action: "EVALUATE_DOCUMENT_POLICIES",
+    entityType: "DocumentRequest",
+    entityId: input.requestId ?? definition.id,
+    metadata: { definitionId: definition.id, results: results.map((result) => ({ policyCode: result.policyCode, status: result.status, blocking: result.blocking })) },
+  });
+  return results;
 }
 
 async function evaluatePolicy(context: DocumentExecutionContext, policy: { id: string; code: string; type: DocumentPolicyType; enabled: boolean; severity: DocumentPolicySeverity; blocking: boolean; parameters: Prisma.JsonValue | null; version: number }, input: { homeownerId?: string; membershipStatus?: string }, evaluatedAt: Date): Promise<PolicyEvaluationResult> {
@@ -92,6 +100,18 @@ async function evaluatePolicy(context: DocumentExecutionContext, policy: { id: s
       const actual = input.membershipStatus || (input.homeownerId ? (await platformPrisma.homeownerProfile.findFirst({ where: { id: input.homeownerId, tenantId: context.tenantId }, select: { status: true } }))?.status : null);
       const passed = actual === expected;
       return { ...base, status: passed ? "PASS" : policy.blocking ? "FAIL" : "WARNING", summary: passed ? "Membership status satisfies policy." : "Membership status does not satisfy policy.", reasons: passed ? [] : [`Expected membership status ${expected}.`], relevantMetadata: { expectedStatus: expected, actualStatus: actual || "UNKNOWN" } };
+    }
+    if (policy.type === DocumentPolicyType.ACTIVE_RESIDENT) {
+      if (!input.homeownerId) return { ...base, status: "ERROR", summary: "Homeowner context is required.", reasons: ["No homeowner was supplied for residency evaluation."], relevantMetadata: {} };
+      const homeowner = await platformPrisma.homeownerProfile.findFirst({ where: { id: input.homeownerId, tenantId: context.tenantId }, select: { status: true, user: { select: { active: true } } } });
+      const passed = homeowner?.status === "ACTIVE" && homeowner.user.active;
+      return { ...base, status: passed ? "PASS" : policy.blocking ? "FAIL" : "WARNING", summary: passed ? "Resident relationship is active." : "Resident relationship is not active.", reasons: passed ? [] : ["An active homeowner profile and active tenant user are required."], relevantMetadata: { activeResident: Boolean(passed) } };
+    }
+    if (policy.type === DocumentPolicyType.PROPERTY_OWNERSHIP) {
+      if (!input.homeownerId) return { ...base, status: "ERROR", summary: "Homeowner context is required.", reasons: ["No homeowner was supplied for property evaluation."], relevantMetadata: {} };
+      const homeowner = await platformPrisma.homeownerProfile.findFirst({ where: { id: input.homeownerId, tenantId: context.tenantId }, select: { address: true, block: true, lot: true } });
+      const passed = Boolean(homeowner?.address.trim() && homeowner.block.trim() && homeowner.lot.trim());
+      return { ...base, status: passed ? "PASS" : policy.blocking ? "FAIL" : "WARNING", summary: passed ? "Tenant property relationship is verified." : "Tenant property relationship is incomplete.", reasons: passed ? [] : ["A tenant-scoped address, block, and lot relationship is required."], relevantMetadata: { propertyRelationshipVerified: passed } };
     }
     return { ...base, status: "SKIPPED", summary: "No safe evaluator is registered for this policy type yet.", reasons: ["The policy remains configurable for a future domain adapter."], relevantMetadata: {} };
   } catch (error) {

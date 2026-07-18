@@ -505,3 +505,12 @@ Release gate:
 - Added workflow-aware policy summaries and request status preparation; unsafe unconditional generation is no longer implied.
 
 Deferred: full walk-in workflow reconstruction, payment processing, release acknowledgement, public QR verification, and the professional editor remain outside this phase.
+
+# Certificate of Residency Reference Implementation
+
+- Added a controlled, idempotent Certificate definition and certified-template provisioning path with tenant-owned published inheritance and restore-as-draft behavior.
+- Added active-resident and property eligibility adapters, tenant approval workflow, configured signatory requirement, COR numbering, immutable HTML issue/reissue, release, exact-version download/print, and revocation.
+- Added homeowner correction/resubmission and workflow-aware office-assisted requests with mandatory acting reason.
+- Public verification now uses opaque hashed tokens, rate limiting, noindex metadata, and a projection that excludes resident, property, balance, approval, contact, and internal data.
+- Added `RETURNED_FOR_CORRECTION` and `DOCUMENT_REISSUED` through additive local migration `20260718230000_certificate_residency_reference`.
+- Product Owner UAT remains the release gate. No production seed, deployment, push, or merge was performed.

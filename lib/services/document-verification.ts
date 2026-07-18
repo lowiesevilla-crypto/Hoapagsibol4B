@@ -48,6 +48,31 @@ export async function verifyDocumentToken(rawToken: string) {
   return { status, tenantName: token.tenant.name, documentNumber: version?.documentNumber ?? token.request.documentNumber, documentType: version?.definition?.displayName ?? token.request.definition?.displayName ?? token.request.type ?? "Document", issueDate: version?.issuedAt ?? token.request.issueDate, validUntil: token.request.validityDate };
 }
 
+export async function verifyLegacyDocumentCode(code: string) {
+  if (!/^[A-Za-z0-9]{12,32}$/.test(code)) return invalidVerificationResult();
+  const request = await platformPrisma.documentRequest.findUnique({
+    where: { verificationCode: code.toUpperCase() },
+    select: {
+      tenantId: true,
+      documentNumber: true,
+      issueDate: true,
+      validityDate: true,
+      definition: { select: { displayName: true } },
+      type: true,
+      versions: { orderBy: { version: "desc" }, take: 1, select: { issuedStatus: true, issuedAt: true, revokedAt: true, definition: { select: { displayName: true } } } },
+    },
+  });
+  if (!request?.documentNumber) return invalidVerificationResult();
+  const tenant = await platformPrisma.tenant.findUnique({ where: { id: request.tenantId }, select: { name: true } });
+  if (!tenant) return invalidVerificationResult();
+  const version = request.versions[0];
+  const expired = request.validityDate ? request.validityDate.getTime() <= Date.now() : false;
+  const revoked = version?.issuedStatus === DocumentIssuedStatus.REVOKED || Boolean(version?.revokedAt);
+  const status = revoked ? "REVOKED" : expired ? "EXPIRED" : "VALID";
+  await platformPrisma.auditLog.create({ data: { tenantId: request.tenantId, module: "DOCUMENTS", action: "VERIFY_LEGACY_DOCUMENT_CODE", entityType: "DocumentRequest", metadata: { result: status } as Prisma.InputJsonValue } });
+  return { status, tenantName: tenant.name, documentNumber: request.documentNumber, documentType: version?.definition?.displayName ?? request.definition?.displayName ?? request.type ?? "Document", issueDate: version?.issuedAt ?? request.issueDate, validUntil: request.validityDate };
+}
+
 export async function revokeDocumentVerificationToken(context: DocumentExecutionContext, tokenId: string, reason: string) {
   requireDocumentPermission(context, "REVOKE_VERIFICATION");
   if (!reason.trim()) throw new Error("A reason is required to revoke a verification token.");

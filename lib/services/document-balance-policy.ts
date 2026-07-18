@@ -4,7 +4,7 @@ import {
   Role,
   type Prisma,
 } from "@prisma/client";
-import { prisma } from "@/lib/db";
+import { platformPrisma } from "@/lib/db";
 import { money } from "@/lib/utils";
 
 export const defaultDocumentOutstandingBalancePolicy = DocumentOutstandingBalancePolicy.BLOCK_DOWNLOAD;
@@ -42,7 +42,7 @@ export function normalizeOutstandingBalancePolicy(value: unknown) {
 export async function getQualifyingHomeownerBalance(
   tenantId: string,
   homeownerId: string,
-  client: Pick<Prisma.TransactionClient, "bill"> = prisma as unknown as Pick<Prisma.TransactionClient, "bill">,
+  client: Pick<Prisma.TransactionClient, "bill"> = platformPrisma,
 ) {
   const unpaid = await client.bill.aggregate({
     where: { tenantId, homeownerId, archivedAt: null, balance: { gt: 0 } },

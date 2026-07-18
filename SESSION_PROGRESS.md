@@ -1108,6 +1108,16 @@ The editor must not resemble Canva, Figma, or a technical block/JSON editor.
 Implementation will begin only after Document Module Architecture
 Consolidation Phase 1 is completed and verified.
 
+# 2026-07-18 - Certificate of Residency Milestone 4
+
+- Implemented the first production reference document on the Document Platform without adding another registry or generation engine.
+- Added explicit local tenant provisioning, certified template lineage, active-resident/property policies, tenant approval workflow, COR numbering, configured signatory enforcement, and optional template metadata omission.
+- New homeowner and office-assisted Certificate requests start the platform workflow; office requests require an acting reason.
+- Admin review now exposes return, reject, approve, preview, issue, release, exact immutable download/print, reissue, and revoke actions.
+- Replaced the public verification page's private legacy projection with token-service output limited to safe metadata, rate limiting, and noindex metadata.
+- Applied local additive migration `20260718230000_certificate_residency_reference` and passed the cleanup-backed 33-check Certificate harness.
+- Product Owner UAT remains required; no push, merge, deployment, or production seed occurred.
+
 ## 2026-07-18 - Certified Template Foundation Phase 2B.1
 
 - Added additive ownership metadata to existing `DocumentTemplateSet` and `DocumentTemplateVersion` records.

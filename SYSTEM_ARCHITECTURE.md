@@ -782,3 +782,9 @@ Sprint 6B-1B final hotfix completes the transitional custom-request path. `Docum
 Milestone 3 adds a server-only configuration-driven coordinator over the Milestone 2 registry, capability, policy, workflow, template, placeholder, numbering, verification, audit, and notification services. It builds a renderer-neutral model and supports safe HTML as the native immutable output. Preview and validation are side-effect free; issue and reissue use database-backed idempotency and a short final transaction for number allocation, final QR render, hash, version/token persistence, request state, and critical audit events.
 
 Release is a separate idempotent operation that changes release metadata only and never regenerates output. Existing legacy generation, PDF, print, and download paths remain active compatibility adapters until a later route migration is approved. See `DOCUMENT_GENERATION_ENGINE.md` for the sequence, failure recovery, privacy boundary, and extension contract.
+
+## Certificate of Residency Reference Adapter
+
+Milestone 4 configures, rather than forks, the generic Document Platform. `certificate-of-residency.ts` owns stable codes, the certified A4 template, and explicit tenant provisioning. `document-certificate-lifecycle.ts` composes policy/workflow decisions with the generic orchestrator and release service. Certificate wording remains template data; the generation orchestrator contains no Certificate-type branch.
+
+New definition-backed Certificate requests snapshot the definition and published template. Official issue requires the configured signatory and completed workflow. Released downloads read `DocumentVersion.generatedContent` directly and never render again. Public verification resolves an opaque token hash and returns only safe metadata. Legacy enum fields, requests, generated content, PDF, and print routes remain readable compatibility data.

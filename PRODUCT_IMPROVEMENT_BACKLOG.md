@@ -3260,6 +3260,16 @@ Acceptance Criteria:
 - Unauthorized users cannot edit or publish templates.
 - No existing issued-document history is mutated.
 
+## Certificate of Residency Reference Implementation
+
+Status: Engineering complete; Product Owner UAT required.
+
+- [x] Add a versioned read-only HOAHub certified Certificate template and controlled tenant provisioning.
+- [x] Route new Certificate requests through platform policy, workflow, generation, release, verification, audit, and notification services.
+- [x] Add correction/resubmission, rejection, issuance, exact immutable download/print, reissue, and revocation.
+- [x] Add privacy-safe public QR verification and tenant-isolation coverage.
+- [ ] Complete the focused Product Owner UAT in `docs/CERTIFICATE_OF_RESIDENCY.md` before release approval.
+
 ## Certified Template Foundation - Phase 2B.1
 
 Status: Engineering ready for Product Owner UAT.

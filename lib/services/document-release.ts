@@ -8,6 +8,7 @@ import {
 import { platformPrisma } from "@/lib/db";
 import { recordDocumentGenerationEvent } from "@/lib/services/document-generation-events";
 import { notifyDocumentOwner } from "@/lib/services/document-notifications";
+import { writeDocumentAudit } from "@/lib/services/document-runtime-audit";
 import { DocumentRuntimeError } from "@/lib/services/document-runtime-errors";
 import {
   requireDocumentPermission,
@@ -144,4 +145,34 @@ export async function getIssuedDocument(
     );
   }
   return documentVersion;
+}
+
+export async function revokeIssuedDocument(
+  context: DocumentExecutionContext,
+  input: { documentVersionId: string; reason: string },
+) {
+  requireDocumentPermission(context, "REVOKE_DOCUMENT");
+  const reason = input.reason.trim();
+  if (reason.length < 3) throw new DocumentRuntimeError("VALIDATION_FAILED", "A revocation reason is required.");
+  const current = await platformPrisma.documentVersion.findFirst({
+    where: { id: input.documentVersionId, tenantId: context.tenantId },
+    include: { request: { include: { homeowner: { select: { userId: true, tenantId: true } } } } },
+  });
+  if (!current || current.request.tenantId !== context.tenantId || current.request.homeowner.tenantId !== context.tenantId) {
+    throw new DocumentRuntimeError("NOT_FOUND", "Issued document was not found for the authenticated tenant.");
+  }
+  if (current.issuedStatus === DocumentIssuedStatus.REVOKED) return { documentVersion: current, revoked: false, idempotentReplay: true } as const;
+  const revokedAt = new Date();
+  const documentVersion = await platformPrisma.$transaction(async (tx) => {
+    const fresh = await tx.documentVersion.findFirst({ where: { id: current.id, tenantId: context.tenantId }, select: { id: true, issuedStatus: true } });
+    if (!fresh) throw new DocumentRuntimeError("NOT_FOUND", "Issued document disappeared before revocation.");
+    if (fresh.issuedStatus === DocumentIssuedStatus.REVOKED) return tx.documentVersion.findUniqueOrThrow({ where: { id: fresh.id } });
+    const updated = await tx.documentVersion.update({ where: { id: fresh.id }, data: { issuedStatus: DocumentIssuedStatus.REVOKED, revokedAt, revokedById: context.authenticatedUserId, revocationReason: reason } });
+    await tx.documentVerificationToken.updateMany({ where: { tenantId: context.tenantId, documentVersionId: fresh.id, status: "VALID" }, data: { status: "REVOKED", revokedAt, revokedById: context.authenticatedUserId } });
+    await tx.documentRequestHistory.create({ data: { tenantId: context.tenantId, requestId: current.requestId, status: current.request.status, actorId: context.authenticatedUserId, note: `Revoked issued document ${current.documentNumber}.` } });
+    await writeDocumentAudit({ context, action: "REVOKE_ISSUED_DOCUMENT", entityType: "DocumentVersion", entityId: fresh.id, reason, before: { issuedStatus: fresh.issuedStatus }, after: { issuedStatus: DocumentIssuedStatus.REVOKED }, client: tx });
+    return updated;
+  });
+  await notifyDocumentOwner(context, current.request.homeowner.userId, "REVOKED", "Document revoked", `${current.documentNumber} has been revoked. Contact the HOA office for assistance.`, current.requestId, { documentNumber: current.documentNumber }, `REVOKED:DocumentVersion:${current.id}`);
+  return { documentVersion, revoked: true, idempotentReplay: false } as const;
 }

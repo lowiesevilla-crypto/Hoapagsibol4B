@@ -3077,4 +3077,159 @@ Engineering Note:
 - Admin override is limited to `ALLOW_ADMIN_OVERRIDE`, requires an authorized role and reason, and writes request history plus audit logs.
 - Added `scripts/verify-document-balance-policy-hotfix.ts` rollback verification for policy behavior, request blocking, paid-document separation, override/revoke behavior, household ownership, tenant isolation, and migration defaults.
 - Status remains Open until Product Owner UAT passes.
+## Improvement #099 – Professional Word-Style Document Template Editor
 
+Module:
+Document Management / Templates
+
+Priority:
+Critical
+
+Status:
+Open
+
+Background:
+The current template editor exposes technical blocks, revisions, template
+sets, and version structures that are confusing for ordinary HOA
+administrators.
+
+The desired editor must work like a simplified Microsoft Word document editor,
+not like Canva, Figma, a page builder, or a raw JSON/block editor.
+
+Objective:
+Provide an intuitive A4 document-authoring environment where authorized tenant
+administrators can format official HOA documents, insert dynamic fields,
+preview the final output, save drafts, publish versions, and preserve historical
+issued-document integrity.
+
+Required Capabilities:
+
+Page Setup:
+- A4, Letter, Legal, and custom page size
+- Portrait and Landscape orientation
+- Top, bottom, left, and right margins
+- Header and footer spacing
+- Page border
+- Page background where allowed
+- Single-column and multi-column layout
+- Page break
+- Section break
+- Print-safe layout
+- Multiple-page document support
+
+Text Formatting:
+- Font family
+- Font size
+- Bold
+- Italic
+- Underline
+- Strikethrough
+- Superscript
+- Subscript
+- Font color
+- Text highlight color
+- Clear formatting
+- Change case
+- Paragraph alignment
+- Line spacing
+- Paragraph spacing
+- First-line indent
+- Hanging indent
+- Left and right indent
+- Bullets
+- Numbering
+- Multilevel lists
+- Undo and redo
+- Copy and paste while sanitizing unsupported formatting
+
+Insert Tools:
+- Horizontal line
+- Vertical line
+- Adjustable line thickness
+- Solid, dashed, and dotted line styles
+- Text box
+- Table
+- Image
+- Tenant logo
+- Authorized signature
+- Dynamic placeholder
+- Date and time
+- Document number
+- Page number
+- QR verification code
+- Watermark
+- Header
+- Footer
+- Page break
+- Non-breaking space
+- Special characters
+
+Table Tools:
+- Insert and delete rows
+- Insert and delete columns
+- Merge cells
+- Split cells
+- Cell alignment
+- Cell padding
+- Border style
+- Border thickness
+- Border color
+- Background fill
+- Column width
+- Row height
+- Repeat header row
+- Prevent inappropriate row splitting across pages
+
+Dynamic Fields:
+- Association fields
+- Homeowner fields
+- Property fields
+- Household-member fields
+- Request fields
+- Document fields
+- Payment fields
+- Signatory fields
+- Date fields
+- QR verification field
+- Conditional fields where safely supported
+- Default values
+- Fallback text
+- User-friendly field picker
+- Technical placeholder names hidden from ordinary administrators
+
+Editor Layout:
+- Familiar toolbar
+- Header editing area
+- Body editing area
+- Footer editing area
+- A4 live preview
+- Zoom controls
+- Page navigation
+- Ruler where practical
+- Desktop-first authoring
+- Mobile and tablet view-only or limited editing
+- Clear Draft and Published indicators
+
+Versioning:
+- One published version at a time
+- Editing a published template creates a draft
+- Draft can be saved repeatedly
+- Publishing archives the previous published version
+- Historical issued documents retain the exact published version and content
+  snapshot used during generation
+- Restore an old version as a new draft
+- Never directly alter an already issued document
+
+Acceptance Criteria:
+- Ordinary administrators do not see block JSON or internal IDs.
+- Editor behaves like a simplified Microsoft Word interface.
+- A4 preview closely matches generated PDF and print output.
+- Header, body, and footer are editable.
+- Horizontal and vertical lines render consistently.
+- Font colors and formatting persist.
+- Tables render consistently in preview, PDF, download, and print.
+- Dynamic placeholders are validated before publication.
+- Draft changes do not affect the currently published template.
+- Tenant isolation is enforced.
+- Unauthorized users cannot edit or publish templates.
+- No existing issued-document history is mutated.

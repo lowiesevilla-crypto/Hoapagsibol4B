@@ -105,6 +105,32 @@ Release Gate
 
 Do not mark fixed until Product Owner UAT verifies active Certificate of Residency submission, inactive hiding, subject selection, snapshots, and tenant isolation.
 
+# Improvement #099
+
+Module
+
+Documents
+
+Priority
+
+🟠 High
+
+Status
+
+Testing
+
+Problem
+
+Document administration had two competing administrator-facing template/configuration surfaces: the legacy `/admin/document-templates` body editor and the newer Document Definition catalog with template versions, draft/publish workflow, and A4 preview.
+
+Engineering Update
+
+Phase 1 consolidates administrator navigation through `/admin/documents`, redirects the legacy template route to the consolidated workspace, preserves the legacy screen code for rollback/reference, exposes document type requestability and hidden reasons, simplifies template presentation into Current Published Template, Current Draft, and Version History, and keeps DocumentDefinition as the authoritative architecture.
+
+Release Gate
+
+Do not mark complete until Product Owner UAT verifies the Document Management hub, legacy-route redirect, template publishing presentation, hidden document reasons, tenant isolation, and existing request/review/generation workflows.
+
 # Improvement #063
 
 Module

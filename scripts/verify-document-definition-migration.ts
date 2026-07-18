@@ -155,6 +155,7 @@ async function main() {
   const expectedPairs = await collectExpectedPairs();
   const [
     definitionCount,
+    legacyDefinitionCount,
     linkedConfigurationCount,
     fieldCount,
     linkedFieldCount,
@@ -167,6 +168,7 @@ async function main() {
     fingerprints,
   ] = await Promise.all([
     prisma.documentDefinition.count(),
+    prisma.documentDefinition.count({ where: { legacyType: { not: null } } }),
     prisma.documentTypeConfiguration.count({ where: { definitionId: { not: null } } }),
     prisma.documentDefinitionField.count(),
     prisma.documentFieldConfiguration.count({ where: { definitionFieldId: { not: null } } }),
@@ -183,7 +185,8 @@ async function main() {
   const expectedVersionContentHash = expectedHash("EXPECTED_VERSION_CONTENT_HASH");
   const expectedDocumentNumberHash = expectedHash("EXPECTED_DOCUMENT_NUMBER_HASH");
 
-  assertCondition(definitionCount === expectedPairs.length, "definition count does not match expected tenant/type pairs", { definitionCount, expectedPairs: expectedPairs.length });
+  assertCondition(definitionCount >= expectedPairs.length, "definition count is below expected tenant/type pairs", { definitionCount, expectedPairs: expectedPairs.length });
+  assertCondition(legacyDefinitionCount === expectedPairs.length, "legacy definition count does not match expected tenant/type pairs", { legacyDefinitionCount, expectedPairs: expectedPairs.length });
   assertCondition(linkedConfigurationCount === await prisma.documentTypeConfiguration.count(), "not all configurations are linked");
   assertCondition(linkedFieldCount === await prisma.documentFieldConfiguration.count(), "not all legacy fields are linked");
   assertCondition(linkedTemplateCount === await prisma.documentTemplate.count(), "not all templates are linked");
@@ -201,6 +204,7 @@ async function main() {
   const result = {
     expectedDefinitionPairs: expectedPairs.length,
     definitionCount,
+    legacyDefinitionCount,
     linkedConfigurationCount,
     fieldCount,
     linkedFieldCount,

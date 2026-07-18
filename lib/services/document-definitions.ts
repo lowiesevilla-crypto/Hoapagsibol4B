@@ -118,6 +118,11 @@ export type DocumentDefinitionCompleteness = {
   warnings: string[];
 };
 
+export type DocumentDefinitionVisibility = DocumentDefinitionCompleteness & {
+  hiddenReasons: string[];
+  visibleToHomeowners: boolean;
+};
+
 export async function validateDocumentDefinitionCompleteness(definitionId: string, tenantId: string): Promise<DocumentDefinitionCompleteness> {
   const definition = await platformPrisma.documentDefinition.findFirst({
     where: { id: definitionId, tenantId },
@@ -181,6 +186,24 @@ export function evaluateDefinitionCompleteness(definition: DocumentDefinition & 
   return { status, requestable: status === "COMPLETE" && errors.length === 0, errors, warnings };
 }
 
+export function evaluateDocumentDefinitionVisibility(definition: DocumentDefinition & {
+  fields?: { key: string; required: boolean; active: boolean }[];
+  assignedTemplateVersion?: { status: DocumentTemplateVersionStatus; definitionJson: Prisma.JsonValue; templateSet: { definitionId: string; tenantId: string; active: boolean } } | null;
+  signatoryOfficer?: { active: boolean; archivedAt: Date | null } | null;
+}): DocumentDefinitionVisibility {
+  const completeness = evaluateDefinitionCompleteness(definition);
+  const hiddenReasons: string[] = [];
+  if (definition.archivedAt || definition.status === DocumentDefinitionStatus.ARCHIVED) hiddenReasons.push("Archived");
+  if (!definition.active || definition.status === DocumentDefinitionStatus.INACTIVE) hiddenReasons.push("Inactive");
+  if (!definition.homeownerDownloadEnabled) hiddenReasons.push("Homeowner visibility disabled");
+  if (!definition.assignedTemplateVersion) hiddenReasons.push("No published template");
+  if (completeness.status === "DRAFT_ONLY") hiddenReasons.push("Draft only");
+  if (completeness.status === "INVALID_TEMPLATE") hiddenReasons.push("Invalid template");
+  if (completeness.errors.length) hiddenReasons.push("Incomplete configuration");
+  const visibleToHomeowners = completeness.requestable && definition.homeownerDownloadEnabled && hiddenReasons.length === 0;
+  return { ...completeness, hiddenReasons: [...new Set(hiddenReasons)], visibleToHomeowners };
+}
+
 export async function getRequestableDocumentDefinitions(tenantId: string) {
   const definitions = await platformPrisma.documentDefinition.findMany({
     where: {
@@ -196,7 +219,7 @@ export async function getRequestableDocumentDefinitions(tenantId: string) {
     },
     orderBy: [{ displayOrder: "asc" }, { displayName: "asc" }],
   });
-  return definitions.filter((definition) => evaluateDefinitionCompleteness(definition).requestable);
+  return definitions.filter((definition) => evaluateDocumentDefinitionVisibility(definition).visibleToHomeowners);
 }
 
 export function workflowPresetForDefinition(definition: Pick<DocumentDefinition, "deliveryMode" | "paymentRequired" | "approvalRequired" | "requiresAdminReview" | "allowImmediateDownload">) {

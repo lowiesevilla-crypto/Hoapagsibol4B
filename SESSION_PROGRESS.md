@@ -1,5 +1,34 @@
 # Session Progress
 
+## 2026-07-18 - Document Module Architecture Consolidation Phase 1
+
+Branch:
+feature/homeowner-mobile
+
+Completed:
+
+- Committed the prior mobile login UI cleanup as `f5a1eba Improve mobile login page layout` before starting this clean preflight.
+- Confirmed the authoritative document architecture is `DocumentDefinition`, `DocumentDefinitionField`, `DocumentTemplateSet`, `DocumentTemplateVersion`, `DocumentRequest`, generated snapshots, verification tokens, and document counters.
+- Redirected legacy `/admin/document-templates` to `/admin/documents?section=templates` while preserving the old screen code in `legacy-screen.tsx`.
+- Consolidated `/admin/documents` into one Document Management hub with Document Types, Templates, Requests, and Issued Documents sections.
+- Removed old Document Templates and duplicate document-definition entries from the sidebar navigation.
+- Added admin-visible requestability and hidden-reason evaluation for homeowner catalog visibility.
+- Simplified template presentation into Current Published Template, Current Draft, and Version History.
+- Updated template publishing so one version is assigned/published at a time and older published versions in the same set are retired, not deleted.
+- Added a non-destructive draft discard action that retires drafts.
+- Tenant-scoped the older generated-documents and archive deep-link routes.
+- Hardened Bug #098 access resolution with a definition-snapshot balance-policy fallback when a historical request lacks a live definition relation.
+
+Inventory findings:
+
+- Pagsibol has 8 legacy-backed definitions with published templates; Certificate of Indigency, Move-In Pass, and Move-Out Pass are missing custom definitions.
+- Test HOA has document request history, one legacy template, and mixed definition states; Certificate of Residency is archived, Certificate of Indigency is missing, and some definitions are inactive or incomplete because no active assigned published template exists.
+- Certificate of Indigency is not visible because no tenant-owned custom definition currently exists for it; it is not a homeowner-query filtering bug.
+
+Release Gate:
+
+- Product Owner UAT must verify the consolidated Document Management entry, legacy redirect, hidden reason display, template version presentation, Certificate of Indigency finding, Bug #098 access policy trace, and existing homeowner/admin document workflows.
+
 ## 2026-07-12 - Urgent Finance Migration and Single Receipt Hotfix
 
 Branch:

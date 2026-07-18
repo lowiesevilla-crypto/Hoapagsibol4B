@@ -16,6 +16,27 @@ This version is intended for development and internal User Acceptance Testing (U
 
 ---
 
+## Document Management Consolidation Phase 1
+
+### Completed
+
+- Consolidated administrator entry through `/admin/documents` with Document Types, Templates, Requests, and Issued Documents sections.
+- Redirected legacy `/admin/document-templates` to the consolidated Templates section while retaining the old screen code for rollback/reference.
+- Removed duplicate legacy template navigation from the admin sidebar.
+- Added document type requestability and hidden-reason visibility for inactive, archived, incomplete, draft-only, missing-template, and homeowner-hidden definitions.
+- Simplified template administration into Current Published Template, Current Draft, and Version History.
+- Retired older published template versions when a new draft is published, preserving history without allowing competing published versions in one template set.
+- Tenant-scoped legacy generated-document and archive list routes.
+- Hardened outstanding-balance policy resolution with a request snapshot fallback for historical documents.
+
+### UAT Notes
+
+- Certificate of Indigency is currently missing as a tenant-owned custom definition in the local catalog, so it is not visible to homeowners.
+- Pagsibol has the eight legacy-backed definitions linked to templates; Test HOA has mixed inactive, archived, and incomplete definitions that now surface explicit reasons.
+- Document Module Architecture Consolidation remains open until Product Owner UAT passes.
+
+---
+
 ## One Payment / One Receipt Finance Hotfix
 
 ### Completed

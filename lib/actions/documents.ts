@@ -425,6 +425,8 @@ export async function saveDocumentTypeConfigurationAction(formData: FormData) {
     fail(error instanceof Error ? error.message : "Field definitions are invalid.");
   }
   if (!displayName || fields.length === 0) fail("Enter a display name and at least one field definition.");
+  const definitionFields = configRecord.definitionId ? await prisma.documentDefinitionField.findMany({ where: { tenantId: admin.tenantId, definitionId: configRecord.definitionId }, select: { id: true, key: true } }) : [];
+  const definitionFieldByKey = new Map(definitionFields.map((field) => [field.key, field.id]));
   await platformPrisma.$transaction([
     platformPrisma.documentTypeConfiguration.update({
       where: { id },
@@ -452,7 +454,7 @@ export async function saveDocumentTypeConfigurationAction(formData: FormData) {
     }),
     platformPrisma.documentFieldConfiguration.deleteMany({ where: { tenantId: admin.tenantId, configId: id } }),
     platformPrisma.documentFieldConfiguration.createMany({
-      data: fields.map((field, index) => ({ ...field, tenantId: admin.tenantId, configId: id, displayOrder: index * 10 + 10 })),
+      data: fields.map((field, index) => ({ ...field, tenantId: admin.tenantId, configId: id, definitionFieldId: definitionFieldByKey.get(field.key), displayOrder: index * 10 + 10 })),
     }),
     platformPrisma.auditLog.create({ data: { tenantId: admin.tenantId, actorId: admin.id, module: "DOCUMENTS", action: "UPDATE_DOCUMENT_TYPE_CONFIGURATION", entityType: "DocumentTypeConfiguration", entityId: id, metadata: { type: configRecord.type, deliveryMode, feeAmount, maxCopies, active: formData.get("active") === "on" } } }),
   ]);
@@ -691,6 +693,7 @@ export async function saveDocumentTemplateVersionAction(formData: FormData) {
       await tx.auditLog.create({ data: { tenantId: admin.tenantId, actorId: admin.id, module: "DOCUMENTS", action: "CREATE_TEMPLATE_SET", entityType: "DocumentTemplateSet", entityId: createdSet.id, metadata: { definitionId, draftVersionId: draft.id } } });
       return { createdSet, draft };
     });
+    revalidatePath("/admin/documents");
     redirect(`/admin/settings/document-definitions/${definitionId}/templates/${set.draft.id}/edit?success=created&message=Draft%20template%20created.`);
   }
   if (operation === "duplicateVersion") {
@@ -701,6 +704,7 @@ export async function saveDocumentTemplateVersionAction(formData: FormData) {
     const maxVersion = Math.max(0, ...(await prisma.documentTemplateVersion.findMany({ where: { tenantId: admin.tenantId, templateSetId: sourceRecord.templateSetId }, select: { version: true } })).map((item) => item.version));
     const draft = await platformPrisma.documentTemplateVersion.create({ data: { tenantId: admin.tenantId, templateSetId: sourceRecord.templateSetId, version: maxVersion + 1, status: DocumentTemplateVersionStatus.DRAFT, schemaVersion: sourceRecord.schemaVersion, definitionJson: sourceRecord.definitionJson ?? asJson(defaultTemplateDefinition(definitionRecord.displayName)), previewMetadata: asJson({ duplicatedFrom: sourceRecord.id }), createdById: admin.id } });
     await platformPrisma.auditLog.create({ data: { tenantId: admin.tenantId, actorId: admin.id, module: "DOCUMENTS", action: "DUPLICATE_TEMPLATE_VERSION", entityType: "DocumentTemplateVersion", entityId: draft.id, metadata: { definitionId, sourceId } } });
+    revalidatePath("/admin/documents");
     redirect(`/admin/settings/document-definitions/${definitionId}/templates/${draft.id}/edit?success=duplicated&message=Draft%20version%20created.`);
   }
   const current = versionId ? await prisma.documentTemplateVersion.findFirst({ where: { id: versionId, tenantId: admin.tenantId }, include: { templateSet: true } }) : null;
@@ -713,7 +717,18 @@ export async function saveDocumentTemplateVersionAction(formData: FormData) {
       platformPrisma.auditLog.create({ data: { tenantId: admin.tenantId, actorId: admin.id, module: "DOCUMENTS", action: "RETIRE_TEMPLATE_VERSION", entityType: "DocumentTemplateVersion", entityId: currentRecord.id, metadata: { definitionId, version: currentRecord.version } } }),
     ]);
     revalidatePath(`/admin/settings/document-definitions/${definitionId}/templates`);
+    revalidatePath("/admin/documents");
     redirect(`/admin/settings/document-definitions/${definitionId}/templates?success=retired&message=Template%20version%20retired.`);
+  }
+  if (operation === "discardDraft") {
+    if (currentRecord.status !== DocumentTemplateVersionStatus.DRAFT) fail("Only draft versions can be discarded.");
+    await platformPrisma.$transaction([
+      platformPrisma.documentTemplateVersion.update({ where: { id: currentRecord.id }, data: { status: DocumentTemplateVersionStatus.RETIRED } }),
+      platformPrisma.auditLog.create({ data: { tenantId: admin.tenantId, actorId: admin.id, module: "DOCUMENTS", action: "DISCARD_TEMPLATE_DRAFT", entityType: "DocumentTemplateVersion", entityId: currentRecord.id, metadata: { definitionId, version: currentRecord.version } } }),
+    ]);
+    revalidatePath(`/admin/settings/document-definitions/${definitionId}/templates`);
+    revalidatePath("/admin/documents");
+    redirect(`/admin/settings/document-definitions/${definitionId}/templates?success=discarded&message=Draft%20retired%20without%20deleting%20version%20history.`);
   }
   const templateDefinition = templateDefinitionFromForm(formData, definitionRecord.displayName);
   const validation = validateTemplateDefinition(templateDefinition);
@@ -721,12 +736,14 @@ export async function saveDocumentTemplateVersionAction(formData: FormData) {
   if (operation === "publish") {
     if (currentRecord.status !== DocumentTemplateVersionStatus.DRAFT) fail("Only draft versions can be published.");
     await platformPrisma.$transaction(async (tx) => {
+      await tx.documentTemplateVersion.updateMany({ where: { tenantId: admin.tenantId, templateSetId: currentRecord.templateSetId, status: DocumentTemplateVersionStatus.PUBLISHED, id: { not: currentRecord.id } }, data: { status: DocumentTemplateVersionStatus.RETIRED } });
       const published = await tx.documentTemplateVersion.update({ where: { id: currentRecord.id }, data: { status: DocumentTemplateVersionStatus.PUBLISHED, definitionJson: asJson(templateDefinition), publishedAt: new Date(), publishedById: admin.id } });
       await tx.documentDefinition.update({ where: { id: definitionId }, data: { assignedTemplateVersionId: published.id, updatedById: admin.id, version: { increment: 1 } } });
       await tx.auditLog.create({ data: { tenantId: admin.tenantId, actorId: admin.id, module: "DOCUMENTS", action: "PUBLISH_TEMPLATE_VERSION", entityType: "DocumentTemplateVersion", entityId: currentRecord.id, metadata: { definitionId, version: currentRecord.version } } });
     });
     revalidatePath(`/admin/settings/document-definitions/${definitionId}/templates`);
     revalidatePath("/admin/settings/document-definitions");
+    revalidatePath("/admin/documents");
     revalidatePath("/portal/documents");
     redirect(`/admin/settings/document-definitions/${definitionId}/templates?success=published&message=Template%20version%20published%20and%20assigned.`);
   }
@@ -736,6 +753,7 @@ export async function saveDocumentTemplateVersionAction(formData: FormData) {
     platformPrisma.auditLog.create({ data: { tenantId: admin.tenantId, actorId: admin.id, module: "DOCUMENTS", action: "SAVE_TEMPLATE_DRAFT", entityType: "DocumentTemplateVersion", entityId: currentRecord.id, metadata: { definitionId, version: currentRecord.version, operation } } }),
   ]);
   revalidatePath(`/admin/settings/document-definitions/${definitionId}/templates/${currentRecord.id}/edit`);
+  revalidatePath("/admin/documents");
   redirect(`/admin/settings/document-definitions/${definitionId}/templates/${currentRecord.id}/edit?success=saved&message=Draft%20saved.`);
 }
 

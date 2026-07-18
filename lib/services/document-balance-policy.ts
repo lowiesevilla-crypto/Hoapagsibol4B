@@ -56,10 +56,15 @@ export type DocumentAccessPolicyRequest = {
   paymentRequiredSnapshot: boolean;
   allowDownloadDespiteBalance: boolean;
   definition?: { outstandingBalancePolicy: DocumentOutstandingBalancePolicy } | null;
+  definitionSnapshot?: unknown;
 };
 
-export function policyForDocumentRequest(request: { definition?: { outstandingBalancePolicy: DocumentOutstandingBalancePolicy } | null }) {
-  return request.definition?.outstandingBalancePolicy ?? defaultDocumentOutstandingBalancePolicy;
+export function policyForDocumentRequest(request: { definition?: { outstandingBalancePolicy: DocumentOutstandingBalancePolicy } | null; definitionSnapshot?: unknown }) {
+  const snapshot = request.definitionSnapshot && typeof request.definitionSnapshot === "object" && !Array.isArray(request.definitionSnapshot)
+    ? request.definitionSnapshot as Record<string, unknown>
+    : null;
+  const snapshotPolicy = normalizeOutstandingBalancePolicy(snapshot?.outstandingBalancePolicy);
+  return request.definition?.outstandingBalancePolicy ?? snapshotPolicy ?? defaultDocumentOutstandingBalancePolicy;
 }
 
 export function isDocumentReadyForDownload(status: DocumentRequestStatus | string) {

@@ -1,5 +1,56 @@
 # Current Development Status
 
+## Document Module Architecture Consolidation - Phase 1
+
+### Authoritative Architecture
+
+- `DocumentDefinition` is the tenant-owned root for document type, workflow, fee, visibility, balance policy, numbering, signatory, and assigned published template.
+- `DocumentDefinitionField` stores tenant-owned required information for request forms.
+- `DocumentTemplateSet` and `DocumentTemplateVersion` store draft, published, and retired template versions.
+- `DocumentRequest` stores immutable definition, workflow, subject, request data, template, and generated-content snapshots.
+- `DocumentVerificationToken`, `DocumentDefinitionCounter`, and `DocumentCounter` remain the verification and numbering foundations.
+- Legacy `DocumentTypeConfiguration` and `DocumentTemplate` remain compatibility data only and must not be the ordinary administrator-facing configuration system.
+
+### Target Lifecycle
+
+Document Type Configuration
+->
+Template Draft
+->
+Template Publication
+->
+Homeowner, Household Member, or Walk-In Request
+->
+Document Fee Payment when required
+->
+Approval when required
+->
+Generation using an immutable template snapshot
+->
+Download or Office Release
+->
+Receipt and Release Acknowledgement
+->
+Verification and Audit History
+
+### Phase 1 Delivered
+
+- `/admin/documents` is the single Document Management entry point with Document Types, Templates, Requests, and Issued Documents sections.
+- `/admin/document-templates` redirects to the consolidated Templates section with an informational notice; legacy code is retained for rollback/reference.
+- The sidebar exposes Document Management instead of separate legacy template and definition links.
+- Document Types show status, homeowner visibility, workflow, fee, balance policy, active published template, completeness, requestability, and actions.
+- Templates are presented as Current Published Template, Current Draft, and Version History.
+- Homeowner catalog requestability is backed by the same completeness and visibility rules exposed to administrators.
+- Bug #098 policy resolution uses the saved live definition policy and falls back to the request definition snapshot before defaulting to `BLOCK_DOWNLOAD`.
+
+### Phase 2 Scope
+
+- Add an authorized tenant-safe seed/repair workflow for missing custom definitions such as Certificate of Indigency, Move-In Pass, and Move-Out Pass.
+- Move admin walk-in generation from legacy configurations to DocumentDefinition when the generation path is fully verified.
+- Replace legacy print/PDF branching with the deterministic template renderer where compatible.
+- Add public QR verification tokens and verification page when the verification model is ready.
+- Add release acknowledgement, document-fee accounting, and receipt integration in a dedicated sprint.
+
 ## Sprint 2.3 – Billing Generation and Finance Integration
 
 ### Status

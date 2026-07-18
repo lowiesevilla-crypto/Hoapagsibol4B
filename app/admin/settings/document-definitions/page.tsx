@@ -49,7 +49,7 @@ export default async function DocumentDefinitionsPage({ searchParams }: { search
     return `/admin/settings/document-definitions?${params.toString()}#${catalogTargetId}`;
   };
   return <>
-    <PageHeader eyebrow="Document platform" title="Document definitions" description="Create tenant-owned certificates, forms, permits, passes, workflows, fields, and template publishing rules." action={<div className="flex flex-wrap gap-2"><Link className="btn-secondary" href="/admin/settings/document-types">Legacy types</Link><Link className="btn-secondary" href="/admin/documents">Requests</Link></div>} />
+    <PageHeader eyebrow="Document platform" title="Document definitions" description="Create tenant-owned certificates, forms, permits, passes, workflows, fields, and template publishing rules." action={<div className="flex flex-wrap gap-2"><Link className="btn-secondary" href="/admin/documents">Document Management</Link><Link className="btn-secondary" href="/admin/documents?section=templates">Templates</Link></div>} />
     {query.error && <Notice kind="error">{query.error}</Notice>}
     {query.success && <Notice kind="success">{query.message || "Document definition saved."}</Notice>}
     <section className="card mb-5">

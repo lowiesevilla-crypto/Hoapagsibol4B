@@ -22,6 +22,7 @@ import { defaultTemplateDefinition } from "@/lib/services/document-template-buil
 type Check = [name: string, passed: boolean, detail: string];
 
 async function main() {
+  assertSafeVerificationDatabase();
   const checks: Check[] = [];
   const runId = `GEN_VERIFY_${Date.now()}`;
   const requestIds: string[] = [];
@@ -163,6 +164,29 @@ async function main() {
   await platformPrisma.$disconnect();
   if (failures) throw new Error(`${failures} document generation engine checks failed.`);
   console.log(`Document generation engine verification passed (${checks.length} checks).`);
+}
+
+function assertSafeVerificationDatabase() {
+  if (process.env.NODE_ENV === "production") {
+    throw new Error("Document generation verification is disabled when NODE_ENV=production.");
+  }
+
+  const databaseUrl = process.env.DATABASE_URL;
+  if (!databaseUrl) {
+    throw new Error("Document generation verification requires an explicit local DATABASE_URL.");
+  }
+
+  let url: URL;
+  try {
+    url = new URL(databaseUrl);
+  } catch {
+    throw new Error("Document generation verification requires a valid DATABASE_URL.");
+  }
+
+  const localHosts = new Set(["127.0.0.1", "localhost", "::1"]);
+  if (url.protocol !== "mysql:" || !localHosts.has(url.hostname.toLowerCase())) {
+    throw new Error("Document generation verification may run only against a local MySQL database.");
+  }
 }
 
 function verificationTemplate() {

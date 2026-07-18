@@ -5,6 +5,7 @@ import { notFound, redirect } from "next/navigation";
 import { requireUser } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { getQualifyingHomeownerBalance, resolveDocumentDownloadAccess } from "@/lib/services/document-balance-policy";
+import { permissionsForRole } from "@/lib/services/document-runtime-context";
 
 export async function getAccessibleGeneratedDocument(id: string, options?: { requireDownload?: boolean }) {
   const user = await requireUser();
@@ -12,8 +13,7 @@ export async function getAccessibleGeneratedDocument(id: string, options?: { req
   if (!request?.generatedContent || !request.documentNumber || !request.verificationCode) notFound();
   if (user.role === Role.HOMEOWNER && request.homeownerId !== user.homeownerProfile?.id) redirect("/portal/documents");
   if (user.role === Role.HOMEOWNER && request.archivedAt) redirect("/portal/documents?error=This%20document%20has%20been%20archived%20by%20the%20HOA%20office.");
-  const adminRoles: Role[] = [Role.ADMIN, Role.SYSTEM_ADMIN, Role.HOA_ADMIN, Role.BILLING_MANAGER, Role.PAYROLL_MANAGER, Role.STAFF, Role.SUPER_ADMIN, Role.PLATFORM_ADMIN];
-  if (user.role !== Role.HOMEOWNER && !adminRoles.includes(user.role)) redirect("/login");
+  if (user.role !== Role.HOMEOWNER && !permissionsForRole(user.role).includes("VIEW_ISSUED_DOCUMENT")) redirect("/login");
   const currentOutstandingBalance = await getQualifyingHomeownerBalance(user.tenantId, request.homeownerId);
   const access = resolveDocumentDownloadAccess({ request, currentOutstandingBalance });
   const { downloadAllowed } = access;

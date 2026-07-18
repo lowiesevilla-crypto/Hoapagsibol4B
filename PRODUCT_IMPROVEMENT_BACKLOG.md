@@ -3069,3 +3069,12 @@ Acceptance Criteria:
 - No cross-tenant balance access is possible.
 - Legacy documents retain their existing behavior until explicitly configured.
 
+Engineering Note:
+- Added `DocumentOutstandingBalancePolicy` and persisted `DocumentDefinition.outstandingBalancePolicy`.
+- Existing definitions default to `BLOCK_DOWNLOAD` to preserve current behavior until an admin changes the policy.
+- Centralized generated-document access now evaluates tenant ownership, request readiness, document-specific payment lock, current qualifying homeowner balance, policy, and active admin override.
+- Homeowner submission blocks before creating a request only when the saved policy is `BLOCK_REQUEST`.
+- Admin override is limited to `ALLOW_ADMIN_OVERRIDE`, requires an authorized role and reason, and writes request history plus audit logs.
+- Added `scripts/verify-document-balance-policy-hotfix.ts` rollback verification for policy behavior, request blocking, paid-document separation, override/revoke behavior, household ownership, tenant isolation, and migration defaults.
+- Status remains Open until Product Owner UAT passes.
+

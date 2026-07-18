@@ -1016,3 +1016,21 @@ Decision:
 Introduce an explicit per-definition Outstanding Balance Policy rather than
 allowing a hidden global balance rule to override document behavior.
 Tracked as Bug #098.
+
+# 2026-07-18 - Document Outstanding Balance Policy Hotfix
+
+## Engineering Ready for Product Owner UAT
+
+- Fixed Bug #098 by separating document workflow/payment rules from the homeowner's pre-existing HOA account balance.
+- Added tenant-owned `DocumentDefinition.outstandingBalancePolicy` with `IGNORE_BALANCE`, `BLOCK_DOWNLOAD`, `BLOCK_REQUEST`, and `ALLOW_ADMIN_OVERRIDE`.
+- Migrated existing definitions to `BLOCK_DOWNLOAD` to preserve the previous balance-lock behavior until explicitly changed.
+- Added the balance policy selector and persisted summary on `/admin/settings/document-definitions`.
+- Centralized generated document access through one resolver that evaluates tenant ownership, request readiness, document-specific fee lock, current qualifying balance, policy, and active override.
+- Updated homeowner submission so `BLOCK_REQUEST` rejects before creating any request while `IGNORE_BALANCE`, `BLOCK_DOWNLOAD`, and `ALLOW_ADMIN_OVERRIDE` keep submission separate from existing HOA balances.
+- Added authorized admin allow/revoke override actions with reason, actor, timestamp, request history, and audit log.
+- Added `scripts/verify-document-balance-policy-hotfix.ts` rollback verification.
+
+## Release Gate
+
+- Bug #097 is technically fixed but final workflow UAT continues under Bug #098.
+- Bug #098 remains open until Product Owner UAT passes.

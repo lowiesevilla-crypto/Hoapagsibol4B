@@ -2,6 +2,7 @@ import "server-only";
 
 import {
   DocumentDefinitionStatus,
+  DocumentOutstandingBalancePolicy,
   DocumentSequenceScope,
   DocumentTemplateVersionStatus,
   type DocumentDefinition,
@@ -12,6 +13,7 @@ import { platformPrisma } from "@/lib/db";
 import { validateTemplateDefinition } from "@/lib/services/document-template-builder";
 import { defaultNumberingFormat, validateNumberingFormat } from "@/lib/services/document-numbering";
 import { workflowFieldsForPreset, workflowPresetForDeliveryMode } from "@/lib/services/document-workflow-presets";
+import { defaultDocumentOutstandingBalancePolicy } from "@/lib/services/document-balance-policy";
 
 export const documentDefinitionInclude = {
   fields: {
@@ -154,6 +156,8 @@ export function evaluateDefinitionCompleteness(definition: DocumentDefinition & 
   }
   if (definition.maxCopies < 1 || definition.maxCopies > 25) errors.push("Maximum copies must be between 1 and 25.");
   if (definition.validityDays != null && definition.validityDays < 1) errors.push("Validity days must be blank or greater than zero.");
+  const balancePolicy = definition.outstandingBalancePolicy ?? defaultDocumentOutstandingBalancePolicy;
+  if (!Object.values(DocumentOutstandingBalancePolicy).includes(balancePolicy)) errors.push("Outstanding balance policy is invalid.");
   const numbering = validateNumberingFormat(definition.numberingFormat);
   errors.push(...numbering.errors);
   if (definition.qrEnabled && !definition.numberingFormat.includes("{SEQUENCE")) errors.push("QR-enabled definitions need a valid numbering sequence.");

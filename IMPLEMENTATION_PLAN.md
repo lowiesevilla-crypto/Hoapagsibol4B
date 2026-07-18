@@ -395,3 +395,17 @@ Introduce the additive database foundation required for tenant-created documents
 - [x] Preserved assigned template and dynamic field records during definition edits.
 - [x] Added `scripts/verify-document-definition-persistence-hotfix.ts`.
 - [ ] Keep Bug #097 open until Product Owner UAT passes.
+
+## Document Outstanding Balance Policy Hotfix – Bug #098
+
+### Implementation Status
+
+- [x] Added persisted per-definition outstanding balance policy.
+- [x] Defaulted existing definitions to `BLOCK_DOWNLOAD` for legacy compatibility.
+- [x] Added policy controls and persisted summary to the Document Definition UI.
+- [x] Added completeness validation for invalid or missing policy values.
+- [x] Centralized generated-document download/print authorization around policy, payment lock, readiness, current balance, and override state.
+- [x] Implemented `IGNORE_BALANCE`, `BLOCK_DOWNLOAD`, `BLOCK_REQUEST`, and `ALLOW_ADMIN_OVERRIDE` behavior.
+- [x] Added authorized admin allow/revoke balance override actions with audit and history records.
+- [x] Added `scripts/verify-document-balance-policy-hotfix.ts`.
+- [ ] Keep Bug #098 open until Product Owner UAT passes.

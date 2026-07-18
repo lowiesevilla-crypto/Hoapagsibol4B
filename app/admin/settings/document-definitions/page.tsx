@@ -1,5 +1,6 @@
 import Link from "next/link";
-import { DocumentDefinitionStatus, DocumentSequenceScope, DocumentType, type Prisma } from "@prisma/client";
+import { DocumentDefinitionStatus, DocumentOutstandingBalancePolicy, DocumentSequenceScope, DocumentType, type Prisma } from "@prisma/client";
+import { DocumentBalancePolicyControls } from "@/components/document-balance-policy-controls";
 import { DocumentDefinitionFieldBuilder } from "@/components/document-definition-field-builder";
 import { DocumentDefinitionWorkflowControls } from "@/components/document-definition-workflow-controls";
 import { PageHeader } from "@/components/page-header";
@@ -9,6 +10,7 @@ import { changeDocumentDefinitionStatusAction, duplicateDocumentDefinitionAction
 import { requireUser } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { defaultNumberingFormat, evaluateDefinitionCompleteness, workflowPresetForDefinition } from "@/lib/services/document-definitions";
+import { documentOutstandingBalancePolicyOptions } from "@/lib/services/document-balance-policy";
 import { money, shortDate } from "@/lib/utils";
 
 type Query = { q?: string; status?: string; page?: string; sort?: string; edit?: string; error?: string; success?: string; message?: string };
@@ -68,13 +70,13 @@ export default async function DocumentDefinitionsPage({ searchParams }: { search
     <PaginationFocusTarget id={catalogTargetId} label="Document definition catalog" />
     <section className="card p-0 sm:p-0">
       <div className="table-wrap rounded-none shadow-none">
-        <table className="data-table min-w-[1200px]"><thead><tr><th>Code</th><th>Display name</th><th>Category</th><th>Workflow</th><th>Fee</th><th>Status</th><th>Completeness</th><th>Published template</th><th>Updated</th><th>Actions</th></tr></thead><tbody>
+        <table className="data-table min-w-[1320px]"><thead><tr><th>Code</th><th>Display name</th><th>Category</th><th>Workflow</th><th>Fee</th><th>Balance policy</th><th>Status</th><th>Completeness</th><th>Published template</th><th>Updated</th><th>Actions</th></tr></thead><tbody>
           {definitions.map((definition) => {
             const completeness = evaluateDefinitionCompleteness(definition);
             const archived = definition.status === DocumentDefinitionStatus.ARCHIVED || Boolean(definition.archivedAt);
-            return <tr key={definition.id}><td className="font-mono text-xs font-bold">{definition.code}</td><td><p className="font-black">{definition.displayName}</p><p className="max-w-72 truncate text-xs text-slate-500">{definition.description || "No description"}</p></td><td>{definition.category || "General"}</td><td>{definition.deliveryMode.replaceAll("_", " ")}</td><td>{money(Number(definition.feeAmount))}</td><td><span className={`badge ${definition.active && !definition.archivedAt ? "badge-paid" : "badge-info"}`}>{definition.status}</span></td><td><p className={completeness.requestable ? "font-bold text-emerald-700" : "font-bold text-amber-700"}>{completeness.status}</p>{[...completeness.errors, ...completeness.warnings].slice(0, 2).map((item) => <p key={item} className="max-w-56 text-xs text-slate-500">{item}</p>)}</td><td>{definition.assignedTemplateVersion ? `v${definition.assignedTemplateVersion.version}` : "None"}</td><td>{shortDate(definition.updatedAt)}</td><td><div className="flex flex-wrap gap-2"><Link className="btn-secondary min-h-8 px-3 py-1 text-xs" href={`/admin/settings/document-definitions?edit=${definition.id}`}>Edit</Link><Link className="btn-secondary min-h-8 px-3 py-1 text-xs" href={`/admin/settings/document-definitions/${definition.id}/templates`}>Templates</Link><form action={duplicateDocumentDefinitionAction}><input type="hidden" name="id" value={definition.id} /><button className="btn-secondary min-h-8 px-3 py-1 text-xs">Duplicate</button></form>{!archived && <form action={changeDocumentDefinitionStatusAction}><input type="hidden" name="id" value={definition.id} /><input type="hidden" name="operation" value={definition.active ? "DEACTIVATE" : "ACTIVATE"} /><button className="btn-secondary min-h-8 px-3 py-1 text-xs">{definition.active ? "Deactivate" : "Activate"}</button></form>}{!archived && <form action={changeDocumentDefinitionStatusAction}><input type="hidden" name="id" value={definition.id} /><input type="hidden" name="operation" value="ARCHIVE" /><button className="btn-danger min-h-8 px-3 py-1 text-xs">Archive</button></form>}</div></td></tr>;
+            return <tr key={definition.id}><td className="font-mono text-xs font-bold">{definition.code}</td><td><p className="font-black">{definition.displayName}</p><p className="max-w-72 truncate text-xs text-slate-500">{definition.description || "No description"}</p></td><td>{definition.category || "General"}</td><td>{definition.deliveryMode.replaceAll("_", " ")}</td><td>{money(Number(definition.feeAmount))}</td><td>{balancePolicyLabel(definition.outstandingBalancePolicy)}</td><td><span className={`badge ${definition.active && !definition.archivedAt ? "badge-paid" : "badge-info"}`}>{definition.status}</span></td><td><p className={completeness.requestable ? "font-bold text-emerald-700" : "font-bold text-amber-700"}>{completeness.status}</p>{[...completeness.errors, ...completeness.warnings].slice(0, 2).map((item) => <p key={item} className="max-w-56 text-xs text-slate-500">{item}</p>)}</td><td>{definition.assignedTemplateVersion ? `v${definition.assignedTemplateVersion.version}` : "None"}</td><td>{shortDate(definition.updatedAt)}</td><td><div className="flex flex-wrap gap-2"><Link className="btn-secondary min-h-8 px-3 py-1 text-xs" href={`/admin/settings/document-definitions?edit=${definition.id}`}>Edit</Link><Link className="btn-secondary min-h-8 px-3 py-1 text-xs" href={`/admin/settings/document-definitions/${definition.id}/templates`}>Templates</Link><form action={duplicateDocumentDefinitionAction}><input type="hidden" name="id" value={definition.id} /><button className="btn-secondary min-h-8 px-3 py-1 text-xs">Duplicate</button></form>{!archived && <form action={changeDocumentDefinitionStatusAction}><input type="hidden" name="id" value={definition.id} /><input type="hidden" name="operation" value={definition.active ? "DEACTIVATE" : "ACTIVATE"} /><button className="btn-secondary min-h-8 px-3 py-1 text-xs">{definition.active ? "Deactivate" : "Activate"}</button></form>}{!archived && <form action={changeDocumentDefinitionStatusAction}><input type="hidden" name="id" value={definition.id} /><input type="hidden" name="operation" value="ARCHIVE" /><button className="btn-danger min-h-8 px-3 py-1 text-xs">Archive</button></form>}</div></td></tr>;
           })}
-          {!definitions.length && <tr><td colSpan={10} className="py-12 text-center text-slate-500">No document definitions found.</td></tr>}
+          {!definitions.length && <tr><td colSpan={11} className="py-12 text-center text-slate-500">No document definitions found.</td></tr>}
         </tbody></table>
       </div>
     </section>
@@ -92,6 +94,7 @@ function DefinitionForm({ definition, officers }: { definition: EditableDefiniti
     <Field label="Display order"><input className="field" name="displayOrder" type="number" defaultValue={definition?.displayOrder ?? 0} /></Field>
     <div className="md:col-span-2 xl:col-span-4"><label className="label">Description</label><textarea className="field min-h-20" name="description" defaultValue={definition?.description || ""} /></div>
     <DocumentDefinitionWorkflowControls defaultPreset={definition ? workflowPresetForDefinition(definition) : "FREE_APPROVAL"} defaultFeeAmount={Number(definition?.feeAmount ?? 0).toFixed(2)} />
+    <DocumentBalancePolicyControls defaultPolicy={definition?.outstandingBalancePolicy || DocumentOutstandingBalancePolicy.BLOCK_DOWNLOAD} />
     <Field label="Currency"><input className="field" name="currency" defaultValue={definition?.currency || "PHP"} /></Field>
     <Field label="Finance classification"><input className="field" name="financeClassification" defaultValue={definition?.financeClassification || ""} /></Field>
     <Field label="Numbering format"><input className="field" name="numberingFormat" defaultValue={definition?.numberingFormat || defaultNumberingFormat(code || "DOC")} /></Field>
@@ -136,6 +139,7 @@ function PersistedDefinitionSummary({ definition }: { definition: EditableDefini
     <div className="mt-3 grid gap-3 text-sm sm:grid-cols-2 xl:grid-cols-4">
       <SummaryItem label="Workflow" value={workflowPresetForDefinition(definition).replaceAll("_", " + ").replace("PAID + INSTANT", "Paid + Instant").replace("PAID + APPROVAL", "Paid + Approval").replace("FREE + INSTANT", "Free + Instant").replace("FREE + APPROVAL", "Free + Approval").replace("REQUEST + ONLY", "Request Only")} />
       <SummaryItem label="Fee" value={money(Number(definition.feeAmount))} />
+      <SummaryItem label="Balance policy" value={balancePolicyLabel(definition.outstandingBalancePolicy)} />
       <SummaryItem label="Status" value={definition.status} />
       <SummaryItem label="Active" value={definition.active ? "Yes" : "No"} />
       <SummaryItem label="Published template" value={definition.assignedTemplateVersion ? `v${definition.assignedTemplateVersion.version}` : "None"} />
@@ -148,4 +152,8 @@ function PersistedDefinitionSummary({ definition }: { definition: EditableDefini
 
 function SummaryItem({ label, value }: { label: string; value: string }) {
   return <div className="rounded-xl bg-white p-3"><p className="text-xs font-bold uppercase tracking-[.12em] text-slate-500">{label}</p><p className="mt-1 font-black text-slate-950">{value}</p></div>;
+}
+
+function balancePolicyLabel(policy: DocumentOutstandingBalancePolicy) {
+  return documentOutstandingBalancePolicyOptions.find((option) => option.value === policy)?.label || policy.replaceAll("_", " ");
 }

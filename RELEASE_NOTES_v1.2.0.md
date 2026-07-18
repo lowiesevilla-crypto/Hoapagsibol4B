@@ -438,3 +438,21 @@ Status: Engineering ready for Product Owner UAT.
 
 Release gate:
 - Bug #097 remains open until Product Owner UAT passes.
+
+# Document Outstanding Balance Policy Hotfix
+
+Status: Engineering ready for Product Owner UAT.
+
+- Added a tenant-safe outstanding balance policy to Document Definitions.
+- Existing definitions now preserve the prior behavior through the default `BLOCK_DOWNLOAD` policy.
+- Added admin UI controls and persisted summary display for `IGNORE_BALANCE`, `BLOCK_DOWNLOAD`, `BLOCK_REQUEST`, and `ALLOW_ADMIN_OVERRIDE`.
+- Centralized document download and print authorization so policy behavior is consistent across detail, PDF, print, and portal history views.
+- Added request-time blocking for `BLOCK_REQUEST` without creating partial requests.
+- Added authorized admin allow/revoke balance override actions with request history and audit logs.
+- Added rollback verification for policy behavior, paid-document separation, household-member ownership, tenant isolation, and migration defaults.
+
+Deferred:
+- Full document payment accounting, walk-in payment, release acknowledgment, public QR verification, and Word-style template editing remain outside this hotfix.
+
+Release gate:
+- Bug #098 remains open until Product Owner UAT passes.

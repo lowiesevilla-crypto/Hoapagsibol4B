@@ -366,32 +366,39 @@ enum DocumentSequenceScope {
   CONTINUOUS
 }
 
+enum DocumentOutstandingBalancePolicy {
+  IGNORE_BALANCE
+  BLOCK_DOWNLOAD
+  BLOCK_REQUEST
+  ALLOW_ADMIN_OVERRIDE
+}
+
 model Tenant {
-  id                    String                    @id @default(cuid())
-  name                  String
-  shortName             String
-  slug                  String                    @unique
-  logoUrl               String?
-  address               String?                   @db.Text
-  contactNumber         String?
-  email                 String?
-  secRegistrationNumber String?
-  tinNumber             String?
-  status                TenantStatus              @default(ACTIVE)
-  subscriptionPlan      String                    @default("STANDARD")
-  subscriptionStatus    TenantSubscriptionStatus  @default(TRIAL)
-  createdAt             DateTime                  @default(now())
-  updatedAt             DateTime                  @updatedAt
-  users                 User[]
-  moduleEntitlements    TenantModuleEntitlement[]
-  advisories            TenantAdvisory[]
-  sequences             TenantSequence[]
-  userRoleAssignments   UserRoleAssignment[]
-  billingRules          BillingRule[]
-  paymentAllocations    PaymentAllocation[]
-  documentDefinitions   DocumentDefinition[]
-  documentTemplateSets  DocumentTemplateSet[]
-  documentTemplateVersions DocumentTemplateVersion[]
+  id                         String                      @id @default(cuid())
+  name                       String
+  shortName                  String
+  slug                       String                      @unique
+  logoUrl                    String?
+  address                    String?                     @db.Text
+  contactNumber              String?
+  email                      String?
+  secRegistrationNumber      String?
+  tinNumber                  String?
+  status                     TenantStatus                @default(ACTIVE)
+  subscriptionPlan           String                      @default("STANDARD")
+  subscriptionStatus         TenantSubscriptionStatus    @default(TRIAL)
+  createdAt                  DateTime                    @default(now())
+  updatedAt                  DateTime                    @updatedAt
+  users                      User[]
+  moduleEntitlements         TenantModuleEntitlement[]
+  advisories                 TenantAdvisory[]
+  sequences                  TenantSequence[]
+  userRoleAssignments        UserRoleAssignment[]
+  billingRules               BillingRule[]
+  paymentAllocations         PaymentAllocation[]
+  documentDefinitions        DocumentDefinition[]
+  documentTemplateSets       DocumentTemplateSet[]
+  documentTemplateVersions   DocumentTemplateVersion[]
   documentDefinitionCounters DocumentDefinitionCounter[]
   documentVerificationTokens DocumentVerificationToken[]
 
@@ -456,7 +463,7 @@ model User {
   documentDefinitionsUpdated        DocumentDefinition[]         @relation("DocumentDefinitionUpdater")
   documentTemplateVersionsCreated   DocumentTemplateVersion[]    @relation("DocumentTemplateVersionCreator")
   documentTemplateVersionsPublished DocumentTemplateVersion[]    @relation("DocumentTemplateVersionPublisher")
-  documentVerificationTokensRevoked DocumentVerificationToken[]   @relation("DocumentVerificationTokenRevoker")
+  documentVerificationTokensRevoked DocumentVerificationToken[]  @relation("DocumentVerificationTokenRevoker")
   organizationOfficersUpdated       OrganizationOfficer[]        @relation("OrganizationOfficerUpdater")
   organizationHistoryCreated        OrganizationOfficerHistory[] @relation("OrganizationOfficerHistoryActor")
   chatConversationsHomeowner        ChatConversation[]           @relation("ChatConversationHomeowner")
@@ -935,24 +942,24 @@ model DataMigration {
 }
 
 model DocumentTemplate {
-  tenantId                   String                   @default("tenant_pagsibol4b_default")
-  id                         String                   @id @default(cuid())
+  tenantId                   String                      @default("tenant_pagsibol4b_default")
+  id                         String                      @id @default(cuid())
   type                       DocumentType
   title                      String
-  body                       String                   @db.Text
-  active                     Boolean                  @default(true)
-  version                    Int                      @default(1)
+  body                       String                      @db.Text
+  active                     Boolean                     @default(true)
+  version                    Int                         @default(1)
   definitionId               String?
-  definition                 DocumentDefinition?      @relation("DocumentTemplateDefinition", fields: [tenantId, definitionId], references: [tenantId, id], onDelete: Restrict, onUpdate: Cascade)
+  definition                 DocumentDefinition?         @relation("DocumentTemplateDefinition", fields: [tenantId, definitionId], references: [tenantId, id], onDelete: Restrict, onUpdate: Cascade)
   templateSetId              String?
-  templateSet                DocumentTemplateSet?     @relation("LegacyDocumentTemplateSet", fields: [tenantId, templateSetId], references: [tenantId, id], onDelete: Restrict, onUpdate: Cascade)
+  templateSet                DocumentTemplateSet?        @relation("LegacyDocumentTemplateSet", fields: [tenantId, templateSetId], references: [tenantId, id], onDelete: Restrict, onUpdate: Cascade)
   publishedTemplateVersionId String?
-  publishedTemplateVersion   DocumentTemplateVersion? @relation("LegacyDocumentTemplatePublishedVersion", fields: [tenantId, publishedTemplateVersionId], references: [tenantId, id], onDelete: Restrict, onUpdate: Cascade)
+  publishedTemplateVersion   DocumentTemplateVersion?    @relation("LegacyDocumentTemplatePublishedVersion", fields: [tenantId, publishedTemplateVersionId], references: [tenantId, id], onDelete: Restrict, onUpdate: Cascade)
   updatedById                String?
-  updatedBy                  User?                    @relation("DocumentTemplateUpdater", fields: [updatedById], references: [id], onDelete: SetNull)
+  updatedBy                  User?                       @relation("DocumentTemplateUpdater", fields: [updatedById], references: [id], onDelete: SetNull)
   configurations             DocumentTypeConfiguration[]
-  createdAt                  DateTime                 @default(now())
-  updatedAt                  DateTime                 @updatedAt
+  createdAt                  DateTime                    @default(now())
+  updatedAt                  DateTime                    @updatedAt
 
   @@unique([tenantId, id])
   @@unique([tenantId, type])
@@ -1027,22 +1034,22 @@ model DocumentTypeConfiguration {
 }
 
 model DocumentFieldConfiguration {
-  tenantId      String                    @default("tenant_pagsibol4b_default")
-  id            String                    @id @default(cuid())
-  configId      String
-  configuration DocumentTypeConfiguration @relation(fields: [tenantId, configId], references: [tenantId, id], onDelete: Cascade)
+  tenantId          String                    @default("tenant_pagsibol4b_default")
+  id                String                    @id @default(cuid())
+  configId          String
+  configuration     DocumentTypeConfiguration @relation(fields: [tenantId, configId], references: [tenantId, id], onDelete: Cascade)
   definitionFieldId String?
-  definitionField DocumentDefinitionField? @relation("DocumentFieldConfigurationDefinitionField", fields: [tenantId, definitionFieldId], references: [tenantId, id], onDelete: Restrict, onUpdate: Cascade)
-  key           String
-  label         String
-  fieldType     DocumentFieldType
-  required      Boolean                   @default(false)
-  options       Json?
-  validation    Json?
-  displayOrder  Int                       @default(0)
-  active        Boolean                   @default(true)
-  createdAt     DateTime                  @default(now())
-  updatedAt     DateTime                  @updatedAt
+  definitionField   DocumentDefinitionField?  @relation("DocumentFieldConfigurationDefinitionField", fields: [tenantId, definitionFieldId], references: [tenantId, id], onDelete: Restrict, onUpdate: Cascade)
+  key               String
+  label             String
+  fieldType         DocumentFieldType
+  required          Boolean                   @default(false)
+  options           Json?
+  validation        Json?
+  displayOrder      Int                       @default(0)
+  active            Boolean                   @default(true)
+  createdAt         DateTime                  @default(now())
+  updatedAt         DateTime                  @updatedAt
 
   @@unique([tenantId, configId, key])
   @@index([tenantId, configId, active, displayOrder])
@@ -1051,61 +1058,62 @@ model DocumentFieldConfiguration {
 }
 
 model DocumentDefinition {
-  tenantId                 String                    @default("tenant_pagsibol4b_default")
-  id                       String                    @id @default(cuid())
-  tenant                   Tenant                    @relation(fields: [tenantId], references: [id], onDelete: Restrict, onUpdate: Cascade)
-  code                     String
-  displayName              String
-  description              String?                   @db.Text
-  category                 String?
-  status                   DocumentDefinitionStatus  @default(DRAFT)
-  active                   Boolean                   @default(false)
-  archivedAt               DateTime?
-  displayOrder             Int                       @default(0)
-  systemKey                String?
-  legacyType               DocumentType?
-  deliveryMode             DocumentDeliveryMode      @default(APPROVAL_REQUIRED)
-  approvalRequired         Boolean                   @default(true)
-  paymentRequired          Boolean                   @default(false)
-  paymentBeforeApproval    Boolean                   @default(false)
-  allowImmediateDownload   Boolean                   @default(false)
-  requiresAdminReview      Boolean                   @default(true)
-  releaseRequired          Boolean                   @default(false)
-  homeownerDownloadEnabled Boolean                   @default(true)
-  walkInEnabled            Boolean                   @default(false)
-  householdMemberEnabled   Boolean                   @default(true)
-  manualSubjectEnabled     Boolean                   @default(false)
-  allowRegeneration        Boolean                   @default(true)
-  allowPayLater            Boolean                   @default(false)
-  feeAmount                Decimal                   @default(0) @db.Decimal(12, 2)
-  currency                 String                    @default("PHP")
-  receiptRequired          Boolean                   @default(false)
-  financeClassification    String?
-  numberingFormat          String                    @default("{PREFIX}-{YYYY}-{SEQUENCE:6}")
-  sequenceScope            DocumentSequenceScope     @default(ANNUAL)
-  validityDays             Int?
-  maxCopies                Int                       @default(1)
-  qrEnabled                Boolean                   @default(true)
-  watermarkEnabled         Boolean                   @default(false)
-  signatoryOfficerId       String?
-  signatoryOfficer         OrganizationOfficer?      @relation("DocumentDefinitionSignatory", fields: [tenantId, signatoryOfficerId], references: [tenantId, id], onDelete: Restrict, onUpdate: Cascade)
+  tenantId                  String                           @default("tenant_pagsibol4b_default")
+  id                        String                           @id @default(cuid())
+  tenant                    Tenant                           @relation(fields: [tenantId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  code                      String
+  displayName               String
+  description               String?                          @db.Text
+  category                  String?
+  status                    DocumentDefinitionStatus         @default(DRAFT)
+  active                    Boolean                          @default(false)
+  archivedAt                DateTime?
+  displayOrder              Int                              @default(0)
+  systemKey                 String?
+  legacyType                DocumentType?
+  deliveryMode              DocumentDeliveryMode             @default(APPROVAL_REQUIRED)
+  approvalRequired          Boolean                          @default(true)
+  paymentRequired           Boolean                          @default(false)
+  paymentBeforeApproval     Boolean                          @default(false)
+  allowImmediateDownload    Boolean                          @default(false)
+  requiresAdminReview       Boolean                          @default(true)
+  releaseRequired           Boolean                          @default(false)
+  homeownerDownloadEnabled  Boolean                          @default(true)
+  outstandingBalancePolicy  DocumentOutstandingBalancePolicy @default(BLOCK_DOWNLOAD)
+  walkInEnabled             Boolean                          @default(false)
+  householdMemberEnabled    Boolean                          @default(true)
+  manualSubjectEnabled      Boolean                          @default(false)
+  allowRegeneration         Boolean                          @default(true)
+  allowPayLater             Boolean                          @default(false)
+  feeAmount                 Decimal                          @default(0) @db.Decimal(12, 2)
+  currency                  String                           @default("PHP")
+  receiptRequired           Boolean                          @default(false)
+  financeClassification     String?
+  numberingFormat           String                           @default("{PREFIX}-{YYYY}-{SEQUENCE:6}")
+  sequenceScope             DocumentSequenceScope            @default(ANNUAL)
+  validityDays              Int?
+  maxCopies                 Int                              @default(1)
+  qrEnabled                 Boolean                          @default(true)
+  watermarkEnabled          Boolean                          @default(false)
+  signatoryOfficerId        String?
+  signatoryOfficer          OrganizationOfficer?             @relation("DocumentDefinitionSignatory", fields: [tenantId, signatoryOfficerId], references: [tenantId, id], onDelete: Restrict, onUpdate: Cascade)
   assignedTemplateVersionId String?
-  assignedTemplateVersion  DocumentTemplateVersion?  @relation("DocumentDefinitionAssignedTemplateVersion", fields: [tenantId, assignedTemplateVersionId], references: [tenantId, id], onDelete: Restrict, onUpdate: Cascade)
-  version                  Int                       @default(1)
-  createdById              String?
-  createdBy                User?                     @relation("DocumentDefinitionCreator", fields: [createdById], references: [id], onDelete: SetNull)
-  updatedById              String?
-  updatedBy                User?                     @relation("DocumentDefinitionUpdater", fields: [updatedById], references: [id], onDelete: SetNull)
-  fields                   DocumentDefinitionField[]
-  templateSets             DocumentTemplateSet[]
-  legacyTemplates          DocumentTemplate[]        @relation("DocumentTemplateDefinition")
-  legacyConfigurations     DocumentTypeConfiguration[] @relation("DocumentTypeConfigurationDefinition")
-  requests                 DocumentRequest[]
-  documentVersions         DocumentVersion[]
-  counters                 DocumentDefinitionCounter[]
-  verificationTokens       DocumentVerificationToken[]
-  createdAt                DateTime                  @default(now())
-  updatedAt                DateTime                  @updatedAt
+  assignedTemplateVersion   DocumentTemplateVersion?         @relation("DocumentDefinitionAssignedTemplateVersion", fields: [tenantId, assignedTemplateVersionId], references: [tenantId, id], onDelete: Restrict, onUpdate: Cascade)
+  version                   Int                              @default(1)
+  createdById               String?
+  createdBy                 User?                            @relation("DocumentDefinitionCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  updatedById               String?
+  updatedBy                 User?                            @relation("DocumentDefinitionUpdater", fields: [updatedById], references: [id], onDelete: SetNull)
+  fields                    DocumentDefinitionField[]
+  templateSets              DocumentTemplateSet[]
+  legacyTemplates           DocumentTemplate[]               @relation("DocumentTemplateDefinition")
+  legacyConfigurations      DocumentTypeConfiguration[]      @relation("DocumentTypeConfigurationDefinition")
+  requests                  DocumentRequest[]
+  documentVersions          DocumentVersion[]
+  counters                  DocumentDefinitionCounter[]
+  verificationTokens        DocumentVerificationToken[]
+  createdAt                 DateTime                         @default(now())
+  updatedAt                 DateTime                         @updatedAt
 
   @@unique([tenantId, id])
   @@unique([tenantId, code])
@@ -1119,22 +1127,22 @@ model DocumentDefinition {
 }
 
 model DocumentDefinitionField {
-  tenantId       String                    @default("tenant_pagsibol4b_default")
-  id             String                    @id @default(cuid())
-  definitionId   String
-  definition     DocumentDefinition        @relation(fields: [tenantId, definitionId], references: [tenantId, id], onDelete: Cascade)
-  key            String
-  label          String
-  fieldType      DocumentFieldType
-  required       Boolean                   @default(false)
-  active         Boolean                   @default(true)
-  displayOrder   Int                       @default(0)
-  options        Json?
-  validation     Json?
-  defaultValue   Json?
-  legacyFields   DocumentFieldConfiguration[] @relation("DocumentFieldConfigurationDefinitionField")
-  createdAt      DateTime                  @default(now())
-  updatedAt      DateTime                  @updatedAt
+  tenantId     String                       @default("tenant_pagsibol4b_default")
+  id           String                       @id @default(cuid())
+  definitionId String
+  definition   DocumentDefinition           @relation(fields: [tenantId, definitionId], references: [tenantId, id], onDelete: Cascade)
+  key          String
+  label        String
+  fieldType    DocumentFieldType
+  required     Boolean                      @default(false)
+  active       Boolean                      @default(true)
+  displayOrder Int                          @default(0)
+  options      Json?
+  validation   Json?
+  defaultValue Json?
+  legacyFields DocumentFieldConfiguration[] @relation("DocumentFieldConfigurationDefinitionField")
+  createdAt    DateTime                     @default(now())
+  updatedAt    DateTime                     @updatedAt
 
   @@unique([tenantId, id])
   @@unique([tenantId, definitionId, key])
@@ -1192,45 +1200,45 @@ model DocumentTemplateVersion {
 }
 
 model DocumentRequest {
-  tenantId                    String                     @default("tenant_pagsibol4b_default")
-  id                          String                     @id @default(cuid())
+  tenantId                    String                      @default("tenant_pagsibol4b_default")
+  id                          String                      @id @default(cuid())
   documentNumber              String?
   homeownerId                 String
-  homeowner                   HomeownerProfile           @relation(fields: [homeownerId], references: [id], onDelete: Cascade)
+  homeowner                   HomeownerProfile            @relation(fields: [homeownerId], references: [id], onDelete: Cascade)
   configurationId             String?
-  configuration               DocumentTypeConfiguration? @relation(fields: [tenantId, configurationId], references: [tenantId, id])
+  configuration               DocumentTypeConfiguration?  @relation(fields: [tenantId, configurationId], references: [tenantId, id])
   configurationVersion        Int?
   definitionId                String?
-  definition                  DocumentDefinition?        @relation(fields: [tenantId, definitionId], references: [tenantId, id], onDelete: Restrict, onUpdate: Cascade)
+  definition                  DocumentDefinition?         @relation(fields: [tenantId, definitionId], references: [tenantId, id], onDelete: Restrict, onUpdate: Cascade)
   definitionVersionSnapshot   Int?
   definitionSnapshot          Json?
   templateIdSnapshot          String?
   templateVersionSnapshot     Int?
   templateVersionIdSnapshot   String?
   templateDefinitionSnapshot  Json?
-  subjectType                 DocumentSubjectType        @default(SELF)
+  subjectType                 DocumentSubjectType         @default(SELF)
   subjectMemberId             String?
-  subjectMember               HouseholdMember?           @relation(fields: [tenantId, subjectMemberId], references: [tenantId, id])
+  subjectMember               HouseholdMember?            @relation(fields: [tenantId, subjectMemberId], references: [tenantId, id])
   subjectSnapshot             Json?
   requestDataSnapshot         Json?
   reviewedDataSnapshot        Json?
   deliveryModeSnapshot        DocumentDeliveryMode?
-  approvalRequiredSnapshot    Boolean                    @default(true)
-  paymentRequiredSnapshot     Boolean                    @default(false)
-  feeAmountSnapshot           Decimal                    @default(0) @db.Decimal(12, 2)
-  numberOfCopies              Int                        @default(1)
-  issueDate                   DateTime?                  @db.Date
+  approvalRequiredSnapshot    Boolean                     @default(true)
+  paymentRequiredSnapshot     Boolean                     @default(false)
+  feeAmountSnapshot           Decimal                     @default(0) @db.Decimal(12, 2)
+  numberOfCopies              Int                         @default(1)
+  issueDate                   DateTime?                   @db.Date
   readyForDownloadAt          DateTime?
-  origin                      DocumentOrigin             @default(HOMEOWNER)
+  origin                      DocumentOrigin              @default(HOMEOWNER)
   initiatedById               String?
-  initiatedBy                 User?                      @relation("DocumentInitiator", fields: [initiatedById], references: [id], onDelete: SetNull)
+  initiatedBy                 User?                       @relation("DocumentInitiator", fields: [initiatedById], references: [id], onDelete: SetNull)
   type                        DocumentType?
-  status                      DocumentRequestStatus      @default(SUBMITTED)
+  status                      DocumentRequestStatus       @default(SUBMITTED)
   purpose                     String?
   remarks                     String?
   adminRemarks                String?
-  validityDate                DateTime?                  @db.Date
-  scheduledDate               DateTime?                  @db.Date
+  validityDate                DateTime?                   @db.Date
+  scheduledDate               DateTime?                   @db.Date
   startTime                   String?
   endTime                     String?
   passType                    String?
@@ -1239,45 +1247,45 @@ model DocumentRequest {
   contractorDetails           String?
   representativeName          String?
   propertyDetails             String?
-  outstandingBalanceAtRequest Decimal                    @default(0) @db.Decimal(12, 2)
-  allowDownloadDespiteBalance Boolean                    @default(false)
+  outstandingBalanceAtRequest Decimal                     @default(0) @db.Decimal(12, 2)
+  allowDownloadDespiteBalance Boolean                     @default(false)
   downloadOverrideReason      String?
   downloadOverrideAt          DateTime?
   downloadOverrideById        String?
-  downloadOverrideBy          User?                      @relation("DocumentDownloadOverride", fields: [downloadOverrideById], references: [id], onDelete: SetNull)
-  requestedAt                 DateTime                   @default(now())
+  downloadOverrideBy          User?                       @relation("DocumentDownloadOverride", fields: [downloadOverrideById], references: [id], onDelete: SetNull)
+  requestedAt                 DateTime                    @default(now())
   reviewedAt                  DateTime?
   approvedAt                  DateTime?
   generatedAt                 DateTime?
   downloadedAt                DateTime?
   processedById               String?
-  processedBy                 User?                      @relation("DocumentRequestProcessor", fields: [processedById], references: [id], onDelete: SetNull)
+  processedBy                 User?                       @relation("DocumentRequestProcessor", fields: [processedById], references: [id], onDelete: SetNull)
   approvedById                String?
-  approvedBy                  User?                      @relation("DocumentRequestApprover", fields: [approvedById], references: [id], onDelete: SetNull)
+  approvedBy                  User?                       @relation("DocumentRequestApprover", fields: [approvedById], references: [id], onDelete: SetNull)
   processedByOfficerId        String?
-  processedByOfficer          OrganizationOfficer?       @relation("DocumentProcessedOfficer", fields: [processedByOfficerId], references: [id], onDelete: SetNull)
+  processedByOfficer          OrganizationOfficer?        @relation("DocumentProcessedOfficer", fields: [processedByOfficerId], references: [id], onDelete: SetNull)
   approvedByOfficerId         String?
-  approvedByOfficer           OrganizationOfficer?       @relation("DocumentApprovedOfficer", fields: [approvedByOfficerId], references: [id], onDelete: SetNull)
+  approvedByOfficer           OrganizationOfficer?        @relation("DocumentApprovedOfficer", fields: [approvedByOfficerId], references: [id], onDelete: SetNull)
   templateVersion             Int?
-  templateSnapshot            String?                    @db.Text
-  generatedContent            String?                    @db.Text
+  templateSnapshot            String?                     @db.Text
+  generatedContent            String?                     @db.Text
   associationSnapshot         Json?
   homeownerSnapshot           Json?
   organizationSnapshot        Json?
   processedOfficerSnapshot    Json?
   approvedOfficerSnapshot     Json?
-  verificationCode            String?                    @unique
+  verificationCode            String?                     @unique
   verificationTokens          DocumentVerificationToken[]
-  currentVersion              Int                        @default(0)
+  currentVersion              Int                         @default(0)
   versions                    DocumentVersion[]
   archivedAt                  DateTime?
   archivedById                String?
-  archivedBy                  User?                      @relation("DocumentArchiver", fields: [archivedById], references: [id], onDelete: SetNull)
+  archivedBy                  User?                       @relation("DocumentArchiver", fields: [archivedById], references: [id], onDelete: SetNull)
   archiveReason               String?
   histories                   DocumentRequestHistory[]
   editAudits                  DocumentRequestEditAudit[]
-  createdAt                   DateTime                   @default(now())
-  updatedAt                   DateTime                   @updatedAt
+  createdAt                   DateTime                    @default(now())
+  updatedAt                   DateTime                    @updatedAt
 
   @@unique([tenantId, id])
   @@unique([tenantId, documentNumber])
@@ -1300,28 +1308,28 @@ model DocumentRequest {
 }
 
 model DocumentVersion {
-  tenantId                   String                    @default("tenant_pagsibol4b_default")
-  id                         String                    @id @default(cuid())
+  tenantId                   String                      @default("tenant_pagsibol4b_default")
+  id                         String                      @id @default(cuid())
   requestId                  String
-  request                    DocumentRequest           @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  request                    DocumentRequest             @relation(fields: [requestId], references: [id], onDelete: Cascade)
   definitionId               String?
-  definition                 DocumentDefinition?       @relation(fields: [tenantId, definitionId], references: [tenantId, id], onDelete: Restrict, onUpdate: Cascade)
+  definition                 DocumentDefinition?         @relation(fields: [tenantId, definitionId], references: [tenantId, id], onDelete: Restrict, onUpdate: Cascade)
   templateVersionId          String?
-  templateVersionRecord      DocumentTemplateVersion?  @relation(fields: [tenantId, templateVersionId], references: [tenantId, id], onDelete: Restrict, onUpdate: Cascade)
+  templateVersionRecord      DocumentTemplateVersion?    @relation(fields: [tenantId, templateVersionId], references: [tenantId, id], onDelete: Restrict, onUpdate: Cascade)
   version                    Int
   documentNumber             String
   verificationCode           String
   templateVersion            Int
-  templateSnapshot           String                    @db.Text
-  generatedContent           String                    @db.Text
+  templateSnapshot           String                      @db.Text
+  generatedContent           String                      @db.Text
   requestSnapshot            Json
   definitionSnapshot         Json?
   templateDefinitionSnapshot Json?
   generatedById              String?
-  generatedBy                User?                     @relation("DocumentVersionGenerator", fields: [generatedById], references: [id], onDelete: SetNull)
+  generatedBy                User?                       @relation("DocumentVersionGenerator", fields: [generatedById], references: [id], onDelete: SetNull)
   verificationTokens         DocumentVerificationToken[]
   reason                     String?
-  createdAt                  DateTime                  @default(now())
+  createdAt                  DateTime                    @default(now())
 
   @@unique([tenantId, id])
   @@unique([requestId, version])

@@ -31,6 +31,7 @@ export type DocumentRenderModel = {
     locale: string;
   };
   page: DocumentTemplateDefinition["page"];
+  visualLayout: boolean;
   sections: Record<"header" | "body" | "footer", DocumentRenderBlock[]>;
   unresolvedPlaceholders: string[];
   unauthorizedPlaceholders: string[];
@@ -50,6 +51,7 @@ export function buildDocumentRenderModel(input: {
   placeholderDefinitions: readonly PlaceholderDefinition[];
 }): DocumentRenderModel {
   const template = normalizeTemplateDefinition(input.templateDefinition, input.title);
+  const visualLayout = template.blocks.some((block) => Boolean(block.position));
   const unresolved = new Set<string>();
   const unauthorized = new Set<string>();
   const warnings = new Set<string>();
@@ -81,6 +83,7 @@ export function buildDocumentRenderModel(input: {
     preview: input.mode === "PREVIEW",
     metadata: { title: input.title, documentNumber: input.documentNumber, issueDate: input.issueDate, validUntil: input.validUntil ?? null, verificationUrl: input.verificationUrl ?? null, locale: "en-PH" },
     page,
+    visualLayout,
     sections: { header: section("header"), body: section("body"), footer: section("footer") },
     unresolvedPlaceholders: [...unresolved],
     unauthorizedPlaceholders: [...unauthorized],

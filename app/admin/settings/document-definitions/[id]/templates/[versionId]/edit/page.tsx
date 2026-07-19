@@ -18,6 +18,7 @@ export default async function TemplateVersionEditorPage({ params, searchParams }
   });
   if (!version || version.templateSet.definitionId !== id) return <p className="card">Template version not found.</p>;
   const definition = version.templateSet.definition;
+  const customPlaceholders = await prisma.documentPlaceholderDefinition.findMany({ where: { tenantId: admin.tenantId, ownership: "TENANT", active: true }, orderBy: [{ category: "asc" }, { key: "asc" }], select: { key: true, category: true, displayName: true, description: true, dataType: true, exampleValue: true, sensitivity: true } });
   const template = normalizeTemplateDefinition(version.definitionJson, definition.displayName);
   const editable = version.status === DocumentTemplateVersionStatus.DRAFT;
   return <>
@@ -41,6 +42,7 @@ export default async function TemplateVersionEditorPage({ params, searchParams }
       updatedAt={version.updatedAt.toISOString()}
       templateWorkspaceHref={`/admin/settings/document-definitions/${id}/templates`}
       documentManagementHref="/admin/documents?section=templates"
+      customPlaceholders={customPlaceholders.map((item) => ({ key: item.key, group: item.category, label: item.displayName, description: item.description || "Tenant-defined placeholder.", dataType: item.dataType, sample: item.exampleValue || `{{${item.key}}}`, sensitivity: item.sensitivity }))}
     />
   </>;
 }

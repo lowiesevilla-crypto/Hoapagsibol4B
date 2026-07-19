@@ -40,6 +40,7 @@ export const allowedDocumentPlaceholders = [
 ] as const;
 
 export type AllowedDocumentPlaceholder = typeof allowedDocumentPlaceholders[number];
+export type DocumentPlaceholderKey = string;
 
 export const placeholderGroups: { group: string; items: { key: AllowedDocumentPlaceholder; label: string; sample: string }[] }[] = [
   { group: "Tenant", items: [
@@ -105,6 +106,8 @@ export const documentTemplateBlockTypes = [
   "documentTitle",
   "text",
   "bodyText",
+  "heading",
+  "paragraph",
   "textBox",
   "subjectInfo",
   "propertyInfo",
@@ -125,6 +128,11 @@ export const documentTemplateBlockTypes = [
   "horizontalLine",
   "verticalLine",
   "image",
+  "rectangle",
+  "officerName",
+  "officerTitle",
+  "verificationText",
+  "pageNumber",
 ] as const;
 
 export type DocumentTemplateBlockType = typeof documentTemplateBlockTypes[number];
@@ -142,10 +150,22 @@ export type DocumentTemplateBlock = {
   label?: string;
   text?: string;
   content?: string;
-  binding?: AllowedDocumentPlaceholder;
+  binding?: DocumentPlaceholderKey;
   order: number;
   visible: boolean;
+  locked?: boolean;
   required?: boolean;
+  position?: {
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+    zIndex: number;
+  };
+  accessibility?: {
+    ariaLabel?: string;
+    altText?: string;
+  };
   style?: {
     align?: "left" | "center" | "right" | "justify";
     fontFamily?: SafeFontFamily;
@@ -168,6 +188,9 @@ export type DocumentTemplateBlock = {
     paragraphSpacing?: number;
     indent?: number;
     listStyle?: "none" | "bullet" | "number";
+    borderColor?: string;
+    borderWidth?: number;
+    radius?: number;
   };
   image?: {
     src?: string;
@@ -193,6 +216,7 @@ export type DocumentTemplateDefinition = {
     border: { enabled: boolean; style: "solid" | "dashed" | "dotted"; width: number; color: string };
     backgroundColor: string;
     watermark: { enabled: boolean; text: string; opacity: number };
+    canvas: { gridSize: number; snapToGrid: boolean; showGrid: boolean };
   };
   sections: Record<DocumentTemplateSectionName, DocumentTemplateBlock[]>;
   blocks: DocumentTemplateBlock[];
@@ -214,10 +238,12 @@ const defaultPage: DocumentTemplateDefinition["page"] = {
   border: { enabled: false, style: "solid", width: 1, color: "#111827" },
   backgroundColor: "#ffffff",
   watermark: { enabled: false, text: "", opacity: 0.08 },
+  canvas: { gridSize: 5, snapToGrid: true, showGrid: true },
 };
 
-export function validateTemplateDefinition(value: unknown) {
+export function validateTemplateDefinition(value: unknown, options: { allowedPlaceholders?: ReadonlySet<string> } = {}) {
   const errors: string[] = [];
+  const knownPlaceholders = options.allowedPlaceholders || new Set<string>(allowedDocumentPlaceholders);
   if (!isRecord(value)) return { valid: false, errors: ["Template definition is missing."] };
   const definition = value;
   if (definition.schemaVersion !== documentTemplateSchemaVersion && definition.schemaVersion !== 1) errors.push("Unsupported template schema version.");
@@ -238,6 +264,11 @@ export function validateTemplateDefinition(value: unknown) {
       }
     }
     if (typeof page.backgroundColor === "string" && !isSafeColor(page.backgroundColor)) errors.push("Page background color must be a safe hex value.");
+    const canvas = isRecord(page.canvas) ? page.canvas : null;
+    if (canvas) {
+      const gridSize = Number(canvas.gridSize);
+      if (!Number.isFinite(gridSize) || gridSize < 1 || gridSize > 20) errors.push("Grid size must be between 1mm and 20mm.");
+    }
     const border = isRecord(page.border) ? page.border : null;
     if (border?.enabled === true && !isSafeColor(String(border.color || ""))) errors.push("Page border color must be a safe hex value.");
   }
@@ -254,20 +285,33 @@ export function validateTemplateDefinition(value: unknown) {
   if (sections && !Array.isArray(sections.body)) errors.push("Missing body.");
   if (sections && !Array.isArray(sections.footer)) errors.push("Missing footer.");
   const blocks = sectionBlocks.length ? sectionBlocks : sectionValidationBlocks(legacyBlocks, "body", errors);
+  if (blocks.length > 100) errors.push("Templates are limited to 100 elements.");
   if (!blocks.some((block) => block.visible && block.type !== "spacer" && block.type !== "divider")) errors.push("Template must contain at least one visible content block.");
   for (const block of blocks) {
     if (!documentTemplateBlockTypes.includes(block.type)) errors.push(`Unsupported block type: ${block.type}`);
     if (!["header", "body", "footer"].includes(block.section)) errors.push(`Unsupported section for block ${block.id}.`);
-    if (block.binding && !allowedDocumentPlaceholders.includes(block.binding)) errors.push(`Unsupported placeholder: ${block.binding}`);
+    if (block.binding && !knownPlaceholders.has(block.binding)) errors.push(`Unsupported placeholder: ${block.binding}`);
+    if (block.position) {
+      const position = block.position;
+      for (const key of ["x", "y", "width", "height", "zIndex"] as const) if (!Number.isFinite(Number(position[key]))) errors.push(`Invalid position for block ${block.id}.`);
+      if (position.width <= 0 || position.height <= 0) errors.push(`Block ${block.id} must have a positive size.`);
+      const pageWidth = page && page.format === "A4" ? 210 : page && page.format === "LEGAL" ? 216 : 216;
+      const pageHeight = page && page.format === "A4" ? 297 : page && page.format === "LEGAL" ? 356 : 279;
+      const width = page?.orientation === "landscape" ? pageHeight : pageWidth;
+      const height = page?.orientation === "landscape" ? pageWidth : pageHeight;
+      if (position.x < 0 || position.y < 0 || position.x + position.width > width || position.y + position.height > height) errors.push(`${block.label || block.id} is outside the printable page.`);
+      if (position.width > width || position.height > height) errors.push(`${block.label || block.id} is larger than the page.`);
+    }
     const text = block.content ?? block.text ?? "";
     for (const placeholder of extractPlaceholders(text)) {
-      if (!allowedDocumentPlaceholders.includes(placeholder as AllowedDocumentPlaceholder)) errors.push(`Unsupported placeholder: ${placeholder}`);
+      if (!knownPlaceholders.has(placeholder)) errors.push(`Unsupported placeholder: ${placeholder}`);
     }
     if (containsUnsafeTemplateContent(text)) errors.push(`Unsafe text content in block ${block.id}.`);
     if (block.style?.fontFamily && !safeFontFamilies.includes(block.style.fontFamily)) errors.push(`Unsupported font in block ${block.id}.`);
     for (const color of [block.style?.textColor, block.style?.highlightColor, block.style?.backgroundColor].filter(Boolean)) {
       if (!isSafeColor(String(color))) errors.push(`Unsafe color value in block ${block.id}.`);
     }
+    if (block.style?.borderColor && !isSafeColor(block.style.borderColor)) errors.push(`Unsafe border color in block ${block.id}.`);
     if (block.image?.src && !isSafeImageSource(block.image.src)) errors.push(`Unsafe image source in block ${block.id}.`);
     if (block.table?.rows && (block.table.rows.length > 40 || block.table.rows.some((row) => row.length > 12))) errors.push(`Table block ${block.id} is too large.`);
   }
@@ -311,19 +355,19 @@ export function normalizeTemplateDefinition(value: unknown, title = "Official HO
 export function defaultTemplateDefinition(title = "Official HOA Document"): DocumentTemplateDefinition {
   const sections: Record<DocumentTemplateSectionName, DocumentTemplateBlock[]> = {
     header: [
-      { id: "tenant-logo", section: "header", type: "logo", binding: "tenant.logo", order: 10, visible: true, style: { align: "center", width: 64, height: 64 } },
-      { id: "tenant-name", section: "header", type: "tenantName", binding: "tenant.name", order: 20, visible: true, style: { align: "center", fontFamily: "Arial", fontSize: 16, fontWeight: "bold" } },
-      { id: "tenant-address", section: "header", type: "address", binding: "tenant.address", order: 30, visible: true, style: { align: "center", fontFamily: "Arial", fontSize: 10 } },
+      { id: "tenant-logo", section: "header", type: "logo", binding: "tenant.logo", order: 10, visible: true, position: { x: 75, y: 16, width: 60, height: 28, zIndex: 10 }, style: { align: "center", width: 64, height: 64 } },
+      { id: "tenant-name", section: "header", type: "tenantName", binding: "tenant.name", order: 20, visible: true, position: { x: 35, y: 48, width: 140, height: 10, zIndex: 11 }, style: { align: "center", fontFamily: "Arial", fontSize: 16, fontWeight: "bold" } },
+      { id: "tenant-address", section: "header", type: "address", binding: "tenant.address", order: 30, visible: true, position: { x: 35, y: 61, width: 140, height: 8, zIndex: 12 }, style: { align: "center", fontFamily: "Arial", fontSize: 10 } },
     ],
     body: [
-      { id: "title", section: "body", type: "documentTitle", text: title, order: 10, visible: true, style: { align: "center", fontFamily: "Times New Roman", fontSize: 18, fontWeight: "bold", paragraphSpacing: 16 } },
-      { id: "body-intro", section: "body", type: "bodyText", content: "This is to certify that {{subject.fullName}} is a registered resident of {{tenant.name}}.", order: 20, visible: true, style: { align: "justify", fontFamily: "Times New Roman", fontSize: 12, lineHeight: 1.6 } },
-      { id: "purpose", section: "body", type: "purpose", binding: "request.purpose", order: 30, visible: true, style: { fontFamily: "Times New Roman", fontSize: 12 } },
-      { id: "issue-date", section: "body", type: "issueDate", content: "Issued on {{document.issueDate}}.", order: 40, visible: true, style: { fontFamily: "Times New Roman", fontSize: 12 } },
-      { id: "signatory", section: "body", type: "signatory", content: "{{signatory.name}}\n{{signatory.position}}", order: 50, visible: true, style: { align: "right", fontFamily: "Times New Roman", fontSize: 12, fontWeight: "bold" } },
+      { id: "title", section: "body", type: "documentTitle", text: title, order: 10, visible: true, position: { x: 25, y: 84, width: 160, height: 12, zIndex: 20 }, style: { align: "center", fontFamily: "Times New Roman", fontSize: 18, fontWeight: "bold", paragraphSpacing: 16 } },
+      { id: "body-intro", section: "body", type: "bodyText", content: "This is to certify that {{subject.fullName}} is a registered resident of {{tenant.name}}.", order: 20, visible: true, position: { x: 25, y: 108, width: 160, height: 34, zIndex: 21 }, style: { align: "justify", fontFamily: "Times New Roman", fontSize: 12, lineHeight: 1.6 } },
+      { id: "purpose", section: "body", type: "purpose", binding: "request.purpose", order: 30, visible: true, position: { x: 25, y: 149, width: 160, height: 12, zIndex: 22 }, style: { fontFamily: "Times New Roman", fontSize: 12 } },
+      { id: "issue-date", section: "body", type: "issueDate", content: "Issued on {{document.issueDate}}.", order: 40, visible: true, position: { x: 25, y: 168, width: 160, height: 12, zIndex: 23 }, style: { fontFamily: "Times New Roman", fontSize: 12 } },
+      { id: "signatory", section: "body", type: "signatory", content: "{{signatory.name}}\n{{signatory.position}}", order: 50, visible: true, position: { x: 115, y: 178, width: 70, height: 28, zIndex: 24 }, style: { align: "center", fontFamily: "Times New Roman", fontSize: 12, fontWeight: "bold" } },
     ],
     footer: [
-      { id: "verification-footer", section: "footer", type: "footer", content: "Document No. {{document.number}} | Verification: {{verification.code}}", order: 10, visible: true, style: { align: "center", fontFamily: "Arial", fontSize: 9 } },
+      { id: "verification-footer", section: "footer", type: "footer", content: "Document No. {{document.number}} | Verification: {{verification.code}}", order: 10, visible: true, position: { x: 25, y: 202, width: 160, height: 10, zIndex: 30 }, style: { align: "center", fontFamily: "Arial", fontSize: 9 } },
     ],
   };
   return {
@@ -375,6 +419,11 @@ function normalizePage(value: unknown): DocumentTemplateDefinition["page"] {
     border: { enabled: Boolean(border.enabled), style: ["solid", "dashed", "dotted"].includes(String(border.style)) ? border.style as "solid" | "dashed" | "dotted" : "solid", width: clampNumber(border.width, 0, 6, 1), color: isSafeColor(String(border.color || "")) ? String(border.color) : defaultPage.border.color },
     backgroundColor: isSafeColor(String(page.backgroundColor || "")) ? String(page.backgroundColor) : defaultPage.backgroundColor,
     watermark: { enabled: Boolean(watermark.enabled), text: sanitizeText(String(watermark.text || "")), opacity: clampNumber(watermark.opacity, 0.02, 0.3, defaultPage.watermark.opacity) },
+    canvas: {
+      gridSize: clampNumber(isRecord(page.canvas) ? page.canvas.gridSize : undefined, 1, 20, defaultPage.canvas.gridSize),
+      snapToGrid: isRecord(page.canvas) ? page.canvas.snapToGrid !== false : defaultPage.canvas.snapToGrid,
+      showGrid: isRecord(page.canvas) ? page.canvas.showGrid !== false : defaultPage.canvas.showGrid,
+    },
   };
 }
 
@@ -401,9 +450,11 @@ function sectionValidationBlocks(value: unknown, fallbackSection: DocumentTempla
       label: typeof entry.label === "string" ? entry.label : undefined,
       text: typeof entry.text === "string" ? entry.text : undefined,
       content: typeof entry.content === "string" ? entry.content : undefined,
-      binding: typeof entry.binding === "string" ? entry.binding as AllowedDocumentPlaceholder : undefined,
+      binding: typeof entry.binding === "string" && isSafePlaceholderKey(entry.binding) ? entry.binding : undefined,
       order: Number.isFinite(Number(entry.order)) ? Number(entry.order) : (index + 1) * 10,
       visible: entry.visible !== false,
+      locked: entry.locked === true,
+      position: normalizePosition(entry.position),
       required: entry.required !== false,
       style,
       image,
@@ -428,9 +479,15 @@ function normalizeBlock(value: unknown, fallbackSection: DocumentTemplateSection
     label: typeof item.label === "string" ? sanitizeText(item.label).slice(0, 120) : undefined,
     text: typeof item.text === "string" ? sanitizeText(item.text) : undefined,
     content: typeof item.content === "string" ? sanitizeText(item.content) : typeof item.text === "string" ? sanitizeText(item.text) : undefined,
-    binding: allowedDocumentPlaceholders.includes(item.binding as AllowedDocumentPlaceholder) ? item.binding as AllowedDocumentPlaceholder : undefined,
+    binding: typeof item.binding === "string" && isSafePlaceholderKey(item.binding) ? item.binding : undefined,
     order: Number.isFinite(Number(item.order)) ? Number(item.order) : (index + 1) * 10,
     visible: item.visible !== false,
+    locked: item.locked === true,
+    position: normalizePosition(item.position),
+    accessibility: isRecord(item.accessibility) ? {
+      ariaLabel: typeof item.accessibility.ariaLabel === "string" ? sanitizeText(item.accessibility.ariaLabel).slice(0, 140) : undefined,
+      altText: typeof item.accessibility.altText === "string" ? sanitizeText(item.accessibility.altText).slice(0, 140) : undefined,
+    } : undefined,
     required: item.required !== false,
     style: {
       align: ["left", "center", "right", "justify"].includes(String(style.align)) ? style.align as NonNullable<DocumentTemplateBlock["style"]>["align"] : undefined,
@@ -454,6 +511,9 @@ function normalizeBlock(value: unknown, fallbackSection: DocumentTemplateSection
       paragraphSpacing: clampNumber(style.paragraphSpacing, 0, 60, undefined),
       indent: clampNumber(style.indent, 0, 120, undefined),
       listStyle: ["none", "bullet", "number"].includes(String(style.listStyle)) ? style.listStyle as "none" | "bullet" | "number" : undefined,
+      borderColor: isSafeColor(String(style.borderColor || "")) ? String(style.borderColor) : undefined,
+      borderWidth: clampNumber(style.borderWidth, 0, 8, undefined),
+      radius: clampNumber(style.radius, 0, 24, undefined),
     },
     image: image ? { src: typeof image.src === "string" && isSafeImageSource(image.src) ? image.src : undefined, alt: typeof image.alt === "string" ? sanitizeText(image.alt).slice(0, 140) : undefined, width: clampNumber(image.width, 8, 500, undefined), height: clampNumber(image.height, 8, 500, undefined) } : undefined,
     table,
@@ -462,6 +522,18 @@ function normalizeBlock(value: unknown, fallbackSection: DocumentTemplateSection
 
 function flattenSections(sections: Partial<Record<DocumentTemplateSectionName, DocumentTemplateBlock[]>>) {
   return (["header", "body", "footer"] as const).flatMap((section) => (Array.isArray(sections[section]) ? sections[section] : []).map((block) => ({ ...block, section })));
+}
+
+function normalizePosition(value: unknown) {
+  if (!isRecord(value)) return undefined;
+  const position = value;
+  const x = clampNumber(position.x, 0, 500, undefined);
+  const y = clampNumber(position.y, 0, 500, undefined);
+  const width = clampNumber(position.width, 1, 500, undefined);
+  const height = clampNumber(position.height, 1, 500, undefined);
+  const zIndex = clampNumber(position.zIndex, 0, 1000, undefined);
+  if ([x, y, width, height, zIndex].some((item) => item == null)) return undefined;
+  return { x: x!, y: y!, width: width!, height: height!, zIndex: zIndex! };
 }
 
 function clampNumber(value: unknown, min: number, max: number, fallback: number): number;
@@ -486,6 +558,10 @@ function isSafeColor(value: string) {
 
 function isSafeImageSource(value: string) {
   return value === "{{tenant.logo}}" || value.startsWith("/uploads/") || value.startsWith("/api/");
+}
+
+function isSafePlaceholderKey(value: string) {
+  return /^[A-Za-z][A-Za-z0-9_.]{1,120}$/.test(value);
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

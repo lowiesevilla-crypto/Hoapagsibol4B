@@ -3,7 +3,7 @@
 import { randomUUID } from "node:crypto";
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { DocumentDefinitionStatus, DocumentDeliveryMode, DocumentFieldType, DocumentGenerationMode, DocumentOutstandingBalancePolicy, DocumentRequestStatus, DocumentSequenceScope, DocumentSubjectType, DocumentTemplateOwnership, DocumentTemplateVersionStatus, DocumentType, NotificationType, Prisma, Role } from "@prisma/client";
+import { DocumentDefinitionStatus, DocumentDeliveryMode, DocumentFieldType, DocumentGenerationMode, DocumentOutstandingBalancePolicy, DocumentPlaceholderOwnership, DocumentRequestStatus, DocumentSequenceScope, DocumentSubjectType, DocumentTemplateOwnership, DocumentTemplateVersionStatus, DocumentType, NotificationType, Prisma, Role } from "@prisma/client";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { requireUser } from "@/lib/auth";
@@ -16,7 +16,7 @@ import { allocateDefinitionDocumentNumber, allocateDocumentNumber, documentTypeL
 import { buildSubjectSnapshot, canGenerateWithoutPayment, documentConfigurationStatus, legacyRequestFields, parseConfiguredFields, requestDataSnapshotJson, statusForConfiguration, subjectSnapshotJson } from "@/lib/services/document-workflow";
 import { defaultNumberingFormat, evaluateDefinitionCompleteness, validateNumberingFormat, workflowFieldsForPreset } from "@/lib/services/document-definitions";
 import { balancePolicyLockMessage, canOverrideDocumentBalancePolicy, getQualifyingHomeownerBalance, normalizeOutstandingBalancePolicy, policyForDocumentRequest } from "@/lib/services/document-balance-policy";
-import { defaultTemplateDefinition, documentTemplateBlockTypes, documentTemplateSchemaVersion, normalizeTemplateDefinition, renderTemplateDefinitionText, validateTemplateDefinition, type AllowedDocumentPlaceholder, type DocumentTemplateBlock, type DocumentTemplateBlockType } from "@/lib/services/document-template-builder";
+import { allowedDocumentPlaceholders, defaultTemplateDefinition, documentTemplateBlockTypes, documentTemplateSchemaVersion, normalizeTemplateDefinition, renderTemplateDefinitionText, validateTemplateDefinition, type AllowedDocumentPlaceholder, type DocumentTemplateBlock, type DocumentTemplateBlockType } from "@/lib/services/document-template-builder";
 import { tenantUploadDirectory } from "@/lib/storage";
 import { assertEditableTemplateOwnership } from "@/lib/services/document-template-ownership";
 import { money, shortDate } from "@/lib/utils";
@@ -843,7 +843,8 @@ export async function saveDocumentTemplateVersionAction(formData: FormData) {
   const loadedUpdatedAt = clean(formData.get("loadedUpdatedAt"));
   if ((operation === "saveDraft" || operation === "publish") && loadedUpdatedAt && currentRecord.updatedAt.toISOString() !== loadedUpdatedAt) fail("This draft changed in another session. Reload before saving to avoid overwriting someone else's work.");
   const templateDefinition = await templateDefinitionFromForm(formData, definitionRecord.displayName, admin.tenant.slug);
-  const validation = validateTemplateDefinition(templateDefinition);
+  const customPlaceholderKeys = await prisma.documentPlaceholderDefinition.findMany({ where: { tenantId: admin.tenantId, ownership: DocumentPlaceholderOwnership.TENANT, active: true }, select: { key: true } });
+  const validation = validateTemplateDefinition(templateDefinition, { allowedPlaceholders: new Set([...allowedDocumentPlaceholders, ...customPlaceholderKeys.map((item) => item.key)]) });
   if (!validation.valid) fail(validation.errors[0]);
   if (operation === "publish") {
     if (currentRecord.status !== DocumentTemplateVersionStatus.DRAFT) fail("Only draft versions can be published.");
@@ -1078,6 +1079,7 @@ function uniqueCopyCode(code: string) {
 async function templateDefinitionFromForm(formData: FormData, title: string, tenantSlug: string) {
   const json = clean(formData.get("templateDefinitionJson"));
   if (json) {
+    if (json.length > 750_000) throw new Error("Template definition is too large. Keep the design under 100 elements.");
     let parsed: unknown;
     try {
       parsed = JSON.parse(json);

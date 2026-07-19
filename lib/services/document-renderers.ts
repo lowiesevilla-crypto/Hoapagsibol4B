@@ -38,7 +38,7 @@ export const htmlDocumentRenderer: DocumentRenderer = {
     const errors = this.validate(model);
     if (errors.length) throw new Error(errors.join(" "));
     const qrDataUrl = model.metadata.verificationUrl ? await QRCode.toDataURL(model.metadata.verificationUrl, { width: 240, margin: 1, errorCorrectionLevel: "M" }) : null;
-    const html = `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${escapeHtml(model.metadata.title)}</title><style>${documentCss(model)}</style></head><body><main class="document-page${model.preview ? " preview" : ""}">${renderWatermark(model)}${renderSection(model.sections.header, "header", qrDataUrl)}${renderSection(model.sections.body, "body", qrDataUrl)}${renderSection(model.sections.footer, "footer", qrDataUrl)}</main></body></html>`;
+    const html = `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${escapeHtml(model.metadata.title)}</title><style>${documentCss(model)}</style></head><body><main class="document-page${model.preview ? " preview" : ""}${model.visualLayout ? " visual-layout" : ""}">${renderWatermark(model)}${renderSection(model.sections.header, "header", qrDataUrl, model.visualLayout)}${renderSection(model.sections.body, "body", qrDataUrl, model.visualLayout)}${renderSection(model.sections.footer, "footer", qrDataUrl, model.visualLayout)}</main></body></html>`;
     return { outputFormat: DocumentOutputFormat.HTML, contentType: "text/html; charset=utf-8", content: html, outputSize: Buffer.byteLength(html, "utf8"), pageCount: null, rendererName: this.name, rendererVersion: this.version, warnings: model.warnings };
   },
 };
@@ -48,12 +48,12 @@ export function getDocumentRenderer(format: DocumentOutputFormat) {
   throw new Error(`Unsupported document output format: ${format}.`);
 }
 
-function renderSection(blocks: DocumentRenderBlock[], name: string, qrDataUrl: string | null) {
-  return `<section class="section section-${name}">${blocks.filter((block) => block.visible).map((block) => renderBlock(block, qrDataUrl)).join("")}</section>`;
+function renderSection(blocks: DocumentRenderBlock[], name: string, qrDataUrl: string | null, visualLayout: boolean) {
+  return `<section class="section section-${name}${visualLayout ? " visual-section" : ""}">${blocks.filter((block) => block.visible).map((block) => renderBlock(block, qrDataUrl, visualLayout)).join("")}</section>`;
 }
 
-function renderBlock(block: DocumentRenderBlock, qrDataUrl: string | null) {
-  const style = blockStyle(block);
+function renderBlock(block: DocumentRenderBlock, qrDataUrl: string | null, visualLayout: boolean) {
+  const style = blockStyle(block, visualLayout);
   if (block.type === "pageBreak") return '<div class="page-break" aria-hidden="true"></div>';
   if (block.type === "divider" || block.type === "horizontalLine") return `<hr style="${style}">`;
   if (block.type === "verticalLine") return `<div class="vertical-line" style="${style}"></div>`;
@@ -62,14 +62,21 @@ function renderBlock(block: DocumentRenderBlock, qrDataUrl: string | null) {
   const imageSource = block.image?.src || (block.type === "logo" ? block.content : "");
   if ((block.type === "logo" || block.type === "image") && imageSource) return `<figure style="${style}"><img src="${escapeAttribute(imageSource)}" alt="${escapeAttribute(block.image?.alt ?? block.label ?? "Document image")}" width="${Math.round(block.image?.width ?? block.style?.width ?? 96)}" height="${Math.round(block.image?.height ?? block.style?.height ?? 96)}"></figure>`;
   if (block.table?.rows?.length) return `<table style="${style}"><tbody>${block.table.rows.map((row) => `<tr>${row.map((cell) => `<td>${escapeHtml(cell)}</td>`).join("")}</tr>`).join("")}</tbody></table>`;
-  const tag = block.type === "documentTitle" || block.type === "tenantName" ? "h1" : "div";
+  const tag = ["documentTitle", "tenantName", "heading"].includes(block.type) ? "h1" : "div";
   return `<${tag} class="block block-${escapeAttribute(block.type)}" style="${style}">${escapeHtml(block.content).replaceAll("\n", "<br>")}</${tag}>`;
 }
 
-function blockStyle(block: DocumentRenderBlock) {
-  const style = block.style;
-  if (!style) return "";
+function blockStyle(block: DocumentRenderBlock, visualLayout: boolean) {
+  const style = block.style || {};
+  const position = block.position;
   const declarations = [
+    visualLayout && position ? "position:absolute" : "",
+    visualLayout && position ? `left:${clamp(position.x, 0, 500)}mm` : "",
+    visualLayout && position ? `top:${clamp(position.y, 0, 500)}mm` : "",
+    visualLayout && position ? `width:${clamp(position.width, 1, 500)}mm` : "",
+    visualLayout && position ? `height:${clamp(position.height, 1, 500)}mm` : "",
+    visualLayout && position ? `z-index:${clamp(position.zIndex, 0, 1000)}` : "",
+    visualLayout ? "overflow:hidden" : "",
     style.align ? `text-align:${style.align}` : "",
     style.fontFamily ? `font-family:${safeFont(style.fontFamily)}` : "",
     style.fontSize ? `font-size:${clamp(style.fontSize, 6, 72)}pt` : "",
@@ -80,8 +87,10 @@ function blockStyle(block: DocumentRenderBlock) {
     style.backgroundColor ? `background-color:${style.backgroundColor}` : "",
     style.padding != null ? `padding:${clamp(style.padding, 0, 60)}px` : "",
     style.margin != null ? `margin:${clamp(style.margin, 0, 60)}px` : "",
-    style.width ? `width:${clamp(style.width, 1, 100)}%` : "",
+    !visualLayout && style.width ? `width:${clamp(style.width, 1, 100)}%` : "",
     style.lineHeight ? `line-height:${clamp(style.lineHeight, 1, 3)}` : "",
+    style.borderColor && style.borderWidth ? `border:${clamp(style.borderWidth, 0, 8)}px solid ${style.borderColor}` : "",
+    style.radius != null ? `border-radius:${clamp(style.radius, 0, 24)}px` : "",
   ].filter(Boolean);
   return declarations.join(";");
 }
@@ -89,7 +98,12 @@ function blockStyle(block: DocumentRenderBlock) {
 function documentCss(model: DocumentRenderModel) {
   const margins = model.page.margins;
   const size = model.page.format === "LETTER" ? "Letter" : model.page.format === "LEGAL" ? "Legal" : "A4";
-  return `@page{size:${size} ${model.page.orientation};margin:${margins.top}mm ${margins.right}mm ${margins.bottom}mm ${margins.left}mm}*{box-sizing:border-box}body{margin:0;background:#f3f4f6;color:#111827;font-family:Arial,sans-serif}.document-page{position:relative;width:210mm;min-height:297mm;margin:0 auto;padding:${margins.top}mm ${margins.right}mm ${margins.bottom}mm ${margins.left}mm;background:${model.page.backgroundColor};overflow:hidden}.section{position:relative;z-index:1}.block{white-space:normal;overflow-wrap:anywhere;margin:0 0 12px}.block-documentTitle{font-size:20pt;text-align:center}.section-footer{margin-top:24px}table{width:100%;border-collapse:collapse}td{border:1px solid #d1d5db;padding:6px;vertical-align:top}.qr-block{text-align:center}.qr-block img{width:96px;height:96px}.qr-block figcaption{font-size:8pt}.page-break{break-after:page}.watermark{position:absolute;inset:45% 0 auto;transform:rotate(-28deg);text-align:center;font-size:34pt;font-weight:700;color:rgba(100,116,139,.15);z-index:0}@media print{body{background:white}.document-page{margin:0;box-shadow:none}}`;
+  const dimensions = model.page.format === "A4" ? { width: 210, height: 297 } : model.page.format === "LETTER" ? { width: 216, height: 279 } : { width: 216, height: 356 };
+  const width = model.page.orientation === "landscape" ? dimensions.height : dimensions.width;
+  const height = model.page.orientation === "landscape" ? dimensions.width : dimensions.height;
+  const page = model.visualLayout ? `width:${width}mm;height:${height}mm;min-height:${height}mm;padding:0` : `width:${width}mm;min-height:${height}mm;padding:${margins.top}mm ${margins.right}mm ${margins.bottom}mm ${margins.left}mm`;
+  const pageMargin = model.visualLayout ? "0" : `${margins.top}mm ${margins.right}mm ${margins.bottom}mm ${margins.left}mm`;
+  return `@page{size:${size} ${model.page.orientation};margin:${pageMargin}}*{box-sizing:border-box}body{margin:0;background:#f3f4f6;color:#111827;font-family:Arial,sans-serif}.document-page{position:relative;${page};margin:0 auto;background:${model.page.backgroundColor};overflow:hidden}.section{position:relative;z-index:1}.visual-section{position:absolute;inset:0}.block{white-space:normal;overflow-wrap:anywhere;margin:0 0 12px}.visual-layout .block{margin:0}.block-documentTitle{font-size:20pt;text-align:center}.section-footer{margin-top:24px}table{border-collapse:collapse}td{border:1px solid #d1d5db;padding:6px;vertical-align:top}.qr-block{text-align:center}.qr-block img{width:96px;height:96px}.qr-block figcaption{font-size:8pt}.page-break{break-after:page}.watermark{position:absolute;inset:45% 0 auto;transform:rotate(-28deg);text-align:center;font-size:34pt;font-weight:700;color:rgba(100,116,139,.15);z-index:0}@media print{body{background:white}.document-page{margin:0;box-shadow:none}}`;
 }
 
 function renderWatermark(model: DocumentRenderModel) {

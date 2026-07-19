@@ -25,7 +25,7 @@ async function main() {
 
   await prisma.$transaction(async (tx) => {
     const actor = await findOrCreateActor(tx, fixture.tenantId);
-    const homeowner = await findOrCreateHomeowner(tx, fixture.tenantId, actor.id);
+    const homeowner = await findOrCreateHomeowner(tx, fixture.tenantId);
     const code = `VERIFY_RESTORE_${Date.now()}`;
     const archivedAt = new Date("2026-07-01T00:00:00.000Z");
 
@@ -175,7 +175,7 @@ async function findOrCreateActor(tx: Prisma.TransactionClient, tenantId: string)
   });
 }
 
-async function findOrCreateHomeowner(tx: Prisma.TransactionClient, tenantId: string, actorId: string) {
+async function findOrCreateHomeowner(tx: Prisma.TransactionClient, tenantId: string) {
   const existing = await tx.homeownerProfile.findFirst({ where: { tenantId }, select: { id: true, address: true } });
   if (existing) return existing;
   const user = await tx.user.create({

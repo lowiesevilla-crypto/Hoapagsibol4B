@@ -68,9 +68,9 @@ export async function generateDocument(context: DocumentExecutionContext, reques
     if (validatesOfficialReadiness && request.definition?.workflowDefinitionId && !workflowSummary?.completed) issues.push(issue("WORKFLOW_INCOMPLETE", "WORKFLOW", "The configured workflow has not completed.", true, "Complete all required workflow steps before issuance."));
     if (validatesOfficialReadiness && request.approvalRequiredSnapshot && !request.approvedAt && !workflowSummary?.completed) issues.push(issue("APPROVAL_INCOMPLETE", "WORKFLOW", "Required approval has not completed.", true));
     const template = await resolveGenerationTemplate(context, { definitionId: effective.definition.id, mode: options.mode, requestTemplateVersionId: request.templateVersionIdSnapshot, draftTemplateVersionId: options.draftTemplateVersionId });
-    const templateValidation = validateTemplateDefinition(template.definitionJson);
-    templateValidation.errors.forEach((message) => issues.push(issue("TEMPLATE_INVALID", "TEMPLATE", message, true, "Repair and publish a valid template version.")));
     const placeholders = await listDocumentPlaceholders(context);
+    const templateValidation = validateTemplateDefinition(template.definitionJson, { allowedPlaceholders: new Set(placeholders.map((item) => item.key)) });
+    templateValidation.errors.forEach((message) => issues.push(issue("TEMPLATE_INVALID", "TEMPLATE", message, true, "Repair and publish a valid template version.")));
     const association = await getAssociationSettings(context.tenantId);
     const officers = await getActiveOrganizationOfficers(context.tenantId);
     const templateRequiresSignatory = Boolean(record(template.definitionJson).meta && record(record(template.definitionJson).meta).requiresSignatory === true);

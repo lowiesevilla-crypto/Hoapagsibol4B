@@ -3,7 +3,6 @@ import {
   DocumentRequestStatus,
   PrismaClient,
   Role,
-  type Prisma,
 } from "@prisma/client";
 import {
   canOverrideDocumentBalancePolicy,

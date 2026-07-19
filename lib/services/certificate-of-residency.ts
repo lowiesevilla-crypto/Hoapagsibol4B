@@ -39,6 +39,7 @@ export function certificateOfResidencyTemplateDefinition(): DocumentTemplateDefi
       border: { enabled: true, style: "solid", width: 1, color: "#166534" },
       backgroundColor: "#ffffff",
       watermark: { enabled: false, text: "", opacity: 0.08 },
+      canvas: { gridSize: 5, snapToGrid: true, showGrid: true },
     },
     sections: {
       header: [

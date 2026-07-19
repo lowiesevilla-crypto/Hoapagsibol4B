@@ -179,6 +179,12 @@ main, section, article, header, footer, aside, nav, form, div { min-width: 0; }
   background-size: 32px 32px, 32px 32px, auto, auto, auto;
 }
 
+.canvas-grid {
+  background-image:
+    linear-gradient(rgba(15, 118, 110, .08) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(15, 118, 110, .08) 1px, transparent 1px);
+}
+
 @media print {
   @page { size: A4 portrait; margin: 5mm; }
   @page hoa-document { size: A4 portrait; margin: 0; }

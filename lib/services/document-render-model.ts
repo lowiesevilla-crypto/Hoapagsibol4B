@@ -6,6 +6,7 @@ import {
   normalizeTemplateDefinition,
   type DocumentTemplateBlock,
   type DocumentTemplateDefinition,
+  type DocumentRichText,
 } from "@/lib/services/document-template-builder";
 import {
   resolveDocumentPlaceholders,
@@ -16,6 +17,7 @@ import {
 export type DocumentRenderBlock = Omit<DocumentTemplateBlock, "content" | "text" | "table"> & {
   content: string;
   table?: { rows: string[][] };
+  richText?: DocumentRichText;
   officerListData?: {
     heading: string;
     term: string | null;
@@ -106,12 +108,13 @@ export function buildDocumentRenderModel(input: {
         officerListData: resolvedOfficerList,
       };
     }
-    const result = resolveText(block.content ?? block.text ?? (block.binding ? `{{${block.binding}}}` : block.label ?? ""));
+    const richTextResult = block.richText ? resolveRichText(block.richText, resolveText, collect) : null;
+    const result = richTextResult ? { resolvedContent: richTextResult.text, unresolvedPlaceholders: richTextResult.unresolved, unauthorizedPlaceholders: richTextResult.unauthorized, warnings: richTextResult.warnings, validationErrors: [], resolvedValues: richTextResult.resolvedValues } : resolveText(block.content ?? block.text ?? (block.binding ? `{{${block.binding}}}` : ""));
     const omit = block.required === false && (result.unresolvedPlaceholders.length > 0 || result.unauthorizedPlaceholders.length > 0);
     if (!omit) collect(result);
     const table = block.table ? { rows: block.table.rows.map((row) => row.map((cell) => { const cellResult = resolveText(cell); collect(cellResult); return cellResult.resolvedContent; })) } : undefined;
     const imageSource = resolveImageSource(block, input.placeholderContext);
-    return { ...block, image: imageSource ? { ...block.image, src: imageSource } : block.image, visible: block.visible && !omit, content: omit ? "" : result.resolvedContent, table };
+    return { ...block, image: imageSource ? { ...block.image, src: imageSource } : block.image, visible: block.visible && !omit, content: omit ? "" : result.resolvedContent, richText: richTextResult?.richText, table };
   });
   const page = input.mode === "PREVIEW"
     ? { ...template.page, watermark: { ...template.page.watermark, enabled: true, text: "PREVIEW - NOT AN OFFICIAL DOCUMENT", opacity: 0.12 } }
@@ -132,6 +135,24 @@ export function buildDocumentRenderModel(input: {
     officerListValidationErrors: [...officerListValidationErrors],
     warnings: [...warnings],
   };
+}
+
+function resolveRichText(richText: DocumentRichText, resolveText: (value: string) => ReturnType<typeof resolveDocumentPlaceholders>, collect: (result: ReturnType<typeof resolveDocumentPlaceholders>) => void) {
+  const unresolved = new Set<string>();
+  const unauthorized = new Set<string>();
+  const warnings = new Set<string>();
+  const resolvedValues: Record<string, string> = {};
+  const children = richText.children.map((node) => {
+    const source = node.type === "placeholder" ? `{{${node.key}}}` : node.text;
+    const result = resolveText(source);
+    collect(result);
+    result.unresolvedPlaceholders.forEach((item) => unresolved.add(item));
+    result.unauthorizedPlaceholders.forEach((item) => unauthorized.add(item));
+    result.warnings.forEach((item) => warnings.add(item));
+    Object.assign(resolvedValues, result.resolvedValues);
+    return { ...node, resolvedText: result.resolvedContent };
+  });
+  return { richText: { type: "paragraph" as const, children }, text: children.map((node) => node.resolvedText || (node.type === "placeholder" ? `{{${node.key}}}` : node.text)).join(""), unresolved: [...unresolved], unauthorized: [...unauthorized], warnings: [...warnings], resolvedValues };
 }
 
 function resolveImageSource(block: DocumentTemplateBlock, context: PlaceholderResolutionContext) {

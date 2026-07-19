@@ -53,6 +53,7 @@ import {
   type DocumentTemplateBlockType,
   type DocumentTemplateDefinition,
   type DocumentTemplateSectionName,
+  type DocumentRichText,
 } from "@/lib/services/document-template-builder";
 import {
   defaultDesignerPanelPreference,
@@ -98,6 +99,7 @@ type DragState = {
   origin: NonNullable<VisualBlock["position"]>;
   before: DocumentTemplateDefinition;
   moved: boolean;
+  lockAspectRatio: boolean;
 };
 
 const elementOptions: { type: DocumentTemplateBlockType; label: string; icon: React.ReactNode; content?: string; binding?: string; section?: DocumentTemplateSectionName }[] = [
@@ -107,7 +109,9 @@ const elementOptions: { type: DocumentTemplateBlockType; label: string; icon: Re
   { type: "image", label: "Image", icon: <ImageIcon /> },
   { type: "logo", label: "Tenant Logo", icon: <ImageIcon />, binding: "tenant.logo", section: "header" },
   { type: "horizontalLine", label: "Horizontal Line", icon: <Minus /> },
+  { type: "verticalLine", label: "Vertical Line", icon: <Minus /> },
   { type: "rectangle", label: "Rectangle", icon: <Square /> },
+  { type: "textBox", label: "Text Box", icon: <Type /> },
   { type: "officerList", label: "HOA Officer List", icon: <List /> },
   { type: "table", label: "Table", icon: <FileText /> },
   { type: "signature", label: "Signature Block", icon: <Signature />, content: "{{signatory.name}}\n{{signatory.position}}", binding: "signatory.name" },
@@ -136,6 +140,7 @@ export function ProfessionalDocumentTemplateEditor(props: Props) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const canvasRef = useRef<HTMLDivElement>(null);
   const dragRef = useRef<DragState | null>(null);
+  const textSelectionRef = useRef<{ blockId: string; start: number; end: number } | null>(null);
   const copiedRef = useRef<VisualBlock[]>([]);
   const focusRestoreRef = useRef<{ leftOpen: boolean; rightOpen: boolean } | null>(null);
   const [leftPanelOpen, setLeftPanelOpen] = useState(defaultDesignerPanelPreference.leftOpen);
@@ -304,6 +309,19 @@ export function ProfessionalDocumentTemplateEditor(props: Props) {
     updateDefinition((draft) => mapBlocks(draft, (block) => selectedIds.includes(block.id) ? { ...block, ...patch } : block));
   }
 
+  function applyTextColor(color: string) {
+    const normalized = /^#[0-9A-Fa-f]{6}$/.test(color) ? color.toUpperCase() : "";
+    if (!normalized || !selected.length) return;
+    const block = selected[0];
+    const selection = textSelectionRef.current?.blockId === block.id ? textSelectionRef.current : null;
+    if (selection && selection.end > selection.start) {
+      const richText = applyColorToRichText(block.richText || plainTextToRichText(block.content || block.text || ""), selection.start, selection.end, normalized);
+      updateBlock(block.id, { richText, content: richTextToContent(richText) });
+      return;
+    }
+    updateBlock(block.id, { style: { ...block.style, textColor: normalized } });
+  }
+
   function updatePositions(updater: (position: VisualBlock["position"]) => VisualBlock["position"]) {
     updateLive((draft) => mapBlocks(draft, (block) => selectedIds.includes(block.id) && block.position ? { ...block, position: updater(block.position) } : block));
   }
@@ -321,9 +339,10 @@ export function ProfessionalDocumentTemplateEditor(props: Props) {
       order: (count + 1) * 10,
       visible: true,
       locked: false,
-      position: { x: position?.x ?? (option.type === "officerList" ? 8 : clamp(25 + (count % 3) * 8, 0, paperWidth - 60)), y: position?.y ?? (option.type === "officerList" ? 65 : clamp(88 + count * 12, 0, paperHeight - 22)), width: option.type === "logo" ? 60 : option.type === "qrVerification" ? 32 : option.type === "officerList" ? 38 : option.type === "horizontalLine" ? 160 : 150, height: option.type === "logo" ? 28 : option.type === "qrVerification" ? 32 : option.type === "officerList" ? 110 : option.type === "horizontalLine" ? 2 : option.type === "rectangle" ? 28 : 12, zIndex: 40 + count },
-      style: { fontFamily: "Arial", fontSize: option.type === "heading" ? 16 : 11, align: option.type === "heading" ? "center" : "left", fontWeight: option.type === "heading" ? "bold" : "normal", borderColor: option.type === "rectangle" ? "#94a3b8" : undefined, borderWidth: option.type === "rectangle" ? 1 : undefined },
-      image: option.type === "logo" ? { src: "{{tenant.logo}}", alt: "Tenant logo" } : undefined,
+      position: { x: position?.x ?? (option.type === "officerList" ? 8 : clamp(25 + (count % 3) * 8, 0, paperWidth - 60)), y: position?.y ?? (option.type === "officerList" ? 65 : clamp(88 + count * 12, 0, paperHeight - 22)), width: option.type === "logo" ? 60 : option.type === "qrVerification" ? 32 : option.type === "officerList" ? 38 : option.type === "verticalLine" ? 2 : option.type === "horizontalLine" ? 160 : 150, height: option.type === "logo" ? 28 : option.type === "qrVerification" ? 32 : option.type === "officerList" ? 110 : option.type === "verticalLine" ? 160 : option.type === "horizontalLine" ? 2 : option.type === "rectangle" ? 28 : 12, zIndex: 40 + count },
+      style: { fontFamily: "Arial", fontSize: option.type === "heading" ? 16 : 11, align: option.type === "heading" ? "center" : "left", fontWeight: option.type === "heading" ? "bold" : "normal", borderColor: option.type === "rectangle" ? "#94a3b8" : undefined, borderWidth: option.type === "rectangle" ? 1 : undefined, lineColor: ["horizontalLine", "verticalLine"].includes(option.type) ? "#64748b" : undefined, lineWidth: ["horizontalLine", "verticalLine"].includes(option.type) ? 1 : undefined, lineStyle: ["horizontalLine", "verticalLine"].includes(option.type) ? "solid" : undefined },
+      image: option.type === "logo" ? { src: "{{tenant.logo}}", alt: "Tenant logo", fit: "contain", positionX: "center", positionY: "center", opacity: 1, lockAspectRatio: true } : undefined,
+      qr: option.type === "qrVerification" ? { label: "PREVIEW QR — NOT VALID FOR VERIFICATION", instruction: "Scan to verify", showLabel: true, showInstruction: true, squareLocked: true, quietZone: 1 } : undefined,
       table: option.type === "table" ? { rows: [["Label", "Value"], ["", ""]] } : undefined,
       officerList: option.type === "officerList" ? { ...defaultOfficerListConfig } : undefined,
     };
@@ -385,7 +404,7 @@ export function ProfessionalDocumentTemplateEditor(props: Props) {
     if (!props.editable || block.locked || !block.position || isLockedPageRegion(block.position)) return;
     event.stopPropagation();
     if (!selectedIds.includes(block.id)) select(block.id, event.shiftKey || event.metaKey || event.ctrlKey);
-    dragRef.current = { mode, id: block.id, corner, startX: event.clientX, startY: event.clientY, origin: { ...block.position }, before: definition, moved: false };
+    dragRef.current = { mode, id: block.id, corner, startX: event.clientX, startY: event.clientY, origin: { ...block.position }, before: definition, moved: false, lockAspectRatio: mode === "resize" && (block.type === "logo" || block.type === "image") && block.image?.lockAspectRatio !== false };
     (event.currentTarget as HTMLElement).setPointerCapture?.(event.pointerId);
   }
 
@@ -399,7 +418,7 @@ export function ProfessionalDocumentTemplateEditor(props: Props) {
     const snap = (value: number) => definition.page.canvas.snapToGrid ? Math.round(value / definition.page.canvas.gridSize) * definition.page.canvas.gridSize : value;
     const next = { ...drag.origin };
     if (drag.mode === "move") { next.x = clamp(snap(drag.origin.x + dx), 0, paperWidth - next.width); next.y = clamp(snap(drag.origin.y + dy), 0, paperHeight - next.height); }
-    else resizePosition(next, dx, dy, drag.corner || "se", paperWidth, paperHeight, snap);
+    else resizePosition(next, dx, dy, drag.corner || "se", paperWidth, paperHeight, snap, drag.lockAspectRatio);
     updateLive((draft) => mapBlocks(draft, (block) => block.id === drag.id ? { ...block, position: next } : block));
   }
 
@@ -497,7 +516,7 @@ export function ProfessionalDocumentTemplateEditor(props: Props) {
                 {definition.page.guides.horizontal.map((guide, index) => <div key={`h-guide-${index}`} className="pointer-events-none absolute left-0 right-0 z-[2] border-t border-dashed border-fuchsia-300" style={{ top: guide.positionMm * scale }} />)}
                 {definition.page.canvas.showMarginGuides && definition.page.showHeaderBoundary && <div className="pointer-events-none absolute left-0 right-0 z-[2] border-t border-amber-400" style={{ top: (definition.page.margins.top + definition.page.headerHeightMm) * scale }} />}
                 {definition.page.canvas.showMarginGuides && definition.page.showFooterBoundary && <div className="pointer-events-none absolute left-0 right-0 z-[2] border-t border-amber-400" style={{ top: (paperHeight - definition.page.margins.bottom - definition.page.footerHeightMm) * scale }} />}
-                {definition.blocks.filter((block) => block.visible && block.position).sort((a, b) => (a.position?.zIndex || 0) - (b.position?.zIndex || 0)).map((block) => <CanvasBlock key={block.id} block={block as VisualBlock} selected={selectedIds.includes(block.id)} editing={editingId === block.id} editable={props.editable} scale={scale} tenantLogoSrc={props.tenantLogoSrc} onImageError={setAssetError} onSelect={(event) => select(block.id, event.shiftKey || event.metaKey || event.ctrlKey)} onDoubleClick={() => isTextBlock(block) && setEditingId(block.id)} onChangeText={(content) => updateLive((draft) => mapBlocks(draft, (item) => item.id === block.id ? { ...item, content } : item))} onCommitText={(content) => { setEditingId(""); updateBlock(block.id, { content }); }} onEscape={selectPage} onPointerDown={beginDrag} onResizeStart={beginDrag} onImageUpload={() => { setImageBlockId(block.id); fileInputRef.current?.click(); }} />)}
+                {definition.blocks.filter((block) => block.visible && block.position).sort((a, b) => (a.position?.zIndex || 0) - (b.position?.zIndex || 0)).map((block) => <CanvasBlock key={block.id} block={block as VisualBlock} selected={selectedIds.includes(block.id)} editing={editingId === block.id} editable={props.editable} scale={scale} tenantLogoSrc={props.tenantLogoSrc} onImageError={setAssetError} onTextSelection={(selection) => { textSelectionRef.current = selection; }} onSelect={(event) => select(block.id, event.shiftKey || event.metaKey || event.ctrlKey)} onDoubleClick={() => isTextBlock(block) && setEditingId(block.id)} onChangeText={(content, richText) => updateLive((draft) => mapBlocks(draft, (item) => item.id === block.id ? { ...item, content, richText } : item))} onCommitText={(content, richText) => { setEditingId(""); updateBlock(block.id, { content, richText }); }} onEscape={selectPage} onPointerDown={beginDrag} onResizeStart={beginDrag} onImageUpload={() => { setImageBlockId(block.id); fileInputRef.current?.click(); }} />)}
                 {!definition.blocks.length && <div className="absolute inset-0 flex items-center justify-center text-sm font-bold text-slate-400">Add an element to start designing.</div>}
               </div>
             </div>
@@ -507,16 +526,14 @@ export function ProfessionalDocumentTemplateEditor(props: Props) {
         </div>
       </main>
 
-      {rightPanelOpen && <aside id="designer-right-panel" aria-label="Properties and validation" aria-hidden={false} className="border-l border-slate-200 bg-white p-4 print:hidden max-xl:absolute max-xl:inset-y-0 max-xl:right-0 max-xl:z-20 max-xl:w-[min(90vw,304px)] max-xl:shadow-2xl"><PropertiesPanel selected={selected} pageSelected={pageSelected} definition={definition} editable={props.editable} updatePage={updatePage} updateBlock={updateBlock} updateSelectedPatch={updateSelectedPatch} updatePositions={updatePositions} duplicate={duplicateSelected} remove={removeSelected} align={alignSelected} layerMove={layerMove} onImageUpload={() => { setImageBlockId(selected[0]?.id || ""); fileInputRef.current?.click(); }} onPageImageUpload={(target) => { setImageBlockId(target); fileInputRef.current?.click(); }} />
+      {rightPanelOpen && <aside id="designer-right-panel" aria-label="Properties and validation" aria-hidden={false} className="border-l border-slate-200 bg-white p-4 print:hidden max-xl:absolute max-xl:inset-y-0 max-xl:right-0 max-xl:z-20 max-xl:w-[min(90vw,304px)] max-xl:shadow-2xl"><PropertiesPanel selected={selected} pageSelected={pageSelected} definition={definition} editable={props.editable} updatePage={updatePage} updateBlock={updateBlock} updateSelectedPatch={updateSelectedPatch} updatePositions={updatePositions} applyTextColor={applyTextColor} duplicate={duplicateSelected} remove={removeSelected} align={alignSelected} layerMove={layerMove} onImageUpload={() => { setImageBlockId(selected[0]?.id || ""); fileInputRef.current?.click(); }} onPageImageUpload={(target) => { setImageBlockId(target); fileInputRef.current?.click(); }} />
         <ValidationPanel errors={validation.errors} warnings={validation.warnings} blocks={definition.blocks} onSelect={select} onSelectPage={selectPage} />
       </aside>}
     </div>
   </form>;
 }
 
-function CanvasBlock({ block, selected, editing, editable, scale, tenantLogoSrc, onImageError, onSelect, onDoubleClick, onChangeText, onCommitText, onEscape, onPointerDown, onResizeStart, onImageUpload }: { block: VisualBlock; selected: boolean; editing: boolean; editable: boolean; scale: number; tenantLogoSrc?: string | null; onImageError: (message: string) => void; onSelect: (event: React.MouseEvent) => void; onDoubleClick: () => void; onChangeText: (content: string) => void; onCommitText: (content: string) => void; onEscape: () => void; onPointerDown: (event: React.PointerEvent, block: VisualBlock) => void; onResizeStart: (event: React.PointerEvent, block: VisualBlock, mode: "resize", corner: "nw" | "ne" | "sw" | "se") => void; onImageUpload: () => void }) {
-  const [draft, setDraft] = useState(block.content || block.text || "");
-  useEffect(() => { if (!editing) setDraft(block.content || block.text || ""); }, [block.content, block.text, editing]);
+function CanvasBlock({ block, selected, editing, editable, scale, tenantLogoSrc, onImageError, onTextSelection, onSelect, onDoubleClick, onChangeText, onCommitText, onEscape, onPointerDown, onResizeStart, onImageUpload }: { block: VisualBlock; selected: boolean; editing: boolean; editable: boolean; scale: number; tenantLogoSrc?: string | null; onImageError: (message: string) => void; onTextSelection: (selection: { blockId: string; start: number; end: number }) => void; onSelect: (event: React.MouseEvent) => void; onDoubleClick: () => void; onChangeText: (content: string, richText?: DocumentRichText) => void; onCommitText: (content: string, richText?: DocumentRichText) => void; onEscape: () => void; onPointerDown: (event: React.PointerEvent, block: VisualBlock) => void; onResizeStart: (event: React.PointerEvent, block: VisualBlock, mode: "resize", corner: "nw" | "ne" | "sw" | "se") => void; onImageUpload: () => void }) {
   const style = block.style || {};
   const css: React.CSSProperties = {
     left: block.position.x * scale,
@@ -537,8 +554,21 @@ function CanvasBlock({ block, selected, editing, editable, scale, tenantLogoSrc,
     border: style.borderColor && style.borderWidth ? `${style.borderWidth * scale / 3.78}px solid ${style.borderColor}` : selected ? undefined : "1px solid transparent",
     borderRadius: style.radius,
   };
-  const content = editing ? <textarea autoFocus className="h-full w-full resize-none border-0 bg-transparent p-0 text-inherit outline-none" value={draft} onChange={(event) => { const value = sanitizeText(event.target.value); setDraft(value); onChangeText(value); }} onBlur={() => onCommitText(draft)} onKeyDown={(event) => { if (event.key === "Escape") { setDraft(block.content || ""); onCommitText(block.content || ""); onEscape(); } }} /> : <BlockContent block={block} tenantLogoSrc={tenantLogoSrc} onImageError={onImageError} onImageUpload={onImageUpload} />;
-  return <div role="button" tabIndex={0} aria-label={block.accessibility?.ariaLabel || block.label || block.type} className={`absolute select-none overflow-hidden ${selected ? "ring-2 ring-pine-600 ring-offset-1" : "hover:ring-1 hover:ring-pine-300"} ${block.locked ? "cursor-not-allowed opacity-75" : "cursor-move"}`} style={css} onClick={(event) => { event.stopPropagation(); onSelect(event); }} onDoubleClick={onDoubleClick} onPointerDown={(event) => { if ((event.target as HTMLElement).tagName !== "TEXTAREA") onPointerDown(event, block); }}>{content}{selected && editable && !block.locked && <>{(["nw", "ne", "sw", "se"] as const).map((corner) => <button key={corner} type="button" aria-label={`Resize ${corner}`} className={`absolute z-10 size-2.5 border border-white bg-pine-700 ${corner.includes("n") ? "top-[-5px]" : "bottom-[-5px]"} ${corner.includes("w") ? "left-[-5px]" : "right-[-5px]"}`} onPointerDown={(event) => { event.stopPropagation(); onResizeStart(event, block, "resize", corner); }} />)}</>}</div>;
+  const content = editing && isTextBlock(block) ? <RichTextCanvas block={block} onSelection={onTextSelection} onChange={onChangeText} onCommit={onCommitText} onEscape={onEscape} /> : <BlockContent block={block} tenantLogoSrc={tenantLogoSrc} onImageError={onImageError} onImageUpload={onImageUpload} />;
+  return <div role="button" tabIndex={0} aria-label={block.accessibility?.ariaLabel || block.label || block.type} className={`absolute select-none overflow-hidden ${selected ? "ring-2 ring-pine-600 ring-offset-1" : "hover:ring-1 hover:ring-pine-300"} ${block.locked ? "cursor-not-allowed opacity-75" : "cursor-move"}`} style={{ ...css, border: isLineBlock(block) ? "0" : css.border }} onClick={(event) => { event.stopPropagation(); onSelect(event); }} onDoubleClick={onDoubleClick} onPointerDown={(event) => { const tag = (event.target as HTMLElement).tagName; if (!editing && tag !== "TEXTAREA" && tag !== "INPUT") onPointerDown(event, block); }}>{content}{selected && editable && !block.locked && <>{(["nw", "ne", "sw", "se"] as const).map((corner) => <button key={corner} type="button" aria-label={`Resize ${corner}`} className={`absolute z-10 size-2.5 border border-white bg-pine-700 ${corner.includes("n") ? "top-[-5px]" : "bottom-[-5px]"} ${corner.includes("w") ? "left-[-5px]" : "right-[-5px]"}`} onPointerDown={(event) => { event.stopPropagation(); onResizeStart(event, block, "resize", corner); }} />)}</>}</div>;
+}
+
+function RichTextCanvas({ block, onSelection, onChange, onCommit, onEscape }: { block: VisualBlock; onSelection: (selection: { blockId: string; start: number; end: number }) => void; onChange: (content: string, richText: DocumentRichText) => void; onCommit: (content: string, richText: DocumentRichText) => void; onEscape: () => void }) {
+  const value = block.richText || plainTextToRichText(block.content || block.text || "");
+  const rememberSelection = (event: React.SyntheticEvent<HTMLDivElement>) => {
+    const selection = window.getSelection();
+    if (!selection || selection.rangeCount === 0 || !event.currentTarget.contains(selection.anchorNode)) return;
+    const range = selection.getRangeAt(0);
+    const start = textOffset(event.currentTarget, range.startContainer, range.startOffset);
+    const end = textOffset(event.currentTarget, range.endContainer, range.endOffset);
+    onSelection({ blockId: block.id, start: Math.min(start, end), end: Math.max(start, end) });
+  };
+  return <div contentEditable suppressContentEditableWarning className="h-full w-full overflow-hidden whitespace-pre-wrap break-words outline-none" onFocus={(event) => { if (!richTextToContent(value)) event.currentTarget.replaceChildren(); }} onInput={(event) => { const richText = parseRichTextDom(event.currentTarget); onChange(richTextToContent(richText), richText); }} onMouseUp={rememberSelection} onKeyUp={rememberSelection} onBlur={(event) => { const richText = parseRichTextDom(event.currentTarget); onCommit(richTextToContent(richText), richText); }} onKeyDown={(event) => { if (event.key === "Escape") { event.preventDefault(); onEscape(); } }}>{renderEditorRichText(value)}</div>;
 }
 
 function BlockContent({ block, tenantLogoSrc, onImageError, onImageUpload }: { block: VisualBlock; tenantLogoSrc?: string | null; onImageError: (message: string) => void; onImageUpload: () => void }) {
@@ -550,32 +580,64 @@ function BlockContent({ block, tenantLogoSrc, onImageError, onImageUpload }: { b
     const config = block.officerList;
     return <div className="h-full border-r border-pine-700 pr-1 text-pine-900"><div className="bg-pine-800 px-1 py-1 text-center text-[8px] font-black text-white">{config?.showHeading === false ? "" : config?.heading || "HOA OFFICERS"}</div>{config?.showTerm !== false && <p className="py-1 text-center text-[7px] font-black">[Current term]</p>}<div className="space-y-1 px-1 text-[7px]">{Array.from({ length: Math.min(config?.maxOfficers || 8, 4) }).map((_, index) => <div key={index} className={config?.showSeparators === false ? "" : "border-b border-slate-300 pb-1"}><strong className="block">[Active officer {index + 1}]</strong><span className="block font-bold uppercase">[Position]</span></div>)}</div></div>;
   }
-  if (block.type === "horizontalLine" || block.type === "divider") return <div className="mt-1 h-px w-full bg-slate-500" />;
-  if (block.type === "qrVerification") return <div className="flex h-full flex-col items-center justify-center gap-1 text-[8px] font-bold text-slate-500"><QrCode className="size-[65%]" /><span>Verification QR</span></div>;
+  if (block.type === "horizontalLine" || block.type === "divider") return <div className="h-0 w-full border-t" style={{ borderTopColor: block.style?.lineColor || "#64748b", borderTopWidth: `${block.style?.lineWidth || 1}px`, borderTopStyle: block.style?.lineStyle || "solid", opacity: block.style?.opacity || 1 }} />;
+  if (block.type === "verticalLine") return <div className="h-full w-0 border-l" style={{ borderLeftColor: block.style?.lineColor || "#64748b", borderLeftWidth: `${block.style?.lineWidth || 1}px`, borderLeftStyle: block.style?.lineStyle || "solid", opacity: block.style?.opacity || 1 }} />;
+  if (block.type === "qrVerification") return <div className="flex h-full flex-col items-center justify-center gap-1 overflow-hidden text-[8px] font-bold text-slate-500"><QrCode className="size-[65%]" />{block.qr?.showLabel !== false && <span className="text-center">PREVIEW QR — NOT VALID FOR VERIFICATION</span>}{block.qr?.showInstruction !== false && <small>{block.qr?.instruction || "Scan to verify"}</small>}</div>;
   if (block.type === "logo" || block.type === "image") {
-    return imageSrc && !imageFailed ? <img className="h-full w-full object-contain" src={imageSrc} alt={block.image?.alt || block.label || "Document image"} onError={() => { setImageFailed(true); onImageError(`${block.type === "logo" ? "Tenant logo" : "Approved image"} could not be loaded. Re-upload the approved image.`); }} /> : <button type="button" className="flex h-full w-full flex-col items-center justify-center gap-1 bg-slate-100 text-[9px] font-black text-slate-500" onClick={onImageUpload}><ImageIcon className="size-6" /><span>{imageFailed ? "Re-upload image" : block.type === "logo" ? "Tenant logo" : "Add image"}</span></button>;
+    const fit = block.image?.fit === "stretch" ? "fill" : block.image?.fit || "contain";
+    const objectPosition = `${block.image?.positionX || "center"} ${block.image?.positionY || "center"}`;
+    return imageSrc && !imageFailed ? <img className="h-full w-full" src={imageSrc} alt={block.image?.alt || block.label || "Document image"} style={{ objectFit: fit, objectPosition, opacity: block.image?.opacity || 1 }} onError={() => { setImageFailed(true); onImageError(`${block.type === "logo" ? "Tenant logo" : "Approved image"} could not be loaded. Re-upload the approved image.`); }} /> : <button type="button" className="flex h-full w-full flex-col items-center justify-center gap-1 bg-slate-100 text-[9px] font-black text-slate-500" onClick={onImageUpload}><ImageIcon className="size-6" /><span>{imageFailed ? "Re-upload image" : block.type === "logo" ? "Tenant logo" : "Add image"}</span></button>;
   }
   if (block.table?.rows?.length) return <table className="w-full border-collapse text-[9px]"><tbody>{block.table.rows.map((row, index) => <tr key={index}>{row.map((cell, cellIndex) => <td key={cellIndex} className="border border-slate-300 p-1">{renderFriendlyText(cell)}</td>)}</tr>)}</tbody></table>;
-  const value = block.content || block.text || (block.binding ? `{{${block.binding}}}` : block.label || block.type);
-  return <div className="whitespace-pre-wrap break-words">{renderFriendlyText(value)}</div>;
+  const value = block.content || block.text || (block.binding ? `{{${block.binding}}}` : "");
+  if (!value && isTextBlock(block)) return <div className="whitespace-pre-wrap break-words italic text-slate-400">Type to edit</div>;
+  return <div className="whitespace-pre-wrap break-words">{block.richText ? renderEditorRichText(block.richText) : renderFriendlyText(value)}</div>;
 }
 
-function PropertiesPanel({ selected, pageSelected, definition, editable, updatePage, updateBlock, updateSelectedPatch, updatePositions, duplicate, remove, align, layerMove, onImageUpload, onPageImageUpload }: { selected: VisualBlock[]; pageSelected: boolean; definition: DocumentTemplateDefinition; editable: boolean; updatePage: (patch: Partial<DocumentTemplateDefinition["page"]>) => void; updateBlock: (id: string, patch: Partial<DocumentTemplateBlock>) => void; updateSelectedPatch: (patch: Partial<DocumentTemplateBlock>) => void; updatePositions: (updater: (position: VisualBlock["position"]) => VisualBlock["position"]) => void; duplicate: () => void; remove: () => void; align: (kind: "left" | "center" | "right" | "top" | "middle" | "bottom") => void; layerMove: (direction: -1 | 1) => void; onImageUpload: () => void; onPageImageUpload: (target: "page-background" | "page-watermark") => void }) {
+function PropertiesPanel({ selected, pageSelected, definition, editable, updatePage, updateBlock, updateSelectedPatch, updatePositions, applyTextColor, duplicate, remove, align, layerMove, onImageUpload, onPageImageUpload }: { selected: VisualBlock[]; pageSelected: boolean; definition: DocumentTemplateDefinition; editable: boolean; updatePage: (patch: Partial<DocumentTemplateDefinition["page"]>) => void; updateBlock: (id: string, patch: Partial<DocumentTemplateBlock>) => void; updateSelectedPatch: (patch: Partial<DocumentTemplateBlock>) => void; updatePositions: (updater: (position: VisualBlock["position"]) => VisualBlock["position"] ) => void; applyTextColor: (color: string) => void; duplicate: () => void; remove: () => void; align: (kind: "left" | "center" | "right" | "top" | "middle" | "bottom") => void; layerMove: (direction: -1 | 1) => void; onImageUpload: () => void; onPageImageUpload: (target: "page-background" | "page-watermark") => void }) {
   const block = selected[0];
   if (pageSelected || !block) return <PagePropertiesPanel definition={definition} editable={editable} updatePage={updatePage} onPageImageUpload={onPageImageUpload} />;
   const position = block.position;
-  const patchPosition = (key: keyof VisualBlock["position"], value: number) => updatePositions((current) => ({ ...current, [key]: value }));
+  const patchPosition = (key: keyof VisualBlock["position"], value: number) => updatePositions((current) => {
+    const next = { ...current, [key]: value };
+    if ((block.type === "logo" || block.type === "image") && block.image?.lockAspectRatio !== false && (key === "width" || key === "height")) {
+      if (key === "width") next.height = value / Math.max(current.width, 1) * current.height;
+      else next.width = value / Math.max(current.height, 1) * current.width;
+    }
+    return next;
+  });
   return <div className="space-y-4"><div className="flex items-start justify-between gap-2"><div><p className="text-[10px] font-black uppercase tracking-wide text-slate-500">Properties</p><h2 className="mt-1 text-sm font-black">{block.label || block.type}</h2><p className="text-[10px] font-mono text-slate-400">{selected.length > 1 ? `+${selected.length - 1} selected` : block.type}</p></div><div className="flex gap-1"><IconAction label="Duplicate" onClick={duplicate}><Copy /></IconAction><IconAction label="Delete" onClick={remove}><Trash2 /></IconAction></div></div>
     <label><span className="label">Element name</span><input className="field text-xs" value={block.label || ""} onChange={(event) => updateSelectedPatch({ label: sanitizeText(event.target.value) })} disabled={!editable} /></label>
     <div><p className="label">Position and size (mm)</p><div className="grid grid-cols-2 gap-2">{(["x", "y", "width", "height"] as const).map((key) => <label key={key}><span className="sr-only">{key}</span><input className="field text-xs" type="number" min={0} step={1} value={Math.round(position[key] * 10) / 10} onChange={(event) => patchPosition(key, Number(event.target.value))} disabled={!editable || block.locked} aria-label={key} /></label>)}</div></div>
     <div className="grid grid-cols-2 gap-2"><label className="flex min-h-9 items-center gap-2 rounded-lg border px-2 text-xs font-bold"><input type="checkbox" checked={block.locked === true} onChange={(event) => updateSelectedPatch({ locked: event.target.checked })} disabled={!editable} /> Lock</label><label className="flex min-h-9 items-center gap-2 rounded-lg border px-2 text-xs font-bold"><input type="checkbox" checked={block.visible !== false} onChange={(event) => updateSelectedPatch({ visible: event.target.checked })} disabled={!editable} /> Visible</label></div>
     {block.type === "officerList" && <OfficerListSettings block={block} editable={editable} updateBlock={updateBlock} />}
-    {isTextBlock(block) && <><label><span className="label">Text content</span><textarea className="field min-h-24 text-xs" value={block.content || block.text || ""} onChange={(event) => updateSelectedPatch({ content: sanitizeText(event.target.value) })} disabled={!editable} /></label><div className="grid grid-cols-2 gap-2"><label><span className="label">Font</span><select className="field text-xs" value={block.style?.fontFamily || "Arial"} onChange={(event) => updateBlock(block.id, { style: { ...block.style, fontFamily: event.target.value as typeof safeFontFamilies[number] } })} disabled={!editable}>{safeFontFamilies.map((font) => <option key={font}>{font}</option>)}</select></label><label><span className="label">Size</span><input className="field text-xs" type="number" min={6} max={72} value={block.style?.fontSize || 11} onChange={(event) => updateBlock(block.id, { style: { ...block.style, fontSize: Number(event.target.value) } })} disabled={!editable} /></label></div><div className="flex gap-1"><IconAction label="Left" active={block.style?.align === "left"} onClick={() => updateBlock(block.id, { style: { ...block.style, align: "left" } })}><AlignLeft /></IconAction><IconAction label="Center" active={block.style?.align === "center"} onClick={() => updateBlock(block.id, { style: { ...block.style, align: "center" } })}><AlignCenter /></IconAction><IconAction label="Right" active={block.style?.align === "right"} onClick={() => updateBlock(block.id, { style: { ...block.style, align: "right" } })}><AlignRight /></IconAction><IconAction label="Bold" active={block.style?.fontWeight === "bold"} onClick={() => updateBlock(block.id, { style: { ...block.style, fontWeight: block.style?.fontWeight === "bold" ? "normal" : "bold" } })}><Bold /></IconAction></div></>}
+    {isTextBlock(block) && <><div className="rounded-md border border-slate-200 bg-slate-50 p-2 text-[10px] font-semibold text-slate-600">Double-click the text on the canvas to edit it. Select a range to color only that text; with no range selected, color applies to the whole element.</div><div className="grid grid-cols-2 gap-2"><label><span className="label">Font</span><select className="field text-xs" value={block.style?.fontFamily || "Arial"} onChange={(event) => updateBlock(block.id, { style: { ...block.style, fontFamily: event.target.value as typeof safeFontFamilies[number] } })} disabled={!editable}>{safeFontFamilies.map((font) => <option key={font}>{font}</option>)}</select></label><label><span className="label">Size</span><input className="field text-xs" type="number" min={6} max={72} value={block.style?.fontSize || 11} onChange={(event) => updateBlock(block.id, { style: { ...block.style, fontSize: Number(event.target.value) } })} disabled={!editable} /></label></div><label><span className="label">Text color</span><input className="h-9 w-full" aria-label="Text color" type="color" value={block.style?.textColor || "#111827"} onChange={(event) => applyTextColor(event.target.value)} disabled={!editable} /></label><div className="flex gap-1"><IconAction label="Left" active={block.style?.align === "left"} onClick={() => updateBlock(block.id, { style: { ...block.style, align: "left" } })}><AlignLeft /></IconAction><IconAction label="Center" active={block.style?.align === "center"} onClick={() => updateBlock(block.id, { style: { ...block.style, align: "center" } })}><AlignCenter /></IconAction><IconAction label="Right" active={block.style?.align === "right"} onClick={() => updateBlock(block.id, { style: { ...block.style, align: "right" } })}><AlignRight /></IconAction><IconAction label="Bold" active={block.style?.fontWeight === "bold"} onClick={() => updateBlock(block.id, { style: { ...block.style, fontWeight: block.style?.fontWeight === "bold" ? "normal" : "bold" } })}><Bold /></IconAction></div></>}
+    {(block.type === "logo" || block.type === "image") && <ImageProperties block={block} editable={editable} updateBlock={updateBlock} />}
+    {isLineBlock(block) && <LineProperties block={block} editable={editable} updateBlock={updateBlock} />}
+    {block.type === "qrVerification" && <QrProperties block={block} editable={editable} updateBlock={updateBlock} updatePositions={updatePositions} />}
     <div><p className="label">Align to page</p><div className="grid grid-cols-3 gap-1"><SmallButton label="Left" onClick={() => align("left")}><AlignLeft /></SmallButton><SmallButton label="Center" onClick={() => align("center")}><AlignCenter /></SmallButton><SmallButton label="Right" onClick={() => align("right")}><AlignRight /></SmallButton><SmallButton label="Top" onClick={() => align("top")}><ChevronUp /></SmallButton><SmallButton label="Middle" onClick={() => align("middle")}><Minus /></SmallButton><SmallButton label="Bottom" onClick={() => align("bottom")}><ChevronDown /></SmallButton></div></div>
     <div><p className="label">Layer order</p><div className="flex gap-1"><SmallButton label="Forward" onClick={() => layerMove(1)}><MoveUp /></SmallButton><SmallButton label="Backward" onClick={() => layerMove(-1)}><MoveDown /></SmallButton></div></div>
     {(block.type === "logo" || block.type === "image") && <button type="button" className="btn-secondary w-full text-xs" onClick={onImageUpload} disabled={!editable}><ImageIcon className="size-4" /> Upload approved image</button>}
     {block.binding && <div className="rounded-lg bg-pine-50 p-3 text-xs"><p className="font-black text-pine-800">Dynamic binding</p><p className="mt-1 font-mono text-pine-700">[{placeholderLabel(block.binding)}]</p><p className="mt-1 text-pine-700">Sample: {sampleTemplateValue(block.binding)}</p></div>}
   </div>;
+}
+
+function ImageProperties({ block, editable, updateBlock }: { block: VisualBlock; editable: boolean; updateBlock: (id: string, patch: Partial<DocumentTemplateBlock>) => void }) {
+  const image = block.image || { fit: "contain" as const, positionX: "center" as const, positionY: "center" as const, opacity: 1, lockAspectRatio: true };
+  const update = (patch: Partial<NonNullable<DocumentTemplateBlock["image"]>>) => updateBlock(block.id, { image: { ...image, ...patch } });
+  return <section className="space-y-2 rounded-md border border-slate-200 bg-slate-50 p-3"><p className="label">Image layout</p><div className="grid grid-cols-2 gap-2"><label><span className="label">Fit</span><select className="field text-xs" value={image.fit || "contain"} onChange={(event) => update({ fit: event.target.value as "contain" | "cover" | "stretch" })} disabled={!editable}><option value="contain">Contain</option><option value="cover">Cover</option><option value="stretch">Stretch</option></select></label><label><span className="label">Opacity</span><input className="field text-xs" type="number" min={0.05} max={1} step={0.05} value={image.opacity || 1} onChange={(event) => update({ opacity: Number(event.target.value) })} disabled={!editable} /></label></div><div className="grid grid-cols-2 gap-2"><label><span className="label">Horizontal</span><select className="field text-xs" value={image.positionX || "center"} onChange={(event) => update({ positionX: event.target.value as "left" | "center" | "right" })} disabled={!editable}><option value="left">Left</option><option value="center">Center</option><option value="right">Right</option></select></label><label><span className="label">Vertical</span><select className="field text-xs" value={image.positionY || "center"} onChange={(event) => update({ positionY: event.target.value as "top" | "center" | "bottom" })} disabled={!editable}><option value="top">Top</option><option value="center">Center</option><option value="bottom">Bottom</option></select></label></div><label className="flex min-h-8 items-center gap-2 text-[10px] font-bold"><input type="checkbox" checked={image.lockAspectRatio !== false} onChange={(event) => update({ lockAspectRatio: event.target.checked })} disabled={!editable} /> Lock aspect ratio</label><div className="grid grid-cols-2 gap-2"><button type="button" className="btn-secondary text-[10px]" onClick={() => update({ src: "{{tenant.logo}}", alt: "Tenant logo", fit: "contain", positionX: "center", positionY: "center" })} disabled={!editable}>Reset to tenant logo</button><button type="button" className="btn-secondary text-[10px]" onClick={() => update({ width: undefined, height: undefined, lockAspectRatio: true })} disabled={!editable}>Reset natural ratio</button></div><label><span className="label">Alt text</span><input className="field text-xs" value={image.alt || ""} onChange={(event) => update({ alt: sanitizeText(event.target.value) })} disabled={!editable} /></label></section>;
+}
+
+function LineProperties({ block, editable, updateBlock }: { block: VisualBlock; editable: boolean; updateBlock: (id: string, patch: Partial<DocumentTemplateBlock>) => void }) {
+  const style = block.style || {};
+  const update = (patch: NonNullable<DocumentTemplateBlock["style"]>) => updateBlock(block.id, { style: { ...style, ...patch } });
+  return <section className="space-y-2 rounded-md border border-slate-200 bg-slate-50 p-3"><p className="label">Line stroke</p><div className="grid grid-cols-3 gap-2"><label><span className="label">Thickness</span><input className="field text-xs" type="number" min={0.25} max={8} step={0.25} value={style.lineWidth || 1} onChange={(event) => update({ lineWidth: Number(event.target.value) })} disabled={!editable} /></label><label><span className="label">Opacity</span><input className="field text-xs" type="number" min={0.05} max={1} step={0.05} value={style.opacity || 1} onChange={(event) => update({ opacity: Number(event.target.value) })} disabled={!editable} /></label><label><span className="label">Style</span><select className="field text-xs" value={style.lineStyle || "solid"} onChange={(event) => update({ lineStyle: event.target.value as "solid" | "dashed" | "dotted" })} disabled={!editable}><option value="solid">Solid</option><option value="dashed">Dashed</option><option value="dotted">Dotted</option></select></label></div><label><span className="label">Color</span><input className="h-9 w-full" type="color" value={style.lineColor || "#64748b"} onChange={(event) => update({ lineColor: event.target.value })} disabled={!editable} /></label></section>;
+}
+
+function QrProperties({ block, editable, updateBlock, updatePositions }: { block: VisualBlock; editable: boolean; updateBlock: (id: string, patch: Partial<DocumentTemplateBlock>) => void; updatePositions: (updater: (position: VisualBlock["position"]) => VisualBlock["position"]) => void }) {
+  const qr = block.qr || { label: "PREVIEW QR — NOT VALID FOR VERIFICATION", instruction: "Scan to verify", showLabel: true, showInstruction: true, squareLocked: true, quietZone: 1 };
+  const update = (patch: Partial<NonNullable<DocumentTemplateBlock["qr"]>>) => updateBlock(block.id, { qr: { ...qr, ...patch } });
+  return <section className="space-y-2 rounded-md border border-slate-200 bg-slate-50 p-3"><p className="label">QR preview</p><div className="grid grid-cols-2 gap-2"><label><span className="label">Width (mm)</span><input className="field text-xs" type="number" min={12} value={block.position.width} onChange={(event) => updatePositions((position) => ({ ...position, width: Number(event.target.value), height: qr.squareLocked ? Number(event.target.value) : position.height }))} disabled={!editable} /></label><label><span className="label">Height (mm)</span><input className="field text-xs" type="number" min={12} value={block.position.height} onChange={(event) => updatePositions((position) => ({ ...position, height: Number(event.target.value), width: qr.squareLocked ? Number(event.target.value) : position.width }))} disabled={!editable} /></label></div><label className="flex min-h-8 items-center gap-2 text-[10px] font-bold"><input type="checkbox" checked={qr.squareLocked} onChange={(event) => update({ squareLocked: event.target.checked })} disabled={!editable} /> Lock square ratio</label><div className="grid grid-cols-2 gap-2"><label><span className="label">Label</span><input className="field text-xs" value={qr.label} onChange={(event) => update({ label: sanitizeText(event.target.value) })} disabled={!editable} /></label><label><span className="label">Instruction</span><input className="field text-xs" value={qr.instruction} onChange={(event) => update({ instruction: sanitizeText(event.target.value) })} disabled={!editable} /></label></div><div className="grid grid-cols-2 gap-2"><label className="flex items-center gap-2 text-[10px] font-bold"><input type="checkbox" checked={qr.showLabel} onChange={(event) => update({ showLabel: event.target.checked })} disabled={!editable} /> Show label</label><label className="flex items-center gap-2 text-[10px] font-bold"><input type="checkbox" checked={qr.showInstruction} onChange={(event) => update({ showInstruction: event.target.checked })} disabled={!editable} /> Show instruction</label></div><p className="text-[10px] font-semibold text-amber-800">Preview QR is not a valid verification code.</p></section>;
 }
 
 function PagePaddingProperties({ page, editable, updatePage }: { page: DocumentTemplateDefinition["page"]; editable: boolean; updatePage: (patch: Partial<DocumentTemplateDefinition["page"]>) => void }) {
@@ -645,10 +707,15 @@ function defaultPosition(block: DocumentTemplateBlock, section: DocumentTemplate
   return { x: block.type === "officerList" ? 8 : block.style?.align === "right" ? 125 : block.style?.align === "center" ? 25 : 25, y: block.type === "officerList" ? 65 : y, width, height, zIndex: index + 10 };
 }
 
-function resizePosition(position: VisualBlock["position"], dx: number, dy: number, corner: "nw" | "ne" | "sw" | "se", pageWidth: number, pageHeight: number, snap: (value: number) => number) {
+function resizePosition(position: VisualBlock["position"], dx: number, dy: number, corner: "nw" | "ne" | "sw" | "se", pageWidth: number, pageHeight: number, snap: (value: number) => number, lockAspectRatio = false) {
   let { x, y, width, height } = position;
   if (corner.includes("e")) width = snap(width + dx); else { x = snap(x + dx); width = snap(width - dx); }
   if (corner.includes("s")) height = snap(height + dy); else { y = snap(y + dy); height = snap(height - dy); }
+  if (lockAspectRatio) {
+    const ratio = position.width / Math.max(position.height, 1);
+    height = snap(width / Math.max(ratio, 0.01));
+    if (corner.includes("n")) y = position.y + position.height - height;
+  }
   width = clamp(width, 12, pageWidth); height = clamp(height, 8, pageHeight); x = clamp(x, 0, pageWidth - width); y = clamp(y, 0, pageHeight - height);
   position.x = x; position.y = y; position.width = width; position.height = height;
 }
@@ -663,7 +730,88 @@ function clone<T>(value: T): T { return structuredClone(value); }
 function uniqueId() { return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`; }
 function clamp(value: number, min: number, max: number) { return Math.min(max, Math.max(min, value)); }
 function sanitizeText(value: string) { return value.replace(/[<>]/g, "").replace(/javascript:/gi, "").slice(0, 8000); }
-function isTextBlock(block: DocumentTemplateBlock) { return !["logo", "image", "qrVerification", "rectangle", "horizontalLine", "divider", "table", "officerList"].includes(block.type); }
-function defaultContent(type: DocumentTemplateBlockType) { return type === "documentTitle" || type === "heading" ? "Document heading" : type === "paragraph" || type === "bodyText" ? "Type your official HOA wording here." : type === "horizontalLine" ? "" : type === "verificationText" ? "Verify this document at {{verification.url}}" : type === "documentNumber" ? "Document No. {{document.number}}" : type === "issueDate" ? "Issued on {{document.issueDate}}" : "Type to edit"; }
+function isTextBlock(block: DocumentTemplateBlock) { return !["logo", "image", "qrVerification", "rectangle", "horizontalLine", "verticalLine", "divider", "table", "officerList"].includes(block.type); }
+function isLineBlock(block: DocumentTemplateBlock) { return block.type === "horizontalLine" || block.type === "verticalLine" || block.type === "divider"; }
+function defaultContent(type: DocumentTemplateBlockType) { return type === "documentTitle" || type === "heading" ? "Document heading" : type === "verificationText" ? "Verify this document at {{verification.url}}" : type === "documentNumber" ? "Document No. {{document.number}}" : type === "issueDate" ? "Issued on {{document.issueDate}}" : ""; }
 function placeholderLabel(key: string) { return placeholderGroups.flatMap((group) => group.items).find((item) => item.key === key)?.label || key; }
 function renderFriendlyText(value: string): React.ReactNode { return value.split(/(\{\{\s*[A-Za-z0-9_.]+\s*\}\})/g).map((part, index) => { const match = part.match(/^\{\{\s*([A-Za-z0-9_.]+)\s*\}\}$/); return match ? <span key={index} className="mx-0.5 inline-flex rounded bg-pine-100 px-1 text-[.8em] font-bold text-pine-800">[{placeholderLabel(match[1])}]</span> : <span key={index}>{part}</span>; }); }
+
+function plainTextToRichText(value: string): DocumentRichText {
+  return { type: "paragraph", children: splitPlaceholderText(sanitizeText(value)) };
+}
+
+function splitPlaceholderText(value: string, marks?: { color?: string; bold?: boolean; italic?: boolean; underline?: boolean }) {
+  return value.split(/(\{\{\s*[A-Za-z0-9_.]+\s*\}\})/g).filter(Boolean).map((part) => {
+    const match = part.match(/^\{\{\s*([A-Za-z0-9_.]+)\s*\}\}$/);
+    return match ? { type: "placeholder" as const, key: match[1], label: placeholderLabel(match[1]), marks } : { type: "text" as const, text: part, marks };
+  });
+}
+
+function renderEditorRichText(richText: DocumentRichText): React.ReactNode {
+  if (!richText.children.length) return <span contentEditable={false} className="italic text-slate-400">Type to edit</span>;
+  return richText.children.map((node, index) => {
+    const marks = node.marks || {};
+    const style: React.CSSProperties = { color: marks.color, fontWeight: marks.bold ? "bold" : undefined, fontStyle: marks.italic ? "italic" : undefined, textDecoration: marks.underline ? "underline" : undefined };
+    if (node.type === "placeholder") return <span key={index} contentEditable={false} data-placeholder-key={node.key} className="mx-0.5 inline-flex rounded bg-pine-100 px-1 text-[.8em] font-bold text-pine-800" style={style}>[{node.label || placeholderLabel(node.key)}]</span>;
+    return <span key={index} data-rich-text="true" data-color={marks.color || ""} style={style}>{node.text}</span>;
+  });
+}
+
+function parseRichTextDom(root: HTMLElement): DocumentRichText {
+  const children: DocumentRichText["children"] = [];
+  const visit = (node: Node, marks?: { color?: string; bold?: boolean; italic?: boolean; underline?: boolean }) => {
+    if (node.nodeType === Node.TEXT_NODE) {
+      const text = sanitizeText(node.textContent || "");
+      if (text) children.push(...splitPlaceholderText(text, marks));
+      return;
+    }
+    if (!(node instanceof HTMLElement)) return;
+    const placeholder = node.dataset.placeholderKey;
+    if (placeholder) {
+      children.push({ type: "placeholder", key: placeholder, label: placeholderLabel(placeholder), marks });
+      return;
+    }
+    const color = node.dataset.color && /^#[0-9A-Fa-f]{6}$/.test(node.dataset.color) ? node.dataset.color.toUpperCase() : marks?.color;
+    visitChildren(node, { color, bold: marks?.bold || node.style.fontWeight === "bold", italic: marks?.italic || node.style.fontStyle === "italic", underline: marks?.underline || node.style.textDecoration.includes("underline") });
+  };
+  const visitChildren = (element: HTMLElement, marks?: { color?: string; bold?: boolean; italic?: boolean; underline?: boolean }) => Array.from(element.childNodes).forEach((child) => visit(child, marks));
+  visitChildren(root);
+  return { type: "paragraph", children };
+}
+
+function textOffset(root: HTMLElement, target: Node, offset: number) {
+  let total = 0;
+  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+  let current: Node | null = walker.nextNode();
+  while (current) {
+    if (current === target) return total + offset;
+    total += current.textContent?.length || 0;
+    current = walker.nextNode();
+  }
+  return total;
+}
+
+function richTextToContent(richText: DocumentRichText) {
+  return richText.children.map((node) => node.type === "placeholder" ? `{{${node.key}}}` : node.text).join("");
+}
+
+function applyColorToRichText(richText: DocumentRichText, start: number, end: number, color: string): DocumentRichText {
+  let cursor = 0;
+  const children = richText.children.flatMap((node) => {
+    const display = node.type === "placeholder" ? `[${node.label || placeholderLabel(node.key)}]` : node.text;
+    const nodeStart = cursor;
+    const nodeEnd = cursor + display.length;
+    cursor = nodeEnd;
+    if (end <= nodeStart || start >= nodeEnd) return [node];
+    const marks = { ...node.marks, color };
+    if (node.type === "placeholder") return [{ ...node, marks }];
+    const left = Math.max(0, start - nodeStart);
+    const right = Math.min(node.text.length, end - nodeStart);
+    return [
+      ...(left > 0 ? [{ type: "text" as const, text: node.text.slice(0, left), marks: node.marks }] : []),
+      ...(right > left ? [{ type: "text" as const, text: node.text.slice(left, right), marks }] : []),
+      ...(right < node.text.length ? [{ type: "text" as const, text: node.text.slice(right), marks: node.marks }] : []),
+    ];
+  });
+  return { type: "paragraph", children };
+}

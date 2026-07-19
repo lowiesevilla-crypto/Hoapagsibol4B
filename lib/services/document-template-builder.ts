@@ -162,6 +162,28 @@ export type DocumentPageImage = {
   opacity: number;
 };
 
+export type DocumentImageFit = "contain" | "cover" | "stretch";
+export type DocumentImagePositionX = "left" | "center" | "right";
+export type DocumentImagePositionY = "top" | "center" | "bottom";
+export type DocumentTextMarks = {
+  bold?: boolean;
+  italic?: boolean;
+  underline?: boolean;
+  color?: string;
+};
+export type DocumentRichTextNode =
+  | { type: "text"; text: string; marks?: DocumentTextMarks; resolvedText?: string }
+  | { type: "placeholder"; key: DocumentPlaceholderKey; label?: string; marks?: DocumentTextMarks; resolvedText?: string };
+export type DocumentRichText = { type: "paragraph"; children: DocumentRichTextNode[] };
+export type DocumentQrConfig = {
+  label: string;
+  instruction: string;
+  showLabel: boolean;
+  showInstruction: boolean;
+  squareLocked: boolean;
+  quietZone: number;
+};
+
 export const documentPageSizes: Record<DocumentPageFormat, { width: number; height: number; label: string }> = {
   A4: { width: 210, height: 297, label: "A4" },
   LETTER: { width: 216, height: 279, label: "Letter" },
@@ -199,6 +221,15 @@ export const defaultOfficerListConfig: DocumentOfficerListConfig = {
   showHeading: true,
   showTerm: true,
   showSeparators: true,
+};
+
+export const defaultQrConfig: DocumentQrConfig = {
+  label: "SCAN TO VERIFY",
+  instruction: "Scan to verify",
+  showLabel: true,
+  showInstruction: true,
+  squareLocked: true,
+  quietZone: 1,
 };
 
 export const safeFontFamilies = ["Arial", "Inter", "Times New Roman", "Georgia", "Calibri"] as const;
@@ -252,13 +283,25 @@ export type DocumentTemplateBlock = {
     borderColor?: string;
     borderWidth?: number;
     radius?: number;
+    lineColor?: string;
+    lineWidth?: number;
+    lineStyle?: "solid" | "dashed" | "dotted";
+    opacity?: number;
   };
   image?: {
     src?: string;
     alt?: string;
     width?: number;
     height?: number;
+    fit?: DocumentImageFit;
+    position?: "center" | "top" | "bottom" | "left" | "right";
+    positionX?: DocumentImagePositionX;
+    positionY?: DocumentImagePositionY;
+    opacity?: number;
+    lockAspectRatio?: boolean;
   };
+  richText?: DocumentRichText;
+  qr?: DocumentQrConfig;
   table?: {
     rows: string[][];
   };
@@ -415,8 +458,12 @@ export function validateTemplateDefinition(value: unknown, options: { allowedPla
       if (position.x < 0 || position.y < 0 || position.x + position.width > pageWidth || position.y + position.height > pageHeight) errors.push(`${block.label || block.id} is outside the page.`);
       if (position.width > pageWidth || position.height > pageHeight) errors.push(`${block.label || block.id} is larger than the page.`);
       if (safeArea?.warnOnOverflow === true && (position.x < Number(margins.left || 0) || position.y < Number(margins.top || 0) || position.x + position.width > pageWidth - Number(margins.right || 0) || position.y + position.height > pageHeight - Number(margins.bottom || 0))) warnings.push(`${block.label || block.id} extends beyond the printable area.`);
+      if ((block.type === "logo" || block.type === "image") && (position.width < 15 || position.height < 15)) warnings.push(`The logo dimensions are below the recommended print size (${block.label || block.id}).`);
+      if (block.type === "qrVerification" && (position.width < 25 || position.height < 25)) warnings.push(`The QR code is below the recommended printable size (${block.label || block.id}).`);
+      if (block.type === "qrVerification" && block.qr?.squareLocked && Math.abs(position.width - position.height) > 0.1) errors.push(`The QR code must remain square (${block.label || block.id}).`);
     }
     const text = block.content ?? block.text ?? "";
+    if (["text", "textBox", "paragraph", "bodyText", "tenantName", "address", "heading"].includes(block.type) && !text.trim() && !(block.richText?.children.length)) warnings.push(`This text element is empty and will not appear in the document (${block.label || block.id}).`);
     for (const placeholder of extractPlaceholders(text)) {
       if (!knownPlaceholders.has(placeholder)) errors.push(`Unsupported placeholder: ${placeholder}`);
     }
@@ -426,7 +473,20 @@ export function validateTemplateDefinition(value: unknown, options: { allowedPla
       if (!isSafeColor(String(color))) errors.push(`Unsafe color value in block ${block.id}.`);
     }
     if (block.style?.borderColor && !isSafeColor(block.style.borderColor)) errors.push(`Unsafe border color in block ${block.id}.`);
+    for (const color of [block.style?.lineColor].filter(Boolean)) if (!isSafeColor(String(color))) errors.push(`The selected line color is invalid for block ${block.id}.`);
+    if (block.style?.lineWidth != null && (!Number.isFinite(Number(block.style.lineWidth)) || block.style.lineWidth < 0.25 || block.style.lineWidth > 8)) errors.push(`The line thickness is outside the allowed range for block ${block.id}.`);
+    if (block.style?.lineStyle && !["solid", "dashed", "dotted"].includes(block.style.lineStyle)) errors.push(`The line style is invalid for block ${block.id}.`);
+    if (block.style?.opacity != null && (!Number.isFinite(Number(block.style.opacity)) || block.style.opacity < 0.05 || block.style.opacity > 1)) errors.push(`The line opacity is invalid for block ${block.id}.`);
     if (block.image?.src && !isSafeImageSource(block.image.src)) errors.push(`Unsafe image source in block ${block.id}.`);
+    if (block.image?.fit && !["contain", "cover", "stretch"].includes(block.image.fit)) errors.push(`The selected logo fit mode is invalid for block ${block.id}.`);
+    if (block.image?.positionX && !["left", "center", "right"].includes(block.image.positionX)) errors.push(`The image horizontal position is invalid for block ${block.id}.`);
+    if (block.image?.positionY && !["top", "center", "bottom"].includes(block.image.positionY)) errors.push(`The image vertical position is invalid for block ${block.id}.`);
+    if (block.image?.opacity != null && (!Number.isFinite(Number(block.image.opacity)) || block.image.opacity < 0.05 || block.image.opacity > 1)) errors.push(`The image opacity is invalid for block ${block.id}.`);
+    if (block.richText) errors.push(...validateRichText(block.richText, block.id, knownPlaceholders));
+    if (block.qr) {
+      if (block.qr.label.length > 120 || block.qr.instruction.length > 160) errors.push(`QR text is too long for block ${block.id}.`);
+      if (!Number.isInteger(block.qr.quietZone) || block.qr.quietZone < 1 || block.qr.quietZone > 4) errors.push(`QR quiet zone is outside the safe range for block ${block.id}.`);
+    }
     if (block.table?.rows && (block.table.rows.length > 40 || block.table.rows.some((row) => row.length > 12))) errors.push(`Table block ${block.id} is too large.`);
     if (block.type === "officerList") {
       const config = block.officerList || defaultOfficerListConfig;
@@ -523,11 +583,16 @@ export function renderTemplateDefinitionText(value: unknown, title?: string) {
     if (block.type === "divider" || block.type === "horizontalLine") return "------------------------------";
     if (block.type === "pageBreak") return "\n";
     if (block.table?.rows?.length) return block.table.rows.map((row) => row.join(" | ")).join("\n");
+    if (block.richText) return richTextToPlainText(block.richText);
     const text = block.content ?? block.text;
     if (text) return text;
     if (block.binding) return `{{${block.binding}}}`;
-    return block.label || block.type;
+    return "";
   }).join("\n\n").trim();
+}
+
+function richTextToPlainText(value: DocumentRichText) {
+  return value.children.map((node) => node.type === "placeholder" ? `{{${node.key}}}` : node.text).join("");
 }
 
 export function sampleTemplateValue(key: string) {
@@ -647,6 +712,8 @@ function sectionValidationBlocks(value: unknown, fallbackSection: DocumentTempla
       style,
       image,
       table,
+      richText: normalizeRichText(entry.richText),
+      qr: normalizeQr(entry.qr),
       officerList: normalizeOfficerList(entry.officerList),
     }];
   });
@@ -703,8 +770,14 @@ function normalizeBlock(value: unknown, fallbackSection: DocumentTemplateSection
       borderColor: isSafeColor(String(style.borderColor || "")) ? String(style.borderColor) : undefined,
       borderWidth: clampNumber(style.borderWidth, 0, 8, undefined),
       radius: clampNumber(style.radius, 0, 24, undefined),
+      lineColor: isSafeColor(String(style.lineColor || "")) ? String(style.lineColor) : undefined,
+      lineWidth: clampNumber(style.lineWidth, 0.25, 8, undefined),
+      lineStyle: ["solid", "dashed", "dotted"].includes(String(style.lineStyle)) ? style.lineStyle as "solid" | "dashed" | "dotted" : undefined,
+      opacity: clampNumber(style.opacity, 0.05, 1, undefined),
     },
-    image: image ? { src: typeof image.src === "string" && isSafeImageSource(image.src) ? image.src : undefined, alt: typeof image.alt === "string" ? sanitizeText(image.alt).slice(0, 140) : undefined, width: clampNumber(image.width, 8, 500, undefined), height: clampNumber(image.height, 8, 500, undefined) } : undefined,
+    image: image ? normalizeImage(image) : undefined,
+    richText: normalizeRichText(item.richText),
+    qr: normalizeQr(item.qr),
     table,
     officerList: normalizeOfficerList(item.officerList),
   };
@@ -725,6 +798,54 @@ function normalizeOfficerList(value: unknown): DocumentOfficerListConfig | undef
     showHeading: value.showHeading !== false,
     showTerm: value.showTerm !== false,
     showSeparators: value.showSeparators !== false,
+  };
+}
+
+function normalizeImage(value: NonNullable<DocumentTemplateBlock["image"]>) {
+  const legacyPosition = typeof value.position === "string" ? value.position : "center";
+  return {
+    src: typeof value.src === "string" && isSafeImageSource(value.src) ? value.src : undefined,
+    alt: typeof value.alt === "string" ? sanitizeText(value.alt).slice(0, 140) : undefined,
+    width: clampNumber(value.width, 8, 500, undefined),
+    height: clampNumber(value.height, 8, 500, undefined),
+    fit: value.fit === "cover" ? "cover" as const : value.fit === "stretch" || (value as { fit?: string }).fit === "fill" ? "stretch" as const : "contain" as const,
+    positionX: ["left", "center", "right"].includes(String(value.positionX)) ? value.positionX as DocumentImagePositionX : legacyPosition === "left" ? "left" : legacyPosition === "right" ? "right" : "center",
+    positionY: ["top", "center", "bottom"].includes(String(value.positionY)) ? value.positionY as DocumentImagePositionY : legacyPosition === "top" ? "top" : legacyPosition === "bottom" ? "bottom" : "center",
+    opacity: clampNumber(value.opacity, 0.05, 1, 1),
+    lockAspectRatio: value.lockAspectRatio !== false,
+  };
+}
+
+function normalizeRichText(value: unknown): DocumentRichText | undefined {
+  if (!isRecord(value) || value.type !== "paragraph" || !Array.isArray(value.children)) return undefined;
+  const children = value.children.slice(0, 200).flatMap((entry): DocumentRichTextNode[] => {
+    if (!isRecord(entry) || (entry.type !== "text" && entry.type !== "placeholder")) return [];
+    const marks = normalizeTextMarks(entry.marks);
+    if (entry.type === "placeholder") {
+      const key = typeof entry.key === "string" && isSafePlaceholderKey(entry.key) ? entry.key : "";
+      return key ? [{ type: "placeholder", key, label: typeof entry.label === "string" ? sanitizeText(entry.label).slice(0, 120) : undefined, marks }] : [];
+    }
+    const text = sanitizeText(String(entry.text || ""));
+    return text ? [{ type: "text", text, marks }] : [];
+  });
+  return { type: "paragraph", children };
+}
+
+function normalizeTextMarks(value: unknown): DocumentTextMarks | undefined {
+  if (!isRecord(value)) return undefined;
+  const color = isSafeColor(String(value.color || "")) ? String(value.color) : undefined;
+  return value.bold || value.italic || value.underline || color ? { bold: value.bold === true || undefined, italic: value.italic === true || undefined, underline: value.underline === true || undefined, color } : undefined;
+}
+
+function normalizeQr(value: unknown): DocumentQrConfig | undefined {
+  if (!isRecord(value)) return undefined;
+  return {
+    label: sanitizeText(String(value.label || defaultQrConfig.label)).slice(0, 120),
+    instruction: sanitizeText(String(value.instruction || defaultQrConfig.instruction)).slice(0, 160),
+    showLabel: value.showLabel !== false,
+    showInstruction: value.showInstruction !== false,
+    squareLocked: value.squareLocked !== false,
+    quietZone: Math.round(clampNumber(value.quietZone, 1, 4, defaultQrConfig.quietZone)),
   };
 }
 
@@ -758,6 +879,17 @@ function sanitizeText(text: string) {
 
 function containsUnsafeTemplateContent(text: string) {
   return /<script|javascript:|on[a-z]+\s*=|<iframe|<object|<embed/i.test(text);
+}
+
+function validateRichText(value: DocumentRichText, blockId: string, knownPlaceholders: ReadonlySet<string>) {
+  const errors: string[] = [];
+  if (value.type !== "paragraph" || !Array.isArray(value.children)) return [`The selected inline formatting is invalid for block ${blockId}.`];
+  for (const node of value.children) {
+    if (node.type === "text" && containsUnsafeTemplateContent(node.text)) errors.push(`Unsafe rich text content in block ${blockId}.`);
+    if (node.type === "placeholder" && (!isSafePlaceholderKey(node.key) || !knownPlaceholders.has(node.key))) errors.push(`The selected placeholder formatting is invalid for block ${blockId}.`);
+    if (node.marks?.color && !isSafeColor(node.marks.color)) errors.push(`The selected text color is invalid for block ${blockId}.`);
+  }
+  return errors;
 }
 
 function isSafeColor(value: string) {

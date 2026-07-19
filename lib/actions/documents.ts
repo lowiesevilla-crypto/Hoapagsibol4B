@@ -1141,6 +1141,8 @@ async function applyTemplateImageUpload(definition: ReturnType<typeof normalizeT
   const target = path.join(directory, fileName);
   await writeFile(target, Buffer.from(await file.arrayBuffer()));
   const publicPath = `/uploads/settings/${tenantSlug}/document-templates/${fileName}`;
+  if (uploadBlockId === "page-background") return normalizeTemplateDefinition({ ...definition, page: { ...definition.page, backgroundImage: { src: publicPath, fit: "cover", position: "center", opacity: 1 } } }, definition.blocks.find((block) => block.type === "documentTitle")?.content || "Official HOA Document");
+  if (uploadBlockId === "page-watermark") return normalizeTemplateDefinition({ ...definition, page: { ...definition.page, watermark: { ...definition.page.watermark, image: { src: publicPath, fit: "contain", position: "center", opacity: 1 } } } }, definition.blocks.find((block) => block.type === "documentTitle")?.content || "Official HOA Document");
   const sections = {
     header: definition.sections.header.map((block) => block.id === uploadBlockId ? { ...block, image: { ...block.image, src: publicPath, alt: block.image?.alt || block.label || "Template image" } } : block),
     body: definition.sections.body.map((block) => block.id === uploadBlockId ? { ...block, image: { ...block.image, src: publicPath, alt: block.image?.alt || block.label || "Template image" } } : block),

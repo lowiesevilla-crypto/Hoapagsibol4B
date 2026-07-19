@@ -154,6 +154,24 @@ export type DocumentTemplateBlockType = typeof documentTemplateBlockTypes[number
 export type DocumentTemplateSectionName = "header" | "body" | "footer";
 export type DocumentPageFormat = "A4" | "LETTER" | "LEGAL";
 export type DocumentPageOrientation = "portrait" | "landscape";
+export type DocumentGuide = { positionMm: number; label?: string };
+export type DocumentPageImage = {
+  src: string;
+  fit: "cover" | "contain" | "fill";
+  position: "center" | "top" | "bottom" | "left" | "right";
+  opacity: number;
+};
+
+export const documentPageSizes: Record<DocumentPageFormat, { width: number; height: number; label: string }> = {
+  A4: { width: 210, height: 297, label: "A4" },
+  LETTER: { width: 216, height: 279, label: "Letter" },
+  LEGAL: { width: 216, height: 356, label: "Legal" },
+};
+
+export function documentPageDimensions(format: DocumentPageFormat, orientation: DocumentPageOrientation) {
+  const size = documentPageSizes[format];
+  return orientation === "landscape" ? { widthMm: size.height, heightMm: size.width } : { widthMm: size.width, heightMm: size.height };
+}
 
 export type DocumentOfficerListConfig = {
   source: "TENANT_ORGANIZATION_OFFICERS";
@@ -250,17 +268,32 @@ export type DocumentTemplateBlock = {
 export type DocumentTemplateDefinition = {
   schemaVersion: typeof documentTemplateSchemaVersion;
   page: {
+    id: string;
     format: DocumentPageFormat;
     orientation: DocumentPageOrientation;
+    widthMm: number;
+    heightMm: number;
+    pageNumber: number;
     marginPreset: "normal" | "narrow" | "moderate" | "wide" | "custom";
     margins: { top: number; right: number; bottom: number; left: number };
+    padding: { top: number; right: number; bottom: number; left: number };
+    headerHeightMm: number;
+    footerHeightMm: number;
+    headerLocked: boolean;
+    footerLocked: boolean;
+    showHeaderBoundary: boolean;
+    showFooterBoundary: boolean;
     headerDistance: number;
     footerDistance: number;
     columns: { count: 1 | 2 | 3; gap: number };
     border: { enabled: boolean; style: "solid" | "dashed" | "dotted"; width: number; color: string };
     backgroundColor: string;
-    watermark: { enabled: boolean; text: string; opacity: number };
-    canvas: { gridSize: number; snapToGrid: boolean; showGrid: boolean };
+    backgroundOpacity: number;
+    backgroundImage?: DocumentPageImage;
+    watermark: { enabled: boolean; text: string; opacity: number; fontSize: number; position: "center" | "top" | "bottom"; rotation: number; image?: DocumentPageImage };
+    canvas: { gridSize: number; snapToGrid: boolean; showGrid: boolean; showRulers: boolean; showMarginGuides: boolean; showCenterGuides: boolean };
+    guides: { horizontal: DocumentGuide[]; vertical: DocumentGuide[] };
+    safeArea: { showBoundary: boolean; showNonPrintableArea: boolean; warnOnOverflow: boolean; minimumMarginMm: number };
   };
   sections: Record<DocumentTemplateSectionName, DocumentTemplateBlock[]>;
   blocks: DocumentTemplateBlock[];
@@ -272,23 +305,38 @@ export type DocumentTemplateDefinition = {
 };
 
 const defaultPage: DocumentTemplateDefinition["page"] = {
+  id: "page-1",
   format: "A4",
   orientation: "portrait",
+  widthMm: 210,
+  heightMm: 297,
+  pageNumber: 1,
   marginPreset: "normal",
   margins: { top: 25.4, right: 25.4, bottom: 25.4, left: 25.4 },
+  padding: { top: 0, right: 0, bottom: 0, left: 0 },
+  headerHeightMm: 54,
+  footerHeightMm: 30,
+  headerLocked: false,
+  footerLocked: false,
+  showHeaderBoundary: true,
+  showFooterBoundary: true,
   headerDistance: 12,
   footerDistance: 12,
   columns: { count: 1, gap: 10 },
   border: { enabled: false, style: "solid", width: 1, color: "#111827" },
   backgroundColor: "#ffffff",
-  watermark: { enabled: false, text: "", opacity: 0.08 },
-  canvas: { gridSize: 5, snapToGrid: true, showGrid: true },
+  backgroundOpacity: 1,
+  watermark: { enabled: false, text: "", opacity: 0.08, fontSize: 34, position: "center", rotation: -28 },
+  canvas: { gridSize: 5, snapToGrid: true, showGrid: true, showRulers: true, showMarginGuides: true, showCenterGuides: true },
+  guides: { horizontal: [], vertical: [] },
+  safeArea: { showBoundary: true, showNonPrintableArea: false, warnOnOverflow: true, minimumMarginMm: 12 },
 };
 
 export function validateTemplateDefinition(value: unknown, options: { allowedPlaceholders?: ReadonlySet<string>; officerPositions?: readonly string[]; activeOfficerCount?: number } = {}) {
   const errors: string[] = [];
+  const warnings: string[] = [];
   const knownPlaceholders = options.allowedPlaceholders || new Set<string>(allowedDocumentPlaceholders);
-  if (!isRecord(value)) return { valid: false, errors: ["Template definition is missing."] };
+  if (!isRecord(value)) return { valid: false, errors: ["Template definition is missing."], warnings: [] };
   const definition = value;
   if (definition.schemaVersion !== documentTemplateSchemaVersion && definition.schemaVersion !== 1) errors.push("Unsupported template schema version.");
 
@@ -308,10 +356,25 @@ export function validateTemplateDefinition(value: unknown, options: { allowedPla
       }
     }
     if (typeof page.backgroundColor === "string" && !isSafeColor(page.backgroundColor)) errors.push("Page background color must be a safe hex value.");
+    if (page.backgroundOpacity != null && (!Number.isFinite(Number(page.backgroundOpacity)) || Number(page.backgroundOpacity) < 0.05 || Number(page.backgroundOpacity) > 1)) errors.push("Page background opacity must be between 0.05 and 1.");
+    if (page.backgroundImage != null) {
+      if (!isRecord(page.backgroundImage) || typeof page.backgroundImage.src !== "string" || !isSafeImageSource(page.backgroundImage.src)) errors.push("Page background image must use a tenant-approved upload.");
+      if (isRecord(page.backgroundImage) && !["cover", "contain", "fill"].includes(String(page.backgroundImage.fit))) errors.push("Page background fit is not supported.");
+    }
+    if (isRecord(page.watermark)) {
+      if (containsUnsafeTemplateContent(String(page.watermark.text || ""))) errors.push("Watermark text contains unsafe content.");
+      if (page.watermark.image != null && (!isRecord(page.watermark.image) || typeof page.watermark.image.src !== "string" || !isSafeImageSource(page.watermark.image.src))) errors.push("Watermark image must use a tenant-approved upload.");
+    }
+    for (const key of ["headerHeightMm", "footerHeightMm"] as const) if (page[key] != null && (!Number.isFinite(Number(page[key])) || Number(page[key]) < 0 || Number(page[key]) > 120)) errors.push(`${key} must be between 0mm and 120mm.`);
     const canvas = isRecord(page.canvas) ? page.canvas : null;
     if (canvas) {
       const gridSize = Number(canvas.gridSize);
       if (!Number.isFinite(gridSize) || gridSize < 1 || gridSize > 20) errors.push("Grid size must be between 1mm and 20mm.");
+    }
+    if (isRecord(page.guides)) {
+      for (const [axis, max] of [["horizontal", Number(page.heightMm) || 356], ["vertical", Number(page.widthMm) || 216]] as const) {
+        if (page.guides[axis] != null && (!Array.isArray(page.guides[axis]) || page.guides[axis].some((guide) => !isRecord(guide) || !Number.isFinite(Number(guide.positionMm)) || Number(guide.positionMm) < 0 || Number(guide.positionMm) > max))) errors.push(`${axis} guides must stay within the page boundary.`);
+      }
     }
     const border = isRecord(page.border) ? page.border : null;
     if (border?.enabled === true && !isSafeColor(String(border.color || ""))) errors.push("Page border color must be a safe hex value.");
@@ -333,10 +396,14 @@ export function validateTemplateDefinition(value: unknown, options: { allowedPla
   if (!blocks.some((block) => block.visible && block.type !== "spacer" && block.type !== "divider")) errors.push("Template must contain at least one visible content block.");
   const officerLists = blocks.filter((block) => block.type === "officerList");
   if (officerLists.length > 1) errors.push("Only one HOA officer list is allowed per template.");
-  const pageWidth = page && page.format === "A4" ? 210 : page && page.format === "LEGAL" ? 216 : 216;
-  const pageHeight = page && page.format === "A4" ? 297 : page && page.format === "LEGAL" ? 356 : 279;
-  const printableWidth = page?.orientation === "landscape" ? pageHeight : pageWidth;
-  const printableHeight = page?.orientation === "landscape" ? pageWidth : pageHeight;
+  const format = page && ["A4", "LETTER", "LEGAL"].includes(String(page.format)) ? page.format as DocumentPageFormat : "A4";
+  const orientation = page?.orientation === "landscape" ? "landscape" : "portrait";
+  const dimensions = documentPageDimensions(format, orientation);
+  const pageWidth = Number(page?.widthMm) || dimensions.widthMm;
+  const pageHeight = Number(page?.heightMm) || dimensions.heightMm;
+  const margins = isRecord(page?.margins) ? page.margins : {};
+  const safeArea = isRecord(page?.safeArea) ? page.safeArea : null;
+  if (safeArea?.warnOnOverflow === true && ["top", "right", "bottom", "left"].some((side) => Number(margins[side]) < Number(safeArea.minimumMarginMm || 12))) warnings.push("The page margin is smaller than the recommended printer-safe margin.");
   for (const block of blocks) {
     if (!documentTemplateBlockTypes.includes(block.type)) errors.push(`Unsupported block type: ${block.type}`);
     if (!["header", "body", "footer"].includes(block.section)) errors.push(`Unsupported section for block ${block.id}.`);
@@ -345,8 +412,9 @@ export function validateTemplateDefinition(value: unknown, options: { allowedPla
       const position = block.position;
       for (const key of ["x", "y", "width", "height", "zIndex"] as const) if (!Number.isFinite(Number(position[key]))) errors.push(`Invalid position for block ${block.id}.`);
       if (position.width <= 0 || position.height <= 0) errors.push(`Block ${block.id} must have a positive size.`);
-      if (position.x < 0 || position.y < 0 || position.x + position.width > printableWidth || position.y + position.height > printableHeight) errors.push(`${block.label || block.id} is outside the printable page.`);
-      if (position.width > printableWidth || position.height > printableHeight) errors.push(`${block.label || block.id} is larger than the page.`);
+      if (position.x < 0 || position.y < 0 || position.x + position.width > pageWidth || position.y + position.height > pageHeight) errors.push(`${block.label || block.id} is outside the page.`);
+      if (position.width > pageWidth || position.height > pageHeight) errors.push(`${block.label || block.id} is larger than the page.`);
+      if (safeArea?.warnOnOverflow === true && (position.x < Number(margins.left || 0) || position.y < Number(margins.top || 0) || position.x + position.width > pageWidth - Number(margins.right || 0) || position.y + position.height > pageHeight - Number(margins.bottom || 0))) warnings.push(`${block.label || block.id} extends beyond the printable area.`);
     }
     const text = block.content ?? block.text ?? "";
     for (const placeholder of extractPlaceholders(text)) {
@@ -384,7 +452,7 @@ export function validateTemplateDefinition(value: unknown, options: { allowedPla
       }
     }
   }
-  return { valid: errors.length === 0, errors: [...new Set(errors)] };
+  return { valid: errors.length === 0, errors: [...new Set(errors)], warnings: [...new Set(warnings)] };
 }
 
 export function extractPlaceholders(text: string) {
@@ -472,9 +540,33 @@ function normalizePage(value: unknown): DocumentTemplateDefinition["page"] {
   const border = page.border && typeof page.border === "object" ? page.border as Partial<DocumentTemplateDefinition["page"]["border"]> : {};
   const watermark = page.watermark && typeof page.watermark === "object" ? page.watermark as Partial<DocumentTemplateDefinition["page"]["watermark"]> : {};
   const columns = page.columns && typeof page.columns === "object" ? page.columns as Partial<DocumentTemplateDefinition["page"]["columns"]> : {};
+  const format = ["A4", "LETTER", "LEGAL"].includes(String(page.format)) ? page.format as DocumentPageFormat : defaultPage.format;
+  const orientation = page.orientation === "landscape" ? "landscape" : "portrait";
+  const dimensions = documentPageDimensions(format, orientation);
+  const backgroundImage = isRecord(page.backgroundImage) && typeof page.backgroundImage.src === "string" && isSafeImageSource(page.backgroundImage.src) ? {
+    src: page.backgroundImage.src,
+    fit: ["cover", "contain", "fill"].includes(String(page.backgroundImage.fit)) ? page.backgroundImage.fit as DocumentPageImage["fit"] : "cover",
+    position: ["center", "top", "bottom", "left", "right"].includes(String(page.backgroundImage.position)) ? page.backgroundImage.position as DocumentPageImage["position"] : "center",
+    opacity: clampNumber(page.backgroundImage.opacity, 0.05, 1, 1),
+  } : undefined;
+  const watermarkImage = isRecord(watermark.image) && typeof watermark.image.src === "string" && isSafeImageSource(watermark.image.src) ? {
+    src: watermark.image.src,
+    fit: ["cover", "contain", "fill"].includes(String(watermark.image.fit)) ? watermark.image.fit as DocumentPageImage["fit"] : "contain",
+    position: ["center", "top", "bottom", "left", "right"].includes(String(watermark.image.position)) ? watermark.image.position as DocumentPageImage["position"] : "center",
+    opacity: clampNumber(watermark.image.opacity, 0.05, 1, 1),
+  } : undefined;
+  const normalizeGuides = (value: unknown, max: number): DocumentGuide[] => Array.isArray(value) ? value.slice(0, 20).flatMap((entry) => {
+    const source = isRecord(entry) ? entry : null;
+    const positionMm = clampNumber(source?.positionMm ?? entry, 0, max, undefined);
+    return positionMm == null ? [] : [{ positionMm, label: typeof source?.label === "string" ? sanitizeText(source.label).slice(0, 60) : undefined }];
+  }) : [];
   return {
-    format: ["A4", "LETTER", "LEGAL"].includes(String(page.format)) ? page.format as DocumentPageFormat : defaultPage.format,
-    orientation: page.orientation === "landscape" ? "landscape" : "portrait",
+    id: typeof page.id === "string" && /^[A-Za-z0-9_-]{2,80}$/.test(page.id) ? page.id : defaultPage.id,
+    format,
+    orientation,
+    widthMm: dimensions.widthMm,
+    heightMm: dimensions.heightMm,
+    pageNumber: clampNumber(page.pageNumber, 1, 9999, defaultPage.pageNumber),
     marginPreset: ["normal", "narrow", "moderate", "wide", "custom"].includes(String(page.marginPreset)) ? page.marginPreset as DocumentTemplateDefinition["page"]["marginPreset"] : defaultPage.marginPreset,
     margins: {
       top: clampNumber(margins.top, 5, 60, defaultPage.margins.top),
@@ -482,16 +574,43 @@ function normalizePage(value: unknown): DocumentTemplateDefinition["page"] {
       bottom: clampNumber(margins.bottom, 5, 60, defaultPage.margins.bottom),
       left: clampNumber(margins.left, 5, 60, defaultPage.margins.left),
     },
+    padding: {
+      top: clampNumber(isRecord(page.padding) ? page.padding.top : undefined, 0, 30, defaultPage.padding.top),
+      right: clampNumber(isRecord(page.padding) ? page.padding.right : undefined, 0, 30, defaultPage.padding.right),
+      bottom: clampNumber(isRecord(page.padding) ? page.padding.bottom : undefined, 0, 30, defaultPage.padding.bottom),
+      left: clampNumber(isRecord(page.padding) ? page.padding.left : undefined, 0, 30, defaultPage.padding.left),
+    },
+    headerHeightMm: clampNumber(page.headerHeightMm, 0, 120, defaultPage.headerHeightMm),
+    footerHeightMm: clampNumber(page.footerHeightMm, 0, 120, defaultPage.footerHeightMm),
+    headerLocked: page.headerLocked === true,
+    footerLocked: page.footerLocked === true,
+    showHeaderBoundary: page.showHeaderBoundary !== false,
+    showFooterBoundary: page.showFooterBoundary !== false,
     headerDistance: clampNumber(page.headerDistance, 0, 40, defaultPage.headerDistance),
     footerDistance: clampNumber(page.footerDistance, 0, 40, defaultPage.footerDistance),
     columns: { count: [1, 2, 3].includes(Number(columns.count)) ? Number(columns.count) as 1 | 2 | 3 : 1, gap: clampNumber(columns.gap, 0, 30, defaultPage.columns.gap) },
     border: { enabled: Boolean(border.enabled), style: ["solid", "dashed", "dotted"].includes(String(border.style)) ? border.style as "solid" | "dashed" | "dotted" : "solid", width: clampNumber(border.width, 0, 6, 1), color: isSafeColor(String(border.color || "")) ? String(border.color) : defaultPage.border.color },
     backgroundColor: isSafeColor(String(page.backgroundColor || "")) ? String(page.backgroundColor) : defaultPage.backgroundColor,
-    watermark: { enabled: Boolean(watermark.enabled), text: sanitizeText(String(watermark.text || "")), opacity: clampNumber(watermark.opacity, 0.02, 0.3, defaultPage.watermark.opacity) },
+    backgroundOpacity: clampNumber(page.backgroundOpacity, 0.05, 1, defaultPage.backgroundOpacity),
+    backgroundImage,
+    watermark: { enabled: Boolean(watermark.enabled), text: sanitizeText(String(watermark.text || "")), opacity: clampNumber(watermark.opacity, 0.02, 0.3, defaultPage.watermark.opacity), fontSize: clampNumber(watermark.fontSize, 12, 96, defaultPage.watermark.fontSize), position: ["center", "top", "bottom"].includes(String(watermark.position)) ? watermark.position as "center" | "top" | "bottom" : defaultPage.watermark.position, rotation: clampNumber(watermark.rotation, -45, 45, defaultPage.watermark.rotation), image: watermarkImage },
     canvas: {
       gridSize: clampNumber(isRecord(page.canvas) ? page.canvas.gridSize : undefined, 1, 20, defaultPage.canvas.gridSize),
       snapToGrid: isRecord(page.canvas) ? page.canvas.snapToGrid !== false : defaultPage.canvas.snapToGrid,
       showGrid: isRecord(page.canvas) ? page.canvas.showGrid !== false : defaultPage.canvas.showGrid,
+      showRulers: isRecord(page.canvas) ? page.canvas.showRulers !== false : defaultPage.canvas.showRulers,
+      showMarginGuides: isRecord(page.canvas) ? page.canvas.showMarginGuides !== false : defaultPage.canvas.showMarginGuides,
+      showCenterGuides: isRecord(page.canvas) ? page.canvas.showCenterGuides !== false : defaultPage.canvas.showCenterGuides,
+    },
+    guides: {
+      horizontal: normalizeGuides(isRecord(page.guides) ? page.guides.horizontal : undefined, dimensions.heightMm),
+      vertical: normalizeGuides(isRecord(page.guides) ? page.guides.vertical : undefined, dimensions.widthMm),
+    },
+    safeArea: {
+      showBoundary: isRecord(page.safeArea) ? page.safeArea.showBoundary !== false : defaultPage.safeArea.showBoundary,
+      showNonPrintableArea: isRecord(page.safeArea) ? page.safeArea.showNonPrintableArea === true : defaultPage.safeArea.showNonPrintableArea,
+      warnOnOverflow: isRecord(page.safeArea) ? page.safeArea.warnOnOverflow !== false : defaultPage.safeArea.warnOnOverflow,
+      minimumMarginMm: clampNumber(isRecord(page.safeArea) ? page.safeArea.minimumMarginMm : undefined, 5, 30, defaultPage.safeArea.minimumMarginMm),
     },
   };
 }

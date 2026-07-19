@@ -108,16 +108,22 @@ function blockStyle(block: DocumentRenderBlock, visualLayout: boolean) {
 function documentCss(model: DocumentRenderModel) {
   const margins = model.page.margins;
   const size = model.page.format === "LETTER" ? "Letter" : model.page.format === "LEGAL" ? "Legal" : "A4";
-  const dimensions = model.page.format === "A4" ? { width: 210, height: 297 } : model.page.format === "LETTER" ? { width: 216, height: 279 } : { width: 216, height: 356 };
-  const width = model.page.orientation === "landscape" ? dimensions.height : dimensions.width;
-  const height = model.page.orientation === "landscape" ? dimensions.width : dimensions.height;
+  const width = model.page.widthMm;
+  const height = model.page.heightMm;
   const page = model.visualLayout ? `width:${width}mm;height:${height}mm;min-height:${height}mm;padding:0` : `width:${width}mm;min-height:${height}mm;padding:${margins.top}mm ${margins.right}mm ${margins.bottom}mm ${margins.left}mm`;
   const pageMargin = model.visualLayout ? "0" : `${margins.top}mm ${margins.right}mm ${margins.bottom}mm ${margins.left}mm`;
-  return `@page{size:${size} ${model.page.orientation};margin:${pageMargin}}*{box-sizing:border-box}body{margin:0;background:#f3f4f6;color:#111827;font-family:Arial,sans-serif}.document-page{position:relative;${page};margin:0 auto;background:${model.page.backgroundColor};overflow:hidden}.section{position:relative;z-index:1}.visual-section{position:absolute;inset:0}.block{white-space:normal;overflow-wrap:anywhere;margin:0 0 12px}.visual-layout .block{margin:0}.block-documentTitle{font-size:20pt;text-align:center}.section-footer{margin-top:24px}table{border-collapse:collapse}td{border:1px solid #d1d5db;padding:6px;vertical-align:top}.qr-block{text-align:center}.qr-block img{width:96px;height:96px}.qr-block figcaption{font-size:8pt}.officer-list{border-right:1px solid #0b2a63;padding:0 6mm 0 0;color:#0b2a63}.officer-list h2{margin:0;background:#0b2a63;color:white;padding:4mm 2mm;text-align:center;font-size:11pt;line-height:1.1}.officer-term{text-align:center;font-weight:700;font-size:9pt;margin:2mm 0 7mm}.officer-row{padding:0 2mm 3mm;margin:0 0 3mm}.officer-list.with-separators .officer-row{border-bottom:1px solid #cbd5e1}.officer-row strong,.officer-row span{display:block}.officer-row strong{font-size:8pt;color:#111827}.officer-row span{font-size:7pt;font-weight:700;text-transform:uppercase}.page-break{break-after:page}.watermark{position:absolute;inset:45% 0 auto;transform:rotate(-28deg);text-align:center;font-size:34pt;font-weight:700;color:rgba(100,116,139,.15);z-index:0}@media print{body{background:white}.document-page{margin:0;box-shadow:none}}`;
+  const border = model.page.border.enabled ? `border:${clamp(model.page.border.width, 0, 6)}px ${model.page.border.style} ${model.page.border.color};` : "";
+  const background = `background-color:${colorWithOpacity(model.page.backgroundColor, model.page.backgroundOpacity)};${model.page.backgroundImage ? `background-image:url('${escapeAttribute(model.page.backgroundImage.src)}');background-size:${model.page.backgroundImage.fit === "fill" ? "100% 100%" : model.page.backgroundImage.fit};background-position:${model.page.backgroundImage.position};background-repeat:no-repeat;` : ""}`;
+  return `@page{size:${size} ${model.page.orientation};margin:${pageMargin}}*{box-sizing:border-box}body{margin:0;background:#f3f4f6;color:#111827;font-family:Arial,sans-serif}.document-page{position:relative;${page};margin:0 auto;${background}${border}overflow:hidden}.section{position:relative;z-index:1}.visual-section{position:absolute;inset:0}.section-header{min-height:${model.page.headerHeightMm}mm}.section-footer{min-height:${model.page.footerHeightMm}mm;margin-top:24px}.block{white-space:normal;overflow-wrap:anywhere;margin:0 0 12px}.visual-layout .block{margin:0}.block-documentTitle{font-size:20pt;text-align:center}table{border-collapse:collapse}td{border:1px solid #d1d5db;padding:6px;vertical-align:top}.qr-block{text-align:center}.qr-block img{width:96px;height:96px}.qr-block figcaption{font-size:8pt}.officer-list{border-right:1px solid #0b2a63;padding:0 6mm 0 0;color:#0b2a63}.officer-list h2{margin:0;background:#0b2a63;color:white;padding:4mm 2mm;text-align:center;font-size:11pt;line-height:1.1}.officer-term{text-align:center;font-weight:700;font-size:9pt;margin:2mm 0 7mm}.officer-row{padding:0 2mm 3mm;margin:0 0 3mm}.officer-list.with-separators .officer-row{border-bottom:1px solid #cbd5e1}.officer-row strong,.officer-row span{display:block}.officer-row strong{font-size:8pt;color:#111827}.officer-row span{font-size:7pt;font-weight:700;text-transform:uppercase}.page-break{break-after:page}.watermark{position:absolute;left:0;right:0;text-align:center;font-weight:700;color:rgba(100,116,139,.15);z-index:0;pointer-events:none}.watermark-image{display:block;max-width:70%;max-height:35%;margin:0 auto;object-fit:contain}.watermark-center{top:45%;transform:translateY(-50%)}.watermark-top{top:10%}.watermark-bottom{bottom:10%}@media print{body{background:white}.document-page{margin:0;box-shadow:none}}`;
 }
 
 function renderWatermark(model: DocumentRenderModel) {
-  return model.page.watermark.enabled && model.page.watermark.text ? `<div class="watermark">${escapeHtml(model.page.watermark.text)}</div>` : "";
+  const watermark = model.page.watermark;
+  if (!watermark.enabled || (!watermark.text && !watermark.image)) return "";
+  const positionClass = `watermark-${watermark.position}`;
+  const image = watermark.image ? `<img class="watermark-image" src="${escapeAttribute(watermark.image.src)}" alt="">` : "";
+  const transform = watermark.position === "center" ? `translateY(-50%) rotate(${clamp(watermark.rotation, -45, 45)}deg)` : `rotate(${clamp(watermark.rotation, -45, 45)}deg)`;
+  return `<div class="watermark ${positionClass}" style="opacity:${clamp(watermark.opacity, 0.02, 0.3)};font-size:${clamp(watermark.fontSize, 12, 96)}pt;transform:${transform}">${image}${watermark.text ? escapeHtml(watermark.text).replaceAll("\n", "<br>") : ""}</div>`;
 }
 
 function escapeHtml(value: string) {
@@ -130,6 +136,15 @@ function escapeAttribute(value: string) {
 
 function safeFont(value: string) {
   return value.replace(/[^A-Za-z0-9 ,'-]/g, "") || "Arial";
+}
+
+function colorWithOpacity(value: string, opacity: number) {
+  const match = value.match(/^#([0-9A-Fa-f]{6})$/);
+  if (!match || opacity >= 1) return value;
+  const red = parseInt(match[1].slice(0, 2), 16);
+  const green = parseInt(match[1].slice(2, 4), 16);
+  const blue = parseInt(match[1].slice(4, 6), 16);
+  return `rgba(${red},${green},${blue},${clamp(opacity, 0.05, 1)})`;
 }
 
 function clamp(value: number, min: number, max: number) {

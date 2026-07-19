@@ -30,17 +30,31 @@ export function certificateOfResidencyTemplateDefinition(): DocumentTemplateDefi
   const definition: DocumentTemplateDefinition = {
     schemaVersion: 2,
     page: {
+      id: "page-1",
       format: "A4",
       orientation: "portrait",
+      widthMm: 210,
+      heightMm: 297,
+      pageNumber: 1,
       marginPreset: "custom",
       margins: { top: 20, right: 20, bottom: 20, left: 20 },
+      padding: { top: 0, right: 0, bottom: 0, left: 0 },
+      headerHeightMm: 54,
+      footerHeightMm: 30,
+      headerLocked: false,
+      footerLocked: false,
+      showHeaderBoundary: true,
+      showFooterBoundary: true,
       headerDistance: 10,
       footerDistance: 10,
       columns: { count: 1, gap: 10 },
       border: { enabled: true, style: "solid", width: 1, color: "#166534" },
       backgroundColor: "#ffffff",
-      watermark: { enabled: false, text: "", opacity: 0.08 },
-      canvas: { gridSize: 5, snapToGrid: true, showGrid: true },
+      backgroundOpacity: 1,
+      watermark: { enabled: false, text: "", opacity: 0.08, fontSize: 34, position: "center", rotation: -28 },
+      canvas: { gridSize: 5, snapToGrid: true, showGrid: true, showRulers: true, showMarginGuides: true, showCenterGuides: true },
+      guides: { horizontal: [], vertical: [] },
+      safeArea: { showBoundary: true, showNonPrintableArea: false, warnOnOverflow: true, minimumMarginMm: 12 },
     },
     sections: {
       header: [
@@ -142,7 +156,7 @@ export function certificateOfResidencyReferenceTemplateDefinition(): DocumentTem
   const sections = { header, body, footer };
   return {
     schemaVersion: 2,
-    page: { format: "A4", orientation: "portrait", marginPreset: "custom", margins: { top: 6, right: 6, bottom: 5, left: 6 }, headerDistance: 0, footerDistance: 0, columns: { count: 1, gap: 0 }, border: { enabled: false, style: "solid", width: 0, color: "#ffffff" }, backgroundColor: "#ffffff", watermark: { enabled: false, text: "", opacity: 0.08 }, canvas: { gridSize: 5, snapToGrid: true, showGrid: true } },
+    page: { id: "page-1", format: "A4", orientation: "portrait", widthMm: 210, heightMm: 297, pageNumber: 1, marginPreset: "custom", margins: { top: 6, right: 6, bottom: 5, left: 6 }, padding: { top: 0, right: 0, bottom: 0, left: 0 }, headerHeightMm: 54, footerHeightMm: 30, headerLocked: false, footerLocked: false, showHeaderBoundary: true, showFooterBoundary: true, headerDistance: 0, footerDistance: 0, columns: { count: 1, gap: 0 }, border: { enabled: false, style: "solid", width: 0, color: "#ffffff" }, backgroundColor: "#ffffff", backgroundOpacity: 1, watermark: { enabled: false, text: "", opacity: 0.08, fontSize: 34, position: "center", rotation: -28 }, canvas: { gridSize: 5, snapToGrid: true, showGrid: true, showRulers: true, showMarginGuides: true, showCenterGuides: true }, guides: { horizontal: [], vertical: [] }, safeArea: { showBoundary: true, showNonPrintableArea: false, warnOnOverflow: true, minimumMarginMm: 12 } },
     sections,
     blocks: [...header, ...body, ...footer],
     meta: { editor: "professional-document-editor", revisionNote: "Tenant draft reference layout based on the supplied Certificate of Residency PDF. Published certified templates remain unchanged.", requiresSignatory: false },

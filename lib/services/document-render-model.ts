@@ -113,7 +113,7 @@ export function buildDocumentRenderModel(input: {
     return { ...block, visible: block.visible && !omit, content: omit ? "" : result.resolvedContent, table };
   });
   const page = input.mode === "PREVIEW"
-    ? { ...template.page, watermark: { enabled: true, text: "PREVIEW - NOT AN OFFICIAL DOCUMENT", opacity: 0.12 } }
+    ? { ...template.page, watermark: { ...template.page.watermark, enabled: true, text: "PREVIEW - NOT AN OFFICIAL DOCUMENT", opacity: 0.12 } }
     : template.page;
   return {
     schemaVersion: 1,

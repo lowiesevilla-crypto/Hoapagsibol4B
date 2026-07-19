@@ -9,6 +9,7 @@ const fieldTypes = ["TEXT", "TEXTAREA", "DATE", "NUMBER", "MONEY", "SELECT", "CH
 type FieldType = (typeof fieldTypes)[number];
 
 type InitialField = {
+  id?: string;
   key: string;
   label: string;
   fieldType: string;
@@ -21,6 +22,7 @@ type InitialField = {
 
 type EditableField = {
   uid: string;
+  existing: boolean;
   key: string;
   label: string;
   fieldType: FieldType;
@@ -35,7 +37,7 @@ type EditableField = {
   pattern: string;
 };
 
-export function DocumentDefinitionFieldBuilder({ definitionId, fields }: { definitionId: string; fields: InitialField[] }) {
+export function DocumentDefinitionFieldBuilder({ definitionId, fields, hasHistoricalReferences = false }: { definitionId: string; fields: InitialField[]; hasHistoricalReferences?: boolean }) {
   const [rows, setRows] = useState<EditableField[]>(() => fields.length ? fields.map(toEditableField) : [blankField()]);
   const duplicateKeys = useMemo(() => {
     const seen = new Set<string>();
@@ -67,17 +69,19 @@ export function DocumentDefinitionFieldBuilder({ definitionId, fields }: { defin
     <div className="space-y-3">
       {rows.map((row, index) => {
         const duplicate = duplicateKeys.has(row.key.trim());
+        const lockedRemoval = hasHistoricalReferences && row.existing;
         return <div key={row.uid} className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
           <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
             <div>
               <p className="text-xs font-black uppercase tracking-[.16em] text-slate-500">Field {index + 1}</p>
-              <h4 className="mt-1 font-black">{row.label || row.key || "New field"}</h4>
+              <div className="mt-1 flex flex-wrap items-center gap-2"><h4 className="font-black">{row.label || row.key || "New field"}</h4><span className={`badge ${row.active ? "badge-paid" : "badge-info"}`}>{row.active ? "Active" : "Inactive"}</span></div>
               {duplicate && <p className="mt-1 text-xs font-bold text-rose-700">This field key is duplicated.</p>}
+              {lockedRemoval && <p className="mt-1 text-xs font-bold text-amber-700">This field is used by existing requests. It cannot be deleted, but it can be deactivated for future requests.</p>}
             </div>
             <div className="flex flex-wrap gap-2">
               <button type="button" className="btn-secondary min-h-9 px-3 py-1 text-xs" onClick={() => moveRow(row.uid, -1)} disabled={index === 0}>Move up</button>
               <button type="button" className="btn-secondary min-h-9 px-3 py-1 text-xs" onClick={() => moveRow(row.uid, 1)} disabled={index === rows.length - 1}>Move down</button>
-              <button type="button" className="btn-danger min-h-9 px-3 py-1 text-xs" onClick={() => removeRow(row.uid)} disabled={rows.length === 1}>Remove</button>
+              <button type="button" className="btn-danger min-h-9 px-3 py-1 text-xs" onClick={() => removeRow(row.uid)} disabled={rows.length === 1 || lockedRemoval}>Remove</button>
             </div>
           </div>
           <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
@@ -110,13 +114,14 @@ export function DocumentDefinitionFieldBuilder({ definitionId, fields }: { defin
 
 function blankField(): EditableField {
   const id = Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
-  return { uid: id, key: "", label: "", fieldType: "TEXT", required: false, active: true, optionsText: "", defaultValue: "", minLength: "", maxLength: "", min: "", max: "", pattern: "" };
+  return { uid: id, existing: false, key: "", label: "", fieldType: "TEXT", required: false, active: true, optionsText: "", defaultValue: "", minLength: "", maxLength: "", min: "", max: "", pattern: "" };
 }
 
 function toEditableField(field: InitialField, index: number): EditableField {
   const validation = isRecord(field.validation) ? field.validation : {};
   return {
     uid: `${field.key || "field"}-${index}`,
+    existing: true,
     key: field.key,
     label: field.label,
     fieldType: fieldTypes.includes(field.fieldType as FieldType) ? field.fieldType as FieldType : "TEXT",

@@ -537,7 +537,7 @@ export async function saveDocumentDefinitionAction(formData: FormData) {
   if (displayName.length < 3) fail("Display name must be at least 3 characters.");
   const existingByCode = await prisma.documentDefinition.findFirst({ where: { tenantId: admin.tenantId, code, ...(id ? { id: { not: id } } : {}) }, select: { id: true } });
   if (existingByCode) fail("A document definition with this code already exists for this tenant.");
-  const existingDefinition = id ? await prisma.documentDefinition.findFirst({ where: { id, tenantId: admin.tenantId }, select: { id: true, tenantId: true, legacyType: true, archivedAt: true, status: true, version: true } }) : null;
+  const existingDefinition = id ? await prisma.documentDefinition.findFirst({ where: { id, tenantId: admin.tenantId }, select: { id: true, tenantId: true, code: true, displayName: true, active: true, legacyType: true, archivedAt: true, status: true, version: true } }) : null;
   if (id && !existingDefinition) fail("Document definition not found.");
   const workflowPreset = String(formData.get("workflowPreset") || "FREE_APPROVAL");
   const workflowFields = workflowFieldsForPreset(workflowPreset);
@@ -569,14 +569,16 @@ export async function saveDocumentDefinitionAction(formData: FormData) {
   const validityDays = formData.get("validityDays") ? Math.max(1, Number(formData.get("validityDays")) || 0) : null;
   const active = booleanFromForm(formData, "active");
   const archived = Boolean(existingDefinition?.archivedAt || existingDefinition?.status === DocumentDefinitionStatus.ARCHIVED);
+  const restoreByActivation = archived && active;
   const data = {
     code,
     displayName,
     description: nullableText(formData.get("description")),
     category: nullableText(formData.get("category")),
     displayOrder: Number(formData.get("displayOrder")) || 0,
-    active: archived ? false : active,
-    status: archived ? DocumentDefinitionStatus.ARCHIVED : active ? DocumentDefinitionStatus.ACTIVE : DocumentDefinitionStatus.INACTIVE,
+    active: restoreByActivation ? true : archived ? false : active,
+    status: restoreByActivation ? DocumentDefinitionStatus.ACTIVE : archived ? DocumentDefinitionStatus.ARCHIVED : active ? DocumentDefinitionStatus.ACTIVE : DocumentDefinitionStatus.INACTIVE,
+    ...(restoreByActivation ? { archivedAt: null } : {}),
     legacyType: legacyTypeValue,
     ...workflow,
     feeAmount,
@@ -607,6 +609,9 @@ export async function saveDocumentDefinitionAction(formData: FormData) {
         await tx.documentTypeConfiguration.updateMany({ where: { tenantId: admin.tenantId, type: existingDefinition.legacyType, definitionId: id }, data: { definitionId: null, updatedById: admin.id, version: { increment: 1 } } });
       }
       if (legacyTypeValue) await syncLegacyDefinitionConfiguration(tx, admin.tenantId, legacyTypeValue, id, data, admin.id);
+      if (restoreByActivation) {
+        await tx.auditLog.create({ data: { tenantId: admin.tenantId, actorId: admin.id, module: "DOCUMENTS", action: "DOCUMENT_DEFINITION_RESTORE", entityType: "DocumentDefinition", entityId: id, metadata: { code, oldValue: { active: existingDefinition?.active, status: existingDefinition?.status, archivedAt: existingDefinition?.archivedAt?.toISOString() ?? null }, newValue: { active: true, status: DocumentDefinitionStatus.ACTIVE, archivedAt: null }, source: "saveDefinitionActiveCheckbox" } } });
+      }
       await tx.auditLog.create({ data: { tenantId: admin.tenantId, actorId: admin.id, module: "DOCUMENTS", action: "UPDATE_DOCUMENT_DEFINITION", entityType: "DocumentDefinition", entityId: id, metadata: { code, workflow: workflowPreset, feeAmount, outstandingBalancePolicy: balancePolicy } } });
     });
   } else {
@@ -617,10 +622,14 @@ export async function saveDocumentDefinitionAction(formData: FormData) {
       return created;
     });
     revalidatePath("/admin/settings/document-definitions");
+    revalidatePath("/admin/documents");
+    revalidatePath("/admin/documents/new");
     revalidatePath("/portal/documents");
     redirect(`/admin/settings/document-definitions?edit=${definition.id}&success=saved&message=${encodeURIComponent(`${displayName} definition saved.`)}`);
   }
   revalidatePath("/admin/settings/document-definitions");
+  revalidatePath("/admin/documents");
+  revalidatePath("/admin/documents/new");
   revalidatePath("/portal/documents");
   redirect(`/admin/settings/document-definitions?edit=${id}&success=saved&message=${encodeURIComponent(`${displayName} definition saved.`)}`);
 }
@@ -637,15 +646,20 @@ export async function changeDocumentDefinitionStatusAction(formData: FormData) {
     ACTIVATE: { data: { active: true, status: DocumentDefinitionStatus.ACTIVE }, pastTense: "activated" },
     DEACTIVATE: { data: { active: false, status: DocumentDefinitionStatus.INACTIVE }, pastTense: "deactivated" },
     ARCHIVE: { data: { active: false, status: DocumentDefinitionStatus.ARCHIVED, archivedAt: new Date() }, pastTense: "archived" },
+    RESTORE: { data: { active: true, status: DocumentDefinitionStatus.ACTIVE, archivedAt: null }, pastTense: "restored and activated" },
   } satisfies Record<string, { data: Prisma.DocumentDefinitionUpdateInput; pastTense: string }>;
   const data = operations[operation as keyof typeof operations]?.data;
   if (!data) fail("Select a valid definition action.");
-  if ((definitionRecord.archivedAt || definitionRecord.status === DocumentDefinitionStatus.ARCHIVED) && operation !== "ARCHIVE") fail("Archived definitions cannot be activated or deactivated without a restore workflow.");
+  const archived = Boolean(definitionRecord.archivedAt || definitionRecord.status === DocumentDefinitionStatus.ARCHIVED);
+  if (archived && operation !== "RESTORE" && operation !== "ARCHIVE") fail("Archived definitions must be restored before activation or deactivation.");
+  if (!archived && operation === "RESTORE") fail("Only archived definitions can be restored.");
   await platformPrisma.$transaction([
     platformPrisma.documentDefinition.update({ where: { id }, data: { ...data, updatedById: admin.id, version: { increment: 1 } } }),
-    platformPrisma.auditLog.create({ data: { tenantId: admin.tenantId, actorId: admin.id, module: "DOCUMENTS", action: `DOCUMENT_DEFINITION_${operation}`, entityType: "DocumentDefinition", entityId: id, metadata: { code: definitionRecord.code, hadRequests: definitionRecord.requests.length > 0, hadVersions: definitionRecord.documentVersions.length > 0 } } }),
+    platformPrisma.auditLog.create({ data: { tenantId: admin.tenantId, actorId: admin.id, module: "DOCUMENTS", action: `DOCUMENT_DEFINITION_${operation}`, entityType: "DocumentDefinition", entityId: id, metadata: { code: definitionRecord.code, hadRequests: definitionRecord.requests.length > 0, hadVersions: definitionRecord.documentVersions.length > 0, oldValue: { active: definitionRecord.active, status: definitionRecord.status, archivedAt: definitionRecord.archivedAt?.toISOString() ?? null }, newValue: { active: operation === "ACTIVATE" || operation === "RESTORE", status: operation === "ARCHIVE" ? DocumentDefinitionStatus.ARCHIVED : operation === "DEACTIVATE" ? DocumentDefinitionStatus.INACTIVE : DocumentDefinitionStatus.ACTIVE, archivedAt: operation === "ARCHIVE" ? "set" : operation === "RESTORE" ? null : definitionRecord.archivedAt?.toISOString() ?? null } } } }),
   ]);
   revalidatePath("/admin/settings/document-definitions");
+  revalidatePath("/admin/documents");
+  revalidatePath("/admin/documents/new");
   revalidatePath("/portal/documents");
   redirect(`/admin/settings/document-definitions?success=${operation.toLowerCase()}&message=${encodeURIComponent(`${definitionRecord.displayName} ${operations[operation as keyof typeof operations].pastTense}.`)}`);
 }
@@ -712,7 +726,7 @@ export async function saveDocumentDefinitionFieldsAction(formData: FormData) {
   const admin = await requireDocumentTemplateAdmin();
   const definitionId = String(formData.get("definitionId") || "");
   const fail = (message: string): never => redirect(`/admin/settings/document-definitions?edit=${definitionId}&error=${encodeURIComponent(message)}`);
-  const definition = await prisma.documentDefinition.findFirst({ where: { id: definitionId, tenantId: admin.tenantId }, include: { requests: { select: { id: true }, take: 1 } } });
+  const definition = await prisma.documentDefinition.findFirst({ where: { id: definitionId, tenantId: admin.tenantId }, include: { requests: { select: { id: true }, take: 1 }, documentVersions: { select: { id: true }, take: 1 } } });
   if (!definition) fail("Document definition not found.");
   const definitionRecord = definition!;
   let fields: ReturnType<typeof parseFieldsJson> = [];
@@ -724,19 +738,50 @@ export async function saveDocumentDefinitionFieldsAction(formData: FormData) {
   if (fields.length === 0) fail("At least one field is required.");
   const duplicateKey = firstDuplicate(fields.map((field) => field.key));
   if (duplicateKey) fail(`Field key ${duplicateKey} is duplicated.`);
-  if (definitionRecord.requests.length) {
-    const existing = await prisma.documentDefinitionField.findMany({ where: { tenantId: admin.tenantId, definitionId }, select: { key: true } });
-    const existingKeys = new Set(existing.map((field) => field.key));
-    const removed = [...existingKeys].filter((key) => !fields.some((field) => field.key === key));
-    if (removed.length) fail("Field keys cannot be removed after requests exist. Deactivate the field instead.");
+  const existingFields = await prisma.documentDefinitionField.findMany({ where: { tenantId: admin.tenantId, definitionId }, orderBy: [{ displayOrder: "asc" }, { label: "asc" }] });
+  const hasHistoricalReferences = definitionRecord.requests.length > 0 || definitionRecord.documentVersions.length > 0;
+  const submittedByKey = new Map(fields.map((field) => [field.key, field]));
+  const existingByKey = new Map(existingFields.map((field) => [field.key, field]));
+  const removed = existingFields.filter((field) => !submittedByKey.has(field.key));
+  if (hasHistoricalReferences && removed.length) {
+    await platformPrisma.auditLog.create({ data: { tenantId: admin.tenantId, actorId: admin.id, module: "DOCUMENTS", action: "PROHIBITED_DOCUMENT_DEFINITION_FIELD_DELETE", entityType: "DocumentDefinition", entityId: definitionId, metadata: { code: definitionRecord.code, removedKeys: removed.map((field) => field.key), hadRequests: definitionRecord.requests.length > 0, hadVersions: definitionRecord.documentVersions.length > 0 } } });
+    fail(`Field key${removed.length === 1 ? "" : "s"} ${removed.map((field) => field.key).join(", ")} cannot be removed after requests or issued documents exist. Deactivate the field instead.`);
   }
-  await platformPrisma.$transaction([
-    platformPrisma.documentDefinitionField.deleteMany({ where: { tenantId: admin.tenantId, definitionId } }),
-    platformPrisma.documentDefinitionField.createMany({ data: fields.map((field, index) => ({ ...field, tenantId: admin.tenantId, definitionId, displayOrder: index * 10 + 10 })) }),
-    platformPrisma.documentDefinition.update({ where: { id: definitionId }, data: { updatedById: admin.id, version: { increment: 1 } } }),
-    platformPrisma.auditLog.create({ data: { tenantId: admin.tenantId, actorId: admin.id, module: "DOCUMENTS", action: "UPDATE_DOCUMENT_DEFINITION_FIELDS", entityType: "DocumentDefinition", entityId: definitionId, metadata: { fieldCount: fields.length } } }),
-  ]);
+  const deactivated = fields.filter((field) => existingByKey.get(field.key)?.active === true && field.active === false);
+  const reactivated = fields.filter((field) => existingByKey.get(field.key)?.active === false && field.active === true);
+  await platformPrisma.$transaction(async (tx) => {
+    if (!hasHistoricalReferences && removed.length) {
+      await tx.documentDefinitionField.deleteMany({ where: { tenantId: admin.tenantId, definitionId, key: { in: removed.map((field) => field.key) } } });
+    }
+    await Promise.all(fields.map((field, index) => {
+      const existing = existingByKey.get(field.key);
+      const data = {
+        label: field.label,
+        fieldType: field.fieldType,
+        required: field.required,
+        active: field.active,
+        displayOrder: index * 10 + 10,
+        options: field.options ?? Prisma.JsonNull,
+        validation: field.validation ?? Prisma.JsonNull,
+        defaultValue: field.defaultValue ?? Prisma.JsonNull,
+      };
+      return existing
+        ? tx.documentDefinitionField.update({ where: { id: existing.id }, data })
+        : tx.documentDefinitionField.create({ data: { ...data, tenantId: admin.tenantId, definitionId, key: field.key } });
+    }));
+    await tx.documentDefinition.update({ where: { id: definitionId }, data: { updatedById: admin.id, version: { increment: 1 } } });
+    const fieldStateAudits = [
+      ...deactivated.map((field) => ({ action: "DYNAMIC_FIELD_DEACTIVATED", field })),
+      ...reactivated.map((field) => ({ action: "DYNAMIC_FIELD_REACTIVATED", field })),
+    ];
+    if (fieldStateAudits.length) {
+      await tx.auditLog.createMany({ data: fieldStateAudits.map(({ action, field }) => ({ tenantId: admin.tenantId, actorId: admin.id, module: "DOCUMENTS", action, entityType: "DocumentDefinitionField", entityId: existingByKey.get(field.key)?.id, metadata: { definitionId, definitionCode: definitionRecord.code, key: field.key, oldValue: { active: !field.active }, newValue: { active: field.active } } })) });
+    }
+    await tx.auditLog.create({ data: { tenantId: admin.tenantId, actorId: admin.id, module: "DOCUMENTS", action: "UPDATE_DOCUMENT_DEFINITION_FIELDS", entityType: "DocumentDefinition", entityId: definitionId, metadata: { fieldCount: fields.length, deactivatedKeys: deactivated.map((field) => field.key), reactivatedKeys: reactivated.map((field) => field.key), removedKeys: hasHistoricalReferences ? [] : removed.map((field) => field.key), preservedHistoricalFields: hasHistoricalReferences } } });
+  });
   revalidatePath("/admin/settings/document-definitions");
+  revalidatePath("/admin/documents");
+  revalidatePath("/admin/documents/new");
   revalidatePath("/portal/documents");
   redirect(`/admin/settings/document-definitions?edit=${definitionId}&success=fields&message=Definition%20fields%20saved.`);
 }

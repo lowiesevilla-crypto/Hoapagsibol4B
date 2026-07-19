@@ -8,6 +8,7 @@ import { requireDocumentTemplateAdmin } from "@/lib/document-template-admin";
 import { prisma } from "@/lib/db";
 import { normalizeTemplateDefinition } from "@/lib/services/document-template-builder";
 import { getActiveOrganizationOfficers } from "@/lib/organization";
+import { getAssociationSettings } from "@/lib/system-settings";
 
 export default async function TemplateVersionEditorPage({ params, searchParams }: { params: Promise<{ id: string; versionId: string }>; searchParams: Promise<{ error?: string; success?: string; message?: string }> }) {
   const admin = await requireDocumentTemplateAdmin();
@@ -20,7 +21,10 @@ export default async function TemplateVersionEditorPage({ params, searchParams }
   if (!version || version.templateSet.definitionId !== id) return <p className="card">Template version not found.</p>;
   const definition = version.templateSet.definition;
   const customPlaceholders = await prisma.documentPlaceholderDefinition.findMany({ where: { tenantId: admin.tenantId, ownership: "TENANT", active: true }, orderBy: [{ category: "asc" }, { key: "asc" }], select: { key: true, category: true, displayName: true, description: true, dataType: true, exampleValue: true, sensitivity: true } });
-  const officers = await getActiveOrganizationOfficers(admin.tenantId);
+  const [officers, association] = await Promise.all([
+    getActiveOrganizationOfficers(admin.tenantId),
+    getAssociationSettings(admin.tenantId),
+  ]);
   const template = normalizeTemplateDefinition(version.definitionJson, definition.displayName);
   const editable = version.status === DocumentTemplateVersionStatus.DRAFT;
   return <>
@@ -44,6 +48,8 @@ export default async function TemplateVersionEditorPage({ params, searchParams }
       updatedAt={version.updatedAt.toISOString()}
       templateWorkspaceHref={`/admin/settings/document-definitions/${id}/templates`}
       documentManagementHref="/admin/documents?section=templates"
+      previewHref={`/admin/settings/document-definitions/${id}/templates/${version.id}/preview`}
+      tenantLogoSrc={association.logoUrl}
       customPlaceholders={customPlaceholders.map((item) => ({ key: item.key, group: item.category, label: item.displayName, description: item.description || "Tenant-defined placeholder.", dataType: item.dataType, sample: item.exampleValue || `{{${item.key}}}`, sensitivity: item.sensitivity }))}
       officerPositions={[...new Set(officers.map((officer) => officer.position))]}
       activeOfficerCount={officers.length}

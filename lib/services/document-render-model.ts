@@ -110,7 +110,8 @@ export function buildDocumentRenderModel(input: {
     const omit = block.required === false && (result.unresolvedPlaceholders.length > 0 || result.unauthorizedPlaceholders.length > 0);
     if (!omit) collect(result);
     const table = block.table ? { rows: block.table.rows.map((row) => row.map((cell) => { const cellResult = resolveText(cell); collect(cellResult); return cellResult.resolvedContent; })) } : undefined;
-    return { ...block, visible: block.visible && !omit, content: omit ? "" : result.resolvedContent, table };
+    const imageSource = resolveImageSource(block, input.placeholderContext);
+    return { ...block, image: imageSource ? { ...block.image, src: imageSource } : block.image, visible: block.visible && !omit, content: omit ? "" : result.resolvedContent, table };
   });
   const page = input.mode === "PREVIEW"
     ? { ...template.page, watermark: { ...template.page.watermark, enabled: true, text: "PREVIEW - NOT AN OFFICIAL DOCUMENT", opacity: 0.12 } }
@@ -131,6 +132,12 @@ export function buildDocumentRenderModel(input: {
     officerListValidationErrors: [...officerListValidationErrors],
     warnings: [...warnings],
   };
+}
+
+function resolveImageSource(block: DocumentTemplateBlock, context: PlaceholderResolutionContext) {
+  const source = block.image?.src || block.content || (block.type === "logo" && block.binding ? `{{${block.binding}}}` : "");
+  if (source === "{{tenant.logo}}" || (!block.image?.src && (block.binding === "tenant.logo" || block.type === "logo"))) return context.tenant?.logo || undefined;
+  return block.image?.src;
 }
 
 function resolveOfficerList(config: NonNullable<DocumentTemplateBlock["officerList"]>, context: PlaceholderResolutionContext) {

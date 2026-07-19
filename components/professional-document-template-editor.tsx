@@ -18,10 +18,14 @@ import {
   ImageIcon,
   List,
   Lock,
+  Maximize2,
+  Minimize2,
   Minus,
   MoveDown,
   MoveUp,
   PanelLeft,
+  PanelLeftOpen,
+  PanelRightOpen,
   Plus,
   Printer,
   QrCode,
@@ -50,6 +54,15 @@ import {
   type DocumentTemplateDefinition,
   type DocumentTemplateSectionName,
 } from "@/lib/services/document-template-builder";
+import {
+  defaultDesignerPanelPreference,
+  designerPanelPreferenceKey,
+  enterDesignerFocusCanvas,
+  exitDesignerFocusCanvas,
+  parseDesignerPanelPreference,
+  serializeDesignerPanelPreference,
+  toggleDesignerPanel,
+} from "@/lib/services/document-designer-ui";
 
 type TemplateEditorAction = (formData: FormData) => void | Promise<void>;
 
@@ -128,6 +141,11 @@ export function ProfessionalDocumentTemplateEditor(props: Props) {
   const canvasRef = useRef<HTMLDivElement>(null);
   const dragRef = useRef<DragState | null>(null);
   const copiedRef = useRef<VisualBlock[]>([]);
+  const focusRestoreRef = useRef<{ leftOpen: boolean; rightOpen: boolean } | null>(null);
+  const [leftPanelOpen, setLeftPanelOpen] = useState(defaultDesignerPanelPreference.leftOpen);
+  const [rightPanelOpen, setRightPanelOpen] = useState(defaultDesignerPanelPreference.rightOpen);
+  const [focusCanvas, setFocusCanvas] = useState(false);
+  const [panelPreferenceLoaded, setPanelPreferenceLoaded] = useState(false);
   const initialSerialized = useRef(JSON.stringify(materializeVisualLayout(props.template, props.title)));
   const validation = useMemo(() => validateTemplateDefinition(definition, { officerPositions: props.officerPositions, activeOfficerCount: props.activeOfficerCount }), [definition, props.activeOfficerCount, props.officerPositions]);
   const selected = selectedIds.map((id) => findBlock(definition, id)).filter(Boolean) as VisualBlock[];
@@ -137,6 +155,20 @@ export function ProfessionalDocumentTemplateEditor(props: Props) {
   const scale = (zoom / 100) * 3.78;
   const dirty = JSON.stringify(definition) !== initialSerialized.current;
   const knownPlaceholderKeys = useMemo(() => new Set<string>([...allowedDocumentPlaceholders, ...props.customPlaceholders.map((item) => item.key)]), [props.customPlaceholders]);
+
+  useEffect(() => {
+    const preference = parseDesignerPanelPreference(window.localStorage.getItem(designerPanelPreferenceKey));
+    if (preference) {
+      setLeftPanelOpen(preference.leftOpen);
+      setRightPanelOpen(preference.rightOpen);
+    }
+    setPanelPreferenceLoaded(true);
+  }, []);
+
+  useEffect(() => {
+    if (!panelPreferenceLoaded) return;
+    window.localStorage.setItem(designerPanelPreferenceKey, serializeDesignerPanelPreference({ leftOpen: leftPanelOpen, rightOpen: rightPanelOpen }));
+  }, [leftPanelOpen, panelPreferenceLoaded, rightPanelOpen]);
 
   useEffect(() => {
     const warn = (event: BeforeUnloadEvent) => {
@@ -150,9 +182,15 @@ export function ProfessionalDocumentTemplateEditor(props: Props) {
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
-      if (editingId || !props.editable || selected.length === 0) return;
       const target = event.target as HTMLElement;
       if (["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName)) return;
+      if ((event.ctrlKey || event.metaKey) && event.shiftKey) {
+        const shortcut = event.key.toLowerCase();
+        if (shortcut === "l") { event.preventDefault(); toggleLeftPanel(); return; }
+        if (shortcut === "r") { event.preventDefault(); toggleRightPanel(); return; }
+        if (shortcut === "f") { event.preventDefault(); toggleFocusCanvas(); return; }
+      }
+      if (editingId || !props.editable || selected.length === 0) return;
       if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "z") { event.preventDefault(); undo(); return; }
       if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "y") { event.preventDefault(); redo(); return; }
       if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "c") { event.preventDefault(); copiedRef.current = selected.map(clone); return; }
@@ -169,6 +207,43 @@ export function ProfessionalDocumentTemplateEditor(props: Props) {
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
   });
+
+  function focusControl(id: string) {
+    window.requestAnimationFrame(() => document.getElementById(id)?.focus());
+  }
+
+  function toggleLeftPanel() {
+    const next = toggleDesignerPanel({ leftOpen: leftPanelOpen, rightOpen: rightPanelOpen, focusCanvas }, "left");
+    setFocusCanvas(next.focusCanvas);
+    focusRestoreRef.current = null;
+    setLeftPanelOpen(next.leftOpen);
+    focusControl("designer-left-toggle");
+  }
+
+  function toggleRightPanel() {
+    const next = toggleDesignerPanel({ leftOpen: leftPanelOpen, rightOpen: rightPanelOpen, focusCanvas }, "right");
+    setFocusCanvas(next.focusCanvas);
+    focusRestoreRef.current = null;
+    setRightPanelOpen(next.rightOpen);
+    focusControl("designer-right-toggle");
+  }
+
+  function toggleFocusCanvas() {
+    if (focusCanvas) {
+      const next = exitDesignerFocusCanvas({ leftOpen: leftPanelOpen, rightOpen: rightPanelOpen, focusCanvas }, focusRestoreRef.current);
+      setFocusCanvas(next.focusCanvas);
+      setLeftPanelOpen(next.leftOpen);
+      setRightPanelOpen(next.rightOpen);
+      focusRestoreRef.current = null;
+    } else {
+      const next = enterDesignerFocusCanvas({ leftOpen: leftPanelOpen, rightOpen: rightPanelOpen, focusCanvas });
+      focusRestoreRef.current = next.restore;
+      setFocusCanvas(next.state.focusCanvas);
+      setLeftPanelOpen(next.state.leftOpen);
+      setRightPanelOpen(next.state.rightOpen);
+    }
+    focusControl("designer-focus-toggle");
+  }
 
   function commit(next: DocumentTemplateDefinition) {
     setHistory((items) => [...items.slice(-49), definition]);
@@ -345,6 +420,9 @@ export function ProfessionalDocumentTemplateEditor(props: Props) {
         <ToolbarButton label="Undo" onClick={undo} disabled={!history.length}><Undo2 /></ToolbarButton>
         <ToolbarButton label="Redo" onClick={redo} disabled={!future.length}><Redo2 /></ToolbarButton>
         <div className="flex items-center gap-1 rounded-lg border border-slate-200 px-1"><ToolbarButton label="Zoom out" onClick={() => setZoom((value) => Math.max(50, value - 10))}><Minus /></ToolbarButton><span className="w-10 text-center text-xs font-black">{zoom}%</span><ToolbarButton label="Zoom in" onClick={() => setZoom((value) => Math.min(130, value + 10))}><Plus /></ToolbarButton></div>
+        <ToolbarButton id="designer-left-toggle" label={leftPanelOpen ? "Hide Elements Panel" : "Show Elements Panel"} expanded={leftPanelOpen} controls="designer-left-panel" onClick={toggleLeftPanel}>{leftPanelOpen ? <PanelLeft /> : <PanelLeftOpen />}</ToolbarButton>
+        <ToolbarButton id="designer-focus-toggle" label={focusCanvas ? "Exit Focus Canvas" : "Focus Canvas"} ariaPressed={focusCanvas} onClick={toggleFocusCanvas}>{focusCanvas ? <Minimize2 /> : <Maximize2 />}</ToolbarButton>
+        <ToolbarButton id="designer-right-toggle" label={rightPanelOpen ? "Hide Properties Panel" : "Show Properties Panel"} expanded={rightPanelOpen} controls="designer-right-panel" onClick={toggleRightPanel}><PanelRightOpen /></ToolbarButton>
         <button className="btn-secondary min-h-9 px-3 py-1.5 text-xs" type="button" onClick={() => window.print()}><Printer className="size-4" /> Preview</button>
         {props.editable ? <><button className="btn-secondary min-h-9 px-3 py-1.5 text-xs" name="operation" value="saveDraft" disabled={isPending}><Save className="size-4" /> Save Draft</button><button className="btn-primary min-h-9 px-3 py-1.5 text-xs" name="operation" value="publish" disabled={isPending || !validation.valid} onClick={(event) => { if (!window.confirm("Validate and publish this new immutable template version?")) event.preventDefault(); }}><Save className="size-4" /> Publish</button></> : <span className="rounded-lg bg-slate-100 px-3 py-2 text-xs font-bold text-slate-600">Published version is immutable</span>}
         <a className="btn-secondary min-h-9 px-3 py-1.5 text-xs" href={props.templateWorkspaceHref}>Version History</a>
@@ -358,17 +436,18 @@ export function ProfessionalDocumentTemplateEditor(props: Props) {
       </div>
     </header>
 
-    <div className="grid min-h-[calc(100vh-132px)] bg-slate-100 xl:grid-cols-[236px_1fr_304px] print:block">
-      <aside className="border-r border-slate-200 bg-white p-3 print:hidden">
+    <div className={`relative grid min-h-[calc(100vh-132px)] bg-slate-100 ${leftPanelOpen && rightPanelOpen ? "xl:grid-cols-[236px_minmax(0,1fr)_304px]" : leftPanelOpen ? "xl:grid-cols-[236px_minmax(0,1fr)]" : rightPanelOpen ? "xl:grid-cols-[minmax(0,1fr)_304px]" : "xl:grid-cols-[minmax(0,1fr)]"} print:block`}>
+      {(!leftPanelOpen || !rightPanelOpen) && <div className="pointer-events-none absolute inset-x-3 top-3 z-20 flex justify-between print:hidden"><div>{!leftPanelOpen && <button id="designer-left-edge-toggle" type="button" className="pointer-events-auto inline-flex min-h-9 min-w-9 items-center justify-center rounded-md border border-slate-200 bg-white p-2 text-slate-700 outline-none shadow-sm hover:bg-slate-50 focus-visible:ring-2 focus-visible:ring-pine-600" title="Show Elements Panel" aria-label="Show Elements Panel" aria-expanded={false} aria-controls="designer-left-panel" onClick={toggleLeftPanel}><PanelLeftOpen className="size-4" /></button>}</div><div>{!rightPanelOpen && <button id="designer-right-edge-toggle" type="button" className="pointer-events-auto inline-flex min-h-9 min-w-9 items-center justify-center rounded-md border border-slate-200 bg-white p-2 text-slate-700 outline-none shadow-sm hover:bg-slate-50 focus-visible:ring-2 focus-visible:ring-pine-600" title="Show Properties Panel" aria-label="Show Properties Panel" aria-expanded={false} aria-controls="designer-right-panel" onClick={toggleRightPanel}><PanelRightOpen className="size-4" /></button>}</div></div>}
+      {leftPanelOpen && <aside id="designer-left-panel" aria-label="Elements and document tools" aria-hidden={false} className="border-r border-slate-200 bg-white p-3 print:hidden max-xl:absolute max-xl:inset-y-0 max-xl:left-0 max-xl:z-20 max-xl:w-[min(86vw,236px)] max-xl:shadow-2xl">
         <div className="grid grid-cols-4 gap-1 rounded-lg bg-slate-100 p-1" role="tablist" aria-label="Designer tools">{(["Elements", "Dynamic Fields", "Layers", "Pages"] as LeftTab[]).map((tab) => <button key={tab} type="button" role="tab" aria-selected={leftTab === tab} className={`rounded-md px-1 py-2 text-[10px] font-black ${leftTab === tab ? "bg-white text-pine-800 shadow-sm" : "text-slate-500"}`} onClick={() => setLeftTab(tab)}>{tab === "Dynamic Fields" ? "Fields" : tab}</button>)}</div>
         {leftTab === "Elements" && <div className="mt-4 grid grid-cols-2 gap-2">{elementOptions.map((option) => <button key={`${option.type}-${option.label}`} type="button" className="flex min-h-16 flex-col items-center justify-center gap-1 rounded-lg border border-slate-200 bg-white p-2 text-center text-[10px] font-bold text-slate-700 hover:border-pine-400 hover:bg-pine-50" onClick={() => addElement(option)} disabled={!props.editable}>{option.icon}<span>{option.label}</span></button>)}</div>}
         {leftTab === "Dynamic Fields" && <div className="mt-4 space-y-3"><label className="relative block"><span className="sr-only">Search dynamic fields</span><Search className="pointer-events-none absolute left-3 top-3 size-4 text-slate-400" /><input className="field pl-9 text-xs" value={fieldSearch} onChange={(event) => setFieldSearch(event.target.value)} placeholder="Search fields" /></label>{filteredGroups.map((group) => <details key={group.group} open><summary className="cursor-pointer text-xs font-black text-pine-800">{group.group}</summary><div className="mt-2 space-y-1">{group.items.map((item) => <button key={item.key} type="button" draggable={props.editable} onDragStart={(event) => { event.dataTransfer.setData("text/hoahub-placeholder", item.key); }} onClick={() => insertField(item.key)} className="w-full rounded-md border border-slate-100 p-2 text-left hover:bg-slate-50"><span className="block text-[11px] font-bold">{item.label}</span><span className="block text-[9px] font-mono text-slate-400">[{item.label}]</span><span className="block truncate text-[9px] text-slate-500">{item.sample}</span></button>)}</div></details>)}{props.customPlaceholders.length > 0 && <details open><summary className="cursor-pointer text-xs font-black text-pine-800">Custom Tenant Fields</summary><div className="mt-2 space-y-1">{props.customPlaceholders.filter((item) => `${item.label} ${item.key} ${item.sample}`.toLowerCase().includes(fieldSearch.toLowerCase())).map((item) => <button key={item.key} type="button" draggable={props.editable} onDragStart={(event) => event.dataTransfer.setData("text/hoahub-placeholder", item.key)} onClick={() => insertField(item.key)} className="w-full rounded-md border border-slate-100 p-2 text-left hover:bg-slate-50"><span className="block text-[11px] font-bold">{item.label}</span><span className="block text-[9px] font-mono text-slate-400">[{item.label}]</span><span className="block truncate text-[9px] text-slate-500">{item.sample} · {item.dataType}</span></button>)}</div></details>}</div>}
         {leftTab === "Layers" && <div className="mt-4 space-y-1">{[...definition.blocks].sort((a, b) => (b.position?.zIndex || 0) - (a.position?.zIndex || 0)).map((block) => <button key={block.id} type="button" className={`flex w-full items-center gap-2 rounded-md px-2 py-2 text-left text-xs ${selectedIds.includes(block.id) ? "bg-pine-800 text-white" : "hover:bg-slate-100"}`} onClick={() => select(block.id, false)}><span className="truncate flex-1">{block.label || block.type}</span>{block.locked ? <Lock className="size-3" /> : null}{block.visible ? <Eye className="size-3" /> : <EyeOff className="size-3" />}</button>)}</div>}
         {leftTab === "Pages" && <PagePanel definition={definition} updatePage={(patch) => updateDefinition((draft) => ({ ...draft, page: { ...draft.page, ...patch } }))} />}
         <div className="mt-6 border-t border-slate-100 pt-4"><p className="text-[10px] font-black uppercase tracking-wide text-slate-500">Document outline</p>{(["header", "body", "footer"] as const).map((section) => <div key={section} className="mt-3"><p className="text-[10px] font-black uppercase text-pine-700">{section}</p>{definition.sections[section].map((block) => <button key={block.id} type="button" className="mt-1 block w-full truncate rounded px-2 py-1 text-left text-[11px] font-semibold hover:bg-slate-100" onClick={() => select(block.id)}>{block.label || block.type}</button>)}</div>)}</div>
-      </aside>
+      </aside>}
 
-      <main className="min-w-0 overflow-auto p-4 sm:p-7 print:p-0">
+      <main className="relative min-w-0 overflow-auto p-4 sm:p-7 print:p-0">
         <div className="mx-auto max-w-[1100px]">
           <div className="mb-3 flex items-center justify-between print:hidden"><div className="flex items-center gap-2 text-xs font-bold text-slate-600"><FileText className="size-4" /> {page.label} · {definition.page.orientation}</div><div className="text-[11px] font-bold text-slate-500">Drag to move · Double-click text to edit</div></div>
           <div className="overflow-auto rounded-xl border border-slate-300 bg-slate-200 p-8 shadow-inner print:overflow-visible print:border-0 print:bg-white print:p-0 print:shadow-none">
@@ -385,9 +464,9 @@ export function ProfessionalDocumentTemplateEditor(props: Props) {
         </div>
       </main>
 
-      <aside className="border-l border-slate-200 bg-white p-4 print:hidden"><PropertiesPanel selected={selected} editable={props.editable} updateBlock={updateBlock} updateSelectedPatch={updateSelectedPatch} updatePositions={updatePositions} duplicate={duplicateSelected} remove={removeSelected} align={alignSelected} layerMove={layerMove} onImageUpload={() => { setImageBlockId(selected[0]?.id || ""); fileInputRef.current?.click(); }} />
+      {rightPanelOpen && <aside id="designer-right-panel" aria-label="Properties and validation" aria-hidden={false} className="border-l border-slate-200 bg-white p-4 print:hidden max-xl:absolute max-xl:inset-y-0 max-xl:right-0 max-xl:z-20 max-xl:w-[min(90vw,304px)] max-xl:shadow-2xl"><PropertiesPanel selected={selected} editable={props.editable} updateBlock={updateBlock} updateSelectedPatch={updateSelectedPatch} updatePositions={updatePositions} duplicate={duplicateSelected} remove={removeSelected} align={alignSelected} layerMove={layerMove} onImageUpload={() => { setImageBlockId(selected[0]?.id || ""); fileInputRef.current?.click(); }} />
         <ValidationPanel errors={validation.errors} blocks={definition.blocks} onSelect={select} />
-      </aside>
+      </aside>}
     </div>
   </form>;
 }
@@ -468,7 +547,7 @@ function ValidationPanel({ errors, blocks, onSelect }: { errors: string[]; block
   return <section className="mt-6 border-t border-slate-200 pt-4" aria-labelledby="template-validation"><div className="flex items-center justify-between"><h2 id="template-validation" className="text-xs font-black uppercase tracking-wide text-slate-600">Validation</h2><span className={`rounded-full px-2 py-1 text-[10px] font-black ${errors.length ? "bg-rose-50 text-rose-700" : "bg-emerald-50 text-emerald-700"}`}>{errors.length ? `${errors.length} issue${errors.length === 1 ? "" : "s"}` : "Ready"}</span></div>{errors.length ? <div className="mt-3 space-y-2">{errors.map((error) => <button key={error} type="button" className="block w-full rounded-lg bg-rose-50 p-2 text-left text-[11px] font-semibold text-rose-800" onClick={() => { const block = blocks.find((item) => error.includes(item.id) || error.includes(item.label || "\u0000")); if (block) onSelect(block.id); }}>{error}</button>)}</div> : <p className="mt-2 text-[11px] text-slate-500">No unresolved placeholders or printable-boundary errors.</p>}</section>;
 }
 
-function ToolbarButton({ label, onClick, disabled, children }: { label: string; onClick: () => void; disabled?: boolean; children: React.ReactNode }) { return <button type="button" title={label} aria-label={label} className="inline-flex min-h-8 min-w-8 items-center justify-center rounded-md border border-slate-200 bg-white p-1.5 text-slate-700 hover:bg-slate-50 disabled:opacity-40" onClick={onClick} disabled={disabled}>{children}</button>; }
+function ToolbarButton({ id, label, onClick, disabled, expanded, controls, ariaPressed, children }: { id?: string; label: string; onClick: () => void; disabled?: boolean; expanded?: boolean; controls?: string; ariaPressed?: boolean; children: React.ReactNode }) { return <button id={id} type="button" title={label} aria-label={label} aria-expanded={expanded} aria-controls={controls} aria-pressed={ariaPressed} className="inline-flex min-h-8 min-w-8 items-center justify-center rounded-md border border-slate-200 bg-white p-1.5 text-slate-700 outline-none hover:bg-slate-50 focus-visible:ring-2 focus-visible:ring-pine-600 disabled:opacity-40" onClick={onClick} disabled={disabled}>{children}</button>; }
 function SmallButton({ label, onClick, children }: { label: string; onClick: () => void; children: React.ReactNode }) { return <button type="button" className="inline-flex min-h-8 items-center justify-center gap-1 rounded-md border border-slate-200 px-2 text-[10px] font-bold" onClick={onClick} title={label}>{children}</button>; }
 function IconAction({ label, onClick, active, children }: { label: string; onClick: () => void; active?: boolean; children: React.ReactNode }) { return <button type="button" title={label} aria-label={label} className={`inline-flex min-h-8 min-w-8 items-center justify-center rounded-md border p-1.5 ${active ? "border-pine-700 bg-pine-800 text-white" : "border-slate-200 text-slate-700"}`} onClick={onClick}>{children}</button>; }
 

@@ -6,12 +6,15 @@ import {
   DocumentOrigin,
   DocumentRequestStatus,
   DocumentTemplateOwnership,
+  DocumentTemplateVersionStatus,
   Prisma,
   Role,
 } from "@prisma/client";
 import { platformPrisma } from "@/lib/db";
 import {
   CERTIFICATE_OF_RESIDENCY_CODE,
+  CERTIFICATE_OF_RESIDENCY_REFERENCE_TEMPLATE_NAME,
+  createCertificateOfResidencyReferenceDraft,
   ensureCertifiedCertificateOfResidencyTemplate,
   provisionCertificateOfResidencyForTenant,
 } from "@/lib/services/certificate-of-residency";
@@ -64,6 +67,13 @@ async function main() {
     add(checks, "approval workflow has one unnamed authorized step", definition.workflowDefinition?.steps.length === 1 && !definition.workflowDefinition.steps[0].approverUserId && !definition.workflowDefinition.steps[0].approverRole, String(definition.workflowDefinition?.steps.length));
     add(checks, "policy assignments are present", ["ACTIVE_RESIDENT", "PROPERTY_OWNERSHIP", "OUTSTANDING_BALANCE", "VIOLATION_STATUS"].every((type) => definition.policyAssignments.some((assignment) => assignment.policy.type === type)), definition.policyAssignments.map((assignment) => assignment.policy.type).join(","));
     add(checks, "numbering configuration is tenant-specific", definition.numberingConfiguration?.prefix === "COR" && definition.numberingConfiguration.sequenceLength === 6, definition.numberingConfiguration?.prefix ?? "none");
+
+    const referenceDraft = await createCertificateOfResidencyReferenceDraft(context, certified1.version.id);
+    const referenceDraftReplay = await createCertificateOfResidencyReferenceDraft(context, certified1.version.id);
+    const referenceSet = await platformPrisma.documentTemplateSet.findFirst({ where: { tenantId: fixture.tenant.id, name: CERTIFICATE_OF_RESIDENCY_REFERENCE_TEMPLATE_NAME }, include: { versions: true } });
+    add(checks, "visual certificate reference creates a separate tenant draft", referenceDraft.created && referenceDraft.draft.status === DocumentTemplateVersionStatus.DRAFT && referenceDraft.draft.sourceVersionId === certified1.version.id && referenceSet?.versions.length === 1, referenceDraft.draft.id);
+    add(checks, "visual certificate reference draft is idempotent and unpublished", !referenceDraftReplay.created && referenceDraftReplay.draft.id === referenceDraft.draft.id && definition.assignedTemplateVersionId !== referenceDraft.draft.id, referenceDraftReplay.draft.status);
+    add(checks, "visual reference draft preserves the officer-list schema", JSON.stringify(referenceDraft.draft.definitionJson).includes("officerList") && JSON.stringify(referenceDraft.draft.definitionJson).includes("TENANT_ORGANIZATION_OFFICERS"), referenceDraft.draft.id);
 
     await platformPrisma.documentDefinition.update({ where: { id: definition.id }, data: { signatoryOfficerId: fixture.officer.id } });
     const restored = await restoreTenantTemplateFromCertified({ tenantId: fixture.tenant.id, templateSetId: definition.assignedTemplateVersion!.templateSetId, certifiedVersionId: certified1.version.id, createdById: fixture.admin.id });

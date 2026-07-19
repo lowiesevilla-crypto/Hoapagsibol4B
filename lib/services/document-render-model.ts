@@ -2,6 +2,7 @@ import "server-only";
 
 import type { DocumentGenerationMode } from "@prisma/client";
 import {
+  defaultOfficerListConfig,
   normalizeTemplateDefinition,
   type DocumentTemplateBlock,
   type DocumentTemplateDefinition,
@@ -15,6 +16,15 @@ import {
 export type DocumentRenderBlock = Omit<DocumentTemplateBlock, "content" | "text" | "table"> & {
   content: string;
   table?: { rows: string[][] };
+  officerListData?: {
+    heading: string;
+    term: string | null;
+    termLabel: string;
+    showHeading: boolean;
+    showTerm: boolean;
+    showSeparators: boolean;
+    officers: Array<{ id: string; fullName: string; position: string; displayOrder: number }>;
+  };
 };
 
 export type DocumentRenderModel = {
@@ -36,6 +46,12 @@ export type DocumentRenderModel = {
   unresolvedPlaceholders: string[];
   unauthorizedPlaceholders: string[];
   resolvedValues: Record<string, string>;
+  officerListSnapshot?: {
+    sourceTenantId: string;
+    term: string | null;
+    officers: Array<{ id: string; fullName: string; position: string; displayOrder: number }>;
+  } | null;
+  officerListValidationErrors?: string[];
   warnings: string[];
 };
 
@@ -55,7 +71,9 @@ export function buildDocumentRenderModel(input: {
   const unresolved = new Set<string>();
   const unauthorized = new Set<string>();
   const warnings = new Set<string>();
+  const officerListValidationErrors = new Set<string>();
   const resolvedValues: Record<string, string> = {};
+  let officerListSnapshot: DocumentRenderModel["officerListSnapshot"] = null;
   const resolveText = (value: string) => {
     const result = resolveDocumentPlaceholders(value, input.placeholderContext, input.mode === "PREVIEW" ? "PREVIEW" : "GENERATE", input.placeholderDefinitions);
     return result;
@@ -67,6 +85,27 @@ export function buildDocumentRenderModel(input: {
     Object.assign(resolvedValues, result.resolvedValues);
   };
   const section = (name: "header" | "body" | "footer") => template.sections[name].map((block) => {
+    if (block.type === "officerList") {
+      const officerResult = resolveOfficerList(block.officerList || defaultOfficerListConfig, input.placeholderContext);
+      officerResult.errors.forEach((item) => officerListValidationErrors.add(item));
+      officerResult.warnings.forEach((item) => warnings.add(item));
+      if (officerResult.snapshot) officerListSnapshot = officerResult.snapshot;
+      const resolvedOfficerList = officerResult.snapshot ? {
+        heading: block.officerList?.heading || defaultOfficerListConfig.heading,
+        term: officerResult.snapshot.term,
+        termLabel: block.officerList?.termLabel || defaultOfficerListConfig.termLabel,
+        showHeading: block.officerList?.showHeading !== false,
+        showTerm: block.officerList?.showTerm !== false,
+        showSeparators: block.officerList?.showSeparators !== false,
+        officers: officerResult.snapshot.officers,
+      } : undefined;
+      return {
+        ...block,
+        visible: block.visible && Boolean(resolvedOfficerList),
+        content: resolvedOfficerList ? officerListText(resolvedOfficerList) : "",
+        officerListData: resolvedOfficerList,
+      };
+    }
     const result = resolveText(block.content ?? block.text ?? (block.binding ? `{{${block.binding}}}` : block.label ?? ""));
     const omit = block.required === false && (result.unresolvedPlaceholders.length > 0 || result.unauthorizedPlaceholders.length > 0);
     if (!omit) collect(result);
@@ -88,6 +127,40 @@ export function buildDocumentRenderModel(input: {
     unresolvedPlaceholders: [...unresolved],
     unauthorizedPlaceholders: [...unauthorized],
     resolvedValues,
+    officerListSnapshot,
+    officerListValidationErrors: [...officerListValidationErrors],
     warnings: [...warnings],
   };
+}
+
+function resolveOfficerList(config: NonNullable<DocumentTemplateBlock["officerList"]>, context: PlaceholderResolutionContext) {
+  const errors: string[] = [];
+  const warnings: string[] = [];
+  if (config.source !== "TENANT_ORGANIZATION_OFFICERS") errors.push("Officer list source is not trusted for this tenant.");
+  if (config.termMode !== "CURRENT") errors.push("Officer list must use the current organization term.");
+  const organization = context.organization;
+  if (!organization || !context.tenantId || organization.tenantId !== context.tenantId) {
+    errors.push("Officer list source does not belong to the authenticated tenant.");
+    return { snapshot: null, errors, warnings };
+  }
+  const roles = config.roleFilters.map((role) => role.trim().toLowerCase()).filter(Boolean);
+  const invalidRoles = roles.filter((role) => !organization.officers.some((officer) => officer.position.trim().toLowerCase() === role));
+  if (invalidRoles.length) errors.push("Officer list role filter does not match an active tenant officer position.");
+  const filtered = organization.officers.filter((officer) => !roles.length || roles.includes(officer.position.trim().toLowerCase()));
+  if (!filtered.length) {
+    errors.push("Officer list has no available active tenant officers.");
+    return { snapshot: null, errors, warnings };
+  }
+  const sorted = [...filtered].sort((left, right) => {
+    const compare = config.sortBy === "displayOrder" ? left.displayOrder - right.displayOrder : config.sortBy === "position" ? left.position.localeCompare(right.position) : left.fullName.localeCompare(right.fullName);
+    return config.sortDirection === "desc" ? compare * -1 : compare;
+  }).slice(0, config.maxOfficers);
+  if (sorted.length < filtered.length) warnings.push(`Officer list is limited to ${config.maxOfficers} active officers.`);
+  const snapshot = { sourceTenantId: organization.tenantId, term: organization.term ?? null, officers: sorted.map((officer) => ({ id: officer.id, fullName: officer.fullName, position: officer.position, displayOrder: officer.displayOrder })) };
+  return { snapshot, errors, warnings };
+}
+
+function officerListText(list: NonNullable<DocumentRenderBlock["officerListData"]>) {
+  const lines = [list.showHeading ? list.heading : "", list.showTerm && list.term ? `${list.termLabel ? `${list.termLabel} ` : ""}${list.term}` : "", ...list.officers.flatMap((officer) => [officer.fullName, officer.position])];
+  return lines.filter(Boolean).join("\n");
 }

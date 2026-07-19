@@ -16,6 +16,7 @@ import {
   FileText,
   Grid2X2,
   ImageIcon,
+  List,
   Lock,
   Minus,
   MoveDown,
@@ -36,12 +37,14 @@ import {
 } from "lucide-react";
 import {
   allowedDocumentPlaceholders,
+  defaultOfficerListConfig,
   normalizeTemplateDefinition,
   placeholderGroups,
   sampleTemplateValue,
   safeFontFamilies,
   validateTemplateDefinition,
   type DocumentPageFormat,
+  type DocumentOfficerListConfig,
   type DocumentTemplateBlock,
   type DocumentTemplateBlockType,
   type DocumentTemplateDefinition,
@@ -63,6 +66,8 @@ type Props = {
   templateWorkspaceHref: string;
   documentManagementHref: string;
   customPlaceholders: CustomPlaceholder[];
+  officerPositions: string[];
+  activeOfficerCount: number;
 };
 
 type CustomPlaceholder = { key: string; group: string; label: string; description: string; dataType: string; sample: string; sensitivity: string | null };
@@ -94,6 +99,7 @@ const elementOptions: { type: DocumentTemplateBlockType; label: string; icon: Re
   { type: "logo", label: "Tenant Logo", icon: <ImageIcon />, binding: "tenant.logo", section: "header" },
   { type: "horizontalLine", label: "Horizontal Line", icon: <Minus /> },
   { type: "rectangle", label: "Rectangle", icon: <Square /> },
+  { type: "officerList", label: "HOA Officer List", icon: <List /> },
   { type: "table", label: "Table", icon: <FileText /> },
   { type: "signature", label: "Signature Block", icon: <Signature />, content: "{{signatory.name}}\n{{signatory.position}}", binding: "signatory.name" },
   { type: "officerName", label: "Officer Name", icon: <FileText />, binding: "signatory.name" },
@@ -123,7 +129,7 @@ export function ProfessionalDocumentTemplateEditor(props: Props) {
   const dragRef = useRef<DragState | null>(null);
   const copiedRef = useRef<VisualBlock[]>([]);
   const initialSerialized = useRef(JSON.stringify(materializeVisualLayout(props.template, props.title)));
-  const validation = useMemo(() => validateTemplateDefinition(definition), [definition]);
+  const validation = useMemo(() => validateTemplateDefinition(definition, { officerPositions: props.officerPositions, activeOfficerCount: props.activeOfficerCount }), [definition, props.activeOfficerCount, props.officerPositions]);
   const selected = selectedIds.map((id) => findBlock(definition, id)).filter(Boolean) as VisualBlock[];
   const page = pageSizes[definition.page.format];
   const paperWidth = definition.page.orientation === "landscape" ? page.height : page.width;
@@ -224,10 +230,11 @@ export function ProfessionalDocumentTemplateEditor(props: Props) {
       order: (count + 1) * 10,
       visible: true,
       locked: false,
-      position: { x: position?.x ?? clamp(25 + (count % 3) * 8, 0, paperWidth - 60), y: position?.y ?? clamp(88 + count * 12, 0, paperHeight - 22), width: option.type === "logo" ? 60 : option.type === "qrVerification" ? 32 : option.type === "horizontalLine" ? 160 : 150, height: option.type === "logo" ? 28 : option.type === "qrVerification" ? 32 : option.type === "horizontalLine" ? 2 : option.type === "rectangle" ? 28 : 12, zIndex: 40 + count },
+      position: { x: position?.x ?? (option.type === "officerList" ? 8 : clamp(25 + (count % 3) * 8, 0, paperWidth - 60)), y: position?.y ?? (option.type === "officerList" ? 65 : clamp(88 + count * 12, 0, paperHeight - 22)), width: option.type === "logo" ? 60 : option.type === "qrVerification" ? 32 : option.type === "officerList" ? 38 : option.type === "horizontalLine" ? 160 : 150, height: option.type === "logo" ? 28 : option.type === "qrVerification" ? 32 : option.type === "officerList" ? 110 : option.type === "horizontalLine" ? 2 : option.type === "rectangle" ? 28 : 12, zIndex: 40 + count },
       style: { fontFamily: "Arial", fontSize: option.type === "heading" ? 16 : 11, align: option.type === "heading" ? "center" : "left", fontWeight: option.type === "heading" ? "bold" : "normal", borderColor: option.type === "rectangle" ? "#94a3b8" : undefined, borderWidth: option.type === "rectangle" ? 1 : undefined },
       image: option.type === "logo" ? { src: "{{tenant.logo}}", alt: "Tenant logo" } : undefined,
       table: option.type === "table" ? { rows: [["Label", "Value"], ["", ""]] } : undefined,
+      officerList: option.type === "officerList" ? { ...defaultOfficerListConfig } : undefined,
     };
     updateDefinition((draft) => ({ ...draft, sections: { ...draft.sections, [section]: [...draft.sections[section], block] } }));
     setSelectedIds([block.id]);
@@ -414,6 +421,10 @@ function CanvasBlock({ block, selected, editing, editable, scale, onSelect, onDo
 
 function BlockContent({ block, onImageUpload }: { block: VisualBlock; onImageUpload: () => void }) {
   if (block.type === "rectangle") return null;
+  if (block.type === "officerList") {
+    const config = block.officerList;
+    return <div className="h-full border-r border-pine-700 pr-1 text-pine-900"><div className="bg-pine-800 px-1 py-1 text-center text-[8px] font-black text-white">{config?.showHeading === false ? "" : config?.heading || "HOA OFFICERS"}</div>{config?.showTerm !== false && <p className="py-1 text-center text-[7px] font-black">[Current term]</p>}<div className="space-y-1 px-1 text-[7px]">{Array.from({ length: Math.min(config?.maxOfficers || 8, 4) }).map((_, index) => <div key={index} className={config?.showSeparators === false ? "" : "border-b border-slate-300 pb-1"}><strong className="block">[Active officer {index + 1}]</strong><span className="block font-bold uppercase">[Position]</span></div>)}</div></div>;
+  }
   if (block.type === "horizontalLine" || block.type === "divider") return <div className="mt-1 h-px w-full bg-slate-500" />;
   if (block.type === "qrVerification") return <div className="flex h-full flex-col items-center justify-center gap-1 text-[8px] font-bold text-slate-500"><QrCode className="size-[65%]" /><span>Verification QR</span></div>;
   if (block.type === "logo" || block.type === "image") {
@@ -434,12 +445,19 @@ function PropertiesPanel({ selected, editable, updateBlock, updateSelectedPatch,
     <label><span className="label">Element name</span><input className="field text-xs" value={block.label || ""} onChange={(event) => updateSelectedPatch({ label: sanitizeText(event.target.value) })} disabled={!editable} /></label>
     <div><p className="label">Position and size (mm)</p><div className="grid grid-cols-2 gap-2">{(["x", "y", "width", "height"] as const).map((key) => <label key={key}><span className="sr-only">{key}</span><input className="field text-xs" type="number" min={0} step={1} value={Math.round(position[key] * 10) / 10} onChange={(event) => patchPosition(key, Number(event.target.value))} disabled={!editable || block.locked} aria-label={key} /></label>)}</div></div>
     <div className="grid grid-cols-2 gap-2"><label className="flex min-h-9 items-center gap-2 rounded-lg border px-2 text-xs font-bold"><input type="checkbox" checked={block.locked === true} onChange={(event) => updateSelectedPatch({ locked: event.target.checked })} disabled={!editable} /> Lock</label><label className="flex min-h-9 items-center gap-2 rounded-lg border px-2 text-xs font-bold"><input type="checkbox" checked={block.visible !== false} onChange={(event) => updateSelectedPatch({ visible: event.target.checked })} disabled={!editable} /> Visible</label></div>
+    {block.type === "officerList" && <OfficerListSettings block={block} editable={editable} updateBlock={updateBlock} />}
     {isTextBlock(block) && <><label><span className="label">Text content</span><textarea className="field min-h-24 text-xs" value={block.content || block.text || ""} onChange={(event) => updateSelectedPatch({ content: sanitizeText(event.target.value) })} disabled={!editable} /></label><div className="grid grid-cols-2 gap-2"><label><span className="label">Font</span><select className="field text-xs" value={block.style?.fontFamily || "Arial"} onChange={(event) => updateBlock(block.id, { style: { ...block.style, fontFamily: event.target.value as typeof safeFontFamilies[number] } })} disabled={!editable}>{safeFontFamilies.map((font) => <option key={font}>{font}</option>)}</select></label><label><span className="label">Size</span><input className="field text-xs" type="number" min={6} max={72} value={block.style?.fontSize || 11} onChange={(event) => updateBlock(block.id, { style: { ...block.style, fontSize: Number(event.target.value) } })} disabled={!editable} /></label></div><div className="flex gap-1"><IconAction label="Left" active={block.style?.align === "left"} onClick={() => updateBlock(block.id, { style: { ...block.style, align: "left" } })}><AlignLeft /></IconAction><IconAction label="Center" active={block.style?.align === "center"} onClick={() => updateBlock(block.id, { style: { ...block.style, align: "center" } })}><AlignCenter /></IconAction><IconAction label="Right" active={block.style?.align === "right"} onClick={() => updateBlock(block.id, { style: { ...block.style, align: "right" } })}><AlignRight /></IconAction><IconAction label="Bold" active={block.style?.fontWeight === "bold"} onClick={() => updateBlock(block.id, { style: { ...block.style, fontWeight: block.style?.fontWeight === "bold" ? "normal" : "bold" } })}><Bold /></IconAction></div></>}
     <div><p className="label">Align to page</p><div className="grid grid-cols-3 gap-1"><SmallButton label="Left" onClick={() => align("left")}><AlignLeft /></SmallButton><SmallButton label="Center" onClick={() => align("center")}><AlignCenter /></SmallButton><SmallButton label="Right" onClick={() => align("right")}><AlignRight /></SmallButton><SmallButton label="Top" onClick={() => align("top")}><ChevronUp /></SmallButton><SmallButton label="Middle" onClick={() => align("middle")}><Minus /></SmallButton><SmallButton label="Bottom" onClick={() => align("bottom")}><ChevronDown /></SmallButton></div></div>
     <div><p className="label">Layer order</p><div className="flex gap-1"><SmallButton label="Forward" onClick={() => layerMove(1)}><MoveUp /></SmallButton><SmallButton label="Backward" onClick={() => layerMove(-1)}><MoveDown /></SmallButton></div></div>
     {(block.type === "logo" || block.type === "image") && <button type="button" className="btn-secondary w-full text-xs" onClick={onImageUpload} disabled={!editable}><ImageIcon className="size-4" /> Upload approved image</button>}
     {block.binding && <div className="rounded-lg bg-pine-50 p-3 text-xs"><p className="font-black text-pine-800">Dynamic binding</p><p className="mt-1 font-mono text-pine-700">[{placeholderLabel(block.binding)}]</p><p className="mt-1 text-pine-700">Sample: {sampleTemplateValue(block.binding)}</p></div>}
   </div>;
+}
+
+function OfficerListSettings({ block, editable, updateBlock }: { block: VisualBlock; editable: boolean; updateBlock: (id: string, patch: Partial<DocumentTemplateBlock>) => void }) {
+  const config = block.officerList || defaultOfficerListConfig;
+  const update = (patch: Partial<DocumentOfficerListConfig>) => updateBlock(block.id, { officerList: { ...config, ...patch } });
+  return <section className="space-y-3 rounded-lg border border-pine-100 bg-pine-50 p-3"><div><p className="text-xs font-black text-pine-900">HOA officer list</p><p className="mt-1 text-[10px] text-pine-800">Trusted source: active officers from this tenant.</p></div><label><span className="label">Heading</span><input className="field text-xs" value={config.heading} onChange={(event) => update({ heading: sanitizeText(event.target.value) })} disabled={!editable} /></label><label><span className="label">Role filters</span><input className="field text-xs" value={config.roleFilters.join(", ")} onChange={(event) => update({ roleFilters: event.target.value.split(",").map((value) => value.trim()).filter(Boolean) })} placeholder="All active roles" disabled={!editable} /></label><div className="grid grid-cols-2 gap-2"><label><span className="label">Sort by</span><select className="field text-xs" value={config.sortBy} onChange={(event) => update({ sortBy: event.target.value as DocumentOfficerListConfig["sortBy"] })} disabled={!editable}><option value="displayOrder">Display order</option><option value="position">Position</option><option value="fullName">Name</option></select></label><label><span className="label">Max count</span><input className="field text-xs" type="number" min={1} max={30} value={config.maxOfficers} onChange={(event) => update({ maxOfficers: Number(event.target.value) })} disabled={!editable} /></label></div><label><span className="label">Term label</span><input className="field text-xs" value={config.termLabel} onChange={(event) => update({ termLabel: sanitizeText(event.target.value) })} placeholder="Optional prefix" disabled={!editable} /></label><div className="grid grid-cols-2 gap-2"><label className="flex items-center gap-2 text-[10px] font-bold"><input type="checkbox" checked={config.showHeading} onChange={(event) => update({ showHeading: event.target.checked })} disabled={!editable} /> Heading</label><label className="flex items-center gap-2 text-[10px] font-bold"><input type="checkbox" checked={config.showTerm} onChange={(event) => update({ showTerm: event.target.checked })} disabled={!editable} /> Current term</label><label className="flex items-center gap-2 text-[10px] font-bold"><input type="checkbox" checked={config.showSeparators} onChange={(event) => update({ showSeparators: event.target.checked })} disabled={!editable} /> Separators</label></div><div className="grid grid-cols-2 gap-2"><label><span className="label">Background</span><input className="h-9 w-full" type="color" value={block.style?.backgroundColor || "#ffffff"} onChange={(event) => updateBlock(block.id, { style: { ...block.style, backgroundColor: event.target.value } })} disabled={!editable} /></label><label><span className="label">Border</span><input className="h-9 w-full" type="color" value={block.style?.borderColor || "#0b2a63"} onChange={(event) => updateBlock(block.id, { style: { ...block.style, borderColor: event.target.value, borderWidth: 1 } })} disabled={!editable} /></label></div></section>;
 }
 
 function PagePanel({ definition, updatePage }: { definition: DocumentTemplateDefinition; updatePage: (patch: Partial<DocumentTemplateDefinition["page"]>) => void }) {
@@ -466,9 +484,9 @@ function materializeSection(blocks: DocumentTemplateBlock[], section: DocumentTe
 
 function defaultPosition(block: DocumentTemplateBlock, section: DocumentTemplateSectionName, index: number): VisualBlock["position"] {
   const y = section === "header" ? 15 + index * 12 : section === "footer" ? 270 + index * 10 : 82 + index * 16;
-  const width = block.type === "logo" ? 60 : block.type === "qrVerification" ? 32 : 160;
-  const height = block.type === "logo" ? 28 : block.type === "qrVerification" ? 32 : block.type === "rectangle" ? 28 : 13;
-  return { x: block.style?.align === "right" ? 125 : block.style?.align === "center" ? 25 : 25, y, width, height, zIndex: index + 10 };
+  const width = block.type === "logo" ? 60 : block.type === "qrVerification" ? 32 : block.type === "officerList" ? 38 : 160;
+  const height = block.type === "logo" ? 28 : block.type === "qrVerification" ? 32 : block.type === "officerList" ? 110 : block.type === "rectangle" ? 28 : 13;
+  return { x: block.type === "officerList" ? 8 : block.style?.align === "right" ? 125 : block.style?.align === "center" ? 25 : 25, y: block.type === "officerList" ? 65 : y, width, height, zIndex: index + 10 };
 }
 
 function resizePosition(position: VisualBlock["position"], dx: number, dy: number, corner: "nw" | "ne" | "sw" | "se", pageWidth: number, pageHeight: number, snap: (value: number) => number) {
@@ -489,7 +507,7 @@ function clone<T>(value: T): T { return structuredClone(value); }
 function uniqueId() { return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`; }
 function clamp(value: number, min: number, max: number) { return Math.min(max, Math.max(min, value)); }
 function sanitizeText(value: string) { return value.replace(/[<>]/g, "").replace(/javascript:/gi, "").slice(0, 8000); }
-function isTextBlock(block: DocumentTemplateBlock) { return !["logo", "image", "qrVerification", "rectangle", "horizontalLine", "divider", "table"].includes(block.type); }
+function isTextBlock(block: DocumentTemplateBlock) { return !["logo", "image", "qrVerification", "rectangle", "horizontalLine", "divider", "table", "officerList"].includes(block.type); }
 function defaultContent(type: DocumentTemplateBlockType) { return type === "documentTitle" || type === "heading" ? "Document heading" : type === "paragraph" || type === "bodyText" ? "Type your official HOA wording here." : type === "horizontalLine" ? "" : type === "verificationText" ? "Verify this document at {{verification.url}}" : type === "documentNumber" ? "Document No. {{document.number}}" : type === "issueDate" ? "Issued on {{document.issueDate}}" : "Type to edit"; }
 function placeholderLabel(key: string) { return placeholderGroups.flatMap((group) => group.items).find((item) => item.key === key)?.label || key; }
 function renderFriendlyText(value: string): React.ReactNode { return value.split(/(\{\{\s*[A-Za-z0-9_.]+\s*\}\})/g).map((part, index) => { const match = part.match(/^\{\{\s*([A-Za-z0-9_.]+)\s*\}\}$/); return match ? <span key={index} className="mx-0.5 inline-flex rounded bg-pine-100 px-1 text-[.8em] font-bold text-pine-800">[{placeholderLabel(match[1])}]</span> : <span key={index}>{part}</span>; }); }

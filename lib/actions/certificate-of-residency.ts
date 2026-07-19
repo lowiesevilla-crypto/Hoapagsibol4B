@@ -18,6 +18,7 @@ import { documentContextFromUser } from "@/lib/services/document-runtime-context
 import { cloneCertifiedDocumentTemplate, restoreCertifiedDocumentTemplate } from "@/lib/services/document-template-runtime";
 import { platformPrisma } from "@/lib/db";
 import { CERTIFICATE_OF_RESIDENCY_CODE } from "@/lib/services/certificate-of-residency";
+import { createCertificateOfResidencyReferenceDraft } from "@/lib/services/certificate-of-residency";
 
 export async function returnCertificateForCorrectionAction(formData: FormData) {
   const user = await requireUser();
@@ -85,6 +86,19 @@ export async function cloneCertifiedCertificateTemplateAction(formData: FormData
   }
   revalidatePath(`/admin/settings/document-definitions/${definitionId}/templates`);
   redirect(`/admin/settings/document-definitions/${definitionId}/templates?success=cloned&message=Certified%20template%20cloned%20as%20a%20tenant%20draft.`);
+}
+
+export async function createCertificateReferenceDraftAction(formData: FormData) {
+  const user = await requireUser();
+  const definitionId = field(formData, "definitionId");
+  await assertCertificateDefinition(user.tenantId, definitionId);
+  try {
+    await createCertificateOfResidencyReferenceDraft(documentContextFromUser(user), field(formData, "certifiedVersionId"));
+  } catch (error) {
+    redirect(`/admin/settings/document-definitions/${definitionId}/templates?error=${encodeURIComponent(message(error))}`);
+  }
+  revalidatePath(`/admin/settings/document-definitions/${definitionId}/templates`);
+  redirect(`/admin/settings/document-definitions/${definitionId}/templates?success=reference&message=Visual%20Certificate%20of%20Residency%20draft%20created.%20Published%20versions%20were%20not%20changed.`);
 }
 
 export async function restoreCertifiedCertificateTemplateAction(formData: FormData) {

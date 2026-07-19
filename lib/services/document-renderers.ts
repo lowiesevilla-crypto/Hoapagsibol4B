@@ -59,11 +59,21 @@ function renderBlock(block: DocumentRenderBlock, qrDataUrl: string | null, visua
   if (block.type === "verticalLine") return `<div class="vertical-line" style="${style}"></div>`;
   if (block.type === "spacer") return `<div aria-hidden="true" style="height:${Math.max(4, block.style?.height ?? 16)}px"></div>`;
   if (block.type === "qrVerification") return qrDataUrl ? `<figure class="qr-block" style="${style}"><img src="${qrDataUrl}" alt="Document verification QR code"><figcaption>${escapeHtml(block.content)}</figcaption></figure>` : "";
+  if (block.type === "officerList") return renderOfficerList(block, style);
   const imageSource = block.image?.src || (block.type === "logo" ? block.content : "");
   if ((block.type === "logo" || block.type === "image") && imageSource) return `<figure style="${style}"><img src="${escapeAttribute(imageSource)}" alt="${escapeAttribute(block.image?.alt ?? block.label ?? "Document image")}" width="${Math.round(block.image?.width ?? block.style?.width ?? 96)}" height="${Math.round(block.image?.height ?? block.style?.height ?? 96)}"></figure>`;
   if (block.table?.rows?.length) return `<table style="${style}"><tbody>${block.table.rows.map((row) => `<tr>${row.map((cell) => `<td>${escapeHtml(cell)}</td>`).join("")}</tr>`).join("")}</tbody></table>`;
   const tag = ["documentTitle", "tenantName", "heading"].includes(block.type) ? "h1" : "div";
   return `<${tag} class="block block-${escapeAttribute(block.type)}" style="${style}">${escapeHtml(block.content).replaceAll("\n", "<br>")}</${tag}>`;
+}
+
+function renderOfficerList(block: DocumentRenderBlock, style: string) {
+  const list = block.officerListData;
+  if (!list) return "";
+  const heading = list.showHeading ? `<h2>${escapeHtml(list.heading)}</h2>` : "";
+  const term = list.showTerm && list.term ? `<p class="officer-term">${escapeHtml(`${list.termLabel ? `${list.termLabel} ` : ""}${list.term}`)}</p>` : "";
+  const rows = list.officers.map((officer) => `<div class="officer-row"><strong>${escapeHtml(officer.fullName)}</strong><span>${escapeHtml(officer.position)}</span></div>`).join("");
+  return `<aside class="officer-list${list.showSeparators ? " with-separators" : ""}" style="${style}">${heading}${term}<div class="officer-rows">${rows}</div></aside>`;
 }
 
 function blockStyle(block: DocumentRenderBlock, visualLayout: boolean) {
@@ -103,7 +113,7 @@ function documentCss(model: DocumentRenderModel) {
   const height = model.page.orientation === "landscape" ? dimensions.width : dimensions.height;
   const page = model.visualLayout ? `width:${width}mm;height:${height}mm;min-height:${height}mm;padding:0` : `width:${width}mm;min-height:${height}mm;padding:${margins.top}mm ${margins.right}mm ${margins.bottom}mm ${margins.left}mm`;
   const pageMargin = model.visualLayout ? "0" : `${margins.top}mm ${margins.right}mm ${margins.bottom}mm ${margins.left}mm`;
-  return `@page{size:${size} ${model.page.orientation};margin:${pageMargin}}*{box-sizing:border-box}body{margin:0;background:#f3f4f6;color:#111827;font-family:Arial,sans-serif}.document-page{position:relative;${page};margin:0 auto;background:${model.page.backgroundColor};overflow:hidden}.section{position:relative;z-index:1}.visual-section{position:absolute;inset:0}.block{white-space:normal;overflow-wrap:anywhere;margin:0 0 12px}.visual-layout .block{margin:0}.block-documentTitle{font-size:20pt;text-align:center}.section-footer{margin-top:24px}table{border-collapse:collapse}td{border:1px solid #d1d5db;padding:6px;vertical-align:top}.qr-block{text-align:center}.qr-block img{width:96px;height:96px}.qr-block figcaption{font-size:8pt}.page-break{break-after:page}.watermark{position:absolute;inset:45% 0 auto;transform:rotate(-28deg);text-align:center;font-size:34pt;font-weight:700;color:rgba(100,116,139,.15);z-index:0}@media print{body{background:white}.document-page{margin:0;box-shadow:none}}`;
+  return `@page{size:${size} ${model.page.orientation};margin:${pageMargin}}*{box-sizing:border-box}body{margin:0;background:#f3f4f6;color:#111827;font-family:Arial,sans-serif}.document-page{position:relative;${page};margin:0 auto;background:${model.page.backgroundColor};overflow:hidden}.section{position:relative;z-index:1}.visual-section{position:absolute;inset:0}.block{white-space:normal;overflow-wrap:anywhere;margin:0 0 12px}.visual-layout .block{margin:0}.block-documentTitle{font-size:20pt;text-align:center}.section-footer{margin-top:24px}table{border-collapse:collapse}td{border:1px solid #d1d5db;padding:6px;vertical-align:top}.qr-block{text-align:center}.qr-block img{width:96px;height:96px}.qr-block figcaption{font-size:8pt}.officer-list{border-right:1px solid #0b2a63;padding:0 6mm 0 0;color:#0b2a63}.officer-list h2{margin:0;background:#0b2a63;color:white;padding:4mm 2mm;text-align:center;font-size:11pt;line-height:1.1}.officer-term{text-align:center;font-weight:700;font-size:9pt;margin:2mm 0 7mm}.officer-row{padding:0 2mm 3mm;margin:0 0 3mm}.officer-list.with-separators .officer-row{border-bottom:1px solid #cbd5e1}.officer-row strong,.officer-row span{display:block}.officer-row strong{font-size:8pt;color:#111827}.officer-row span{font-size:7pt;font-weight:700;text-transform:uppercase}.page-break{break-after:page}.watermark{position:absolute;inset:45% 0 auto;transform:rotate(-28deg);text-align:center;font-size:34pt;font-weight:700;color:rgba(100,116,139,.15);z-index:0}@media print{body{background:white}.document-page{margin:0;box-shadow:none}}`;
 }
 
 function renderWatermark(model: DocumentRenderModel) {

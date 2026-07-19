@@ -8,14 +8,20 @@ import { assertDocumentTenant, type DocumentExecutionContext } from "@/lib/servi
 export type PlaceholderMode = "VALIDATE" | "PREVIEW" | "GENERATE";
 export type PlaceholderDefinition = { key: string; category: string; displayName: string; description: string; dataType: string; sample: string; sensitivity: string | null; ownership: DocumentPlaceholderOwnership };
 export type PlaceholderResolutionContext = {
+  tenantId?: string;
   tenant?: { name?: string; address?: string; tin?: string; secRegistration?: string; contactNumber?: string; email?: string; logo?: string };
   document?: { number?: string; title?: string; issueDate?: string; issuePlace?: string; status?: string; validUntil?: string };
-  subject?: { fullName?: string; relationship?: string; address?: string; birthDate?: string; civilStatus?: string; nationality?: string; status?: string; residencyStartDate?: string };
+  subject?: { fullName?: string; relationship?: string; address?: string; birthDate?: string; civilStatus?: string; nationality?: string; status?: string; residencyStartDate?: string; age?: string | number; occupation?: string; contactNumber?: string; phase?: string; propertyType?: string; occupancyStatus?: string };
   property?: { block?: string; lot?: string; address?: string; accountLabel?: string; phase?: string; subdivision?: string };
-  request?: { purpose?: string; remarks?: string; copies?: string | number };
+  request?: { purpose?: string; remarks?: string; copies?: string | number; requestedAt?: string };
   signatory?: { name?: string; position?: string };
   verification?: { url?: string; code?: string };
   system?: { generatedAt?: string; platformName?: string };
+  organization?: {
+    tenantId: string;
+    term?: string | null;
+    officers: Array<{ id: string; fullName: string; position: string; displayOrder: number }>;
+  };
   permissions?: ReadonlySet<string>;
   customResolvers?: Record<string, (context: PlaceholderResolutionContext) => unknown>;
 };

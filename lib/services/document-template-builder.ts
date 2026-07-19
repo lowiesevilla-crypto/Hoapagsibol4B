@@ -22,6 +22,12 @@ export const allowedDocumentPlaceholders = [
   "subject.nationality",
   "subject.status",
   "subject.residencyStartDate",
+  "subject.age",
+  "subject.occupation",
+  "subject.contactNumber",
+  "subject.phase",
+  "subject.propertyType",
+  "subject.occupancyStatus",
   "property.block",
   "property.lot",
   "property.address",
@@ -31,6 +37,7 @@ export const allowedDocumentPlaceholders = [
   "request.purpose",
   "request.remarks",
   "request.copies",
+  "request.requestedAt",
   "signatory.name",
   "signatory.position",
   "verification.url",
@@ -69,6 +76,12 @@ export const placeholderGroups: { group: string; items: { key: AllowedDocumentPl
     { key: "subject.nationality", label: "Nationality", sample: "Filipino" },
     { key: "subject.status", label: "Residency status", sample: "Owner occupied" },
     { key: "subject.residencyStartDate", label: "Residency start date", sample: "January 1, 2020" },
+    { key: "subject.age", label: "Age", sample: "39" },
+    { key: "subject.occupation", label: "Occupation", sample: "Property manager" },
+    { key: "subject.contactNumber", label: "Contact number", sample: "0917 000 0000" },
+    { key: "subject.phase", label: "Phase", sample: "Phase 2" },
+    { key: "subject.propertyType", label: "Property type", sample: "Residential" },
+    { key: "subject.occupancyStatus", label: "Occupancy status", sample: "Owner occupied" },
   ] },
   { group: "Property", items: [
     { key: "property.block", label: "Block", sample: "1" },
@@ -82,6 +95,7 @@ export const placeholderGroups: { group: string; items: { key: AllowedDocumentPl
     { key: "request.purpose", label: "Purpose", sample: "For official purposes" },
     { key: "request.remarks", label: "Remarks", sample: "No remarks" },
     { key: "request.copies", label: "Number of copies", sample: "1" },
+    { key: "request.requestedAt", label: "Request date", sample: "July 18, 2026" },
   ] },
   { group: "Signatory", items: [
     { key: "signatory.name", label: "Signatory name", sample: "Maria Santos" },
@@ -133,12 +147,41 @@ export const documentTemplateBlockTypes = [
   "officerTitle",
   "verificationText",
   "pageNumber",
+  "officerList",
 ] as const;
 
 export type DocumentTemplateBlockType = typeof documentTemplateBlockTypes[number];
 export type DocumentTemplateSectionName = "header" | "body" | "footer";
 export type DocumentPageFormat = "A4" | "LETTER" | "LEGAL";
 export type DocumentPageOrientation = "portrait" | "landscape";
+
+export type DocumentOfficerListConfig = {
+  source: "TENANT_ORGANIZATION_OFFICERS";
+  termMode: "CURRENT";
+  roleFilters: string[];
+  sortBy: "displayOrder" | "position" | "fullName";
+  sortDirection: "asc" | "desc";
+  maxOfficers: number;
+  heading: string;
+  termLabel: string;
+  showHeading: boolean;
+  showTerm: boolean;
+  showSeparators: boolean;
+};
+
+export const defaultOfficerListConfig: DocumentOfficerListConfig = {
+  source: "TENANT_ORGANIZATION_OFFICERS",
+  termMode: "CURRENT",
+  roleFilters: [],
+  sortBy: "displayOrder",
+  sortDirection: "asc",
+  maxOfficers: 8,
+  heading: "HOA OFFICERS",
+  termLabel: "",
+  showHeading: true,
+  showTerm: true,
+  showSeparators: true,
+};
 
 export const safeFontFamilies = ["Arial", "Inter", "Times New Roman", "Georgia", "Calibri"] as const;
 export type SafeFontFamily = typeof safeFontFamilies[number];
@@ -201,6 +244,7 @@ export type DocumentTemplateBlock = {
   table?: {
     rows: string[][];
   };
+  officerList?: DocumentOfficerListConfig;
 };
 
 export type DocumentTemplateDefinition = {
@@ -241,7 +285,7 @@ const defaultPage: DocumentTemplateDefinition["page"] = {
   canvas: { gridSize: 5, snapToGrid: true, showGrid: true },
 };
 
-export function validateTemplateDefinition(value: unknown, options: { allowedPlaceholders?: ReadonlySet<string> } = {}) {
+export function validateTemplateDefinition(value: unknown, options: { allowedPlaceholders?: ReadonlySet<string>; officerPositions?: readonly string[]; activeOfficerCount?: number } = {}) {
   const errors: string[] = [];
   const knownPlaceholders = options.allowedPlaceholders || new Set<string>(allowedDocumentPlaceholders);
   if (!isRecord(value)) return { valid: false, errors: ["Template definition is missing."] };
@@ -287,6 +331,12 @@ export function validateTemplateDefinition(value: unknown, options: { allowedPla
   const blocks = sectionBlocks.length ? sectionBlocks : sectionValidationBlocks(legacyBlocks, "body", errors);
   if (blocks.length > 100) errors.push("Templates are limited to 100 elements.");
   if (!blocks.some((block) => block.visible && block.type !== "spacer" && block.type !== "divider")) errors.push("Template must contain at least one visible content block.");
+  const officerLists = blocks.filter((block) => block.type === "officerList");
+  if (officerLists.length > 1) errors.push("Only one HOA officer list is allowed per template.");
+  const pageWidth = page && page.format === "A4" ? 210 : page && page.format === "LEGAL" ? 216 : 216;
+  const pageHeight = page && page.format === "A4" ? 297 : page && page.format === "LEGAL" ? 356 : 279;
+  const printableWidth = page?.orientation === "landscape" ? pageHeight : pageWidth;
+  const printableHeight = page?.orientation === "landscape" ? pageWidth : pageHeight;
   for (const block of blocks) {
     if (!documentTemplateBlockTypes.includes(block.type)) errors.push(`Unsupported block type: ${block.type}`);
     if (!["header", "body", "footer"].includes(block.section)) errors.push(`Unsupported section for block ${block.id}.`);
@@ -295,12 +345,8 @@ export function validateTemplateDefinition(value: unknown, options: { allowedPla
       const position = block.position;
       for (const key of ["x", "y", "width", "height", "zIndex"] as const) if (!Number.isFinite(Number(position[key]))) errors.push(`Invalid position for block ${block.id}.`);
       if (position.width <= 0 || position.height <= 0) errors.push(`Block ${block.id} must have a positive size.`);
-      const pageWidth = page && page.format === "A4" ? 210 : page && page.format === "LEGAL" ? 216 : 216;
-      const pageHeight = page && page.format === "A4" ? 297 : page && page.format === "LEGAL" ? 356 : 279;
-      const width = page?.orientation === "landscape" ? pageHeight : pageWidth;
-      const height = page?.orientation === "landscape" ? pageWidth : pageHeight;
-      if (position.x < 0 || position.y < 0 || position.x + position.width > width || position.y + position.height > height) errors.push(`${block.label || block.id} is outside the printable page.`);
-      if (position.width > width || position.height > height) errors.push(`${block.label || block.id} is larger than the page.`);
+      if (position.x < 0 || position.y < 0 || position.x + position.width > printableWidth || position.y + position.height > printableHeight) errors.push(`${block.label || block.id} is outside the printable page.`);
+      if (position.width > printableWidth || position.height > printableHeight) errors.push(`${block.label || block.id} is larger than the page.`);
     }
     const text = block.content ?? block.text ?? "";
     for (const placeholder of extractPlaceholders(text)) {
@@ -314,6 +360,29 @@ export function validateTemplateDefinition(value: unknown, options: { allowedPla
     if (block.style?.borderColor && !isSafeColor(block.style.borderColor)) errors.push(`Unsafe border color in block ${block.id}.`);
     if (block.image?.src && !isSafeImageSource(block.image.src)) errors.push(`Unsafe image source in block ${block.id}.`);
     if (block.table?.rows && (block.table.rows.length > 40 || block.table.rows.some((row) => row.length > 12))) errors.push(`Table block ${block.id} is too large.`);
+    if (block.type === "officerList") {
+      const config = block.officerList || defaultOfficerListConfig;
+      if (config.source !== "TENANT_ORGANIZATION_OFFICERS") errors.push(`Officer list ${block.id} must use the trusted tenant organization source.`);
+      if (config.termMode !== "CURRENT") errors.push(`Officer list ${block.id} must use the current organization term.`);
+      if (!Array.isArray(config.roleFilters) || config.roleFilters.some((role) => typeof role !== "string" || role.trim().length === 0 || role.length > 100)) errors.push(`Officer list ${block.id} has invalid role filters.`);
+      if (!["displayOrder", "position", "fullName"].includes(config.sortBy)) errors.push(`Officer list ${block.id} has an invalid sort field.`);
+      if (!["asc", "desc"].includes(config.sortDirection)) errors.push(`Officer list ${block.id} has an invalid sort direction.`);
+      if (!Number.isInteger(config.maxOfficers) || config.maxOfficers < 1 || config.maxOfficers > 30) errors.push(`Officer list ${block.id} must show between 1 and 30 officers.`);
+      if (typeof config.heading !== "string" || config.heading.length > 120 || containsUnsafeTemplateContent(config.heading)) errors.push(`Officer list ${block.id} has an invalid heading.`);
+      if (typeof config.termLabel !== "string" || config.termLabel.length > 80 || containsUnsafeTemplateContent(config.termLabel)) errors.push(`Officer list ${block.id} has an invalid term label.`);
+      if (options.activeOfficerCount === 0) errors.push(`Officer list ${block.id} has no available active tenant officers.`);
+      if (options.officerPositions && config.roleFilters.some((role) => !options.officerPositions!.some((position) => position.trim().toLowerCase() === role.trim().toLowerCase()))) errors.push(`Officer list ${block.id} contains a role filter that does not match an active tenant officer position.`);
+      if (block.position && block.position.height < 18 + (config.showHeading ? 12 : 0) + (config.showTerm ? 8 : 0) + config.maxOfficers * 9) errors.push(`Officer list ${block.label || block.id} may overflow its sidebar height for the configured officer count.`);
+    }
+  }
+  for (const officerList of officerLists) {
+    if (!officerList.position || !officerList.visible) continue;
+    for (const other of blocks) {
+      if (other.id === officerList.id || !other.visible || !other.position || other.type === "verticalLine" || other.type === "divider" || other.type === "spacer") continue;
+      if (rectanglesOverlap(officerList.position, other.position)) {
+        errors.push(other.section === "body" ? `Main certificate body overlaps the HOA officer sidebar (${officerList.label || officerList.id}).` : `HOA officer sidebar overlaps ${other.label || other.id}.`);
+      }
+    }
   }
   return { valid: errors.length === 0, errors: [...new Set(errors)] };
 }
@@ -459,6 +528,7 @@ function sectionValidationBlocks(value: unknown, fallbackSection: DocumentTempla
       style,
       image,
       table,
+      officerList: normalizeOfficerList(entry.officerList),
     }];
   });
 }
@@ -517,6 +587,25 @@ function normalizeBlock(value: unknown, fallbackSection: DocumentTemplateSection
     },
     image: image ? { src: typeof image.src === "string" && isSafeImageSource(image.src) ? image.src : undefined, alt: typeof image.alt === "string" ? sanitizeText(image.alt).slice(0, 140) : undefined, width: clampNumber(image.width, 8, 500, undefined), height: clampNumber(image.height, 8, 500, undefined) } : undefined,
     table,
+    officerList: normalizeOfficerList(item.officerList),
+  };
+}
+
+function normalizeOfficerList(value: unknown): DocumentOfficerListConfig | undefined {
+  if (!isRecord(value)) return undefined;
+  const roleFilters = Array.isArray(value.roleFilters) ? value.roleFilters.filter((role): role is string => typeof role === "string").map((role) => sanitizeText(role).trim()).filter(Boolean).slice(0, 30) : defaultOfficerListConfig.roleFilters;
+  return {
+    source: "TENANT_ORGANIZATION_OFFICERS",
+    termMode: "CURRENT",
+    roleFilters,
+    sortBy: ["displayOrder", "position", "fullName"].includes(String(value.sortBy)) ? value.sortBy as DocumentOfficerListConfig["sortBy"] : defaultOfficerListConfig.sortBy,
+    sortDirection: value.sortDirection === "desc" ? "desc" : "asc",
+    maxOfficers: Math.round(clampNumber(value.maxOfficers, 1, 30, defaultOfficerListConfig.maxOfficers)),
+    heading: typeof value.heading === "string" ? sanitizeText(value.heading).slice(0, 120) : defaultOfficerListConfig.heading,
+    termLabel: typeof value.termLabel === "string" ? sanitizeText(value.termLabel).slice(0, 80) : defaultOfficerListConfig.termLabel,
+    showHeading: value.showHeading !== false,
+    showTerm: value.showTerm !== false,
+    showSeparators: value.showSeparators !== false,
   };
 }
 
@@ -562,6 +651,10 @@ function isSafeImageSource(value: string) {
 
 function isSafePlaceholderKey(value: string) {
   return /^[A-Za-z][A-Za-z0-9_.]{1,120}$/.test(value);
+}
+
+function rectanglesOverlap(left: NonNullable<DocumentTemplateBlock["position"]>, right: NonNullable<DocumentTemplateBlock["position"]>) {
+  return left.x < right.x + right.width && left.x + left.width > right.x && left.y < right.y + right.height && left.y + left.height > right.y;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

@@ -11,7 +11,7 @@ import {
   Role,
 } from "@prisma/client";
 import { platformPrisma } from "@/lib/db";
-import { getActiveOrganizationOfficers } from "@/lib/organization";
+import { getActiveOrganizationOfficers, organizationOfficerTerm } from "@/lib/organization";
 import { getAssociationSettings } from "@/lib/system-settings";
 import { resolveEffectiveDocumentDefinition } from "@/lib/services/document-registry";
 import { evaluateDocumentPolicies } from "@/lib/services/document-policies";
@@ -69,10 +69,10 @@ export async function generateDocument(context: DocumentExecutionContext, reques
     if (validatesOfficialReadiness && request.approvalRequiredSnapshot && !request.approvedAt && !workflowSummary?.completed) issues.push(issue("APPROVAL_INCOMPLETE", "WORKFLOW", "Required approval has not completed.", true));
     const template = await resolveGenerationTemplate(context, { definitionId: effective.definition.id, mode: options.mode, requestTemplateVersionId: request.templateVersionIdSnapshot, draftTemplateVersionId: options.draftTemplateVersionId });
     const placeholders = await listDocumentPlaceholders(context);
-    const templateValidation = validateTemplateDefinition(template.definitionJson, { allowedPlaceholders: new Set(placeholders.map((item) => item.key)) });
+    const officers = await getActiveOrganizationOfficers(context.tenantId);
+    const templateValidation = validateTemplateDefinition(template.definitionJson, { allowedPlaceholders: new Set(placeholders.map((item) => item.key)), officerPositions: officers.map((officer) => officer.position), activeOfficerCount: officers.length });
     templateValidation.errors.forEach((message) => issues.push(issue("TEMPLATE_INVALID", "TEMPLATE", message, true, "Repair and publish a valid template version.")));
     const association = await getAssociationSettings(context.tenantId);
-    const officers = await getActiveOrganizationOfficers(context.tenantId);
     const templateRequiresSignatory = Boolean(record(template.definitionJson).meta && record(record(template.definitionJson).meta).requiresSignatory === true);
     const signatory = request.definition?.signatoryOfficer ?? (templateRequiresSignatory ? null : officers[0] ?? { fullName: "Authorized HOA Officer", position: "Authorized Signatory" });
     if (validatesOfficialReadiness && templateRequiresSignatory && !signatory) issues.push(issue("SIGNATORY_MISSING", "DEFINITION", "A valid authorized signatory is required for official issuance.", true, "Assign an active tenant officer to this document definition."));
@@ -81,10 +81,11 @@ export async function generateDocument(context: DocumentExecutionContext, reques
     const validationVerificationUrl = validatesOfficialReadiness && effective.capabilities.supportsQRVerification
       ? "https://verification.invalid/pending"
       : null;
-    const previewContext = placeholderContext(request, association, signatory, previewNumber, issueDate, validationVerificationUrl, context);
+    const previewContext = placeholderContext(request, association, signatory, previewNumber, issueDate, validationVerificationUrl, context, officers);
     const previewModel = buildDocumentRenderModel({ templateDefinition: template.definitionJson, title: effective.definition.displayName, documentNumber: previewNumber, issueDate: shortDate(issueDate), validUntil: request.validityDate ? shortDate(request.validityDate) : null, verificationUrl: null, mode: options.mode, placeholderContext: previewContext, placeholderDefinitions: placeholders });
     previewModel.unauthorizedPlaceholders.forEach((key) => issues.push(issue("PLACEHOLDER_UNAUTHORIZED", "PLACEHOLDER", `Placeholder ${key} is not authorized for this generation context.`, true)));
     if (validatesOfficialReadiness) previewModel.unresolvedPlaceholders.forEach((key) => issues.push(issue("PLACEHOLDER_UNRESOLVED", "PLACEHOLDER", `Placeholder ${key} could not be resolved.`, true, "Provide the required request data or remove the placeholder from the published template.")));
+    if (validatesOfficialReadiness) (previewModel.officerListValidationErrors ?? []).forEach((message) => issues.push(issue("OFFICER_LIST_INVALID", "TEMPLATE", message, true, "Configure an active same-tenant officer list with a valid term and role filter.")));
     const renderer = getDocumentRenderer(outputFormat);
     renderer.validate(previewModel).forEach((message) => issues.push(issue("RENDER_VALIDATION_FAILED", "RENDERER", message, true)));
     const blocking = issues.some((item) => item.blocking);
@@ -113,17 +114,18 @@ export async function generateDocument(context: DocumentExecutionContext, reques
       await recordDocumentGenerationEvent({ context, event: "RENDER_STARTED", requestId, attemptId: attempt!.id, attemptNumber: attempt!.attemptNumber, state: DocumentGenerationState.RENDERING, client: tx });
       const documentNumber = await allocateGenerationNumber(context, effective.definition.id, tx, issueDate);
       await recordDocumentGenerationEvent({ context, event: "NUMBER_ALLOCATED", requestId, attemptId: attempt!.id, attemptNumber: attempt!.attemptNumber, metadata: { documentNumber }, client: tx });
-      const finalContext = placeholderContext(request, association, signatory, documentNumber, issueDate, verification?.url ?? null, context);
+      const finalContext = placeholderContext(request, association, signatory, documentNumber, issueDate, verification?.url ?? null, context, officers);
       const model = buildDocumentRenderModel({ templateDefinition: template.definitionJson, title: effective.definition.displayName, documentNumber, issueDate: shortDate(issueDate), validUntil: request.validityDate ? shortDate(request.validityDate) : null, verificationUrl: verification?.url ?? null, mode: options.mode, placeholderContext: finalContext, placeholderDefinitions: placeholders });
       if (model.unresolvedPlaceholders.length) throw new DocumentRuntimeError("PLACEHOLDER_UNRESOLVED", "Required placeholders could not be resolved.", { placeholders: model.unresolvedPlaceholders });
       if (model.unauthorizedPlaceholders.length) throw new DocumentRuntimeError("PLACEHOLDER_UNAUTHORIZED", "The generation context is not authorized for required placeholders.", { placeholders: model.unauthorizedPlaceholders });
+      if ((model.officerListValidationErrors ?? []).length) throw new DocumentRuntimeError("TEMPLATE_INVALID", "The HOA officer list could not be resolved for the authenticated tenant.", { errors: model.officerListValidationErrors });
       const rendered = await renderer.render(model);
       if (!rendered.content.trim()) throw new DocumentRuntimeError("RENDER_FAILED", "Renderer returned an empty document.");
       const contentHash = createHash("sha256").update(rendered.content, "utf8").digest("hex");
       const versionNumber = fresh.currentVersion + 1;
       const immediateRelease = !effective.definition.releaseRequired && effective.definition.homeownerDownloadEnabled;
       const legacyVerificationCode = randomUUID().replaceAll("-", "").slice(0, 20).toUpperCase();
-      const version = await tx.documentVersion.create({ data: { tenantId: context.tenantId, requestId: request.id, definitionId: effective.definition.id, templateVersionId: template.id, version: versionNumber, documentNumber, verificationCode: legacyVerificationCode, templateVersion: template.version, templateSnapshot: JSON.stringify(template.definitionJson), generatedContent: rendered.content, requestSnapshot: safeGenerationSnapshot({ requestDataSnapshot: request.requestDataSnapshot, reviewedDataSnapshot: request.reviewedDataSnapshot, subjectSnapshot: request.subjectSnapshot, property: { block: request.homeowner.block, lot: request.homeowner.lot, address: request.homeowner.address } }), definitionSnapshot: safeGenerationSnapshot(definitionSnapshot(effective.definition)), templateDefinitionSnapshot: safeGenerationSnapshot(template.definitionJson), generatedById: context.authenticatedUserId, issuedStatus: immediateRelease ? DocumentIssuedStatus.RELEASED : DocumentIssuedStatus.ISSUED, issuedAt: issueDate, releasedAt: immediateRelease ? issueDate : null, releasedById: immediateRelease ? context.authenticatedUserId : null, contentHash, reissueOfId: sourceVersion?.id ?? null, reason: options.reason?.trim() || (options.mode === DocumentGenerationMode.REISSUE ? "Authorized document reissue." : "Configuration-driven document issuance."), generationMode: options.mode, outputFormat: rendered.outputFormat, contentType: rendered.contentType, outputSize: rendered.outputSize, rendererName: rendered.rendererName, rendererVersion: rendered.rendererVersion, capabilitiesSnapshot: safeGenerationSnapshot(effective.capabilities), policySnapshot: safeGenerationSnapshot(policySummary), workflowSnapshot: workflowSummary ? safeGenerationSnapshot(workflowSummary) : Prisma.JsonNull, resolvedDataSnapshot: safeGenerationSnapshot(model.resolvedValues), generationCorrelationId: correlationId, idempotencyKey, templateSetIdSnapshot: template.templateSetId, sourceTemplateVersionIdSnapshot: template.sourceVersionId } });
+      const version = await tx.documentVersion.create({ data: { tenantId: context.tenantId, requestId: request.id, definitionId: effective.definition.id, templateVersionId: template.id, version: versionNumber, documentNumber, verificationCode: legacyVerificationCode, templateVersion: template.version, templateSnapshot: JSON.stringify(template.definitionJson), generatedContent: rendered.content, requestSnapshot: safeGenerationSnapshot({ requestDataSnapshot: request.requestDataSnapshot, reviewedDataSnapshot: request.reviewedDataSnapshot, subjectSnapshot: request.subjectSnapshot, property: { block: request.homeowner.block, lot: request.homeowner.lot, address: request.homeowner.address } }), definitionSnapshot: safeGenerationSnapshot(definitionSnapshot(effective.definition)), templateDefinitionSnapshot: safeGenerationSnapshot(template.definitionJson), generatedById: context.authenticatedUserId, issuedStatus: immediateRelease ? DocumentIssuedStatus.RELEASED : DocumentIssuedStatus.ISSUED, issuedAt: issueDate, releasedAt: immediateRelease ? issueDate : null, releasedById: immediateRelease ? context.authenticatedUserId : null, contentHash, reissueOfId: sourceVersion?.id ?? null, reason: options.reason?.trim() || (options.mode === DocumentGenerationMode.REISSUE ? "Authorized document reissue." : "Configuration-driven document issuance."), generationMode: options.mode, outputFormat: rendered.outputFormat, contentType: rendered.contentType, outputSize: rendered.outputSize, rendererName: rendered.rendererName, rendererVersion: rendered.rendererVersion, capabilitiesSnapshot: safeGenerationSnapshot(effective.capabilities), policySnapshot: safeGenerationSnapshot(policySummary), workflowSnapshot: workflowSummary ? safeGenerationSnapshot(workflowSummary) : Prisma.JsonNull, resolvedDataSnapshot: safeGenerationSnapshot({ resolvedValues: model.resolvedValues, officerListSnapshot: model.officerListSnapshot }), generationCorrelationId: correlationId, idempotencyKey, templateSetIdSnapshot: template.templateSetId, sourceTemplateVersionIdSnapshot: template.sourceVersionId } });
       if (verification) {
         await persistPreparedDocumentVerificationToken(context, { requestId: request.id, documentVersionId: version.id, definitionId: effective.definition.id, expiresAt: request.validityDate ?? undefined, prepared: verification }, tx);
         await recordDocumentGenerationEvent({ context, event: "VERIFICATION_CREATED", requestId, attemptId: attempt!.id, documentVersionId: version.id, attemptNumber: attempt!.attemptNumber, client: tx });
@@ -187,19 +189,21 @@ const blockedRequestStates = new Set<DocumentRequestStatus>([
   DocumentRequestStatus.REJECTED,
 ]);
 
-function placeholderContext(request: GenerationRequestRecord, association: Awaited<ReturnType<typeof getAssociationSettings>>, signatory: { fullName: string; position: string } | null, documentNumber: string, issueDate: Date, verificationUrl: string | null, context: DocumentExecutionContext): PlaceholderResolutionContext {
+function placeholderContext(request: GenerationRequestRecord, association: Awaited<ReturnType<typeof getAssociationSettings>>, signatory: { fullName: string; position: string } | null, documentNumber: string, issueDate: Date, verificationUrl: string | null, context: DocumentExecutionContext, officers: Awaited<ReturnType<typeof getActiveOrganizationOfficers>>): PlaceholderResolutionContext {
   const subject = record(request.subjectSnapshot);
   const requestData = record(request.reviewedDataSnapshot ?? request.requestDataSnapshot);
   const fields = record(requestData.fields ?? requestData);
   return {
+    tenantId: context.tenantId,
     tenant: { name: association.name, address: association.address, tin: association.tinNumber, secRegistration: association.secRegistrationNumber, contactNumber: association.contactNumber, email: association.email, logo: association.logoUrl },
     document: { number: documentNumber, title: request.definition?.displayName ?? "Official HOA Document", issueDate: shortDate(issueDate), issuePlace: association.address || association.name, status: documentNumber === "PREVIEW" ? "Preview" : "Issued", validUntil: request.validityDate ? shortDate(request.validityDate) : undefined },
-    subject: { fullName: text(subject.fullName) || request.homeowner.user.name, relationship: text(subject.relationship) || "Homeowner", address: text(subject.address) || request.homeowner.address, birthDate: text(subject.birthDate), civilStatus: text(subject.civilStatus) || request.homeowner.civilStatus || undefined, nationality: text(subject.nationality) || request.homeowner.citizenship || undefined, status: request.homeowner.occupancyStatus || request.homeowner.propertyType || undefined, residencyStartDate: request.homeowner.residencyDate ? shortDate(request.homeowner.residencyDate) : undefined },
+    subject: { fullName: text(subject.fullName) || request.homeowner.user.name, relationship: text(subject.relationship) || "Homeowner", address: text(subject.address) || request.homeowner.address, birthDate: text(subject.birthDate), civilStatus: text(subject.civilStatus) || request.homeowner.civilStatus || undefined, nationality: text(subject.nationality) || request.homeowner.citizenship || undefined, status: request.homeowner.occupancyStatus || request.homeowner.propertyType || undefined, residencyStartDate: request.homeowner.residencyDate ? shortDate(request.homeowner.residencyDate) : undefined, age: request.homeowner.birthDate ? String(ageAt(request.homeowner.birthDate, issueDate)) : undefined, occupation: request.homeowner.occupation || undefined, contactNumber: request.homeowner.phone || undefined, phase: request.homeowner.phase || undefined, propertyType: request.homeowner.propertyType || undefined, occupancyStatus: request.homeowner.occupancyStatus || undefined },
     property: { block: text(subject.block) || request.homeowner.block, lot: text(subject.lot) || request.homeowner.lot, address: text(subject.propertyAddress) || request.homeowner.address, accountLabel: text(subject.accountLabel) || `Block ${request.homeowner.block}, Lot ${request.homeowner.lot}`, phase: request.homeowner.phase || undefined, subdivision: association.name },
-    request: { purpose: text(fields.purpose) || request.purpose || undefined, remarks: text(fields.remarks) || request.remarks || undefined, copies: request.numberOfCopies },
+    request: { purpose: text(fields.purpose) || request.purpose || undefined, remarks: text(fields.remarks) || request.remarks || undefined, copies: request.numberOfCopies, requestedAt: shortDate(request.requestedAt) },
     signatory: { name: signatory?.fullName, position: signatory?.position },
     verification: { url: verificationUrl ?? undefined, code: verificationUrl ? "Scan to verify" : undefined },
     system: { generatedAt: shortDate(issueDate), platformName: "HOAHub" },
+    organization: { tenantId: context.tenantId, term: organizationOfficerTerm(officers), officers: officers.map((officer) => ({ id: officer.id, fullName: officer.fullName, position: officer.position, displayOrder: officer.displayOrder })) },
     permissions: new Set(context.role === Role.HOMEOWNER ? ["DOCUMENT_PLACEHOLDER:PERSONAL"] : ["DOCUMENT_PLACEHOLDER:PERSONAL", "DOCUMENT_PLACEHOLDER:FINANCIAL", "DOCUMENT_PLACEHOLDER:VIOLATION"]),
   };
 }
@@ -256,6 +260,12 @@ function record(value: unknown): Record<string, unknown> {
 
 function text(value: unknown) {
   return typeof value === "string" || typeof value === "number" ? String(value) : undefined;
+}
+
+function ageAt(birthDate: Date, at: Date) {
+  let age = at.getUTCFullYear() - birthDate.getUTCFullYear();
+  if (at.getUTCMonth() < birthDate.getUTCMonth() || (at.getUTCMonth() === birthDate.getUTCMonth() && at.getUTCDate() < birthDate.getUTCDate())) age -= 1;
+  return Math.max(0, age);
 }
 
 function isConcurrency(error: unknown) {

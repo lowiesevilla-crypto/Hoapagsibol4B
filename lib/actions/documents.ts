@@ -844,7 +844,8 @@ export async function saveDocumentTemplateVersionAction(formData: FormData) {
   if ((operation === "saveDraft" || operation === "publish") && loadedUpdatedAt && currentRecord.updatedAt.toISOString() !== loadedUpdatedAt) fail("This draft changed in another session. Reload before saving to avoid overwriting someone else's work.");
   const templateDefinition = await templateDefinitionFromForm(formData, definitionRecord.displayName, admin.tenant.slug);
   const customPlaceholderKeys = await prisma.documentPlaceholderDefinition.findMany({ where: { tenantId: admin.tenantId, ownership: DocumentPlaceholderOwnership.TENANT, active: true }, select: { key: true } });
-  const validation = validateTemplateDefinition(templateDefinition, { allowedPlaceholders: new Set([...allowedDocumentPlaceholders, ...customPlaceholderKeys.map((item) => item.key)]) });
+  const activeOfficers = await getActiveOrganizationOfficers(admin.tenantId);
+  const validation = validateTemplateDefinition(templateDefinition, { allowedPlaceholders: new Set([...allowedDocumentPlaceholders, ...customPlaceholderKeys.map((item) => item.key)]), officerPositions: activeOfficers.map((officer) => officer.position), activeOfficerCount: activeOfficers.length });
   if (!validation.valid) fail(validation.errors[0]);
   if (operation === "publish") {
     if (currentRecord.status !== DocumentTemplateVersionStatus.DRAFT) fail("Only draft versions can be published.");

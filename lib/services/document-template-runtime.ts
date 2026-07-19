@@ -13,6 +13,7 @@ import {
   validateTemplateDefinition,
 } from "@/lib/services/document-template-builder";
 import { listDocumentPlaceholders, validateTemplatePlaceholdersForTenant } from "@/lib/services/document-placeholders";
+import { getActiveOrganizationOfficers } from "@/lib/organization";
 import { requireDocumentPermission, type DocumentExecutionContext } from "@/lib/services/document-runtime-context";
 import { writeDocumentAudit } from "@/lib/services/document-runtime-audit";
 
@@ -84,7 +85,8 @@ export async function saveDocumentTemplateDraft(context: DocumentExecutionContex
   assertEditableTemplateOwnership(current.ownershipType);
   if (current.status !== DocumentTemplateVersionStatus.DRAFT) throw new Error("Only draft template versions can be edited.");
   const placeholders = await listDocumentPlaceholders(context);
-  const validation = validateTemplateDefinition(input.definitionJson, { allowedPlaceholders: new Set(placeholders.map((item) => item.key)) });
+  const officers = await getActiveOrganizationOfficers(context.tenantId);
+  const validation = validateTemplateDefinition(input.definitionJson, { allowedPlaceholders: new Set(placeholders.map((item) => item.key)), officerPositions: officers.map((officer) => officer.position), activeOfficerCount: officers.length });
   if (!validation.valid) throw new Error(`Template draft is invalid: ${validation.errors.join(" ")}`);
   const placeholderValidation = await validateTemplatePlaceholdersForTenant(context, renderableText(input.definitionJson));
   if (!placeholderValidation.valid) throw new Error(`Template placeholders are invalid: ${placeholderValidation.validationErrors.join(" ")}`);
@@ -102,7 +104,8 @@ export async function publishDocumentTemplateDraft(context: DocumentExecutionCon
   assertEditableTemplateOwnership(current.ownershipType);
   if (current.status !== DocumentTemplateVersionStatus.DRAFT) throw new Error("Only a draft template version can be published.");
   const placeholders = await listDocumentPlaceholders(context);
-  const validation = validateTemplateDefinition(current.definitionJson, { allowedPlaceholders: new Set(placeholders.map((item) => item.key)) });
+  const officers = await getActiveOrganizationOfficers(context.tenantId);
+  const validation = validateTemplateDefinition(current.definitionJson, { allowedPlaceholders: new Set(placeholders.map((item) => item.key)), officerPositions: officers.map((officer) => officer.position), activeOfficerCount: officers.length });
   if (!validation.valid) throw new Error(`Template cannot be published: ${validation.errors.join(" ")}`);
   const placeholderValidation = await validateTemplatePlaceholdersForTenant(context, renderableText(current.definitionJson));
   if (!placeholderValidation.valid) throw new Error(`Template placeholders are invalid: ${placeholderValidation.validationErrors.join(" ")}`);

@@ -25,6 +25,18 @@ export type DocumentRenderBlock = Omit<DocumentTemplateBlock, "content" | "text"
     showHeading: boolean;
     showTerm: boolean;
     showSeparators: boolean;
+    headingFontSize: number;
+    termFontSize: number;
+    nameFontSize: number;
+    positionFontSize: number;
+    lineHeight: number;
+    officerSpacing: number;
+    nameFontWeight: "normal" | "bold";
+    positionFontWeight: "normal" | "bold";
+    headingColor: string;
+    termColor: string;
+    nameColor: string;
+    positionColor: string;
     officers: Array<{ id: string; fullName: string; position: string; displayOrder: number }>;
   };
 };
@@ -99,6 +111,18 @@ export function buildDocumentRenderModel(input: {
         showHeading: block.officerList?.showHeading !== false,
         showTerm: block.officerList?.showTerm !== false,
         showSeparators: block.officerList?.showSeparators !== false,
+        headingFontSize: block.officerList?.headingFontSize || defaultOfficerListConfig.headingFontSize,
+        termFontSize: block.officerList?.termFontSize || defaultOfficerListConfig.termFontSize,
+        nameFontSize: block.officerList?.nameFontSize || defaultOfficerListConfig.nameFontSize,
+        positionFontSize: block.officerList?.positionFontSize || defaultOfficerListConfig.positionFontSize,
+        lineHeight: block.officerList?.lineHeight || defaultOfficerListConfig.lineHeight,
+        officerSpacing: block.officerList?.officerSpacing ?? defaultOfficerListConfig.officerSpacing,
+        nameFontWeight: block.officerList?.nameFontWeight || defaultOfficerListConfig.nameFontWeight,
+        positionFontWeight: block.officerList?.positionFontWeight || defaultOfficerListConfig.positionFontWeight,
+        headingColor: block.officerList?.headingColor || defaultOfficerListConfig.headingColor,
+        termColor: block.officerList?.termColor || defaultOfficerListConfig.termColor,
+        nameColor: block.officerList?.nameColor || defaultOfficerListConfig.nameColor,
+        positionColor: block.officerList?.positionColor || defaultOfficerListConfig.positionColor,
         officers: officerResult.snapshot.officers,
       } : undefined;
       return {

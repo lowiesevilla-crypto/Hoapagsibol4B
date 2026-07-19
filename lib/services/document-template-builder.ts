@@ -207,6 +207,18 @@ export type DocumentOfficerListConfig = {
   showHeading: boolean;
   showTerm: boolean;
   showSeparators: boolean;
+  headingFontSize: number;
+  termFontSize: number;
+  nameFontSize: number;
+  positionFontSize: number;
+  lineHeight: number;
+  officerSpacing: number;
+  nameFontWeight: "normal" | "bold";
+  positionFontWeight: "normal" | "bold";
+  headingColor: string;
+  termColor: string;
+  nameColor: string;
+  positionColor: string;
 };
 
 export const defaultOfficerListConfig: DocumentOfficerListConfig = {
@@ -221,6 +233,18 @@ export const defaultOfficerListConfig: DocumentOfficerListConfig = {
   showHeading: true,
   showTerm: true,
   showSeparators: true,
+  headingFontSize: 12,
+  termFontSize: 9,
+  nameFontSize: 8,
+  positionFontSize: 7,
+  lineHeight: 1.25,
+  officerSpacing: 3,
+  nameFontWeight: "bold",
+  positionFontWeight: "bold",
+  headingColor: "#ffffff",
+  termColor: "#0b2a63",
+  nameColor: "#111827",
+  positionColor: "#0b2a63",
 };
 
 export const defaultQrConfig: DocumentQrConfig = {
@@ -498,6 +522,15 @@ export function validateTemplateDefinition(value: unknown, options: { allowedPla
       if (!Number.isInteger(config.maxOfficers) || config.maxOfficers < 1 || config.maxOfficers > 30) errors.push(`Officer list ${block.id} must show between 1 and 30 officers.`);
       if (typeof config.heading !== "string" || config.heading.length > 120 || containsUnsafeTemplateContent(config.heading)) errors.push(`Officer list ${block.id} has an invalid heading.`);
       if (typeof config.termLabel !== "string" || config.termLabel.length > 80 || containsUnsafeTemplateContent(config.termLabel)) errors.push(`Officer list ${block.id} has an invalid term label.`);
+      if (!Number.isFinite(config.headingFontSize) || config.headingFontSize < 8 || config.headingFontSize > 18) errors.push(`Officer list ${block.id} heading font size must be between 8 and 18 pt.`);
+      if (!Number.isFinite(config.termFontSize) || config.termFontSize < 6 || config.termFontSize > 16) errors.push(`Officer list ${block.id} term font size must be between 6 and 16 pt.`);
+      if (!Number.isFinite(config.nameFontSize) || config.nameFontSize < 6 || config.nameFontSize > 16) errors.push(`Officer list ${block.id} name font size must be between 6 and 16 pt.`);
+      if (!Number.isFinite(config.positionFontSize) || config.positionFontSize < 6 || config.positionFontSize > 14) errors.push(`Officer list ${block.id} position font size must be between 6 and 14 pt.`);
+      if (!Number.isFinite(config.lineHeight) || config.lineHeight < 0.9 || config.lineHeight > 2.5) errors.push(`Officer list ${block.id} line height must be between 0.9 and 2.5.`);
+      if (!Number.isFinite(config.officerSpacing) || config.officerSpacing < 0 || config.officerSpacing > 12) errors.push(`Officer list ${block.id} officer spacing must be between 0 and 12 mm.`);
+      if (!["normal", "bold"].includes(config.nameFontWeight)) errors.push(`Officer list ${block.id} name font weight is invalid.`);
+      if (!["normal", "bold"].includes(config.positionFontWeight)) errors.push(`Officer list ${block.id} position font weight is invalid.`);
+      for (const [label, color] of [["heading", config.headingColor], ["term", config.termColor], ["name", config.nameColor], ["position", config.positionColor]] as const) if (!isSafeColor(color)) errors.push(`Officer list ${block.id} ${label} text color is invalid.`);
       if (options.activeOfficerCount === 0) errors.push(`Officer list ${block.id} has no available active tenant officers.`);
       if (options.officerPositions && config.roleFilters.some((role) => !options.officerPositions!.some((position) => position.trim().toLowerCase() === role.trim().toLowerCase()))) errors.push(`Officer list ${block.id} contains a role filter that does not match an active tenant officer position.`);
       if (block.position && block.position.height < 18 + (config.showHeading ? 12 : 0) + (config.showTerm ? 8 : 0) + config.maxOfficers * 9) errors.push(`Officer list ${block.label || block.id} may overflow its sidebar height for the configured officer count.`);
@@ -696,6 +729,7 @@ function sectionValidationBlocks(value: unknown, fallbackSection: DocumentTempla
     const style = isRecord(entry.style) ? entry.style as NonNullable<DocumentTemplateBlock["style"]> : undefined;
     const image = isRecord(entry.image) ? entry.image as DocumentTemplateBlock["image"] : undefined;
     const table = isRecord(entry.table) && Array.isArray(entry.table.rows) ? { rows: entry.table.rows.filter(Array.isArray).map((row) => row.map((cell) => String(cell ?? ""))) } : undefined;
+    if (type === "officerList") validateRawOfficerTypography(entry.officerList, typeof entry.id === "string" ? entry.id : `${fallbackSection}-block-${index + 1}`, errors);
     return [{
       id: typeof entry.id === "string" && entry.id ? entry.id : `${fallbackSection}-block-${index + 1}`,
       type,
@@ -717,6 +751,25 @@ function sectionValidationBlocks(value: unknown, fallbackSection: DocumentTempla
       officerList: normalizeOfficerList(entry.officerList),
     }];
   });
+}
+
+function validateRawOfficerTypography(value: unknown, blockId: string, errors: string[]) {
+  if (!isRecord(value)) return;
+  const numericRules = [
+    ["headingFontSize", 8, 18, "heading font size", "pt"],
+    ["termFontSize", 6, 16, "term font size", "pt"],
+    ["nameFontSize", 6, 16, "name font size", "pt"],
+    ["positionFontSize", 6, 14, "position font size", "pt"],
+    ["lineHeight", 0.9, 2.5, "line height", ""],
+    ["officerSpacing", 0, 12, "officer spacing", "mm"],
+  ] as const;
+  for (const [key, min, max, label, unit] of numericRules) {
+    if (value[key] == null) continue;
+    const number = Number(value[key]);
+    if (!Number.isFinite(number) || number < min || number > max) errors.push(`Officer list ${blockId} ${label} must be between ${min} and ${max}${unit ? ` ${unit}` : ""}.`);
+  }
+  for (const [key, label] of [["nameFontWeight", "name"], ["positionFontWeight", "position"]] as const) if (value[key] != null && !["normal", "bold"].includes(String(value[key]))) errors.push(`Officer list ${blockId} ${label} font weight is invalid.`);
+  for (const [key, label] of [["headingColor", "heading"], ["termColor", "term"], ["nameColor", "name"], ["positionColor", "position"]] as const) if (value[key] != null && !isSafeColor(String(value[key]))) errors.push(`Officer list ${blockId} ${label} text color is invalid.`);
 }
 
 function normalizeBlock(value: unknown, fallbackSection: DocumentTemplateSectionName, index: number): DocumentTemplateBlock {
@@ -798,6 +851,18 @@ function normalizeOfficerList(value: unknown): DocumentOfficerListConfig | undef
     showHeading: value.showHeading !== false,
     showTerm: value.showTerm !== false,
     showSeparators: value.showSeparators !== false,
+    headingFontSize: clampNumber(value.headingFontSize, 8, 18, defaultOfficerListConfig.headingFontSize),
+    termFontSize: clampNumber(value.termFontSize, 6, 16, defaultOfficerListConfig.termFontSize),
+    nameFontSize: clampNumber(value.nameFontSize, 6, 16, defaultOfficerListConfig.nameFontSize),
+    positionFontSize: clampNumber(value.positionFontSize, 6, 14, defaultOfficerListConfig.positionFontSize),
+    lineHeight: clampNumber(value.lineHeight, 0.9, 2.5, defaultOfficerListConfig.lineHeight),
+    officerSpacing: clampNumber(value.officerSpacing, 0, 12, defaultOfficerListConfig.officerSpacing),
+    nameFontWeight: value.nameFontWeight === "normal" ? "normal" : "bold",
+    positionFontWeight: value.positionFontWeight === "normal" ? "normal" : "bold",
+    headingColor: isSafeColor(String(value.headingColor || "")) ? String(value.headingColor) : defaultOfficerListConfig.headingColor,
+    termColor: isSafeColor(String(value.termColor || "")) ? String(value.termColor) : defaultOfficerListConfig.termColor,
+    nameColor: isSafeColor(String(value.nameColor || "")) ? String(value.nameColor) : defaultOfficerListConfig.nameColor,
+    positionColor: isSafeColor(String(value.positionColor || "")) ? String(value.positionColor) : defaultOfficerListConfig.positionColor,
   };
 }
 

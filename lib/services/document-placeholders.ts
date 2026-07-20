@@ -5,7 +5,7 @@ import { platformPrisma } from "@/lib/db";
 import { allowedDocumentPlaceholders, extractPlaceholders, placeholderGroups, sampleTemplateValue } from "@/lib/services/document-template-builder";
 import { assertDocumentTenant, type DocumentExecutionContext } from "@/lib/services/document-runtime-context";
 
-export type PlaceholderMode = "VALIDATE" | "PREVIEW" | "GENERATE";
+export type PlaceholderMode = "VALIDATE" | "DESIGNER_PREVIEW" | "REQUEST_PREVIEW" | "GENERATE";
 export type PlaceholderDefinition = { key: string; category: string; displayName: string; description: string; dataType: string; sample: string; sensitivity: string | null; ownership: DocumentPlaceholderOwnership };
 export type PlaceholderResolutionContext = {
   tenantId?: string;
@@ -83,17 +83,17 @@ export function resolveDocumentPlaceholders(content: string, context: Placeholde
   const resolvedContent = content.replace(/\{\{\s*([A-Za-z0-9_.]+)\s*\}\}/g, (expression, key: string) => {
     if (!known.has(key)) { unresolvedPlaceholders.push(key); return expression; }
     const definition = definitions.find((item) => item.key === key);
-    if (definition?.sensitivity && !context.permissions?.has(`DOCUMENT_PLACEHOLDER:${definition.sensitivity}`) && mode === "GENERATE") {
+    if (definition?.sensitivity && !context.permissions?.has(`DOCUMENT_PLACEHOLDER:${definition.sensitivity}`) && mode !== "DESIGNER_PREVIEW") {
       unauthorizedPlaceholders.push(key);
       return expression;
     }
-    const raw = mode === "PREVIEW" ? sampleTemplateValue(key) : readKnownValue(key, context);
+    const raw = mode === "DESIGNER_PREVIEW" ? sampleTemplateValue(key) : readKnownValue(key, context);
     if (raw == null || raw === "") { unresolvedPlaceholders.push(key); return expression; }
     const value = String(raw);
     resolvedValues[key] = value;
     return value;
   });
-  if (mode === "GENERATE" && unresolvedPlaceholders.length) warnings.push("Some placeholders could not be resolved and remain visible.");
+  if (mode !== "DESIGNER_PREVIEW" && unresolvedPlaceholders.length) warnings.push("Some placeholders could not be resolved and remain visible.");
   return { resolvedContent, resolvedValues, unresolvedPlaceholders: [...new Set(unresolvedPlaceholders)], unauthorizedPlaceholders: [...new Set(unauthorizedPlaceholders)], validationErrors: validation.validationErrors, warnings };
 }
 

@@ -82,8 +82,10 @@ export async function rejectCertificateRequest(context: DocumentExecutionContext
 }
 
 export async function previewCertificate(context: DocumentExecutionContext, requestId: string) {
-  await loadCertificateRequest(context, requestId);
-  return generateDocument(context, requestId, { mode: DocumentGenerationMode.PREVIEW });
+  const request = await loadCertificateRequest(context, requestId);
+  const result = await generateDocument(context, request.id, { mode: DocumentGenerationMode.PREVIEW });
+  await writeDocumentAudit({ context, action: "PREVIEW_DOCUMENT_REQUEST", entityType: "DocumentRequest", entityId: request.id, metadata: { rendered: Boolean(result.content), templateVersionId: result.templateVersionId, templateVersion: result.templateVersion } });
+  return result;
 }
 
 export async function validateCertificate(context: DocumentExecutionContext, requestId: string) {

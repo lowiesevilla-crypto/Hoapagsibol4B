@@ -40,15 +40,24 @@ export async function allocateNextDocumentNumberForGeneration(context: DocumentE
 async function allocateDocumentNumber(context: DocumentExecutionContext, definitionId: string, tx: Prisma.TransactionClient, date: Date) {
   const definition = await getDefinition(context, definitionId, tx);
   const config = await tx.documentNumberingConfiguration.findFirst({ where: { tenantId: context.tenantId, definitionId } });
-  let number: string;
-  if (!config) {
-    number = await allocateDefinitionDocumentNumber(tx, context.tenantId, definition, date);
-  } else {
-    const year = config.resetRule === DocumentSequenceScope.ANNUAL ? date.getUTCFullYear() : 0;
-    const counter = await tx.documentDefinitionCounter.upsert({ where: { tenantId_definitionId_sequenceScope_year: { tenantId: context.tenantId, definitionId, sequenceScope: config.resetRule, year } }, create: { tenantId: context.tenantId, definitionId, sequenceScope: config.resetRule, year, lastNumber: 1 }, update: { lastNumber: { increment: 1 } }, select: { lastNumber: true } });
-    number = formatNumber(config, counter.lastNumber, date);
-    await tx.documentNumberingConfiguration.update({ where: { id: config.id }, data: { currentSequence: counter.lastNumber, lastResetAt: config.resetRule === DocumentSequenceScope.ANNUAL && config.lastResetAt?.getUTCFullYear() !== date.getUTCFullYear() ? date : config.lastResetAt, version: { increment: 1 } } });
+  let number = "";
+  for (let attempt = 0; attempt < 1000; attempt += 1) {
+    if (!config) {
+      number = await allocateDefinitionDocumentNumber(tx, context.tenantId, definition, date);
+    } else {
+      const year = config.resetRule === DocumentSequenceScope.ANNUAL ? date.getUTCFullYear() : 0;
+      const counter = await tx.documentDefinitionCounter.upsert({ where: { tenantId_definitionId_sequenceScope_year: { tenantId: context.tenantId, definitionId, sequenceScope: config.resetRule, year } }, create: { tenantId: context.tenantId, definitionId, sequenceScope: config.resetRule, year, lastNumber: 1 }, update: { lastNumber: { increment: 1 } }, select: { lastNumber: true } });
+      number = formatNumber(config, counter.lastNumber, date);
+      await tx.documentNumberingConfiguration.update({ where: { id: config.id }, data: { currentSequence: counter.lastNumber, lastResetAt: config.resetRule === DocumentSequenceScope.ANNUAL && config.lastResetAt?.getUTCFullYear() !== date.getUTCFullYear() ? date : config.lastResetAt, version: { increment: 1 } } });
+    }
+    const [requestConflict, versionConflict] = await Promise.all([
+      tx.documentRequest.findFirst({ where: { tenantId: context.tenantId, documentNumber: number }, select: { id: true } }),
+      tx.documentVersion.findFirst({ where: { tenantId: context.tenantId, documentNumber: number }, select: { id: true } }),
+    ]);
+    if (!requestConflict && !versionConflict) break;
+    number = "";
   }
+  if (!number) throw new Error("Unable to allocate an unused tenant document number after 1,000 attempts.");
   await writeDocumentAudit({ context, action: "ALLOCATE_DOCUMENT_NUMBER", entityType: "DocumentDefinition", entityId: definition.id, after: { documentNumber: number }, client: tx });
   return number;
 }

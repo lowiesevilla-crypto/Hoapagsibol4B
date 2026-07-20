@@ -1,7 +1,8 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useActionState, useEffect, useMemo, useState } from "react";
 import { FilePlus2 } from "lucide-react";
+import { useRouter } from "next/navigation";
 import { submitDocumentRequestAction } from "@/lib/actions/documents";
 import { SubmitButton } from "@/components/ui";
 
@@ -40,15 +41,29 @@ export type PortalHouseholdMember = {
   relationship: string;
 };
 
+const initialSubmissionState = { status: "idle" as const, message: "", requestId: null, duplicate: false };
+
 export function DocumentRequestForm({ configs, members, disabled = false }: { configs: PortalDocumentConfig[]; members: PortalHouseholdMember[]; disabled?: boolean }) {
+  const router = useRouter();
+  const [submissionKey, setSubmissionKey] = useState("");
+  const [submissionState, submitAction] = useActionState(submitDocumentRequestAction, initialSubmissionState);
   const [configurationId, setConfigurationId] = useState(configs[0]?.id || "");
   const [subjectType, setSubjectType] = useState<"SELF" | "HOUSEHOLD_MEMBER">("SELF");
   const selected = useMemo(() => configs.find((config) => config.id === configurationId) || configs[0], [configurationId, configs]);
+  useEffect(() => {
+    const randomKey = globalThis.crypto?.randomUUID?.() || `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
+    setSubmissionKey(randomKey);
+  }, []);
+  useEffect(() => {
+    if (submissionState.status === "success" && submissionState.requestId) router.refresh();
+  }, [router, submissionState.requestId, submissionState.status]);
   if (!selected) return <section className="card"><h2 className="text-lg font-black">Request an HOA document</h2><p className="mt-2 text-sm text-slate-500">No document types are currently available. Please contact the HOA office.</p></section>;
-  return <form action={submitDocumentRequestAction} className="card">
+  return <form action={submitAction} className="card">
     <h2 className="text-lg font-black">Request an HOA document</h2>
     <p className="mb-5 text-sm text-slate-500">Select who the document is for and complete the tenant-required fields.</p>
-    <fieldset disabled={disabled} className="grid gap-4 md:grid-cols-2 disabled:opacity-60">
+    {submissionState.status !== "idle" && <p role="status" aria-live="polite" className={`mb-4 rounded-xl p-3 text-sm font-semibold ${submissionState.status === "success" ? "bg-emerald-50 text-emerald-800" : "bg-rose-50 text-rose-800"}`}>{submissionState.message}</p>}
+    <input type="hidden" name="submissionKey" value={submissionKey} />
+    <fieldset disabled={disabled || !submissionKey} className="grid gap-4 md:grid-cols-2 disabled:opacity-60">
       <div className="md:col-span-2">
         <label className="label">Document type</label>
         <select className="field" name="definitionId" value={selected.id} onChange={(event) => setConfigurationId(event.target.value)}>

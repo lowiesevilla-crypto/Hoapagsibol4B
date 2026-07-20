@@ -93,6 +93,7 @@ async function main() {
     const preview = await generateDocument(context, request.id, { mode: DocumentGenerationMode.PREVIEW });
     const afterPreview = await sideEffects(request.id, definition.id);
     add(checks, "preview is watermarked and side-effect free", Boolean(preview.content?.includes("PREVIEW - NOT AN OFFICIAL DOCUMENT")) && before.versions === afterPreview.versions && before.tokens === afterPreview.tokens && before.counter === afterPreview.counter, preview.state);
+    add(checks, "preview binds the selected request data", Boolean(preview.content?.includes("Resident Verification") && preview.content?.includes("Block 1 Lot 2, Verification Village") && preview.content?.includes("Employment verification") && !preview.content?.includes("Juan Dela Cruz")), "request-bound preview");
     const validationBeforeApproval = await generateDocument(context, request.id, { mode: DocumentGenerationMode.VALIDATE });
     add(checks, "validation reports incomplete approval", validationBeforeApproval.issues.some((issue) => issue.code === "WORKFLOW_INCOMPLETE" || issue.code === "APPROVAL_INCOMPLETE"), validationBeforeApproval.issues.map((issue) => issue.code).join(","));
     await expectFailure(checks, "unauthorized homeowner approval is rejected", () => approveCertificateRequest(homeownerContext, request.id), "Permission denied");

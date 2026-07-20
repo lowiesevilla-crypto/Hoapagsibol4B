@@ -11,6 +11,7 @@ import {
 import {
   resolveDocumentPlaceholders,
   type PlaceholderDefinition,
+  type PlaceholderMode,
   type PlaceholderResolutionContext,
 } from "@/lib/services/document-placeholders";
 
@@ -77,6 +78,7 @@ export function buildDocumentRenderModel(input: {
   validUntil?: string | null;
   verificationUrl?: string | null;
   mode: DocumentGenerationMode;
+  placeholderMode?: PlaceholderMode;
   placeholderContext: PlaceholderResolutionContext;
   placeholderDefinitions: readonly PlaceholderDefinition[];
 }): DocumentRenderModel {
@@ -88,8 +90,9 @@ export function buildDocumentRenderModel(input: {
   const officerListValidationErrors = new Set<string>();
   const resolvedValues: Record<string, string> = {};
   let officerListSnapshot: DocumentRenderModel["officerListSnapshot"] = null;
+  const placeholderMode = input.placeholderMode ?? (input.mode === "PREVIEW" ? "REQUEST_PREVIEW" : "GENERATE");
   const resolveText = (value: string) => {
-    const result = resolveDocumentPlaceholders(value, input.placeholderContext, input.mode === "PREVIEW" ? "PREVIEW" : "GENERATE", input.placeholderDefinitions);
+    const result = resolveDocumentPlaceholders(value, input.placeholderContext, placeholderMode, input.placeholderDefinitions);
     return result;
   };
   const collect = (result: ReturnType<typeof resolveText>) => {

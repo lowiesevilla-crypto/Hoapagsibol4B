@@ -27,16 +27,35 @@ import { recordDocumentNotification } from "@/lib/services/document-notification
 import { documentContextFromUser } from "@/lib/services/document-runtime-context";
 import { startDocumentWorkflow } from "@/lib/services/document-workflows";
 
-export async function submitDocumentRequestAction(formData: FormData) {
+export type DocumentRequestSubmissionState = {
+  status: "idle" | "success" | "error";
+  message: string;
+  requestId: string | null;
+  duplicate: boolean;
+};
+
+export async function submitDocumentRequestAction(_previousState: DocumentRequestSubmissionState, formData: FormData): Promise<DocumentRequestSubmissionState> {
   const user = await requireUser(Role.HOMEOWNER);
+  try {
+    return await submitDocumentRequest(user, formData);
+  } catch (error) {
+    if (error instanceof DocumentRequestSubmissionError) return { status: "error", message: error.message, requestId: null, duplicate: false };
+    console.error("Document request submission failed", error);
+    return { status: "error", message: "The document request could not be submitted. Please try again.", requestId: null, duplicate: false };
+  }
+}
+
+async function submitDocumentRequest(user: Awaited<ReturnType<typeof requireUser>>, formData: FormData): Promise<DocumentRequestSubmissionState> {
   const homeownerId = user.homeownerProfile?.id;
-  if (!homeownerId) redirect("/portal/documents?error=Homeowner%20profile%20not%20found.");
+  if (!homeownerId) throw new DocumentRequestSubmissionError("Homeowner profile not found.");
   const definitionId = clean(formData.get("definitionId"));
   const configurationId = String(formData.get("configurationId") || "");
+  const submissionKey = clean(formData.get("submissionKey"));
   const subjectType = String(formData.get("subjectType") || DocumentSubjectType.SELF) === DocumentSubjectType.HOUSEHOLD_MEMBER ? DocumentSubjectType.HOUSEHOLD_MEMBER : DocumentSubjectType.SELF;
   const subjectMemberId = clean(formData.get("subjectMemberId"));
   const numberOfCopies = Math.max(1, Math.min(25, Number(formData.get("numberOfCopies")) || 1));
-  const fail = (message: string): never => redirect(`/portal/documents?error=${encodeURIComponent(message)}`);
+  const fail = (message: string): never => { throw new DocumentRequestSubmissionError(message); };
+  if (!submissionKey || !/^[A-Za-z0-9._:-]{8,128}$/.test(submissionKey)) fail("Refresh the page and submit the request again.");
   const [homeowner, config] = await Promise.all([
     prisma.homeownerProfile.findFirst({ where: { id: homeownerId, tenantId: user.tenantId }, include: { user: true } }),
     definitionId
@@ -92,19 +111,21 @@ export async function submitDocumentRequestAction(formData: FormData) {
   const balancePolicy = definitionRecord?.outstandingBalancePolicy ?? DocumentOutstandingBalancePolicy.BLOCK_DOWNLOAD;
   if (balancePolicy === DocumentOutstandingBalancePolicy.BLOCK_REQUEST && outstandingBalance > 0) fail(balancePolicyLockMessage(balancePolicy, outstandingBalance));
   const status = statusForConfiguration(workflowRecord);
+  const context = documentContextFromUser(user);
+  const platformCertificate = definitionRecord?.code === CERTIFICATE_OF_RESIDENCY_CODE;
+  if (platformCertificate && (workflowRecord.approvalRequired || workflowRecord.requiresAdminReview) && !definitionRecord.workflowDefinitionId) fail("This document requires approval, but no approval workflow is configured. Please contact the HOA office.");
   const subjectSnapshot = buildSubjectSnapshot({ subjectType, homeowner: homeownerRecord, member });
   const requestDataSnapshot = definitionRecord
     ? asJson({ definitionId: definitionRecord.id, definitionVersion: definitionRecord.version, code: definitionRecord.code, displayName: definitionRecord.displayName, legacyType: definitionRecord.legacyType, fields: parsed.values, numberOfCopies })
     : requestDataSnapshotJson(configRecord!, parsed.values, numberOfCopies);
-  const duplicate = await prisma.documentRequest.findFirst({
-    where: { tenantId: user.tenantId, homeownerId, ...(definitionRecord ? { definitionId: definitionRecord.id } : { configurationId: configRecord!.id }), subjectType, subjectMemberId: member?.id ?? null, purpose: purposeValue, requestedAt: { gte: new Date(Date.now() - 15000) }, archivedAt: null },
-    orderBy: { requestedAt: "desc" },
-  });
-  if (duplicate) redirect(`/portal/documents?success=submitted&message=${encodeURIComponent("Your recent document request is already recorded.")}`);
+  const duplicate = await prisma.documentRequest.findFirst({ where: { tenantId: user.tenantId, submissionKey }, select: { id: true } });
+  if (duplicate) return { status: "success", message: "Your document request is already recorded.", requestId: duplicate.id, duplicate: true };
 
-  const request = await prisma.documentRequest.create({
+  let request;
+  try {
+    request = await prisma.documentRequest.create({
     data: {
-      tenantId: user.tenantId, homeownerId, type: legacyType, configurationId: configRecord?.id, configurationVersion: configRecord?.version,
+      tenantId: user.tenantId, submissionKey, homeownerId, type: legacyType, configurationId: configRecord?.id, configurationVersion: configRecord?.version,
       definitionId: definitionRecord?.id, definitionVersionSnapshot: definitionRecord?.version,
       definitionSnapshot: definitionRecord ? asJson({ id: definitionRecord.id, code: definitionRecord.code, displayName: definitionRecord.displayName, version: definitionRecord.version, legacyType: definitionRecord.legacyType, deliveryMode: definitionRecord.deliveryMode, approvalRequired: definitionRecord.approvalRequired, paymentRequired: definitionRecord.paymentRequired, feeAmount: String(definitionRecord.feeAmount), numberingFormat: definitionRecord.numberingFormat, outstandingBalancePolicy: definitionRecord.outstandingBalancePolicy }) : undefined,
       templateVersionIdSnapshot: definitionRecord?.assignedTemplateVersion?.id, templateDefinitionSnapshot: definitionRecord?.assignedTemplateVersion?.definitionJson ?? undefined,
@@ -119,9 +140,14 @@ export async function submitDocumentRequestAction(formData: FormData) {
       histories: { create: { tenantId: user.tenantId, status, actorId: user.id, note: requestStatusNote(status, outstandingBalance) } },
     },
     include: { homeowner: { include: { user: true } }, configuration: { include: { template: true } } },
-  });
-  const context = documentContextFromUser(user);
-  const platformCertificate = definitionRecord?.code === CERTIFICATE_OF_RESIDENCY_CODE;
+    });
+  } catch (error) {
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
+      const replay = await prisma.documentRequest.findFirst({ where: { tenantId: user.tenantId, submissionKey }, select: { id: true } });
+      if (replay) return { status: "success", message: "Your document request is already recorded.", requestId: replay.id, duplicate: true };
+    }
+    throw error;
+  }
   if (platformCertificate && definitionRecord.workflowDefinitionId) await startDocumentWorkflow(context, request.id);
   await recordDocumentNotification({ context, recipientId: user.id, event: "REQUEST_SUBMITTED", subject: "Document request submitted", message: `${definitionRecord?.displayName ?? configRecord?.displayName ?? "Document"} was submitted successfully.`, entityType: "DocumentRequest", entityId: request.id, eventKey: `REQUEST_SUBMITTED:DocumentRequest:${request.id}` });
   if (status === DocumentRequestStatus.PENDING_APPROVAL) {
@@ -134,7 +160,7 @@ export async function submitDocumentRequestAction(formData: FormData) {
   }
   await prisma.auditLog.create({ data: { actorId: user.id, module: "DOCUMENTS", action: "SUBMIT_DOCUMENT_REQUEST", entityType: "DocumentRequest", entityId: request.id, metadata: { type: legacyType, configurationId: configRecord?.id, definitionId: definitionRecord?.id, subjectType, subjectMemberId: member?.id, purpose: purposeValue, outstandingBalance, deliveryMode: workflowRecord.deliveryMode, paymentRequired: workflowRecord.paymentRequired } } });
   revalidateDocumentPages(request.id);
-  redirect(`/portal/documents?success=submitted&message=${encodeURIComponent(status === DocumentRequestStatus.READY_FOR_DOWNLOAD ? "Document request submitted and prepared for download." : "Document request submitted successfully.")}`);
+  return { status: "success", message: status === DocumentRequestStatus.READY_FOR_DOWNLOAD ? "Document request submitted and prepared for download." : "Document request submitted successfully.", requestId: request.id, duplicate: false };
 }
 
 export async function processDocumentRequestAction(formData: FormData) {
@@ -948,6 +974,7 @@ function optionalDateFromString(value: string | undefined) { if (!value) return 
 function todayUtc() { const now = new Date(); return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate())); }
 function oneYearFromToday() { const date = todayUtc(); date.setUTCFullYear(date.getUTCFullYear() + 1); return date; }
 function clean(value: FormDataEntryValue | null) { return String(value || "").trim() || undefined; }
+class DocumentRequestSubmissionError extends Error {}
 function nullableText(value: FormDataEntryValue | null) { const text = String(value || "").trim(); return text || null; }
 function ordinal(day: number) { const suffix = day % 100 >= 11 && day % 100 <= 13 ? "th" : day % 10 === 1 ? "st" : day % 10 === 2 ? "nd" : day % 10 === 3 ? "rd" : "th"; return `${day}${suffix}`; }
 function ageAt(birthDate: Date, at: Date) { let age = at.getUTCFullYear() - birthDate.getUTCFullYear(); if (at.getUTCMonth() < birthDate.getUTCMonth() || (at.getUTCMonth() === birthDate.getUTCMonth() && at.getUTCDate() < birthDate.getUTCDate())) age -= 1; return Math.max(0, age); }

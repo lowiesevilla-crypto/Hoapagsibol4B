@@ -1351,6 +1351,7 @@ model DocumentTemplateVersion {
 model DocumentRequest {
   tenantId                    String                      @default("tenant_pagsibol4b_default")
   id                          String                      @id @default(cuid())
+  submissionKey               String?
   documentNumber              String?
   homeownerId                 String
   homeowner                   HomeownerProfile            @relation(fields: [homeownerId], references: [id], onDelete: Cascade)
@@ -1438,6 +1439,7 @@ model DocumentRequest {
   updatedAt                   DateTime                    @updatedAt
 
   @@unique([tenantId, id])
+  @@unique([tenantId, submissionKey])
   @@unique([tenantId, documentNumber])
   @@index([homeownerId, requestedAt])
   @@index([tenantId, configurationId])

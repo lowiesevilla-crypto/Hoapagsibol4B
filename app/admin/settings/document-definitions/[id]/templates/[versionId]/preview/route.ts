@@ -54,6 +54,7 @@ async function renderPreview(templateDefinitionOverride: unknown, params: Promis
     validUntil: null,
     verificationUrl: null,
     mode: DocumentGenerationMode.PREVIEW,
+    placeholderMode: "DESIGNER_PREVIEW",
     placeholderContext: {
       tenantId: admin.tenantId,
       tenant: { name: association.name, address: association.address, tin: association.tinNumber, secRegistration: association.secRegistrationNumber, contactNumber: association.contactNumber, email: association.email, logo: association.logoUrl },

@@ -42,9 +42,14 @@ export async function generateDocument(context: DocumentExecutionContext, reques
   requireModePermission(context, options.mode);
   const request = await loadGenerationRequest(context, requestId);
   if (!request) throw new DocumentRuntimeError("NOT_FOUND", "Document request was not found for the authenticated tenant.");
+  const automaticHomeownerIssue = options.mode === DocumentGenerationMode.ISSUE
+    && context.role === Role.HOMEOWNER
+    && request.homeowner.userId === context.authenticatedUserId
+    && Boolean(request.definition?.allowImmediateDownload)
+    && !request.approvalRequiredSnapshot
+    && !request.paymentRequiredSnapshot;
   if (context.role === Role.HOMEOWNER && official) {
-    const automatic = options.mode === DocumentGenerationMode.ISSUE && request.homeowner.userId === context.authenticatedUserId && request.definition?.allowImmediateDownload && !request.approvalRequiredSnapshot && !request.paymentRequiredSnapshot;
-    if (!automatic) throw new DocumentRuntimeError("PERMISSION_DENIED", "Homeowners cannot issue official documents for this workflow.");
+    if (!automaticHomeownerIssue) throw new DocumentRuntimeError("PERMISSION_DENIED", "Homeowners cannot issue official documents for this workflow.");
   }
   const idempotencyKey = official ? normalizeIdempotencyKey(options.idempotencyKey) : null;
   let attempt: Awaited<ReturnType<typeof claimDocumentGenerationAttempt>>["attempt"] | null = null;
@@ -64,7 +69,9 @@ export async function generateDocument(context: DocumentExecutionContext, reques
     for (const result of policySummary) {
       if (result.status === "ERROR" || (result.blocking && result.status !== "PASS")) issues.push(issue("POLICY_BLOCKED", "POLICY", result.summary, true, "Resolve or validly override the blocking policy before issuance.", { policyCode: result.policyCode, policyVersion: result.policyVersion, evaluatorVersion: result.evaluatorVersion }));
     }
-    const workflowSummary = request.definition?.workflowDefinitionId ? await getWorkflowState(context, request.id) : null;
+    const workflowSummary = request.definition?.workflowDefinitionId
+      ? await getWorkflowState(context, request.id)
+      : automaticWorkflowState(request);
     if (validatesOfficialReadiness && request.definition?.workflowDefinitionId && !workflowSummary?.completed) issues.push(issue("WORKFLOW_INCOMPLETE", "WORKFLOW", "The configured workflow has not completed.", true, "Complete all required workflow steps before issuance."));
     if (validatesOfficialReadiness && request.approvalRequiredSnapshot && !request.approvedAt && !workflowSummary?.completed) issues.push(issue("APPROVAL_INCOMPLETE", "WORKFLOW", "Required approval has not completed.", true));
     const template = await resolveGenerationTemplate(context, { definitionId: effective.definition.id, mode: options.mode, requestTemplateVersionId: request.templateVersionIdSnapshot, draftTemplateVersionId: options.draftTemplateVersionId });
@@ -131,8 +138,8 @@ export async function generateDocument(context: DocumentExecutionContext, reques
         await recordDocumentGenerationEvent({ context, event: "VERIFICATION_CREATED", requestId, attemptId: attempt!.id, documentVersionId: version.id, attemptNumber: attempt!.attemptNumber, client: tx });
       }
       const requestStatus = immediateRelease ? DocumentRequestStatus.READY_FOR_DOWNLOAD : DocumentRequestStatus.GENERATED;
-      await tx.documentRequest.update({ where: { id: request.id }, data: { status: requestStatus, documentNumber, generatedAt: issueDate, readyForDownloadAt: immediateRelease ? issueDate : null, issueDate, templateVersion: template.version, templateVersionSnapshot: template.version, templateVersionIdSnapshot: template.id, templateDefinitionSnapshot: safeGenerationSnapshot(template.definitionJson), templateSnapshot: JSON.stringify(template.definitionJson), generatedContent: rendered.content, verificationCode: legacyVerificationCode, currentVersion: versionNumber, associationSnapshot: safeGenerationSnapshot(association), homeownerSnapshot: safeGenerationSnapshot(request.subjectSnapshot), organizationSnapshot: safeGenerationSnapshot(officers), processedById: context.authenticatedUserId, ...(request.approvedById ? {} : { approvedById: context.authenticatedUserId, approvedAt: request.approvedAt ?? issueDate }) } });
-      await tx.documentRequestHistory.create({ data: { tenantId: context.tenantId, requestId: request.id, status: requestStatus, actorId: context.authenticatedUserId, note: immediateRelease ? `Issued ${documentNumber} and made ready for download.` : `Issued ${documentNumber}; office release is pending.` } });
+      await tx.documentRequest.update({ where: { id: request.id }, data: { status: requestStatus, documentNumber, generatedAt: issueDate, readyForDownloadAt: immediateRelease ? issueDate : null, issueDate, templateVersion: template.version, templateVersionSnapshot: template.version, templateVersionIdSnapshot: template.id, templateDefinitionSnapshot: safeGenerationSnapshot(template.definitionJson), templateSnapshot: JSON.stringify(template.definitionJson), generatedContent: rendered.content, verificationCode: legacyVerificationCode, currentVersion: versionNumber, associationSnapshot: safeGenerationSnapshot(association), homeownerSnapshot: safeGenerationSnapshot(request.subjectSnapshot), organizationSnapshot: safeGenerationSnapshot(officers), ...(automaticHomeownerIssue ? { processedById: null, processedOfficerSnapshot: safeGenerationSnapshot({ processorType: "SYSTEM", name: "HOAHub automatic processing", processedAt: issueDate }) } : { processedById: context.authenticatedUserId }), ...(!request.approvalRequiredSnapshot || request.approvedById ? {} : { approvedById: context.authenticatedUserId, approvedAt: request.approvedAt ?? issueDate }) } });
+      await tx.documentRequestHistory.create({ data: { tenantId: context.tenantId, requestId: request.id, status: requestStatus, actorId: automaticHomeownerIssue ? null : context.authenticatedUserId, note: automaticHomeownerIssue ? `HOAHub automatic processing issued ${documentNumber} and released it for download.` : immediateRelease ? `Issued ${documentNumber} and made ready for download.` : `Issued ${documentNumber}; office release is pending.` } });
       const attemptState = options.mode === DocumentGenerationMode.REISSUE ? DocumentGenerationState.REISSUED : immediateRelease ? DocumentGenerationState.RELEASED : DocumentGenerationState.RELEASE_PENDING;
       await updateDocumentGenerationAttempt(context, attempt!.id, { state: attemptState, completedAt: issueDate, documentVersion: { connect: { id: version.id } }, rendererName: rendered.rendererName, rendererVersion: rendered.rendererVersion, metadata: safeGenerationSnapshot({ contentHash, outputSize: rendered.outputSize, documentNumber }) }, tx);
       await recordDocumentGenerationEvent({ context, event: "RENDER_COMPLETED", requestId, attemptId: attempt!.id, documentVersionId: version.id, attemptNumber: attempt!.attemptNumber, state: DocumentGenerationState.GENERATED, metadata: { contentHash, outputSize: rendered.outputSize }, client: tx });
@@ -210,6 +217,17 @@ function placeholderContext(request: GenerationRequestRecord, association: Await
 
 function definitionSnapshot(definition: { id: string; code: string; displayName: string; version: number; deliveryMode: string; approvalRequired: boolean; paymentRequired: boolean; releaseRequired: boolean; outstandingBalancePolicy: string; numberingFormat: string; qrEnabled: boolean }) {
   return { id: definition.id, code: definition.code, displayName: definition.displayName, version: definition.version, deliveryMode: definition.deliveryMode, approvalRequired: definition.approvalRequired, paymentRequired: definition.paymentRequired, releaseRequired: definition.releaseRequired, outstandingBalancePolicy: definition.outstandingBalancePolicy, numberingFormat: definition.numberingFormat, qrEnabled: definition.qrEnabled };
+}
+
+function automaticWorkflowState(request: GenerationRequestRecord) {
+  if (!request.definition?.allowImmediateDownload || request.approvalRequiredSnapshot || request.paymentRequiredSnapshot) return null;
+  return {
+    workflowId: "HOAHUB_AUTOMATIC_INSTANT",
+    workflowVersion: request.definition.version,
+    completed: true,
+    currentStepIds: [] as string[],
+    timeline: [{ stepId: null, decision: "APPROVED", status: request.status, note: "Validated for automatic instant processing.", createdAt: request.requestedAt }],
+  };
 }
 
 function requireModePermission(context: DocumentExecutionContext, mode: DocumentGenerationMode) {

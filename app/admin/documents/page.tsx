@@ -90,16 +90,10 @@ export default async function AdminDocumentsPage({ searchParams }: { searchParam
   const requestPages = Math.max(1, Math.ceil(requestCount / requestPageSize));
   const filters = new URLSearchParams(Object.entries({ section: "requests", view: requestView, q, status: status || "", type: type || "", date: query.date || "" }).filter(([, value]) => value));
   return <>
-    <PageHeader eyebrow="Resident services" title="Document Management" description="Manage document types, templates, homeowner requests, and issued HOA documents from one tenant-scoped workspace." action={<div className="flex flex-wrap gap-2"><Link className="btn-primary" href="/admin/documents/new">Create Walk-In / Office Request</Link><Link className="btn-secondary" href="/admin/documents/archive">Archive</Link></div>} />
+    <PageHeader eyebrow="Resident services" title="Document Management" description="Manage document types, templates, homeowner requests, and issued HOA documents from one tenant-scoped workspace." action={<Link className="btn-secondary" href="/admin/documents/archive">Archive</Link>} />
     {query.notice === "legacy-templates" && <Notice kind="success">The legacy template screen now redirects here. Use Templates for draft, publishing, and version history.</Notice>}
     {query.error && <Notice kind="error">{query.error}</Notice>}
     {query.success && <Notice kind="success">{query.message || "Document request updated."}</Notice>}
-    <nav className="mb-5 flex flex-wrap gap-2" aria-label="Document management sections">
-      <Tab href="/admin/documents?section=types" active={section === "types"}>Document Types</Tab>
-      <Tab href="/admin/documents?section=templates" active={section === "templates"}>Templates</Tab>
-      <Tab href="/admin/documents?section=requests" active={section === "requests"}>Requests</Tab>
-      <Tab href="/admin/documents?section=issued" active={section === "issued"}>Issued Documents</Tab>
-    </nav>
     {section === "types" && <DocumentTypesSection definitions={definitions} inventory={inventory} />}
     {section === "templates" && <TemplatesSection definitions={definitions} />}
     {section === "requests" && <RequestsSection requests={requests} count={requestCount} page={page} pages={requestPages} filters={filters} query={query} status={status} type={type} q={q} view={requestView} />}
@@ -152,9 +146,9 @@ function TemplatesSection({ definitions }: { definitions: DefinitionRow[] }) {
 
 function RequestsSection({ requests, count, page, pages, filters, query, status, type, q, view }: { requests: RequestRow[]; count: number; page: number; pages: number; filters: URLSearchParams; query: Query; status?: DocumentRequestStatus; type?: DocumentType; q: string; view: "needs-action" | "all" }) {
   return <>
-    <nav className="mb-4 flex flex-wrap gap-2" aria-label="Document request views">
-      <Tab href="/admin/documents?section=requests" active={view === "needs-action"}>Needs Action</Tab>
-      <Tab href="/admin/documents?section=requests&view=all" active={view === "all"}>All Requests</Tab>
+    <nav className="mb-4 inline-flex max-w-full rounded-xl border border-slate-200 bg-white p-1 shadow-sm" aria-label="Document request filters">
+      <RequestViewTab href="/admin/documents?section=requests" active={view === "needs-action"}>Needs Action</RequestViewTab>
+      <RequestViewTab href="/admin/documents?section=requests&view=all" active={view === "all"}>All Requests</RequestViewTab>
     </nav>
     <form className="card mb-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-[1fr_180px_230px_170px_auto]" method="get"><input type="hidden" name="section" value="requests" />{view === "all" && <input type="hidden" name="view" value="all" />}<input className="field" type="search" name="q" defaultValue={q} placeholder="Homeowner, document no., block, lot" /><select className="field" name="status" defaultValue={status || ""}><option value="">All statuses</option>{Object.values(DocumentRequestStatus).map((item) => <option key={item} value={item}>{item.replaceAll("_", " ")}</option>)}</select><select className="field" name="type" defaultValue={type || ""}><option value="">All document types</option>{documentTypeOptions.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</select><input className="field" type="date" name="date" defaultValue={query.date} /><button className="btn-secondary">Apply filters</button></form>
     <PaginationFocusTarget id="document-request-table" label="Document request table" />
@@ -192,8 +186,8 @@ function buildInventory(definitions: DefinitionRow[], legacyConfigs: { type: Doc
   });
 }
 
-function Tab({ href, active, children }: { href: string; active: boolean; children: React.ReactNode }) {
-  return <Link className={`rounded-xl px-4 py-2 text-sm font-black ${active ? "bg-pine-800 text-white" : "bg-white text-pine-900 shadow-sm ring-1 ring-slate-200"}`} href={href} aria-current={active ? "page" : undefined}>{children}</Link>;
+function RequestViewTab({ href, active, children }: { href: string; active: boolean; children: React.ReactNode }) {
+  return <Link className={`min-h-10 rounded-lg px-4 py-2 text-center text-sm font-black transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-pine-700 ${active ? "bg-pine-800 text-white shadow-sm" : "text-pine-900 hover:bg-pine-50"}`} href={href} aria-current={active ? "page" : undefined}>{children}</Link>;
 }
 
 function Panel({ title, children }: { title: string; children: React.ReactNode }) {

@@ -6,7 +6,6 @@ import {
   AlignCenter,
   AlignLeft,
   AlignRight,
-  ArrowLeft,
   Bold,
   ChevronDown,
   ChevronUp,
@@ -78,7 +77,6 @@ type Props = {
   template: DocumentTemplateDefinition;
   updatedAt: string;
   templateWorkspaceHref: string;
-  documentManagementHref: string;
   previewHref: string;
   tenantLogoSrc?: string | null;
   customPlaceholders: CustomPlaceholder[];
@@ -449,8 +447,6 @@ export function ProfessionalDocumentTemplateEditor(props: Props) {
 
     <header className="sticky top-0 z-30 border-b border-slate-200 bg-white shadow-sm print:hidden">
       <div className="flex flex-wrap items-center gap-2 px-4 py-3">
-        <a className="btn-secondary min-h-9 px-3 py-1.5 text-xs" href={props.documentManagementHref}><ArrowLeft className="size-4" /> Document Management</a>
-        <div className="mx-1 hidden h-7 w-px bg-slate-200 sm:block" />
         <div className="min-w-40 flex-1"><p className="truncate text-sm font-black text-slate-950">{props.title}</p><p className="text-[11px] font-bold text-slate-500">{props.code} · {props.status.replaceAll("_", " ")} · {dirty ? "Unsaved changes" : "Saved"}</p></div>
         <ToolbarButton label="Undo" onClick={undo} disabled={!history.length}><Undo2 /></ToolbarButton>
         <ToolbarButton label="Redo" onClick={redo} disabled={!future.length}><Redo2 /></ToolbarButton>

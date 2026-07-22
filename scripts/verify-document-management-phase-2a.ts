@@ -8,7 +8,24 @@ function assertCondition(condition: unknown, message: string) {
 }
 
 async function main() {
-  const [definitions, hub, legacy, sidebarLinks, sidebar, adminLayout, definitionPage, workflowControls, documentActions, actionCountService] = await Promise.all([
+  const [
+    definitions,
+    hub,
+    legacy,
+    sidebarLinks,
+    sidebar,
+    adminLayout,
+    definitionPage,
+    workflowControls,
+    documentActions,
+    actionCountService,
+    walkInPage,
+    templatesPage,
+    legacyDocumentTypesPage,
+    archivePage,
+    generatedPage,
+    templateEditor,
+  ] = await Promise.all([
     prisma.documentDefinition.findMany({ include: { assignedTemplateVersion: { include: { templateSet: true } }, fields: { where: { active: true } } } }),
     fs.readFile("app/admin/documents/page.tsx", "utf8"),
     fs.readFile("app/admin/document-templates/page.tsx", "utf8"),
@@ -19,6 +36,12 @@ async function main() {
     fs.readFile("components/document-definition-workflow-controls.tsx", "utf8"),
     fs.readFile("lib/actions/documents.ts", "utf8"),
     fs.readFile("lib/services/document-request-action-count.ts", "utf8"),
+    fs.readFile("app/admin/documents/new/page.tsx", "utf8"),
+    fs.readFile("app/admin/settings/document-definitions/[id]/templates/page.tsx", "utf8"),
+    fs.readFile("app/admin/settings/document-types/page.tsx", "utf8"),
+    fs.readFile("app/admin/documents/archive/page.tsx", "utf8"),
+    fs.readFile("app/admin/documents/generated/page.tsx", "utf8"),
+    fs.readFile("components/professional-document-template-editor.tsx", "utf8"),
   ]);
   const keys = new Set<string>();
   for (const definition of definitions) {
@@ -37,10 +60,22 @@ async function main() {
   }
   assertCondition(hub.includes("Document Definition Diagnostics"), "diagnostics panel is missing from the hub");
   assertCondition(!hub.includes("Expected document type inventory"), "duplicate inventory cards remain on the normal hub");
+  assertCondition(!hub.includes('aria-label="Document management sections"'), "duplicate in-page document management navigation remains on the hub");
+  assertCondition(!hub.includes('href="/admin/documents/new">Create Walk-In / Office Request'), "duplicate walk-in shortcut remains in the hub header");
+  assertCondition(hub.includes('aria-label="Document request filters"'), "request-specific segmented filters are missing");
+  assertCondition(hub.includes("RequestViewTab"), "request filters were not converted to the compact segmented control");
+  assertCondition(hub.includes(">Needs Action</RequestViewTab>") && hub.includes(">All Requests</RequestViewTab>"), "Needs Action and All Requests filters are missing");
   assertCondition(hub.includes("Walk-In availability"), "walk-in availability is missing from the catalog table");
   assertCondition(hub.includes("Needs Action"), "requests section does not expose a Needs Action view");
   assertCondition(hub.includes("documentRequestNeedsActionWhere(user.tenantId)"), "requests section does not use the authoritative action-needed filter");
   assertCondition(legacy.includes('redirect("/admin/documents?section=templates&notice=legacy-templates")'), "legacy template redirect is not preserved");
+  assertCondition(!definitionPage.includes('href="/admin/documents">Document Management') && !definitionPage.includes('href="/admin/documents?section=templates">Templates'), "duplicate document navigation remains on the definitions catalog page");
+  assertCondition(!walkInPage.includes("Back to Document Management"), "duplicate back-to-management shortcut remains on the walk-in page");
+  assertCondition(!templatesPage.includes('href="/admin/documents?section=templates">Document Management') && !templatesPage.includes("Back to definitions"), "duplicate document navigation remains on the template workspace page");
+  assertCondition(!legacyDocumentTypesPage.includes('href="/admin/documents">Document Management') && !legacyDocumentTypesPage.includes('href="/admin/documents?section=templates">Templates'), "duplicate document navigation remains on the legacy document types page");
+  assertCondition(!archivePage.includes('href="/admin/documents">Document Management'), "duplicate document navigation remains on the archive page");
+  assertCondition(!generatedPage.includes('href="/admin/documents/new">Generate new') && !generatedPage.includes('href="/admin/documents?section=issued">Document Management'), "duplicate document navigation remains on the generated documents page");
+  assertCondition(!templateEditor.includes("documentManagementHref") && !templateEditor.includes("> Document Management</a>"), "duplicate document management shortcut remains in the template editor toolbar");
 
   const residentServicesStart = sidebarLinks.indexOf('href: "/admin/documents?section=types"');
   assertCondition(residentServicesStart >= 0, "Resident Services sidebar group is missing");

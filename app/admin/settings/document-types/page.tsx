@@ -1,4 +1,3 @@
-import Link from "next/link";
 import { DocumentDeliveryMode, DocumentFieldType } from "@prisma/client";
 import { PageHeader } from "@/components/page-header";
 import { SubmitButton } from "@/components/ui";
@@ -18,7 +17,7 @@ export default async function DocumentTypesSettingsPage({ searchParams }: { sear
     prisma.organizationOfficer.findMany({ where: { tenantId: user.tenantId, active: true, archivedAt: null }, orderBy: [{ displayOrder: "asc" }, { fullName: "asc" }] }),
   ]);
   return <>
-    <PageHeader eyebrow="Resident services settings" title="Legacy document types" description="Compatibility view for legacy request rules while document definitions remain the authoritative configuration system." action={<div className="flex flex-wrap gap-2"><Link className="btn-secondary" href="/admin/documents">Document Management</Link><Link className="btn-secondary" href="/admin/documents?section=templates">Templates</Link></div>} />
+    <PageHeader eyebrow="Resident services settings" title="Legacy document types" description="Compatibility view for legacy request rules while document definitions remain the authoritative configuration system." />
     {query.error && <Notice kind="error">{query.error}</Notice>}
     {query.success && <Notice kind="success">{query.message || "Document type saved."}</Notice>}
     <div className="space-y-5">

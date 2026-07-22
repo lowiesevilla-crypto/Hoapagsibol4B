@@ -47,7 +47,6 @@ export default async function TemplateVersionEditorPage({ params, searchParams }
       template={template}
       updatedAt={version.updatedAt.toISOString()}
       templateWorkspaceHref={`/admin/settings/document-definitions/${id}/templates`}
-      documentManagementHref="/admin/documents?section=templates"
       previewHref={`/admin/settings/document-definitions/${id}/templates/${version.id}/preview`}
       tenantLogoSrc={association.logoUrl}
       customPlaceholders={customPlaceholders.map((item) => ({ key: item.key, group: item.category, label: item.displayName, description: item.description || "Tenant-defined placeholder.", dataType: item.dataType, sample: item.exampleValue || `{{${item.key}}}`, sensitivity: item.sensitivity }))}

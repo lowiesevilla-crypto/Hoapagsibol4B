@@ -74,6 +74,11 @@ export async function approvePaymentRequest(requestId: string, reviewerId?: stri
       const documentRequest = await tx.documentRequest.findFirst({ where: { tenantId: request.tenantId, id: request.documentRequestId, homeownerId: request.homeownerId }, select: { id: true, paymentRequiredSnapshot: true, feeAmountSnapshot: true, status: true } });
       if (!documentRequest) throw new Error("Linked document request was not found for this tenant.");
       if (!documentRequest.paymentRequiredSnapshot) throw new Error("The linked document request does not require a document fee.");
+      const terminalDocumentStatuses: DocumentRequestStatus[] = [DocumentRequestStatus.CANCELLED, DocumentRequestStatus.REJECTED, DocumentRequestStatus.REVOKED, DocumentRequestStatus.ISSUED, DocumentRequestStatus.READY_FOR_DOWNLOAD, DocumentRequestStatus.GENERATED, DocumentRequestStatus.DOWNLOADED];
+      if (terminalDocumentStatuses.includes(documentRequest.status)) {
+        throw new Error("The linked document request can no longer accept payment confirmation.");
+      }
+      if (Math.abs(Number(request.amount) - Number(documentRequest.feeAmountSnapshot)) > 0.009) throw new Error("Document fee payment amount does not match the saved document request fee.");
       const adminId = reviewerId ?? (await tx.user.findFirst({ where: { tenantId: request.tenantId, role: { in: [Role.SYSTEM_ADMIN, Role.ADMIN, Role.HOA_ADMIN] } }, select: { id: true } }))?.id;
       if (!adminId) throw new Error("No tenant administrator account is available to record this document collection.");
       const receiptNumber = await allocateReceiptNumber(tx as unknown as Prisma.TransactionClient, request.tenantId, paymentDate, "OC");

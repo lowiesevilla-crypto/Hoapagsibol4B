@@ -11,6 +11,7 @@ import { getRequestableDocumentDefinitions } from "@/lib/services/document-defin
 import { resolveDocumentDownloadAccess } from "@/lib/services/document-balance-policy";
 import { documentTypeLabel } from "@/lib/services/documents";
 import { getPaymentSettings } from "@/lib/system-settings";
+import { canSubmitDocumentFeePayment, documentFeePaymentStatusLabel, documentRequestPublicReference } from "@/lib/services/document-fee-payments";
 import { money, shortDate } from "@/lib/utils";
 import { CERTIFICATE_OF_RESIDENCY_CODE } from "@/lib/services/certificate-of-residency";
 
@@ -21,7 +22,7 @@ export default async function PortalDocumentsPage({ searchParams }: { searchPara
   const page = Math.max(1, Number(query.page) || 1);
   const where = { tenantId: user.tenantId, homeownerId, archivedAt: null, ...(query.status ? { status: query.status as never } : {}), ...(query.type ? { type: query.type as never } : {}), ...(query.date && /^\d{4}-\d{2}-\d{2}$/.test(query.date) ? { requestedAt: { gte: new Date(`${query.date}T00:00:00.000Z`), lt: new Date(`${query.date}T23:59:59.999Z`) } } : {}) };
   const [requests, requestCount, unpaid, paymentSettings, configs, members] = await Promise.all([
-    prisma.documentRequest.findMany({ where, include: { histories: { include: { actor: true }, orderBy: { createdAt: "desc" } }, configuration: true, definition: true, paymentRequest: true, versions: { orderBy: { version: "desc" }, take: 1 } }, orderBy: { requestedAt: "desc" }, skip: (page - 1) * 10, take: 10 }),
+    prisma.documentRequest.findMany({ where, include: { histories: { include: { actor: true }, orderBy: { createdAt: "desc" } }, configuration: true, definition: true, paymentRequest: { include: { collection: true } }, versions: { orderBy: { version: "desc" }, take: 1 } }, orderBy: { requestedAt: "desc" }, skip: (page - 1) * 10, take: 10 }),
     prisma.documentRequest.count({ where }),
     prisma.bill.aggregate({ where: { tenantId: user.tenantId, homeownerId, archivedAt: null, balance: { gt: 0 } }, _sum: { balance: true } }),
     getPaymentSettings(user.tenantId),
@@ -70,7 +71,7 @@ export default async function PortalDocumentsPage({ searchParams }: { searchPara
         </section>
       </div>
       <section className="card"><h2 className="text-lg font-black">My request history</h2><p className="mb-4 text-sm text-slate-500">Status changes and generated documents remain available here.</p>
-        {requests.length === 0 ? <p className="rounded-2xl bg-slate-50 p-8 text-center text-sm text-slate-500">You have not submitted a document request yet.</p> : <div className="space-y-3">{requests.map((item) => { const subject = snapshotRecord(item.subjectSnapshot); const access = resolveDocumentDownloadAccess({ request: item, currentOutstandingBalance: unpaidBalance }); const downloadable = Boolean(item.generatedContent && access.downloadAllowed); const platformCertificate = item.definition?.code === CERTIFICATE_OF_RESIDENCY_CODE; const currentVersion = item.versions[0]; const exactReleasedVersion = platformCertificate && currentVersion?.issuedStatus === "RELEASED" && !currentVersion.revokedAt; return <article key={item.id} className="rounded-2xl border border-slate-100 bg-slate-50 p-4"><div className="flex flex-col justify-between gap-2 sm:flex-row"><div><p className="font-black">{item.definition?.displayName || item.configuration?.displayName || documentTypeLabel(item.type)}</p><p className="text-xs text-slate-500">{item.origin === "ADMIN" ? "Created by HOA office" : `Requested ${shortDate(item.requestedAt)}`}{item.documentNumber ? ` | ${item.documentNumber}` : ""}{item.generatedAt ? ` | Generated ${shortDate(item.generatedAt)}` : ""}</p></div><span className={`badge ${isReadyForDownload(item.status) ? "badge-paid" : item.status === "REJECTED" || currentVersion?.issuedStatus === "REVOKED" ? "badge-overdue" : "badge-info"}`}>{currentVersion?.issuedStatus === "REVOKED" ? "REVOKED" : item.status.replaceAll("_", " ")}</span></div><p className="mt-2 text-sm text-slate-600">{item.purpose}</p><p className="mt-1 text-xs font-bold text-slate-500">Subject: {String(subject.fullName || "Registered homeowner")}{subject.relationship ? ` (${String(subject.relationship)})` : ""} | Fee: {money(Number(item.feeAmountSnapshot))}</p>{(item.adminRemarks || item.remarks) && <p className="mt-2 rounded-xl bg-white p-2 text-xs"><b>Remarks:</b> {item.adminRemarks || item.remarks}</p>}{item.status === "RETURNED_FOR_CORRECTION" && platformCertificate && <form action={resubmitCertificateAction} className="mt-3 space-y-3 rounded-xl border border-amber-200 bg-amber-50 p-3"><input type="hidden" name="id" value={item.id} /><label><span className="label">Corrected purpose</span><textarea className="field min-h-24" name="purpose" defaultValue={item.purpose || ""} maxLength={500} required /></label><label><span className="label">Additional remarks</span><textarea className="field min-h-20" name="remarks" defaultValue={item.remarks || ""} maxLength={1000} /></label><button className="btn-primary w-full sm:w-auto">Resubmit for review</button></form>}{access.message && <p className="mt-2 rounded-xl bg-amber-100 p-2 text-xs font-bold text-amber-900">{access.message}</p>}{item.generatedContent && <div className="mt-3 flex flex-wrap gap-2"><Link className="btn-secondary min-h-9 px-3 py-1.5 text-xs" href={`/documents/${item.id}`}>View details</Link>{downloadable && exactReleasedVersion ? <><a className="btn-primary min-h-9 px-3 py-1.5 text-xs" href={`/documents/${item.id}/download`}>Download certificate</a><a className="btn-secondary min-h-9 px-3 py-1.5 text-xs" href={`/documents/${item.id}/download?print=1`} target="_blank" rel="noreferrer">Print</a></> : downloadable ? <><a className="btn-primary min-h-9 px-3 py-1.5 text-xs" href={`/documents/${item.id}/pdf`}>Download PDF</a><Link className="btn-secondary min-h-9 px-3 py-1.5 text-xs" href={`/documents/${item.id}/print`}>Print</Link></> : <span className="rounded-xl bg-amber-100 px-3 py-2 text-xs font-bold text-amber-900">Download locked</span>}</div>}<details className="mt-3 rounded-xl bg-white p-3 text-xs"><summary className="cursor-pointer font-bold">Status history ({item.histories.length})</summary><div className="mt-2 space-y-1">{item.histories.map((history) => <p key={history.id}><b>{history.status.replaceAll("_", " ")}</b> - {shortDate(history.createdAt)}{history.note ? `: ${history.note}` : ""}</p>)}</div></details></article>; })}</div>}
+        {requests.length === 0 ? <p className="rounded-2xl bg-slate-50 p-8 text-center text-sm text-slate-500">You have not submitted a document request yet.</p> : <div className="space-y-3">{requests.map((item) => { const subject = snapshotRecord(item.subjectSnapshot); const access = resolveDocumentDownloadAccess({ request: item, currentOutstandingBalance: unpaidBalance }); const downloadable = Boolean(item.generatedContent && access.downloadAllowed); const platformCertificate = item.definition?.code === CERTIFICATE_OF_RESIDENCY_CODE; const currentVersion = item.versions[0]; const exactReleasedVersion = platformCertificate && currentVersion?.issuedStatus === "RELEASED" && !currentVersion.revokedAt; const paymentStatusLabel = documentFeePaymentStatusLabel(item); const requestReference = documentRequestPublicReference(item); return <article key={item.id} className="rounded-2xl border border-slate-100 bg-slate-50 p-4"><div className="flex flex-col justify-between gap-2 sm:flex-row"><div><p className="font-black">{item.definition?.displayName || item.configuration?.displayName || documentTypeLabel(item.type)}</p><p className="text-xs text-slate-500">{item.origin === "ADMIN" ? "Created by HOA office" : `Requested ${shortDate(item.requestedAt)}`}{item.documentNumber ? ` | ${item.documentNumber}` : ` | ${requestReference}`}{item.generatedAt ? ` | Generated ${shortDate(item.generatedAt)}` : ""}</p></div><span className={`badge ${isReadyForDownload(item.status) ? "badge-paid" : item.status === "REJECTED" || currentVersion?.issuedStatus === "REVOKED" ? "badge-overdue" : "badge-info"}`}>{currentVersion?.issuedStatus === "REVOKED" ? "REVOKED" : item.status.replaceAll("_", " ")}</span></div><p className="mt-2 text-sm text-slate-600">{item.purpose}</p><p className="mt-1 text-xs font-bold text-slate-500">Subject: {String(subject.fullName || "Registered homeowner")}{subject.relationship ? ` (${String(subject.relationship)})` : ""} | Fee: {money(Number(item.feeAmountSnapshot))}</p>{(item.adminRemarks || item.remarks) && <p className="mt-2 rounded-xl bg-white p-2 text-xs"><b>Remarks:</b> {item.adminRemarks || item.remarks}</p>}{item.status === "RETURNED_FOR_CORRECTION" && platformCertificate && <form action={resubmitCertificateAction} className="mt-3 space-y-3 rounded-xl border border-amber-200 bg-amber-50 p-3"><input type="hidden" name="id" value={item.id} /><label><span className="label">Corrected purpose</span><textarea className="field min-h-24" name="purpose" defaultValue={item.purpose || ""} maxLength={500} required /></label><label><span className="label">Additional remarks</span><textarea className="field min-h-20" name="remarks" defaultValue={item.remarks || ""} maxLength={1000} /></label><button className="btn-primary w-full sm:w-auto">Resubmit for review</button></form>}{access.message && <p className="mt-2 rounded-xl bg-amber-100 p-2 text-xs font-bold text-amber-900">{access.paymentLocked ? `Payment of ${money(Number(item.feeAmountSnapshot))} is required before this document can be generated and downloaded.` : access.message}</p>}<DocumentFeePaymentPanel item={item} paymentStatusLabel={paymentStatusLabel} requestReference={requestReference} />{item.generatedContent && <div className="mt-3 flex flex-wrap gap-2"><Link className="btn-secondary min-h-9 px-3 py-1.5 text-xs" href={`/documents/${item.id}`}>View details</Link>{downloadable && exactReleasedVersion ? <><a className="btn-primary min-h-9 px-3 py-1.5 text-xs" href={`/documents/${item.id}/download`}>Download certificate</a><a className="btn-secondary min-h-9 px-3 py-1.5 text-xs" href={`/documents/${item.id}/download?print=1`} target="_blank" rel="noreferrer">Print</a></> : downloadable ? <><a className="btn-primary min-h-9 px-3 py-1.5 text-xs" href={`/documents/${item.id}/pdf`}>Download PDF</a><Link className="btn-secondary min-h-9 px-3 py-1.5 text-xs" href={`/documents/${item.id}/print`}>Print</Link></> : <span className="rounded-xl bg-amber-100 px-3 py-2 text-xs font-bold text-amber-900">Download locked</span>}</div>}<details className="mt-3 rounded-xl bg-white p-3 text-xs"><summary className="cursor-pointer font-bold">Status history ({item.histories.length})</summary><div className="mt-2 space-y-1">{item.histories.map((history) => <p key={history.id}><b>{history.status.replaceAll("_", " ")}</b> - {shortDate(history.createdAt)}{history.note ? `: ${history.note}` : ""}</p>)}</div></details></article>; })}</div>}
         {requestCount > 10 && <div className="mt-4 flex items-center justify-between text-sm"><Link className={`btn-secondary ${page <= 1 ? "pointer-events-none opacity-50" : ""}`} href={`?page=${page - 1}`}>Previous</Link><span>Page {page} of {Math.ceil(requestCount / 10)}</span><Link className={`btn-secondary ${page >= Math.ceil(requestCount / 10) ? "pointer-events-none opacity-50" : ""}`} href={`?page=${page + 1}`}>Next</Link></div>}
       </section>
     </div>
@@ -79,4 +80,61 @@ export default async function PortalDocumentsPage({ searchParams }: { searchPara
 
 function snapshotRecord(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
+}
+
+type DocumentFeePanelItem = {
+  id: string;
+  status: string;
+  documentNumber?: string | null;
+  requestedAt?: Date | null;
+  paymentRequiredSnapshot: boolean;
+  feeAmountSnapshot: unknown;
+  definition?: { displayName: string } | null;
+  configuration?: { displayName: string } | null;
+  type?: unknown;
+  paymentRequest?: {
+    id: string;
+    status: string;
+    referenceNumber?: string | null;
+    proofImageUrl?: string | null;
+    paymentDate?: Date | null;
+    reviewedAt?: Date | null;
+    reviewRemarks?: string | null;
+    collectionId?: string | null;
+    collection?: { id: string; receiptNumber?: string | null; collectionDate?: Date | null } | null;
+  } | null;
+};
+
+function DocumentFeePaymentPanel({ item, paymentStatusLabel, requestReference }: { item: DocumentFeePanelItem; paymentStatusLabel: string; requestReference: string }) {
+  if (!item.paymentRequiredSnapshot || Number(item.feeAmountSnapshot) <= 0) return null;
+  const payment = item.paymentRequest;
+  const receiptId = payment?.collectionId || payment?.collection?.id;
+  return <section className="mt-3 rounded-2xl border border-pine-100 bg-white p-3 text-xs">
+    <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-start">
+      <div>
+        <h3 className="text-sm font-black text-pine-950">Document fee payment</h3>
+        <p className="mt-1 font-semibold text-slate-600">Payment of {money(Number(item.feeAmountSnapshot))} is required before this document can be generated and downloaded.</p>
+      </div>
+      <span className="badge badge-info w-fit">{paymentStatusLabel}</span>
+    </div>
+    <dl className="mt-3 grid gap-2 sm:grid-cols-2">
+      <PaymentInfo label="Document Type" value={item.definition?.displayName || item.configuration?.displayName || (item.type ? documentTypeLabel(item.type as never) : "Official HOA document")} />
+      <PaymentInfo label="Request Number" value={requestReference} />
+      <PaymentInfo label="Document Fee" value={money(Number(item.feeAmountSnapshot))} />
+      <PaymentInfo label="Payment Status" value={paymentStatusLabel} />
+      <PaymentInfo label="Receipt Type" value="Other Collection receipt" />
+      <PaymentInfo label="Payment Reference" value={payment?.referenceNumber || "Not submitted"} />
+      <PaymentInfo label="Payment Date" value={payment?.paymentDate ? shortDate(payment.paymentDate) : "Not submitted"} />
+      <PaymentInfo label="Confirmation Date" value={payment?.reviewedAt ? shortDate(payment.reviewedAt) : "Pending verification"} />
+      <PaymentInfo label="Receipt Number" value={payment?.collection?.receiptNumber || "Available after confirmation"} />
+    </dl>
+    {payment?.status === "REJECTED" && <p className="mt-3 rounded-xl bg-rose-50 p-3 font-bold text-rose-700">Payment rejected{payment.reviewRemarks ? `: ${payment.reviewRemarks}` : "."}</p>}
+    {payment?.status === "PENDING_REVIEW" && (payment.referenceNumber || payment.proofImageUrl) && <p className="mt-3 rounded-xl bg-blue-50 p-3 font-bold text-blue-800">Payment submitted and waiting for HOA verification. Download remains locked until confirmation.</p>}
+    {payment?.status === "APPROVED" && <div className="mt-3 flex flex-wrap items-center gap-2 rounded-xl bg-emerald-50 p-3 font-bold text-emerald-800"><span>Payment confirmed. Document processing will continue automatically.</span>{receiptId && <Link className="btn-secondary min-h-8 px-3 py-1 text-xs" href={`/receipts/collection/${receiptId}`} target="_blank">View Receipt</Link>}</div>}
+    {canSubmitDocumentFeePayment(item) && <Link className="btn-primary mt-3 w-full sm:w-auto" href={`/portal/pay?documentRequestId=${item.id}`}>Pay Document Fee</Link>}
+  </section>;
+}
+
+function PaymentInfo({ label, value }: { label: string; value: string }) {
+  return <div className="rounded-xl bg-slate-50 p-2"><dt className="font-bold uppercase tracking-wide text-slate-500">{label}</dt><dd className="mt-0.5 font-black text-slate-800">{value}</dd></div>;
 }

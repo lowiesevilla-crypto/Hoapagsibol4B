@@ -178,7 +178,8 @@ export const paymentVoidSchema = z.object({
 });
 
 export const paymentRequestSchema = z.object({
-  transactionType: z.enum(["MONTHLY_DUES", "GATE_PASS", "STICKER", "MEMBERSHIP", "CONSTRUCTION_BOND", "OTHER"]),
+  transactionType: z.enum(["MONTHLY_DUES", "GATE_PASS", "STICKER", "MEMBERSHIP", "CONSTRUCTION_BOND", "OTHER", "DOCUMENT_FEE"]),
+  documentRequestId: z.string().trim().optional(),
   collectionType: z.enum(["GATE_PASS", "STICKER", "MEMBERSHIP", "CONSTRUCTION_BOND", "OTHER"]).optional(),
   description: z.string().trim().max(150).optional(),
   amount: currency.optional(),

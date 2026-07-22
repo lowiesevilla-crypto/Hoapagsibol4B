@@ -65,7 +65,7 @@ export async function getPaymentRequestsData(admin: AdminActor, query: PaymentQu
   const [paymentRequests, requestCount, homeowners] = await Promise.all([
     prisma.paymentRequest.findMany({
       where,
-      include: { homeowner: { include: { user: true } }, bill: true, payment: true, collection: true },
+      include: { homeowner: { include: { user: true } }, bill: true, payment: true, collection: true, documentRequest: { include: { definition: true, configuration: true } } },
       orderBy: [{ status: "asc" }, { createdAt: "desc" }],
       skip: (requestPage - 1) * paymentPageSize,
       take: paymentPageSize,
@@ -167,7 +167,7 @@ function buildPaymentRequestWhere(tenantId: string, query: PaymentQuery, q: stri
     ...(query.paymentType ? { type: query.paymentType as never } : {}),
     ...(query.collectionType ? { collectionType: query.collectionType as never } : {}),
     ...(Object.keys(range).length ? { createdAt: range } : {}),
-    ...(q ? { OR: [{ id: { contains: q } }, { referenceNumber: { contains: q } }, { bill: { resolutionReference: { contains: q } } }, ...homeownerSearch(q)] } : {}),
+    ...(q ? { OR: [{ id: { contains: q } }, { referenceNumber: { contains: q } }, { documentRequestId: { contains: q } }, { documentRequest: { documentNumber: { contains: q } } }, { documentRequest: { definition: { displayName: { contains: q } } } }, { bill: { resolutionReference: { contains: q } } }, ...homeownerSearch(q)] } : {}),
   };
 }
 

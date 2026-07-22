@@ -9,18 +9,22 @@ import { SubmitButton } from "@/components/ui";
 import { approvePaymentRequestAction, rejectPaymentRequestAction } from "@/lib/actions/payment-requests";
 import { requireUser } from "@/lib/auth";
 import { prisma } from "@/lib/db";
+import { documentRequestPublicReference } from "@/lib/services/document-fee-payments";
+import { documentTypeLabel } from "@/lib/services/documents";
 import { collectionLabel, money, monthLabel, shortDate } from "@/lib/utils";
 
 export default async function PaymentRequestDetailsPage({ params }: { params: Promise<{ id: string }> }) {
-  await requireUser(Role.ADMIN);
+  const admin = await requireUser(Role.ADMIN);
   const { id } = await params;
-  const request = await prisma.paymentRequest.findUnique({
-    where: { id },
-    include: { homeowner: { include: { user: true } }, bill: true, payment: true, collection: true },
+  const request = await prisma.paymentRequest.findFirst({
+    where: { id, tenantId: admin.tenantId },
+    include: { homeowner: { include: { user: true } }, bill: true, payment: true, collection: true, documentRequest: { include: { definition: true, configuration: true } } },
   });
   if (!request) notFound();
   const purpose = request.type === PaymentRequestType.MONTHLY_DUES
     ? `Monthly dues - ${request.bill ? monthLabel(request.bill.billingMonth) : "Billing"}`
+    : request.type === PaymentRequestType.DOCUMENT_FEE
+      ? `Document Request Fee - ${request.documentRequest?.definition?.displayName || request.documentRequest?.configuration?.displayName || (request.documentRequest?.type ? documentTypeLabel(request.documentRequest.type) : "Official HOA document")}`
     : collectionLabel(String(request.collectionType), request.description);
 
   return <>
@@ -38,9 +42,12 @@ export default async function PaymentRequestDetailsPage({ params }: { params: Pr
           <Info label="Payment date" value={shortDate(request.paymentDate)} />
           <Info label="Submitted" value={shortDate(request.createdAt)} />
           <Info label="Status" value={request.status.replaceAll("_", " ")} />
+          {request.documentRequest && <Info label="Document request" value={documentRequestPublicReference(request.documentRequest)} />}
+          {request.documentRequest && <Info label="Document status" value={request.documentRequest.status.replaceAll("_", " ")} />}
           {request.payerNotes && <Info label="Homeowner notes" value={request.payerNotes} />}
           {request.reviewRemarks && <Info label="Review remarks" value={request.reviewRemarks} />}
         </div>
+        {request.documentRequest && <div className="mt-5 flex flex-wrap gap-2 border-t border-slate-100 pt-5"><Link className="btn-secondary" href={`/admin/documents/${request.documentRequest.id}`}>Open document request</Link>{request.collectionId && <Link className="btn-secondary" href={`/receipts/collection/${request.collectionId}`} target="_blank">Open receipt</Link>}</div>}
         {request.status === "PENDING_REVIEW" ? <div className="mt-5 grid gap-3 border-t border-slate-100 pt-5">
           <form action={approvePaymentRequestAction} className="space-y-2">
             <input type="hidden" name="id" value={request.id} />

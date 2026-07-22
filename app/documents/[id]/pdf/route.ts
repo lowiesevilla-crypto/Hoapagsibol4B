@@ -58,15 +58,14 @@ function drawPassSheet(page: PDFPage, input: DrawInput) {
   page.drawImage(qr, { x: 518, y: 754, width: 48, height: 48 });
   page.drawText("SCAN TO VERIFY", { x: 513, y: 744, font: bold, size: 5.5, color: navy });
   const bands = [
-    { label: "MARSHAL'S COPY", color: rgb(.18, .55, .12), note: "Present to the marshal at the gate." },
-    { label: "HOMEOWNER'S COPY", color: rgb(.04, .35, .72), note: "Please keep this copy." },
-    { label: "HOA OFFICE COPY", color: rgb(.94, .33, .02), note: "Retain for record and reference." },
+    { label: "HOA OFFICE COPY", color: rgb(.18, .55, .12), note: "Retain for HOA office records." },
+    { label: "HOMEOWNER COPY", color: rgb(.04, .35, .72), note: "Please keep this copy." },
   ];
   bands.forEach((band, index) => {
-    const top = 724 - index * 219;
-    const bottom = top - 202;
-    page.drawRectangle({ x: 22, y: bottom, width: 551, height: 202, borderColor: band.color, borderWidth: 1 });
-    page.drawRectangle({ x: 22, y: bottom, width: 82, height: 202, color: band.color });
+    const top = 724 - index * 318;
+    const bottom = top - 292;
+    page.drawRectangle({ x: 22, y: bottom, width: 551, height: 292, borderColor: band.color, borderWidth: 1 });
+    page.drawRectangle({ x: 22, y: bottom, width: 82, height: 292, color: band.color });
     drawCenteredWithin(page, String(index + 1), bold, 24, 22, 104, top - 42, rgb(1, 1, 1));
     const labelLines = band.label === "HOA OFFICE COPY" ? ["HOA OFFICE", "COPY"] : [band.label.replace(" COPY", ""), "COPY"];
     drawCenteredWithin(page, labelLines[0], bold, 7.5, 25, 101, top - 67, rgb(1, 1, 1));
@@ -80,7 +79,7 @@ function drawPassSheet(page: PDFPage, input: DrawInput) {
     page.drawText(safeText(officerName(request.processedOfficerSnapshot, request.processedByOfficer?.fullName || request.processedBy?.name)), { x: 116, y: bottom + 21, font: bold, size: 7, color: navy, maxWidth: 125 });
     page.drawText("APPROVED BY", { x: 250, y: bottom + 34, font: bold, size: 5.5, color: navy });
     page.drawText(safeText(officerName(request.approvedOfficerSnapshot, request.approvedByOfficer?.fullName || request.approvedBy?.name)), { x: 250, y: bottom + 21, font: bold, size: 7, color: navy, maxWidth: 125 });
-    page.drawText(index === 2 ? "RECEIVED BY (HOA OFFICE)" : "CONFIRMED BY (MARSHAL)", { x: 381, y: bottom + 34, font: bold, size: 5.5, color: navy });
+    page.drawText(index === 0 ? "RECEIVED BY (HOA OFFICE)" : "CONFIRMED BY (HOMEOWNER)", { x: 381, y: bottom + 34, font: bold, size: 5.5, color: navy });
     page.drawLine({ start: { x: 381, y: bottom + 17 }, end: { x: 476, y: bottom + 17 }, color: rgb(.2, .2, .2), thickness: .6 });
     page.drawImage(qr, { x: 500, y: bottom + 104, width: 57, height: 57 });
     drawCenteredWithin(page, request.documentNumber!, bold, 6.5, 487, 570, bottom + 86, navy);

@@ -18,14 +18,14 @@ export default async function AdminDocumentRequestPage({ params, searchParams }:
   const { id } = await params;
   const query = await searchParams;
   const [request, officers] = await Promise.all([
-    prisma.documentRequest.findFirst({ where: { id, tenantId: user.tenantId }, include: { homeowner: { include: { user: true } }, configuration: true, definition: { include: { signatoryOfficer: true, assignedTemplateVersion: { include: { templateSet: true } }, workflowDefinition: { include: { steps: { orderBy: { stepOrder: "asc" } } } }, policyAssignments: { where: { enabled: true }, include: { policy: true }, orderBy: { evaluationOrder: "asc" } } } }, initiatedBy: true, processedBy: true, approvedBy: true, processedByOfficer: true, approvedByOfficer: true, downloadOverrideBy: true, archivedBy: true, versions: { include: { generatedBy: true }, orderBy: { version: "desc" } }, histories: { include: { actor: true }, orderBy: { createdAt: "asc" } }, editAudits: { include: { actor: true }, orderBy: { createdAt: "desc" } } } }),
+    prisma.documentRequest.findFirst({ where: { id, tenantId: user.tenantId }, include: { homeowner: { include: { user: true } }, configuration: true, definition: { include: { signatoryOfficer: true, assignedTemplateVersion: { include: { templateSet: true } }, workflowDefinition: { include: { steps: { orderBy: { stepOrder: "asc" } } } }, policyAssignments: { where: { enabled: true }, include: { policy: true }, orderBy: { evaluationOrder: "asc" } } } }, paymentRequest: true, initiatedBy: true, processedBy: true, approvedBy: true, processedByOfficer: true, approvedByOfficer: true, downloadOverrideBy: true, archivedBy: true, versions: { include: { generatedBy: true }, orderBy: { version: "desc" } }, histories: { include: { actor: true }, orderBy: { createdAt: "asc" } }, editAudits: { include: { actor: true }, orderBy: { createdAt: "desc" } } } }),
     getActiveOrganizationOfficers(user.tenantId),
   ]);
   if (!request) notFound();
   const unpaid = await prisma.bill.aggregate({ where: { tenantId: user.tenantId, homeownerId: request.homeownerId, archivedAt: null, balance: { gt: 0 } }, _sum: { balance: true } });
   const currentBalance = Number(unpaid._sum.balance ?? 0);
   const access = resolveDocumentDownloadAccess({ request, currentOutstandingBalance: currentBalance });
-  const pending = request.status === "SUBMITTED" || request.status === "PENDING_APPROVAL" || request.status === "UNDER_REVIEW";
+  const pending = request.status === "SUBMITTED" || request.status === "PAYMENT_CONFIRMED" || request.status === "PENDING_APPROVAL" || request.status === "UNDER_REVIEW";
   const generated = Boolean(request.generatedContent && request.documentNumber);
   const editable = !request.archivedAt && (pending || generated);
   const pass = isPassDocument(request.type);

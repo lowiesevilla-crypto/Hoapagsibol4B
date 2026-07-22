@@ -96,16 +96,16 @@ export function configuredDocumentSummary(config: Pick<DocumentTypeConfiguration
 
 export function statusForConfiguration(config: Pick<DocumentTypeConfiguration, "deliveryMode" | "approvalRequired" | "paymentRequired" | "requiresAdminReview" | "allowImmediateDownload">) {
   if (config.paymentRequired || config.deliveryMode === DocumentDeliveryMode.PAYMENT_REQUIRED || config.deliveryMode === DocumentDeliveryMode.PAYMENT_AND_APPROVAL_REQUIRED) {
-    return DocumentRequestStatus.PAYMENT_PENDING;
+    return DocumentRequestStatus.PENDING_PAYMENT;
   }
   if (config.deliveryMode === DocumentDeliveryMode.REQUEST_ONLY) return DocumentRequestStatus.SUBMITTED;
   if (config.approvalRequired || config.requiresAdminReview || config.deliveryMode === DocumentDeliveryMode.APPROVAL_REQUIRED) return DocumentRequestStatus.PENDING_APPROVAL;
-  if (config.deliveryMode === DocumentDeliveryMode.INSTANT_DOWNLOAD && config.allowImmediateDownload) return DocumentRequestStatus.READY_FOR_DOWNLOAD;
+  if (config.deliveryMode === DocumentDeliveryMode.INSTANT_DOWNLOAD && config.allowImmediateDownload) return DocumentRequestStatus.SUBMITTED;
   return DocumentRequestStatus.SUBMITTED;
 }
 
 export function isReadyForDownload(status: DocumentRequestStatus | string) {
-  return status === DocumentRequestStatus.READY_FOR_DOWNLOAD || status === DocumentRequestStatus.GENERATED || status === DocumentRequestStatus.DOWNLOADED;
+  return status === DocumentRequestStatus.ISSUED || status === DocumentRequestStatus.READY_FOR_DOWNLOAD || status === DocumentRequestStatus.GENERATED || status === DocumentRequestStatus.DOWNLOADED;
 }
 
 export function legacyRequestFields(values: Record<string, string | boolean>) {

@@ -1,6 +1,7 @@
 import {
   DocumentOutstandingBalancePolicy,
   DocumentRequestStatus,
+  PaymentRequestStatus,
   Role,
   type Prisma,
 } from "@prisma/client";
@@ -57,6 +58,7 @@ export type DocumentAccessPolicyRequest = {
   allowDownloadDespiteBalance: boolean;
   definition?: { outstandingBalancePolicy: DocumentOutstandingBalancePolicy } | null;
   definitionSnapshot?: unknown;
+  paymentRequest?: { status: PaymentRequestStatus | string } | null;
 };
 
 export function policyForDocumentRequest(request: { definition?: { outstandingBalancePolicy: DocumentOutstandingBalancePolicy } | null; definitionSnapshot?: unknown }) {
@@ -68,7 +70,7 @@ export function policyForDocumentRequest(request: { definition?: { outstandingBa
 }
 
 export function isDocumentReadyForDownload(status: DocumentRequestStatus | string) {
-  return status === DocumentRequestStatus.READY_FOR_DOWNLOAD || status === DocumentRequestStatus.GENERATED || status === DocumentRequestStatus.DOWNLOADED;
+  return status === DocumentRequestStatus.ISSUED || status === DocumentRequestStatus.READY_FOR_DOWNLOAD || status === DocumentRequestStatus.GENERATED || status === DocumentRequestStatus.DOWNLOADED;
 }
 
 export function resolveDocumentDownloadAccess(input: {
@@ -77,7 +79,7 @@ export function resolveDocumentDownloadAccess(input: {
 }) {
   const { request, currentOutstandingBalance } = input;
   const policy = policyForDocumentRequest(request);
-  const paymentLocked = request.paymentRequiredSnapshot;
+  const paymentLocked = request.paymentRequiredSnapshot && request.paymentRequest?.status !== PaymentRequestStatus.APPROVED;
   const hasBalance = currentOutstandingBalance > 0.009;
   const balanceLocked = hasBalance && (
     policy === DocumentOutstandingBalancePolicy.BLOCK_DOWNLOAD ||

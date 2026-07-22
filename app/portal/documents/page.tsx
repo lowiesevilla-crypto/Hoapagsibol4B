@@ -21,7 +21,7 @@ export default async function PortalDocumentsPage({ searchParams }: { searchPara
   const page = Math.max(1, Number(query.page) || 1);
   const where = { tenantId: user.tenantId, homeownerId, archivedAt: null, ...(query.status ? { status: query.status as never } : {}), ...(query.type ? { type: query.type as never } : {}), ...(query.date && /^\d{4}-\d{2}-\d{2}$/.test(query.date) ? { requestedAt: { gte: new Date(`${query.date}T00:00:00.000Z`), lt: new Date(`${query.date}T23:59:59.999Z`) } } : {}) };
   const [requests, requestCount, unpaid, paymentSettings, configs, members] = await Promise.all([
-    prisma.documentRequest.findMany({ where, include: { histories: { include: { actor: true }, orderBy: { createdAt: "desc" } }, configuration: true, definition: true, versions: { orderBy: { version: "desc" }, take: 1 } }, orderBy: { requestedAt: "desc" }, skip: (page - 1) * 10, take: 10 }),
+    prisma.documentRequest.findMany({ where, include: { histories: { include: { actor: true }, orderBy: { createdAt: "desc" } }, configuration: true, definition: true, paymentRequest: true, versions: { orderBy: { version: "desc" }, take: 1 } }, orderBy: { requestedAt: "desc" }, skip: (page - 1) * 10, take: 10 }),
     prisma.documentRequest.count({ where }),
     prisma.bill.aggregate({ where: { tenantId: user.tenantId, homeownerId, archivedAt: null, balance: { gt: 0 } }, _sum: { balance: true } }),
     getPaymentSettings(user.tenantId),

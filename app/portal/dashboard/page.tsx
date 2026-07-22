@@ -25,7 +25,7 @@ export default async function PortalDashboard() {
     prisma.collection.aggregate({ _sum: { amount: true, amountRefunded: true, amountForfeited: true }, where: { tenantId: profile.tenantId, homeownerId: profile.id, refundable: true } }),
     prisma.announcement.findFirst({ where: { tenantId: profile.tenantId, status: "PUBLISHED" }, orderBy: { createdAt: "desc" } }),
     prisma.event.findFirst({ where: { tenantId: profile.tenantId, status: "PUBLISHED", eventDate: { gte: today } }, orderBy: { eventDate: "asc" } }),
-    prisma.documentRequest.findFirst({ where: { tenantId: profile.tenantId, homeownerId: profile.id, archivedAt: null, status: { in: ["SUBMITTED", "UNDER_REVIEW", "APPROVED", "GENERATED"] } }, include: { definition: true, configuration: true }, orderBy: { requestedAt: "desc" } }),
+    prisma.documentRequest.findFirst({ where: { tenantId: profile.tenantId, homeownerId: profile.id, archivedAt: null, status: { in: ["SUBMITTED", "PENDING_PAYMENT", "PAYMENT_CONFIRMED", "PENDING_APPROVAL", "UNDER_REVIEW", "APPROVED", "GENERATING", "ISSUED", "GENERATED"] } }, include: { definition: true, configuration: true }, orderBy: { requestedAt: "desc" } }),
     prisma.paymentRequest.findFirst({ where: { tenantId: profile.tenantId, homeownerId: profile.id, status: "PENDING_REVIEW" }, orderBy: { createdAt: "desc" } }),
     getEnabledTenantModules(profile.tenantId),
   ]);

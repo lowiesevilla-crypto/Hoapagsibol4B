@@ -37,11 +37,12 @@ export async function persistPreparedDocumentVerificationToken(context: Document
 export async function verifyDocumentToken(rawToken: string) {
   if (!rawToken || rawToken.length < 32) return invalidVerificationResult();
   const tokenHash = hashVerificationToken(rawToken);
-  const token = await platformPrisma.documentVerificationToken.findUnique({ where: { tokenHash }, include: { tenant: { select: { name: true } }, request: { select: { documentNumber: true, status: true, definition: { select: { displayName: true } }, type: true, issueDate: true, validityDate: true } }, documentVersion: { select: { documentNumber: true, issuedStatus: true, issuedAt: true, revokedAt: true, definition: { select: { displayName: true } } } } } });
+  const token = await platformPrisma.documentVerificationToken.findUnique({ where: { tokenHash }, include: { tenant: { select: { name: true } }, request: { select: { documentNumber: true, status: true, definition: { select: { displayName: true } }, type: true, issueDate: true, validityDate: true } }, documentVersion: { select: { id: true, tenantId: true, documentNumber: true, issuedStatus: true, issuedAt: true, revokedAt: true, definition: { select: { displayName: true } } } } } });
   if (!token) return invalidVerificationResult();
   const expired = token.expiresAt ? token.expiresAt.getTime() <= Date.now() : false;
   const revoked = token.status === DocumentVerificationStatus.REVOKED || Boolean(token.revokedAt) || token.documentVersion?.issuedStatus === DocumentIssuedStatus.REVOKED || Boolean(token.documentVersion?.revokedAt);
-  const status = revoked ? "REVOKED" : expired ? "EXPIRED" : "VALID";
+  const superseded = token.documentVersion ? await platformPrisma.documentVersion.count({ where: { tenantId: token.documentVersion.tenantId, reissueOfId: token.documentVersion.id } }) : 0;
+  const status = revoked ? "REVOKED" : expired ? "EXPIRED" : superseded > 0 ? "SUPERSEDED" : "VALID";
   await platformPrisma.documentVerificationToken.update({ where: { id: token.id }, data: { verificationCount: { increment: 1 }, lastVerifiedAt: new Date() } });
   await platformPrisma.auditLog.create({ data: { tenantId: token.tenantId, module: "DOCUMENTS", action: "VERIFY_DOCUMENT_TOKEN", entityType: "DocumentVerificationToken", entityId: token.id, metadata: { result: status } as Prisma.InputJsonValue } });
   const version = token.documentVersion;
@@ -111,5 +112,5 @@ export function verificationUrl(rawToken: string, baseUrl = process.env.NEXT_PUB
 }
 
 function invalidVerificationResult() {
-  return { status: "INVALID" as const, tenantName: null, documentNumber: null, documentType: null, issueDate: null, validUntil: null };
+  return { status: "NOT_FOUND" as const, tenantName: null, documentNumber: null, documentType: null, issueDate: null, validUntil: null };
 }

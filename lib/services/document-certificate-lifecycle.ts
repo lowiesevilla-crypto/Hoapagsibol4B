@@ -16,6 +16,7 @@ import { releaseIssuedDocument, revokeIssuedDocument } from "@/lib/services/docu
 import { requireDocumentPermission, type DocumentExecutionContext } from "@/lib/services/document-runtime-context";
 import { writeDocumentAudit } from "@/lib/services/document-runtime-audit";
 import { getWorkflowState } from "@/lib/services/document-workflows";
+import { executeDocumentWorkflowAfterSubmission } from "@/lib/services/document-workflow-executor";
 
 export async function returnCertificateRequestForCorrection(context: DocumentExecutionContext, requestId: string, remarks: string) {
   requireDocumentPermission(context, "APPROVE_REQUESTS");
@@ -65,7 +66,10 @@ export async function approveCertificateRequest(context: DocumentExecutionContex
   if (!stepId) throw new Error("No workflow approval step is currently actionable.");
   const result = await approveDocumentRequestStep(context, { requestId: request.id, stepId, remarks });
   const updated = await platformPrisma.documentRequest.findFirst({ where: { id: request.id, tenantId: context.tenantId }, select: { status: true } });
-  if (updated?.status === DocumentRequestStatus.APPROVED) await notifyDocumentOwner(context, request.homeowner.userId, "APPROVED", "Document request approved", "Your Certificate of Residency request was approved and is ready for issuance.", request.id, undefined, `APPROVED:DocumentRequest:${request.id}`);
+  if (updated?.status === DocumentRequestStatus.APPROVED) {
+    await notifyDocumentOwner(context, request.homeowner.userId, "APPROVED", "Document request approved", "Your Certificate of Residency request was approved and is ready for issuance.", request.id, undefined, `APPROVED:DocumentRequest:${request.id}`);
+    return executeDocumentWorkflowAfterSubmission(context, request.id);
+  }
   return result;
 }
 

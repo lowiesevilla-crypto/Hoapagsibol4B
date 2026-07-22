@@ -169,7 +169,8 @@ export async function revokeIssuedDocument(
     if (fresh.issuedStatus === DocumentIssuedStatus.REVOKED) return tx.documentVersion.findUniqueOrThrow({ where: { id: fresh.id } });
     const updated = await tx.documentVersion.update({ where: { id: fresh.id }, data: { issuedStatus: DocumentIssuedStatus.REVOKED, revokedAt, revokedById: context.authenticatedUserId, revocationReason: reason } });
     await tx.documentVerificationToken.updateMany({ where: { tenantId: context.tenantId, documentVersionId: fresh.id, status: "VALID" }, data: { status: "REVOKED", revokedAt, revokedById: context.authenticatedUserId } });
-    await tx.documentRequestHistory.create({ data: { tenantId: context.tenantId, requestId: current.requestId, status: current.request.status, actorId: context.authenticatedUserId, note: `Revoked issued document ${current.documentNumber}.` } });
+    if (current.request.currentVersion === current.version) await tx.documentRequest.update({ where: { id: current.requestId }, data: { status: DocumentRequestStatus.REVOKED } });
+    await tx.documentRequestHistory.create({ data: { tenantId: context.tenantId, requestId: current.requestId, status: current.request.currentVersion === current.version ? DocumentRequestStatus.REVOKED : current.request.status, actorId: context.authenticatedUserId, note: `Revoked issued document ${current.documentNumber}.` } });
     await writeDocumentAudit({ context, action: "REVOKE_ISSUED_DOCUMENT", entityType: "DocumentVersion", entityId: fresh.id, reason, before: { issuedStatus: fresh.issuedStatus }, after: { issuedStatus: DocumentIssuedStatus.REVOKED }, client: tx });
     return updated;
   });

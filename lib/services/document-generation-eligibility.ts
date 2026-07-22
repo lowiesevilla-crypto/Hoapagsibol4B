@@ -27,6 +27,7 @@ export const generationRequestInclude = {
   },
   histories: { orderBy: { createdAt: "asc" } },
   versions: { orderBy: { version: "desc" } },
+  paymentRequest: true,
 } satisfies Prisma.DocumentRequestInclude;
 
 export type GenerationRequestRecord = Prisma.DocumentRequestGetPayload<{ include: typeof generationRequestInclude }>;
@@ -75,7 +76,7 @@ export function validateGenerationEligibility(input: {
   if ((mode === DocumentGenerationMode.ISSUE || mode === DocumentGenerationMode.VALIDATE) && request.versions.length) block("DUPLICATE_ISSUANCE", "ISSUANCE", "This request already has an issued document. Use reissue mode.");
   if (mode === DocumentGenerationMode.REISSUE && !request.versions.length) block("REISSUE_SOURCE_MISSING", "ISSUANCE", "Reissue requires an existing issued document.");
   if (mode === DocumentGenerationMode.REISSUE && !capabilities.supportsReissue) block("REISSUE_UNSUPPORTED", "DEFINITION", "This document definition does not allow reissue.");
-  if (validatesOfficialReadiness && request.paymentRequiredSnapshot) block("DOCUMENT_PAYMENT_PENDING", "REQUEST", "Document fee payment confirmation is required before issuance.", "Complete the approved document-payment integration.");
+  if (validatesOfficialReadiness && request.paymentRequiredSnapshot && !documentPaymentConfirmed(request)) block("DOCUMENT_PAYMENT_PENDING", "REQUEST", "Document fee payment confirmation is required before issuance.", "Approve the linked document fee payment request before issuance.");
   const approvedStatus = approvedRequestStates.has(request.status);
   if (validatesOfficialReadiness && request.approvalRequiredSnapshot && !request.approvedAt && !approvedStatus) block("APPROVAL_INCOMPLETE", "WORKFLOW", "Required approval is incomplete.");
   return issues;
@@ -88,10 +89,17 @@ const blockedRequestStates = new Set<DocumentRequestStatus>([
 
 const approvedRequestStates = new Set<DocumentRequestStatus>([
   DocumentRequestStatus.APPROVED,
+  DocumentRequestStatus.PAYMENT_CONFIRMED,
+  DocumentRequestStatus.GENERATING,
+  DocumentRequestStatus.ISSUED,
   DocumentRequestStatus.READY_FOR_DOWNLOAD,
   DocumentRequestStatus.GENERATED,
   DocumentRequestStatus.DOWNLOADED,
 ]);
+
+function documentPaymentConfirmed(request: GenerationRequestRecord) {
+  return request.paymentRequest?.status === "APPROVED" || approvedRequestStates.has(request.status);
+}
 
 function record(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};

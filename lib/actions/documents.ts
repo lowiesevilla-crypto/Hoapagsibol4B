@@ -3,7 +3,7 @@
 import { randomUUID } from "node:crypto";
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { DocumentDefinitionStatus, DocumentDeliveryMode, DocumentFieldType, DocumentGenerationMode, DocumentOutstandingBalancePolicy, DocumentPlaceholderOwnership, DocumentRequestStatus, DocumentSequenceScope, DocumentSubjectType, DocumentTemplateOwnership, DocumentTemplateVersionStatus, DocumentType, NotificationType, Prisma, Role } from "@prisma/client";
+import { DocumentDefinitionStatus, DocumentDeliveryMode, DocumentFieldType, DocumentOutstandingBalancePolicy, DocumentPlaceholderOwnership, DocumentRequestStatus, DocumentSequenceScope, DocumentSubjectType, DocumentTemplateOwnership, DocumentTemplateVersionStatus, DocumentType, NotificationType, Prisma, Role } from "@prisma/client";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { requireUser } from "@/lib/auth";
@@ -22,10 +22,9 @@ import { assertEditableTemplateOwnership } from "@/lib/services/document-templat
 import { money, shortDate } from "@/lib/utils";
 import { sendEmailNotification } from "@/lib/services/notifications";
 import { CERTIFICATE_OF_RESIDENCY_CODE } from "@/lib/services/certificate-of-residency";
-import { generateDocument } from "@/lib/services/document-generation";
 import { recordDocumentNotification } from "@/lib/services/document-notifications";
 import { documentContextFromUser } from "@/lib/services/document-runtime-context";
-import { startDocumentWorkflow } from "@/lib/services/document-workflows";
+import { approveDocumentWorkflowRequest, executeDocumentWorkflowAfterSubmission } from "@/lib/services/document-workflow-executor";
 
 export type DocumentRequestSubmissionState = {
   status: "idle" | "success" | "error";
@@ -92,6 +91,7 @@ async function submitDocumentRequest(user: Awaited<ReturnType<typeof requireUser
     ? await prisma.householdMember.findFirst({ where: { id: subjectMemberId, tenantId: user.tenantId, homeownerId, active: true } })
     : null;
   if (subjectType === DocumentSubjectType.HOUSEHOLD_MEMBER && !member) fail("Select a registered household or family member linked to your account.");
+  if (member && (!member.validatedAt || member.revokedAt)) fail("The selected household or family member must be validated and active before document requests can be submitted.");
   const parsed = parseConfiguredFields(formData, definitionRecord?.fields ?? configRecord!.fields);
   if (parsed.errors.length) fail(parsed.errors[0]);
   const legacy = legacyRequestFields(parsed.values);
@@ -148,19 +148,11 @@ async function submitDocumentRequest(user: Awaited<ReturnType<typeof requireUser
     }
     throw error;
   }
-  if (platformCertificate && definitionRecord.workflowDefinitionId) await startDocumentWorkflow(context, request.id);
   await recordDocumentNotification({ context, recipientId: user.id, event: "REQUEST_SUBMITTED", subject: "Document request submitted", message: `${definitionRecord?.displayName ?? configRecord?.displayName ?? "Document"} was submitted successfully.`, entityType: "DocumentRequest", entityId: request.id, eventKey: `REQUEST_SUBMITTED:DocumentRequest:${request.id}` });
-  if (status === DocumentRequestStatus.PENDING_APPROVAL) {
-    const approvers = await platformPrisma.user.findMany({ where: { tenantId: user.tenantId, active: true, role: { in: [Role.ADMIN, Role.HOA_ADMIN, Role.SYSTEM_ADMIN] } }, select: { id: true } });
-    await Promise.all(approvers.map((recipient) => recordDocumentNotification({ context, recipientId: recipient.id, event: "APPROVAL_REQUIRED", subject: "Document approval required", message: `${definitionRecord?.displayName ?? configRecord?.displayName ?? "Document"} requires tenant review.`, entityType: "DocumentRequest", entityId: request.id, eventKey: `APPROVAL_REQUIRED:DocumentRequest:${request.id}:${recipient.id}` })));
-  }
-  if (status === DocumentRequestStatus.READY_FOR_DOWNLOAD && (configRecord?.template?.active || definitionRecord?.assignedTemplateVersion)) {
-    if (platformCertificate) await generateDocument(context, request.id, { mode: DocumentGenerationMode.ISSUE, idempotencyKey: `instant:${request.id}` });
-    else await generateDocumentForRequest(request.id, user.id, "Instant document generated after valid homeowner submission.");
-  }
+  const workflowResult = definitionRecord ? await executeDocumentWorkflowAfterSubmission(context, request.id) : null;
   await prisma.auditLog.create({ data: { actorId: user.id, module: "DOCUMENTS", action: "SUBMIT_DOCUMENT_REQUEST", entityType: "DocumentRequest", entityId: request.id, metadata: { type: legacyType, configurationId: configRecord?.id, definitionId: definitionRecord?.id, subjectType, subjectMemberId: member?.id, purpose: purposeValue, outstandingBalance, deliveryMode: workflowRecord.deliveryMode, paymentRequired: workflowRecord.paymentRequired } } });
   revalidateDocumentPages(request.id);
-  return { status: "success", message: status === DocumentRequestStatus.READY_FOR_DOWNLOAD ? "Document request submitted and prepared for download." : "Document request submitted successfully.", requestId: request.id, duplicate: false };
+  return { status: "success", message: workflowResult?.action === "GENERATED" ? "Document request submitted and issued for download." : workflowResult?.action === "PAYMENT_REQUIRED" ? "Document request submitted. Payment confirmation is required before it can proceed." : workflowResult?.action === "APPROVAL_REQUIRED" ? "Document request submitted and waiting for HOA approval." : "Document request submitted successfully.", requestId: request.id, duplicate: false };
 }
 
 export async function processDocumentRequestAction(formData: FormData) {
@@ -191,7 +183,7 @@ export async function processDocumentRequestAction(formData: FormData) {
   const downloadOverrideReason = clean(formData.get("downloadOverrideReason"));
   const reviewedDataSnapshot = asJson({ fields: { purpose, remarks: request.remarks, validityDate: validityDate?.toISOString().slice(0, 10) ?? null, scheduledDate: scheduledDate?.toISOString().slice(0, 10) ?? null, startTime, endTime, partyName, vehicleDetails, contractorDetails, representativeName, propertyDetails, passType }, adminRemarks, processedByOfficerId, approvedByOfficerId, numberOfCopies: Number(formData.get("numberOfCopies")) || request.numberOfCopies });
   const editAudits = documentEditAudits(request, { purpose, validityDate, scheduledDate, startTime, endTime, partyName, vehicleDetails, contractorDetails, representativeName, propertyDetails, passType, adminRemarks, processedByOfficerId, approvedByOfficerId, numberOfCopies: Number(formData.get("numberOfCopies")) || request.numberOfCopies }, admin.id);
-  const reviewableStatuses: DocumentRequestStatus[] = [DocumentRequestStatus.SUBMITTED, DocumentRequestStatus.PENDING_APPROVAL, DocumentRequestStatus.UNDER_REVIEW];
+  const reviewableStatuses: DocumentRequestStatus[] = [DocumentRequestStatus.SUBMITTED, DocumentRequestStatus.PAYMENT_CONFIRMED, DocumentRequestStatus.PENDING_APPROVAL, DocumentRequestStatus.UNDER_REVIEW];
   if (request.homeowner.tenantId !== admin.tenantId) fail("Document request homeowner does not belong to this tenant.");
   if (request.configuration && request.configuration.tenantId !== admin.tenantId) fail("Document configuration does not belong to this tenant.");
   if (request.configuration?.template && (request.configuration.template.tenantId !== admin.tenantId || (request.type && request.configuration.template.type !== request.type))) fail("Document template does not belong to this tenant or document type.");
@@ -218,9 +210,71 @@ export async function processDocumentRequestAction(formData: FormData) {
     });
   } else if (operation === "approve" || operation === "regenerate") {
     const regenerating = operation === "regenerate";
-    if (request.paymentRequiredSnapshot && !regenerating) fail("Payment confirmation is required before this paid document can be approved for download. Finance integration is deferred to Sprint 6B.");
     if (!regenerating && !reviewableStatuses.includes(request.status)) fail("Only pending requests can be approved.");
     if (regenerating && (!request.generatedContent || !request.documentNumber || !request.verificationCode || request.archivedAt)) fail("Only active generated documents can be regenerated.");
+    if (!regenerating && request.definition) {
+      const [outstandingBalance, officers] = await Promise.all([
+        getQualifyingHomeownerBalance(admin.tenantId, request.homeownerId),
+        getActiveOrganizationOfficers(admin.tenantId),
+      ]);
+      const balancePolicy = policyForDocumentRequest(request);
+      const allowDownloadDespiteBalance = balancePolicy === DocumentOutstandingBalancePolicy.ALLOW_ADMIN_OVERRIDE && requestedDownloadOverride;
+      if (requestedDownloadOverride && balancePolicy !== DocumentOutstandingBalancePolicy.ALLOW_ADMIN_OVERRIDE) fail("This document definition does not allow admin balance overrides.");
+      if (allowDownloadDespiteBalance && !canOverrideDocumentBalancePolicy(admin.role)) fail("Your role is not authorized to allow download despite an outstanding balance.");
+      if (allowDownloadDespiteBalance && outstandingBalance > 0 && !downloadOverrideReason) fail("Enter a reason when allowing download despite an outstanding balance.");
+      const processedOfficer = officers.find((officer) => officer.id === processedByOfficerId) || null;
+      const approvedOfficer = officers.find((officer) => officer.id === approvedByOfficerId) || null;
+      if (processedByOfficerId && !processedOfficer) fail("Select an active processing officer.");
+      if (approvedByOfficerId && !approvedOfficer) fail("Select an active approving officer.");
+      const now = new Date();
+      const result = await approveDocumentWorkflowRequest(documentContextFromUser(admin), request.id, {
+        remarks: adminRemarks,
+        reviewedDataSnapshot,
+        validityDate: validityDate ?? null,
+        processedByOfficerId: processedOfficer?.id ?? null,
+        approvedByOfficerId: approvedOfficer?.id ?? null,
+        editAudits,
+        adminData: {
+          purpose,
+          validityDate,
+          scheduledDate,
+          startTime,
+          endTime,
+          partyName,
+          vehicleDetails,
+          contractorDetails,
+          representativeName,
+          propertyDetails,
+          passType,
+          outstandingBalanceAtRequest: outstandingBalance,
+          allowDownloadDespiteBalance,
+          downloadOverrideReason: allowDownloadDespiteBalance ? downloadOverrideReason : null,
+          downloadOverrideAt: allowDownloadDespiteBalance ? now : null,
+          downloadOverrideById: allowDownloadDespiteBalance ? admin.id : null,
+          processedById: admin.id,
+          processedOfficerSnapshot: processedOfficer ? asJson(officerSnapshot(processedOfficer)) : undefined,
+          approvedOfficerSnapshot: approvedOfficer ? asJson(officerSnapshot(approvedOfficer)) : undefined,
+        },
+      });
+      if (allowDownloadDespiteBalance && outstandingBalance > 0) {
+        await platformPrisma.auditLog.create({ data: { tenantId: request.tenantId, actorId: admin.id, module: "DOCUMENTS", action: "DOWNLOAD_BALANCE_OVERRIDE", entityType: "DocumentRequest", entityId: request.id, metadata: { documentNumber: result.documentNumber, outstandingBalance, reason: downloadOverrideReason } } });
+      }
+      const appUrl = getAppUrl();
+      await sendEmailNotification({
+        tenantId: request.tenantId,
+        recipientId: request.homeowner.user.id,
+        email: request.homeowner.user.email,
+        subject: "Your HOA document request was approved",
+        heading: "Document approved",
+        message: `Hello ${request.homeowner.user.name},\nYour ${documentRequestLabel(request).toLowerCase()} request has been approved and generated. You can review it in the homeowner portal.`,
+        type: NotificationType.DOCUMENT_APPROVED,
+        actionLabel: "View document requests",
+        actionUrl: `${appUrl}/portal/documents`,
+      }).catch(() => undefined);
+      revalidateDocumentPages(id);
+      redirect(`${returnPath}?success=approve&message=${encodeURIComponent("Document approved and issued through the workflow engine.")}`);
+    }
+    if (request.paymentRequiredSnapshot && !regenerating) fail("Payment confirmation is required before this paid document can be approved for download.");
     const [unpaid, template, payments, constructionBonds, association, officers] = await Promise.all([
       getQualifyingHomeownerBalance(admin.tenantId, request.homeownerId),
       request.configuration?.template?.active ? Promise.resolve(request.configuration.template) : request.type ? prisma.documentTemplate.findFirst({ where: { tenantId: admin.tenantId, type: request.type } }) : Promise.resolve(null),
@@ -374,7 +428,7 @@ export async function generateManualDocumentAction(formData: FormData) {
   const outstandingBalance = await getQualifyingHomeownerBalance(admin.tenantId, homeownerId);
   if (definition.outstandingBalancePolicy === DocumentOutstandingBalancePolicy.BLOCK_REQUEST && outstandingBalance > 0) redirect(`/admin/documents/new?error=${encodeURIComponent(balancePolicyLockMessage(definition.outstandingBalancePolicy, outstandingBalance))}`);
   const expectedStatus = statusForConfiguration(definition);
-  const initialStatus = expectedStatus === DocumentRequestStatus.READY_FOR_DOWNLOAD ? DocumentRequestStatus.SUBMITTED : expectedStatus;
+  const initialStatus = expectedStatus;
   const subjectSnapshot = buildSubjectSnapshot({ subjectType: DocumentSubjectType.SELF, homeowner: homeowner! });
   const request = await platformPrisma.$transaction(async (tx) => {
     const created = await tx.documentRequest.create({ data: { tenantId: admin.tenantId, homeownerId, type: definition!.legacyType, definitionId: definition!.id, definitionVersionSnapshot: definition!.version, definitionSnapshot: asJson({ id: definition!.id, code: definition!.code, displayName: definition!.displayName, version: definition!.version, deliveryMode: definition!.deliveryMode, approvalRequired: definition!.approvalRequired, paymentRequired: definition!.paymentRequired, feeAmount: String(definition!.feeAmount), outstandingBalancePolicy: definition!.outstandingBalancePolicy }), templateVersionIdSnapshot: definition!.assignedTemplateVersion!.id, templateDefinitionSnapshot: definition!.assignedTemplateVersion!.definitionJson ?? undefined, subjectType: DocumentSubjectType.SELF, subjectSnapshot: subjectSnapshotJson(subjectSnapshot), requestDataSnapshot: asJson({ definitionId: definition!.id, fields: requestValues, numberOfCopies: 1 }), deliveryModeSnapshot: definition!.deliveryMode, approvalRequiredSnapshot: definition!.approvalRequired || definition!.requiresAdminReview, paymentRequiredSnapshot: definition!.paymentRequired, feeAmountSnapshot: definition!.feeAmount, numberOfCopies: 1, origin: "ADMIN", initiatedById: admin.id, status: initialStatus, purpose, remarks: requestValues.remarks, validityDate: optionalDate(formData.get("validityDate")), scheduledDate: optionalDate(formData.get("scheduledDate")), startTime: requestValues.startTime, endTime: requestValues.endTime, passType: requestValues.passType, vehicleDetails: requestValues.vehicleDetails, partyName: requestValues.partyName, contractorDetails: requestValues.contractorDetails, representativeName: requestValues.representativeName, propertyDetails: requestValues.propertyDetails, outstandingBalanceAtRequest: outstandingBalance } });
@@ -382,17 +436,16 @@ export async function generateManualDocumentAction(formData: FormData) {
     await tx.auditLog.create({ data: { tenantId: admin.tenantId, actorId: admin.id, module: "DOCUMENTS", action: "ADMIN_INITIATE_DOCUMENT", entityType: "DocumentRequest", entityId: created.id, reason: onBehalfReason, metadata: { homeownerId, definitionId: definition!.id, code: definition!.code, role: admin.role, status: initialStatus } } });
     return created;
   });
-  if (definition.code === CERTIFICATE_OF_RESIDENCY_CODE && definition.workflowDefinitionId) await startDocumentWorkflow(documentContextFromUser(admin), request.id);
   await recordDocumentNotification({ context: documentContextFromUser(admin), recipientId: homeowner.user.id, event: "REQUEST_SUBMITTED", subject: "Office-assisted document request created", message: `${definition.displayName} was created by the HOA office.`, entityType: "DocumentRequest", entityId: request.id, eventKey: `REQUEST_SUBMITTED:DocumentRequest:${request.id}` });
-  if (expectedStatus === DocumentRequestStatus.READY_FOR_DOWNLOAD) {
-    if (definition.code === CERTIFICATE_OF_RESIDENCY_CODE) {
-      await generateDocument(documentContextFromUser(admin), request.id, { mode: DocumentGenerationMode.ISSUE, idempotencyKey: `walkin:${request.id}` });
-      redirect(`/admin/documents/${request.id}?success=created&message=Walk-In%20request%20issued%20through%20the%20document%20orchestrator.`);
-    }
-    formData.set("id", request.id); formData.set("operation", "approve"); formData.set("returnTo", `/admin/documents/${request.id}`);
-    return processDocumentRequestAction(formData);
-  }
-  redirect(`/admin/documents/${request.id}?success=created&message=${encodeURIComponent(`Walk-In / Office Request created. Next step: ${expectedStatus === DocumentRequestStatus.PENDING_APPROVAL ? "Submit for approval." : expectedStatus === DocumentRequestStatus.PAYMENT_PENDING ? "Confirm the document fee payment." : "Manual processing."}`)}`);
+  const result = await executeDocumentWorkflowAfterSubmission(documentContextFromUser(admin), request.id);
+  const nextStep = result.action === "GENERATED"
+    ? "Issued through the document workflow engine."
+    : result.action === "PAYMENT_REQUIRED"
+      ? "Confirm the document fee payment."
+      : result.action === "APPROVAL_REQUIRED"
+        ? "Submit for approval."
+        : "Manual processing.";
+  redirect(`/admin/documents/${request.id}?success=created&message=${encodeURIComponent(`Walk-In / Office Request created. Next step: ${nextStep}`)}`);
 }
 
 export async function updateDocumentBalanceOverrideAction(formData: FormData) {
@@ -979,8 +1032,10 @@ function nullableText(value: FormDataEntryValue | null) { const text = String(va
 function ordinal(day: number) { const suffix = day % 100 >= 11 && day % 100 <= 13 ? "th" : day % 10 === 1 ? "st" : day % 10 === 2 ? "nd" : day % 10 === 3 ? "rd" : "th"; return `${day}${suffix}`; }
 function ageAt(birthDate: Date, at: Date) { let age = at.getUTCFullYear() - birthDate.getUTCFullYear(); if (at.getUTCMonth() < birthDate.getUTCMonth() || (at.getUTCMonth() === birthDate.getUTCMonth() && at.getUTCDate() < birthDate.getUTCDate())) age -= 1; return Math.max(0, age); }
 function requestStatusNote(status: DocumentRequestStatus, outstandingBalance: number) {
+  if (status === DocumentRequestStatus.PENDING_PAYMENT) return "Submitted. Document fee payment confirmation is required before this request can proceed.";
   if (status === DocumentRequestStatus.PAYMENT_PENDING) return "Submitted. Download remains blocked until document fee payment is confirmed.";
   if (status === DocumentRequestStatus.PENDING_APPROVAL) return outstandingBalance > 0 ? `Submitted with an outstanding balance of ${money(outstandingBalance)}. HOA approval is required.` : "Submitted and waiting for HOA approval.";
+  if (status === DocumentRequestStatus.ISSUED) return "Submitted and issued for download.";
   if (status === DocumentRequestStatus.READY_FOR_DOWNLOAD) return "Submitted and prepared for immediate download.";
   return "Submitted by homeowner.";
 }
@@ -1215,7 +1270,7 @@ function parseFieldsJson(raw: string) {
   });
 }
 
-async function generateDocumentForRequest(id: string, actorId: string, reason: string) {
+async function _generateDocumentForRequest(id: string, actorId: string, reason: string) {
   const request = await prisma.documentRequest.findFirst({
     where: { id },
     include: {

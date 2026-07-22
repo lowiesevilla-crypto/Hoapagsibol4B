@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import {
   DocumentDeliveryMode,
   DocumentGenerationMode,
+  DocumentGenerationState,
   DocumentIssuedStatus,
   DocumentOrigin,
   DocumentRequestStatus,
@@ -97,20 +98,19 @@ async function main() {
     const validationBeforeApproval = await generateDocument(context, request.id, { mode: DocumentGenerationMode.VALIDATE });
     add(checks, "validation reports incomplete approval", validationBeforeApproval.issues.some((issue) => issue.code === "WORKFLOW_INCOMPLETE" || issue.code === "APPROVAL_INCOMPLETE"), validationBeforeApproval.issues.map((issue) => issue.code).join(","));
     await expectFailure(checks, "unauthorized homeowner approval is rejected", () => approveCertificateRequest(homeownerContext, request.id), "Permission denied");
-    await approveCertificateRequest(context, request.id, "Verified residency and property relationship.");
-    const approved = await platformPrisma.documentRequest.findUniqueOrThrow({ where: { id: request.id } });
-    add(checks, "authorized approval updates request", approved.status === DocumentRequestStatus.APPROVED && Boolean(approved.approvedAt), approved.status);
 
     await platformPrisma.documentDefinition.update({ where: { id: definition.id }, data: { signatoryOfficerId: null } });
     const missingSignatory = await generateDocument(context, request.id, { mode: DocumentGenerationMode.VALIDATE });
     add(checks, "missing signatory blocks official readiness", missingSignatory.issues.some((issue) => issue.code === "SIGNATORY_MISSING"), missingSignatory.issues.map((issue) => issue.code).join(","));
     await platformPrisma.documentDefinition.update({ where: { id: definition.id }, data: { signatoryOfficerId: fixture.officer.id } });
 
-    const issued = await issueCertificate(context, request.id, `${marker}:issue`);
-    if (!issued.documentVersionId || !issued.documentNumber || !issued.content || !issued.contentHash || !issued.verificationUrl) throw new Error(`Certificate issuance did not return the expected immutable result: ${issued.state} ${issued.issues.map((issue) => `${issue.code}:${issue.message}`).join(" | ")} ${JSON.stringify(issued.policySummary)}`);
-    const replay = await issueCertificate(context, request.id, `${marker}:issue`);
+    const issued = await approveCertificateRequest(context, request.id, "Verified residency and property relationship.") as Awaited<ReturnType<typeof approveCertificateRequest>> & { documentVersionId?: string | null; documentNumber?: string | null; verificationUrl?: string | null };
+    const approved = await platformPrisma.documentRequest.findUniqueOrThrow({ where: { id: request.id } });
+    add(checks, "authorized approval issues request", approved.status === DocumentRequestStatus.ISSUED && Boolean(approved.approvedAt && approved.issuedAt), approved.status);
+    if (!issued.documentVersionId || !issued.documentNumber || !issued.verificationUrl) throw new Error(`Certificate approval did not return the expected immutable result: ${JSON.stringify(issued)}`);
+    const duplicateIssue = await issueCertificate(context, request.id, `${marker}:issue`);
+    add(checks, "duplicate manual issue is rejected", duplicateIssue.state === DocumentGenerationState.BLOCKED && duplicateIssue.issues.some((issue) => issue.code === "DUPLICATE_ISSUANCE"), duplicateIssue.issues.map((issue) => issue.code).join(","));
     const issuedRow = await platformPrisma.documentVersion.findUniqueOrThrow({ where: { id: issued.documentVersionId }, include: { verificationTokens: true } });
-    add(checks, "issuance is idempotent", replay.idempotentReplay && replay.documentVersionId === issued.documentVersionId && replay.documentNumber === issued.documentNumber, issued.documentNumber);
     add(checks, "number and exact published template are captured", /^COR-\d{4}-\d{6}$/.test(issued.documentNumber) && issuedRow.templateVersionId === definition.assignedTemplateVersion!.id, issued.documentNumber);
     add(checks, "immutable content hash matches output", issuedRow.contentHash === createHash("sha256").update(issuedRow.generatedContent).digest("hex") && issuedRow.generatedContent.includes("CERTIFICATE OF RESIDENCY"), issuedRow.contentHash ?? "none");
     add(checks, "verification token is opaque and hashed", issuedRow.verificationTokens.length === 1 && /^[a-f0-9]{64}$/.test(issuedRow.verificationTokens[0].tokenHash), String(issuedRow.verificationTokens.length));
@@ -125,7 +125,7 @@ async function main() {
     const publicValid = await verifyDocumentToken(rawToken);
     add(checks, "public verification returns safe valid projection", publicValid.status === "VALID" && publicValid.documentNumber === issued.documentNumber && !("homeowner" in publicValid) && !("address" in publicValid), Object.keys(publicValid).join(","));
     const invalid = await verifyDocumentToken("x".repeat(40));
-    add(checks, "invalid token returns generic result", invalid.status === "INVALID" && invalid.documentNumber === null, invalid.status);
+    add(checks, "invalid token returns generic result", invalid.status === "NOT_FOUND" && invalid.documentNumber === null, invalid.status);
 
     const reissued = await reissueCertificate(context, { requestId: request.id, sourceVersionId: issuedRow.id, reason: "Corrected official copy", idempotencyKey: `${marker}:reissue` });
     if (!reissued.documentVersionId) throw new Error("Reissue did not create a version.");

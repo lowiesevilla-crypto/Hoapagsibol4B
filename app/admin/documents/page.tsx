@@ -190,7 +190,7 @@ function Info({ label, value }: { label: string; value: string }) {
 }
 
 function Status({ value }: { value: DocumentRequestStatus }) {
-  return <span className={`badge ${value === "GENERATED" || value === "READY_FOR_DOWNLOAD" || value === "DOWNLOADED" ? "badge-paid" : value === "REJECTED" ? "badge-overdue" : "badge-info"}`}>{value.replaceAll("_", " ")}</span>;
+  return <span className={`badge ${value === "ISSUED" || value === "GENERATED" || value === "READY_FOR_DOWNLOAD" || value === "DOWNLOADED" ? "badge-paid" : value === "REJECTED" || value === "REVOKED" ? "badge-overdue" : "badge-info"}`}>{value.replaceAll("_", " ")}</span>;
 }
 
 function Notice({ kind, children }: { kind: "error" | "success"; children: React.ReactNode }) {

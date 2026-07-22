@@ -144,7 +144,7 @@ export function buildDocumentRenderModel(input: {
     return { ...block, image: imageSource ? { ...block.image, src: imageSource } : block.image, visible: block.visible && !omit, content: omit ? "" : result.resolvedContent, richText: richTextResult?.richText, table };
   });
   const page = input.mode === "PREVIEW"
-    ? { ...template.page, watermark: { ...template.page.watermark, enabled: true, text: "PREVIEW - NOT AN OFFICIAL DOCUMENT", opacity: 0.12 } }
+    ? { ...template.page, watermark: { ...template.page.watermark, enabled: true, text: "PREVIEW - NOT VALID FOR ISSUANCE", opacity: 0.14 } }
     : template.page;
   return {
     schemaVersion: 1,

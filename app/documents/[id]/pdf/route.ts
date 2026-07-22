@@ -246,7 +246,7 @@ function drawDocumentPage(page: PDFPage, input: DrawInput) {
   }
 
   let y = 575;
-  for (const paragraph of request.generatedContent!.split(/\n+/)) {
+  for (const paragraph of generatedPlainText(request.generatedContent!).split(/\n+/)) {
     const lines = wrapText(safeText(paragraph), regular, 10.5, 365);
     for (const line of lines) { page.drawText(line, { x: 180, y, font: regular, size: 10.5, color: rgb(0.08, 0.1, 0.12) }); y -= 16; }
     y -= 10;
@@ -297,3 +297,20 @@ function drawCentered(page: PDFPage, text: string, font: PDFFont, size: number, 
 function drawCenteredWithin(page: PDFPage, text: string, font: PDFFont, size: number, x1: number, x2: number, y: number, color: ReturnType<typeof rgb>) { const width = font.widthOfTextAtSize(text, size); page.drawText(text, { x: x1 + Math.max(0, (x2 - x1 - width) / 2), y, font, size, color }); }
 function documentRequestTitle(request: Awaited<ReturnType<typeof getAccessibleGeneratedDocument>>["request"]) { return request.definition?.displayName || request.configuration?.displayName || documentTypeLabel(request.type); }
 function safeText(value: string) { return value.normalize("NFKD").replace(/[^\x20-\x7E]/g, ""); }
+function generatedPlainText(value: string) {
+  if (!/<[a-z][\s\S]*>/i.test(value)) return value;
+  return value
+    .replace(/<style[\s\S]*?<\/style>/gi, "")
+    .replace(/<script[\s\S]*?<\/script>/gi, "")
+    .replace(/<br\s*\/?>/gi, "\n")
+    .replace(/<\/(p|div|section|h1|h2|h3|li|tr)>/gi, "\n")
+    .replace(/<[^>]+>/g, "")
+    .replace(/&nbsp;/g, " ")
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}

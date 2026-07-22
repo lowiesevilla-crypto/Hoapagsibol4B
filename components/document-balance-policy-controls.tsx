@@ -5,18 +5,13 @@ import { useMemo, useState } from "react";
 const options = [
   {
     value: "IGNORE_BALANCE",
-    label: "Ignore Outstanding Balance",
-    helper: "Existing HOA balances will not prevent this document from being requested, downloaded, or printed.",
+    label: "Allow Download With Balance",
+    helper: "Unrelated HOA balances do not prevent download or printing after official issuance. Document-specific fees must still be confirmed before issuance.",
   },
   {
     value: "BLOCK_DOWNLOAD",
-    label: "Block Download When Balance Exists",
+    label: "Block When Balance Exists",
     helper: "The request may proceed, but download and printing remain locked until the qualifying balance is settled.",
-  },
-  {
-    value: "BLOCK_REQUEST",
-    label: "Block Request When Balance Exists",
-    helper: "The homeowner cannot submit this request while a qualifying balance exists.",
   },
   {
     value: "ALLOW_ADMIN_OVERRIDE",
@@ -26,7 +21,8 @@ const options = [
 ] as const;
 
 export function DocumentBalancePolicyControls({ defaultPolicy = "BLOCK_DOWNLOAD" }: { defaultPolicy?: string | null }) {
-  const [policy, setPolicy] = useState(defaultPolicy || "BLOCK_DOWNLOAD");
+  const initialPolicy = options.some((option) => option.value === defaultPolicy) ? defaultPolicy! : "BLOCK_DOWNLOAD";
+  const [policy, setPolicy] = useState(initialPolicy);
   const selected = useMemo(() => options.find((option) => option.value === policy) ?? options[1], [policy]);
   return (
     <label className="md:col-span-2 xl:col-span-4">

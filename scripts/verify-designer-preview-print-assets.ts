@@ -47,7 +47,7 @@ async function main() {
   assert(!rendered.content.includes("sidebar") && !rendered.content.includes("Document Management"), "rendered preview contains no application shell");
   assert(rendered.content.includes("@page{size:A4 portrait;margin:0}"), "visual preview print CSS uses the document page size and zero outer shell margin");
   assert(rendered.content.includes("/uploads/tenant/approved-page.png") && rendered.content.includes("/uploads/tenant/approved-watermark.png"), "approved page background and watermark image sources are preserved");
-  assert(rendered.content.includes("PREVIEW - NOT AN OFFICIAL DOCUMENT"), "preview is visibly marked without issuing a document");
+  assert(rendered.content.includes("PREVIEW - NOT VALID FOR ISSUANCE"), "preview is visibly marked without issuing a document");
 }
 
 main().catch((error) => { console.error(error); process.exitCode = 1; });

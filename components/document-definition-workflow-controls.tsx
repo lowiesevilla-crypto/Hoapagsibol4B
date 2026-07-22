@@ -20,6 +20,49 @@ const workflowExplanations: Record<WorkflowPreset, string> = {
   REQUEST_ONLY: "The request is recorded for manual processing.",
 };
 
+const effectiveRules: Record<WorkflowPreset, Array<[string, string]>> = {
+  FREE_INSTANT: [
+    ["Requires Payment", "No"],
+    ["Requires Approval", "No"],
+    ["Auto-Generate Without Approval", "Yes"],
+    ["Auto-Generate After Payment", "No"],
+    ["Receipt Required", "No"],
+    ["Delivery Mode", "Instant Download"],
+  ],
+  FREE_APPROVAL: [
+    ["Requires Payment", "No"],
+    ["Requires Approval", "Yes"],
+    ["Auto-Generate Without Approval", "No"],
+    ["Auto-Generate After Payment", "No"],
+    ["Receipt Required", "No"],
+    ["Delivery Mode", "Approval Required"],
+  ],
+  PAID_INSTANT: [
+    ["Requires Payment", "Yes"],
+    ["Requires Approval", "No"],
+    ["Auto-Generate Without Approval", "No"],
+    ["Auto-Generate After Payment", "Yes"],
+    ["Receipt Required", "Yes when receipt-required is enabled"],
+    ["Delivery Mode", "Payment Required"],
+  ],
+  PAID_APPROVAL: [
+    ["Requires Payment", "Yes"],
+    ["Requires Approval", "Yes"],
+    ["Auto-Generate Without Approval", "No"],
+    ["Auto-Generate After Payment", "Waits for approval"],
+    ["Receipt Required", "Yes when receipt-required is enabled"],
+    ["Delivery Mode", "Payment and Approval Required"],
+  ],
+  REQUEST_ONLY: [
+    ["Requires Payment", "No by default"],
+    ["Requires Approval", "Yes"],
+    ["Auto-Generate Without Approval", "No"],
+    ["Auto-Generate After Payment", "No"],
+    ["Receipt Required", "No"],
+    ["Delivery Mode", "Request Only"],
+  ],
+};
+
 export function DocumentDefinitionWorkflowControls({ defaultPreset, defaultFeeAmount }: { defaultPreset: WorkflowPreset; defaultFeeAmount: string }) {
   const [preset, setPreset] = useState<WorkflowPreset>(defaultPreset);
   const [feeAmount, setFeeAmount] = useState(defaultFeeAmount);
@@ -39,6 +82,12 @@ export function DocumentDefinitionWorkflowControls({ defaultPreset, defaultFeeAm
     </label>
     <div className="rounded-2xl border border-emerald-100 bg-emerald-50 p-4 text-sm font-semibold text-emerald-950 md:col-span-2">
       {workflowExplanations[preset]}
+    </div>
+    <div className="rounded-2xl border border-slate-200 bg-white p-4 text-sm md:col-span-2 xl:col-span-4">
+      <h3 className="font-black">Resolved effective rules</h3>
+      <div className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
+        {effectiveRules[preset].map(([label, value]) => <div className="rounded-xl bg-slate-50 p-3" key={label}><p className="text-xs font-bold uppercase tracking-wide text-slate-500">{label}</p><p className="mt-1 font-black text-slate-950">{value}</p></div>)}
+      </div>
     </div>
   </>;
 }

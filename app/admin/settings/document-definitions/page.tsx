@@ -15,7 +15,7 @@ import { money, shortDate } from "@/lib/utils";
 
 type Query = { q?: string; status?: string; page?: string; sort?: string; edit?: string; error?: string; success?: string; message?: string };
 type EditableDefinition = Prisma.DocumentDefinitionGetPayload<{
-  include: { fields: true; assignedTemplateVersion: { include: { templateSet: true } }; signatoryOfficer: true; requests: { select: { id: true } }; documentVersions: { select: { id: true } } };
+  include: { fields: true; assignedTemplateVersion: { include: { templateSet: true } }; workflowDefinition: { include: { steps: true } }; signatoryOfficer: true; requests: { select: { id: true } }; documentVersions: { select: { id: true } } };
 }>;
 
 const pageSize = 12;
@@ -36,7 +36,7 @@ export default async function DocumentDefinitionsPage({ searchParams }: { search
     prisma.documentDefinition.findMany({ where, include: { fields: { orderBy: [{ displayOrder: "asc" }, { label: "asc" }] }, assignedTemplateVersion: { include: { templateSet: true } }, signatoryOfficer: true }, orderBy, skip: (page - 1) * pageSize, take: pageSize }),
     prisma.documentDefinition.count({ where }),
     prisma.organizationOfficer.findMany({ where: { tenantId: user.tenantId, active: true, archivedAt: null }, orderBy: [{ displayOrder: "asc" }, { fullName: "asc" }] }),
-    query.edit ? prisma.documentDefinition.findFirst({ where: { tenantId: user.tenantId, id: query.edit }, include: { fields: { orderBy: [{ displayOrder: "asc" }, { label: "asc" }] }, assignedTemplateVersion: { include: { templateSet: true } }, signatoryOfficer: true, requests: { select: { id: true }, take: 1 }, documentVersions: { select: { id: true }, take: 1 } } }) : null,
+    query.edit ? prisma.documentDefinition.findFirst({ where: { tenantId: user.tenantId, id: query.edit }, include: { fields: { orderBy: [{ displayOrder: "asc" }, { label: "asc" }] }, assignedTemplateVersion: { include: { templateSet: true } }, workflowDefinition: { include: { steps: { orderBy: { stepOrder: "asc" } } } }, signatoryOfficer: true, requests: { select: { id: true }, take: 1 }, documentVersions: { select: { id: true }, take: 1 } } }) : null,
   ]);
   const pages = Math.max(1, Math.ceil(count / pageSize));
   const editFields = (editing?.fields ?? []).map((field) => ({ key: field.key, label: field.label, fieldType: field.fieldType, required: field.required, options: field.options ?? undefined, validation: field.validation ?? undefined, defaultValue: field.defaultValue ?? undefined, active: field.active }));
@@ -58,7 +58,7 @@ export default async function DocumentDefinitionsPage({ searchParams }: { search
         {editing && <PersistedDefinitionSummary definition={editing} />}
         {editing && <DefinitionConfigurationNav definitionId={editing.id} />}
         <DefinitionForm definition={editing} officers={officers} />
-        {editing && <div className="mt-6 border-t pt-5"><h3 className="font-black">Dynamic fields</h3><p className="mt-1 text-sm text-slate-500">Keys are immutable once requests exist. Deactivate fields instead of deleting them when historical snapshots depend on them.</p><DocumentDefinitionFieldBuilder definitionId={editing.id} fields={editFields} hasHistoricalReferences={editing.requests.length > 0 || editing.documentVersions.length > 0} /></div>}
+        {editing && <div id="required-information" className="mt-6 border-t pt-5"><h3 className="font-black">Dynamic fields</h3><p className="mt-1 text-sm text-slate-500">Keys are immutable once requests exist. Deactivate fields instead of deleting them when historical snapshots depend on them.</p><DocumentDefinitionFieldBuilder definitionId={editing.id} fields={editFields} hasHistoricalReferences={editing.requests.length > 0 || editing.documentVersions.length > 0} /></div>}
       </details>
     </section>
     <form className="card mb-5 grid gap-3 md:grid-cols-[1fr_auto_auto_auto]" method="get" action={`/admin/settings/document-definitions#${catalogTargetId}`}>
@@ -89,13 +89,13 @@ function DefinitionForm({ definition, officers }: { definition: EditableDefiniti
   const code = definition?.code || "";
   return <form action={saveDocumentDefinitionAction} className="mt-4 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
     {definition && <input type="hidden" name="id" value={definition.id} />}
-    <Field label="Code"><input className="field" name="code" defaultValue={code} placeholder="CERTIFICATE_OF_RESIDENCY" required /></Field>
+    <Field label="Code"><input id="general" className="field" name="code" defaultValue={code} placeholder="CERTIFICATE_OF_RESIDENCY" required /></Field>
     <Field label="Display name"><input className="field" name="displayName" defaultValue={definition?.displayName || ""} required /></Field>
     <Field label="Category"><input className="field" name="category" defaultValue={definition?.category || ""} placeholder="Certificate" /></Field>
     <Field label="Display order"><input className="field" name="displayOrder" type="number" defaultValue={definition?.displayOrder ?? 0} /></Field>
     <div className="md:col-span-2 xl:col-span-4"><label className="label">Description</label><textarea className="field min-h-20" name="description" defaultValue={definition?.description || ""} /></div>
-    <DocumentDefinitionWorkflowControls defaultPreset={definition ? workflowPresetForDefinition(definition) : "FREE_APPROVAL"} defaultFeeAmount={Number(definition?.feeAmount ?? 0).toFixed(2)} />
-    <DocumentBalancePolicyControls defaultPolicy={definition?.outstandingBalancePolicy || DocumentOutstandingBalancePolicy.BLOCK_DOWNLOAD} />
+    <div id="workflow" className="md:col-span-2 xl:col-span-4 grid gap-4 md:grid-cols-2 xl:grid-cols-4"><DocumentDefinitionWorkflowControls defaultPreset={definition ? workflowPresetForDefinition(definition) : "FREE_APPROVAL"} defaultFeeAmount={Number(definition?.feeAmount ?? 0).toFixed(2)} /></div>
+    <div id="request-policy" className="md:col-span-2 xl:col-span-4"><DocumentBalancePolicyControls defaultPolicy={definition?.outstandingBalancePolicy || DocumentOutstandingBalancePolicy.BLOCK_DOWNLOAD} /></div>
     <Field label="Currency"><input className="field" name="currency" defaultValue={definition?.currency || "PHP"} /></Field>
     <Field label="Finance classification"><input className="field" name="financeClassification" defaultValue={definition?.financeClassification || ""} /></Field>
     <Field label="Numbering format"><input className="field" name="numberingFormat" defaultValue={definition?.numberingFormat || defaultNumberingFormat(code || "DOC")} /></Field>
@@ -104,7 +104,7 @@ function DefinitionForm({ definition, officers }: { definition: EditableDefiniti
     <Field label="Maximum copies"><input className="field" name="maxCopies" type="number" min={1} max={25} defaultValue={definition?.maxCopies ?? 1} /></Field>
     <Field label="Legacy compatibility type"><select className="field" name="legacyType" defaultValue={definition?.legacyType || ""}><option value="">None yet</option>{Object.values(DocumentType).map((type) => <option key={type} value={type}>{type.replaceAll("_", " ")}</option>)}</select></Field>
     <Field label="Signatory officer"><select className="field" name="signatoryOfficerId" defaultValue={definition?.signatoryOfficerId || ""}><option value="">Use approving officer</option>{officers.map((officer) => <option key={officer.id} value={officer.id}>{officer.fullName} - {officer.position}</option>)}</select></Field>
-    <div className="md:col-span-2 xl:col-span-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+    <div id="advanced" className="md:col-span-2 xl:col-span-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
       <Check name="active" label="Active" checked={definition?.active ?? false} />
       <Check name="receiptRequired" label="Receipt required" checked={definition?.receiptRequired ?? false} />
       <Check name="allowPayLater" label="Allow pay later" checked={definition?.allowPayLater ?? false} />
@@ -149,14 +149,39 @@ function Notice({ kind, children }: { kind: "error" | "success"; children: React
 
 function PersistedDefinitionSummary({ definition }: { definition: EditableDefinition }) {
   const completeness = evaluateDefinitionCompleteness(definition);
+  const preset = workflowPresetForDefinition(definition);
+  const approvalStep = definition.workflowDefinition?.steps.find((step) => step.required) ?? definition.workflowDefinition?.steps[0];
   return <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 p-4">
-    <h3 className="text-sm font-black uppercase tracking-[.16em] text-slate-500">Persisted configuration</h3>
+    <h3 className="text-sm font-black uppercase tracking-[.16em] text-slate-500">Persisted effective configuration</h3>
     <div className="mt-3 grid gap-3 text-sm sm:grid-cols-2 xl:grid-cols-4">
-      <SummaryItem label="Workflow" value={workflowPresetForDefinition(definition).replaceAll("_", " + ").replace("PAID + INSTANT", "Paid + Instant").replace("PAID + APPROVAL", "Paid + Approval").replace("FREE + INSTANT", "Free + Instant").replace("FREE + APPROVAL", "Free + Approval").replace("REQUEST + ONLY", "Request Only")} />
-      <SummaryItem label="Fee" value={money(Number(definition.feeAmount))} />
+      <SummaryItem label="Workflow preset" value={workflowPresetLabel(preset)} />
+      <SummaryItem label="Requires payment" value={definition.paymentRequired ? "Yes" : "No"} />
+      <SummaryItem label="Fee amount" value={money(Number(definition.feeAmount))} />
+      <SummaryItem label="Currency" value={definition.currency} />
+      <SummaryItem label="Requires approval" value={definition.approvalRequired || definition.requiresAdminReview ? "Yes" : "No"} />
+      <SummaryItem label="Approver role" value={approvalStep?.approverRole?.replaceAll("_", " ") || "Tenant administrator"} />
+      <SummaryItem label="Specific approver" value={approvalStep?.approverUserId ? "Configured in workflow step" : "None"} />
+      <SummaryItem label="Auto-generate after payment" value={definition.paymentRequired && !definition.approvalRequired ? "Yes" : definition.paymentRequired && definition.approvalRequired ? "After approval" : "No"} />
+      <SummaryItem label="Auto-generate without approval" value={!definition.paymentRequired && !definition.approvalRequired && definition.allowImmediateDownload ? "Yes" : "No"} />
+      <SummaryItem label="Receipt required" value={definition.receiptRequired ? "Yes" : "No"} />
+      <SummaryItem label="Receipt type" value={definition.paymentRequired ? "Other Collection receipt" : "Not applicable"} />
+      <SummaryItem label="Allow pay later" value={definition.allowPayLater ? "Yes" : "No"} />
       <SummaryItem label="Balance policy" value={balancePolicyLabel(definition.outstandingBalancePolicy)} />
-      <SummaryItem label="Status" value={definition.status} />
+      <SummaryItem label="Release required" value={definition.releaseRequired ? "Yes" : "No"} />
+      <SummaryItem label="Delivery mode" value={definition.deliveryMode.replaceAll("_", " ")} />
+      <SummaryItem label="Number format" value={definition.numberingFormat} />
+      <SummaryItem label="Sequence scope" value={definition.sequenceScope} />
+      <SummaryItem label="Validity days" value={definition.validityDays ? String(definition.validityDays) : "No default"} />
+      <SummaryItem label="Maximum copies" value={String(definition.maxCopies)} />
+      <SummaryItem label="QR enabled" value={definition.qrEnabled ? "Yes" : "No"} />
+      <SummaryItem label="Watermark enabled" value={definition.watermarkEnabled ? "Yes" : "No"} />
+      <SummaryItem label="Household subjects" value={definition.householdMemberEnabled ? "Enabled" : "Disabled"} />
+      <SummaryItem label="Manual subject" value={definition.manualSubjectEnabled ? "Enabled" : "Disabled"} />
+      <SummaryItem label="Regeneration" value={definition.allowRegeneration ? "Allowed" : "Disabled"} />
+      <SummaryItem label="Homeowner visible/download" value={definition.homeownerDownloadEnabled ? "Enabled" : "Disabled"} />
+      <SummaryItem label="Walk-in" value={definition.walkInEnabled ? "Enabled" : "Disabled"} />
       <SummaryItem label="Active" value={definition.active ? "Yes" : "No"} />
+      <SummaryItem label="Status" value={definition.status} />
       <SummaryItem label="Published template" value={definition.assignedTemplateVersion ? `v${definition.assignedTemplateVersion.version}` : "None"} />
       <SummaryItem label="Completeness" value={completeness.status} />
       <SummaryItem label="Requestable" value={completeness.requestable ? "Yes" : "No"} />
@@ -171,4 +196,15 @@ function SummaryItem({ label, value }: { label: string; value: string }) {
 
 function balancePolicyLabel(policy: DocumentOutstandingBalancePolicy) {
   return documentOutstandingBalancePolicyOptions.find((option) => option.value === policy)?.label || policy.replaceAll("_", " ");
+}
+
+function workflowPresetLabel(value: string) {
+  const labels: Record<string, string> = {
+    FREE_INSTANT: "Free + Instant",
+    FREE_APPROVAL: "Free + Approval",
+    PAID_INSTANT: "Paid + Instant",
+    PAID_APPROVAL: "Paid + Approval",
+    REQUEST_ONLY: "Request Only",
+  };
+  return labels[value] || value.replaceAll("_", " ");
 }

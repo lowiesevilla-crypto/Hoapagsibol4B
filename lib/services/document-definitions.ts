@@ -163,6 +163,7 @@ export function evaluateDefinitionCompleteness(definition: DocumentDefinition & 
   if (definition.validityDays != null && definition.validityDays < 1) errors.push("Validity days must be blank or greater than zero.");
   const balancePolicy = definition.outstandingBalancePolicy ?? defaultDocumentOutstandingBalancePolicy;
   if (!Object.values(DocumentOutstandingBalancePolicy).includes(balancePolicy)) errors.push("Outstanding balance policy is invalid.");
+  if (balancePolicy === DocumentOutstandingBalancePolicy.BLOCK_REQUEST) errors.push("Legacy Block Request balance policy is no longer requestable. Select Block When Balance Exists, Allow Admin Override, or Allow Download With Balance.");
   const numbering = validateNumberingFormat(definition.numberingFormat);
   errors.push(...numbering.errors);
   if (definition.qrEnabled && !definition.numberingFormat.includes("{SEQUENCE")) errors.push("QR-enabled definitions need a valid numbering sequence.");

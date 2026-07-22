@@ -61,7 +61,7 @@ function ClearanceSheet({ request, association, qr }: { request: Request; associ
   return <article className="clearance-sheet official-document-sheet overflow-hidden border border-slate-300 bg-white p-[7mm] text-[10px] text-slate-950">
     <header className="grid grid-cols-[25mm_1fr_35mm] gap-3 border-b-4 border-blue-950 pb-4"><AssociationLogo className="size-[25mm]" src={association.logoUrl} alt={`${association.name} logo`} /><div><h1 className="text-[18px] font-black uppercase leading-tight text-blue-950">{association.name}</h1><p className="mt-2">{association.address}</p><p>{[association.contactNumber, association.email].filter(Boolean).join(" | ")}</p><p className="mt-2">SEC Registration No.: {association.secRegistrationNumber || "Not specified"}</p></div><div className="border-l pl-3"><b>DOCUMENT NO.</b><p className="font-black text-red-600">{request.documentNumber}</p><p className="mt-2"><b>DATE ISSUED</b><br />{shortDate(request.generatedAt!)}</p><img className="mt-2 size-[23mm]" src={qr} alt="Verification QR" /><p className="text-[7px] font-bold">SCAN TO VERIFY</p></div></header>
     <div className="mt-6 grid grid-cols-[42mm_1fr] gap-6"><aside className="border-r border-blue-950 pr-4"><h2 className="rounded-lg bg-blue-950 p-2 text-center font-black text-white">HOA OFFICERS</h2><div className="mt-3 space-y-3">{organization.slice(0, 8).map((officer, index) => <div className="border-b pb-2" key={String(officer.id || index)}><p className="font-black">{String(officer.fullName || "")}</p><p className="text-[8px] font-bold uppercase text-blue-900">{String(officer.position || "")}</p></div>)}</div></aside>
-      <section><div className="text-center"><h2 className="font-serif text-[30px] font-black tracking-[.12em] text-blue-950">HOA CLEARANCE</h2><p className="font-serif text-[13px] font-black italic text-blue-900">TO WHOM IT MAY CONCERN:</p></div><div className="mt-8 whitespace-pre-wrap text-justify text-[12px] leading-7">{request.generatedContent}</div><div className="mt-8 grid grid-cols-2 gap-5 rounded-2xl border border-green-500 bg-green-50/40 p-4"><Cell label="Homeowner" value={request.homeowner.user.name} /><Cell label="Property" value={request.propertyDetails || `Block ${request.homeowner.block}, Lot ${request.homeowner.lot}, ${request.homeowner.address}`} /><Cell label="Purpose" value={request.purpose || "Official purposes"} /><Cell label="Validity" value={request.validityDate ? shortDate(request.validityDate) : "Not specified"} /></div></section></div>
+      <section><div className="text-center"><h2 className="font-serif text-[30px] font-black tracking-[.12em] text-blue-950">HOA CLEARANCE</h2><p className="font-serif text-[13px] font-black italic text-blue-900">TO WHOM IT MAY CONCERN:</p></div><div className="mt-8 whitespace-pre-wrap text-justify text-[12px] leading-7">{generatedPlainText(request.generatedContent || "")}</div><div className="mt-8 grid grid-cols-2 gap-5 rounded-2xl border border-green-500 bg-green-50/40 p-4"><Cell label="Homeowner" value={request.homeowner.user.name} /><Cell label="Property" value={request.propertyDetails || `Block ${request.homeowner.block}, Lot ${request.homeowner.lot}, ${request.homeowner.address}`} /><Cell label="Purpose" value={request.purpose || "Official purposes"} /><Cell label="Validity" value={request.validityDate ? shortDate(request.validityDate) : "Not specified"} /></div></section></div>
     <div className="mt-8 grid grid-cols-[1fr_1fr_1fr] gap-8 border-t border-blue-950 pt-6"><div><p><b>DATE REQUESTED:</b> {shortDate(request.requestedAt)}</p><p><b>DATE ISSUED:</b> {shortDate(request.generatedAt!)}</p><p><b>VALID UNTIL:</b> {request.validityDate ? shortDate(request.validityDate) : "Not specified"}</p></div><Signature snapshot={request.processedOfficerSnapshot} name={officerName(request.processedOfficerSnapshot, request.processedByOfficer?.fullName || request.processedBy?.name)} label="Processed by" /><Signature snapshot={request.approvedOfficerSnapshot} name={officerName(request.approvedOfficerSnapshot, request.approvedByOfficer?.fullName || request.approvedBy?.name)} label="Approved by" /></div>
     <footer className="mt-8 rounded-xl border bg-slate-50 p-4 font-bold">This is a system-generated document. Scan the QR code to verify authenticity. This clearance is valid only within the indicated validity period.</footer>
   </article>;
@@ -73,3 +73,20 @@ function officerName(snapshot: unknown, fallback?: string | null) { if (snapshot
 function documentRequestTitle(request: Request) { return request.definition?.displayName || request.configuration?.displayName || documentTypeLabel(request.type); }
 function ordinal(day: number) { const suffix = day % 100 >= 11 && day % 100 <= 13 ? "th" : day % 10 === 1 ? "st" : day % 10 === 2 ? "nd" : day % 10 === 3 ? "rd" : "th"; return `${day}${suffix}`; }
 function ageAt(birthDate: Date, at: Date) { let age = at.getUTCFullYear() - birthDate.getUTCFullYear(); if (at.getUTCMonth() < birthDate.getUTCMonth() || (at.getUTCMonth() === birthDate.getUTCMonth() && at.getUTCDate() < birthDate.getUTCDate())) age--; return Math.max(0, age); }
+function generatedPlainText(value: string) {
+  if (!/<[a-z][\s\S]*>/i.test(value)) return value;
+  return value
+    .replace(/<style[\s\S]*?<\/style>/gi, "")
+    .replace(/<script[\s\S]*?<\/script>/gi, "")
+    .replace(/<br\s*\/?>/gi, "\n")
+    .replace(/<\/(p|div|section|h1|h2|h3|li|tr)>/gi, "\n")
+    .replace(/<[^>]+>/g, "")
+    .replace(/&nbsp;/g, " ")
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}

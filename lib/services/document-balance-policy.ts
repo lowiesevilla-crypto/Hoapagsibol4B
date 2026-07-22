@@ -13,18 +13,13 @@ export const defaultDocumentOutstandingBalancePolicy = DocumentOutstandingBalanc
 export const documentOutstandingBalancePolicyOptions = [
   {
     value: DocumentOutstandingBalancePolicy.IGNORE_BALANCE,
-    label: "Ignore Outstanding Balance",
-    helper: "Existing HOA balances will not prevent this document from being requested, downloaded, or printed.",
+    label: "Allow Download With Balance",
+    helper: "Unrelated HOA balances do not prevent download or printing after official issuance. Document-specific fees must still be confirmed before issuance.",
   },
   {
     value: DocumentOutstandingBalancePolicy.BLOCK_DOWNLOAD,
-    label: "Block Download When Balance Exists",
+    label: "Block When Balance Exists",
     helper: "The request may proceed, but download and printing remain locked until the qualifying balance is settled.",
-  },
-  {
-    value: DocumentOutstandingBalancePolicy.BLOCK_REQUEST,
-    label: "Block Request When Balance Exists",
-    helper: "The homeowner cannot submit this request while a qualifying balance exists.",
   },
   {
     value: DocumentOutstandingBalancePolicy.ALLOW_ADMIN_OVERRIDE,

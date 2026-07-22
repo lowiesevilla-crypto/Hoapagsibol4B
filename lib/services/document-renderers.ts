@@ -5,7 +5,7 @@ import { DocumentOutputFormat } from "@prisma/client";
 import { type DocumentRenderBlock, type DocumentRenderModel } from "@/lib/services/document-render-model";
 import { defaultQrConfig, type DocumentRichText, type DocumentTextMarks } from "@/lib/services/document-template-builder";
 
-const previewQrLabel = "PREVIEW QR — NOT VALID FOR VERIFICATION";
+const previewQrLabel = "PREVIEW QR - NOT VALID FOR VERIFICATION";
 
 export type DocumentRenderResult = {
   outputFormat: DocumentOutputFormat;
@@ -46,7 +46,7 @@ export const htmlDocumentRenderer: DocumentRenderer = {
       renderSection(model.sections.body, "body", qrPayload, model.visualLayout, model.preview),
       renderSection(model.sections.footer, "footer", qrPayload, model.visualLayout, model.preview),
     ]);
-    const html = `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${escapeHtml(model.metadata.title)}</title><style>${documentCss(model)}</style></head><body><main class="document-page${model.preview ? " preview" : ""}${model.visualLayout ? " visual-layout" : ""}">${renderWatermark(model)}${sections.join("")}</main></body></html>`;
+    const html = `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${escapeHtml(model.metadata.title)}</title><style>${documentCss(model)}</style></head><body>${model.preview ? '<div class="preview-banner">PREVIEW ONLY - NOT AN OFFICIAL DOCUMENT</div>' : ""}<main class="document-page${model.preview ? " preview" : ""}${model.visualLayout ? " visual-layout" : ""}">${renderWatermark(model)}${sections.join("")}</main></body></html>`;
     return { outputFormat: DocumentOutputFormat.HTML, contentType: "text/html; charset=utf-8", content: html, outputSize: Buffer.byteLength(html, "utf8"), pageCount: null, rendererName: this.name, rendererVersion: this.version, warnings: model.warnings };
   },
 };
@@ -73,13 +73,13 @@ async function renderBlock(block: DocumentRenderBlock, qrPayload: string | null,
   if ((block.type === "logo" || block.type === "image") && imageSource) return `<div class="image-element" style="${style}"><img src="${escapeAttribute(imageSource)}" alt="${escapeAttribute(block.image?.alt ?? block.label ?? "Document image")}" style="${imageStyle(block)}"></div>`;
   if (block.table?.rows?.length) return `<table style="${style}"><tbody>${block.table.rows.map((row) => `<tr>${row.map((cell) => `<td>${escapeHtml(cell)}</td>`).join("")}</tr>`).join("")}</tbody></table>`;
   const tag = ["documentTitle", "tenantName", "heading"].includes(block.type) ? "h1" : "div";
-  return `<${tag} class="block block-${escapeAttribute(block.type)}" style="${style}">${block.richText ? renderRichText(block.richText) : escapeHtml(block.content).replaceAll("\n", "<br>")}</${tag}>`;
+  return `<${tag} class="block block-${escapeAttribute(block.type)}" style="${style}">${block.richText ? renderRichText(block.richText, preview) : escapeHtml(preview ? previewSafeText(block.content) : block.content).replaceAll("\n", "<br>")}</${tag}>`;
 }
 
 function renderQr(block: DocumentRenderBlock, qrDataUrl: string, style: string, preview: boolean) {
   const qr = block.qr || defaultQrConfig;
   const label = preview ? previewQrLabel : qr.label;
-  const image = `<img class="qr-code-image" src="${qrDataUrl}" alt="${escapeAttribute(preview ? "Preview QR — not valid for verification" : "Document verification QR code")}" style="--qr-quiet-zone:${qr.quietZone}">`;
+  const image = `<img class="qr-code-image" src="${qrDataUrl}" alt="${escapeAttribute(preview ? "Preview QR - not valid for verification" : "Document verification QR code")}" style="--qr-quiet-zone:${qr.quietZone}">`;
   const labelMarkup = qr.showLabel ? `<figcaption>${escapeHtml(label)}</figcaption>` : "";
   const instructionMarkup = qr.showInstruction ? `<small>${escapeHtml(qr.instruction)}</small>` : "";
   return `<figure class="qr-block" style="${style}">${image}${labelMarkup}${instructionMarkup}</figure>`;
@@ -104,10 +104,10 @@ function lineStyle(block: DocumentRenderBlock, visualLayout: boolean) {
   return common.filter(Boolean).join(";");
 }
 
-function renderRichText(richText: DocumentRichText) {
+function renderRichText(richText: DocumentRichText, preview: boolean) {
   return richText.children.map((node) => {
     const text = node.resolvedText ?? (node.type === "placeholder" ? `{{${node.key}}}` : node.text);
-    return `<span style="${marksStyle(node.marks)}">${escapeHtml(text).replaceAll("\n", "<br>")}</span>`;
+    return `<span style="${marksStyle(node.marks)}">${escapeHtml(preview ? previewSafeText(text) : text).replaceAll("\n", "<br>")}</span>`;
   }).join("");
 }
 
@@ -164,7 +164,7 @@ function documentCss(model: DocumentRenderModel) {
   const pageMargin = model.visualLayout ? "0" : `${margins.top}mm ${margins.right}mm ${margins.bottom}mm ${margins.left}mm`;
   const border = model.page.border.enabled ? `border:${clamp(model.page.border.width, 0, 6)}px ${model.page.border.style} ${model.page.border.color};` : "";
   const background = `background-color:${colorWithOpacity(model.page.backgroundColor, model.page.backgroundOpacity)};${model.page.backgroundImage ? `background-image:url('${escapeAttribute(model.page.backgroundImage.src)}');background-size:${model.page.backgroundImage.fit === "fill" ? "100% 100%" : model.page.backgroundImage.fit};background-position:${model.page.backgroundImage.position};background-repeat:no-repeat;` : ""}`;
-  return `@page{size:${size} ${model.page.orientation};margin:${pageMargin}}*{box-sizing:border-box}body{margin:0;background:#f3f4f6;color:#111827;font-family:Arial,sans-serif}.document-page{position:relative;${page};margin:0 auto;${background}${border}overflow:hidden}.section{position:relative;z-index:1}.visual-section{position:absolute;inset:0}.section-header{min-height:${model.page.headerHeightMm}mm}.section-footer{min-height:${model.page.footerHeightMm}mm;margin-top:24px}.block{white-space:normal;overflow-wrap:anywhere;margin:0 0 12px}.visual-layout .block{margin:0}.block-documentTitle{font-size:20pt;text-align:center}.image-element{overflow:hidden}.image-element img{max-width:none}.line-element{display:block;padding:0!important;margin:0!important;background:transparent!important;border:0!important;border-radius:0!important;box-shadow:none!important}.horizontal-line{border-top:var(--line-width) var(--line-style) var(--line-color)!important;height:0!important}.vertical-line{border-left:var(--line-width) var(--line-style) var(--line-color)!important;width:0!important}table{border-collapse:collapse}td{border:1px solid #d1d5db;padding:6px;vertical-align:top}.qr-block{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;overflow:hidden;margin:0;padding:0}.qr-code-image{display:block;max-width:100%;max-height:calc(100% - 20px);aspect-ratio:1/1;object-fit:contain;image-rendering:auto}.qr-block figcaption,.qr-block small{font-size:8pt;line-height:1.1;text-align:center}.qr-block small{font-size:7pt}.officer-list{border-right:1px solid #0b2a63;padding:0 6mm 0 0;color:var(--officer-position-color,#0b2a63);line-height:var(--officer-line-height,1.25)}.officer-list h2{margin:0;background:#0b2a63;color:var(--officer-heading-color,#fff);padding:4mm 2mm;text-align:center;font-size:var(--officer-heading-size,12pt);line-height:var(--officer-line-height,1.25)}.officer-term{text-align:center;font-weight:700;font-size:var(--officer-term-size,9pt);line-height:var(--officer-line-height,1.25);color:var(--officer-term-color,#0b2a63);margin:2mm 0 7mm}.officer-row{padding:0 2mm var(--officer-spacing,3mm);margin:0 0 var(--officer-spacing,3mm)}.officer-list.with-separators .officer-row{border-bottom:1px solid #cbd5e1}.officer-row strong,.officer-row span{display:block;line-height:var(--officer-line-height,1.25)}.officer-row strong{font-size:var(--officer-name-size,8pt);font-weight:var(--officer-name-weight,bold);color:var(--officer-name-color,#111827)}.officer-row span{font-size:var(--officer-position-size,7pt);font-weight:var(--officer-position-weight,bold);color:var(--officer-position-color,#0b2a63);text-transform:uppercase}.page-break{break-after:page}.watermark{position:absolute;left:0;right:0;text-align:center;font-weight:700;color:rgba(100,116,139,.15);z-index:0;pointer-events:none}.watermark-image{display:block;max-width:70%;max-height:35%;margin:0 auto;object-fit:contain}.watermark-center{top:45%;transform:translateY(-50%)}.watermark-top{top:10%}.watermark-bottom{bottom:10%}@media print{body{background:white}.document-page{margin:0;box-shadow:none}}`;
+  return `@page{size:${size} ${model.page.orientation};margin:${pageMargin}}*{box-sizing:border-box}body{margin:0;background:#f3f4f6;color:#111827;font-family:Arial,sans-serif}.preview-banner{position:sticky;top:0;z-index:9999;background:#991b1b;color:#fff;text-align:center;font-weight:900;letter-spacing:.08em;padding:10px 12px;font-size:12px}.document-page{position:relative;${page};margin:0 auto;${background}${border}overflow:hidden}.section{position:relative;z-index:1}.visual-section{position:absolute;inset:0}.section-header{min-height:${model.page.headerHeightMm}mm}.section-footer{min-height:${model.page.footerHeightMm}mm;margin-top:24px}.block{white-space:normal;overflow-wrap:anywhere;margin:0 0 12px}.visual-layout .block{margin:0}.block-documentTitle{font-size:20pt;text-align:center}.image-element{overflow:hidden}.image-element img{max-width:none}.line-element{display:block;padding:0!important;margin:0!important;background:transparent!important;border:0!important;border-radius:0!important;box-shadow:none!important}.horizontal-line{border-top:var(--line-width) var(--line-style) var(--line-color)!important;height:0!important}.vertical-line{border-left:var(--line-width) var(--line-style) var(--line-color)!important;width:0!important}table{border-collapse:collapse}td{border:1px solid #d1d5db;padding:6px;vertical-align:top}.qr-block{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;overflow:hidden;margin:0;padding:2px}.qr-code-image{display:block;max-width:100%;max-height:calc(100% - 30px);aspect-ratio:1/1;object-fit:contain;image-rendering:auto}.qr-block figcaption,.qr-block small{display:block;max-width:100%;font-size:7pt;line-height:1.15;text-align:center;overflow-wrap:anywhere}.qr-block small{font-size:6pt}.officer-list{border-right:1px solid #0b2a63;padding:0 6mm 0 0;color:var(--officer-position-color,#0b2a63);line-height:var(--officer-line-height,1.25)}.officer-list h2{margin:0;background:#0b2a63;color:var(--officer-heading-color,#fff);padding:4mm 2mm;text-align:center;font-size:var(--officer-heading-size,12pt);line-height:var(--officer-line-height,1.25)}.officer-term{text-align:center;font-weight:700;font-size:var(--officer-term-size,9pt);line-height:var(--officer-line-height,1.25);color:var(--officer-term-color,#0b2a63);margin:2mm 0 7mm}.officer-row{padding:0 2mm var(--officer-spacing,3mm);margin:0 0 var(--officer-spacing,3mm)}.officer-list.with-separators .officer-row{border-bottom:1px solid #cbd5e1}.officer-row strong,.officer-row span{display:block;line-height:var(--officer-line-height,1.25)}.officer-row strong{font-size:var(--officer-name-size,8pt);font-weight:var(--officer-name-weight,bold);color:var(--officer-name-color,#111827)}.officer-row span{font-size:var(--officer-position-size,7pt);font-weight:var(--officer-position-weight,bold);color:var(--officer-position-color,#0b2a63);text-transform:uppercase}.page-break{break-after:page}.watermark{position:absolute;left:0;right:0;text-align:center;font-weight:700;color:rgba(100,116,139,.15);z-index:0;pointer-events:none}.watermark-image{display:block;max-width:70%;max-height:35%;margin:0 auto;object-fit:contain}.watermark-center{top:45%;transform:translateY(-50%)}.watermark-top{top:10%}.watermark-bottom{bottom:10%}@media print{body{background:white}.preview-banner{display:block;position:static}.document-page{margin:0;box-shadow:none}}`;
 }
 
 function renderWatermark(model: DocumentRenderModel) {
@@ -178,6 +178,15 @@ function renderWatermark(model: DocumentRenderModel) {
 
 function escapeHtml(value: string) {
   return value.replace(/[&<>"']/g, (character) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[character]!);
+}
+
+function previewSafeText(value: string) {
+  return value
+    .replace(/Official document number:/gi, "Preview document number:")
+    .replace(/Official Document Number:/g, "Preview Document Number:")
+    .replace(/\bDATE ISSUED\b/g, "PREVIEW GENERATED")
+    .replace(/\bIssue Date\b/g, "Preview Generated Date")
+    .replace(/\bIssued on\b/g, "Preview generated on");
 }
 
 function escapeAttribute(value: string) {

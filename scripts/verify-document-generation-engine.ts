@@ -82,7 +82,7 @@ async function main() {
     const preview = await generateDocument(context, request.id, { mode: DocumentGenerationMode.PREVIEW, correlationId: `${runId}:preview` });
     const afterPreview = await sideEffectCounts(tenant.id, definition.id, request.id);
     add(checks, "preview produces safe HTML", preview.state === DocumentGenerationState.GENERATED && preview.contentType === "text/html; charset=utf-8" && Boolean(preview.content), preview.state);
-    add(checks, "preview is visibly marked", preview.content?.includes("PREVIEW - NOT AN OFFICIAL DOCUMENT") === true, "watermark");
+    add(checks, "preview is visibly marked", preview.content?.includes("PREVIEW - NOT VALID FOR ISSUANCE") === true, "watermark");
     add(checks, "preview does not allocate number", baseline.counter === afterPreview.counter, `${baseline.counter} -> ${afterPreview.counter}`);
     add(checks, "preview creates no version or token", afterPreview.versions === 0 && afterPreview.tokens === 0, JSON.stringify(afterPreview));
     add(checks, "explicit authorized draft preview works", (await generateDocument(context, request.id, { mode: DocumentGenerationMode.PREVIEW, draftTemplateVersionId: draft.id })).templateVersionId === draft.id, draft.id);

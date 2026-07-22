@@ -5,7 +5,7 @@ import { DocumentOutputFormat } from "@prisma/client";
 import { type DocumentRenderBlock, type DocumentRenderModel } from "@/lib/services/document-render-model";
 import { defaultQrConfig, type DocumentRichText, type DocumentTextMarks } from "@/lib/services/document-template-builder";
 
-const previewQrLabel = "PREVIEW QR - NOT VALID FOR VERIFICATION";
+const previewQrLabel = "PREVIEW QR — NOT VALID FOR VERIFICATION";
 
 export type DocumentRenderResult = {
   outputFormat: DocumentOutputFormat;

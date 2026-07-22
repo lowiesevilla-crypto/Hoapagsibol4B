@@ -44,6 +44,52 @@ The Document Definition edit page now shows:
 
 The workflow preset control now displays resolved effective rules directly below the preset selector.
 
+## Resident Services UX Consolidation
+
+The administrator sidebar now presents one Resident Services document group in this order:
+
+1. Document Definitions
+2. Templates
+3. Requests
+4. Create Walk-In / Office Request
+5. Issued Documents
+
+Homeowner portal navigation is limited to homeowner-owned document actions:
+
+- My Document Requests
+- Request a Document
+- Issued Documents
+
+The Document Management Requests link and Resident Services section can display a tenant-scoped action badge. The badge uses the same server-side predicate as the default Requests view, hides when zero, caps visually at `99+`, and keeps the exact count in the accessible label.
+
+## Editable Workflow Rules
+
+Preset workflows remain the business-friendly default, and Custom mode is available when administrators need independent control over effective rules. The save action derives and validates all workflow fields server-side before persisting.
+
+Editable/persisted fields now include:
+
+- workflow preset or Custom;
+- payment requirement;
+- fee amount;
+- currency;
+- approval requirement;
+- approver role;
+- specific approver;
+- auto-generation timing;
+- receipt requirement;
+- allow pay later;
+- outstanding balance policy;
+- release requirement;
+- delivery mode;
+- numbering and validity;
+- QR and watermark;
+- subject access;
+- regeneration;
+- homeowner and walk-in availability;
+- active state.
+
+Approval configuration is stored through a tenant-owned `DocumentWorkflowDefinition` and first approval step when approval/admin review is required. Existing request and issued-document snapshots remain immutable.
+
 ## Balance Policies
 
 The setup UI exposes three business policies:

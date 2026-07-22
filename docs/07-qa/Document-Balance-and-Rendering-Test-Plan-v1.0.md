@@ -10,6 +10,7 @@ Run:
 - `pnpm exec prisma migrate status`
 - `pnpm typecheck`
 - `pnpm build`
+- `NODE_OPTIONS='--conditions=react-server' pnpm tsx scripts/verify-document-management-phase-2a.ts`
 - `NODE_OPTIONS='--conditions=react-server' pnpm tsx scripts/verify-document-balance-rendering-hotfix.ts`
 - `NODE_OPTIONS='--conditions=react-server' pnpm tsx scripts/verify-document-workflow-executor.ts`
 - `NODE_OPTIONS='--conditions=react-server' pnpm tsx scripts/verify-certificate-of-residency.ts`
@@ -22,6 +23,13 @@ Run:
 
 The focused hotfix harness verifies:
 
+- Document Management Resident Services sidebar labels and order;
+- homeowner-only document navigation labels;
+- tenant-scoped actionable document request badge wiring;
+- Requests default Needs Action view uses the same count predicate;
+- Document Definition configuration sections and persisted summary are present;
+- Custom workflow mode and effective workflow-rule controls are available;
+- server-side custom workflow parsing and approval-step persistence are wired;
 - three setup-visible balance policies;
 - business labels for balance policies;
 - legacy `BLOCK_REQUEST` is not offered for setup;

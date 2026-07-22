@@ -12,7 +12,7 @@ import {
 import { platformPrisma } from "@/lib/db";
 import { validateTemplateDefinition } from "@/lib/services/document-template-builder";
 import { defaultNumberingFormat, validateNumberingFormat } from "@/lib/services/document-numbering";
-import { workflowFieldsForPreset, workflowPresetForDeliveryMode } from "@/lib/services/document-workflow-presets";
+import { workflowFieldsForPreset, workflowPresetForDefinitionFields, workflowPresetForDeliveryMode } from "@/lib/services/document-workflow-presets";
 import { defaultDocumentOutstandingBalancePolicy } from "@/lib/services/document-balance-policy";
 
 export const documentDefinitionInclude = {
@@ -149,7 +149,8 @@ export function evaluateDefinitionCompleteness(definition: DocumentDefinition & 
   if (status === "INACTIVE") errors.push("Definition is inactive.");
   if (!definition.code.trim()) errors.push("Code is required.");
   if (!definition.displayName.trim()) errors.push("Display name is required.");
-  const expectedWorkflow = workflowFieldsForPreset(workflowPresetForDeliveryMode(definition.deliveryMode));
+  const effectivePreset = workflowPresetForDefinitionFields(definition);
+  const expectedWorkflow = effectivePreset === "CUSTOM" ? null : workflowFieldsForPreset(workflowPresetForDeliveryMode(definition.deliveryMode));
   if (expectedWorkflow) {
     if (expectedWorkflow.paymentRequired && Number(definition.feeAmount) <= 0) errors.push("Paid workflows require a fee greater than zero.");
     if (!expectedWorkflow.paymentRequired && Number(definition.feeAmount) !== 0) errors.push("Free workflows must have a zero fee.");
@@ -158,6 +159,12 @@ export function evaluateDefinitionCompleteness(definition: DocumentDefinition & 
     if (definition.paymentBeforeApproval !== expectedWorkflow.paymentBeforeApproval) errors.push("Payment timing does not match the selected workflow.");
     if (definition.allowImmediateDownload !== expectedWorkflow.allowImmediateDownload) errors.push("Immediate download setting does not match the selected workflow.");
     if (definition.requiresAdminReview !== expectedWorkflow.requiresAdminReview) errors.push("Admin review setting does not match the selected workflow.");
+  } else {
+    if (definition.paymentRequired && Number(definition.feeAmount) <= 0) errors.push("Payment-required custom workflows require a fee greater than zero.");
+    if (!definition.paymentRequired && Number(definition.feeAmount) !== 0) errors.push("Non-payment custom workflows must have a zero fee.");
+    if (definition.paymentBeforeApproval && !definition.paymentRequired) errors.push("Payment timing requires payment to be enabled.");
+    if (definition.allowImmediateDownload && (definition.paymentRequired || definition.approvalRequired)) errors.push("Immediate download is available only when payment and approval are not required.");
+    if (definition.requiresAdminReview && !definition.approvalRequired) errors.push("Admin review requires approval to be enabled.");
   }
   if (definition.maxCopies < 1 || definition.maxCopies > 25) errors.push("Maximum copies must be between 1 and 25.");
   if (definition.validityDays != null && definition.validityDays < 1) errors.push("Validity days must be blank or greater than zero.");
@@ -250,10 +257,10 @@ export async function getWalkInDocumentDefinitions(tenantId: string) {
   return definitions.filter((definition) => evaluateDefinitionCompleteness(definition).requestable);
 }
 
-export function workflowPresetForDefinition(definition: Pick<DocumentDefinition, "deliveryMode" | "paymentRequired" | "approvalRequired" | "requiresAdminReview" | "allowImmediateDownload">) {
-  return workflowPresetForDeliveryMode(definition.deliveryMode);
+export function workflowPresetForDefinition(definition: Pick<DocumentDefinition, "deliveryMode" | "paymentRequired" | "approvalRequired" | "requiresAdminReview" | "allowImmediateDownload" | "paymentBeforeApproval">) {
+  return workflowPresetForDefinitionFields(definition);
 }
 
 export const documentSequenceScopeOptions = Object.values(DocumentSequenceScope);
 export { defaultNumberingFormat, validateNumberingFormat };
-export { documentWorkflowPresetValues, isDocumentWorkflowPreset, workflowFieldsForPreset, workflowPresetForDeliveryMode, type DocumentWorkflowPreset } from "@/lib/services/document-workflow-presets";
+export { documentWorkflowPresetValues, isDocumentWorkflowPreset, workflowFieldsForPreset, workflowPresetForDeliveryMode, workflowPresetForDefinitionFields, type DocumentWorkflowPreset } from "@/lib/services/document-workflow-presets";

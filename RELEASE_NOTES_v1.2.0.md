@@ -503,6 +503,9 @@ Release gate:
 - Added tenant-safe, auditable Certificate of Indigency repair/seed behavior without rewriting historical references.
 - Updated Walk-In / Office Request to use complete tenant-owned Document Definitions and published template versions.
 - Added workflow-aware policy summaries and request status preparation; unsafe unconditional generation is no longer implied.
+- Refined Resident Services navigation to Document Definitions, Templates, Requests, Create Walk-In / Office Request, and Issued Documents.
+- Added a tenant-scoped actionable Requests badge and matching Needs Action default request view.
+- Reorganized Document Definition setup into business-facing sections with persisted effective configuration, unsaved-change warning, and Custom workflow rule editing.
 
 Deferred: full walk-in workflow reconstruction, payment processing, release acknowledgement, public QR verification, and the professional editor remain outside this phase.
 

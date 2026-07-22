@@ -42,10 +42,14 @@ export const adminLinks: LinkItem[] = [
   { href: "/admin/payments/active", label: "Active payments", icon: "payments", section: "Payments" },
   { href: "/admin/payments/history", label: "Transaction history", icon: "payments", section: "Payments" },
   { href: "/admin/reports/dashboard", label: "Finance Dashboard", icon: "dashboard", section: "Reports" },
-  { href: "/admin/documents", label: "Document management", icon: "documents", section: "Resident Services" },
-  { href: "/admin/announcements", label: "Announcements", icon: "announcements", section: "Resident Services" },
-  { href: "/admin/events", label: "Events", icon: "events", section: "Resident Services" },
-  { href: "/admin/chat", label: "Chat", icon: "chat", section: "Resident Services" },
+  { href: "/admin/documents?section=types", label: "Document Definitions", icon: "documents", section: "Resident Services" },
+  { href: "/admin/documents?section=templates", label: "Templates", icon: "documents", section: "Resident Services" },
+  { href: "/admin/documents?section=requests", label: "Requests", icon: "documents", section: "Resident Services" },
+  { href: "/admin/documents/new", label: "Create Walk-In / Office Request", icon: "documents", section: "Resident Services" },
+  { href: "/admin/documents?section=issued", label: "Issued Documents", icon: "documents", section: "Resident Services" },
+  { href: "/admin/announcements", label: "Announcements", icon: "announcements", section: "Community" },
+  { href: "/admin/events", label: "Events", icon: "events", section: "Community" },
+  { href: "/admin/chat", label: "Chat", icon: "chat", section: "Community" },
   { href: "/admin/employees", label: "Employees", icon: "employees", section: "HR & Payroll" },
   { href: "/admin/attendance", label: "Attendance", icon: "attendance", section: "HR & Payroll" },
   { href: "/admin/payroll", label: "Payroll", icon: "payroll", section: "HR & Payroll" },
@@ -70,7 +74,8 @@ export const platformLinks: LinkItem[] = [
 
 export const portalLinks: LinkItem[] = [
   { href: "/portal/dashboard", label: "Dashboard", icon: "dashboard", section: "Overview" }, { href: "/portal/profile", label: "My profile", icon: "profile", section: "Account" },
-  { href: "/portal/billing", label: "My billing", icon: "billing", section: "Account" }, { href: "/portal/pay", label: "Pay by QR", icon: "payments", section: "Account" }, { href: "/portal/soa", label: "Statement of Account", icon: "reports", section: "Account" }, { href: "/portal/payments", label: "My payments", icon: "payments", section: "Account" }, { href: "/portal/collections", label: "Collections & bonds", icon: "collections", section: "Account" }, { href: "/portal/vehicles", label: "My vehicles", icon: "vehicles", section: "Account" }, { href: "/portal/documents", label: "Document requests", icon: "documents", section: "Account" },
+  { href: "/portal/billing", label: "My billing", icon: "billing", section: "Account" }, { href: "/portal/pay", label: "Pay by QR", icon: "payments", section: "Account" }, { href: "/portal/soa", label: "Statement of Account", icon: "reports", section: "Account" }, { href: "/portal/payments", label: "My payments", icon: "payments", section: "Account" }, { href: "/portal/collections", label: "Collections & bonds", icon: "collections", section: "Account" }, { href: "/portal/vehicles", label: "My vehicles", icon: "vehicles", section: "Account" },
+  { href: "/portal/documents", label: "My Document Requests", icon: "documents", section: "Resident Services" }, { href: "/portal/documents?intent=request", label: "Request a Document", icon: "documents", section: "Resident Services" }, { href: "/portal/documents?section=issued", label: "Issued Documents", icon: "documents", section: "Resident Services" },
   { href: "/portal/announcements", label: "Announcements", icon: "announcements", section: "Community" }, { href: "/portal/events", label: "Events", icon: "events", section: "Community" }, { href: "/portal/chat", label: "Chat", icon: "chat", section: "Community" },
   { href: "/portal/organization", label: "HOA officers", icon: "homeowners", section: "Community" },
 ];

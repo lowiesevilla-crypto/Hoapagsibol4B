@@ -514,6 +514,16 @@ Deferred next phase:
 
 - Full dynamic walk-in fields, document payment processing, release acknowledgement, public QR verification, and the professional editor remain separate work items.
 
+### Resident Services UX Refinement
+
+- [x] Sidebar Resident Services document links use the approved business labels and order.
+- [x] Homeowner portal exposes only My Document Requests, Request a Document, and Issued Documents.
+- [x] Tenant Admin sidebar shows a hidden-when-zero actionable request badge capped visually at `99+`.
+- [x] Requests default to a Needs Action view that uses the same tenant-scoped predicate as the sidebar badge.
+- [x] Document Definition configuration is organized into Overview, Workflow, Payment and Receipt, Approval, Balance and Release, Numbering and Validity, Access and Request Subjects, Output and Verification, Template Assignment, and Audit / Change History.
+- [x] Custom workflow mode persists independently editable effective payment, approval, receipt, delivery, and approver rules.
+- [ ] Product Owner UAT must confirm the redesigned Document Management navigation and definition-editing workflow before release approval.
+
 ## Certified Template Foundation - Phase 2B.1
 
 Ownership architecture:

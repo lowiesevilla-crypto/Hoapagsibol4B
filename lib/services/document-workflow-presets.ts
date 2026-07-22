@@ -1,6 +1,6 @@
 import { DocumentDeliveryMode } from "@prisma/client";
 
-export const documentWorkflowPresetValues = ["FREE_INSTANT", "FREE_APPROVAL", "PAID_INSTANT", "PAID_APPROVAL", "REQUEST_ONLY"] as const;
+export const documentWorkflowPresetValues = ["FREE_INSTANT", "FREE_APPROVAL", "PAID_INSTANT", "PAID_APPROVAL", "REQUEST_ONLY", "CUSTOM"] as const;
 
 export type DocumentWorkflowPreset = (typeof documentWorkflowPresetValues)[number];
 
@@ -34,7 +34,7 @@ export function workflowFieldsForPreset(preset: string): DocumentWorkflowFields 
   }
 }
 
-export function workflowPresetForDeliveryMode(mode: DocumentDeliveryMode): DocumentWorkflowPreset {
+export function workflowPresetForDeliveryMode(mode: DocumentDeliveryMode): Exclude<DocumentWorkflowPreset, "CUSTOM"> {
   switch (mode) {
     case DocumentDeliveryMode.INSTANT_DOWNLOAD:
       return "FREE_INSTANT";
@@ -47,4 +47,21 @@ export function workflowPresetForDeliveryMode(mode: DocumentDeliveryMode): Docum
     case DocumentDeliveryMode.REQUEST_ONLY:
       return "REQUEST_ONLY";
   }
+}
+
+export function workflowPresetForDefinitionFields(definition: DocumentWorkflowFields): DocumentWorkflowPreset {
+  for (const preset of documentWorkflowPresetValues) {
+    if (preset === "CUSTOM") continue;
+    const fields = workflowFieldsForPreset(preset);
+    if (
+      fields &&
+      fields.deliveryMode === definition.deliveryMode &&
+      fields.paymentRequired === definition.paymentRequired &&
+      fields.approvalRequired === definition.approvalRequired &&
+      fields.paymentBeforeApproval === definition.paymentBeforeApproval &&
+      fields.allowImmediateDownload === definition.allowImmediateDownload &&
+      fields.requiresAdminReview === definition.requiresAdminReview
+    ) return preset;
+  }
+  return "CUSTOM";
 }

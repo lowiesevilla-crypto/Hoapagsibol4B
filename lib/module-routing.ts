@@ -16,7 +16,8 @@ const rules: Array<[string, TenantModule]> = [
 ];
 
 export function moduleForPath(pathname: string) {
-  return rules.find(([prefix]) => pathname === prefix || pathname.startsWith(`${prefix}/`))?.[1];
+  const path = pathname.split(/[?#]/)[0];
+  return rules.find(([prefix]) => path === prefix || path.startsWith(`${prefix}/`))?.[1];
 }
 
 export function filterLinksByModules(links: LinkItem[], enabled: ReadonlySet<TenantModule>) {

@@ -30,8 +30,13 @@ async function main() {
     assertCondition(version.templateSet.tenantId === version.tenantId, `template version ${version.id} crosses tenant scope`);
     if (version.ownershipType === DocumentTemplateOwnership.CERTIFIED) assertCondition(version.status !== DocumentTemplateVersionStatus.DRAFT, `certified version ${version.id} cannot be a draft`);
     if (version.sourceVersionId) {
-      const source = await prisma.documentTemplateVersion.findUnique({ where: { id: version.sourceVersionId }, select: { ownershipType: true, status: true } });
-      assertCondition(source?.ownershipType === DocumentTemplateOwnership.CERTIFIED && source.status === DocumentTemplateVersionStatus.PUBLISHED, `clone source ${version.sourceVersionId} is not a published certified version`);
+      const source = await prisma.documentTemplateVersion.findUnique({ where: { id: version.sourceVersionId }, select: { tenantId: true, templateSetId: true, ownershipType: true, status: true } });
+      assertCondition(Boolean(source), `clone source ${version.sourceVersionId} was not found`);
+      if (source?.ownershipType === DocumentTemplateOwnership.CERTIFIED) {
+        assertCondition(source.status === DocumentTemplateVersionStatus.PUBLISHED, `certified clone source ${version.sourceVersionId} is not published`);
+      } else {
+        assertCondition(source?.tenantId === version.tenantId && source.templateSetId === version.templateSetId && source.ownershipType === version.ownershipType, `tenant draft source ${version.sourceVersionId} crosses tenant/template ownership`);
+      }
     }
   }
   assertCondition(documentVersions.every((version) => Boolean(version.id && version.requestId && version.documentNumber)), "historical document version identity is incomplete");

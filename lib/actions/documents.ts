@@ -3,7 +3,7 @@
 import { randomUUID } from "node:crypto";
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { DocumentDefinitionStatus, DocumentDeliveryMode, DocumentFieldType, DocumentOutstandingBalancePolicy, DocumentPlaceholderOwnership, DocumentRequestStatus, DocumentSequenceScope, DocumentSubjectType, DocumentTemplateOwnership, DocumentTemplateVersionStatus, DocumentType, NotificationType, Prisma, Role } from "@prisma/client";
+import { DocumentDefinitionStatus, DocumentDeliveryMode, DocumentFieldType, DocumentOutstandingBalancePolicy, DocumentPlaceholderOwnership, DocumentRequestStatus, DocumentSequenceScope, DocumentSubjectType, DocumentTemplateOwnership, DocumentTemplateVersionStatus, DocumentType, DocumentWorkflowApprovalMode, DocumentWorkflowStepType, NotificationType, Prisma, Role } from "@prisma/client";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { requireUser } from "@/lib/auth";
@@ -616,12 +616,16 @@ export async function saveDocumentDefinitionAction(formData: FormData) {
   if (displayName.length < 3) fail("Display name must be at least 3 characters.");
   const existingByCode = await prisma.documentDefinition.findFirst({ where: { tenantId: admin.tenantId, code, ...(id ? { id: { not: id } } : {}) }, select: { id: true } });
   if (existingByCode) fail("A document definition with this code already exists for this tenant.");
-  const existingDefinition = id ? await prisma.documentDefinition.findFirst({ where: { id, tenantId: admin.tenantId }, select: { id: true, tenantId: true, code: true, displayName: true, active: true, legacyType: true, archivedAt: true, status: true, version: true } }) : null;
+  const existingDefinition = id ? await prisma.documentDefinition.findFirst({ where: { id, tenantId: admin.tenantId }, select: { id: true, tenantId: true, code: true, displayName: true, active: true, legacyType: true, archivedAt: true, status: true, version: true, workflowDefinitionId: true } }) : null;
   if (id && !existingDefinition) fail("Document definition not found.");
   const workflowPreset = String(formData.get("workflowPreset") || "FREE_APPROVAL");
-  const workflowFields = workflowFieldsForPreset(workflowPreset);
-  if (!workflowFields) fail("Select a valid workflow.");
-  const workflow = workflowFields!;
+  const workflow = ((): NonNullable<ReturnType<typeof workflowFieldsForPreset>> => {
+    const workflowFields = workflowFieldsForPreset(workflowPreset);
+    if (workflowFields) return workflowFields;
+    if (workflowPreset === "CUSTOM") return customWorkflowFieldsFromForm(formData, fail);
+    fail("Select a valid workflow.");
+    throw new Error("Unreachable workflow validation state.");
+  })();
   let feeAmount = "0.00";
   try {
     feeAmount = decimalFromForm(formData.get("feeAmount"));
@@ -630,6 +634,9 @@ export async function saveDocumentDefinitionAction(formData: FormData) {
   }
   if (!workflow.paymentRequired && Number(feeAmount) !== 0) fail("Free workflows must have a zero fee.");
   if (workflow.paymentRequired && Number(feeAmount) <= 0) fail("Paid workflows require a fee greater than zero.");
+  if (workflow.paymentBeforeApproval && !workflow.paymentRequired) fail("Payment timing requires payment to be enabled.");
+  if (workflow.allowImmediateDownload && (workflow.paymentRequired || workflow.approvalRequired)) fail("Immediate download is available only when payment and approval are not required.");
+  if (workflow.requiresAdminReview && !workflow.approvalRequired) fail("Admin review requires approval to be enabled.");
   if (!workflow.paymentRequired) feeAmount = "0.00";
   const numberingFormat = String(formData.get("numberingFormat") || defaultNumberingFormat(code)).trim();
   const numbering = validateNumberingFormat(numberingFormat);
@@ -643,6 +650,18 @@ export async function saveDocumentDefinitionAction(formData: FormData) {
   if (signatoryOfficerId) {
     const officer = await prisma.organizationOfficer.findFirst({ where: { tenantId: admin.tenantId, id: signatoryOfficerId, active: true, archivedAt: null }, select: { id: true } });
     if (!officer) fail("Select an active tenant officer as signatory.");
+  }
+  const approverRole = nullableRole(formData.get("approverRole"));
+  if (approverRole && !approvalApproverRoles.has(approverRole)) fail("Select a valid approver role.");
+  const approverUserId = nullableText(formData.get("approverUserId"));
+  if ((workflow.approvalRequired || workflow.requiresAdminReview) && approverUserId) {
+    const approver = await prisma.user.findFirst({ where: { tenantId: admin.tenantId, id: approverUserId, active: true }, select: { id: true, role: true } });
+    if (!approver) {
+      fail("Select an active tenant user who can approve document requests.");
+      throw new Error("Unreachable approver validation state.");
+    }
+    if (!approvalApproverRoles.has(approver.role)) fail("Select an active tenant user who can approve document requests.");
+    if (approverRole && approver.role !== approverRole) fail("Specific approver must match the selected approver role.");
   }
   const maxCopies = Math.max(1, Math.min(25, Number(formData.get("maxCopies")) || 1));
   const validityDays = formData.get("validityDays") ? Math.max(1, Number(formData.get("validityDays")) || 0) : null;
@@ -683,7 +702,18 @@ export async function saveDocumentDefinitionAction(formData: FormData) {
   };
   if (id) {
     await platformPrisma.$transaction(async (tx) => {
-      await tx.documentDefinition.update({ where: { id }, data: { ...data, version: { increment: 1 } } });
+      const workflowDefinitionId = await saveApprovalWorkflowForDefinition(tx, {
+        tenantId: admin.tenantId,
+        definitionId: id,
+        existingWorkflowId: existingDefinition?.workflowDefinitionId ?? null,
+        code,
+        displayName,
+        approvalRequired: workflow.approvalRequired || workflow.requiresAdminReview,
+        approverRole,
+        approverUserId,
+        adminId: admin.id,
+      });
+      await tx.documentDefinition.update({ where: { id }, data: { ...data, workflowDefinitionId, version: { increment: 1 } } });
       if (existingDefinition?.legacyType && existingDefinition.legacyType !== legacyTypeValue) {
         await tx.documentTypeConfiguration.updateMany({ where: { tenantId: admin.tenantId, type: existingDefinition.legacyType, definitionId: id }, data: { definitionId: null, updatedById: admin.id, version: { increment: 1 } } });
       }
@@ -691,13 +721,25 @@ export async function saveDocumentDefinitionAction(formData: FormData) {
       if (restoreByActivation) {
         await tx.auditLog.create({ data: { tenantId: admin.tenantId, actorId: admin.id, module: "DOCUMENTS", action: "DOCUMENT_DEFINITION_RESTORE", entityType: "DocumentDefinition", entityId: id, metadata: { code, oldValue: { active: existingDefinition?.active, status: existingDefinition?.status, archivedAt: existingDefinition?.archivedAt?.toISOString() ?? null }, newValue: { active: true, status: DocumentDefinitionStatus.ACTIVE, archivedAt: null }, source: "saveDefinitionActiveCheckbox" } } });
       }
-      await tx.auditLog.create({ data: { tenantId: admin.tenantId, actorId: admin.id, module: "DOCUMENTS", action: "UPDATE_DOCUMENT_DEFINITION", entityType: "DocumentDefinition", entityId: id, metadata: { code, workflow: workflowPreset, feeAmount, outstandingBalancePolicy: balancePolicy } } });
+      await tx.auditLog.create({ data: { tenantId: admin.tenantId, actorId: admin.id, module: "DOCUMENTS", action: "UPDATE_DOCUMENT_DEFINITION", entityType: "DocumentDefinition", entityId: id, metadata: { code, workflow: workflowPreset, feeAmount, outstandingBalancePolicy: balancePolicy, approverRole, approverUserId } } });
     });
   } else {
     const definition = await platformPrisma.$transaction(async (tx) => {
       const created = await tx.documentDefinition.create({ data: { ...data, tenantId: admin.tenantId, systemKey: legacyTypeValue ? `CUSTOMIZED_${legacyTypeValue}` : null, createdById: admin.id } });
+      const workflowDefinitionId = await saveApprovalWorkflowForDefinition(tx, {
+        tenantId: admin.tenantId,
+        definitionId: created.id,
+        existingWorkflowId: null,
+        code,
+        displayName,
+        approvalRequired: workflow.approvalRequired || workflow.requiresAdminReview,
+        approverRole,
+        approverUserId,
+        adminId: admin.id,
+      });
+      if (workflowDefinitionId) await tx.documentDefinition.update({ where: { id: created.id }, data: { workflowDefinitionId } });
       if (legacyTypeValue) await syncLegacyDefinitionConfiguration(tx, admin.tenantId, legacyTypeValue, created.id, data, admin.id);
-      await tx.auditLog.create({ data: { tenantId: admin.tenantId, actorId: admin.id, module: "DOCUMENTS", action: "CREATE_DOCUMENT_DEFINITION", entityType: "DocumentDefinition", entityId: created.id, metadata: { code, workflow: workflowPreset, feeAmount, outstandingBalancePolicy: balancePolicy } } });
+      await tx.auditLog.create({ data: { tenantId: admin.tenantId, actorId: admin.id, module: "DOCUMENTS", action: "CREATE_DOCUMENT_DEFINITION", entityType: "DocumentDefinition", entityId: created.id, metadata: { code, workflow: workflowPreset, feeAmount, outstandingBalancePolicy: balancePolicy, approverRole, approverUserId } } });
       return created;
     });
     revalidatePath("/admin/settings/document-definitions");
@@ -741,6 +783,106 @@ export async function changeDocumentDefinitionStatusAction(formData: FormData) {
   revalidatePath("/admin/documents/new");
   revalidatePath("/portal/documents");
   redirect(`/admin/settings/document-definitions?success=${operation.toLowerCase()}&message=${encodeURIComponent(`${definitionRecord.displayName} ${operations[operation as keyof typeof operations].pastTense}.`)}`);
+}
+
+const approvalApproverRoles = new Set<Role>([
+  Role.SUPER_ADMIN,
+  Role.SYSTEM_ADMIN,
+  Role.HOA_ADMIN,
+  Role.ADMIN,
+  Role.STAFF,
+  Role.BILLING_MANAGER,
+]);
+
+function customWorkflowFieldsFromForm(formData: FormData, fail: (message: string) => never) {
+  const deliveryMode = String(formData.get("deliveryMode") || "");
+  if (!Object.values(DocumentDeliveryMode).includes(deliveryMode as DocumentDeliveryMode)) fail("Select a valid delivery mode.");
+  return {
+    deliveryMode: deliveryMode as DocumentDeliveryMode,
+    paymentRequired: String(formData.get("paymentRequired")) === "true",
+    approvalRequired: String(formData.get("approvalRequired")) === "true",
+    paymentBeforeApproval: String(formData.get("paymentBeforeApproval")) === "true",
+    allowImmediateDownload: String(formData.get("allowImmediateDownload")) === "true",
+    requiresAdminReview: String(formData.get("requiresAdminReview")) === "true",
+  };
+}
+
+function nullableRole(value: FormDataEntryValue | null) {
+  const text = nullableText(value);
+  if (!text) return null;
+  return Object.values(Role).includes(text as Role) ? text as Role : null;
+}
+
+async function saveApprovalWorkflowForDefinition(
+  tx: Prisma.TransactionClient,
+  input: {
+    tenantId: string;
+    definitionId: string;
+    existingWorkflowId: string | null;
+    code: string;
+    displayName: string;
+    approvalRequired: boolean;
+    approverRole: Role | null;
+    approverUserId: string | null;
+    adminId: string;
+  },
+) {
+  if (!input.approvalRequired) return null;
+  const workflowCode = `${input.code}_APPROVAL`;
+  const reusableWorkflow = input.existingWorkflowId
+    ? null
+    : await tx.documentWorkflowDefinition.findFirst({ where: { tenantId: input.tenantId, code: workflowCode }, select: { id: true } });
+  const workflowId = input.existingWorkflowId ?? reusableWorkflow?.id ?? null;
+  const workflow = workflowId
+    ? await tx.documentWorkflowDefinition.update({
+        where: { id: workflowId },
+        data: {
+          code: workflowCode,
+          name: `${input.displayName} approval workflow`,
+          active: true,
+          approvalMode: DocumentWorkflowApprovalMode.SEQUENTIAL,
+          updatedById: input.adminId,
+          version: { increment: 1 },
+        },
+      })
+    : await tx.documentWorkflowDefinition.create({
+        data: {
+          tenantId: input.tenantId,
+          code: workflowCode,
+          name: `${input.displayName} approval workflow`,
+          description: "Tenant-configured approval step for this document definition.",
+          active: true,
+          approvalMode: DocumentWorkflowApprovalMode.SEQUENTIAL,
+          createdById: input.adminId,
+          updatedById: input.adminId,
+        },
+      });
+  const existingStep = await tx.documentWorkflowStep.findFirst({
+    where: { tenantId: input.tenantId, workflowId: workflow.id, stepOrder: 1 },
+    select: { id: true },
+  });
+  const stepData = {
+    stepType: DocumentWorkflowStepType.APPROVAL,
+    approvalMode: DocumentWorkflowApprovalMode.SEQUENTIAL,
+    approverRole: input.approverRole,
+    approverUserId: input.approverUserId,
+    required: true,
+    updatedById: input.adminId,
+  };
+  if (existingStep) {
+    await tx.documentWorkflowStep.update({ where: { id: existingStep.id }, data: stepData });
+  } else {
+    await tx.documentWorkflowStep.create({
+      data: {
+        tenantId: input.tenantId,
+        workflowId: workflow.id,
+        stepOrder: 1,
+        ...stepData,
+        createdById: input.adminId,
+      },
+    });
+  }
+  return workflow.id;
 }
 
 export async function duplicateDocumentDefinitionAction(formData: FormData) {

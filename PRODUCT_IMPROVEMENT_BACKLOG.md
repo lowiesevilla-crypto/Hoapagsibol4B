@@ -3260,6 +3260,31 @@ Acceptance Criteria:
 - Unauthorized users cannot edit or publish templates.
 - No existing issued-document history is mutated.
 
+## Improvement #100 – Resident Services Document Management UX
+
+Module:
+Document Management
+
+Priority:
+High
+
+Status:
+Testing
+
+Problem:
+Document administration still exposed fragmented terminology and made effective workflow, payment, approval, receipt, balance, and access rules hard to review in one place.
+
+Implemented:
+- Resident Services navigation now uses business-facing entries: Document Definitions, Templates, Requests, Create Walk-In / Office Request, and Issued Documents.
+- Homeowner navigation is limited to My Document Requests, Request a Document, and Issued Documents.
+- Tenant Admin sidebar shows an actionable Requests badge using tenant-scoped server data.
+- The Requests page defaults to Needs Action using the same predicate as the sidebar badge.
+- Document Definition setup is organized into business sections with persisted effective configuration, unsaved-change warning, Save, Cancel, and Reset controls.
+- Custom workflow mode allows authorized admins to edit payment, approval, receipt, delivery, and approver rules independently.
+
+Release Gate:
+- Keep open until Product Owner UAT confirms navigation clarity, badge accuracy, request filtering, definition persistence, tenant isolation, and mobile usability.
+
 ## Certificate of Residency Reference Implementation
 
 Status: Engineering complete; Product Owner UAT required.

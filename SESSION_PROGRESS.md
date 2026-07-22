@@ -1094,6 +1094,16 @@ Tracked as Bug #098.
 - Walk-in request creation preserves definition/template/workflow/balance-policy snapshots and creates the workflow-appropriate request status before any safe instant generation.
 - Added `scripts/verify-document-management-phase-2a.ts`.
 - Walk-In Workflow Reconstruction and Bug #098 remain open until Product Owner UAT passes.
+
+## 2026-07-22 - Resident Services Document Management UX Refinement
+
+- Reworked the sidebar document module labels under Resident Services to Document Definitions, Templates, Requests, Create Walk-In / Office Request, and Issued Documents.
+- Limited homeowner portal document navigation to My Document Requests, Request a Document, and Issued Documents.
+- Added a tenant-scoped actionable request count service and sidebar badge for the Resident Services Requests entry.
+- Made the Document Management Requests section default to Needs Action using the same server-side predicate as the badge.
+- Reorganized the Document Definition configuration form into business-facing sections with a persisted effective configuration summary and unsaved-change warning.
+- Added Custom workflow mode so payment, approval, delivery, receipt, and approver rules can be independently edited when presets are not enough.
+- No schema migration was required; Product Owner UAT remains required before marking the UX refinement complete.
 ## Approved Document Template Editor Direction
 
 The Product Owner approved reconstructing the Document Template Editor as a

@@ -7,6 +7,7 @@ import { requireDocumentTemplateAdmin } from "@/lib/document-template-admin";
 import { prisma } from "@/lib/db";
 import { evaluateDocumentDefinitionVisibility, workflowPresetForDefinition } from "@/lib/services/document-definitions";
 import { documentOutstandingBalancePolicyOptions } from "@/lib/services/document-balance-policy";
+import { documentRequestNeedsActionWhere } from "@/lib/services/document-request-action-count";
 import { documentTypeLabel, documentTypeOptions } from "@/lib/services/documents";
 import { money, shortDate } from "@/lib/utils";
 
@@ -17,6 +18,7 @@ type Query = {
   status?: string;
   type?: string;
   date?: string;
+  view?: string;
   page?: string;
   error?: string;
   success?: string;
@@ -56,8 +58,17 @@ export default async function AdminDocumentsPage({ searchParams }: { searchParam
   const q = query.q?.trim() || "";
   const status = Object.values(DocumentRequestStatus).includes(query.status as DocumentRequestStatus) ? query.status as DocumentRequestStatus : undefined;
   const type = Object.values(DocumentType).includes(query.type as DocumentType) ? query.type as DocumentType : undefined;
+  const requestView = query.view === "all" || status ? "all" : "needs-action";
   const page = Math.max(1, Number(query.page) || 1);
-  const requestWhere = { tenantId: user.tenantId, archivedAt: null, ...(status ? { status } : {}), ...(type ? { type } : {}), ...(query.date && /^\d{4}-\d{2}-\d{2}$/.test(query.date) ? { requestedAt: { gte: new Date(`${query.date}T00:00:00.000Z`), lt: new Date(`${query.date}T23:59:59.999Z`) } } : {}), ...(q ? { OR: [{ documentNumber: { contains: q } }, { homeowner: { user: { name: { contains: q } } } }, { homeowner: { block: { contains: q } } }, { homeowner: { lot: { contains: q } } }] } : {}) };
+  const requestWhere: Prisma.DocumentRequestWhereInput = {
+    tenantId: user.tenantId,
+    archivedAt: null,
+    ...(status ? { status } : {}),
+    ...(type ? { type } : {}),
+    ...(query.date && /^\d{4}-\d{2}-\d{2}$/.test(query.date) ? { requestedAt: { gte: new Date(`${query.date}T00:00:00.000Z`), lt: new Date(`${query.date}T23:59:59.999Z`) } } : {}),
+    ...(q ? { OR: [{ documentNumber: { contains: q } }, { homeowner: { user: { name: { contains: q } } } }, { homeowner: { block: { contains: q } } }, { homeowner: { lot: { contains: q } } }] } : {}),
+    ...(requestView === "needs-action" ? { AND: [documentRequestNeedsActionWhere(user.tenantId)] } : {}),
+  };
   const [definitions, legacyConfigs, legacyTemplates, requests, requestCount, issued] = await Promise.all([
     prisma.documentDefinition.findMany({
       where: { tenantId: user.tenantId },
@@ -77,7 +88,7 @@ export default async function AdminDocumentsPage({ searchParams }: { searchParam
   ]);
   const inventory = buildInventory(definitions, legacyConfigs, legacyTemplates);
   const requestPages = Math.max(1, Math.ceil(requestCount / requestPageSize));
-  const filters = new URLSearchParams(Object.entries({ section: "requests", q, status: status || "", type: type || "", date: query.date || "" }).filter(([, value]) => value));
+  const filters = new URLSearchParams(Object.entries({ section: "requests", view: requestView, q, status: status || "", type: type || "", date: query.date || "" }).filter(([, value]) => value));
   return <>
     <PageHeader eyebrow="Resident services" title="Document Management" description="Manage document types, templates, homeowner requests, and issued HOA documents from one tenant-scoped workspace." action={<div className="flex flex-wrap gap-2"><Link className="btn-primary" href="/admin/documents/new">Create Walk-In / Office Request</Link><Link className="btn-secondary" href="/admin/documents/archive">Archive</Link></div>} />
     {query.notice === "legacy-templates" && <Notice kind="success">The legacy template screen now redirects here. Use Templates for draft, publishing, and version history.</Notice>}
@@ -91,7 +102,7 @@ export default async function AdminDocumentsPage({ searchParams }: { searchParam
     </nav>
     {section === "types" && <DocumentTypesSection definitions={definitions} inventory={inventory} />}
     {section === "templates" && <TemplatesSection definitions={definitions} />}
-    {section === "requests" && <RequestsSection requests={requests} count={requestCount} page={page} pages={requestPages} filters={filters} query={query} status={status} type={type} q={q} />}
+    {section === "requests" && <RequestsSection requests={requests} count={requestCount} page={page} pages={requestPages} filters={filters} query={query} status={status} type={type} q={q} view={requestView} />}
     {section === "issued" && <IssuedSection issued={issued} />}
   </>;
 }
@@ -139,11 +150,15 @@ function TemplatesSection({ definitions }: { definitions: DefinitionRow[] }) {
   </div>;
 }
 
-function RequestsSection({ requests, count, page, pages, filters, query, status, type, q }: { requests: RequestRow[]; count: number; page: number; pages: number; filters: URLSearchParams; query: Query; status?: DocumentRequestStatus; type?: DocumentType; q: string }) {
+function RequestsSection({ requests, count, page, pages, filters, query, status, type, q, view }: { requests: RequestRow[]; count: number; page: number; pages: number; filters: URLSearchParams; query: Query; status?: DocumentRequestStatus; type?: DocumentType; q: string; view: "needs-action" | "all" }) {
   return <>
-    <form className="card mb-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-[1fr_180px_230px_170px_auto]" method="get"><input type="hidden" name="section" value="requests" /><input className="field" type="search" name="q" defaultValue={q} placeholder="Homeowner, document no., block, lot" /><select className="field" name="status" defaultValue={status || ""}><option value="">All statuses</option>{Object.values(DocumentRequestStatus).map((item) => <option key={item} value={item}>{item.replaceAll("_", " ")}</option>)}</select><select className="field" name="type" defaultValue={type || ""}><option value="">All document types</option>{documentTypeOptions.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</select><input className="field" type="date" name="date" defaultValue={query.date} /><button className="btn-secondary">Apply filters</button></form>
+    <nav className="mb-4 flex flex-wrap gap-2" aria-label="Document request views">
+      <Tab href="/admin/documents?section=requests" active={view === "needs-action"}>Needs Action</Tab>
+      <Tab href="/admin/documents?section=requests&view=all" active={view === "all"}>All Requests</Tab>
+    </nav>
+    <form className="card mb-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-[1fr_180px_230px_170px_auto]" method="get"><input type="hidden" name="section" value="requests" />{view === "all" && <input type="hidden" name="view" value="all" />}<input className="field" type="search" name="q" defaultValue={q} placeholder="Homeowner, document no., block, lot" /><select className="field" name="status" defaultValue={status || ""}><option value="">All statuses</option>{Object.values(DocumentRequestStatus).map((item) => <option key={item} value={item}>{item.replaceAll("_", " ")}</option>)}</select><select className="field" name="type" defaultValue={type || ""}><option value="">All document types</option>{documentTypeOptions.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</select><input className="field" type="date" name="date" defaultValue={query.date} /><button className="btn-secondary">Apply filters</button></form>
     <PaginationFocusTarget id="document-request-table" label="Document request table" />
-    <section className="card overflow-hidden p-0 sm:p-0"><div className="flex flex-col gap-1 border-b border-slate-100 p-4 sm:flex-row sm:items-center sm:justify-between"><div><h2 className="font-black">Requests</h2><p className="text-sm text-slate-500">{count} request{count === 1 ? "" : "s"} found</p></div><p className="text-xs font-bold text-slate-500">Select View request to review or generate</p></div>
+    <section className="card overflow-hidden p-0 sm:p-0"><div className="flex flex-col gap-1 border-b border-slate-100 p-4 sm:flex-row sm:items-center sm:justify-between"><div><h2 className="font-black">{view === "needs-action" ? "Needs Action" : "Requests"}</h2><p className="text-sm text-slate-500">{count} request{count === 1 ? "" : "s"} found</p></div><p className="text-xs font-bold text-slate-500">Select View request to review or generate</p></div>
       {requests.length === 0 ? <div className="py-14 text-center text-sm text-slate-500">No document requests match the selected filters.</div> : <div className="table-wrap rounded-none shadow-none"><table className="data-table min-w-[1050px]"><thead><tr><th>Request / Homeowner</th><th>Origin</th><th>Document type</th><th>Date requested</th><th>Balance at request</th><th>Status</th><th>Document no.</th><th>Action</th></tr></thead><tbody>{requests.map((item) => <tr key={item.id} className="hover:bg-pine-50/60"><td><Link className="font-black text-pine-800 hover:underline" href={`/admin/documents/${item.id}`}>{item.homeowner.user.name}</Link><p className="text-xs text-slate-500">Block {item.homeowner.block}, Lot {item.homeowner.lot}</p></td><td><span className="badge badge-info">{item.origin === "ADMIN" ? "Admin / walk-in" : "Homeowner"}</span></td><td><p className="font-bold">{item.definition?.displayName || item.configuration?.displayName || documentTypeLabel(item.type)}</p><p className="max-w-52 truncate text-xs text-slate-500">{item.purpose || "No purpose supplied"}</p></td><td>{shortDate(item.requestedAt)}</td><td>{money(item.outstandingBalanceAtRequest)}</td><td><Status value={item.status} /></td><td className="font-mono text-xs">{item.documentNumber || "Not generated"}</td><td><Link className="btn-secondary min-h-9 px-3 py-1.5 text-xs" href={`/admin/documents/${item.id}`}>{item.generatedContent ? "Open document" : "View request"}</Link></td></tr>)}</tbody></table></div>}
     </section>
     {count > requestPageSize && <nav className="mt-5 flex items-center justify-between"><Link className={`btn-secondary ${page <= 1 ? "pointer-events-none opacity-50" : ""}`} href={`?${filters.toString()}&page=${page - 1}#document-request-table`}>Previous</Link><span className="text-sm font-bold">Page {page} of {pages}</span><Link className={`btn-secondary ${page >= pages ? "pointer-events-none opacity-50" : ""}`} href={`?${filters.toString()}&page=${page + 1}#document-request-table`}>Next</Link></nav>}
@@ -198,7 +213,7 @@ function Notice({ kind, children }: { kind: "error" | "success"; children: React
 }
 
 function workflowLabel(value: string) {
-  return value.replace("FREE_INSTANT", "Free + Instant").replace("FREE_APPROVAL", "Free + Approval").replace("PAID_INSTANT", "Paid + Instant").replace("PAID_APPROVAL", "Paid + Approval").replace("REQUEST_ONLY", "Request Only");
+  return value.replace("FREE_INSTANT", "Free + Instant").replace("FREE_APPROVAL", "Free + Approval").replace("PAID_INSTANT", "Paid + Instant").replace("PAID_APPROVAL", "Paid + Approval").replace("REQUEST_ONLY", "Request Only").replace("CUSTOM", "Custom");
 }
 
 function balancePolicyLabel(value: string) {

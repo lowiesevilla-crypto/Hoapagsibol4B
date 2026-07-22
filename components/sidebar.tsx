@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { usePathname } from "next/navigation";
+import { usePathname, useSearchParams } from "next/navigation";
 import type { LucideIcon } from "lucide-react";
 import { BellRing, Building2, CalendarDays, CarFront, ChevronDown, CircleDollarSign, CreditCard, FileBarChart, FileText, HardHat, KeyRound, Layers3, LayoutDashboard, ListChecks, LogOut, Megaphone, Menu, MessageSquare, ReceiptText, Settings, ShieldCheck, UserRound, UsersRound } from "lucide-react";
 import { logoutAction } from "@/lib/actions/auth";
@@ -12,9 +12,11 @@ import type { IconName, LinkItem } from "@/components/sidebar-links";
 const icons: Record<IconName, LucideIcon> = { audit: ShieldCheck, dashboard: LayoutDashboard, homeowners: UsersRound, contractors: HardHat, vehicles: CarFront, employees: UsersRound, attendance: CalendarDays, payroll: CreditCard, expenses: ReceiptText, billing: CircleDollarSign, payments: CreditCard, collections: ReceiptText, announcements: Megaphone, events: CalendarDays, reports: FileBarChart, data: FileBarChart, settings: Settings, profile: UserRound, licenses: KeyRound, chat: MessageSquare, documents: FileText, plans: Layers3, platform: Building2, subscriptions: ListChecks };
 type AssociationBrand = { name: string; logoUrl: string };
 const OPEN_SECTIONS_KEY = "hoahub.sidebar.openSections.v1";
+type SidebarBadges = Record<string, number>;
 
-export function Sidebar({ user, links, roleLabel, association, initialChatUnreadCount = 0, desktopOnly = false }: { user: { name: string; email: string }; links: LinkItem[]; roleLabel: string; association: AssociationBrand; initialChatUnreadCount?: number; desktopOnly?: boolean }) {
+export function Sidebar({ user, links, roleLabel, association, initialChatUnreadCount = 0, linkBadges = {}, sectionBadges = {}, desktopOnly = false }: { user: { name: string; email: string }; links: LinkItem[]; roleLabel: string; association: AssociationBrand; initialChatUnreadCount?: number; linkBadges?: SidebarBadges; sectionBadges?: SidebarBadges; desktopOnly?: boolean }) {
   const pathname = usePathname();
+  const searchParams = useSearchParams();
   const mobileMenuRef = useRef<HTMLDetailsElement>(null);
   const [chatUnreadCount, setChatUnreadCount] = useState(initialChatUnreadCount);
   const [openSections, setOpenSections] = useState<Record<string, boolean>>({});
@@ -68,10 +70,10 @@ export function Sidebar({ user, links, roleLabel, association, initialChatUnread
       <span className="absolute inset-x-0 top-0 hidden h-1 bg-gradient-to-r from-leaf-500 via-white/80 to-pine-500 lg:block" />
       <div className="flex h-18 items-center justify-between px-5 lg:h-24">
         <Link href={links[0].href} className="flex min-w-0 items-center gap-3 font-black"><AssociationLogo className="size-12 lg:size-14" src={association.logoUrl} alt={`${association.name} logo`} /><span className="min-w-0 max-w-44 break-words text-sm leading-tight lg:text-base">{firstLine}<br />{secondLine && <span className="text-leaf-100">{secondLine}</span>}</span></Link>
-        <details ref={mobileMenuRef} className="relative lg:hidden"><summary aria-label="Open navigation" className="relative cursor-pointer list-none rounded-xl border border-white/15 bg-white/10 p-2.5 hover:bg-white/20"><Menu className="size-5" />{hasChatLink && chatUnreadCount > 0 && <span className="absolute -right-2 -top-2 grid min-w-5 place-items-center rounded-full bg-red-500 px-1 text-[10px] font-black text-white" aria-label={`${chatUnreadCount} unread chat messages`}>{chatUnreadCount > 99 ? "99+" : chatUnreadCount}</span>}</summary><nav className="absolute right-0 top-12 z-50 max-h-[75vh] w-72 overflow-y-auto rounded-2xl border border-white/10 bg-pine-900 p-2 shadow-2xl">{groupedLinks.map(({ section, items }) => <SidebarSection key={section} section={section} items={items} pathname={pathname} open={sectionIsActive(items, pathname) || (openSections[section] ?? true)} onToggle={() => toggleSection(section)} unreadCount={chatUnreadCount} onNavigate={closeMobileMenu} mobile />)}<form action={logoutAction} className="mt-1 border-t border-white/10 pt-1"><button onClick={closeMobileMenu} className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm hover:bg-white/10"><LogOut className="size-4" />Log out</button></form></nav></details>
+        <details ref={mobileMenuRef} className="relative lg:hidden"><summary aria-label="Open navigation" className="relative cursor-pointer list-none rounded-xl border border-white/15 bg-white/10 p-2.5 hover:bg-white/20"><Menu className="size-5" />{hasChatLink && chatUnreadCount > 0 && <span className="absolute -right-2 -top-2 grid min-w-5 place-items-center rounded-full bg-red-500 px-1 text-[10px] font-black text-white" aria-label={`${chatUnreadCount} unread chat messages`}>{chatUnreadCount > 99 ? "99+" : chatUnreadCount}</span>}</summary><nav className="absolute right-0 top-12 z-50 max-h-[75vh] w-72 overflow-y-auto rounded-2xl border border-white/10 bg-pine-900 p-2 shadow-2xl">{groupedLinks.map(({ section, items }) => <SidebarSection key={section} section={section} items={items} pathname={pathname} currentParams={searchParams} open={sectionIsActive(items, pathname, searchParams) || (openSections[section] ?? true)} onToggle={() => toggleSection(section)} unreadCount={chatUnreadCount} linkBadges={linkBadges} sectionBadge={sectionBadges[section] ?? 0} onNavigate={closeMobileMenu} mobile />)}<form action={logoutAction} className="mt-1 border-t border-white/10 pt-1"><button onClick={closeMobileMenu} className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm hover:bg-white/10"><LogOut className="size-4" />Log out</button></form></nav></details>
       </div>
       <nav className="hidden max-h-[calc(100vh-13.5rem)] overflow-y-auto px-3 pb-5 lg:block">
-        {groupedLinks.map(({ section, items }) => <SidebarSection key={section} section={section} items={items} pathname={pathname} open={sectionIsActive(items, pathname) || (openSections[section] ?? true)} onToggle={() => toggleSection(section)} unreadCount={chatUnreadCount} />)}
+        {groupedLinks.map(({ section, items }) => <SidebarSection key={section} section={section} items={items} pathname={pathname} currentParams={searchParams} open={sectionIsActive(items, pathname, searchParams) || (openSections[section] ?? true)} onToggle={() => toggleSection(section)} unreadCount={chatUnreadCount} linkBadges={linkBadges} sectionBadge={sectionBadges[section] ?? 0} />)}
       </nav>
       <div className="hidden border-t border-white/10 bg-black/5 p-4 lg:absolute lg:inset-x-0 lg:bottom-0 lg:block">
         <div className="mb-3 flex items-center gap-3"><span className="grid size-11 place-items-center rounded-2xl bg-gradient-to-br from-leaf-500 to-leaf-600 font-black text-white shadow-lg">{user.name.charAt(0)}</span><div className="min-w-0"><p className="truncate text-sm font-bold">{user.name}</p><p className="truncate text-xs text-pine-100/70">{roleLabel}</p></div></div>
@@ -81,21 +83,28 @@ export function Sidebar({ user, links, roleLabel, association, initialChatUnread
   );
 }
 
-function SidebarSection({ section, items, pathname, open, onToggle, unreadCount, onNavigate, mobile = false }: { section: string; items: LinkItem[]; pathname: string; open: boolean; onToggle: () => void; unreadCount: number; onNavigate?: () => void; mobile?: boolean }) {
+type CurrentSearchParams = { get: (key: string) => string | null };
+
+function SidebarSection({ section, items, pathname, currentParams, open, onToggle, unreadCount, linkBadges, sectionBadge, onNavigate, mobile = false }: { section: string; items: LinkItem[]; pathname: string; currentParams: CurrentSearchParams; open: boolean; onToggle: () => void; unreadCount: number; linkBadges: SidebarBadges; sectionBadge: number; onNavigate?: () => void; mobile?: boolean }) {
   return <div className="mt-2">
     <button type="button" onClick={onToggle} className="flex w-full items-center justify-between rounded-xl px-3 py-2 text-[10px] font-extrabold uppercase tracking-[.2em] text-leaf-100/85 hover:bg-white/10">
-      <span>{section}</span>
-      <ChevronDown className={`size-4 transition ${open ? "rotate-180" : ""}`} />
+      <span className="flex min-w-0 items-center gap-2"><span className="truncate">{section}</span><SidebarBadge count={sectionBadge} label={`${section} items need action`} /></span>
+      <ChevronDown className={`size-4 shrink-0 transition ${open ? "rotate-180" : ""}`} />
     </button>
     {open && <div className="mt-1 space-y-1">
-      {items.map((item) => <SidebarLink key={item.href} item={item} active={linkIsActive(item.href, pathname)} unreadCount={item.icon === "chat" ? unreadCount : 0} onNavigate={onNavigate} mobile={mobile} />)}
+      {items.map((item) => <SidebarLink key={item.href} item={item} active={linkIsActive(item.href, pathname, currentParams)} unreadCount={item.icon === "chat" ? unreadCount : 0} badgeCount={linkBadges[item.href] ?? 0} onNavigate={onNavigate} mobile={mobile} />)}
     </div>}
   </div>;
 }
 
-function SidebarLink({ item, active, unreadCount, onNavigate, mobile = false }: { item: LinkItem; active: boolean; unreadCount: number; onNavigate?: () => void; mobile?: boolean }) {
+function SidebarLink({ item, active, unreadCount, badgeCount, onNavigate, mobile = false }: { item: LinkItem; active: boolean; unreadCount: number; badgeCount: number; onNavigate?: () => void; mobile?: boolean }) {
   const Icon = item.icon === "chat" && unreadCount > 0 ? BellRing : icons[item.icon];
-  return <Link href={item.href} onClick={onNavigate} className={`flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold transition ${active ? "bg-white text-pine-900 shadow-lg" : "text-pine-100 hover:bg-white/10 hover:text-white"} ${mobile ? "" : "mb-1"}`}><span className={`grid size-8 place-items-center rounded-lg ${active ? "bg-gradient-to-br from-leaf-100 to-pine-100 text-pine-700" : item.icon === "chat" && unreadCount > 0 ? "animate-pulse bg-red-500 text-white" : "bg-white/5"}`}><Icon className="size-4" /></span><span className="min-w-0 flex-1 truncate">{item.label}</span>{unreadCount > 0 && <span className={`ml-auto grid min-w-6 place-items-center rounded-full px-2 py-1 text-xs font-black ${active ? "bg-red-500 text-white" : "bg-white text-pine-900"}`} aria-label={`${unreadCount} unread messages`}>{unreadCount > 99 ? "99+" : unreadCount}</span>}</Link>;
+  return <Link href={item.href} onClick={onNavigate} className={`flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold transition ${active ? "bg-white text-pine-900 shadow-lg" : "text-pine-100 hover:bg-white/10 hover:text-white"} ${mobile ? "" : "mb-1"}`}><span className={`grid size-8 shrink-0 place-items-center rounded-lg ${active ? "bg-gradient-to-br from-leaf-100 to-pine-100 text-pine-700" : item.icon === "chat" && unreadCount > 0 ? "animate-pulse bg-red-500 text-white" : "bg-white/5"}`}><Icon className="size-4" /></span><span className="min-w-0 flex-1 truncate">{item.label}</span>{unreadCount > 0 && <span className={`ml-auto grid min-w-6 place-items-center rounded-full px-2 py-1 text-xs font-black ${active ? "bg-red-500 text-white" : "bg-white text-pine-900"}`} aria-label={`${unreadCount} unread messages`}>{unreadCount > 99 ? "99+" : unreadCount}</span>}<SidebarBadge count={badgeCount} active={active} label={`${badgeCount} document requests need action`} /></Link>;
+}
+
+function SidebarBadge({ count, active = false, label }: { count: number; active?: boolean; label: string }) {
+  if (count <= 0) return null;
+  return <span className={`ml-auto grid min-w-6 shrink-0 place-items-center rounded-full px-2 py-1 text-xs font-black ${active ? "bg-pine-800 text-white" : "bg-white text-pine-900"}`} aria-label={label} title={label}>{count > 99 ? "99+" : count}</span>;
 }
 
 function groupLinks(links: LinkItem[]) {
@@ -107,13 +116,24 @@ function groupLinks(links: LinkItem[]) {
   }, []);
 }
 
-function sectionIsActive(items: LinkItem[], pathname: string) {
-  return items.some((item) => linkIsActive(item.href, pathname));
+function sectionIsActive(items: LinkItem[], pathname: string, currentParams: CurrentSearchParams) {
+  return items.some((item) => linkIsActive(item.href, pathname, currentParams));
 }
 
-function linkIsActive(href: string, pathname: string) {
-  if (href === "/admin/reports") return pathname === href;
-  return pathname === href || pathname.startsWith(`${href}/`);
+function linkIsActive(href: string, pathname: string, currentParams: CurrentSearchParams) {
+  const [path, query = ""] = href.split("?");
+  if (query) {
+    if (pathname !== path) return false;
+    const targetParams = new URLSearchParams(query);
+    for (const [key, value] of targetParams.entries()) {
+      const currentValue = currentParams.get(key);
+      if (key === "section" && value === "types" && !currentValue) continue;
+      if (currentValue !== value) return false;
+    }
+    return true;
+  }
+  if (path === "/admin/reports") return pathname === path;
+  return pathname === path || pathname.startsWith(`${path}/`);
 }
 
 export const adminLinks: LinkItem[] = [
@@ -121,7 +141,8 @@ export const adminLinks: LinkItem[] = [
   { href: "/admin/homeowners", label: "Homeowners", icon: "homeowners", section: "Residents" }, { href: "/admin/contractors", label: "Contractors", icon: "contractors", section: "Residents" }, { href: "/admin/vehicles", label: "Vehicles & stickers", icon: "vehicles", section: "Residents" },
   { href: "/admin/employees", label: "Employees", icon: "employees", section: "Human resources" }, { href: "/admin/attendance", label: "Attendance", icon: "attendance", section: "Human resources" }, { href: "/admin/payroll", label: "Payroll", icon: "payroll", section: "Human resources" },
   { href: "/admin/billing", label: "Billing", icon: "billing", section: "Finance" }, { href: "/admin/payments/record", label: "Record payment", icon: "payments", section: "Payments" }, { href: "/admin/payments/requests", label: "Payment requests", icon: "payments", section: "Payments" }, { href: "/admin/payments/active", label: "Active payments", icon: "payments", section: "Payments" }, { href: "/admin/payments/history", label: "Transaction history", icon: "payments", section: "Payments" }, { href: "/admin/collections", label: "Other collections", icon: "collections", section: "Finance" }, { href: "/admin/expenses", label: "Expenses", icon: "expenses", section: "Finance" }, { href: "/admin/reports", label: "Reports", icon: "reports", section: "Finance" }, { href: "/admin/data", label: "Data management", icon: "data", section: "Finance" }, { href: "/admin/data/migrations", label: "Balance migration", icon: "data", section: "Finance" },
-  { href: "/admin/documents", label: "Document management", icon: "documents", section: "Community" }, { href: "/admin/announcements", label: "Announcements", icon: "announcements", section: "Community" }, { href: "/admin/events", label: "Events", icon: "events", section: "Community" }, { href: "/admin/chat", label: "Chat", icon: "chat", section: "Community" },
+  { href: "/admin/documents?section=types", label: "Document Definitions", icon: "documents", section: "Resident Services" }, { href: "/admin/documents?section=templates", label: "Templates", icon: "documents", section: "Resident Services" }, { href: "/admin/documents?section=requests", label: "Requests", icon: "documents", section: "Resident Services" }, { href: "/admin/documents/new", label: "Create Walk-In / Office Request", icon: "documents", section: "Resident Services" }, { href: "/admin/documents?section=issued", label: "Issued Documents", icon: "documents", section: "Resident Services" },
+  { href: "/admin/announcements", label: "Announcements", icon: "announcements", section: "Community" }, { href: "/admin/events", label: "Events", icon: "events", section: "Community" }, { href: "/admin/chat", label: "Chat", icon: "chat", section: "Community" },
 ];
 export const systemAdminLinks: LinkItem[] = [
   { href: "/admin/settings", label: "System settings", icon: "settings", section: "System" },
@@ -129,7 +150,8 @@ export const systemAdminLinks: LinkItem[] = [
 ];
 export const portalLinks: LinkItem[] = [
   { href: "/portal/dashboard", label: "Dashboard", icon: "dashboard", section: "Overview" }, { href: "/portal/profile", label: "My profile", icon: "profile", section: "Account" },
-  { href: "/portal/billing", label: "My billing", icon: "billing", section: "Account" }, { href: "/portal/pay", label: "Pay by QR", icon: "payments", section: "Account" }, { href: "/portal/payments", label: "My payments", icon: "payments", section: "Account" }, { href: "/portal/collections", label: "Collections & bonds", icon: "collections", section: "Account" }, { href: "/portal/vehicles", label: "My vehicles", icon: "vehicles", section: "Account" }, { href: "/portal/documents", label: "Document requests", icon: "documents", section: "Account" },
+  { href: "/portal/billing", label: "My billing", icon: "billing", section: "Account" }, { href: "/portal/pay", label: "Pay by QR", icon: "payments", section: "Account" }, { href: "/portal/payments", label: "My payments", icon: "payments", section: "Account" }, { href: "/portal/collections", label: "Collections & bonds", icon: "collections", section: "Account" }, { href: "/portal/vehicles", label: "My vehicles", icon: "vehicles", section: "Account" },
+  { href: "/portal/documents", label: "My Document Requests", icon: "documents", section: "Resident Services" }, { href: "/portal/documents?intent=request", label: "Request a Document", icon: "documents", section: "Resident Services" }, { href: "/portal/documents?section=issued", label: "Issued Documents", icon: "documents", section: "Resident Services" },
   { href: "/portal/announcements", label: "Announcements", icon: "announcements", section: "Community" }, { href: "/portal/events", label: "Events", icon: "events", section: "Community" }, { href: "/portal/chat", label: "Chat", icon: "chat", section: "Community" },
 ];
 export const employeeLinks: LinkItem[] = [

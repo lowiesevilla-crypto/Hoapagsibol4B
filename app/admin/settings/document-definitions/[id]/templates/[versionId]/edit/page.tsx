@@ -38,6 +38,8 @@ export default async function TemplateVersionEditorPage({ params, searchParams }
     {query.success && <Notice kind="success">{query.message || "Template saved."}</Notice>}
     <ProfessionalDocumentTemplateEditor
       action={saveDocumentTemplateVersionAction}
+      tenantId={admin.tenantId}
+      userId={admin.id}
       definitionId={id}
       versionId={version.id}
       title={definition.displayName}

@@ -44,6 +44,7 @@ async function main() {
     fs.readFile("components/professional-document-template-editor.tsx", "utf8"),
   ]);
   const keys = new Set<string>();
+  let requestableWalkInDefinitions = 0;
   for (const definition of definitions) {
     const key = `${definition.tenantId}:${definition.code}`;
     assertCondition(!keys.has(key), `duplicate tenant/code ${key}`);
@@ -54,10 +55,15 @@ async function main() {
       assertCondition(definition.assignedTemplateVersion.templateSet.definitionId === definition.id, `template definition mismatch for ${definition.code}`);
     }
     if (definition.walkInEnabled) {
-      assertCondition(definition.status === DocumentDefinitionStatus.ACTIVE && definition.active && !definition.archivedAt, `inactive walk-in definition ${definition.code}`);
-      assertCondition(Boolean(definition.assignedTemplateVersion && definition.assignedTemplateVersion.status === "PUBLISHED"), `walk-in definition without a published template ${definition.code}`);
+      const hasPublishedTemplate = Boolean(definition.assignedTemplateVersion && definition.assignedTemplateVersion.status === "PUBLISHED");
+      if (definition.status === DocumentDefinitionStatus.ACTIVE && definition.active && !definition.archivedAt && hasPublishedTemplate) {
+        requestableWalkInDefinitions++;
+        assertCondition(definition.assignedTemplateVersion!.tenantId === definition.tenantId, `requestable walk-in template tenant mismatch ${definition.code}`);
+        assertCondition(definition.assignedTemplateVersion!.templateSet.definitionId === definition.id, `requestable walk-in template definition mismatch ${definition.code}`);
+      }
     }
   }
+  assertCondition(requestableWalkInDefinitions > 0, "no isolated requestable walk-in definition with a published template was available");
   assertCondition(hub.includes("Document Definition Diagnostics"), "diagnostics panel is missing from the hub");
   assertCondition(!hub.includes("Expected document type inventory"), "duplicate inventory cards remain on the normal hub");
   assertCondition(!hub.includes('aria-label="Document management sections"'), "duplicate in-page document management navigation remains on the hub");

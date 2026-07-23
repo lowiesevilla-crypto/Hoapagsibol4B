@@ -6,6 +6,7 @@ import {
   DocumentDeliveryMode,
   DocumentDefinitionStatus,
   DocumentGenerationMode,
+  DocumentGenerationState,
   DocumentRequestStatus,
   DocumentSubjectType,
   PaymentMethod,
@@ -20,6 +21,7 @@ import { DocumentRuntimeError } from "@/lib/services/document-runtime-errors";
 import { requireDocumentPermission, type DocumentExecutionContext } from "@/lib/services/document-runtime-context";
 import { startDocumentWorkflow } from "@/lib/services/document-workflows";
 import { recordDocumentNotification } from "@/lib/services/document-notifications";
+import { householdMemberEligibility } from "@/lib/services/household-member-eligibility";
 
 const payableStatuses = new Set<DocumentRequestStatus>([
   DocumentRequestStatus.SUBMITTED,
@@ -52,11 +54,13 @@ export type DocumentWorkflowExecutorResult = {
     | "PAYMENT_CONFIRMED"
     | "APPROVAL_REQUIRED"
     | "REQUEST_ONLY"
-    | "GENERATED";
+    | "GENERATED"
+    | "GENERATION_FAILED";
   paymentRequestId?: string | null;
   documentVersionId?: string | null;
   documentNumber?: string | null;
   verificationUrl?: string | null;
+  failureMessage?: string | null;
 };
 
 const workflowRequestInclude = {
@@ -65,6 +69,7 @@ const workflowRequestInclude = {
   definition: { include: { workflowDefinition: { include: { steps: { orderBy: { stepOrder: "asc" } } } }, assignedTemplateVersion: { include: { templateSet: true } } } },
   paymentRequest: true,
   versions: { orderBy: { version: "desc" } },
+  histories: { orderBy: { createdAt: "desc" }, take: 10 },
 } satisfies Prisma.DocumentRequestInclude;
 
 type WorkflowRequest = Prisma.DocumentRequestGetPayload<{ include: typeof workflowRequestInclude }>;
@@ -168,6 +173,22 @@ export async function approveDocumentWorkflowRequest(context: DocumentExecutionC
   return issueOfficialDocument(context, fresh);
 }
 
+export async function retryDocumentGeneration(context: DocumentExecutionContext, requestId: string): Promise<DocumentWorkflowExecutorResult> {
+  requireDocumentPermission(context, "ISSUE_DOCUMENT");
+  const request = await loadWorkflowRequest(context, requestId);
+  await assertWorkflowRequest(context, request);
+  if (request.versions.length || request.currentVersion > 0 || issuedStatuses.has(request.status)) {
+    await reconcileIssuedRequestIfNeeded(context, request);
+    return { requestId: request.id, status: DocumentRequestStatus.ISSUED, action: "NOOP", documentNumber: request.documentNumber };
+  }
+  if (request.status === DocumentRequestStatus.CANCELLED || request.status === DocumentRequestStatus.REJECTED || request.status === DocumentRequestStatus.REVOKED) {
+    throw new DocumentRuntimeError("INVALID_STATE", "Cancelled, rejected, or revoked document requests cannot be retried.");
+  }
+  await assertNoActiveGenerationAttempt(context, request.id);
+  const restored = await restoreRecoverableStatus(context, request, "Authorized generation retry prepared this request for processing.");
+  return issueOfficialDocument(context, { ...request, status: restored.status });
+}
+
 async function continueAfterPaymentOrApproval(context: DocumentExecutionContext, request: WorkflowRequest): Promise<DocumentWorkflowExecutorResult> {
   if (request.approvalRequiredSnapshot || request.definition?.requiresAdminReview || request.definition?.deliveryMode === DocumentDeliveryMode.APPROVAL_REQUIRED || request.definition?.deliveryMode === DocumentDeliveryMode.PAYMENT_AND_APPROVAL_REQUIRED) {
     if (!request.approvedAt && request.status !== DocumentRequestStatus.APPROVED) {
@@ -183,17 +204,30 @@ async function continueAfterPaymentOrApproval(context: DocumentExecutionContext,
 async function issueOfficialDocument(context: DocumentExecutionContext, request: WorkflowRequest): Promise<DocumentWorkflowExecutorResult> {
   if (request.currentVersion > 0 || issuedStatuses.has(request.status)) return { requestId: request.id, status: request.status, action: "NOOP", documentNumber: request.documentNumber };
   if (!request.definition?.assignedTemplateVersion) throw new DocumentRuntimeError("TEMPLATE_UNAVAILABLE", "No active published template version is assigned to this document definition.");
-  const generating = await ensureStatus(context, request, DocumentRequestStatus.GENERATING, "Official document generation started.");
+  await ensureStatus(context, request, DocumentRequestStatus.GENERATING, "Official document generation started.");
   try {
     const result = await generateDocument(context, request.id, { mode: DocumentGenerationMode.ISSUE, idempotencyKey: `workflow:issue:${request.id}` });
-    return { requestId: request.id, status: result.requestStatus ?? generating.status, action: "GENERATED", paymentRequestId: request.paymentRequest?.id ?? null, documentVersionId: result.documentVersionId, documentNumber: result.documentNumber, verificationUrl: result.verificationUrl };
-  } catch (error) {
-    await platformPrisma.$transaction(async (tx) => {
-      await tx.documentRequest.update({ where: { id: request.id }, data: { status: request.status } });
-      await tx.documentRequestHistory.create({ data: { tenantId: context.tenantId, requestId: request.id, status: request.status, actorId: context.authenticatedUserId, note: "Official document generation failed; request was restored to the previous workflow state." } });
-      await tx.auditLog.create({ data: { tenantId: context.tenantId, actorId: context.authenticatedUserId, module: "DOCUMENTS", action: "DOCUMENT_GENERATION_FAILED", entityType: "DocumentRequest", entityId: request.id, metadata: { from: DocumentRequestStatus.GENERATING, restoredTo: request.status, error: error instanceof Error ? error.message : String(error) } } });
+    if (result.documentVersionId && result.requestStatus === DocumentRequestStatus.ISSUED) {
+      return { requestId: request.id, status: result.requestStatus, action: "GENERATED", paymentRequestId: request.paymentRequest?.id ?? null, documentVersionId: result.documentVersionId, documentNumber: result.documentNumber, verificationUrl: result.verificationUrl };
+    }
+    const failureMessage = safeGenerationFailureMessage();
+    const restored = await recordGenerationFailure(context, request, failureMessage, {
+      state: result.state,
+      attemptId: result.attemptId,
+      issueCodes: result.issues.map((issue) => issue.code),
+      issueDomains: result.issues.map((issue) => issue.domain),
+      issueMessages: result.issues.map((issue) => issue.message),
+      templateVersionId: result.templateVersionId,
+      templateVersion: result.templateVersion,
+      correlationId: result.correlationId,
     });
-    throw error;
+    return { requestId: request.id, status: restored.status, action: "GENERATION_FAILED", paymentRequestId: request.paymentRequest?.id ?? null, failureMessage };
+  } catch (error) {
+    const runtime = error instanceof DocumentRuntimeError ? error : new DocumentRuntimeError("INTERNAL_GENERATION_FAILURE", error instanceof Error ? error.message : "Document generation failed.");
+    console.error("Official document generation failed", { requestId: request.id, tenantId: context.tenantId, code: runtime.code, message: runtime.message, stack: error instanceof Error ? error.stack : undefined });
+    const failureMessage = safeGenerationFailureMessage();
+    const restored = await recordGenerationFailure(context, request, failureMessage, { code: runtime.code, detail: runtime.message, stack: error instanceof Error ? error.stack : undefined });
+    return { requestId: request.id, status: restored.status, action: "GENERATION_FAILED", paymentRequestId: request.paymentRequest?.id ?? null, failureMessage };
   }
 }
 
@@ -234,6 +268,63 @@ async function ensureStatus(context: DocumentExecutionContext, request: Workflow
   return updated;
 }
 
+async function recordGenerationFailure(context: DocumentExecutionContext, request: WorkflowRequest, failureMessage: string, metadata: Record<string, unknown>) {
+  const restored = await restoreRecoverableStatus(context, request, failureMessage);
+  await platformPrisma.auditLog.create({
+    data: {
+      tenantId: context.tenantId,
+      actorId: context.authenticatedUserId,
+      module: "DOCUMENTS",
+      action: "DOCUMENT_GENERATION_FAILED",
+      entityType: "DocumentRequest",
+      entityId: request.id,
+      reason: failureMessage,
+      metadata: { from: DocumentRequestStatus.GENERATING, restoredTo: restored.status, userMessage: failureMessage, failedAt: new Date().toISOString(), ...metadata },
+    },
+  });
+  return restored;
+}
+
+async function restoreRecoverableStatus(context: DocumentExecutionContext, request: WorkflowRequest, note: string) {
+  const status = recoverableStatus(request);
+  const current = await platformPrisma.documentRequest.findFirst({ where: { tenantId: context.tenantId, id: request.id }, select: { status: true } });
+  if (current?.status === status) return { id: request.id, status };
+  return platformPrisma.$transaction(async (tx) => {
+    const updated = await tx.documentRequest.update({ where: { id: request.id }, data: { status } });
+    await tx.documentRequestHistory.create({ data: { tenantId: context.tenantId, requestId: request.id, status, actorId: context.authenticatedUserId, note } });
+    return updated;
+  });
+}
+
+async function reconcileIssuedRequestIfNeeded(context: DocumentExecutionContext, request: WorkflowRequest) {
+  const version = request.versions[0];
+  if (!version || request.status === DocumentRequestStatus.ISSUED) return;
+  await platformPrisma.$transaction(async (tx) => {
+    await tx.documentRequest.update({
+      where: { id: request.id },
+      data: {
+        status: DocumentRequestStatus.ISSUED,
+        documentNumber: request.documentNumber ?? version.documentNumber,
+        generatedAt: request.generatedAt ?? version.createdAt,
+        issuedAt: request.issuedAt ?? version.issuedAt ?? version.createdAt,
+        currentVersion: request.currentVersion || version.version,
+      },
+    });
+    await tx.documentRequestHistory.create({ data: { tenantId: context.tenantId, requestId: request.id, status: DocumentRequestStatus.ISSUED, actorId: context.authenticatedUserId, note: `Recovered request status from existing issued document ${version.documentNumber}.` } });
+    await tx.auditLog.create({ data: { tenantId: context.tenantId, actorId: context.authenticatedUserId, module: "DOCUMENTS", action: "DOCUMENT_GENERATION_RECOVERED", entityType: "DocumentRequest", entityId: request.id, metadata: { documentVersionId: version.id, documentNumber: version.documentNumber } } });
+  });
+}
+
+async function assertNoActiveGenerationAttempt(context: DocumentExecutionContext, requestId: string) {
+  const active = await platformPrisma.documentGenerationAttempt.findFirst({
+    where: { tenantId: context.tenantId, requestId, state: { in: [DocumentGenerationState.VALIDATING, DocumentGenerationState.READY, DocumentGenerationState.RENDERING, DocumentGenerationState.GENERATED] } },
+    orderBy: { updatedAt: "desc" },
+  });
+  if (active && Date.now() - active.updatedAt.getTime() < 120_000) {
+    throw new DocumentRuntimeError("CONCURRENCY_CONFLICT", "Official document generation is already running. Try again after the current attempt finishes.");
+  }
+}
+
 async function loadWorkflowRequest(context: DocumentExecutionContext, requestId: string) {
   const request = await platformPrisma.documentRequest.findFirst({ where: { id: requestId, tenantId: context.tenantId }, include: workflowRequestInclude });
   if (!request) throw new DocumentRuntimeError("NOT_FOUND", "Document request was not found for the authenticated tenant.");
@@ -253,12 +344,8 @@ async function assertWorkflowRequest(context: DocumentExecutionContext, request:
 function assertEligibleSubject(context: DocumentExecutionContext, request: WorkflowRequest) {
   if (request.subjectType !== DocumentSubjectType.HOUSEHOLD_MEMBER) return;
   const member = request.subjectMember;
-  if (!member || member.tenantId !== context.tenantId || member.homeownerId !== request.homeownerId) {
-    throw new DocumentRuntimeError("PERMISSION_DENIED", "The selected household member does not belong to the requesting homeowner and tenant.");
-  }
-  if (!member.active || !member.validatedAt || member.revokedAt) {
-    throw new DocumentRuntimeError("VALIDATION_FAILED", "The selected household member must be active, validated, approved, and not revoked before document issuance.");
-  }
+  const eligibility = householdMemberEligibility(member, { tenantId: context.tenantId, homeownerId: request.homeownerId });
+  if (!eligibility.eligible) throw new DocumentRuntimeError(eligibility.label === "Wrong tenant" || eligibility.label === "Wrong household" ? "PERMISSION_DENIED" : "VALIDATION_FAILED", eligibility.reason);
 }
 
 function assertConfiguredApprover(context: DocumentExecutionContext, request: WorkflowRequest) {
@@ -293,6 +380,20 @@ function workflowLabel(request: WorkflowRequest) {
   if (request.approvalRequiredSnapshot) return "APPROVAL_REQUIRED";
   if (isRequestOnly(request)) return "REQUEST_ONLY";
   return "INSTANT_DOWNLOAD";
+}
+
+function recoverableStatus(request: WorkflowRequest) {
+  if (request.status !== DocumentRequestStatus.GENERATING) return request.status;
+  const previous = request.histories.find((history) => history.status !== DocumentRequestStatus.GENERATING && !issuedStatuses.has(history.status));
+  if (previous && previous.status !== DocumentRequestStatus.CANCELLED && previous.status !== DocumentRequestStatus.REJECTED && previous.status !== DocumentRequestStatus.REVOKED) return previous.status;
+  if (request.paymentRequiredSnapshot && !paymentConfirmedByStatus(request.status)) return DocumentRequestStatus.PENDING_PAYMENT;
+  if (request.approvalRequiredSnapshot && !request.approvedAt) return DocumentRequestStatus.PENDING_APPROVAL;
+  if (request.approvedAt) return DocumentRequestStatus.APPROVED;
+  return DocumentRequestStatus.SUBMITTED;
+}
+
+function safeGenerationFailureMessage() {
+  return "We could not finish generating this document. Your request was saved and HOA staff can retry processing it.";
 }
 
 function todayUtc() {

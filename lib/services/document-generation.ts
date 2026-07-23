@@ -200,13 +200,15 @@ function placeholderContext(request: GenerationRequestRecord, association: Await
   const subject = record(request.subjectSnapshot);
   const requestData = record(request.reviewedDataSnapshot ?? request.requestDataSnapshot);
   const fields = record(requestData.fields ?? requestData);
+  const subjectBirthDate = dateValue(subject.birthDate);
+  const requestPurpose = text(fields.purpose) || request.purpose || "official purposes";
   return {
     tenantId: context.tenantId,
     tenant: { name: association.name, address: association.address, tin: association.tinNumber, secRegistration: association.secRegistrationNumber, contactNumber: association.contactNumber, email: association.email, logo: association.logoUrl },
     document: { number: documentNumber, title: request.definition?.displayName ?? "Official HOA Document", issueDate: shortDate(issueDate), issuePlace: association.address || association.name, status: documentNumber === "PREVIEW" ? "Preview" : "Issued", validUntil: request.validityDate ? shortDate(request.validityDate) : undefined },
-    subject: { fullName: text(subject.fullName) || request.homeowner.user.name, relationship: text(subject.relationship) || "Homeowner", address: text(subject.address) || request.homeowner.address, birthDate: text(subject.birthDate), civilStatus: text(subject.civilStatus) || request.homeowner.civilStatus || undefined, nationality: text(subject.nationality) || request.homeowner.citizenship || undefined, status: request.homeowner.occupancyStatus || request.homeowner.propertyType || undefined, residencyStartDate: request.homeowner.residencyDate ? shortDate(request.homeowner.residencyDate) : undefined, age: request.homeowner.birthDate ? String(ageAt(request.homeowner.birthDate, issueDate)) : undefined, occupation: request.homeowner.occupation || undefined, contactNumber: request.homeowner.phone || undefined, phase: request.homeowner.phase || undefined, propertyType: request.homeowner.propertyType || undefined, occupancyStatus: request.homeowner.occupancyStatus || undefined },
+    subject: { fullName: text(subject.fullName) || request.homeowner.user.name, relationship: text(subject.relationship) || "Homeowner", address: text(subject.address) || request.homeowner.address, birthDate: subjectBirthDate ? shortDate(subjectBirthDate) : text(subject.birthDate), civilStatus: text(subject.civilStatus) || request.homeowner.civilStatus || undefined, nationality: text(subject.nationality) || request.homeowner.citizenship || undefined, status: request.homeowner.occupancyStatus || request.homeowner.propertyType || undefined, residencyStartDate: request.homeowner.residencyDate ? shortDate(request.homeowner.residencyDate) : undefined, age: subjectBirthDate ? String(ageAt(subjectBirthDate, issueDate)) : request.homeowner.birthDate ? String(ageAt(request.homeowner.birthDate, issueDate)) : undefined, occupation: request.homeowner.occupation || undefined, contactNumber: request.homeowner.phone || undefined, phase: request.homeowner.phase || undefined, propertyType: request.homeowner.propertyType || undefined, occupancyStatus: request.homeowner.occupancyStatus || undefined },
     property: { block: text(subject.block) || request.homeowner.block, lot: text(subject.lot) || request.homeowner.lot, address: text(subject.propertyAddress) || request.homeowner.address, accountLabel: text(subject.accountLabel) || `Block ${request.homeowner.block}, Lot ${request.homeowner.lot}`, phase: request.homeowner.phase || undefined, subdivision: association.name },
-    request: { purpose: text(fields.purpose) || request.purpose || undefined, remarks: text(fields.remarks) || request.remarks || undefined, copies: request.numberOfCopies, requestedAt: shortDate(request.requestedAt) },
+    request: { purpose: requestPurpose, remarks: text(fields.remarks) || request.remarks || undefined, copies: request.numberOfCopies, requestedAt: shortDate(request.requestedAt) },
     signatory: { name: signatory?.fullName, position: signatory?.position },
     verification: { url: verificationUrl ?? undefined, code: verificationUrl ? "Scan to verify" : undefined },
     system: { generatedAt: shortDate(issueDate), platformName: "HOAHub" },
@@ -278,6 +280,13 @@ function record(value: unknown): Record<string, unknown> {
 
 function text(value: unknown) {
   return typeof value === "string" || typeof value === "number" ? String(value) : undefined;
+}
+
+function dateValue(value: unknown) {
+  if (value instanceof Date) return value;
+  if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}/.test(value)) return null;
+  const date = new Date(`${value.slice(0, 10)}T00:00:00.000Z`);
+  return Number.isNaN(date.getTime()) ? null : date;
 }
 
 function ageAt(birthDate: Date, at: Date) {

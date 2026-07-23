@@ -35,7 +35,9 @@ export async function approveCertificateAction(formData: FormData) {
 export async function rejectCertificateAction(formData: FormData) {
   const user = await requireUser();
   const id = field(formData, "id");
-  await run(id, async () => rejectCertificateRequest(documentContextFromUser(user), id, field(formData, "remarks")));
+  const remarks = field(formData, "remarks");
+  if (remarks.length < 10) redirect(`/admin/documents/${encodeURIComponent(id)}?error=${encodeURIComponent("Enter rejection remarks with at least 10 characters.")}`);
+  await run(id, async () => rejectCertificateRequest(documentContextFromUser(user), id, remarks));
 }
 
 export async function issueCertificateAction(formData: FormData) {

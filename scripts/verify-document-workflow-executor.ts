@@ -23,7 +23,7 @@ import { verifyDocumentToken } from "@/lib/services/document-verification";
 import { DocumentRuntimeError } from "@/lib/services/document-runtime-errors";
 import { documentContextFromUser } from "@/lib/services/document-runtime-context";
 import { defaultTemplateDefinition } from "@/lib/services/document-template-builder";
-import { approveDocumentWorkflowRequest, executeDocumentWorkflowAfterSubmission } from "@/lib/services/document-workflow-executor";
+import { approveDocumentWorkflowRequest, executeDocumentWorkflowAfterSubmission, retryDocumentGeneration } from "@/lib/services/document-workflow-executor";
 
 type Check = [name: string, passed: boolean, detail: string];
 type Fixture = { tenantId: string; adminId: string; homeownerId: string; template: ReturnType<typeof defaultTemplateDefinition> };
@@ -92,12 +92,15 @@ async function main() {
     const issuedD = await requestState(requestD.id);
     add(checks, "scenario D approval after receipt issues document", issuedD.status === DocumentRequestStatus.ISSUED && issuedD.versions.length === 1, `${issuedD.status}/${issuedD.versions.length}`);
 
-    const member = await platformPrisma.householdMember.create({ data: { tenantId: fixture.tenantId, homeownerId: fixture.homeownerId, fullName: `${runId} Validated Member`, relationship: "Child", active: true, validatedAt: new Date(), validatedById: admin.id } });
+    const member = await platformPrisma.householdMember.create({ data: { tenantId: fixture.tenantId, homeownerId: fixture.homeownerId, fullName: `${runId} Sevillañ`, relationship: "Child", birthDate: new Date("2016-01-21T00:00:00.000Z"), civilStatus: "Single", nationality: "Filipino", active: true, validatedAt: new Date(), validatedById: admin.id } });
     memberIds.push(member.id);
     const memberRequest = await createRequest(fixture, instant.definitionId, instant.templateVersionId, runId, { subjectMemberId: member.id });
     requestIds.push(memberRequest.id);
     await executeDocumentWorkflowAfterSubmission(homeownerContext, memberRequest.id);
-    add(checks, "validated household member request issues", (await requestState(memberRequest.id)).status === DocumentRequestStatus.ISSUED, member.id);
+    const issuedMember = await requestState(memberRequest.id);
+    add(checks, "validated household member request issues", issuedMember.status === DocumentRequestStatus.ISSUED, member.id);
+    add(checks, "household member is official subject", issuedMember.generatedContent?.includes(member.fullName) === true && issuedMember.generatedContent?.includes(homeowner.user.name) !== true, member.fullName);
+    add(checks, "unicode household member name renders", issuedMember.generatedContent?.includes("Sevillañ") === true, issuedMember.generatedContent?.slice(0, 120) || "missing content");
     const unvalidated = await platformPrisma.householdMember.create({ data: { tenantId: fixture.tenantId, homeownerId: fixture.homeownerId, fullName: `${runId} Unvalidated Member`, relationship: "Sibling", active: true } });
     memberIds.push(unvalidated.id);
     const unvalidatedRequest = await createRequest(fixture, instant.definitionId, instant.templateVersionId, runId, { subjectMemberId: unvalidated.id });
@@ -108,6 +111,32 @@ async function main() {
     const inactiveRequest = await createRequest(fixture, instant.definitionId, instant.templateVersionId, runId, { subjectMemberId: inactive.id });
     requestIds.push(inactiveRequest.id);
     await expectError(checks, "inactive household member is denied", () => executeDocumentWorkflowAfterSubmission(homeownerContext, inactiveRequest.id), "VALIDATION_FAILED");
+
+    const invalidTemplate = defaultTemplateDefinition("Invalid Generation Fixture");
+    invalidTemplate.sections.header = invalidTemplate.sections.header.filter((block) => block.type !== "logo");
+    invalidTemplate.sections.body = [{ ...invalidTemplate.sections.body[0], id: "missing-required", binding: "request.unsupportedRequiredValue", content: "", required: true }];
+    invalidTemplate.sections.footer = [];
+    invalidTemplate.blocks = [...invalidTemplate.sections.header, ...invalidTemplate.sections.body, ...invalidTemplate.sections.footer];
+    const invalid = await createDefinition(fixture, `${runId}_INVALID`, "Invalid Required Token", { payment: false, approval: false }, definitionIds, templateSetIds, [], invalidTemplate);
+    const invalidRequest = await createRequest(fixture, invalid.definitionId, invalid.templateVersionId, runId, { status: DocumentRequestStatus.SUBMITTED });
+    requestIds.push(invalidRequest.id);
+    const failedGeneration = await executeDocumentWorkflowAfterSubmission(homeownerContext, invalidRequest.id);
+    const failedState = await requestState(invalidRequest.id);
+    const failedAttempt = await platformPrisma.documentGenerationAttempt.findFirstOrThrow({ where: { tenantId: fixture.tenantId, requestId: invalidRequest.id } });
+    add(checks, "generation failure returns recoverable action", failedGeneration.action === "GENERATION_FAILED" && failedGeneration.status === DocumentRequestStatus.SUBMITTED, `${failedGeneration.action}/${failedGeneration.status}`);
+    add(checks, "generation exception does not leave request generating", failedState.status !== DocumentRequestStatus.GENERATING && failedAttempt.state === "BLOCKED", `${failedState.status}/${failedAttempt.state}`);
+    add(checks, "safe homeowner generation failure message is recorded", failedState.histories.some((history) => history.note?.includes("HOA staff can retry processing it")), "safe failure history");
+    const fixedTemplate = defaultTemplateDefinition("Recovered Generation Fixture");
+    fixedTemplate.sections.header = fixedTemplate.sections.header.filter((block) => block.type !== "logo");
+    fixedTemplate.blocks = [...fixedTemplate.sections.header, ...fixedTemplate.sections.body, ...fixedTemplate.sections.footer];
+    await platformPrisma.documentTemplateVersion.update({ where: { id: invalid.templateVersionId }, data: { definitionJson: json(fixedTemplate) } });
+    const beforeRetry = await sideEffects(fixture.tenantId, invalidRequest.id, invalid.definitionId);
+    const retry = await retryDocumentGeneration(context, invalidRequest.id);
+    const retryAgain = await retryDocumentGeneration(context, invalidRequest.id);
+    const afterRetry = await sideEffects(fixture.tenantId, invalidRequest.id, invalid.definitionId);
+    const recovered = await requestState(invalidRequest.id);
+    add(checks, "authorized admin retry issues recovered request", retry.action === "GENERATED" && recovered.status === DocumentRequestStatus.ISSUED, `${retry.action}/${recovered.status}`);
+    add(checks, "retry is idempotent for issued request", retryAgain.action === "NOOP" && afterRetry.versions - beforeRetry.versions === 1 && afterRetry.tokens - beforeRetry.tokens === 1, JSON.stringify({ beforeRetry, afterRetry, retryAgain: retryAgain.action }));
 
     const previewRequest = await createRequest(fixture, instant.definitionId, instant.templateVersionId, runId, { status: DocumentRequestStatus.SUBMITTED });
     requestIds.push(previewRequest.id);
@@ -163,7 +192,7 @@ async function loadFixture(): Promise<Fixture> {
   return { tenantId: admin.tenantId, adminId: admin.id, homeownerId: homeowner.id, template };
 }
 
-async function createDefinition(fixture: Fixture, code: string, displayName: string, workflow: { payment: boolean; approval: boolean; approverRole?: Role }, definitionIds: string[], templateSetIds: string[], workflowIds: string[] = []) {
+async function createDefinition(fixture: Fixture, code: string, displayName: string, workflow: { payment: boolean; approval: boolean; approverRole?: Role }, definitionIds: string[], templateSetIds: string[], workflowIds: string[] = [], templateDefinition = fixture.template) {
   const createdWorkflow = workflow.approval
     ? await platformPrisma.documentWorkflowDefinition.create({ data: { tenantId: fixture.tenantId, code: `${code}_WF`, name: `${displayName} Workflow`, approvalMode: DocumentWorkflowApprovalMode.SEQUENTIAL, createdById: fixture.adminId, updatedById: fixture.adminId } })
     : null;
@@ -197,7 +226,7 @@ async function createDefinition(fixture: Fixture, code: string, displayName: str
   definitionIds.push(definition.id);
   const set = await platformPrisma.documentTemplateSet.create({ data: { tenantId: fixture.tenantId, definitionId: definition.id, name: `${displayName} Template`, createdById: fixture.adminId, updatedById: fixture.adminId } });
   templateSetIds.push(set.id);
-  const version = await platformPrisma.documentTemplateVersion.create({ data: { tenantId: fixture.tenantId, templateSetId: set.id, version: 1, status: DocumentTemplateVersionStatus.PUBLISHED, definitionJson: json(fixture.template), publishedAt: new Date(), publishedById: fixture.adminId, createdById: fixture.adminId } });
+  const version = await platformPrisma.documentTemplateVersion.create({ data: { tenantId: fixture.tenantId, templateSetId: set.id, version: 1, status: DocumentTemplateVersionStatus.PUBLISHED, definitionJson: json(templateDefinition), publishedAt: new Date(), publishedById: fixture.adminId, createdById: fixture.adminId } });
   await platformPrisma.documentDefinition.update({ where: { id: definition.id }, data: { assignedTemplateVersionId: version.id } });
   return { definitionId: definition.id, templateVersionId: version.id };
 }
@@ -216,7 +245,7 @@ async function createRequest(fixture: Fixture, definitionId: string, templateVer
     templateDefinitionSnapshot: json(fixture.template),
     subjectType: options.subjectMemberId ? DocumentSubjectType.HOUSEHOLD_MEMBER : DocumentSubjectType.SELF,
     subjectMemberId: options.subjectMemberId,
-    subjectSnapshot: json(subjectMember ? { fullName: subjectMember.fullName, relationship: subjectMember.relationship, address: subjectMember.address || homeowner.address, block: homeowner.block, lot: homeowner.lot } : { fullName: homeowner.user.name, relationship: "Homeowner", address: homeowner.address, block: homeowner.block, lot: homeowner.lot }),
+    subjectSnapshot: json(subjectMember ? { fullName: subjectMember.fullName, relationship: subjectMember.relationship, birthDate: subjectMember.birthDate?.toISOString().slice(0, 10) ?? null, civilStatus: subjectMember.civilStatus, nationality: subjectMember.nationality, address: subjectMember.address || homeowner.address, homeownerName: homeowner.user.name, propertyAddress: homeowner.address, block: homeowner.block, lot: homeowner.lot, accountLabel: `Block ${homeowner.block}, Lot ${homeowner.lot}` } : { fullName: homeowner.user.name, relationship: "Homeowner", birthDate: homeowner.birthDate?.toISOString().slice(0, 10) ?? null, civilStatus: homeowner.civilStatus, nationality: homeowner.citizenship, address: homeowner.address, homeownerName: homeowner.user.name, propertyAddress: homeowner.address, block: homeowner.block, lot: homeowner.lot, accountLabel: `Block ${homeowner.block}, Lot ${homeowner.lot}` }),
     requestDataSnapshot: json({ fields: { purpose: `${runId} official workflow verification`, remarks: runId } }),
     deliveryModeSnapshot: options.paymentRequired && options.approvalRequired ? DocumentDeliveryMode.PAYMENT_AND_APPROVAL_REQUIRED : options.paymentRequired ? DocumentDeliveryMode.PAYMENT_REQUIRED : options.approvalRequired ? DocumentDeliveryMode.APPROVAL_REQUIRED : DocumentDeliveryMode.INSTANT_DOWNLOAD,
     approvalRequiredSnapshot: options.approvalRequired ?? false,
@@ -232,7 +261,7 @@ async function createRequest(fixture: Fixture, definitionId: string, templateVer
 }
 
 async function requestState(id: string) {
-  return platformPrisma.documentRequest.findUniqueOrThrow({ where: { id }, include: { versions: true, verificationTokens: true } });
+  return platformPrisma.documentRequest.findUniqueOrThrow({ where: { id }, include: { versions: true, verificationTokens: true, histories: true } });
 }
 
 async function sideEffects(tenantId: string, requestId: string, definitionId: string) {

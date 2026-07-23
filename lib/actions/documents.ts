@@ -21,16 +21,18 @@ import { tenantUploadDirectory } from "@/lib/storage";
 import { assertEditableTemplateOwnership } from "@/lib/services/document-template-ownership";
 import { money, shortDate } from "@/lib/utils";
 import { sendEmailNotification } from "@/lib/services/notifications";
+import { canValidateHouseholdMembers, householdMemberEligibility, householdMemberValidationStatus, type HouseholdMemberValidationStatus } from "@/lib/services/household-member-eligibility";
 import { CERTIFICATE_OF_RESIDENCY_CODE } from "@/lib/services/certificate-of-residency";
 import { recordDocumentNotification } from "@/lib/services/document-notifications";
 import { documentContextFromUser } from "@/lib/services/document-runtime-context";
-import { approveDocumentWorkflowRequest, executeDocumentWorkflowAfterSubmission } from "@/lib/services/document-workflow-executor";
+import { approveDocumentWorkflowRequest, executeDocumentWorkflowAfterSubmission, retryDocumentGeneration } from "@/lib/services/document-workflow-executor";
 
 export type DocumentRequestSubmissionState = {
   status: "idle" | "success" | "error";
   message: string;
   requestId: string | null;
   duplicate: boolean;
+  values?: Record<string, string>;
 };
 
 export async function submitDocumentRequestAction(_previousState: DocumentRequestSubmissionState, formData: FormData): Promise<DocumentRequestSubmissionState> {
@@ -38,9 +40,9 @@ export async function submitDocumentRequestAction(_previousState: DocumentReques
   try {
     return await submitDocumentRequest(user, formData);
   } catch (error) {
-    if (error instanceof DocumentRequestSubmissionError) return { status: "error", message: error.message, requestId: null, duplicate: false };
+    if (error instanceof DocumentRequestSubmissionError) return { status: "error", message: error.message, requestId: null, duplicate: false, values: formValues(formData) };
     console.error("Document request submission failed", error);
-    return { status: "error", message: "The document request could not be submitted. Please try again.", requestId: null, duplicate: false };
+    return { status: "error", message: "The document request could not be submitted. Please try again.", requestId: null, duplicate: false, values: formValues(formData) };
   }
 }
 
@@ -88,10 +90,12 @@ async function submitDocumentRequest(user: Awaited<ReturnType<typeof requireUser
   if (!canGenerateWithoutPayment(workflowRecord) && workflowRecord.deliveryMode === DocumentDeliveryMode.INSTANT_DOWNLOAD) fail("This paid document requires payment confirmation before download.");
 
   const member = subjectType === DocumentSubjectType.HOUSEHOLD_MEMBER
-    ? await prisma.householdMember.findFirst({ where: { id: subjectMemberId, tenantId: user.tenantId, homeownerId, active: true } })
+    ? await prisma.householdMember.findFirst({ where: { id: subjectMemberId || "", tenantId: user.tenantId } })
     : null;
-  if (subjectType === DocumentSubjectType.HOUSEHOLD_MEMBER && !member) fail("Select a registered household or family member linked to your account.");
-  if (member && (!member.validatedAt || member.revokedAt)) fail("The selected household or family member must be validated and active before document requests can be submitted.");
+  if (subjectType === DocumentSubjectType.HOUSEHOLD_MEMBER) {
+    const eligibility = householdMemberEligibility(member, { tenantId: user.tenantId, homeownerId });
+    if (!eligibility.eligible) fail(eligibility.reason);
+  }
   const parsed = parseConfiguredFields(formData, definitionRecord?.fields ?? configRecord!.fields);
   if (parsed.errors.length) fail(parsed.errors[0]);
   const legacy = legacyRequestFields(parsed.values);
@@ -152,7 +156,7 @@ async function submitDocumentRequest(user: Awaited<ReturnType<typeof requireUser
   const workflowResult = definitionRecord ? await executeDocumentWorkflowAfterSubmission(context, request.id) : null;
   await prisma.auditLog.create({ data: { actorId: user.id, module: "DOCUMENTS", action: "SUBMIT_DOCUMENT_REQUEST", entityType: "DocumentRequest", entityId: request.id, metadata: { type: legacyType, configurationId: configRecord?.id, definitionId: definitionRecord?.id, subjectType, subjectMemberId: member?.id, purpose: purposeValue, outstandingBalance, deliveryMode: workflowRecord.deliveryMode, paymentRequired: workflowRecord.paymentRequired } } });
   revalidateDocumentPages(request.id);
-  return { status: "success", message: workflowResult?.action === "GENERATED" ? "Document request submitted and issued for download." : workflowResult?.action === "PAYMENT_REQUIRED" ? "Document request submitted. Payment confirmation is required before it can proceed." : workflowResult?.action === "APPROVAL_REQUIRED" ? "Document request submitted and waiting for HOA approval." : "Document request submitted successfully.", requestId: request.id, duplicate: false };
+  return { status: "success", message: workflowResult?.action === "GENERATED" ? "Document request submitted and issued for download." : workflowResult?.action === "GENERATION_FAILED" ? "Document request submitted, but we could not finish generating it. HOA staff can retry processing it." : workflowResult?.action === "PAYMENT_REQUIRED" ? "Document request submitted. Payment confirmation is required before it can proceed." : workflowResult?.action === "APPROVAL_REQUIRED" ? "Document request submitted and waiting for HOA approval." : "Document request submitted successfully.", requestId: request.id, duplicate: false };
 }
 
 export async function processDocumentRequestAction(formData: FormData) {
@@ -162,7 +166,8 @@ export async function processDocumentRequestAction(formData: FormData) {
   const requestedReturnPath = String(formData.get("returnTo") || "");
   const returnPath = /^\/admin\/documents\/[A-Za-z0-9_-]+$/.test(requestedReturnPath) ? requestedReturnPath : "/admin/documents";
   const fail = (message: string): never => redirect(`${returnPath}?error=${encodeURIComponent(message)}`);
-  const adminRemarks = clean(formData.get("adminRemarks"));
+  const rejectionRemarks = clean(formData.get("rejectionRemarks"));
+  const adminRemarks = operation === "reject" ? rejectionRemarks || clean(formData.get("adminRemarks")) : clean(formData.get("adminRemarks"));
   const submittedValidityDate = optionalDate(formData.get("validityDate"));
   const request = await prisma.documentRequest.findFirst({ where: { id, tenantId: admin.tenantId }, include: { homeowner: { include: { user: true } }, configuration: { include: { template: true, fields: { where: { active: true } } } }, definition: { include: { assignedTemplateVersion: { include: { templateSet: true } } } } } });
   if (!request) return fail("Document request not found.");
@@ -200,7 +205,7 @@ export async function processDocumentRequestAction(formData: FormData) {
       await tx.auditLog.create({ data: { tenantId: request.tenantId, actorId: admin.id, module: "DOCUMENTS", action: "REVIEW", entityType: "DocumentRequest", entityId: request.id, metadata: { adminRemarks, role: admin.role } } });
     });
   } else if (operation === "reject") {
-    if (!adminRemarks) fail("A rejection reason is required.");
+    if ((adminRemarks || "").trim().length < 10) fail("Enter rejection remarks with at least 10 characters.");
     if (request.status === DocumentRequestStatus.GENERATED || request.status === DocumentRequestStatus.READY_FOR_DOWNLOAD || request.status === DocumentRequestStatus.DOWNLOADED) fail("Generated documents cannot be rejected.");
     await platformPrisma.$transaction(async (tx) => {
       await tx.documentRequest.update({ where: { id: request.id }, data: { status: DocumentRequestStatus.REJECTED, reviewedAt: new Date(), processedById: admin.id, adminRemarks, reviewedDataSnapshot } });
@@ -446,6 +451,30 @@ export async function generateManualDocumentAction(formData: FormData) {
         ? "Submit for approval."
         : "Manual processing.";
   redirect(`/admin/documents/${request.id}?success=created&message=${encodeURIComponent(`Walk-In / Office Request created. Next step: ${nextStep}`)}`);
+}
+
+export async function retryDocumentGenerationAction(formData: FormData) {
+  const admin = await requireUser(Role.ADMIN);
+  const id = String(formData.get("id") || "");
+  const returnTo = `/admin/documents/${id}`;
+  const fail = (message: string): never => redirect(`${returnTo}?error=${encodeURIComponent(message)}`);
+  if (!id) fail("Document request is required.");
+  let message = "Generation retry completed.";
+  try {
+    const result = await retryDocumentGeneration(documentContextFromUser(admin), id);
+    revalidatePath(returnTo);
+    revalidatePath("/admin/documents");
+    revalidatePath("/portal/documents");
+    message = result.action === "GENERATED"
+      ? `Generation completed${result.documentNumber ? `: ${result.documentNumber}` : "."}`
+      : result.action === "NOOP"
+        ? "Request already has an issued document."
+        : result.failureMessage || "Generation could not be completed. Review the generation status and retry after correcting the issue.";
+  } catch (error) {
+    console.error("Retry document generation failed", error);
+    fail(error instanceof Error ? error.message : "Document generation retry failed.");
+  }
+  redirect(`${returnTo}?success=retry&message=${encodeURIComponent(message)}`);
 }
 
 export async function updateDocumentBalanceOverrideAction(formData: FormData) {
@@ -1131,20 +1160,58 @@ export async function saveAdminHouseholdMemberAction(formData: FormData) {
     prisma.householdMember.findFirst({ where: { id, tenantId: admin.tenantId, homeownerId } }),
   ]);
   if (!homeowner || !member) fail("Household member not found for this tenant.");
+  const memberRecord = member!;
   const fullName = String(formData.get("fullName") || "").trim();
   const relationship = String(formData.get("relationship") || "").trim();
   if (fullName.length < 2 || relationship.length < 2) fail("Enter the household member's name and relationship.");
-  await platformPrisma.householdMember.update({
-    where: { id },
-    data: {
-      fullName,
-      relationship,
-      birthDate: optionalDate(formData.get("birthDate")),
-      civilStatus: clean(formData.get("civilStatus")),
-      nationality: clean(formData.get("nationality")),
-      address: clean(formData.get("address")),
-      active: formData.get("active") === "on",
-    },
+  const active = formData.get("active") === "on";
+  const previousValidationStatus = householdMemberValidationStatus(memberRecord);
+  const requestedValidationStatus = validationStatusFromForm(formData.get("validationStatus"));
+  const validationRemarks = String(formData.get("validationRemarks") || "").trim();
+  const validationChanged = requestedValidationStatus !== previousValidationStatus;
+  const activeChanged = active !== memberRecord.active;
+  if (validationChanged && !canValidateHouseholdMembers(admin.role)) fail("Only authorized Resident Services administrators can change household member validation status.");
+  if (requestedValidationStatus === "REJECTED" && validationRemarks.length < 10) fail("Validation remarks are required when rejecting a household member.");
+  const now = new Date();
+  const validationData = canValidateHouseholdMembers(admin.role)
+    ? validationUpdateData(requestedValidationStatus, previousValidationStatus, memberRecord, admin.id, now)
+    : {};
+  await platformPrisma.$transaction(async (tx) => {
+    await tx.householdMember.update({
+      where: { id },
+      data: {
+        fullName,
+        relationship,
+        birthDate: optionalDate(formData.get("birthDate")),
+        civilStatus: clean(formData.get("civilStatus")),
+        nationality: clean(formData.get("nationality")),
+        address: clean(formData.get("address")),
+        active,
+        ...validationData,
+      },
+    });
+    if (validationChanged || activeChanged) {
+      await tx.auditLog.create({
+        data: {
+          tenantId: admin.tenantId,
+          actorId: admin.id,
+          module: "DOCUMENTS",
+          action: "UPDATE_HOUSEHOLD_MEMBER_VALIDATION",
+          entityType: "HouseholdMember",
+          entityId: id,
+          reason: validationRemarks || null,
+          metadata: {
+            homeownerId,
+            householdMemberId: id,
+            previousValidationStatus,
+            newValidationStatus: requestedValidationStatus,
+            previousActive: memberRecord.active,
+            newActive: active,
+            remarks: validationRemarks || null,
+          },
+        },
+      });
+    }
   });
   revalidatePath(`/admin/homeowners/${homeownerId}`);
   revalidatePath("/portal/documents");
@@ -1169,6 +1236,41 @@ function optionalDateFromString(value: string | undefined) { if (!value) return 
 function todayUtc() { const now = new Date(); return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate())); }
 function oneYearFromToday() { const date = todayUtc(); date.setUTCFullYear(date.getUTCFullYear() + 1); return date; }
 function clean(value: FormDataEntryValue | null) { return String(value || "").trim() || undefined; }
+function validationStatusFromForm(value: FormDataEntryValue | null): HouseholdMemberValidationStatus {
+  const status = String(value || "PENDING").trim().toUpperCase();
+  if (status === "VALIDATED" || status === "REJECTED" || status === "PENDING") return status;
+  return "PENDING";
+}
+function validationUpdateData(
+  requested: HouseholdMemberValidationStatus,
+  previous: HouseholdMemberValidationStatus,
+  member: { validatedAt: Date | null; validatedById: string | null; revokedAt: Date | null; revokedById: string | null },
+  actorId: string,
+  now: Date,
+) {
+  if (requested === "VALIDATED") {
+    return {
+      validatedAt: previous === "VALIDATED" && member.validatedAt ? member.validatedAt : now,
+      validatedById: previous === "VALIDATED" && member.validatedById ? member.validatedById : actorId,
+      revokedAt: null,
+      revokedById: null,
+    };
+  }
+  if (requested === "REJECTED") {
+    return {
+      validatedAt: null,
+      validatedById: null,
+      revokedAt: previous === "REJECTED" && member.revokedAt ? member.revokedAt : now,
+      revokedById: previous === "REJECTED" && member.revokedById ? member.revokedById : actorId,
+    };
+  }
+  return { validatedAt: null, validatedById: null, revokedAt: null, revokedById: null };
+}
+function formValues(formData: FormData) {
+  const values: Record<string, string> = {};
+  for (const [key, value] of formData.entries()) if (typeof value === "string") values[key] = value;
+  return values;
+}
 class DocumentRequestSubmissionError extends Error {}
 function nullableText(value: FormDataEntryValue | null) { const text = String(value || "").trim(); return text || null; }
 function ordinal(day: number) { const suffix = day % 100 >= 11 && day % 100 <= 13 ? "th" : day % 10 === 1 ? "st" : day % 10 === 2 ? "nd" : day % 10 === 3 ? "rd" : "th"; return `${day}${suffix}`; }

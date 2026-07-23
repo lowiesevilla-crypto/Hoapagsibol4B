@@ -7,9 +7,9 @@ import { shortDate } from "@/lib/utils";
 import { ContentImage } from "@/components/content-image";
 
 export default async function PortalEventsPage() {
-  await requireHomeownerProfile();
+  const profile = await requireHomeownerProfile();
   const today = new Date(); today.setHours(0, 0, 0, 0);
-  const events = await prisma.event.findMany({ where: { status: "PUBLISHED", eventDate: { gte: today } }, orderBy: [{ eventDate: "asc" }, { startTime: "asc" }] });
+  const events = await prisma.event.findMany({ where: { tenantId: profile.tenantId, status: "PUBLISHED", eventDate: { gte: today } }, orderBy: [{ eventDate: "asc" }, { startTime: "asc" }] });
   return <>
     <PageHeader eyebrow="Community" title="Upcoming events" description="Published meetings, activities, and neighborhood programs." />
     <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">{events.map((event) => <article className="card overflow-hidden p-0" key={event.id}>

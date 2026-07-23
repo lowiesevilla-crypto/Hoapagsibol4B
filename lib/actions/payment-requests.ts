@@ -1,12 +1,13 @@
 "use server";
 
-import { CollectionType, NotificationType, PaymentRequestType, Role } from "@prisma/client";
+import { CollectionType, DocumentDefinitionStatus, DocumentRequestStatus, NotificationType, PaymentRequestStatus, PaymentRequestType, Role } from "@prisma/client";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { requireUser } from "@/lib/auth";
 import { getAppUrl } from "@/lib/app-url";
 import { prisma } from "@/lib/db";
 import { savePaymentProof } from "@/lib/payment-proofs";
+import { documentFeePaymentPurpose, documentRequestPublicReference } from "@/lib/services/document-fee-payments";
 import { approvePaymentRequest, rejectPaymentRequest } from "@/lib/services/payment-requests";
 import { paymentRequestSchema, paymentReviewSchema } from "@/lib/validation";
 import { sendEmailNotification } from "@/lib/services/notifications";
@@ -21,6 +22,8 @@ const homeownerCollectionTypes = new Set<CollectionType>([
 
 export async function submitPaymentRequestAction(formData: FormData) {
   const user = await requireUser(Role.HOMEOWNER);
+  const rawDocumentRequestId = String(formData.get("documentRequestId") || "").trim();
+  const rawTransactionType = String(formData.get("transactionType") || "").trim();
   try {
     if (!user.homeownerProfile) throw new Error("Homeowner profile not found.");
     const parsed = paymentRequestSchema.safeParse(Object.fromEntries(formData.entries()));
@@ -62,6 +65,82 @@ export async function submitPaymentRequestAction(formData: FormData) {
         payerNotes: data.payerNotes || null,
       })),
     });
+    } else if (data.transactionType === PaymentRequestType.DOCUMENT_FEE) {
+      const documentRequestId = data.documentRequestId?.trim();
+      if (!documentRequestId) throw new Error("Select a document request to pay.");
+      const request = await prisma.documentRequest.findFirst({
+        where: { tenantId: user.tenantId, id: documentRequestId, homeownerId: user.homeownerProfile.id, archivedAt: null },
+        include: { definition: true, paymentRequest: true },
+      });
+      if (!request) throw new Error("Document request was not found for your homeowner account.");
+      if (!request.paymentRequiredSnapshot) throw new Error("This document request does not require a document fee.");
+      if (!request.definition || request.definition.tenantId !== user.tenantId || !request.definition.active || request.definition.status !== DocumentDefinitionStatus.ACTIVE || request.definition.archivedAt) {
+        throw new Error("This document configuration is no longer active. Please contact the HOA office.");
+      }
+      const terminalDocumentStatuses: DocumentRequestStatus[] = [DocumentRequestStatus.CANCELLED, DocumentRequestStatus.REJECTED, DocumentRequestStatus.REVOKED, DocumentRequestStatus.ISSUED, DocumentRequestStatus.READY_FOR_DOWNLOAD, DocumentRequestStatus.GENERATED, DocumentRequestStatus.DOWNLOADED];
+      if (terminalDocumentStatuses.includes(request.status)) {
+        throw new Error("This document request can no longer accept a fee payment.");
+      }
+      const feeAmount = Number(request.feeAmountSnapshot);
+      if (!Number.isFinite(feeAmount) || feeAmount <= 0) throw new Error("The saved document fee is invalid. Please contact the HOA office.");
+      if (data.amount != null && Math.abs(Number(data.amount) - feeAmount) > 0.009) throw new Error("Document fee amount is controlled by the saved document definition.");
+      if (request.paymentRequest?.status === PaymentRequestStatus.APPROVED) throw new Error("This document fee has already been confirmed.");
+      if (request.paymentRequest?.status === PaymentRequestStatus.PENDING_REVIEW && (request.paymentRequest.referenceNumber || request.paymentRequest.proofImageUrl)) {
+        throw new Error("This document fee payment has already been submitted for verification.");
+      }
+      const currentRequestId = request.paymentRequest?.id;
+      const activeDuplicate = await prisma.paymentRequest.findFirst({ where: { tenantId: user.tenantId, referenceNumber, status: { not: "REJECTED" }, ...(currentRequestId ? { id: { not: currentRequestId } } : {}) } });
+      if (activeDuplicate) throw new Error("This payment reference number has already been submitted for verification.");
+      const proof = await savePaymentProof(formData, user.tenant.slug);
+      const requestReference = documentRequestPublicReference(request);
+      const description = documentFeePaymentPurpose({ documentType: request.definition.displayName, requestReference });
+      await prisma.$transaction(async (tx) => {
+        const existing = await tx.paymentRequest.findFirst({ where: { tenantId: user.tenantId, documentRequestId: request.id } });
+        if (existing?.status === PaymentRequestStatus.APPROVED) throw new Error("This document fee has already been confirmed.");
+        if (existing && existing.status === PaymentRequestStatus.PENDING_REVIEW && (existing.referenceNumber || existing.proofImageUrl)) {
+          throw new Error("This document fee payment has already been submitted for verification.");
+        }
+        const paymentRequest = existing
+          ? await tx.paymentRequest.update({
+              where: { id: existing.id },
+              data: {
+                status: PaymentRequestStatus.PENDING_REVIEW,
+                collectionType: CollectionType.OTHER,
+                description,
+                amount: request.feeAmountSnapshot,
+                paymentDate,
+                referenceNumber,
+                proofImageUrl: proof?.url || data.proofImageUrl || null,
+                proofFileName: proof?.fileName || null,
+                proofContentType: proof?.contentType || null,
+                proofFileSize: proof?.size || null,
+                payerNotes: data.payerNotes || null,
+                reviewRemarks: null,
+                reviewedAt: null,
+                reviewedById: null,
+              },
+            })
+          : await tx.paymentRequest.create({
+              data: {
+                tenantId: user.tenantId,
+                type: PaymentRequestType.DOCUMENT_FEE,
+                homeownerId: user.homeownerProfile!.id,
+                documentRequestId: request.id,
+                collectionType: CollectionType.OTHER,
+                description,
+                amount: request.feeAmountSnapshot,
+                paymentDate,
+                referenceNumber,
+                proofImageUrl: proof?.url || data.proofImageUrl || null,
+                proofFileName: proof?.fileName || null,
+                proofContentType: proof?.contentType || null,
+                proofFileSize: proof?.size || null,
+                payerNotes: data.payerNotes || null,
+              },
+            });
+        await tx.documentRequestHistory.create({ data: { tenantId: user.tenantId, requestId: request.id, status: DocumentRequestStatus.PENDING_PAYMENT, actorId: user.id, note: `Document fee payment submitted for HOA verification. Reference: ${referenceNumber}.` } });
+        await tx.auditLog.create({ data: { tenantId: user.tenantId, actorId: user.id, module: "PAYMENTS", action: "SUBMIT_DOCUMENT_FEE_PAYMENT", entityType: "PaymentRequest", entityId: paymentRequest.id, metadata: { documentRequestId: request.id, definitionId: request.definitionId, amount: feeAmount, requestReference, referenceNumber } } });
+      });
     } else {
       const collectionType = data.transactionType as CollectionType;
       if (!homeownerCollectionTypes.has(collectionType)) throw new Error("That collection type cannot be paid from the homeowner portal.");
@@ -87,13 +166,16 @@ export async function submitPaymentRequestAction(formData: FormData) {
       });
     }
   } catch (error) {
-    redirect(`/portal/pay?error=${encodeURIComponent(error instanceof Error ? error.message : "Payment request could not be submitted.")}`);
+    const params = new URLSearchParams({ error: error instanceof Error ? error.message : "Payment request could not be submitted." });
+    if (rawDocumentRequestId) params.set("documentRequestId", rawDocumentRequestId);
+    redirect(`/portal/pay?${params.toString()}`);
   }
 
   revalidatePath("/portal/pay");
+  revalidatePath("/portal/documents");
   revalidatePath("/admin/payments");
   revalidatePath("/admin/payments/requests");
-  redirect("/portal/pay?success=submitted&message=Payment%20submitted%20for%20admin%20verification.");
+  redirect(rawTransactionType === PaymentRequestType.DOCUMENT_FEE ? "/portal/documents?success=payment&message=Document%20fee%20payment%20submitted%20for%20admin%20verification." : "/portal/pay?success=submitted&message=Payment%20submitted%20for%20admin%20verification.");
 }
 
 export async function approvePaymentRequestAction(formData: FormData) {
@@ -104,6 +186,11 @@ export async function approvePaymentRequestAction(formData: FormData) {
   const approved = await prisma.paymentRequest.findUnique({ where: { id: parsed.data.id }, include: { homeowner: { include: { user: true } }, payment: true, collection: true } });
   if (approved) await sendEmailNotification({ tenantId: admin.tenantId, recipientId: approved.homeowner.userId, email: approved.homeowner.user.email, subject: "HOA payment confirmed", heading: "Payment confirmation", message: `Hello ${approved.homeowner.user.name},\nYour payment of PHP ${Number(approved.amount).toFixed(2)} has been verified and approved.\nReference: ${approved.referenceNumber || "Not provided"}\nReceipt: ${approved.payment?.receiptNumber || approved.collection?.receiptNumber || "Available from the HOA office"}`, type: NotificationType.PAYMENT_CONFIRMATION, actionLabel: "View payment history", actionUrl: `${getAppUrl()}/portal/payments` }).catch(() => undefined);
   revalidatePaymentPages();
+  if (approved?.documentRequestId) {
+    revalidatePath(`/admin/documents/${approved.documentRequestId}`);
+    revalidatePath(`/documents/${approved.documentRequestId}`);
+    revalidatePath(`/documents/${approved.documentRequestId}/print`);
+  }
   redirect("/admin/payments/requests?success=approved&message=QR%20payment%20approved%20and%20officially%20recorded.");
 }
 
@@ -112,7 +199,12 @@ export async function rejectPaymentRequestAction(formData: FormData) {
   const parsed = paymentReviewSchema.safeParse(Object.fromEntries(formData.entries()));
   if (!parsed.success) throw new Error(parsed.error.issues[0]?.message || "Invalid review details.");
   await rejectPaymentRequest(parsed.data.id, admin.id, parsed.data.reviewRemarks, admin.tenantId);
+  const rejected = await prisma.paymentRequest.findFirst({ where: { id: parsed.data.id, tenantId: admin.tenantId }, select: { documentRequestId: true } });
   revalidatePaymentPages();
+  if (rejected?.documentRequestId) {
+    revalidatePath(`/admin/documents/${rejected.documentRequestId}`);
+    revalidatePath("/portal/documents");
+  }
   redirect("/admin/payments/requests?success=rejected&message=QR%20payment%20request%20has%20been%20rejected.");
 }
 
@@ -125,7 +217,9 @@ function revalidatePaymentPages() {
   revalidatePath("/admin/dashboard");
   revalidatePath("/admin/billing");
   revalidatePath("/admin/collections");
+  revalidatePath("/admin/documents");
   revalidatePath("/portal/pay");
+  revalidatePath("/portal/documents");
   revalidatePath("/portal/payments");
   revalidatePath("/portal/billing");
   revalidatePath("/portal/collections");

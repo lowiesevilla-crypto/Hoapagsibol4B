@@ -78,6 +78,30 @@ Responsibilities
 - Responsive Design
 - Forms
 - Tables
+
+---
+
+# Sprint 6A Addendum - Tenant Document Workflows
+
+Document requests now flow through a shared tenant-scoped workflow:
+
+1. Admin configures an active `DocumentTypeConfiguration`.
+2. Admin defines required `DocumentFieldConfiguration` rows for the homeowner form.
+3. Homeowner selects Self or a registered household/family member.
+4. Server validates tenant, homeowner ownership, subject ownership, active configuration, required fields, fee mode, and template availability.
+5. The request stores immutable subject/configuration/data snapshots.
+6. Admin review writes final reviewed values and field-level `DocumentRequestEditAudit` entries.
+7. Generation uses reviewed snapshots when present and preserves generated versions.
+
+Delivery modes supported:
+
+- `INSTANT_DOWNLOAD`
+- `APPROVAL_REQUIRED`
+- `PAYMENT_REQUIRED`
+- `PAYMENT_AND_APPROVAL_REQUIRED`
+- `REQUEST_ONLY`
+
+Paid-document accounting is intentionally not posted in Sprint 6A. Requests store fee and payment-required snapshots and block homeowner downloads until a later finance integration confirms payment.
 - Dashboards
 - Mobile Support
 - Client Validation
@@ -665,3 +689,102 @@ No database migration is required for Sprint 5B. Product Owner UAT remains the g
 | Version | Date | Description |
 |----------|------|-------------|
 | 1.3 | July 15, 2026 | Documented Sprint 5B SOA parity, activity filters, SOA link, and export presentation architecture |
+
+## 29. Homeowner Mobile Shell Architecture
+
+The homeowner portal uses a server-rendered, authenticated shell at `app/portal/layout.tsx`. The layout resolves the homeowner with `requireUser(Role.HOMEOWNER)`, loads tenant branding through `getAssociationSettings(user.tenantId)`, applies module entitlement checks through `getEnabledTenantModules(user.tenantId)`, and never accepts tenant identifiers from the client.
+
+Mobile presentation is centralized in `components/portal-mobile-shell.tsx`:
+
+1. `PortalMobileHeader` renders tenant logo/name, homeowner greeting, profile access, and chat notification access only when Chat is entitled.
+2. `PortalBottomNavigation` provides Home, Payments, SOA, Documents, and More navigation with active-route and `aria-current` state.
+3. Shared summary cards, quick-action tiles, section headers, empty/error/skeleton states, and mobile list rows keep portal pages consistent.
+4. The existing `Sidebar` remains the desktop/tablet navigation and is hidden only for portal mobile layout usage.
+
+The dashboard foundation uses `lib/services/statement-of-account.ts` for homeowner finance summary values. Additional previews are bounded, tenant-scoped reads for open bills, recent bills, payment requests, document requests, announcements, events, and refundable bonds. `/portal/soa` consumes the same SOA service to avoid duplicate statement calculations.
+
+PWA support is limited to neutral HOAHub manifest metadata. No service worker or offline cache is introduced for authenticated homeowner finance data. Offline behavior, push notifications, and richer app-install polish are deferred to Sprint 6B.
+
+Security constraints:
+
+- Tenant ID comes from the authenticated session and homeowner profile only.
+- Module entitlements filter navigation and quick actions.
+- Homeowner ownership checks continue through `requireHomeownerProfile`.
+- Finance calculations, payment posting, receipt generation, billing generation, and SOA service calculations are unchanged.
+
+# Document History Addendum
+
+| Version | Date | Description |
+|----------|------|-------------|
+| 1.4 | July 15, 2026 | Documented Sprint 6A homeowner mobile shell, shared components, PWA foundation, and security constraints |
+
+## 30. Document Template and Catalog Foundation
+
+Sprint 6A hotfix centralizes document configuration availability in `lib/services/document-workflow.ts`. A homeowner-requestable document configuration must be active, have a linked same-tenant matching-type template when generation is required, and the linked template must be active. Missing `templateId`, inactive templates, mismatched tenant/type, and inactive configurations are treated as incomplete and are hidden from homeowner request forms.
+
+The current schema remains enum-based through `DocumentType` on `DocumentTemplate`, `DocumentTypeConfiguration`, and `DocumentRequest`. True tenant-created custom document types require an additive catalog migration before implementation. The proposed catalog is a tenant-owned record with code, display name, description, system/legacy mapping, active/configurable/archive state, display order, and audit user fields. Existing enum records should be backfilled into catalog rows and linked through nullable compatibility fields while historical enum values and snapshots remain unchanged.
+
+Visual template editing is represented as a safe block schema foundation in `lib/services/document-template-builder.ts`: A4 portrait, allowlisted block types, allowlisted placeholders, no scripts, and deterministic validation. Draft/published storage, version tables, editor routes, and shared generated-document rendering require the next additive template-version migration.
+## Document Definition Aggregate
+
+The Document Definition is the root aggregate for tenant-configured documents.
+
+It owns or references:
+
+- Document metadata
+- Workflow configuration
+- Finance and fee policy
+- Field configuration
+- Template assignment
+- Published template version
+- Numbering rule
+- Signatory policy
+- Validity and copy rules
+- QR verification policy
+- Visibility and release settings
+
+Document requests and generated documents store immutable snapshots of the definition and published template version used at the time of processing.
+
+The platform must not use another tenant's definition, template, signatory, fee, numbering sequence, or workflow as a fallback.
+## Document Platform Transitional Architecture
+
+During migration, HOAHub will support two document paths:
+
+### Legacy Compatibility Path
+
+Used for existing requests and generated documents:
+
+- `DocumentType`
+- legacy template fields
+- stored request snapshots
+- stored generated content
+
+### Document Definition Path
+
+Used for new document configuration and future requests:
+
+- tenant-owned `DocumentDefinition`
+- versioned `DocumentTemplateVersion`
+- `DocumentDefinitionCounter`
+- secure `DocumentVerificationToken`
+- immutable definition and template snapshots
+
+The system must prefer stored snapshots for historical documents and must never regenerate historical content using current configuration.
+
+Migration `20260716120000_document_definition_compatibility_schema` adds the transitional schema and backfills compatibility links while preserving legacy enum fields. Current portal/admin flows remain enum-compatible; future Sprint 6B work should migrate request creation, catalog management, completeness validation, and generation to the `DocumentDefinition` path through the compatibility service in `lib/services/document-definitions.ts`.
+
+Sprint 6B-1B adds the tenant administration layer for this path. The catalog route manages definitions, dynamic fields, workflow/fee/numbering/signatory settings, completeness validation, and template publishing. Template versions use the safe block schema from `lib/services/document-template-builder.ts`; drafts are editable, published versions are immutable, and homeowner request creation now prefers complete active definitions while retaining legacy enum fallback for historical records.
+
+Sprint 6B-1B final hotfix completes the transitional custom-request path. `DocumentRequest.type` is nullable for custom definition-backed requests, while legacy requests keep their enum values. New custom requests use `definitionId`, definition snapshots, template-version snapshots, and `DocumentDefinitionCounter` as authoritative. Dynamic field rendering and validation share one normalized contract for defaults, select options, min/max constraints, length constraints, patterns, required flags, and checkbox behavior.
+
+## Document Generation Engine
+
+Milestone 3 adds a server-only configuration-driven coordinator over the Milestone 2 registry, capability, policy, workflow, template, placeholder, numbering, verification, audit, and notification services. It builds a renderer-neutral model and supports safe HTML as the native immutable output. Preview and validation are side-effect free; issue and reissue use database-backed idempotency and a short final transaction for number allocation, final QR render, hash, version/token persistence, request state, and critical audit events.
+
+Release is a separate idempotent operation that changes release metadata only and never regenerates output. Existing legacy generation, PDF, print, and download paths remain active compatibility adapters until a later route migration is approved. See `DOCUMENT_GENERATION_ENGINE.md` for the sequence, failure recovery, privacy boundary, and extension contract.
+
+## Certificate of Residency Reference Adapter
+
+Milestone 4 configures, rather than forks, the generic Document Platform. `certificate-of-residency.ts` owns stable codes, the certified A4 template, and explicit tenant provisioning. `document-certificate-lifecycle.ts` composes policy/workflow decisions with the generic orchestrator and release service. Certificate wording remains template data; the generation orchestrator contains no Certificate-type branch.
+
+New definition-backed Certificate requests snapshot the definition and published template. Official issue requires the configured signatory and completed workflow. Released downloads read `DocumentVersion.generatedContent` directly and never render again. Public verification resolves an opaque token hash and returns only safe metadata. Legacy enum fields, requests, generated content, PDF, and print routes remain readable compatibility data.

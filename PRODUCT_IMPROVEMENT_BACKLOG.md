@@ -76,6 +76,148 @@ Requirements
 Expected Result
 
 Users understand the HOA status within 10 seconds after login.
+
+---
+
+# Bug #062
+
+Module
+
+Documents
+
+Priority
+
+🔴 Critical
+
+Status
+
+Testing
+
+Problem
+
+Certificate of Residency request can fail when document availability is controlled only by legacy templates and does not support tenant-configurable active/inactive policy, request subjects, or configured fields.
+
+Engineering Update
+
+Sprint 6A document architecture migration adds tenant document configurations, active/inactive catalog controls, household/family subjects, immutable snapshots, delivery modes, fees, and admin edit audit.
+
+Release Gate
+
+Do not mark fixed until Product Owner UAT verifies active Certificate of Residency submission, inactive hiding, subject selection, snapshots, and tenant isolation.
+
+# Improvement #099
+
+Module
+
+Documents
+
+Priority
+
+🟠 High
+
+Status
+
+Testing
+
+Problem
+
+Document administration had two competing administrator-facing template/configuration surfaces: the legacy `/admin/document-templates` body editor and the newer Document Definition catalog with template versions, draft/publish workflow, and A4 preview.
+
+Engineering Update
+
+Phase 1 consolidates administrator navigation through `/admin/documents`, redirects the legacy template route to the consolidated workspace, preserves the legacy screen code for rollback/reference, exposes document type requestability and hidden reasons, simplifies template presentation into Current Published Template, Current Draft, and Version History, and keeps DocumentDefinition as the authoritative architecture.
+
+Release Gate
+
+Do not mark complete until Product Owner UAT verifies the Document Management hub, legacy-route redirect, template publishing presentation, hidden document reasons, tenant isolation, and existing request/review/generation workflows.
+
+# Improvement #063
+
+Module
+
+Documents
+
+Priority
+
+🟠 High
+
+Status
+
+Testing
+
+Problem
+
+Homeowners need to request documents for Self or authorized household/family members.
+
+Engineering Update
+
+Added `HouseholdMember`, Self/family request subject UI, and server-side tenant/homeowner ownership validation.
+
+# Improvement #064
+
+Module
+
+Documents
+
+Priority
+
+🟠 High
+
+Status
+
+Testing
+
+Problem
+
+Tenants need configurable document fees, fields, templates, approval rules, and delivery modes.
+
+Engineering Update
+
+Added `/admin/settings/document-types` backed by tenant-scoped configuration and field tables.
+
+# Improvement #065
+
+Module
+
+Documents
+
+Priority
+
+🟠 High
+
+Status
+
+Testing
+
+Problem
+
+Admin review needs editable document-visible values with audit history before approval.
+
+Engineering Update
+
+Added reviewed data snapshots and `DocumentRequestEditAudit` field-level records.
+
+# Improvement #066
+
+Module
+
+Documents / Finance
+
+Priority
+
+🟡 Medium
+
+Status
+
+Backlog
+
+Problem
+
+Paid document requests need complete accounting integration.
+
+Engineering Update
+
+Sprint 6A stores fee/payment snapshots and blocks download when payment is required. Full collection posting is deferred to Sprint 6B.
 # Improvement #002
 
 Dashboard KPI Cards
@@ -1856,3 +1998,1497 @@ Validated:
 - Search, date filters, sorting, and URL parameters persist.
 - Desktop and 390px mobile pass.
 - No console errors.
+
+---
+
+## Sprint 6A - Homeowner Mobile Foundation
+
+Module:
+Homeowner Portal / Mobile Shell
+
+Priority:
+High
+
+Status:
+Ready for Product Owner UAT
+
+Delivery Criteria:
+- Homeowner portal uses a mobile-first authenticated application shell with tenant branding, profile access, safe-area-aware bottom navigation, and active-route states.
+- Primary homeowner routes include `/portal/dashboard`, `/portal/profile`, `/portal/pay`, `/portal/soa`, `/portal/documents`, `/portal/announcements`, `/portal/events`, and `/portal/chat`.
+- Dashboard foundation uses the existing tenant-safe SOA service plus bounded homeowner, billing, payment request, document request, announcement, and event reads.
+- Quick actions are filtered by tenant module entitlements and never accept tenant IDs from client input.
+- Portal content reads were tightened with explicit tenant predicates for billing, payments, collections, documents, announcements, events, vehicles, and HOA officers.
+- PWA foundation adds neutral HOAHub install metadata without offline caching of authenticated financial data.
+- No Prisma schema or migration change is required.
+
+Release Gate:
+- Product Owner must verify the homeowner portal at 360px, 390px, 430px, tablet, and desktop widths before Sprint 6A is approved.
+- Sprint 6B remains responsible for deeper feature redesigns, offline strategy, and expanded native-app behaviors.
+## Bug #062 – Available Document Type Cannot Be Requested
+
+Module:
+Homeowner Document Requests
+
+Priority:
+Critical
+
+Status:
+Open
+
+Problem:
+A homeowner can select Certificate of Residency and enter the purpose and remarks, but submission fails with:
+
+`This document type is currently unavailable`
+
+Expected Behavior:
+A document type displayed as selectable must be available for submission for the authenticated tenant.
+
+Acceptance Criteria:
+- Only active tenant document types appear in the homeowner request form.
+- Certificate of Residency can be requested when enabled.
+- Purpose and remarks are saved.
+- Request is created for the logged-in homeowner only.
+- Request belongs to the authenticated tenant.
+- Disabled document types are hidden or clearly marked unavailable.
+- No cross-tenant document templates or fees are exposed.
+- Mobile submission works.
+- Clear success and failure messages are displayed.
+
+---
+
+## Improvement #063 – Configurable Free or Paid Document Requests
+
+Module:
+Document Requests and Tenant Settings
+
+Priority:
+High
+
+Status:
+Open
+
+Business Requirement:
+Each tenant must be able to define whether a document type is free or paid and configure its fee.
+
+Example:
+- Certificate of Residency
+- Fee: PHP 150
+- Another tenant may configure the same certificate as free
+
+Acceptance Criteria:
+- Each document type has a tenant-scoped fee configuration.
+- Fee may be zero.
+- Admin can mark a document as free or paid.
+- Homeowner sees the fee before submission.
+- Request records preserve the fee snapshot at the time of request.
+- Paid requests show payment status.
+- Free requests do not require payment.
+- Approval workflow works for free and paid requests.
+- Tenant isolation is enforced.
+- Existing document requests remain unchanged.
+## Improvement #064 – Document Requests for Registered Family Members
+
+Module:
+Homeowner Document Requests
+
+Priority:
+High
+
+Status:
+Open
+
+Requirement:
+Homeowners may request eligible documents for themselves or registered household/family members linked to their account and property.
+
+Acceptance Criteria:
+- Subject selection supports self and registered household members.
+- Server validates homeowner, household-member, property, and tenant ownership.
+- Request stores a subject snapshot.
+- Another homeowner’s household members cannot be selected.
+- Mobile workflow is supported.
+- Existing generated documents remain unchanged if household data is later updated.
+
+---
+
+## Improvement #065 – Admin Review and Editing Before Document Approval
+
+Module:
+Document Administration
+
+Priority:
+Critical
+
+Status:
+Open
+
+Requirement:
+Authorized administrators must be able to review and edit all information that will appear in a requested document before approval.
+
+Acceptance Criteria:
+- Admin can edit subject, address, property, purpose, dates, copies, remarks, signatory, and document-specific fields.
+- Original and edited values are auditable.
+- Approved document uses the final reviewed values.
+- Only tenant-authorized roles can edit and approve.
+- Existing generated document snapshots remain immutable.
+
+---
+
+## Improvement #066 – Tenant-Configured Instant Download and Approval Rules
+
+Module:
+Tenant Document Configuration
+
+Priority:
+Critical
+
+Status:
+Open
+
+Requirement:
+Each tenant defines whether each document type is available for instant download, requires payment, requires approval, requires both, or is request-only.
+
+Acceptance Criteria:
+- Delivery mode is persisted per tenant document type.
+- Free instant documents may download after validated submission.
+- Paid documents enforce payment.
+- Approval documents enforce admin approval.
+- Payment-and-approval documents enforce both.
+- Request and status history are recorded for instant downloads.
+- Tenant isolation is enforced.
+## Bug #073 – Document Type Configuration Cannot Be Updated
+
+Module:
+Tenant Document Configuration
+
+Priority:
+Critical
+
+Status:
+Open
+
+Problem:
+
+Saving an existing Document Type Configuration fails.
+
+Error:
+
+Unknown argument `tenantId`
+
+Observed During:
+
+Sprint 6A Product Owner UAT
+
+Expected:
+
+Tenant administrators can modify document configuration successfully.
+
+Root Cause:
+
+The update operation incorrectly passes tenantId into prisma.documentTypeConfiguration.update().
+
+Acceptance Criteria:
+
+- Document configuration saves successfully.
+- tenantId is never included in update data.
+- where clause uses only the primary key or Prisma compound unique selector.
+- Existing document fields update correctly.
+- Version increments correctly.
+- No Prisma validation errors.
+- Tenant isolation remains enforced.
+## Bug #074 – Active Document Configuration Cannot Resolve Active Template
+
+Module:
+Tenant Document Configuration and Homeowner Requests
+
+Priority:
+Critical
+
+Status:
+Open
+
+Problem:
+Certificate of Residency is active and visible to the homeowner, and an active template exists in the Test HOA Document Templates page. However, submission fails with:
+
+`This document type is currently unavailable because its template is inactive or missing.`
+
+Expected Behavior:
+An active tenant document configuration linked to an active tenant template must allow homeowner request submission.
+
+Acceptance Criteria:
+- DocumentTypeConfiguration is linked to the correct active template.
+- Configuration and template belong to the same tenant.
+- Configuration and template use the same document type.
+- Active template is resolved consistently by admin configuration and homeowner request flows.
+- If no template is linked, the admin page clearly requires template selection before activation.
+- A document type with missing or inactive template must not appear as requestable.
+- Certificate of Residency submission succeeds when the configuration and template are valid.
+- Purpose and remarks persist.
+- Request enters the configured workflow status.
+- No cross-tenant template fallback occurs.
+
+Engineering Update:
+Centralized availability validation now marks configurations as Complete, Missing template, Invalid template, Draft only, or Inactive. Homeowner request forms use only Complete configurations.
+
+---
+
+## Improvement #075 – Clearly Label Household Member Birth Date
+
+Module:
+Household Member Management
+
+Priority:
+Medium
+
+Status:
+Open
+
+Problem:
+The household-member date field is not clearly identified. Users cannot determine whether it represents date of birth, registration date, or another date.
+
+Acceptance Criteria:
+- Label the field clearly as `Date of Birth`.
+- Add optional explanatory helper text.
+- Use an appropriate date input.
+- Preserve existing birthDate values.
+- Do not confuse system-created or registration dates with birth date.
+- Mobile layout remains usable.
+
+Engineering Update:
+Date fields in homeowner/admin household-member forms are labeled `Date of Birth` and include optional-use helper text.
+
+---
+
+## Improvement #076 – Edit Registered Household Members
+
+Module:
+Household Member Management
+
+Priority:
+High
+
+Status:
+Open
+
+Problem:
+After adding a household member, the homeowner or authorized administrator cannot edit the record.
+
+Acceptance Criteria:
+- Authorized homeowner may edit household members linked to their own account.
+- Authorized admin may edit household members within their tenant.
+- Editable fields include name, relationship, birth date, civil status, nationality, address, and active status.
+- Tenant and homeowner ownership are validated server-side.
+- Changes do not alter snapshots already stored in submitted or generated document requests.
+- Edit history is auditable where required.
+- Mobile and desktop workflows pass.
+
+Engineering Update:
+Homeowner and admin edit forms now update only editable household-member fields after tenant/homeowner validation. Existing request snapshots remain unchanged.
+
+## Improvement #077 – Create Custom Tenant Document Types
+
+Module:
+Tenant Document Configuration
+
+Priority:
+Critical
+
+Status:
+Open
+
+Requirement:
+Authorized tenant administrators must be able to create new document and certification types beyond the system defaults.
+
+Acceptance Criteria:
+- Create a new tenant-scoped document type.
+- Configure unique internal code and display name.
+- Configure description, active status, workflow, fee, validity, copies, required fields, signatory, and template.
+- Custom document codes are unique within the tenant.
+- The same custom code may exist in another tenant without conflict.
+- New document types appear in the homeowner request catalog only when active and fully configured.
+- Existing default document types remain supported.
+- Tenant isolation and RBAC are enforced.
+- No code deployment is required to add a new tenant document type.
+
+Engineering Update:
+Current schema remains enum-bound, so this requires an additive tenant document catalog migration before implementation. Proposed compatibility strategy is documented in architecture notes.
+
+---
+
+## Improvement #078 – Visual Document Template Builder
+
+Module:
+Document Templates
+
+Priority:
+Critical
+
+Status:
+Open
+
+Requirement:
+Authorized tenant administrators must be able to visually create, preview, and edit document templates.
+
+Configurable components:
+- tenant logo
+- association name
+- address
+- TIN
+- SEC registration number
+- document title
+- header
+- footer
+- body text
+- fonts
+- font sizes
+- colors
+- alignment
+- borders
+- spacing
+- tables
+- issue date
+- validity date
+- document number
+- subject information
+- property information
+- purpose
+- remarks
+- signatory
+- signature block
+- QR verification code
+- verification text
+
+Acceptance Criteria:
+- On-screen visual preview represents the generated document.
+- Template editor supports drag-and-drop or structured block positioning.
+- Admin can add, move, edit, resize, hide, and reorder components.
+- Template supports A4 portrait initially.
+- Template uses safe placeholders for dynamic data.
+- QR verification component can be positioned in the template.
+- Preview, print, and generated PDF use the same template definition.
+- Template versions are preserved.
+- Published documents retain their original template version.
+- Draft and published template states are supported.
+- Tenant isolation and RBAC are enforced.
+
+Engineering Update:
+Added a safe block-template definition foundation with allowlisted blocks/placeholders and QR verification placeholder support. Draft/published storage and full editor route require the next additive template-version migration.
+## Bug #079 – Document Review and Approval Fail on Nested Audit Actor Fields
+
+Module:
+Document Administration
+
+Priority:
+Critical
+
+Status:
+Open
+
+Problem:
+Saving reviewed document information and approving/generating a document fail with:
+
+`Unknown argument actorId. Did you mean actor?`
+
+The failure occurs during `prisma.documentRequest.update()` when nested `editAudits.create` and `histories.create` records include `actorId` and `tenantId`.
+
+Affected Workflows:
+- Save Preview / Begin Review
+- Admin editing of document-visible request information
+- Approve and Generate
+- Outstanding-balance download override
+- Document history creation
+- Field-level edit audit creation
+
+Expected Behavior:
+Authorized administrators must be able to review, edit, approve, and generate tenant-scoped documents successfully.
+
+Acceptance Criteria:
+- Save Preview succeeds.
+- Request status changes to `UNDER_REVIEW`.
+- Reviewed values persist.
+- Field-level edit audit records are created.
+- Audit records store the correct actor.
+- Approval succeeds.
+- Generated document receives its document number.
+- Request becomes `READY_FOR_DOWNLOAD`.
+- Outstanding-balance override works when authorized.
+- Approval and generation history records are created.
+- Tenant isolation remains enforced.
+- No Prisma validation errors.
+- No partial update remains after a failed transaction.
+
+Engineering Update:
+Patched the document review, rejection, approval/generation, and instant generation write paths to validate tenant ownership with the tenant-scoped client, then perform atomic base-client transactions with `where: { id }`. Edit audit and history rows are now created as explicit transactional child writes instead of nested `create` payloads on `documentRequest.update()`. Bug #079 remains Open until Product Owner UAT passes.
+
+## Improvement #080 – Distinguish Admin Download from Homeowner Download
+
+Module:
+Document Requests / Download Tracking
+
+Priority:
+Medium
+
+Status:
+Open
+
+Problem:
+When an HOA administrator downloads a generated document, the request is marked as downloaded on the homeowner side.
+
+Expected Behavior:
+Admin preview/download activity must not be treated as homeowner receipt or homeowner download.
+
+Acceptance Criteria:
+- Track admin download separately from homeowner download.
+- Preserve `READY_FOR_DOWNLOAD` status after an admin download.
+- Set homeowner `DOWNLOADED` status only when the authorized homeowner downloads the document.
+- Store separate timestamps where practical:
+  - adminDownloadedAt
+  - homeownerDownloadedAt
+- Store the downloading actor.
+- Repeated admin downloads do not change homeowner status.
+- Homeowner history clearly shows when the homeowner actually downloaded the document.
+- Tenant isolation and ownership checks remain enforced.
+## Improvement #081 – Enterprise Document Definition Platform
+
+Module:
+Document Management
+
+Priority:
+Critical
+
+Status:
+Open
+
+Requirement:
+Replace the fixed or partially enum-based document-type architecture with a tenant-owned Document Definition platform.
+
+Each tenant must be able to create, configure, publish, activate, deactivate, archive, and maintain document definitions without requiring code deployment.
+
+A Document Definition must control:
+
+- Internal code
+- Display name
+- Category
+- Description
+- Active and archived status
+- Display order
+- Workflow
+- Fee and payment policy
+- Approval policy
+- Required and optional fields
+- Assigned template
+- Template version
+- Signatory
+- Numbering format
+- Validity
+- Number of copies
+- QR verification
+- Watermark
+- Release requirements
+- Homeowner visibility
+- Admin-only issuance options
+
+Acceptance Criteria:
+- Custom document definitions are tenant-scoped.
+- The same document code may exist in separate tenants.
+- Existing system document types are backfilled safely.
+- Existing requests and generated documents remain unchanged.
+- No code deployment is required to add future certificates, permits, forms, passes, or clearances.
+- Tenant isolation, RBAC, audit history, and immutable snapshots are preserved.
+
+Sprint 6B-1A Engineering Note:
+- Additive compatibility schema and local backfill are implemented in migration `20260716120000_document_definition_compatibility_schema`.
+- The item remains Open because custom definition administration and Product Owner UAT are not complete.
+
+Sprint 6B-1B Engineering Note:
+- Tenant-facing definition catalog, workflow configuration, field configuration, completeness display, and template publishing foundation are implemented.
+- The item remains Open until Product Owner UAT confirms custom definition management end-to-end.
+## Improvement #082 – Versioned Visual Document Template Platform
+
+Module:
+Document Templates
+
+Priority:
+Critical
+
+Status:
+Open
+
+Requirement:
+Provide a tenant-scoped, versioned visual template platform with an A4 on-screen preview and safe reusable components.
+
+Initial supported components:
+
+- Tenant logo
+- Association name
+- Address
+- TIN
+- SEC registration number
+- Document title
+- Header
+- Footer
+- Body text
+- Subject information
+- Property information
+- Purpose
+- Remarks
+- Issue date
+- Validity date
+- Document number
+- Signatory
+- Signature block
+- QR verification
+- Watermark
+- Divider
+- Spacer
+- Table
+- Page break
+
+Acceptance Criteria:
+- Draft and published template versions are separate.
+- Published versions are immutable.
+- Issued documents retain the template version and snapshot used at generation.
+- Preview, print, and PDF use the same authoritative template definition.
+- Placeholders are allowlisted and safe.
+- Arbitrary scripts, unsafe HTML, and executable expressions are prohibited.
+- Tenant isolation and RBAC are enforced.
+
+Sprint 6B-1A Engineering Note:
+- `DocumentTemplateSet` and `DocumentTemplateVersion` now exist with published legacy backfill snapshots.
+- The item remains Open until the visual editor, publishing workflow, and Product Owner UAT are complete.
+
+Sprint 6B-1B Engineering Note:
+- Structured block editor, A4 preview, draft save, duplicate, publish, retire, and placeholder selection are implemented.
+- The item remains Open until Product Owner UAT passes.
+## Improvement #083 – Document Definition Completeness Validation
+
+Module:
+Document Configuration
+
+Priority:
+High
+
+Status:
+Open
+
+Requirement:
+The system must validate that a Document Definition is complete before it can be published or made requestable.
+
+Validation includes:
+
+- Active definition
+- Valid workflow
+- Valid fee and payment settings
+- Required fields configured
+- Published active template
+- Matching tenant ownership
+- Valid placeholders
+- Signatory where required
+- Numbering rule
+- Validity configuration
+- QR rule where required
+
+Statuses:
+
+- Complete
+- Incomplete
+- Draft Only
+- Missing Template
+- Invalid Template
+- Inactive
+- Archived
+
+Only complete and active definitions may appear in the homeowner request catalog.
+
+Sprint 6B-1A Engineering Note:
+- Compatibility links and verification harness are in place for tenant-safe definitions/templates.
+- The item remains Open until the requestability validator and Product Owner UAT are complete.
+
+Sprint 6B-1B Engineering Note:
+- Authoritative completeness validation now checks active/archive state, workflow, fees, numbering, assigned published template, template ownership, template JSON, placeholders, signatory, copies, validity, and QR configuration.
+- The item remains Open until Product Owner UAT passes.
+## Bug #084 – Document Definition Actions Fail
+
+Module:
+Document Definition Catalog
+
+Priority:
+Critical
+
+Status:
+Open
+
+Problem:
+Activate, Deactivate, and Archive actions fail with:
+
+`Select a valid definition action.`
+
+Acceptance Criteria:
+- Activate succeeds.
+- Deactivate succeeds.
+- Archive succeeds.
+- Action value is validated correctly.
+- Tenant ownership remains enforced.
+- Status persists after refresh.
+- No console or Prisma errors.
+
+Sprint 6B-1B Hotfix Engineering Note:
+- Catalog action buttons now submit explicit uppercase action values and the server action normalizes and validates the allowlist `ACTIVATE`, `DEACTIVATE`, and `ARCHIVE`.
+- Archived definitions are no longer treated as ordinary activate/deactivate candidates; a separate restore workflow remains required.
+- Status writes still load the tenant-owned definition before using a base-client update by `id` only.
+- Status remains Open until Product Owner UAT confirms activate, deactivate, archive, refresh persistence, and tenant isolation.
+
+Sprint 6B-1B Final Hotfix Engineering Note:
+- Action forms now post the exact action through hidden `operation` inputs so server actions receive `ACTIVATE`, `DEACTIVATE`, or `ARCHIVE` independent of submit-button serialization.
+- A local rollback verification harness confirms all three exact values and status transitions.
+- Status remains Open until Product Owner UAT passes.
+
+---
+
+## Bug #085 – Dynamic Field Builder UI Missing
+
+Module:
+Document Definition Fields
+
+Priority:
+Critical
+
+Status:
+Open
+
+Problem:
+The Document Definition page does not provide usable controls for dynamic fields.
+
+Missing capabilities:
+- Add field
+- Edit field
+- Activate/deactivate field
+- Required flag
+- Select options
+- Display order
+- Move up/down
+- Duplicate key validation
+
+Acceptance Criteria:
+- All field-builder controls are available.
+- Changes persist.
+- Duplicate keys are rejected.
+- Select options can be configured.
+- Field order can be changed.
+- Tenant isolation remains enforced.
+- Mobile and desktop work.
+
+Sprint 6B-1B Hotfix Engineering Note:
+- Replaced the raw fields JSON textarea with a structured field builder for add, edit, activate/deactivate, required flag, select options, safe validation inputs, default value, remove, and move up/down ordering.
+- The builder posts through the existing tenant-scoped server action, which still rejects duplicate keys and prevents key removal after requests exist.
+- Status remains Open until Product Owner UAT confirms persistence and desktop/mobile usability.
+
+---
+
+## Improvement #086 – Show Document Definitions in System Settings Navigation
+
+Module:
+Navigation
+
+Priority:
+High
+
+Status:
+Open
+
+Problem:
+`/admin/settings/document-definitions` exists but is not visible in the System Settings navigation.
+
+Acceptance Criteria:
+- Add `Document Definitions` under System Settings.
+- Link opens the correct route.
+- Visibility respects RBAC and module entitlements.
+- Active navigation state works.
+
+Sprint 6B-1B Hotfix Engineering Note:
+- Added a visible `Document definitions` action from the System Settings Configuration Center in addition to the existing admin sidebar link.
+- Status remains Open until Product Owner UAT verifies visibility and route access for authorized roles.
+
+---
+
+## Improvement #087 – Preserve Table Focus After Applying Definition Filters
+
+Module:
+Document Definition Catalog
+
+Priority:
+Medium
+
+Status:
+Open
+
+Problem:
+After clicking Apply on catalog filters, focus is lost from the table.
+
+Acceptance Criteria:
+- After Apply, the viewport returns to the catalog table.
+- Keyboard focus moves to the table heading.
+- Search, filter, sort, and URL parameters remain preserved.
+- Desktop and mobile pass.
+
+Sprint 6B-1B Hotfix Engineering Note:
+- Catalog filter apply and pagination now target the document definition catalog anchor and reuse the shared pagination focus helper.
+- Pagination links preserve search, status, sort, page, and URL hash state.
+- Status remains Open until Product Owner UAT verifies Chrome, Edge, and mobile focus behavior.
+## Bug #088 – Dynamic Field Rules Not Applied in Homeowner Request Form
+
+Module:
+Document Definition Dynamic Fields
+
+Priority:
+Critical
+
+Status:
+Open
+
+Problem:
+Dynamic fields appear in the homeowner request form, but several configured properties are not applied.
+
+Observed:
+- Default value is not populated.
+- Minimum and maximum validation are not enforced.
+- Pattern validation is not enforced.
+- SELECT field appears without options.
+- Required CHECKBOX does not block submission.
+- Submitted checkbox/select values cannot be verified because submission fails.
+
+Expected Behavior:
+The homeowner request form must render and validate every active field according to the saved DocumentDefinitionField configuration.
+
+Acceptance Criteria:
+- Default values populate correctly.
+- Minimum and maximum numeric validation work.
+- Minimum and maximum length validation work.
+- Pattern validation works.
+- SELECT options render as configured.
+- Required checkbox blocks submission when unchecked.
+- Field values are validated server-side.
+- Submitted values are stored in the immutable request snapshot.
+- Inactive fields remain hidden.
+- Tenant isolation remains enforced.
+- Mobile and desktop pass.
+
+Sprint 6B-1B Final Hotfix Engineering Note:
+- Added one normalized field view model for homeowner rendering and server validation with `defaultValue`, `options`, and `validation` fields.
+- SELECT options now support normalized strings and `{ label, value }` objects; request submission rejects values outside the configured allowlist.
+- Server-side validation now rejects unknown fields, inactive-field submissions, missing required values, unchecked required checkboxes, numeric min/max violations, length violations, and invalid pattern matches.
+- Status remains Open until Product Owner UAT passes.
+
+---
+
+## Bug #089 – Custom Document Definition Cannot Create Request
+
+Module:
+Document Requests / Definition Migration
+
+Priority:
+Critical
+
+Status:
+Open
+
+Problem:
+Submitting a custom tenant-created document definition fails with:
+
+`This custom document definition is not yet requestable until legacy enum cleanup is complete`
+
+Root Cause:
+`DocumentRequest.type` remains a required legacy `DocumentType` enum field, so a definition without a legacy enum mapping cannot be persisted.
+
+Expected Behavior:
+A complete, active custom Document Definition must be requestable without requiring a legacy enum value.
+
+Acceptance Criteria:
+- New requests use `definitionId` as the authoritative document reference.
+- `DocumentRequest.type` becomes nullable or compatibility-only.
+- Legacy requests retain their existing enum values.
+- New custom requests may have no legacy type.
+- Existing requests and generated documents remain unchanged.
+- Reporting, admin queues, generation, print, and PDF resolve the definition safely.
+- No fallback to another document type is used.
+- Tenant isolation and snapshots remain enforced.
+
+Sprint 6B-1B Final Hotfix Engineering Note:
+- Migration `20260716174058_nullable_document_request_type` makes `DocumentRequest.type` nullable while preserving the legacy `DocumentType` enum and all existing enum values.
+- Custom requests now persist `definitionId`, definition snapshots, template-version snapshots, and `type = null` when no legacy type exists.
+- Generation uses `DocumentDefinitionCounter` and the definition numbering format for custom definitions; legacy requests continue using `DocumentCounter`.
+- Historical request count, generated-content fingerprint, and document-number fingerprint remained unchanged after migration.
+- Status remains Open until Product Owner UAT passes.
+## Bug #091 – Dynamic Field Constraints Are Not Enforced Correctly
+
+Module:
+Custom Document Request Form
+
+Priority:
+Critical
+
+Status:
+Open
+
+Problem:
+Configured dynamic-field constraints are not consistently enforced in the homeowner form.
+
+Observed:
+- Numeric minimum and maximum rules fail.
+- Text minimum-length and maximum-length rules fail.
+- The UI allows values outside the configured constraints.
+
+Clarification:
+- `Minimum` and `Maximum` apply to NUMBER and MONEY fields.
+- `Minimum Length` and `Maximum Length` apply to TEXT and TEXTAREA fields.
+- A NUMBER field such as Years of Residency should use numeric minimum/maximum, not text length.
+
+Acceptance Criteria:
+- NUMBER and MONEY enforce minimum and maximum values.
+- TEXT and TEXTAREA enforce minimum and maximum length.
+- Client and server validation use the same normalized field rules.
+- Invalid values show field-specific messages.
+- Invalid requests cannot be submitted by bypassing browser validation.
+- Valid values persist in the request snapshot.
+
+Final Validation Hotfix Engineering Note:
+- Added a shared dynamic-field validation service used by document workflow parsing and the local verification harness.
+- Server validation now enforces NUMBER/MONEY `min` and `max`, TEXT/TEXTAREA `minLength`, `maxLength`, and `pattern`, required CHECKBOX values, and field-specific error messages.
+- The homeowner form consumes normalized constraints for browser-supported validation while server-side validation remains authoritative.
+- Status remains Open until Product Owner UAT passes.
+## Bug #092 – SELECT Field Has No Usable Options
+
+Module:
+Custom Document Request Form
+
+Priority:
+Critical
+
+Status:
+Open
+
+Problem:
+A SELECT dynamic field appears in the homeowner request form, but the dropdown contains no usable values.
+
+Expected Behavior:
+Configured options such as Dog, Cat, and Bird must appear as selectable values.
+
+Acceptance Criteria:
+- Options stored as strings or `{ label, value }` objects are normalized.
+- Dropdown displays every active configured option.
+- Placeholder option is clearly shown.
+- Required SELECT cannot remain empty.
+- Submitted value must match the configured allowlist.
+- Selected value persists in the request snapshot.
+
+Final Validation Hotfix Engineering Note:
+- SELECT options now round-trip from the structured field builder as `{ label, value }` objects instead of becoming `[object Object]` after save/refresh.
+- Request rendering and server validation share the same normalization path for string arrays and `{ label, value }` arrays.
+- Required empty SELECT submissions return `Select a <field label>.`; invalid submitted values are rejected against the configured allowlist.
+- Status remains Open until Product Owner UAT passes.
+## Bug #093 – Hidden Legacy Purpose Requirement Blocks Custom Requests
+
+Module:
+Custom Document Requests
+
+Priority:
+Critical
+
+Status:
+Open
+
+Problem:
+Submitting a custom document request fails with:
+
+`Enter the purpose of the request.`
+
+However, no Purpose field is displayed in the custom request form.
+
+Root Cause Suspected:
+The request action still enforces the legacy `purpose` property even when the custom Document Definition does not expose or require a field mapped to purpose.
+
+Expected Behavior:
+Custom requests must be validated exclusively from their active DocumentDefinitionFields and workflow rules.
+
+Acceptance Criteria:
+- If the definition includes an active required purpose field, display and require it.
+- If the definition does not require purpose, submission must not enforce the legacy purpose field.
+- Legacy enum-backed requests retain their existing purpose behavior.
+- No hidden required fields.
+- Dynamic field values map consistently to request snapshots.
+- Custom request submits successfully.
+
+Final Validation Hotfix Engineering Note:
+- The document request action now requires the legacy hidden `purpose` field only for legacy/configuration-backed requests.
+- Definition-backed custom requests without a purpose field validate exclusively against active `DocumentDefinitionField` rules and can persist `purpose = null`.
+- If a custom definition exposes an active required purpose field, that field remains enforced through the dynamic-field validator.
+- Status remains Open until Product Owner UAT passes.
+## Bug #096 – Workflow and Fee Configuration Can Conflict
+
+Module:
+Document Definition Configuration
+
+Priority:
+Critical
+
+Status:
+Open
+
+Problem:
+The Document Definition screen allows invalid combinations such as:
+
+- Free + Approval with a non-zero fee
+- Free + Instant with a non-zero fee
+- Paid workflows with zero fee
+
+The current UI does not clearly expose whether payment is required or whether payment must happen before approval.
+
+Expected Behavior:
+The selected workflow must be the authoritative source for payment and approval behavior.
+
+Workflow Rules:
+
+- Free + Instant
+  - Fee must be 0
+  - Payment not required
+  - Approval not required
+  - Immediate generation/download allowed
+
+- Free + Approval
+  - Fee must be 0
+  - Payment not required
+  - Approval required
+
+- Paid + Instant
+  - Fee must be greater than 0
+  - Payment required
+  - Approval not required
+  - Generation/download only after payment confirmation
+
+- Paid + Approval
+  - Fee must be greater than 0
+  - Payment required
+  - Approval required
+  - Payment required before approval unless explicitly supported otherwise
+
+- Request Only
+  - Request is recorded for manual processing
+  - Automatic generation/download disabled
+
+Acceptance Criteria:
+- Free workflows disable or reset the Fee Amount field to 0.
+- Paid workflows enable Fee Amount and require an amount greater than 0.
+- Workflow selection automatically derives payment and approval flags.
+- Invalid combinations cannot be saved.
+- Clear explanatory text is shown beside the workflow.
+- Existing valid definitions remain unchanged.
+- Tenant isolation and RBAC remain enforced.
+
+Workflow Configuration Hotfix Engineering Note:
+- Document Definition workflow presets now derive payment requirement, approval requirement, payment timing, immediate download, and admin review flags server-side.
+- Free and Request Only workflows save with zero fee; paid workflows require a fee greater than zero.
+- The edit UI disables Fee Amount for non-paid workflows, requires it for paid workflows, and displays workflow-specific helper text.
+- Completeness validation now marks existing workflow/fee or workflow/flag mismatches as incomplete until edited.
+- Status remains Open until Product Owner UAT passes.
+## Bug #097 – Document Definition Configuration Does Not Persist
+
+Module:
+Document Definition Configuration
+
+Priority:
+Critical
+
+Status:
+Open
+
+Problem:
+After editing and saving a Document Definition, several values revert after refresh.
+
+Observed:
+- Workflow returns to the previous value.
+- Active flag reverts.
+- Other configuration values may not persist.
+- Homeowner behavior may use stale values instead of the most recently saved configuration.
+
+Expected Behavior:
+Every editable field must persist exactly as saved and must be the authoritative source for request behavior.
+
+Acceptance Criteria:
+- Workflow persists after refresh.
+- Active flag persists after refresh.
+- Fee persists.
+- Visibility flags persist.
+- Workflow-derived flags persist.
+- Generation settings persist.
+- Approval and release settings persist.
+- Signatory selection persists.
+- Numbering settings persist.
+- Dynamic field changes persist.
+- Completeness recalculates from the saved values.
+- Homeowner request behavior matches the saved configuration.
+- Tenant isolation remains enforced.
+- No console or Prisma errors.
+
+Persistence Hotfix Engineering Note:
+- The Document Definition edit screen now reopens the saved definition after Save, preventing the create form defaults from appearing as reverted values.
+- Workflow reconstruction now uses persisted `DocumentDefinition.deliveryMode` as the workflow source instead of deriving the dropdown from potentially stale low-level flags.
+- Boolean fields now submit explicit `false` and `true` values and the server parses all submitted values reliably.
+- Legacy `DocumentTypeConfiguration` rows are synchronized only from the saved definition for compatibility when a definition has `legacyType`; the Document Definition screen continues to read from `DocumentDefinition`.
+- A persisted configuration summary now displays saved database values for workflow, fee, status, active state, template, completeness, requestability, and last updated.
+- Status remains Open until Product Owner UAT passes.
+## Bug #098 – Outstanding Balance Lock Overrides Document Workflow Without Configurable Policy
+
+Module:
+Document Definitions / Homeowner Documents
+
+Priority:
+Critical
+
+Status:
+Open
+
+Problem:
+A Document Definition configured as Free + Instant successfully accepts the
+request, but download and printing remain locked whenever the homeowner has an
+existing HOA account balance.
+
+Observed message:
+"Download and print are locked while the current balance of 800.00 remains
+unpaid. You can still view and verify this record."
+
+The Document Definition does not currently expose a clear policy controlling
+how unrelated homeowner balances affect requesting, generating, downloading,
+or printing the document.
+
+Required Behavior:
+Each Document Definition must explicitly define its outstanding-balance policy.
+
+Supported policies:
+
+- IGNORE_BALANCE
+  - Existing HOA balances do not prevent request, generation, preview,
+    download, or printing.
+
+- BLOCK_DOWNLOAD
+  - The request and generation are allowed.
+  - Preview may remain available.
+  - Download and printing are blocked until the balance is settled or an
+    authorized override is granted.
+
+- BLOCK_REQUEST
+  - The homeowner cannot submit the request while a qualifying balance exists.
+
+- ALLOW_ADMIN_OVERRIDE
+  - The configured restriction applies by default.
+  - An authorized Admin may override it for an individual request with a
+    mandatory reason and audit record.
+
+Acceptance Criteria:
+- Balance policy is configurable per Document Definition.
+- The selected policy persists after refresh.
+- The edit-page summary shows the active balance policy.
+- Free + Instant with IGNORE_BALANCE permits immediate download.
+- Free + Instant with BLOCK_DOWNLOAD generates the document but locks download.
+- BLOCK_REQUEST prevents submission and displays a clear reason.
+- Admin override requires authorization, reason, timestamp, and audit record.
+- Balance checks use the logged-in homeowner and current tenant only.
+- Household-member requests check the owning homeowner account.
+- No cross-tenant balance access is possible.
+- Legacy documents retain their existing behavior until explicitly configured.
+
+Engineering Note:
+- Added `DocumentOutstandingBalancePolicy` and persisted `DocumentDefinition.outstandingBalancePolicy`.
+- Existing definitions default to `BLOCK_DOWNLOAD` to preserve current behavior until an admin changes the policy.
+- Centralized generated-document access now evaluates tenant ownership, request readiness, document-specific payment lock, current qualifying homeowner balance, policy, and active admin override.
+- Homeowner submission blocks before creating a request only when the saved policy is `BLOCK_REQUEST`.
+- Admin override is limited to `ALLOW_ADMIN_OVERRIDE`, requires an authorized role and reason, and writes request history plus audit logs.
+- Added `scripts/verify-document-balance-policy-hotfix.ts` rollback verification for policy behavior, request blocking, paid-document separation, override/revoke behavior, household ownership, tenant isolation, and migration defaults.
+- Status remains Open until Product Owner UAT passes.
+## Improvement #099 – Professional Word-Style Document Template Editor
+
+Module:
+Document Management / Templates
+
+Priority:
+Critical
+
+Status:
+Open
+
+Background:
+The current template editor exposes technical blocks, revisions, template
+sets, and version structures that are confusing for ordinary HOA
+administrators.
+
+The desired editor must work like a simplified Microsoft Word document editor,
+not like Canva, Figma, a page builder, or a raw JSON/block editor.
+
+Objective:
+Provide an intuitive A4 document-authoring environment where authorized tenant
+administrators can format official HOA documents, insert dynamic fields,
+preview the final output, save drafts, publish versions, and preserve historical
+issued-document integrity.
+
+Required Capabilities:
+
+Page Setup:
+- A4, Letter, Legal, and custom page size
+- Portrait and Landscape orientation
+- Top, bottom, left, and right margins
+- Header and footer spacing
+- Page border
+- Page background where allowed
+- Single-column and multi-column layout
+- Page break
+- Section break
+- Print-safe layout
+- Multiple-page document support
+
+Text Formatting:
+- Font family
+- Font size
+- Bold
+- Italic
+- Underline
+- Strikethrough
+- Superscript
+- Subscript
+- Font color
+- Text highlight color
+- Clear formatting
+- Change case
+- Paragraph alignment
+- Line spacing
+- Paragraph spacing
+- First-line indent
+- Hanging indent
+- Left and right indent
+- Bullets
+- Numbering
+- Multilevel lists
+- Undo and redo
+- Copy and paste while sanitizing unsupported formatting
+
+Insert Tools:
+- Horizontal line
+- Vertical line
+- Adjustable line thickness
+- Solid, dashed, and dotted line styles
+- Text box
+- Table
+- Image
+- Tenant logo
+- Authorized signature
+- Dynamic placeholder
+- Date and time
+- Document number
+- Page number
+- QR verification code
+- Watermark
+- Header
+- Footer
+- Page break
+- Non-breaking space
+- Special characters
+
+Table Tools:
+- Insert and delete rows
+- Insert and delete columns
+- Merge cells
+- Split cells
+- Cell alignment
+- Cell padding
+- Border style
+- Border thickness
+- Border color
+- Background fill
+- Column width
+- Row height
+- Repeat header row
+- Prevent inappropriate row splitting across pages
+
+Dynamic Fields:
+- Association fields
+- Homeowner fields
+- Property fields
+- Household-member fields
+- Request fields
+- Document fields
+- Payment fields
+- Signatory fields
+- Date fields
+- QR verification field
+- Conditional fields where safely supported
+- Default values
+- Fallback text
+- User-friendly field picker
+- Technical placeholder names hidden from ordinary administrators
+
+Editor Layout:
+- Familiar toolbar
+- Header editing area
+- Body editing area
+- Footer editing area
+- A4 live preview
+- Zoom controls
+- Page navigation
+- Ruler where practical
+- Desktop-first authoring
+- Mobile and tablet view-only or limited editing
+- Clear Draft and Published indicators
+
+Versioning:
+- One published version at a time
+- Editing a published template creates a draft
+- Draft can be saved repeatedly
+- Publishing archives the previous published version
+- Historical issued documents retain the exact published version and content
+  snapshot used during generation
+- Restore an old version as a new draft
+- Never directly alter an already issued document
+
+Acceptance Criteria:
+- Ordinary administrators do not see block JSON or internal IDs.
+- Editor behaves like a simplified Microsoft Word interface.
+- A4 preview closely matches generated PDF and print output.
+- Header, body, and footer are editable.
+- Horizontal and vertical lines render consistently.
+- Font colors and formatting persist.
+- Tables render consistently in preview, PDF, download, and print.
+- Dynamic placeholders are validated before publication.
+- Draft changes do not affect the currently published template.
+- Tenant isolation is enforced.
+- Unauthorized users cannot edit or publish templates.
+- No existing issued-document history is mutated.
+
+## Improvement #100 – Resident Services Document Management UX
+
+Module:
+Document Management
+
+Priority:
+High
+
+Status:
+Testing
+
+Problem:
+Document administration still exposed fragmented terminology and made effective workflow, payment, approval, receipt, balance, and access rules hard to review in one place.
+
+Implemented:
+- Resident Services navigation now uses business-facing entries: Document Definitions, Templates, Requests, Create Walk-In / Office Request, and Issued Documents.
+- Homeowner navigation is limited to My Document Requests, Request a Document, and Issued Documents.
+- Tenant Admin sidebar shows an actionable Requests badge using tenant-scoped server data.
+- The Requests page defaults to Needs Action using the same predicate as the sidebar badge.
+- Document Definition setup is organized into business sections with persisted effective configuration, unsaved-change warning, Save, Cancel, and Reset controls.
+- Custom workflow mode allows authorized admins to edit payment, approval, receipt, delivery, and approver rules independently.
+
+Release Gate:
+- Keep open until Product Owner UAT confirms navigation clarity, badge accuracy, request filtering, definition persistence, tenant isolation, and mobile usability.
+
+## Certificate of Residency Reference Implementation
+
+Status: Engineering complete; Product Owner UAT required.
+
+- [x] Add a versioned read-only HOAHub certified Certificate template and controlled tenant provisioning.
+- [x] Route new Certificate requests through platform policy, workflow, generation, release, verification, audit, and notification services.
+- [x] Add correction/resubmission, rejection, issuance, exact immutable download/print, reissue, and revocation.
+- [x] Add privacy-safe public QR verification and tenant-isolation coverage.
+- [ ] Complete the focused Product Owner UAT in `docs/CERTIFICATE_OF_RESIDENCY.md` before release approval.
+
+## Certified Template Foundation - Phase 2B.1
+
+Status: Engineering ready for Product Owner UAT.
+
+- Added explicit Certified, Tenant, and Custom ownership metadata to the existing template architecture.
+- Added tenant-safe, idempotent certified-template clone foundation with source lineage and audit logging.
+- Added backend restore-as-new-draft foundation with backup metadata; historical versions remain immutable.
+- Added custom template-set foundation for future modules without introducing a competing template system.
+- HOAHub certified templates are server-enforced read-only; tenant copies remain editable and upgrade-safe.
+
+## Document Management UX and Walk-In Architecture - Phase 2A
+
+Status: Engineering ready for Product Owner UAT.
+
+- Removed duplicate inventory cards from the normal Document Management view; diagnostics remain available in an authorized expandable panel.
+- Added tenant-safe Certificate of Indigency repair/seed behavior and preserved definition relationships and historical references.
+- Walk-In / Office Request now uses complete, active, walk-in-enabled Document Definitions with published templates.
+- Workflow-aware request summaries and next actions prevent the form from implying unconditional direct generation.
+- The professional editor, walk-in payment, release acknowledgement, and public QR verification remain deferred.
+
+## Document Template Editor Reconstruction - Phase 2
+
+Status: Engineering implementation ready for Product Owner UAT.
+
+- Replaced the technical block/JSON edit screen with a professional structured editor using the existing React and lucide stack; no overlapping editor dependency was added.
+- Added ribbon sections for Home, Insert, Layout, Table, Header/Footer, Dynamic Fields, and Review.
+- Added a centered page preview with configurable page size, orientation, margins, columns, border, background, watermark, zoom, header, body, and footer.
+- Added controlled formatting for font family, font size, bold, italic, underline, alignment, text color, highlight, spacing, indentation, and line height.
+- Added structured insertion for text, text box, table, line, image, tenant logo, signature, QR placeholder, header, footer, and dynamic placeholders.
+- Updated template storage to schema version 2 while normalizing legacy schema version 1 blocks forward.
+- Added stale draft detection using the loaded `updatedAt` timestamp before draft save or publish.
+- Added tenant-scoped image upload handling for template image blocks.
+- Added stricter template-administration authorization that excludes homeowners and payroll-only users from definition/template configuration and publishing.
+- Added `scripts/verify-professional-template-editor.ts`.
+
+Deferred:
+- Exact Word pagination, rulers, multi-page page navigator, merge/split table cells, full DOCX-style page rendering, and exact rich-style PDF parity remain Phase 3 work.
+- Generated document PDFs still consume the shared structured template text contract; rich visual styling is preserved in template JSON and editor preview but is not yet a full WYSIWYG PDF renderer.
+
+Release gate:
+- Do not mark this improvement complete until Product Owner UAT validates the editor workflow, published snapshots, tenant isolation, and generated output expectations.
+## Improvement #099 – Professional Word-Style Document Template Editor
+
+Module:
+Document Management / Templates
+
+Priority:
+Critical
+
+Status:
+Open
+
+Background:
+The current template editor exposes technical blocks, revisions, template
+sets, and version structures that are confusing for ordinary HOA
+administrators.
+
+The desired editor must work like a simplified Microsoft Word document editor,
+not like Canva, Figma, a page builder, or a raw JSON/block editor.
+
+Objective:
+Provide an intuitive A4 document-authoring environment where authorized tenant
+administrators can format official HOA documents, insert dynamic fields,
+preview the final output, save drafts, publish versions, and preserve historical
+issued-document integrity.
+
+Required Capabilities:
+
+Page Setup:
+- A4, Letter, Legal, and custom page size
+- Portrait and Landscape orientation
+- Top, bottom, left, and right margins
+- Header and footer spacing
+- Page border
+- Page background where allowed
+- Single-column and multi-column layout
+- Page break
+- Section break
+- Print-safe layout
+- Multiple-page document support
+
+Text Formatting:
+- Font family
+- Font size
+- Bold
+- Italic
+- Underline
+- Strikethrough
+- Superscript
+- Subscript
+- Font color
+- Text highlight color
+- Clear formatting
+- Change case
+- Paragraph alignment
+- Line spacing
+- Paragraph spacing
+- First-line indent
+- Hanging indent
+- Left and right indent
+- Bullets
+- Numbering
+- Multilevel lists
+- Undo and redo
+- Copy and paste while sanitizing unsupported formatting
+
+Insert Tools:
+- Horizontal line
+- Vertical line
+- Adjustable line thickness
+- Solid, dashed, and dotted line styles
+- Text box
+- Table
+- Image
+- Tenant logo
+- Authorized signature
+- Dynamic placeholder
+- Date and time
+- Document number
+- Page number
+- QR verification code
+- Watermark
+- Header
+- Footer
+- Page break
+- Non-breaking space
+- Special characters
+
+Table Tools:
+- Insert and delete rows
+- Insert and delete columns
+- Merge cells
+- Split cells
+- Cell alignment
+- Cell padding
+- Border style
+- Border thickness
+- Border color
+- Background fill
+- Column width
+- Row height
+- Repeat header row
+- Prevent inappropriate row splitting across pages
+
+Dynamic Fields:
+- Association fields
+- Homeowner fields
+- Property fields
+- Household-member fields
+- Request fields
+- Document fields
+- Payment fields
+- Signatory fields
+- Date fields
+- QR verification field
+- Conditional fields where safely supported
+- Default values
+- Fallback text
+- User-friendly field picker
+- Technical placeholder names hidden from ordinary administrators
+
+Editor Layout:
+- Familiar toolbar
+- Header editing area
+- Body editing area
+- Footer editing area
+- A4 live preview
+- Zoom controls
+- Page navigation
+- Ruler where practical
+- Desktop-first authoring
+- Mobile and tablet view-only or limited editing
+- Clear Draft and Published indicators
+
+Versioning:
+- One published version at a time
+- Editing a published template creates a draft
+- Draft can be saved repeatedly
+- Publishing archives the previous published version
+- Historical issued documents retain the exact published version and content
+  snapshot used during generation
+- Restore an old version as a new draft
+- Never directly alter an already issued document
+
+Acceptance Criteria:
+- Ordinary administrators do not see block JSON or internal IDs.
+- Editor behaves like a simplified Microsoft Word interface.
+- A4 preview closely matches generated PDF and print output.
+- Header, body, and footer are editable.
+- Horizontal and vertical lines render consistently.
+- Font colors and formatting persist.
+- Tables render consistently in preview, PDF, download, and print.
+- Dynamic placeholders are validated before publication.
+- Draft changes do not affect the currently published template.
+- Tenant isolation is enforced.
+- Unauthorized users cannot edit or publish templates.
+- No existing issued-document history is mutated.

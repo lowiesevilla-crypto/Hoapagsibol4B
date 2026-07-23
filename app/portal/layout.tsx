@@ -3,6 +3,7 @@ import type { Metadata } from "next";
 import { Role } from "@prisma/client";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
+import { PortalBottomNavigation, PortalMobileHeader } from "@/components/portal-mobile-shell";
 import { Sidebar } from "@/components/sidebar";
 import { portalLinks } from "@/components/sidebar-links";
 import { TransactionFeedback } from "@/components/transaction-feedback";
@@ -24,8 +25,16 @@ export async function generateMetadata(): Promise<Metadata> {
 export default async function PortalLayout({ children }: { children: React.ReactNode }) {
   const user = await requireUser(Role.HOMEOWNER);
   const enabledModules = await getEnabledTenantModules(user.tenantId);
-  const requestedModule = moduleForPath((await headers()).get("x-hoa-pathname") || "/portal/dashboard");
+  const pathname = (await headers()).get("x-hoa-pathname") || "/portal/dashboard";
+  const requestedModule = moduleForPath(pathname);
   if (requestedModule && !enabledModules.has(requestedModule)) redirect("/portal/dashboard?error=This%20module%20is%20not%20included%20in%20your%20subscription%20plan.");
   const [association, initialChatUnreadCount] = await Promise.all([getAssociationSettings(user.tenantId), getUnreadChatCount(user.id)]);
-  return <div className="min-h-screen"><Sidebar user={user} links={filterLinksByModules(portalLinks, enabledModules)} roleLabel="Homeowner" association={association} initialChatUnreadCount={initialChatUnreadCount} /><Suspense><TransactionFeedback /></Suspense><main className="mx-auto min-w-0 max-w-[1800px] px-4 py-6 sm:px-7 lg:ml-72 lg:px-10 lg:py-9">{children}</main></div>;
+  const links = filterLinksByModules(portalLinks, enabledModules);
+  return <div className="min-h-screen">
+    <Sidebar user={user} links={links} roleLabel="Homeowner" association={association} initialChatUnreadCount={initialChatUnreadCount} desktopOnly />
+    <PortalMobileHeader association={association} user={user} unreadCount={initialChatUnreadCount} showChat={links.some((link) => link.href === "/portal/chat")} />
+    <Suspense><TransactionFeedback /></Suspense>
+    <main className="mx-auto min-w-0 max-w-[1800px] px-4 pb-[calc(6rem+env(safe-area-inset-bottom))] pt-5 sm:px-7 lg:ml-72 lg:px-10 lg:py-9">{children}</main>
+    <PortalBottomNavigation links={links} pathname={pathname} />
+  </div>;
 }

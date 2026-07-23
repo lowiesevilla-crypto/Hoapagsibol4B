@@ -1,4 +1,4 @@
-import { DocumentType, Prisma } from "@prisma/client";
+import { DocumentSequenceScope, DocumentType, Prisma } from "@prisma/client";
 
 export const documentTypeOptions: Array<{ value: DocumentType; label: string; prefix: string }> = [
   { value: DocumentType.CERTIFICATE_OF_RESIDENCY, label: "Certificate of Residency", prefix: "RES" },
@@ -11,11 +11,12 @@ export const documentTypeOptions: Array<{ value: DocumentType; label: string; pr
   { value: DocumentType.MOVE_IN_OUT_PASS, label: "Move In / Move Out Pass", prefix: "MIO" },
 ];
 
-export function documentTypeLabel(type: DocumentType | string) {
+export function documentTypeLabel(type: DocumentType | string | null | undefined, fallback = "Document") {
+  if (!type) return fallback;
   return documentTypeOptions.find((item) => item.value === type)?.label ?? type.replaceAll("_", " ");
 }
 
-export function isPassDocument(type: DocumentType) {
+export function isPassDocument(type: DocumentType | null | undefined) {
   return type === DocumentType.GATE_PASS || type === DocumentType.MOVE_IN_OUT_PASS;
 }
 
@@ -27,8 +28,33 @@ export async function allocateDocumentNumber(tx: Prisma.TransactionClient, tenan
   return `DOC-${prefix}-${year}-${String(counter.lastNumber).padStart(6, "0")}`;
 }
 
+export async function allocateDefinitionDocumentNumber(
+  tx: Prisma.TransactionClient,
+  tenantId: string,
+  definition: { id: string; code: string; numberingFormat: string | null; sequenceScope: DocumentSequenceScope },
+  date = new Date(),
+) {
+  const year = definition.sequenceScope === DocumentSequenceScope.ANNUAL ? date.getUTCFullYear() : 0;
+  const counter = await tx.documentDefinitionCounter.upsert({
+    where: { tenantId_definitionId_sequenceScope_year: { tenantId, definitionId: definition.id, sequenceScope: definition.sequenceScope, year } },
+    create: { tenantId, definitionId: definition.id, sequenceScope: definition.sequenceScope, year, lastNumber: 1 },
+    update: { lastNumber: { increment: 1 } },
+    select: { lastNumber: true },
+  });
+  return formatDefinitionDocumentNumber(definition.numberingFormat || "{PREFIX}-{YYYY}-{SEQUENCE:6}", definition.code, counter.lastNumber, date);
+}
+
+function formatDefinitionDocumentNumber(format: string, code: string, sequence: number, date: Date) {
+  return format
+    .replaceAll("{PREFIX}", code)
+    .replaceAll("{YYYY}", String(date.getUTCFullYear()))
+    .replaceAll("{YY}", String(date.getUTCFullYear()).slice(-2))
+    .replaceAll("{MM}", String(date.getUTCMonth() + 1).padStart(2, "0"))
+    .replace(/\{SEQUENCE:(4|6)\}/g, (_match, width: string) => String(sequence).padStart(Number(width), "0"));
+}
+
 export function renderDocumentTemplate(template: string, values: Record<string, string>) {
-  return template.replace(/{{\s*([A-Za-z0-9_]+)\s*}}/g, (_match, key: string) => values[key] ?? "");
+  return template.replace(/{{\s*([A-Za-z0-9_.]+)\s*}}/g, (_match, key: string) => values[key] ?? "");
 }
 
 export const documentPlaceholders = [

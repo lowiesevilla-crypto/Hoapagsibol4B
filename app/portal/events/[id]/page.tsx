@@ -8,9 +8,9 @@ import { shortDate } from "@/lib/utils";
 import { ContentImage } from "@/components/content-image";
 
 export default async function PortalEventDetailPage({ params }: { params: Promise<{ id: string }> }) {
-  await requireHomeownerProfile();
+  const profile = await requireHomeownerProfile();
   const { id } = await params;
-  const event = await prisma.event.findFirst({ where: { id, status: "PUBLISHED" } });
+  const event = await prisma.event.findFirst({ where: { id, tenantId: profile.tenantId, status: "PUBLISHED" } });
   if (!event) notFound();
 
   return <>

@@ -79,6 +79,28 @@ Purpose
 
 Represents one HOA organization.
 
+---
+
+# Sprint 6A Addendum - Document Workflow Architecture
+
+Migration `20260715120000_document_architecture_migration` adds tenant-scoped document workflow tables without deleting or rewriting historical requests.
+
+New models:
+
+- `HouseholdMember`: tenant/homeowner composite ownership for registered family or household members.
+- `DocumentTypeConfiguration`: one tenant-owned catalog entry per supported `DocumentType`, with delivery mode, fee, approval/payment flags, validity, copy limits, template, signatory, and version.
+- `DocumentFieldConfiguration`: tenant-safe child fields for each document type configuration.
+- `DocumentRequestEditAudit`: field-level admin review audit for document-visible changes.
+
+`DocumentRequest` now stores immutable request context:
+
+- configuration and template version snapshots
+- `subjectType` and optional tenant-owned `subjectMemberId`
+- `subjectSnapshot`, `requestDataSnapshot`, and `reviewedDataSnapshot`
+- delivery, approval, payment, fee, copy, issue-date, and ready-for-download snapshots
+
+Legacy status `GENERATED` is retained for compatibility. New generation workflows use `READY_FOR_DOWNLOAD`.
+
 Stores
 
 - HOA Name
@@ -835,3 +857,73 @@ Migration `20260712150000_payment_allocations_single_receipt` made `Payment.bill
 |----------|------|-------------|
 | 1.0 | July 11, 2026 | Initial Database Design |
 | 1.1 | July 12, 2026 | Added Payment header and tenant-safe PaymentAllocation architecture |
+## Enterprise Document Definition Migration
+
+### Decision
+
+The current `DocumentType` enum architecture is retained temporarily for backward compatibility but will no longer be the primary source of document behavior.
+
+A new tenant-owned `DocumentDefinition` aggregate will become the authoritative model for future document configuration and processing.
+
+Migration `20260716120000_document_definition_compatibility_schema` implements this additive compatibility foundation. It does not remove enum fields, rewrite generated documents, renumber documents, or alter historical request/generated snapshots.
+
+### Migration Strategy
+
+The migration must be additive and phased:
+
+1. Add new definition, template-version, numbering, and verification models.
+2. Create one definition for every existing tenant and legacy document type.
+3. Link existing configurations and templates to their definitions.
+4. Link existing requests where ownership can be determined safely.
+5. Preserve all legacy enum fields and historical snapshots.
+6. Move new requests and generation workflows to `definitionId`.
+7. Remove legacy enum dependencies only in a future cleanup release.
+
+No existing document number, generated document, request snapshot, template snapshot, or workflow outcome may be rewritten.
+
+### New Models
+
+- `DocumentDefinition`
+- `DocumentDefinitionField`
+- `DocumentTemplateSet`
+- `DocumentTemplateVersion`
+- `DocumentDefinitionCounter`
+- `DocumentVerificationToken`
+
+### Compatibility
+
+Existing records remain readable through legacy fields and immutable snapshots.
+
+New records use tenant-owned definitions and published template versions.
+
+### Local Backfill Verification
+
+Local development backfill created 32 tenant/legacy-type definitions, 132 definition fields, 9 template sets, 9 published template versions, linked 32 configurations, linked 2 requests, and linked 1 generated document version. Cross-tenant compatibility checks returned no mismatches.
+
+## Sprint 6B-1B Nullable Document Request Type
+
+Migration `20260716174058_nullable_document_request_type` makes `DocumentRequest.type` nullable for custom tenant-owned document definitions. The legacy `DocumentType` enum remains available and existing historical request rows keep their original enum values.
+
+Compatibility rules:
+
+- Legacy-backed requests continue to store `DocumentRequest.type`.
+- Custom definition-backed requests store `definitionId` as the authoritative reference and may store `type = null`.
+- Definition, template version, request data, and subject snapshots remain immutable at submission/generation time.
+- Custom definition numbering uses `DocumentDefinitionCounter`; legacy numbering continues to use `DocumentCounter`.
+- Historical generated content and document numbers are not rewritten.
+
+Local verification after applying the migration preserved request count `2`, generated-content fingerprint `120b4b0526a4fc425ac961f7563279858d2ed75839c4432ab67e60f645e8ac84`, and document-number fingerprint `00a72e70fa81e3d02226fe9d213f0e7b0c7d23dad7fa240f8501c2c60a7920a7`.
+
+## Document Generation Lifecycle
+
+Migration `20260718210000_document_generation_engine` adds `DocumentGenerationAttempt` and additive immutable generation metadata to `DocumentVersion`.
+
+`DocumentGenerationAttempt` is tenant/request scoped and records mode, deterministic state, idempotency key, attempt number, timestamps, safe failure data, output format, correlation ID, renderer metadata, actor, and resulting version. Composite foreign keys reinforce tenant ownership for requests, versions, and actors. Unique tenant/request/mode/key and tenant/version constraints prevent retry duplication.
+
+`DocumentVersion` now records generation mode, native output format and content type, output size, renderer identity, capabilities, policy/workflow/resolved-data snapshots, correlation and idempotency values, and template lineage. Existing generated content, numbers, verification codes, and historical snapshots are unchanged. No legacy columns or enums were removed.
+
+Recovery note: take a database backup before rollout and deploy the matching application and migration together. Because the migration is additive, application rollback can continue reading legacy `DocumentVersion` fields. Do not drop `DocumentGenerationAttempt` or the added snapshot columns after any Milestone 3 issuance; they become part of the audit and immutable-document record. In a pre-issuance local failure only, restore the backup or remove the additive objects using reviewed SQL after confirming the attempt table is empty.
+
+## Certificate of Residency Lifecycle Additivity
+
+Migration `20260718230000_certificate_residency_reference` adds `RETURNED_FOR_CORRECTION` to the existing request/history status enum and `DOCUMENT_REISSUED` to the existing notification enum. It creates no table, drops no column/value, and rewrites no historical row. Certificate definitions, fields, template lineage, policies, workflow, numbering, issued versions, and tokens use existing Milestone 1-3 models. Rollback should restore a pre-migration backup only after confirming no row uses either new enum value; production migration is outside Milestone 4.

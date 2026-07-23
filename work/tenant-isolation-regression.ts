@@ -111,6 +111,7 @@ async function main() {
 
       const nested = await prisma.documentRequest.create({ data: { homeownerId: a!.homeowner.id, type: "GATE_PASS", histories: { create: { status: "SUBMITTED", actorId: a!.admin.id, note: marker } } }, include: { histories: true } });
       check(nested.tenantId === a!.tenant.id && nested.histories[0]?.tenantId === a!.tenant.id, "nested writes inherit the authenticated tenant automatically");
+      await prisma.documentRequestHistory.deleteMany({ where: { requestId: nested.id } });
       await prisma.documentRequest.delete({ where: { id: nested.id } });
     }, { enabledModules: allModules });
 

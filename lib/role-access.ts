@@ -42,15 +42,19 @@ export function adminPrefixesForRole(role: Role) {
 }
 
 export function canAccessAdminPath(role: Role, pathname: string) {
+  const path = pathname.split(/[?#]/)[0];
   const prefixes = adminPrefixesForRole(role);
   if (prefixes === null) return true;
-  return prefixes.some((prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`));
+  return prefixes.some((prefix) => path === prefix || path.startsWith(`${prefix}/`));
 }
 
 export function filterAdminLinksByRole(links: LinkItem[], role: Role) {
   const prefixes = adminPrefixesForRole(role);
   if (prefixes === null) return links;
-  return links.filter((link) => prefixes.some((prefix) => link.href === prefix || link.href.startsWith(`${prefix}/`)));
+  return links.filter((link) => {
+    const href = link.href.split(/[?#]/)[0];
+    return prefixes.some((prefix) => href === prefix || href.startsWith(`${prefix}/`));
+  });
 }
 
 export function adminHomeForRole(role: Role) {

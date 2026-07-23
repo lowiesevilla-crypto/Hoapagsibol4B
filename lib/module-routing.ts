@@ -12,11 +12,12 @@ const rules: Array<[string, TenantModule]> = [
   ["/admin/vehicles", TenantModule.VEHICLES], ["/portal/vehicles", TenantModule.VEHICLES],
   ["/admin/contractors", TenantModule.CONTRACTORS],
   ["/admin/billing", TenantModule.BILLING], ["/admin/payments", TenantModule.BILLING], ["/admin/receipts", TenantModule.BILLING], ["/admin/collections", TenantModule.BILLING], ["/admin/expenses", TenantModule.BILLING], ["/admin/data", TenantModule.BILLING],
-  ["/portal/billing", TenantModule.BILLING], ["/portal/pay", TenantModule.BILLING], ["/portal/payments", TenantModule.BILLING], ["/portal/collections", TenantModule.BILLING], ["/api/payments", TenantModule.BILLING],
+  ["/portal/billing", TenantModule.BILLING], ["/portal/pay", TenantModule.BILLING], ["/portal/soa", TenantModule.BILLING], ["/portal/payments", TenantModule.BILLING], ["/portal/collections", TenantModule.BILLING], ["/api/payments", TenantModule.BILLING],
 ];
 
 export function moduleForPath(pathname: string) {
-  return rules.find(([prefix]) => pathname === prefix || pathname.startsWith(`${prefix}/`))?.[1];
+  const path = pathname.split(/[?#]/)[0];
+  return rules.find(([prefix]) => path === prefix || path.startsWith(`${prefix}/`))?.[1];
 }
 
 export function filterLinksByModules(links: LinkItem[], enabled: ReadonlySet<TenantModule>) {

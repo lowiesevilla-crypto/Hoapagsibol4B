@@ -31,7 +31,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   if (isPassDocument(documentRequest.type)) drawPassSheet(pdf.addPage([595.28, 841.89]), drawInput);
   else if (documentRequest.type === "CERTIFICATE_OF_RESIDENCY") drawResidencyCertificate(pdf.addPage([595.28, 841.89]), drawInput);
   else drawDocumentPage(pdf.addPage([595.28, 841.89]), drawInput);
-  pdf.setTitle(`${documentRequest.documentNumber} - ${documentTypeLabel(documentRequest.type)}`);
+  pdf.setTitle(`${documentRequest.documentNumber} - ${documentRequestTitle(documentRequest)}`);
   pdf.setAuthor(association.name);
   pdf.setSubject("Official HOA document with online verification");
   const bytes = await pdf.save();
@@ -50,7 +50,7 @@ function drawPassSheet(page: PDFPage, input: DrawInput) {
   const navy = rgb(0.03, 0.16, 0.38);
   if (logo) page.drawImage(logo, { x: 28, y: 764, width: 58, height: 58 });
   page.drawRectangle({ x: 115, y: 787, width: 330, height: 30, color: navy });
-  drawCenteredWithin(page, safeText(documentTypeLabel(request.type).toUpperCase()), bold, 16, 115, 445, 796, rgb(1, 1, 1));
+  drawCenteredWithin(page, safeText(documentRequestTitle(request).toUpperCase()), bold, 16, 115, 445, 796, rgb(1, 1, 1));
   drawCenteredWithin(page, safeText(association.name), bold, 13, 92, 470, 766, navy);
   drawCenteredWithin(page, safeText(association.address), regular, 6.5, 92, 470, 753, rgb(.2, .25, .3));
   drawCenteredWithin(page, safeText([association.contactNumber, association.email].filter(Boolean).join(" | ")), regular, 6.5, 92, 470, 742, rgb(.2, .25, .3));
@@ -58,15 +58,14 @@ function drawPassSheet(page: PDFPage, input: DrawInput) {
   page.drawImage(qr, { x: 518, y: 754, width: 48, height: 48 });
   page.drawText("SCAN TO VERIFY", { x: 513, y: 744, font: bold, size: 5.5, color: navy });
   const bands = [
-    { label: "MARSHAL'S COPY", color: rgb(.18, .55, .12), note: "Present to the marshal at the gate." },
-    { label: "HOMEOWNER'S COPY", color: rgb(.04, .35, .72), note: "Please keep this copy." },
-    { label: "HOA OFFICE COPY", color: rgb(.94, .33, .02), note: "Retain for record and reference." },
+    { label: "HOA OFFICE COPY", color: rgb(.18, .55, .12), note: "Retain for HOA office records." },
+    { label: "HOMEOWNER COPY", color: rgb(.04, .35, .72), note: "Please keep this copy." },
   ];
   bands.forEach((band, index) => {
-    const top = 724 - index * 219;
-    const bottom = top - 202;
-    page.drawRectangle({ x: 22, y: bottom, width: 551, height: 202, borderColor: band.color, borderWidth: 1 });
-    page.drawRectangle({ x: 22, y: bottom, width: 82, height: 202, color: band.color });
+    const top = 724 - index * 318;
+    const bottom = top - 292;
+    page.drawRectangle({ x: 22, y: bottom, width: 551, height: 292, borderColor: band.color, borderWidth: 1 });
+    page.drawRectangle({ x: 22, y: bottom, width: 82, height: 292, color: band.color });
     drawCenteredWithin(page, String(index + 1), bold, 24, 22, 104, top - 42, rgb(1, 1, 1));
     const labelLines = band.label === "HOA OFFICE COPY" ? ["HOA OFFICE", "COPY"] : [band.label.replace(" COPY", ""), "COPY"];
     drawCenteredWithin(page, labelLines[0], bold, 7.5, 25, 101, top - 67, rgb(1, 1, 1));
@@ -80,7 +79,7 @@ function drawPassSheet(page: PDFPage, input: DrawInput) {
     page.drawText(safeText(officerName(request.processedOfficerSnapshot, request.processedByOfficer?.fullName || request.processedBy?.name)), { x: 116, y: bottom + 21, font: bold, size: 7, color: navy, maxWidth: 125 });
     page.drawText("APPROVED BY", { x: 250, y: bottom + 34, font: bold, size: 5.5, color: navy });
     page.drawText(safeText(officerName(request.approvedOfficerSnapshot, request.approvedByOfficer?.fullName || request.approvedBy?.name)), { x: 250, y: bottom + 21, font: bold, size: 7, color: navy, maxWidth: 125 });
-    page.drawText(index === 2 ? "RECEIVED BY (HOA OFFICE)" : "CONFIRMED BY (MARSHAL)", { x: 381, y: bottom + 34, font: bold, size: 5.5, color: navy });
+    page.drawText(index === 0 ? "RECEIVED BY (HOA OFFICE)" : "CONFIRMED BY (HOMEOWNER)", { x: 381, y: bottom + 34, font: bold, size: 5.5, color: navy });
     page.drawLine({ start: { x: 381, y: bottom + 17 }, end: { x: 476, y: bottom + 17 }, color: rgb(.2, .2, .2), thickness: .6 });
     page.drawImage(qr, { x: 500, y: bottom + 104, width: 57, height: 57 });
     drawCenteredWithin(page, request.documentNumber!, bold, 6.5, 487, 570, bottom + 86, navy);
@@ -92,7 +91,7 @@ function drawPassSheet(page: PDFPage, input: DrawInput) {
 
 function passRows(request: DrawInput["documentRequest"], top: number): Array<[string, string, number, number, number]> {
   return [
-    ["TYPE OF PASS", request.passType?.replaceAll("_", "-") || documentTypeLabel(request.type), 116, top - 20, 100],
+    ["TYPE OF PASS", request.passType?.replaceAll("_", "-") || documentRequestTitle(request), 116, top - 20, 100],
     ["SCHEDULED DATE / TIME", `${request.scheduledDate ? shortDate(request.scheduledDate) : "-"} ${request.startTime || ""}-${request.endTime || ""}`, 235, top - 20, 130],
     ["VALID UNTIL", request.validityDate ? shortDate(request.validityDate) : "-", 383, top - 20, 95],
     ["HOMEOWNER", request.homeowner.user.name, 116, top - 54, 145],
@@ -230,7 +229,7 @@ function drawDocumentPage(page: PDFPage, input: DrawInput) {
   page.drawLine({ start: { x: 44, y: 681 }, end: { x: 551, y: 681 }, thickness: 1.5, color: pine });
   if (copy) page.drawText(copy, { x: 455, y: 786, font: bold, size: 8, color: pine });
   drawCentered(page, request.documentNumber!, bold, 8, 652, rgb(0.35, 0.35, 0.35));
-  drawCentered(page, safeText(documentTypeLabel(request.type).toUpperCase()), bold, 20, 625, pine);
+  drawCentered(page, safeText(documentRequestTitle(request).toUpperCase()), bold, 20, 625, pine);
   drawCentered(page, safeText(`Requested ${shortDate(request.requestedAt)} | Approved ${shortDate(request.approvedAt!)}${request.validityDate ? ` | Valid until ${shortDate(request.validityDate)}` : ""}`), regular, 7.5, 605, rgb(0.35, 0.35, 0.35));
   drawCentered(page, safeText(`${request.homeowner.user.name} - Block ${request.homeowner.block}, Lot ${request.homeowner.lot}`), bold, 8.5, 590, pine);
 
@@ -247,7 +246,7 @@ function drawDocumentPage(page: PDFPage, input: DrawInput) {
   }
 
   let y = 575;
-  for (const paragraph of request.generatedContent!.split(/\n+/)) {
+  for (const paragraph of generatedPlainText(request.generatedContent!).split(/\n+/)) {
     const lines = wrapText(safeText(paragraph), regular, 10.5, 365);
     for (const line of lines) { page.drawText(line, { x: 180, y, font: regular, size: 10.5, color: rgb(0.08, 0.1, 0.12) }); y -= 16; }
     y -= 10;
@@ -296,4 +295,22 @@ function wrapText(text: string, font: PDFFont, size: number, maxWidth: number) {
 }
 function drawCentered(page: PDFPage, text: string, font: PDFFont, size: number, y: number, color: ReturnType<typeof rgb>) { const width = font.widthOfTextAtSize(text, size); page.drawText(text, { x: Math.max(120, (595.28 - width) / 2), y, font, size, color }); }
 function drawCenteredWithin(page: PDFPage, text: string, font: PDFFont, size: number, x1: number, x2: number, y: number, color: ReturnType<typeof rgb>) { const width = font.widthOfTextAtSize(text, size); page.drawText(text, { x: x1 + Math.max(0, (x2 - x1 - width) / 2), y, font, size, color }); }
+function documentRequestTitle(request: Awaited<ReturnType<typeof getAccessibleGeneratedDocument>>["request"]) { return request.definition?.displayName || request.configuration?.displayName || documentTypeLabel(request.type); }
 function safeText(value: string) { return value.normalize("NFKD").replace(/[^\x20-\x7E]/g, ""); }
+function generatedPlainText(value: string) {
+  if (!/<[a-z][\s\S]*>/i.test(value)) return value;
+  return value
+    .replace(/<style[\s\S]*?<\/style>/gi, "")
+    .replace(/<script[\s\S]*?<\/script>/gi, "")
+    .replace(/<br\s*\/?>/gi, "\n")
+    .replace(/<\/(p|div|section|h1|h2|h3|li|tr)>/gi, "\n")
+    .replace(/<[^>]+>/g, "")
+    .replace(/&nbsp;/g, " ")
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}

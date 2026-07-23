@@ -1,15 +1,17 @@
 import { randomUUID } from "node:crypto";
-import { CollectionType, PaymentRequestStatus, PaymentRequestType, PayerType, Prisma, RefundStatus, Role } from "@prisma/client";
-import { prisma } from "@/lib/db";
+import { CollectionType, DocumentRequestStatus, PaymentRequestStatus, PaymentRequestType, PayerType, Prisma, RefundStatus, Role } from "@prisma/client";
+import { platformPrisma } from "@/lib/db";
 import { buildPaymentCoverage } from "@/lib/payment-coverage";
 import { recalculateBillFromActivePayments } from "@/lib/services/payment-ledger";
 import { allocateReceiptNumber, collectionReceiptSeries } from "@/lib/services/receipt";
+import { documentContextFromUser } from "@/lib/services/document-runtime-context";
+import { advanceDocumentWorkflowAfterPayment } from "@/lib/services/document-workflow-executor";
 import { monthLabel } from "@/lib/utils";
 
 const refundableTypes = new Set<CollectionType>([CollectionType.CONSTRUCTION_BOND, CollectionType.CONTRACTOR_BOND]);
 
 export async function approvePaymentRequest(requestId: string, reviewerId?: string, reviewRemarks?: string, tenantId?: string) {
-  return prisma.$transaction(async (tx) => {
+  const approved = await platformPrisma.$transaction(async (tx) => {
     const request = tenantId
       ? await tx.paymentRequest.findFirst({ where: { id: requestId, tenantId } })
       : await tx.paymentRequest.findUnique({ where: { id: requestId } });
@@ -67,6 +69,48 @@ export async function approvePaymentRequest(requestId: string, reviewerId?: stri
       return approved;
     }
 
+    if (request.type === PaymentRequestType.DOCUMENT_FEE) {
+      if (!request.documentRequestId) throw new Error("Document fee payment request is missing its document request.");
+      const documentRequest = await tx.documentRequest.findFirst({ where: { tenantId: request.tenantId, id: request.documentRequestId, homeownerId: request.homeownerId }, select: { id: true, paymentRequiredSnapshot: true, feeAmountSnapshot: true, status: true } });
+      if (!documentRequest) throw new Error("Linked document request was not found for this tenant.");
+      if (!documentRequest.paymentRequiredSnapshot) throw new Error("The linked document request does not require a document fee.");
+      const terminalDocumentStatuses: DocumentRequestStatus[] = [DocumentRequestStatus.CANCELLED, DocumentRequestStatus.REJECTED, DocumentRequestStatus.REVOKED, DocumentRequestStatus.ISSUED, DocumentRequestStatus.READY_FOR_DOWNLOAD, DocumentRequestStatus.GENERATED, DocumentRequestStatus.DOWNLOADED];
+      if (terminalDocumentStatuses.includes(documentRequest.status)) {
+        throw new Error("The linked document request can no longer accept payment confirmation.");
+      }
+      if (Math.abs(Number(request.amount) - Number(documentRequest.feeAmountSnapshot)) > 0.009) throw new Error("Document fee payment amount does not match the saved document request fee.");
+      const adminId = reviewerId ?? (await tx.user.findFirst({ where: { tenantId: request.tenantId, role: { in: [Role.SYSTEM_ADMIN, Role.ADMIN, Role.HOA_ADMIN] } }, select: { id: true } }))?.id;
+      if (!adminId) throw new Error("No tenant administrator account is available to record this document collection.");
+      const receiptNumber = await allocateReceiptNumber(tx as unknown as Prisma.TransactionClient, request.tenantId, paymentDate, "OC");
+      const collection = await tx.collection.create({
+        data: {
+          tenantId: request.tenantId,
+          type: CollectionType.OTHER,
+          description: request.description || "Document fee",
+          payerType: PayerType.HOMEOWNER,
+          homeownerId: request.homeownerId,
+          amount: request.amount,
+          collectionDate: paymentDate,
+          method: request.method,
+          referenceNumber: request.referenceNumber,
+          receiptNumber,
+          remarks: [request.payerNotes, reviewRemarks].filter(Boolean).join("\n") || null,
+          refundable: false,
+          refundStatus: RefundStatus.NOT_APPLICABLE,
+          createdById: adminId,
+        },
+      });
+      await tx.auditLog.create({ data: { tenantId: request.tenantId, actorId: adminId, module: "RECEIPTS", action: "GENERATE_OC_RECEIPT", entityType: "Collection", entityId: collection.id, metadata: { receiptNumber, source: "DOCUMENT_FEE_PAYMENT_REQUEST", documentRequestId: request.documentRequestId } } });
+      const updatedDocument = await tx.documentRequest.update({ where: { id: documentRequest.id }, data: { status: DocumentRequestStatus.PAYMENT_CONFIRMED } });
+      await tx.documentRequestHistory.create({ data: { tenantId: request.tenantId, requestId: documentRequest.id, status: DocumentRequestStatus.PAYMENT_CONFIRMED, actorId: adminId, note: `Document fee confirmed with receipt ${receiptNumber}.` } });
+      const approved = await tx.paymentRequest.update({
+        where: { id: request.id },
+        data: { status: PaymentRequestStatus.APPROVED, reviewedById: reviewerId ?? null, reviewedAt: new Date(), reviewRemarks: reviewRemarks || null, collectionId: collection.id },
+      });
+      await tx.auditLog.create({ data: { tenantId: request.tenantId, actorId: adminId, module: "PAYMENTS", action: "APPROVE_DOCUMENT_FEE_PAYMENT", entityType: "PaymentRequest", entityId: request.id, metadata: { oldValue: { status: request.status, documentStatus: documentRequest.status }, newValue: { status: "APPROVED", documentStatus: updatedDocument.status, collectionId: collection.id, receiptNumber }, documentRequestId: documentRequest.id, remarks: reviewRemarks } } });
+      return approved;
+    }
+
     if (!request.collectionType) throw new Error("Payment request is missing a collection type.");
     if (request.collectionType === CollectionType.CONTRACTOR_BOND) throw new Error("Contractor bonds must be recorded from a contractor profile.");
     const adminId = reviewerId ?? (await tx.user.findFirst({ where: { role: { in: [Role.SYSTEM_ADMIN, Role.ADMIN] } }, select: { id: true } }))?.id;
@@ -100,10 +144,17 @@ export async function approvePaymentRequest(requestId: string, reviewerId?: stri
     await tx.auditLog.create({ data: { tenantId: request.tenantId, actorId: adminId, module: "PAYMENTS", action: "APPROVE_PAYMENT_REQUEST", entityType: "PaymentRequest", entityId: request.id, metadata: { oldValue: { status: request.status }, newValue: { status: "APPROVED", collectionId: collection.id, receiptNumber }, remarks: reviewRemarks } } });
     return approved;
   }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+  if (approved.type === PaymentRequestType.DOCUMENT_FEE && approved.documentRequestId) {
+    const reviewer = reviewerId
+      ? await platformPrisma.user.findFirst({ where: { id: reviewerId, tenantId: approved.tenantId } })
+      : await platformPrisma.user.findFirst({ where: { tenantId: approved.tenantId, active: true, role: { in: [Role.SYSTEM_ADMIN, Role.ADMIN, Role.HOA_ADMIN] } } });
+    if (reviewer) await advanceDocumentWorkflowAfterPayment(documentContextFromUser(reviewer), approved.documentRequestId);
+  }
+  return approved;
 }
 
 export async function rejectPaymentRequest(requestId: string, reviewerId: string, reviewRemarks?: string, tenantId?: string) {
-  return prisma.$transaction(async (tx) => {
+  return platformPrisma.$transaction(async (tx) => {
     const request = tenantId
       ? await tx.paymentRequest.findFirst({ where: { id: requestId, tenantId } })
       : await tx.paymentRequest.findUnique({ where: { id: requestId } });

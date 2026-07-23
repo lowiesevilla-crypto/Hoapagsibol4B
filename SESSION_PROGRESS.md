@@ -1,5 +1,34 @@
 # Session Progress
 
+## 2026-07-18 - Document Module Architecture Consolidation Phase 1
+
+Branch:
+feature/homeowner-mobile
+
+Completed:
+
+- Committed the prior mobile login UI cleanup as `f5a1eba Improve mobile login page layout` before starting this clean preflight.
+- Confirmed the authoritative document architecture is `DocumentDefinition`, `DocumentDefinitionField`, `DocumentTemplateSet`, `DocumentTemplateVersion`, `DocumentRequest`, generated snapshots, verification tokens, and document counters.
+- Redirected legacy `/admin/document-templates` to `/admin/documents?section=templates` while preserving the old screen code in `legacy-screen.tsx`.
+- Consolidated `/admin/documents` into one Document Management hub with Document Types, Templates, Requests, and Issued Documents sections.
+- Removed old Document Templates and duplicate document-definition entries from the sidebar navigation.
+- Added admin-visible requestability and hidden-reason evaluation for homeowner catalog visibility.
+- Simplified template presentation into Current Published Template, Current Draft, and Version History.
+- Updated template publishing so one version is assigned/published at a time and older published versions in the same set are retired, not deleted.
+- Added a non-destructive draft discard action that retires drafts.
+- Tenant-scoped the older generated-documents and archive deep-link routes.
+- Hardened Bug #098 access resolution with a definition-snapshot balance-policy fallback when a historical request lacks a live definition relation.
+
+Inventory findings:
+
+- Pagsibol has 8 legacy-backed definitions with published templates; Certificate of Indigency, Move-In Pass, and Move-Out Pass are missing custom definitions.
+- Test HOA has document request history, one legacy template, and mixed definition states; Certificate of Residency is archived, Certificate of Indigency is missing, and some definitions are inactive or incomplete because no active assigned published template exists.
+- Certificate of Indigency is not visible because no tenant-owned custom definition currently exists for it; it is not a homeowner-query filtering bug.
+
+Release Gate:
+
+- Product Owner UAT must verify the consolidated Document Management entry, legacy redirect, hidden reason display, template version presentation, Certificate of Indigency finding, Bug #098 access policy trace, and existing homeowner/admin document workflows.
+
 ## 2026-07-12 - Urgent Finance Migration and Single Receipt Hotfix
 
 Branch:
@@ -680,3 +709,462 @@ Implementation is planned through the shared pagination component to benefit all
 - Wired Finance Dashboard delinquency/activity pagination, shared admin payments pagination, and Billing Preview pagination.
 - Local checks passed for typecheck, clean build, authenticated Chromium dashboard/payment focus restoration, and 390px mobile dashboard focus restoration.
 - Product Owner UAT in Chrome and Edge remains pending.
+
+# 2026-07-15 - Sprint 6A Homeowner Mobile Foundation
+
+## Engineering Ready for Product Owner UAT
+
+- Added a homeowner mobile application shell with tenant logo/name, homeowner greeting, profile action, entitlement-aware chat indicator, safe-area bottom navigation, and active-route accessibility.
+- Added shared portal mobile components for headers, bottom navigation, page containers, summary cards, quick-action tiles, section headers, empty/error/skeleton states, and mobile list items.
+- Reworked `/portal/dashboard` into a mobile-first account overview using the existing SOA service for finance summary values and bounded tenant-scoped preview queries.
+- Added `/portal/soa` as a homeowner-facing statement route backed by `lib/services/statement-of-account.ts`.
+- Added quick actions for Pay Dues, View SOA, Receipts, Documents, Announcements, Chat, Vehicles, and Events, filtered by tenant module entitlement.
+- Tightened tenant-scoped reads across homeowner billing, payments, collections, documents, announcements, events, vehicles, organization officers, and related document officer lookups.
+- Added neutral HOAHub PWA manifest metadata without adding a service worker or offline caching for private financial data.
+- No Prisma schema or migration change was required.
+
+## Release Gate
+
+- Product Owner UAT remains pending for 360px, 390px, 430px, tablet, desktop, two-tenant branding isolation, homeowner login, dashboard, profile, payments, SOA, documents, announcements, events, chat, and desktop admin regression.
+## Sprint 6A Product Owner UAT
+
+Status:
+Conditional Pass
+
+Passed:
+- Mobile homeowner shell
+- Tenant branding
+- Bottom navigation
+- Responsive layouts
+- Portal dashboard
+- Profile
+- Payments
+- SOA
+- Announcements
+- Events
+- Chat
+- Vehicles
+- PWA foundation
+- Tenant isolation
+- No console errors
+
+Blocked:
+- Certificate of Residency request fails as unavailable
+- Tenant-configurable free or paid document fee is not yet available
+
+Decision:
+Do not merge Sprint 6A into develop until Bug #062 is resolved. Improvement #063 may be implemented in the same document-request hotfix.
+
+# 2026-07-15 - Sprint 6A Document Architecture Migration
+
+## Engineering Ready for Product Owner UAT
+
+- Added additive migration `20260715120000_document_architecture_migration`.
+- Added tenant document configurations, configurable request fields, household/family request subjects, request snapshots, fee/delivery snapshots, and admin edit audit rows.
+- Backfilled tenant document catalogs for supported document types and default field definitions.
+- Updated homeowner document requests to show active tenant document types only, ask "Who is this document for?", validate household-member ownership server-side, and snapshot submitted values.
+- Added household/family member management from the homeowner document screen.
+- Added `/admin/settings/document-types` for tenant document activation, fee, delivery mode, approval/payment rules, validity, copies, fields, template, and signatory controls.
+- Updated admin review to store reviewed values and field-level audit entries before approval/regeneration.
+- Preserved legacy `GENERATED` status compatibility while using `READY_FOR_DOWNLOAD` for new generated requests.
+- Paid-document accounting remains deferred; Sprint 6A stores fee/payment snapshots and blocks homeowner downloads until payment confirmation is integrated.
+
+## Release Gate
+
+- Product Owner UAT remains pending.
+- Do not mark Bug #062 or Improvements #063-#066 complete until local Product Owner UAT passes.
+## Additional Document Platform Requirements
+
+New requirements identified during Product Owner review:
+
+- Tenants must be able to create custom document and certification types.
+- Document templates require a real on-screen visual preview.
+- Template components must support editable branding, layout, colors, header, footer, body, signatory, and QR verification.
+- Existing generated documents must remain tied to the template version used at issuance.
+- The current hotfix will establish the safe foundation, while advanced visual editing may be completed in a dedicated follow-up sprint.
+
+# 2026-07-16 - Sprint 6A Document Platform Hotfix
+
+## Engineering Ready for Product Owner UAT
+
+- Fixed Bug #074 by centralizing document configuration availability and hiding incomplete configurations from homeowner request forms.
+- Added admin completeness labels: Complete, Missing template, Invalid template, Draft only, and Inactive.
+- Kept template assignment tenant/type validated; no cross-tenant template fallback was introduced.
+- Updated household Date of Birth labels and helper text.
+- Added homeowner and admin household-member editing with immutable tenantId/homeownerId and preserved request/generated snapshots.
+- Added safe block-template foundation with allowlisted blocks/placeholders and no arbitrary HTML/script execution.
+- Confirmed true custom tenant document types require an additive catalog migration because current records are enum-bound.
+
+## Release Gate
+
+- Product Owner UAT remains pending.
+- Do not mark Bug #074 or Improvements #075-#078 complete until Product Owner UAT passes.
+## Document Architecture UAT – Admin Review Blocker
+
+Passed:
+- Certificate of Residency request for self
+- Active-template resolution
+- Free + Approval configuration
+- Purpose and remarks persistence
+- PENDING_APPROVAL status
+- Homeowner and admin queues
+- Inactive and invalid-template handling
+- Household-member creation and homeowner editing
+- Tenant isolation
+
+Blocked:
+- Save Preview / Start Review
+- Admin editing of requested information
+- Approve and Generate
+- Outstanding-balance download override
+
+Observed Error:
+`Unknown argument actorId. Did you mean actor?`
+
+Release Decision:
+Do not approve the Sprint 6A document workflow until Bug #079 passes Product Owner UAT.
+
+# 2026-07-16 - Sprint 6A Document Review and Approval Hotfix
+
+## Engineering Ready for Product Owner UAT
+
+- Fixed Bug #079 by removing tenant-scoped nested audit/history creates from document review and approval update calls.
+- Confirmed generated Prisma nested checked inputs require `actor` relation for nested `create`; scalar `actorId` is accepted in unchecked/createMany or top-level child writes.
+- Kept tenant-scoped request loading and added explicit validation for homeowner, configuration, template, and officer tenant ownership before base-client writes.
+- Moved review, rejection, approval/generation, document version, workflow history, edit audit, and audit log writes into atomic base-client transactions.
+- Added server-side authorization for outstanding-balance download overrides and preserved the required override reason.
+- Verified the review/audit/approval write shape with a rollback harness; no test rows remained.
+
+## Release Gate
+
+- Product Owner UAT remains pending.
+- Do not mark Bug #079 complete until Save Preview, Approve and Generate, balance override, tenant isolation, and mobile/homeowner regression checks pass locally.
+## Bug #079 Product Owner Retest
+
+Status: PASS
+
+Validated:
+- Save Preview
+- UNDER_REVIEW transition
+- Reviewed data persistence
+- Officer selection
+- Field-level audit records
+- Review history
+- Approval and generation
+- Document number generation
+- READY_FOR_DOWNLOAD transition
+- Reviewed values in generated content
+- Outstanding-balance override
+- Homeowner download access
+- No duplicate generation
+- Tenant isolation
+- No console errors
+
+Additional Improvement:
+Improvement #080 – Admin downloads must be tracked separately from homeowner downloads.
+## Sprint 6B-1 Planning – Enterprise Document Definition Platform
+
+The next document sprint will replace the fixed document-type approach with a tenant-owned Document Definition architecture.
+
+Approved scope:
+
+- Custom tenant document definitions
+- Configurable workflows
+- Dynamic fields
+- Fee and approval rules
+- Document numbering
+- Tenant-owned templates
+- Draft and published template versions
+- Structured visual template foundation
+- A4 preview
+- Placeholder library
+- Completeness validation
+- Immutable generated-document snapshots
+- QR verification architecture
+
+Implementation rule:
+
+Codex must first review the current enum-based schema. If it cannot safely support custom document definitions, Codex must stop and provide an additive migration and backfill proposal before implementation.
+## Enterprise Document Definition Architecture Review
+
+Codex confirmed that the existing `DocumentType` enum architecture cannot safely support custom tenant-created documents.
+
+Approved direction:
+
+- Add a tenant-owned `DocumentDefinition` aggregate.
+- Retain legacy enum fields for compatibility.
+- Use additive migration and backfill.
+- Preserve all existing requests, generated documents, numbers, templates, and snapshots.
+- Move new workflows gradually to definition-based processing.
+
+# 2026-07-16 - Sprint 6B-1A Document Definition Compatibility Schema
+
+## Engineering Complete Locally
+
+- Added additive migration `20260716120000_document_definition_compatibility_schema`.
+- Added tenant-owned document definitions, definition fields, template sets, template versions, definition counters, and verification tokens.
+- Added nullable compatibility links from legacy configurations, fields, templates, requests, and generated document versions.
+- Backfilled 32 tenant/legacy-type definitions, 132 definition fields, 9 template sets, 9 published template versions, 2 request links, and 1 generated-version link in local development.
+- Added `lib/services/document-definitions.ts` for definition-by-id, legacy-type fallback, tenant ownership validation, and published-template-version lookup.
+- Added `scripts/verify-document-definition-migration.ts` to verify backfill counts, cross-tenant relation safety, and historical content/number fingerprints.
+
+## Release Gate
+
+- Improvements #081-#083 remain open until Product Owner UAT validates custom definition administration, versioned template publishing, and completeness/requestability validation.
+
+# 2026-07-16 - Sprint 6B-1B Document Definition Catalog and Template Publishing
+
+## Engineering Ready for Product Owner UAT
+
+- Added tenant-facing Document Definition catalog at `/admin/settings/document-definitions`.
+- Added create, edit, duplicate, activate, deactivate, archive, search, filter, sort, pagination, and requestability/completeness display.
+- Added workflow presets for Free + Instant, Free + Approval, Paid + Instant, Paid + Approval, and Request Only.
+- Added definition field JSON configuration with server-side validation and request-history safeguards.
+- Added template-set and template-version management routes with draft creation, duplication, publish, retire, and version history.
+- Added structured A4 template editor with safe block types, allowlisted placeholders, add/remove/reorder controls, draft save, and publish.
+- Added completeness validation and numbering format validation services plus a local numbering harness.
+- Updated homeowner request creation to use complete active `definitionId` options while preserving legacy enum/configuration fallback.
+
+## Release Gate
+
+- Improvements #081-#083 remain open until Product Owner UAT passes.
+- Fully enumless custom request generation remains deferred because `DocumentRequest.type` is still a required compatibility field.
+
+# 2026-07-16 - Sprint 6B-1B Hotfix Document Definition Catalog Actions and Fields
+
+## Engineering Ready for Product Owner UAT
+
+- Fixed Bug #084 by aligning catalog action button values with the server-side allowlist for `ACTIVATE`, `DEACTIVATE`, and `ARCHIVE`.
+- Preserved tenant ownership validation before base-client status updates and blocked implicit reactivation/deactivation of archived definitions without a restore workflow.
+- Fixed Bug #085 by replacing the raw dynamic-field JSON textarea with structured controls for add, edit, activate/deactivate, required flag, select options, safe validation inputs, default values, remove, and move up/down ordering.
+- Improved System Settings navigation by adding a visible `Document definitions` action on the Configuration Center page.
+- Improved catalog focus retention by routing filter apply and pagination through the shared pagination focus anchor while preserving search, status, sort, and page parameters.
+
+## Release Gate
+
+- Bugs #084-#085 and Improvements #086-#087 remain open until Product Owner UAT passes.
+
+# 2026-07-16 - Sprint 6B-1B Final Hotfix Dynamic Fields and Custom Requests
+
+## Engineering Ready for Product Owner UAT
+
+- Fixed Bug #088 by normalizing document definition fields into one view model for portal rendering, server validation, and immutable request snapshots.
+- SELECT options now support string arrays and `{ label, value }` objects; invalid submitted SELECT values are rejected server-side.
+- Required checkboxes now render with browser `required` and are also rejected server-side when missing or false.
+- Fixed Bug #089 with additive migration `20260716174058_nullable_document_request_type`; custom definition-backed requests may persist `type = null` while legacy-backed requests keep their enum values.
+- Added definition-scoped document numbering through `DocumentDefinitionCounter`; legacy requests still use `DocumentCounter`.
+- Hardened Bug #084 by posting exact hidden `operation` values and verifying `ACTIVATE`, `DEACTIVATE`, and `ARCHIVE` through a rollback harness.
+- Pre/post local fingerprints matched: request count `2`, generated content hash `120b4b0526a4fc425ac961f7563279858d2ed75839c4432ab67e60f645e8ac84`, document number hash `00a72e70fa81e3d02226fe9d213f0e7b0c7d23dad7fa240f8501c2c60a7920a7`.
+
+## Release Gate
+
+- Bugs #084, #088, and #089 remain open until Product Owner UAT passes.
+
+# 2026-07-16 - Sprint 6B-1B Final Validation Hotfix
+
+## Engineering Ready for Product Owner UAT
+
+- Fixed Bug #091 by moving document dynamic-field constraint enforcement into a shared validator used by request parsing and verification.
+- NUMBER and MONEY now enforce numeric minimum/maximum; TEXT and TEXTAREA enforce minimum length, maximum length, and safe pattern validation.
+- Fixed Bug #092 by preserving SELECT options as usable `{ label, value }` pairs from the structured field builder through homeowner rendering and server allowlist validation.
+- Fixed Bug #093 by removing the hidden legacy purpose requirement from custom definition-backed requests while preserving legacy purpose validation for enum/configuration-backed requests.
+- Added `scripts/verify-document-field-validation-hotfix.ts` to verify constraints, SELECT string/object options, required checkbox behavior, and custom no-purpose validation.
+
+## Release Gate
+
+- Bugs #091-#093 remain open until Product Owner UAT passes.
+## Document Workflow Configuration Observation
+
+Product Owner UAT identified that the Document Definition screen allows inconsistent workflow and fee combinations.
+
+Approved direction:
+- Workflow preset is the single source of truth.
+- Free workflows require zero fee.
+- Paid workflows require a positive fee.
+- Approval and payment flags are derived from the selected workflow.
+- The UI must prevent contradictory configuration.
+
+# 2026-07-16 - Document Workflow Configuration Hotfix
+
+## Engineering Ready for Product Owner UAT
+
+- Fixed Bug #096 by making Document Definition workflow presets authoritative for payment requirement, approval requirement, payment timing, immediate download, and admin review flags.
+- Added workflow-aware Fee Amount UI behavior: non-paid workflows submit zero fee and disable the fee input; paid workflows require a positive fee.
+- Added workflow explanation text for Free + Instant, Free + Approval, Paid + Instant, Paid + Approval, and Request Only.
+- Server-side save validation rejects invalid workflow strings and paid workflows with zero or negative fees; non-paid workflows normalize to zero fee.
+- Completeness validation now blocks requestability when existing definitions have workflow/fee or workflow/flag mismatches.
+- Added `scripts/verify-document-workflow-preset-hotfix.ts`.
+
+## Release Gate
+
+- Bug #096 remains open until Product Owner UAT passes.
+
+## Document Workflow UAT – Configuration Persistence Blocker
+
+Scenario tested:
+Free + Instant
+
+Observed:
+- Fee saved as zero.
+- Workflow reverted to Free + Approval after refresh.
+- Active flag reverted.
+- Other settings may not have persisted.
+
+Decision:
+Stop remaining workflow UAT until Bug #097 is resolved.
+
+# 2026-07-18 - Document Definition Persistence Hotfix
+
+## Engineering Ready for Product Owner UAT
+
+- Fixed Bug #097 by keeping `DocumentDefinition` as the authoritative source for the Document Definition administration screen.
+- Updated workflow reconstruction so the edit dropdown is derived from saved `deliveryMode`, not from stale or mismatched low-level flags.
+- Added explicit checkbox serialization and server-side boolean parsing so every boolean field can persist true-to-false and false-to-true changes.
+- Redirected successful saves back to the saved edit record with a success message, so hard refresh and normal navigation load persisted values.
+- Added a persisted configuration summary panel showing workflow, fee, status, active state, assigned template, completeness, requestable state, and last updated from the database.
+- Added legacy compatibility synchronization from saved definitions to matching legacy configurations when `legacyType` exists, without reading legacy configuration back into the definition UI.
+- Added `scripts/verify-document-definition-persistence-hotfix.ts` rollback verification for custom and legacy-backed definitions, boolean flips, workflow reconstruction, signatory/max copy changes, tenant scope, and single version increments.
+
+## Release Gate
+
+- Bug #097 remains open until Product Owner UAT passes.
+
+## Document Workflow UAT – Balance Restriction Finding
+
+Bug #097 persistence retest passed for the tested configuration fields.
+
+A separate workflow issue was identified:
+
+- Definition workflow: Free + Instant
+- Document fee: 0
+- Request submission: successful
+- Existing homeowner balance: 800
+- Download and printing: locked
+
+Decision:
+Introduce an explicit per-definition Outstanding Balance Policy rather than
+allowing a hidden global balance rule to override document behavior.
+Tracked as Bug #098.
+
+# 2026-07-18 - Document Outstanding Balance Policy Hotfix
+
+## Engineering Ready for Product Owner UAT
+
+- Fixed Bug #098 by separating document workflow/payment rules from the homeowner's pre-existing HOA account balance.
+- Added tenant-owned `DocumentDefinition.outstandingBalancePolicy` with `IGNORE_BALANCE`, `BLOCK_DOWNLOAD`, `BLOCK_REQUEST`, and `ALLOW_ADMIN_OVERRIDE`.
+- Migrated existing definitions to `BLOCK_DOWNLOAD` to preserve the previous balance-lock behavior until explicitly changed.
+- Added the balance policy selector and persisted summary on `/admin/settings/document-definitions`.
+- Centralized generated document access through one resolver that evaluates tenant ownership, request readiness, document-specific fee lock, current qualifying balance, policy, and active override.
+- Updated homeowner submission so `BLOCK_REQUEST` rejects before creating any request while `IGNORE_BALANCE`, `BLOCK_DOWNLOAD`, and `ALLOW_ADMIN_OVERRIDE` keep submission separate from existing HOA balances.
+- Added authorized admin allow/revoke override actions with reason, actor, timestamp, request history, and audit log.
+- Added `scripts/verify-document-balance-policy-hotfix.ts` rollback verification.
+
+## Release Gate
+
+- Bug #097 is technically fixed but final workflow UAT continues under Bug #098.
+- Bug #098 remains open until Product Owner UAT passes.
+
+# 2026-07-18 - Professional Document Template Editor Reconstruction
+
+## Engineering Ready for Product Owner UAT
+
+- Reconstructed `/admin/settings/document-definitions/[id]/templates/[versionId]/edit` into a professional structured authoring screen with top app bar, ribbon tabs, document outline, centered page preview, and properties/dynamic-field/review panels.
+- Selected the existing React + lucide foundation because the project has no current rich-text editor library and the authoritative document model already stores safe JSON template definitions.
+- Kept template storage under `DocumentTemplateVersion.definitionJson`; schema version 1 templates normalize to schema version 2 without changing published history.
+- Added header/body/footer sections, page layout settings, formatting controls, table/image/signature/QR/document-field blocks, and an allowlisted placeholder picker.
+- Added stale draft detection before save or publish and kept one published version per template set through the existing publish workflow.
+- Added tenant-scoped image upload support for template image blocks.
+- Added stricter template-administration authorization; homeowners and payroll-only users cannot access template admin or publish actions.
+- Added `scripts/verify-professional-template-editor.ts`.
+
+## Verification Notes
+
+- Focused editor harness passed for dependency audit, schema normalization, placeholder safety, role restrictions, one-published-version invariant, and tenant-scoped assigned templates.
+- Full rich-style PDF parity is not claimed yet; generated PDFs continue using the shared structured text rendering contract while the richer visual renderer remains a Phase 3 item.
+
+## Release Gate
+
+- Professional template editor reconstruction remains open until Product Owner UAT passes.
+
+## 2026-07-18 - Document Management UX and Walk-In Architecture Phase 2A
+
+- Normal `/admin/documents?section=types` is table-first; expected-type inventory moved into an authorized diagnostics panel.
+- Added tenant-safe, idempotent repair action for the Certificate of Indigency typo and inactive seeding for genuinely missing expected definitions.
+- `/admin/documents/new` is now titled Create Walk-In / Office Request and loads only complete active walk-in-enabled definitions with published templates.
+- Walk-in request creation preserves definition/template/workflow/balance-policy snapshots and creates the workflow-appropriate request status before any safe instant generation.
+- Added `scripts/verify-document-management-phase-2a.ts`.
+- Walk-In Workflow Reconstruction and Bug #098 remain open until Product Owner UAT passes.
+
+## 2026-07-22 - Resident Services Document Management UX Refinement
+
+- Reworked the sidebar document module labels under Resident Services to Document Definitions, Templates, Requests, Create Walk-In / Office Request, and Issued Documents.
+- Limited homeowner portal document navigation to My Document Requests, Request a Document, and Issued Documents.
+- Added a tenant-scoped actionable request count service and sidebar badge for the Resident Services Requests entry.
+- Made the Document Management Requests section default to Needs Action using the same server-side predicate as the badge.
+- Reorganized the Document Definition configuration form into business-facing sections with a persisted effective configuration summary and unsaved-change warning.
+- Added Custom workflow mode so payment, approval, delivery, receipt, and approver rules can be independently edited when presets are not enough.
+- No schema migration was required; Product Owner UAT remains required before marking the UX refinement complete.
+## Approved Document Template Editor Direction
+
+The Product Owner approved reconstructing the Document Template Editor as a
+simplified Microsoft Word-style editor.
+
+The editor must support professional page layout, formatting, tables, lines,
+images, dynamic placeholders, header, footer, multiple pages, live preview,
+drafts, publishing, and immutable issued-document snapshots.
+
+The editor must not resemble Canva, Figma, or a technical block/JSON editor.
+
+Implementation will begin only after Document Module Architecture
+Consolidation Phase 1 is completed and verified.
+
+# 2026-07-18 - Certificate of Residency Milestone 4
+
+- Implemented the first production reference document on the Document Platform without adding another registry or generation engine.
+- Added explicit local tenant provisioning, certified template lineage, active-resident/property policies, tenant approval workflow, COR numbering, configured signatory enforcement, and optional template metadata omission.
+- New homeowner and office-assisted Certificate requests start the platform workflow; office requests require an acting reason.
+- Admin review now exposes return, reject, approve, preview, issue, release, exact immutable download/print, reissue, and revoke actions.
+- Replaced the public verification page's private legacy projection with token-service output limited to safe metadata, rate limiting, and noindex metadata.
+- Applied local additive migration `20260718230000_certificate_residency_reference` and passed the cleanup-backed 33-check Certificate harness.
+- Product Owner UAT remains required; no push, merge, deployment, or production seed occurred.
+
+## 2026-07-18 - Certified Template Foundation Phase 2B.1
+
+- Added additive ownership metadata to existing `DocumentTemplateSet` and `DocumentTemplateVersion` records.
+- Existing template records default to `TENANT`; no template content, generated snapshot, or historical version was rewritten.
+- Added backend foundations for HOAHub certified sources, tenant working-copy cloning, custom template sets, restore-as-new-draft, source lineage, upgrade compatibility, and audit events.
+- Certified sources are read-only at the server boundary; tenant and custom copies remain editable and survive certified upgrades.
+- Added `scripts/verify-certified-template-foundation.ts`.
+- Phase 2B.1 is engineering-ready for Product Owner UAT; editor and generation behavior were intentionally left unchanged.
+
+## 2026-07-18 - Document Platform Runtime Services Foundation
+
+- Added tenant-bound runtime context, permission checks, redacted document audit writes, and explicit capability resolution.
+- Added registry, template lifecycle, placeholder, policy, workflow, approval, numbering, verification-token, and notification services.
+- Runtime writes validate tenant ownership before base Prisma transactions; published template versions and document history remain immutable.
+- Added notification metadata migration and read-only runtime verification harness.
+- No administrator UI, certified-template seed data, payment accounting, or public QR page was added in this milestone.
+
+## 2026-07-18 - Document Generation Engine Milestone 3
+
+- Added a tenant-safe generation orchestrator for PREVIEW, VALIDATE, ISSUE, and REISSUE with no document-specific conditionals.
+- Added the additive `DocumentGenerationAttempt` lifecycle and expanded immutable `DocumentVersion` generation metadata.
+- Added safe HTML rendering, QR payload generation, hashed verification persistence, content hashing, exact template lineage, and redacted snapshots.
+- Added retry-safe idempotency and database-backed concurrency protection; simultaneous ISSUE verification created exactly one official version.
+- Added an idempotent release service and reissue lineage without changing original issued content.
+- Applied local migration `20260718210000_document_generation_engine`; no production migration, push, merge, or deployment was performed.
+- Added `scripts/verify-document-generation-engine.ts`; all 29 focused checks passed and cleanup left no verification definitions or attempts.
+- Existing generation, PDF, print, and download flows remain functional compatibility paths pending later route integration approval.
+## Approved Document Template Editor Direction
+
+The Product Owner approved reconstructing the Document Template Editor as a
+simplified Microsoft Word-style editor.
+
+The editor must support professional page layout, formatting, tables, lines,
+images, dynamic placeholders, header, footer, multiple pages, live preview,
+drafts, publishing, and immutable issued-document snapshots.
+
+The editor must not resemble Canva, Figma, or a technical block/JSON editor.
+
+Implementation will begin only after Document Module Architecture
+Consolidation Phase 1 is completed and verified.

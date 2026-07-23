@@ -1,6 +1,6 @@
 "use client";
 
-import { Component, memo, useEffect, useMemo, useRef, useState, useTransition } from "react";
+import { Component, memo, useEffect, useLayoutEffect, useMemo, useRef, useState, useTransition } from "react";
 import type React from "react";
 import type { ErrorInfo } from "react";
 import {
@@ -115,6 +115,7 @@ type StoredTemplateDraft = {
 };
 
 type LiveTextDraft = { content: string; richText: DocumentRichText };
+type RichTextEditorHandle = { insertPlaceholder: (key: string) => boolean };
 
 const elementOptions: { type: DocumentTemplateBlockType; label: string; icon: React.ReactNode; content?: string; binding?: string; section?: DocumentTemplateSectionName }[] = [
   { type: "text", label: "Text", icon: <Type /> },
@@ -163,6 +164,7 @@ function ProfessionalDocumentTemplateEditorBody(props: Props & { draftStorageKey
   const canvasRef = useRef<HTMLDivElement>(null);
   const dragRef = useRef<DragState | null>(null);
   const textSelectionRef = useRef<{ blockId: string; start: number; end: number } | null>(null);
+  const activeTextEditorRef = useRef<{ blockId: string; handle: RichTextEditorHandle } | null>(null);
   const copiedRef = useRef<VisualBlock[]>([]);
   const focusRestoreRef = useRef<{ leftOpen: boolean; rightOpen: boolean } | null>(null);
   const definitionRef = useRef(definition);
@@ -492,8 +494,12 @@ function ProfessionalDocumentTemplateEditorBody(props: Props & { draftStorageKey
   function insertField(key: string, dropPosition?: { x: number; y: number }) {
     const current = selected[0];
     if (current && isTextBlock(current)) {
-      const value = current.content || "";
-      updateBlock(current.id, { content: `${value}${value && !value.endsWith(" ") ? " " : ""}{{${key}}}` });
+      if (activeTextEditorRef.current?.blockId === current.id && activeTextEditorRef.current.handle.insertPlaceholder(key)) return;
+      const draft = liveTextDraftsRef.current.get(current.id);
+      const value = draft?.content ?? current.content ?? "";
+      const richText = draft?.richText ?? current.richText ?? plainTextToRichText(value);
+      const nextRichText = appendPlaceholderToRichText(richText, key);
+      updateBlock(current.id, { content: richTextToContent(nextRichText), richText: nextRichText });
       return;
     }
     const groupItem = placeholderGroups.flatMap((group) => group.items).find((item) => item.key === key);
@@ -655,7 +661,7 @@ function ProfessionalDocumentTemplateEditorBody(props: Props & { draftStorageKey
                 {definition.page.guides.horizontal.map((guide, index) => <div key={`h-guide-${index}`} className="pointer-events-none absolute left-0 right-0 z-[2] border-t border-dashed border-fuchsia-300" style={{ top: guide.positionMm * scale }} />)}
                 {definition.page.canvas.showMarginGuides && definition.page.showHeaderBoundary && <div className="pointer-events-none absolute left-0 right-0 z-[2] border-t border-amber-400" style={{ top: (definition.page.margins.top + definition.page.headerHeightMm) * scale }} />}
                 {definition.page.canvas.showMarginGuides && definition.page.showFooterBoundary && <div className="pointer-events-none absolute left-0 right-0 z-[2] border-t border-amber-400" style={{ top: (paperHeight - definition.page.margins.bottom - definition.page.footerHeightMm) * scale }} />}
-                {definition.blocks.filter((block) => block.visible && block.position).sort((a, b) => (a.position?.zIndex || 0) - (b.position?.zIndex || 0)).map((block) => <CanvasBlock key={block.id} block={block as VisualBlock} selected={selectedIds.includes(block.id)} editing={editingId === block.id} editable={props.editable} scale={scale} tenantLogoSrc={props.tenantLogoSrc} onImageError={setAssetError} onTextSelection={(selection) => { textSelectionRef.current = selection; }} onSelect={(event) => select(block.id, event.shiftKey || event.metaKey || event.ctrlKey)} onDoubleClick={() => isTextBlock(block) && setEditingId(block.id)} onDraftText={(content, richText) => handleRichTextDraft(block.id, content, richText)} onCommitText={(content, richText) => commitRichTextDraft(block.id, content, richText)} onEscape={selectPage} onPointerDown={beginDrag} onResizeStart={beginDrag} onImageUpload={() => { setImageBlockId(block.id); fileInputRef.current?.click(); }} />)}
+                {definition.blocks.filter((block) => block.visible && block.position).sort((a, b) => (a.position?.zIndex || 0) - (b.position?.zIndex || 0)).map((block) => <CanvasBlock key={block.id} block={block as VisualBlock} selected={selectedIds.includes(block.id)} editing={editingId === block.id} editable={props.editable} scale={scale} tenantLogoSrc={props.tenantLogoSrc} onImageError={setAssetError} onTextSelection={(selection) => { textSelectionRef.current = selection; }} onSelect={(event) => select(block.id, event.shiftKey || event.metaKey || event.ctrlKey)} onDoubleClick={() => isTextBlock(block) && setEditingId(block.id)} onDraftText={(content, richText) => handleRichTextDraft(block.id, content, richText)} onCommitText={(content, richText) => commitRichTextDraft(block.id, content, richText)} onRichTextEditorReady={(blockId, handle) => { activeTextEditorRef.current = { blockId, handle }; }} onRichTextEditorDispose={(blockId) => { if (activeTextEditorRef.current?.blockId === blockId) activeTextEditorRef.current = null; }} onEscape={selectPage} onPointerDown={beginDrag} onResizeStart={beginDrag} onImageUpload={() => { setImageBlockId(block.id); fileInputRef.current?.click(); }} />)}
                 {!definition.blocks.length && <div className="absolute inset-0 flex items-center justify-center text-sm font-bold text-slate-400">Add an element to start designing.</div>}
               </div>
             </div>
@@ -672,7 +678,7 @@ function ProfessionalDocumentTemplateEditorBody(props: Props & { draftStorageKey
   </form>;
 }
 
-function CanvasBlock({ block, selected, editing, editable, scale, tenantLogoSrc, onImageError, onTextSelection, onSelect, onDoubleClick, onDraftText, onCommitText, onEscape, onPointerDown, onResizeStart, onImageUpload }: { block: VisualBlock; selected: boolean; editing: boolean; editable: boolean; scale: number; tenantLogoSrc?: string | null; onImageError: (message: string) => void; onTextSelection: (selection: { blockId: string; start: number; end: number }) => void; onSelect: (event: React.MouseEvent) => void; onDoubleClick: () => void; onDraftText: (content: string, richText: DocumentRichText) => void; onCommitText: (content: string, richText: DocumentRichText) => void; onEscape: () => void; onPointerDown: (event: React.PointerEvent, block: VisualBlock) => void; onResizeStart: (event: React.PointerEvent, block: VisualBlock, mode: "resize", corner: "nw" | "ne" | "sw" | "se") => void; onImageUpload: () => void }) {
+function CanvasBlock({ block, selected, editing, editable, scale, tenantLogoSrc, onImageError, onTextSelection, onSelect, onDoubleClick, onDraftText, onCommitText, onRichTextEditorReady, onRichTextEditorDispose, onEscape, onPointerDown, onResizeStart, onImageUpload }: { block: VisualBlock; selected: boolean; editing: boolean; editable: boolean; scale: number; tenantLogoSrc?: string | null; onImageError: (message: string) => void; onTextSelection: (selection: { blockId: string; start: number; end: number }) => void; onSelect: (event: React.MouseEvent) => void; onDoubleClick: () => void; onDraftText: (content: string, richText: DocumentRichText) => void; onCommitText: (content: string, richText: DocumentRichText) => void; onRichTextEditorReady: (blockId: string, handle: RichTextEditorHandle) => void; onRichTextEditorDispose: (blockId: string) => void; onEscape: () => void; onPointerDown: (event: React.PointerEvent, block: VisualBlock) => void; onResizeStart: (event: React.PointerEvent, block: VisualBlock, mode: "resize", corner: "nw" | "ne" | "sw" | "se") => void; onImageUpload: () => void }) {
   const style = block.style || {};
   const css: React.CSSProperties = {
     left: block.position.x * scale,
@@ -693,14 +699,49 @@ function CanvasBlock({ block, selected, editing, editable, scale, tenantLogoSrc,
     border: style.borderColor && style.borderWidth ? `${style.borderWidth * scale / 3.78}px solid ${style.borderColor}` : selected ? undefined : "1px solid transparent",
     borderRadius: style.radius,
   };
-  const content = editing && isTextBlock(block) ? <RichTextCanvas block={block} onSelection={onTextSelection} onDraft={onDraftText} onCommit={onCommitText} onEscape={onEscape} /> : <BlockContent block={block} scale={scale} tenantLogoSrc={tenantLogoSrc} onImageError={onImageError} onImageUpload={onImageUpload} />;
+  const content = editing && isTextBlock(block) ? <RichTextCanvas block={block} onSelection={onTextSelection} onDraft={onDraftText} onCommit={onCommitText} onReady={onRichTextEditorReady} onDispose={onRichTextEditorDispose} onEscape={onEscape} /> : <BlockContent block={block} scale={scale} tenantLogoSrc={tenantLogoSrc} onImageError={onImageError} onImageUpload={onImageUpload} />;
   return <div role="button" tabIndex={0} aria-label={block.accessibility?.ariaLabel || block.label || block.type} className={`absolute select-none overflow-hidden ${selected ? "ring-2 ring-pine-600 ring-offset-1" : "hover:ring-1 hover:ring-pine-300"} ${block.locked ? "cursor-not-allowed opacity-75" : "cursor-move"}`} style={{ ...css, border: isLineBlock(block) ? "0" : css.border }} onClick={(event) => { event.stopPropagation(); onSelect(event); }} onDoubleClick={onDoubleClick} onPointerDown={(event) => { const tag = (event.target as HTMLElement).tagName; if (!editing && tag !== "TEXTAREA" && tag !== "INPUT") onPointerDown(event, block); }}>{content}{selected && editable && !block.locked && <>{(["nw", "ne", "sw", "se"] as const).map((corner) => <button key={corner} type="button" aria-label={`Resize ${corner}`} className={`absolute z-10 size-2.5 border border-white bg-pine-700 ${corner.includes("n") ? "top-[-5px]" : "bottom-[-5px]"} ${corner.includes("w") ? "left-[-5px]" : "right-[-5px]"}`} onPointerDown={(event) => { event.stopPropagation(); onResizeStart(event, block, "resize", corner); }} />)}</>}</div>;
 }
 
-const RichTextCanvas = memo(function RichTextCanvas({ block, onSelection, onDraft, onCommit, onEscape }: { block: VisualBlock; onSelection: (selection: { blockId: string; start: number; end: number }) => void; onDraft: (content: string, richText: DocumentRichText) => void; onCommit: (content: string, richText: DocumentRichText) => void; onEscape: () => void }) {
+const RichTextCanvas = memo(function RichTextCanvas({ block, onSelection, onDraft, onCommit, onReady, onDispose, onEscape }: { block: VisualBlock; onSelection: (selection: { blockId: string; start: number; end: number }) => void; onDraft: (content: string, richText: DocumentRichText) => void; onCommit: (content: string, richText: DocumentRichText) => void; onReady: (blockId: string, handle: RichTextEditorHandle) => void; onDispose: (blockId: string) => void; onEscape: () => void }) {
   const value = block.richText || plainTextToRichText(block.content || block.text || "");
   const rootRef = useRef<HTMLDivElement>(null);
   const composingRef = useRef(false);
+
+  useLayoutEffect(() => {
+    const root = rootRef.current;
+    if (!root) return;
+    const empty = !richTextToContent(value);
+    hydrateRichTextRoot(root, value);
+    root.focus({ preventScroll: true });
+    if (empty) root.replaceChildren();
+    const range = document.createRange();
+    range.selectNodeContents(root);
+    range.collapse(false);
+    const selection = window.getSelection();
+    selection?.removeAllRanges();
+    selection?.addRange(range);
+    // Hydration is intentionally scoped to editor mount/block switch. Normal input must not rewrite this DOM.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [block.id]);
+
+  useEffect(() => {
+    const handle: RichTextEditorHandle = {
+      insertPlaceholder: (key) => {
+        const root = rootRef.current;
+        if (!root) return false;
+        if (isPromptOnly(root)) root.replaceChildren();
+        const inserted = insertPlaceholderAtSelection(root, key);
+        if (!inserted) return false;
+        emitDraft();
+        return true;
+      },
+    };
+    onReady(block.id, handle);
+    return () => onDispose(block.id);
+    // The handle delegates through refs; refreshing it on parent renders would not change editor behavior.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [block.id]);
 
   function currentRichText() {
     const root = rootRef.current;
@@ -728,9 +769,9 @@ const RichTextCanvas = memo(function RichTextCanvas({ block, onSelection, onDraf
     dir="ltr"
     className="h-full w-full overflow-hidden whitespace-pre-wrap break-words outline-none"
     style={{ direction: "ltr", unicodeBidi: "plaintext" }}
-    onFocus={(event) => { if (!richTextToContent(value) && event.currentTarget.textContent === "Type to edit") event.currentTarget.replaceChildren(); }}
+    onFocus={(event) => { if (isPromptOnly(event.currentTarget)) event.currentTarget.replaceChildren(); }}
     onBeforeInput={(event) => event.stopPropagation()}
-    onInput={(event) => { event.stopPropagation(); if (!composingRef.current) emitDraft(); rememberSelection(event); }}
+    onInput={(event) => { event.stopPropagation(); if (isPromptOnly(event.currentTarget)) event.currentTarget.replaceChildren(); if (!composingRef.current) emitDraft(); rememberSelection(event); }}
     onCompositionStart={() => { composingRef.current = true; }}
     onCompositionEnd={(event) => { composingRef.current = false; emitDraft(); rememberSelection(event); }}
     onMouseUp={rememberSelection}
@@ -739,20 +780,13 @@ const RichTextCanvas = memo(function RichTextCanvas({ block, onSelection, onDraf
     onKeyDown={(event) => {
       event.stopPropagation();
       if (event.key === "Escape") { event.preventDefault(); onEscape(); return; }
-      if (event.key === "Enter" && !composingRef.current && !event.nativeEvent.isComposing) {
-        event.preventDefault();
-        insertTextAtSelection(event.currentTarget, event.shiftKey ? "\n" : "\n\n");
-        emitDraft();
-        rememberSelection(event);
-        return;
-      }
       if ((event.key === "Backspace" || event.key === "Delete") && deleteAdjacentPlaceholder(event.currentTarget, event.key === "Backspace" ? "backward" : "forward")) {
         event.preventDefault();
         emitDraft();
         rememberSelection(event);
       }
     }}
-  >{renderEditorRichText(value)}</div>;
+  />;
 }, (previous, next) => previous.block.id === next.block.id && previous.block.richText === next.block.richText && previous.block.content === next.block.content && previous.block.text === next.block.text);
 
 function BlockContent({ block, scale, tenantLogoSrc, onImageError, onImageUpload }: { block: VisualBlock; scale: number; tenantLogoSrc?: string | null; onImageError: (message: string) => void; onImageUpload: () => void }) {
@@ -977,6 +1011,63 @@ function renderEditorRichText(richText: DocumentRichText): React.ReactNode {
   });
 }
 
+function hydrateRichTextRoot(root: HTMLElement, richText: DocumentRichText) {
+  root.replaceChildren(...richTextNodes(richText));
+}
+
+function richTextNodes(richText: DocumentRichText) {
+  if (!richText.children.length) return [promptNode()];
+  return richText.children.map((node) => {
+    if (node.type === "placeholder") return placeholderNode(node.key, node.label, node.marks);
+    const span = document.createElement("span");
+    span.dataset.richText = "true";
+    span.dataset.color = node.marks?.color || "";
+    applyDomMarks(span, node.marks);
+    span.append(document.createTextNode(node.text));
+    return span;
+  });
+}
+
+function promptNode() {
+  const span = document.createElement("span");
+  span.contentEditable = "false";
+  span.className = "italic text-slate-400";
+  span.dataset.templateEditorPrompt = "true";
+  span.textContent = "Type to edit";
+  return span;
+}
+
+function placeholderNode(key: string, label?: string, marks?: { color?: string; bold?: boolean; italic?: boolean; underline?: boolean }) {
+  const span = document.createElement("span");
+  span.contentEditable = "false";
+  span.dataset.templatePlaceholder = "true";
+  span.dataset.placeholderKey = key;
+  span.className = "mx-0.5 inline-flex rounded bg-pine-100 px-1 text-[.8em] font-bold text-pine-800";
+  applyDomMarks(span, marks);
+  span.textContent = `[${label || placeholderLabel(key)}]`;
+  return span;
+}
+
+function applyDomMarks(element: HTMLElement, marks?: { color?: string; bold?: boolean; italic?: boolean; underline?: boolean }) {
+  if (!marks) return;
+  if (marks.color) element.style.color = marks.color;
+  if (marks.bold) element.style.fontWeight = "bold";
+  if (marks.italic) element.style.fontStyle = "italic";
+  if (marks.underline) element.style.textDecoration = "underline";
+}
+
+function isPromptOnly(root: HTMLElement) {
+  return root.childNodes.length === 1 && root.firstElementChild instanceof HTMLElement && root.firstElementChild.dataset.templateEditorPrompt === "true";
+}
+
+function appendPlaceholderToRichText(richText: DocumentRichText, key: string): DocumentRichText {
+  const children = [...richText.children];
+  const content = richTextToContent(richText);
+  if (content && !content.endsWith(" ")) children.push({ type: "text", text: " " });
+  children.push({ type: "placeholder", key, label: placeholderLabel(key) });
+  return { type: "paragraph", children };
+}
+
 function parseRichTextDom(root: HTMLElement): DocumentRichText {
   const children: DocumentRichText["children"] = [];
   const appendText = (text: string, marks?: { color?: string; bold?: boolean; italic?: boolean; underline?: boolean }) => {
@@ -1036,17 +1127,21 @@ function getRootSelectionRange(root: HTMLElement) {
   return selection.getRangeAt(0);
 }
 
-function insertTextAtSelection(root: HTMLElement, text: string) {
+function insertPlaceholderAtSelection(root: HTMLElement, key: string) {
   const range = getRootSelectionRange(root);
-  if (!range) return;
+  if (!range) return false;
   range.deleteContents();
-  const node = document.createTextNode(text);
-  range.insertNode(node);
-  range.setStart(node, node.textContent?.length || 0);
+  const node = placeholderNode(key);
+  const spacer = document.createTextNode(" ");
+  const fragment = document.createDocumentFragment();
+  fragment.append(node, spacer);
+  range.insertNode(fragment);
+  range.setStartAfter(spacer);
   range.collapse(true);
   const selection = window.getSelection();
   selection?.removeAllRanges();
   selection?.addRange(range);
+  return true;
 }
 
 function deleteAdjacentPlaceholder(root: HTMLElement, direction: "backward" | "forward") {
@@ -1054,12 +1149,13 @@ function deleteAdjacentPlaceholder(root: HTMLElement, direction: "backward" | "f
   if (!range || !range.collapsed) return false;
   const candidate = adjacentNodeForDeletion(range, direction);
   const placeholder = closestTemplatePlaceholder(candidate);
-  if (!placeholder || !root.contains(placeholder) || !placeholder.parentNode?.contains(placeholder)) return false;
+  const parent = placeholder?.parentNode;
+  if (!placeholder || !parent || !root.contains(placeholder) || !Array.from(parent.childNodes).includes(placeholder)) return false;
   const nextRange = document.createRange();
   if (direction === "backward") nextRange.setStartBefore(placeholder);
   else nextRange.setStartAfter(placeholder);
   nextRange.collapse(true);
-  placeholder.parentNode.removeChild(placeholder);
+  parent.removeChild(placeholder);
   const selection = window.getSelection();
   selection?.removeAllRanges();
   selection?.addRange(nextRange);

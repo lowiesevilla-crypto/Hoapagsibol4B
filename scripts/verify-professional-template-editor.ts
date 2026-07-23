@@ -81,11 +81,14 @@ async function main() {
   const editorSource = await readFile("components/professional-document-template-editor.tsx", "utf8");
   assert(editorSource.includes("data-template-rich-text-editor=\"true\""), "rich-text editor is isolated from parent keyboard handlers");
   assert(editorSource.includes("defaultValue={JSON.stringify(definition)}") && editorSource.includes("prepareSubmit"), "active editor draft is flushed before Save, Preview, or Publish");
-  assert(editorSource.includes("insertTextAtSelection(event.currentTarget, event.shiftKey ? \"\\n\" : \"\\n\\n\")"), "Enter and Shift+Enter insert serialized new lines without submitting the form");
+  assert(editorSource.includes("hydrateRichTextRoot(root, value)") && !editorSource.includes(">{renderEditorRichText(value)}</div>"), "active contenteditable DOM is hydrated once and is not rendered as React-managed children");
+  assert(!editorSource.includes("dangerouslySetInnerHTML") && !editorSource.includes(".innerHTML ="), "active editor does not rewrite innerHTML during normal typing");
+  assert(editorSource.includes("onBeforeInput={(event) => event.stopPropagation()}") && !editorSource.includes("insertTextAtSelection"), "Enter and Shift+Enter use native browser editing without submitting the parent form");
+  assert(editorSource.includes("activeTextEditorRef") && editorSource.includes("insertPlaceholderAtSelection"), "token insertion uses the live editor DOM when a text block is actively edited");
   assert(editorSource.includes("onCompositionStart") && editorSource.includes("onCompositionEnd"), "composition and IME input are not interrupted");
   assert(editorSource.includes("dir=\"ltr\"") && editorSource.includes("unicodeBidi: \"plaintext\""), "editor defaults to left-to-right text direction");
   assert(editorSource.includes("nodeBelongsToRoot") && editorSource.includes("node.isConnected"), "selection restoration rejects detached nodes");
-  assert(editorSource.includes("deleteAdjacentPlaceholder") && editorSource.includes("placeholder.parentNode.removeChild(placeholder)") && editorSource.includes("placeholder.parentNode?.contains(placeholder)"), "placeholder deletion verifies the current parent before removeChild");
+  assert(editorSource.includes("deleteAdjacentPlaceholder") && editorSource.includes("Array.from(parent.childNodes).includes(placeholder)") && editorSource.includes("parent.removeChild(placeholder)"), "placeholder deletion verifies the current direct parent before removeChild");
   assert(editorSource.includes("TemplateEditorErrorBoundary"), "editor-level recovery boundary preserves local draft after render errors");
   assert(editorSource.includes("templateDraftStorageKey") && editorSource.includes("tenantId") && editorSource.includes("userId") && editorSource.includes("versionId"), "local draft backup is scoped by tenant, user, definition, and template version");
 

@@ -159,6 +159,50 @@ export async function generateDocument(context: DocumentExecutionContext, reques
   }
 }
 
+/**
+ * Read the stored rendered HTML of the latest official issued document version.
+ *
+ * VIEW / DOWNLOAD / PRINT pages MUST use this function — they must NOT call
+ * generateDocument() with mode=PREVIEW to display an already-issued document.
+ * Calling generateDocument(PREVIEW) re-renders the template in preview mode,
+ * which causes the "PREVIEW QR — NOT VALID FOR VERIFICATION" label to appear
+ * on an officially issued document. This function reads the persisted
+ * `generatedContent` that was rendered with the real verification URL at
+ * issuance time and therefore always contains the correct official QR code.
+ */
+export async function getIssuedDocumentContent(
+  context: DocumentExecutionContext,
+  requestId: string,
+): Promise<{ content: string; contentType: string; documentNumber: string; issuedAt: Date | null; versionId: string } | null> {
+  requireDocumentPermission(context, "VIEW_ISSUED_DOCUMENT");
+
+  const version = await platformPrisma.documentVersion.findFirst({
+    where: {
+      tenantId: context.tenantId, // Always tenant-scoped
+      requestId,
+      issuedStatus: { not: DocumentIssuedStatus.REVOKED },
+    },
+    orderBy: { version: "desc" },
+    select: {
+      id: true,
+      generatedContent: true,
+      contentType: true,
+      documentNumber: true,
+      issuedAt: true,
+    },
+  });
+
+  if (!version || !version.generatedContent) return null;
+
+  return {
+    content: version.generatedContent,
+    contentType: version.contentType ?? "text/html; charset=utf-8",
+    documentNumber: version.documentNumber,
+    issuedAt: version.issuedAt,
+    versionId: version.id,
+  };
+}
+
 async function resolveGenerationTemplate(
   context: DocumentExecutionContext,
   input: Parameters<typeof resolveDocumentTemplateForGeneration>[1],
@@ -202,11 +246,36 @@ function placeholderContext(request: GenerationRequestRecord, association: Await
   const fields = record(requestData.fields ?? requestData);
   const subjectBirthDate = dateValue(subject.birthDate);
   const requestPurpose = text(fields.purpose) || request.purpose || "official purposes";
+
+  // FIX: civilStatus — check subject snapshot first, then homeowner profile.
+  // Fall back to "" (empty string, renders blank) instead of undefined.
+  // undefined would cause a PLACEHOLDER_UNRESOLVED error for homeowners whose
+  // civil status has not been filled in yet.
+  const resolvedCivilStatus =
+    text(subject.civilStatus) ||
+    request.homeowner.civilStatus ||
+    "";
+
+  // FIX: nationality — check subject snapshot, then homeowner profile.
+  // The homeowner model may store this as either `citizenship` or `nationality`
+  // depending on the migration history. Check both.
+  const homeownerRecord = request.homeowner as Record<string, unknown>;
+  const resolvedNationality =
+    text(subject.nationality) ||
+    request.homeowner.citizenship ||
+    (typeof homeownerRecord.nationality === "string" ? homeownerRecord.nationality : "") ||
+    "";
+
+  // FIX: validUntil — when validityDate is null the document has no expiry.
+  // Return "" (renders blank) instead of undefined which would throw PLACEHOLDER_UNRESOLVED.
+  // Templates that use {{document.validUntil}} for no-expiry documents will render blank.
+  const resolvedValidUntil = request.validityDate ? shortDate(request.validityDate) : "";
+
   return {
     tenantId: context.tenantId,
     tenant: { name: association.name, address: association.address, tin: association.tinNumber, secRegistration: association.secRegistrationNumber, contactNumber: association.contactNumber, email: association.email, logo: association.logoUrl },
-    document: { number: documentNumber, title: request.definition?.displayName ?? "Official HOA Document", issueDate: shortDate(issueDate), issuePlace: association.address || association.name, status: documentNumber === "PREVIEW" ? "Preview" : "Issued", validUntil: request.validityDate ? shortDate(request.validityDate) : undefined },
-    subject: { fullName: text(subject.fullName) || request.homeowner.user.name, relationship: text(subject.relationship) || "Homeowner", address: text(subject.address) || request.homeowner.address, birthDate: subjectBirthDate ? shortDate(subjectBirthDate) : text(subject.birthDate), civilStatus: text(subject.civilStatus) || request.homeowner.civilStatus || undefined, nationality: text(subject.nationality) || request.homeowner.citizenship || undefined, status: request.homeowner.occupancyStatus || request.homeowner.propertyType || undefined, residencyStartDate: request.homeowner.residencyDate ? shortDate(request.homeowner.residencyDate) : undefined, age: subjectBirthDate ? String(ageAt(subjectBirthDate, issueDate)) : request.homeowner.birthDate ? String(ageAt(request.homeowner.birthDate, issueDate)) : undefined, occupation: request.homeowner.occupation || undefined, contactNumber: request.homeowner.phone || undefined, phase: request.homeowner.phase || undefined, propertyType: request.homeowner.propertyType || undefined, occupancyStatus: request.homeowner.occupancyStatus || undefined },
+    document: { number: documentNumber, title: request.definition?.displayName ?? "Official HOA Document", issueDate: shortDate(issueDate), issuePlace: association.address || association.name, status: documentNumber === "PREVIEW" ? "Preview" : "Issued", validUntil: resolvedValidUntil },
+    subject: { fullName: text(subject.fullName) || request.homeowner.user.name, relationship: text(subject.relationship) || "Homeowner", address: text(subject.address) || request.homeowner.address, birthDate: subjectBirthDate ? shortDate(subjectBirthDate) : text(subject.birthDate), civilStatus: resolvedCivilStatus, nationality: resolvedNationality, status: request.homeowner.occupancyStatus || request.homeowner.propertyType || undefined, residencyStartDate: request.homeowner.residencyDate ? shortDate(request.homeowner.residencyDate) : undefined, age: subjectBirthDate ? String(ageAt(subjectBirthDate, issueDate)) : request.homeowner.birthDate ? String(ageAt(request.homeowner.birthDate, issueDate)) : undefined, occupation: request.homeowner.occupation || undefined, contactNumber: request.homeowner.phone || undefined, phase: request.homeowner.phase || undefined, propertyType: request.homeowner.propertyType || undefined, occupancyStatus: request.homeowner.occupancyStatus || undefined },
     property: { block: text(subject.block) || request.homeowner.block, lot: text(subject.lot) || request.homeowner.lot, address: text(subject.propertyAddress) || request.homeowner.address, accountLabel: text(subject.accountLabel) || `Block ${request.homeowner.block}, Lot ${request.homeowner.lot}`, phase: request.homeowner.phase || undefined, subdivision: association.name },
     request: { purpose: requestPurpose, remarks: text(fields.remarks) || request.remarks || undefined, copies: request.numberOfCopies, requestedAt: shortDate(request.requestedAt) },
     signatory: { name: signatory?.fullName, position: signatory?.position },

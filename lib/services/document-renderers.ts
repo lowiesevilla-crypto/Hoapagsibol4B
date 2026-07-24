@@ -5,7 +5,18 @@ import { DocumentOutputFormat } from "@prisma/client";
 import { type DocumentRenderBlock, type DocumentRenderModel } from "@/lib/services/document-render-model";
 import { defaultQrConfig, type DocumentRichText, type DocumentTextMarks } from "@/lib/services/document-template-builder";
 
+/**
+ * Label shown on QR blocks in PREVIEW mode.
+ * MUST NEVER appear on officially issued documents.
+ * If it appears on an issued document the view page is calling generateDocument
+ * with mode=PREVIEW instead of reading the stored generatedContent from DB.
+ * View/download/print pages MUST read DocumentVersion.generatedContent directly
+ * via getIssuedDocumentContent() in document-generation.ts.
+ */
 const previewQrLabel = "PREVIEW QR — NOT VALID FOR VERIFICATION";
+
+/** Sentinel URL embedded in QR for template designer preview. Never a real token. */
+const PREVIEW_QR_PAYLOAD = "preview://hoahub/document-verification";
 
 export type DocumentRenderResult = {
   outputFormat: DocumentOutputFormat;
@@ -40,7 +51,9 @@ export const htmlDocumentRenderer: DocumentRenderer = {
   async render(model) {
     const errors = this.validate(model);
     if (errors.length) throw new Error(errors.join(" "));
-    const qrPayload = model.preview ? "preview://hoahub/document-verification" : model.metadata.verificationUrl;
+    // FIX: Use the real verification URL for official documents.
+    // For preview mode, use the sentinel payload so the QR contains no real token.
+    const qrPayload = model.preview ? PREVIEW_QR_PAYLOAD : model.metadata.verificationUrl;
     const sections = await Promise.all([
       renderSection(model.sections.header, "header", qrPayload, model.visualLayout, model.preview),
       renderSection(model.sections.body, "body", qrPayload, model.visualLayout, model.preview),
@@ -67,7 +80,8 @@ async function renderBlock(block: DocumentRenderBlock, qrPayload: string | null,
   if (block.type === "divider" || block.type === "horizontalLine") return `<div class="line-element horizontal-line" style="${lineStyle(block, visualLayout)}" aria-hidden="true"></div>`;
   if (block.type === "verticalLine") return `<div class="line-element vertical-line" style="${lineStyle(block, visualLayout)}" aria-hidden="true"></div>`;
   if (block.type === "spacer") return `<div aria-hidden="true" style="height:${Math.max(4, block.style?.height ?? 16)}px"></div>`;
-  if (block.type === "qrVerification") return qrPayload ? renderQr(block, await QRCode.toDataURL(qrPayload, { width: 240, margin: block.qr?.quietZone || 1, errorCorrectionLevel: "M" }), style, preview) : "";
+  // FIX: Pass qrPayload into renderQr so it can distinguish real vs preview URLs.
+  if (block.type === "qrVerification") return qrPayload ? renderQr(block, await QRCode.toDataURL(qrPayload, { width: 240, margin: block.qr?.quietZone || 1, errorCorrectionLevel: "M" }), style, preview, qrPayload) : "";
   if (block.type === "officerList") return renderOfficerList(block, style);
   const imageSource = block.image?.src || (block.type === "logo" ? block.content : "");
   if ((block.type === "logo" || block.type === "image") && imageSource) return `<div class="image-element" style="${style}"><img src="${escapeAttribute(imageSource)}" alt="${escapeAttribute(block.image?.alt ?? block.label ?? "Document image")}" style="${imageStyle(block)}"></div>`;
@@ -76,10 +90,29 @@ async function renderBlock(block: DocumentRenderBlock, qrPayload: string | null,
   return `<${tag} class="block block-${escapeAttribute(block.type)}" style="${style}">${block.richText ? renderRichText(block.richText, preview) : escapeHtml(preview ? previewSafeText(block.content) : block.content).replaceAll("\n", "<br>")}</${tag}>`;
 }
 
-function renderQr(block: DocumentRenderBlock, qrDataUrl: string, style: string, preview: boolean) {
+/**
+ * Render the QR verification block.
+ *
+ * FIX: The `qrPayload` parameter is now used to detect whether this is a real
+ * issued-document URL (starts with http/https) or the preview sentinel.
+ * The preview label is shown ONLY when the payload is the preview sentinel —
+ * never when a real verification URL is present, regardless of the `preview` flag.
+ * This is a defense-in-depth guard: if a view page incorrectly calls the renderer
+ * with preview=true but passes a real verification URL, the official label is shown.
+ */
+function renderQr(block: DocumentRenderBlock, qrDataUrl: string, style: string, preview: boolean, qrPayload: string) {
   const qr = block.qr || defaultQrConfig;
-  const label = preview ? previewQrLabel : qr.label;
-  const image = `<img class="qr-code-image" src="${qrDataUrl}" alt="${escapeAttribute(preview ? "Preview QR - not valid for verification" : "Document verification QR code")}" style="--qr-quiet-zone:${qr.quietZone}">`;
+
+  // A "real" verification URL is any http/https URL — never the preview sentinel.
+  const isRealVerificationUrl = qrPayload.startsWith("https://") || qrPayload.startsWith("http://");
+
+  // Show preview label only when in preview mode AND there is no real URL.
+  const showPreviewLabel = preview && !isRealVerificationUrl;
+
+  const label = showPreviewLabel ? previewQrLabel : qr.label;
+  const altText = showPreviewLabel ? "Preview QR - not valid for verification" : "Document verification QR code";
+
+  const image = `<img class="qr-code-image" src="${qrDataUrl}" alt="${escapeAttribute(altText)}" style="--qr-quiet-zone:${qr.quietZone}">`;
   const labelMarkup = qr.showLabel ? `<figcaption>${escapeHtml(label)}</figcaption>` : "";
   const instructionMarkup = qr.showInstruction ? `<small>${escapeHtml(qr.instruction)}</small>` : "";
   return `<figure class="qr-block" style="${style}">${image}${labelMarkup}${instructionMarkup}</figure>`;

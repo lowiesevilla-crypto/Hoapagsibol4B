@@ -17,11 +17,7 @@ export type PlaceholderResolutionContext = {
   signatory?: { name?: string; position?: string };
   verification?: { url?: string; code?: string };
   system?: { generatedAt?: string; platformName?: string };
-  organization?: {
-    tenantId: string;
-    term?: string | null;
-    officers: Array<{ id: string; fullName: string; position: string; displayOrder: number }>;
-  };
+  organization?: { tenantId: string; term?: string | null; officers: Array<{ id: string; fullName: string; position: string; displayOrder: number }> };
   permissions?: ReadonlySet<string>;
   customResolvers?: Record<string, (context: PlaceholderResolutionContext) => unknown>;
 };
@@ -50,14 +46,14 @@ export async function listDocumentPlaceholders(context: DocumentExecutionContext
   assertDocumentTenant(context, context.tenantId);
   const custom = await platformPrisma.documentPlaceholderDefinition.findMany({ where: { OR: [{ tenantId: null, ownership: DocumentPlaceholderOwnership.PLATFORM }, { tenantId: context.tenantId, ownership: DocumentPlaceholderOwnership.TENANT }], active: true, ...(options.category ? { category: options.category } : {}) }, orderBy: [{ category: "asc" }, { key: "asc" }] });
   const customKeys = new Set(custom.map((item) => item.key));
-  const search = options.search?.trim().toLowerCase();
+  const search = options.search!.trim().toLowerCase();
   const platform = staticDefinitions.filter((item) => !customKeys.has(item.key) && (!options.category || item.category.toLowerCase() === options.category.toLowerCase()) && (!search || `${item.key} ${item.displayName} ${item.description}`.toLowerCase().includes(search)));
   return [...platform, ...custom.map((item) => ({ key: item.key, category: item.category, displayName: item.displayName, description: item.description || "Tenant-defined placeholder.", dataType: item.dataType, sample: item.exampleValue || sampleTemplateValue(item.key), sensitivity: item.sensitivity, ownership: item.ownership }))];
 }
 
 export function validateDocumentPlaceholders(content: string, knownKeys: ReadonlySet<string> = new Set(allowedDocumentPlaceholders)) {
   const validationErrors: string[] = [];
-  const malformed = content.match(/\{\{[^{}]*\}\}|\{\{[^{}]*$/g) || [];
+  const malformed = content.match(/\{\{[^{:]*\}\}|\{\{[^{:]*$/g) || [];
   for (const expression of malformed) {
     const key = expression.match(/^\{\{\s*([A-Za-z0-9_.]+)\s*\}\}$/)?.[1];
     if (!key) validationErrors.push(`Malformed placeholder syntax: ${expression.slice(0, 100)}.`);
@@ -88,7 +84,13 @@ export function resolveDocumentPlaceholders(content: string, context: Placeholde
       return expression;
     }
     const raw = mode === "DESIGNER_PREVIEW" ? sampleTemplateValue(key) : readKnownValue(key, context);
-    if (raw == null || raw === "") { unresolvedPlaceholders.push(key); return expression; }
+
+    // FIX: Only treat null/undefined as unresolved. Empty string "" is a valid
+    // resolved value meaning "this optional field has no data" — render blank,
+    // do NOT report as unresolved. This fixes subject.civilStatus,
+    // subject.nationality, and document.validUntil for optional/empty fields.
+    if (raw == null) { unresolvedPlaceholders.push(key); return expression; }
+
     const value = String(raw);
     resolvedValues[key] = value;
     return value;

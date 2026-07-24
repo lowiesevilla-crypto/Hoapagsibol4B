@@ -1,1 +1,108 @@
-aW1wb3J0ICJzZXJ2ZXItb25seSI7CgppbXBvcnQgeyBEb2N1bWVudFBsYWNlaG9sZGVyT3duZXJzaGlwIH0gZnJvbSAiQHByaXNtYS9jbGllbnQiOwppbXBvcnQgeyBwbGF0Zm9ybVByaXNtYSB9IGZyb20gIkAvbGliL2RiIjsKaW1wb3J0IHsgYWxsb3dlZERvY3VtZW50UGxhY2Vob2xkZXJzLCBleHRyYWN0UGxhY2Vob2xkZXJzLCBwbGFjZWhvbGRlckdyb3Vwcywgc2FtcGxlVGVtcGxhdGVWYWx1ZSB9IGZyb20gIkAvbGliL3NlcnZpY2VzL2RvY3VtZW50LXRlbXBsYXRlLWJ1aWxkZXIiOwppbXBvcnQgeyBhc3NlcnREb2N1bWVudFRlbmFudCwgdHlwZSBEb2N1bWVudEV4ZWN1dGlvbkNvbnRleHQgfSBmcm9tICJAL2xpYi9zZXJ2aWNlcy9kb2N1bWVudC1ydW50aW1lLWNvbnRleHQiOwoKZXhwb3J0IHR5cGUgUGxhY2Vob2xkZXJNb2RlID0gIlZBTElEQVRFIiB8ICJERVNJR05FUl9QUkVWSUVXIiB8ICJSRVFVRVNUX1BSRVZJRVciIHwgIkdFTkVSQVRFIjsKZXhwb3J0IHR5cGUgUGxhY2Vob2xkZXJEZWZpbml0aW9uID0geyBrZXk6IHN0cmluZzsgY2F0ZWdvcnk6IHN0cmluZzsgZGlzcGxheU5hbWU6IHN0cmluZzsgZGVzY3JpcHRpb246IHN0cmluZzsgZGF0YVR5cGU6IHN0cmluZzsgc2FtcGxlOiBzdHJpbmc7IHNlbnNpdGl2aXR5OiBzdHJpbmcgfCBudWxsOyBvd25lcnNoaXA6IERvY3VtZW50UGxhY2Vob2xkZXJPd25lcnNoaXAgfTsKZXhwb3J0IHR5cGUgUGxhY2Vob2xkZXJSZXNvbHV0aW9uQ29udGV4dCA9IHsKICB0ZW5hbnRJZD86IHN0cmluZzsKICB0ZW5hbnQ/OiB7IG5hbWU/OiBzdHJpbmc7IGFkZHJlc3M/OiBzdHJpbmc7IHRpbj86IHN0cmluZzsgc2VjUmVnaXN0cmF0aW9uPzogc3RyaW5nOyBjb250YWN0TnVtYmVyPzogc3RyaW5nOyBlbWFpbD86IHN0cmluZzsgbG9nbz86IHN0cmluZyB9OwogIGRvY3VtZW50PzogeyBudW1iZXI/OiBzdHJpbmc7IHRpdGxlPzogc3RyaW5nOyBpc3N1ZURhdGU/OiBzdHJpbmc7IGlzc3VlUGxhY2U/OiBzdHJpbmc7IHN0YXR1cz86IHN0cmluZzsgdmFsaWRVbnRpbD86IHN0cmluZyB9OwogIHN1YmplY3Q/OiB7IGZ1bGxOYW1lPzogc3RyaW5nOyByZWxhdGlvbnNoaXA/OiBzdHJpbmc7IGFkZHJlc3M/OiBzdHJpbmc7IGJpcnRoRGF0ZT86IHN0cmluZzsgY2l2aWxTdGF0dXM/OiBzdHJpbmc7IG5hdGlvbmFsaXR5Pzogc3RyaW5nOyBzdGF0dXM/OiBzdHJpbmc7IHJlc2lkZW5jeVN0YXJ0RGF0ZT86IHN0cmluZzsgYWdlPzogc3RyaW5nIHwgbnVtYmVyOyBvY2N1cGF0aW9uPzogc3RyaW5nOyBjb250YWN0TnVtYmVyPzogc3RyaW5nOyBwaGFzZT86IHN0cmluZzsgcHJvcGVydHlUeXBlPzogc3RyaW5nOyBvY2N1cGFuY3lTdGF0dXM/OiBzdHJpbmcgfTsKICBwcm9wZXJ0eT86IHsgYmxvY2s/OiBzdHJpbmc7IGxvdD86IHN0cmluZzsgYWRkcmVzcz86IHN0cmluZzsgYWNjb3VudExhYmVsPzogc3RyaW5nOyBwaGFzZT86IHN0cmluZzsgc3ViZGl2aXNpb24/OiBzdHJpbmcgfTsKICByZXF1ZXN0PzogeyBwdXJwb3NlPzogc3RyaW5nOyByZW1hcmtzPzogc3RyaW5nOyBjb3BpZXM/OiBzdHJpbmcgfCBudW1iZXI7IHJlcXVlc3RlZEF0Pzogc3RyaW5nIH07CiAgc2lnbmF0b3J5PzogeyBuYW1lPzogc3RyaW5nOyBwb3NpdGlvbj86IHN0cmluZyB9OwogIHZlcmlmaWNhdGlvbj86IHsgdXJsPzogc3RyaW5nOyBjb2RlPzogc3RyaW5nIH07CiAgc3lzdGVtPzogeyBnZW5lcmF0ZWRBdD86IHN0cmluZzsgcGxhdGZvcm1OYW1lPzogc3RyaW5nIH07CiAgb3JnYW5pemF0aW9uPzogeyB0ZW5hbnRJZDogc3RyaW5nOyB0ZXJtPzogc3RyaW5nIHwgbnVsbDsgb2ZmaWNlcnM6IEFycmF5PHsgaWQ6IHN0cmluZzsgZnVsbE5hbWU6IHN0cmluZzsgcG9zaXRpb246IHN0cmluZzsgZGlzcGxheU9yZGVyOiBudW1iZXIgfT4gfTsKICBwZXJtaXNzaW9ucz86IFJlYWRvbmx5U2V0PHN0cmluZz47CiAgY3VzdG9tUmVzb2x2ZXJzPzogUmVjb3JkPHN0cmluZywgKGNvbnRleHQ6IFBsYWNlaG9sZGVyUmVzb2x1dGlvbkNvbnRleHQpID0+IHVua25vd24+Owp9OwoKZXhwb3J0IHR5cGUgUGxhY2Vob2xkZXJSZXNvbHV0aW9uUmVzdWx0ID0gewogIHJlc29sdmVkQ29udGVudDogc3RyaW5nOwogIHJlc29sdmVkVmFsdWVzOiBSZWNvcmQ8c3RyaW5nLCBzdHJpbmc+OwogIHVucmVzb2x2ZWRQbGFjZWhvbGRlcnM6IHN0cmluZ1tdOwogIHVuYXV0aG9yaXplZFBsYWNlaG9sZGVyczogc3RyaW5nW107CiAgdmFsaWRhdGlvbkVycm9yczogc3RyaW5nW107CiAgd2FybmluZ3M6IHN0cmluZ1tdOwp9OwoKY29uc3Qgc3RhdGljRGVmaW5pdGlvbnM6IFBsYWNlaG9sZGVyRGVmaW5pdGlvbltdID0gcGxhY2Vob2xkZXJHcm91cHMuZmxhdE1hcCgoZ3JvdXApID0+IGdyb3VwLml0ZW1zLm1hcCgoaXRlbSkgPT4gKHsKICBrZXk6IGl0ZW0ua2V5LAogIGNhdGVnb3J5OiBncm91cC5ncm91cCwKICBkaXNwbGF5TmFtZTogaXRlbS5sYWJlbCwKICBkZXNjcmlwdGlvbjogYEFsbG93bGlzdGVkICR7aXRlbS5sYWJlbC50b0xvd2VyQ2FzZSgpfSBkb2N1bWVudCBwbGFjZWhvbGRlci5gLAogIGRhdGFUeXBlOiAiVEVYVCIsCiAgc2FtcGxlOiBpdGVtLnNhbXBsZSwKICBzZW5zaXRpdml0eTogWyJzdWJqZWN0LmJpcnRoRGF0ZSIsICJzdWJqZWN0LmFkZHJlc3MiLCAic3ViamVjdC5jaXZpbFN0YXR1cyIsICJzdWJqZWN0Lm5hdGlvbmFsaXR5Il0uaW5jbHVkZXMoaXRlbS5rZXkpID8gIlBFUlNPTkFMIiA6IG51bGwsCiAgb3duZXJzaGlwOiBEb2N1bWVudFBsYWNlaG9sZGVyT3duZXJzaGlwLlBMQVRGT1JNLAp9KSkpOwoKZXhwb3J0IGFzeW5jIGZ1bmN0aW9uIGxpc3REb2N1bWVudFBsYWNlaG9sZGVycyhjb250ZXh0OiBEb2N1bWVudEV4ZWN1dGlvbkNvbnRleHQsIG9wdGlvbnM6IHsgc2VhcmNoPzogc3RyaW5nOyBjYXRlZ29yeT86IHN0cmluZyB9ID0ge30pIHsKICBhc3NlcnREb2N1bWVudFRlbmFudChjb250ZXh0LCBjb250ZXh0LnRlbmFudElkKTsKICBjb25zdCBjdXN0b20gPSBhd2FpdCBwbGF0Zm9ybVByaXNtYS5kb2N1bWVudFBsYWNlaG9sZGVyRGVmaW5pdGlvbi5maW5kTWFueSh7IHdoZXJlOiB7IE9SOiBbeyB0ZW5hbnRJZDogbnVsbCwgb3duZXJzaGlwOiBEb2N1bWVudFBsYWNlaG9sZGVyT3duZXJzaGlwLlBMQVRGT1JNIH0sIHsgdGVuYW50SWQ6IGNvbnRleHQudGVuYW50SWQsIG93bmVyc2hpcDogRG9jdW1lbnRQbGFjZWhvbGRlck93bmVyc2hpcC5URU5BTlQgfV0sIGFjdGl2ZTogdHJ1ZSwgLi4uKG9wdGlvbnMuY2F0ZWdvcnkgPyB7IGNhdGVnb3J5OiBvcHRpb25zLmNhdGVnb3J5IH0gOiB7fSkgfSwgb3JkZXJCeTogW3sgY2F0ZWdvcnk6ICJhc2MiIH0sIHsga2V5OiAiYXNjIiB9XSB9KTsKICBjb25zdCBjdXN0b21LZXlzID0gbmV3IFNldChjdXN0b20ubWFwKChpdGVtKSA9PiBpdGVtLmtleSkpOwogIGNvbnN0IHNlYXJjaCA9IG9wdGlvbnMuc2VhcmNoIT50cmltKCkudG9Mb3dlckNhc2UoKTsKICBjb25zdCBwbGF0Zm9ybSA9IHN0YXRpY0RlZmluaXRpb25zLmZpbHRlcigoaXRlbSkgPT4gIWN1c3RvbUtleXMuaGFzKGl0ZW0ua2V5KSAmJiAoIW9wdGlvbnMuY2F0ZWdvcnkgfHwgaXRlbS5jYXRlZ29yeS50b0xvd2VyQ2FzZSgpID09PSBvcHRpb25zLmNhdGVnb3J5LnRvTG93ZXJDYXNlKCkpICYmICghc2VhcmNoIHx8IGAke2l0ZW0ua2V5fSAke2l0ZW0uZGlzcGxheU5hbWV9ICR7aXRlbS5kZXNjcmlwdGlvbn1gLnRvTG93ZXJDYXNlKCkuaW5jbHVkZXMoc2VhcmNoKSkpOwogIHJldHVybiBbLi4ucGxhdGZvcm0sIC4uLmN1c3RvbS5tYXAoKGl0ZW0pID0+ICh7IGtleTogaXRlbS5rZXksIGNhdGVnb3J5OiBpdGVtLmNhdGVnb3J5LCBkaXNwbGF5TmFtZTogaXRlbS5kaXNwbGF5TmFtZSwgZGVzY3JpcHRpb246IGl0ZW0uZGVzY3JpcHRpb24gfHwgIlRlbmFudC1kZWZpbmVkIHBsYWNlaG9sZGVyLiIsIGRhdGFUeXBlOiBpdGVtLmRhdGFUeXBlLCBzYW1wbGU6IGl0ZW0uZXhhbXBsZVZhbHVlIHx8IHNhbXBsZVRlbXBsYXRlVmFsdWUoaXRlbS5rZXkpLCBzZW5zaXRpdml0eTogaXRlbS5zZW5zaXRpdml0eSwgb3duZXJzaGlwOiBpdGVtLm93bmVyc2hpcCB9KSldOwp9CgpleHBvcnQgZnVuY3Rpb24gdmFsaWRhdGVEb2N1bWVudFBsYWNlaG9sZGVycyhjb250ZW50OiBzdHJpbmcsIGtub3duS2V5czogUmVhZG9ubHlTZXQ8c3RyaW5nPiA9IG5ldyBTZXQoYWxsb3dlZERvY3VtZW50UGxhY2Vob2xkZXJzKSkgewogIGNvbnN0IHZhbGlkYXRpb25FcnJvcnM6IHN0cmluZ1tdID0gW107CiAgY29uc3QgbWFsZm9ybWVkID0gY29udGVudC5tYXRjaCgvXHtce1teezpdKlx9XH18XHtce1teezpdKiQvZykgfHwgW107CiAgZm9yIChjb25zdCBleHByZXNzaW9uIG9mIG1hbGZvcm1lZCkgewogICAgY29uc3Qga2V5ID0gZXhwcmVzc2lvbi5tYXRjaCgvXlx7XHtccyooW0EtWmEtejAtOV8uXSspXHMqXH1cfSQvKT8uWzFdOwogICAgaWYgKCFrZXkpIHZhbGlkYXRpb25FcnJvcnMucHVzaChgTWFsZm9ybWVkIHBsYWNlaG9sZGVyIHN5bnRheDogJHtleHByZXNzaW9uLnNsaWNlKDAsIDEwMCl9LmApOwogIH0KICBjb25zdCBrZXlzID0gZXh0cmFjdFBsYWNlaG9sZGVycyhjb250ZW50KTsKICBjb25zdCB1bmtub3duID0gWy4uLm5ldyBTZXQoa2V5cy5maWx0ZXIoKGtleSkgPT4gIWtub3duS2V5cy5oYXMoa2V5KSkpXTsKICB2YWxpZGF0aW9uRXJyb3JzLnB1c2goLi4udW5rbm93bi5tYXAoKGtleSkgPT4gYFVua25vd24gcGxhY2Vob2xkZXI6ICR7a2V5fS5gKSk7CiAgcmV0dXJuIHsgdmFsaWQ6IHZhbGlkYXRpb25FcnJvcnMubGVuZ3RoID09PSAwLCBwbGFjZWhvbGRlcnM6IFsuLi5uZXcgU2V0KGtleXMpXSwgdW5rbm93blBsYWNlaG9sZGVyczogdW5rbm93biwgdmFsaWRhdGlvbkVycm9ycyB9Owp9CgpleHBvcnQgYXN5bmMgZnVuY3Rpb24gdmFsaWRhdGVUZW1wbGF0ZVBsYWNlaG9sZGVyc0ZvclRlbmFudChjb250ZXh0OiBEb2N1bWVudEV4ZWN1dGlvbkNvbnRleHQsIGNvbnRlbnQ6IHN0cmluZykgewogIGNvbnN0IGRlZmluaXRpb25zID0gYXdhaXQgbGlzdERvY3VtZW50UGxhY2Vob2xkZXJzKGNvbnRleHQpOwogIHJldHVybiB2YWxpZGF0ZURvY3VtZW50UGxhY2Vob2xkZXJzKGNvbnRlbnQsIG5ldyBTZXQoZGVmaW5pdGlvbnMubWFwKChpdGVtKSA9PiBpdGVtLmtleSkpKTsKfQoKZXhwb3J0IGZ1bmN0aW9uIHJlc29sdmVEb2N1bWVudFBsYWNlaG9sZGVycyhjb250ZW50OiBzdHJpbmcsIGNvbnRleHQ6IFBsYWNlaG9sZGVyUmVzb2x1dGlvbkNvbnRleHQsIG1vZGU6IFBsYWNlaG9sZGVyTW9kZSA9ICJHRU5FUkFURSIsIGRlZmluaXRpb25zOiByZWFkb25seSBQbGFjZWhvbGRlckRlZmluaXRpb25bXSA9IHN0YXRpY0RlZmluaXRpb25zKTogUGxhY2Vob2xkZXJSZXNvbHV0aW9uUmVzdWx0IHsKICBjb25zdCBrbm93biA9IG5ldyBTZXQoZGVmaW5pdGlvbnMubWFwKChpdGVtKSA9PiBpdGVtLmtleSkpOwogIGNvbnN0IHZhbGlkYXRpb24gPSB2YWxpZGF0ZURvY3VtZW50UGxhY2Vob2xkZXJzKGNvbnRlbnQsIGtub3duKTsKICBjb25zdCByZXNvbHZlZFZhbHVlczogUmVjb3JkPHN0cmluZywgc3RyaW5nPiA9IHt9OwogIGNvbnN0IHVucmVzb2x2ZWRQbGFjZWhvbGRlcnM6IHN0cmluZ1tdID0gW107CiAgY29uc3QgdW5hdXRob3JpemVkUGxhY2Vob2xkZXJzOiBzdHJpbmdbXSA9IFtdOwogIGNvbnN0IHdhcm5pbmdzOiBzdHJpbmdbXSA9IFtdOwogIGNvbnN0IHJlc29sdmVkQ29udGVudCA9IGNvbnRlbnQucmVwbGFjZSgvXHtce1xzKihbQS1aYS16MC05Xy5dKylccypcfVx9L2csIChleHByZXNzaW9uLCBrZXk6IHN0cmluZykgPT4gewogICAgaWYgKCFrbm93bi5oYXMoa2V5KSkgeyB1bnJlc29sdmVkUGxhY2Vob2xkZXJzLnB1c2goa2V5KTsgcmV0dXJuIGV4cHJlc3Npb247IH0KICAgIGNvbnN0IGRlZmluaXRpb24gPSBkZWZpbml0aW9ucy5maW5kKChpdGVtKSA9PiBpdGVtLmtleSA9PT0ga2V5KTsKICAgIGlmIChkZWZpbml0aW9uPy5zZW5zaXRpdml0eSAmJiAhY29udGV4dC5wZXJtaXNzaW9ucz8uaGFzKGBET0NVTUVOVF9QTEFDRUhPTERFUjoke2RlZmluaXRpb24uc2Vuc2l0aXZpdHl9YCkgJiYgbW9kZSAhPT0gIkRFU0lHTkVSX1BSRVZJRVciKSB7CiAgICAgIHVuYXV0aG9yaXplZFBsYWNlaG9sZGVycy5wdXNoKGtleSk7CiAgICAgIHJldHVybiBleHByZXNzaW9uOwogICAgfQogICAgY29uc3QgcmF3ID0gbW9kZSA9PT0gIkRFU0lHTkVSX1BSRVZJRVciID8gc2FtcGxlVGVtcGxhdGVWYWx1ZShrZXkpIDogcmVhZEtub3duVmFsdWUoa2V5LCBjb250ZXh0KTsKCiAgICAvLyBGSVg6IE9ubHkgdHJlYXQgbnVsbC91bmRlZmluZWQgYXMgdW5yZXNvbHZlZC4gRW1wdHkgc3RyaW5nICIiIGlzIGEgdmFsaWQKICAgIC8vIHJlc29sdmVkIHZhbHVlIG1lYW5pbmcgInRoaXMgb3B0aW9uYWwgZmllbGQgaGFzIG5vIGRhdGEiIOKAlCByZW5kZXIgYmxhbmssCiAgICAvLyBkbyBOT1QgcmVwb3J0IGFzIHVucmVzb2x2ZWQuIFRoaXMgZml4ZXMgc3ViamVjdC5jaXZpbFN0YXR1cywKICAgIC8vIHN1YmplY3QubmF0aW9uYWxpdHksIGFuZCBkb2N1bWVudC52YWxpZFVudGlsIGZvciBvcHRpb25hbC9lbXB0eSBmaWVsZHMuCiAgICBpZiAocmF3ID09IG51bGwpIHsgdW5yZXNvbHZlZFBsYWNlaG9sZGVycy5wdXNoKGtleSk7IHJldHVybiBleHByZXNzaW9uOyB9CgogICAgY29uc3QgdmFsdWUgPSBTdHJpbmcocmF3KTsKICAgIHJlc29sdmVkVmFsdWVzW2tleV0gPSB2YWx1ZTsKICAgIHJldHVybiB2YWx1ZTsKICB9KTsKICBpZiAobW9kZSAhPT0gIkRFU0lHTkVSX1BSRVZJRVciICYmIHVucmVzb2x2ZWRQbGFjZWhvbGRlcnMubGVuZ3RoKSB3YXJuaW5ncy5wdXNoKCJTb21lIHBsYWNlaG9sZGVycyBjb3VsZCBub3QgYmUgcmVzb2x2ZWQgYW5kIHJlbWFpbiB2aXNpYmxlLiIpOwogIHJldHVybiB7IHJlc29sdmVkQ29udGVudCwgcmVzb2x2ZWRWYWx1ZXMsIHVucmVzb2x2ZWRQbGFjZWhvbGRlcnM6IFsuLi5uZXcgU2V0KHVucmVzb2x2ZWRQbGFjZWhvbGRlcnMpXSwgdW5hdXRob3JpemVkUGxhY2Vob2xkZXJzOiBbLi4ubmV3IFNldCh1bmF1dGhvcml6ZWRQbGFjZWhvbGRlcnMpXSwgdmFsaWRhdGlvbkVycm9yczogdmFsaWRhdGlvbi52YWxpZGF0aW9uRXJyb3JzLCB3YXJuaW5ncyB9Owp9CgpmdW5jdGlvbiByZWFkS25vd25WYWx1ZShrZXk6IHN0cmluZywgY29udGV4dDogUGxhY2Vob2xkZXJSZXNvbHV0aW9uQ29udGV4dCkgewogIGNvbnN0IFtuYW1lc3BhY2UsIG5hbWVdID0ga2V5LnNwbGl0KCIuIik7CiAgY29uc3Qgc291cmNlID0gbmFtZXNwYWNlID09PSAidGVuYW50IiA/IGNvbnRleHQudGVuYW50IDogbmFtZXNwYWNlID09PSAiZG9jdW1lbnQiID8gY29udGV4dC5kb2N1bWVudCA6IG5hbWVzcGFjZSA9PT0gInN1YmplY3QiID8gY29udGV4dC5zdWJqZWN0IDogbmFtZXNwYWNlID09PSAicHJvcGVydHkiID8gY29udGV4dC5wcm9wZXJ0eSA6IG5hbWVzcGFjZSA9PT0gInJlcXVlc3QiID8gY29udGV4dC5yZXF1ZXN0IDogbmFtZXNwYWNlID09PSAic2lnbmF0b3J5IiA/IGNvbnRleHQuc2lnbmF0b3J5IDogbmFtZXNwYWNlID09PSAidmVyaWZpY2F0aW9uIiA/IGNvbnRleHQudmVyaWZpY2F0aW9uIDogbmFtZXNwYWNlID09PSAic3lzdGVtIiA/IGNvbnRleHQuc3lzdGVtIDogdW5kZWZpbmVkOwogIGlmIChzb3VyY2UgJiYgbmFtZSBpbiBzb3VyY2UpIHJldHVybiAoc291cmNlIGFzIFJlY29yZDxzdHJpbmcsIHVua25vd24+KVtuYW1lXTsKICBjb25zdCByZXNvbHZlciA9IGNvbnRleHQuY3VzdG9tUmVzb2x2ZXJzPy5ba2V5XTsKICByZXR1cm4gcmVzb2x2ZXIgPyByZXNvbHZlcihjb250ZXh0KSA6IHVuZGVmaW5lZDsKfQo=
+import "server-only";
+
+import { DocumentPlaceholderOwnership } from "@prisma/client";
+import { platformPrisma } from "@/lib/db";
+import { allowedDocumentPlaceholders, extractPlaceholders, placeholderGroups, sampleTemplateValue } from "@/lib/services/document-template-builder";
+import { assertDocumentTenant, type DocumentExecutionContext } from "@/lib/services/document-runtime-context";
+
+export type PlaceholderMode = "VALIDATE" | "DESIGNER_PREVIEW" | "REQUEST_PREVIEW" | "GENERATE";
+export type PlaceholderDefinition = { key: string; category: string; displayName: string; description: string; dataType: string; sample: string; sensitivity: string | null; ownership: DocumentPlaceholderOwnership };
+export type PlaceholderResolutionContext = {
+  tenantId?: string;
+  tenant?: { name?: string; address?: string; tin?: string; secRegistration?: string; contactNumber?: string; email?: string; logo?: string };
+  document?: { number?: string; title?: string; issueDate?: string; issuePlace?: string; status?: string; validUntil?: string };
+  subject?: { fullName?: string; relationship?: string; address?: string; birthDate?: string; civilStatus?: string; nationality?: string; status?: string; residencyStartDate?: string; age?: string | number; occupation?: string; contactNumber?: string; phase?: string; propertyType?: string; occupancyStatus?: string };
+  property?: { block?: string; lot?: string; address?: string; accountLabel?: string; phase?: string; subdivision?: string };
+  request?: { purpose?: string; remarks?: string; copies?: string | number; requestedAt?: string };
+  signatory?: { name?: string; position?: string };
+  verification?: { url?: string; code?: string };
+  system?: { generatedAt?: string; platformName?: string };
+  organization?: { tenantId: string; term?: string | null; officers: Array<{ id: string; fullName: string; position: string; displayOrder: number }> };
+  permissions?: ReadonlySet<string>;
+  customResolvers?: Record<string, (context: PlaceholderResolutionContext) => unknown>;
+};
+
+export type PlaceholderResolutionResult = {
+  resolvedContent: string;
+  resolvedValues: Record<string, string>;
+  unresolvedPlaceholders: string[];
+  unauthorizedPlaceholders: string[];
+  validationErrors: string[];
+  warnings: string[];
+};
+
+const staticDefinitions: PlaceholderDefinition[] = placeholderGroups.flatMap((group) => group.items.map((item) => ({
+  key: item.key,
+  category: group.group,
+  displayName: item.label,
+  description: `Allowlisted ${item.label.toLowerCase()} document placeholder.`,
+  dataType: "TEXT",
+  sample: item.sample,
+  sensitivity: ["subject.birthDate", "subject.address", "subject.civilStatus", "subject.nationality"].includes(item.key) ? "PERSONAL" : null,
+  ownership: DocumentPlaceholderOwnership.PLATFORM,
+})));
+
+export async function listDocumentPlaceholders(context: DocumentExecutionContext, options: { search?: string; category?: string } = {}) {
+  assertDocumentTenant(context, context.tenantId);
+  const custom = await platformPrisma.documentPlaceholderDefinition.findMany({ where: { OR: [{ tenantId: null, ownership: DocumentPlaceholderOwnership.PLATFORM }, { tenantId: context.tenantId, ownership: DocumentPlaceholderOwnership.TENANT }], active: true, ...(options.category ? { category: options.category } : {}) }, orderBy: [{ category: "asc" }, { key: "asc" }] });
+  const customKeys = new Set(custom.map((item) => item.key));
+  const search = options.search!.trim().toLowerCase();
+  const platform = staticDefinitions.filter((item) => !customKeys.has(item.key) && (!options.category || item.category.toLowerCase() === options.category.toLowerCase()) && (!search || `${item.key} ${item.displayName} ${item.description}`.toLowerCase().includes(search)));
+  return [...platform, ...custom.map((item) => ({ key: item.key, category: item.category, displayName: item.displayName, description: item.description || "Tenant-defined placeholder.", dataType: item.dataType, sample: item.exampleValue || sampleTemplateValue(item.key), sensitivity: item.sensitivity, ownership: item.ownership }))];
+}
+
+export function validateDocumentPlaceholders(content: string, knownKeys: ReadonlySet<string> = new Set(allowedDocumentPlaceholders)) {
+  const validationErrors: string[] = [];
+  const malformed = content.match(/\{\{[^{:]*\}\}|\{\{[^{:]*$/g) || [];
+  for (const expression of malformed) {
+    const key = expression.match(/^\{\{\s*([A-Za-z0-9_.]+)\s*\}\}$/)?.[1];
+    if (!key) validationErrors.push(`Malformed placeholder syntax: ${expression.slice(0, 100)}.`);
+  }
+  const keys = extractPlaceholders(content);
+  const unknown = [...new Set(keys.filter((key) => !knownKeys.has(key)))];
+  validationErrors.push(...unknown.map((key) => `Unknown placeholder: ${key}.`));
+  return { valid: validationErrors.length === 0, placeholders: [...new Set(keys)], unknownPlaceholders: unknown, validationErrors };
+}
+
+export async function validateTemplatePlaceholdersForTenant(context: DocumentExecutionContext, content: string) {
+  const definitions = await listDocumentPlaceholders(context);
+  return validateDocumentPlaceholders(content, new Set(definitions.map((item) => item.key)));
+}
+
+export function resolveDocumentPlaceholders(content: string, context: PlaceholderResolutionContext, mode: PlaceholderMode = "GENERATE", definitions: readonly PlaceholderDefinition[] = staticDefinitions): PlaceholderResolutionResult {
+  const known = new Set(definitions.map((item) => item.key));
+  const validation = validateDocumentPlaceholders(content, known);
+  const resolvedValues: Record<string, string> = {};
+  const unresolvedPlaceholders: string[] = [];
+  const unauthorizedPlaceholders: string[] = [];
+  const warnings: string[] = [];
+  const resolvedContent = content.replace(/\{\{\s*([A-Za-z0-9_.]+)\s*\}\}/g, (expression, key: string) => {
+    if (!known.has(key)) { unresolvedPlaceholders.push(key); return expression; }
+    const definition = definitions.find((item) => item.key === key);
+    if (definition?.sensitivity && !context.permissions?.has(`DOCUMENT_PLACEHOLDER:${definition.sensitivity}`) && mode !== "DESIGNER_PREVIEW") {
+      unauthorizedPlaceholders.push(key);
+      return expression;
+    }
+    const raw = mode === "DESIGNER_PREVIEW" ? sampleTemplateValue(key) : readKnownValue(key, context);
+
+    // FIX: Only treat null/undefined as unresolved. Empty string "" is a valid
+    // resolved value meaning "this optional field has no data" — render blank,
+    // do NOT report as unresolved. This fixes subject.civilStatus,
+    // subject.nationality, and document.validUntil for optional/empty fields.
+    if (raw == null) { unresolvedPlaceholders.push(key); return expression; }
+
+    const value = String(raw);
+    resolvedValues[key] = value;
+    return value;
+  });
+  if (mode !== "DESIGNER_PREVIEW" && unresolvedPlaceholders.length) warnings.push("Some placeholders could not be resolved and remain visible.");
+  return { resolvedContent, resolvedValues, unresolvedPlaceholders: [...new Set(unresolvedPlaceholders)], unauthorizedPlaceholders: [...new Set(unauthorizedPlaceholders)], validationErrors: validation.validationErrors, warnings };
+}
+
+function readKnownValue(key: string, context: PlaceholderResolutionContext) {
+  const [namespace, name] = key.split(".");
+  const source = namespace === "tenant" ? context.tenant : namespace === "document" ? context.document : namespace === "subject" ? context.subject : namespace === "property" ? context.property : namespace === "request" ? context.request : namespace === "signatory" ? context.signatory : namespace === "verification" ? context.verification : namespace === "system" ? context.system : undefined;
+  if (source && name in source) return (source as Record<string, unknown>)[name];
+  const resolver = context.customResolvers?.[key];
+  return resolver ? resolver(context) : undefined;
+}

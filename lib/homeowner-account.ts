@@ -1,16 +1,25 @@
 type HomeownerAccountSource = {
-  block: string;
-  lot: string;
+  accountNumber?: string | null;
+  block?: string | null;
+  lot?: string | null;
 };
 
 export function homeownerAccountNumber(homeowner: HomeownerAccountSource) {
-  return `HOA-B${accountPart(homeowner.block)}-L${accountPart(homeowner.lot)}`;
+  return canonicalAccountNumber(homeowner.accountNumber) || "UNASSIGNED";
 }
 
 export function homeownerPropertyLabel(homeowner: HomeownerAccountSource) {
-  return `Block ${homeowner.block}, Lot ${homeowner.lot}`;
+  return `Block ${accountPart(homeowner.block)}, Lot ${accountPart(homeowner.lot)}`;
 }
 
-function accountPart(value: string) {
-  return value.trim().toUpperCase().replace(/[^A-Z0-9]+/g, "-").replace(/^-|-$/g, "") || "NA";
+export function legacyHomeownerPropertyAccountReference(homeowner: HomeownerAccountSource) {
+  return `HOA-B${accountPart(homeowner.block)}-L${accountPart(homeowner.lot)}`;
+}
+
+function canonicalAccountNumber(value: unknown) {
+  return typeof value === "string" && /^[1-9][0-9]{10}$/.test(value) ? value : null;
+}
+
+function accountPart(value: unknown) {
+  return String(value ?? "").trim().toUpperCase().replace(/[^A-Z0-9]+/g, "-").replace(/^-|-$/g, "") || "NA";
 }

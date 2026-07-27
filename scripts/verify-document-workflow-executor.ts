@@ -3,12 +3,10 @@ import {
   DocumentDefinitionStatus,
   DocumentDeliveryMode,
   DocumentGenerationMode,
-  DocumentIssuedStatus,
   DocumentOrigin,
   DocumentRequestStatus,
   DocumentSubjectType,
   DocumentTemplateVersionStatus,
-  DocumentVerificationStatus,
   DocumentWorkflowApprovalMode,
   DocumentWorkflowStepType,
   PaymentRequestStatus,
@@ -18,7 +16,7 @@ import {
 import { platformPrisma } from "@/lib/db";
 import { approvePaymentRequest } from "@/lib/services/payment-requests";
 import { generateDocument } from "@/lib/services/document-generation";
-import { releaseIssuedDocument, revokeIssuedDocument } from "@/lib/services/document-release";
+import { revokeIssuedDocument } from "@/lib/services/document-release";
 import { verifyDocumentToken } from "@/lib/services/document-verification";
 import { DocumentRuntimeError } from "@/lib/services/document-runtime-errors";
 import { documentContextFromUser } from "@/lib/services/document-runtime-context";
@@ -54,6 +52,8 @@ async function main() {
     const issuedA = await requestState(requestA.id);
     add(checks, "scenario A issues immediately", resultA.action === "GENERATED" && issuedA.status === DocumentRequestStatus.ISSUED && issuedA.currentVersion === 1 && Boolean(issuedA.documentNumber && issuedA.generatedAt && issuedA.issuedAt), `${issuedA.status} ${issuedA.documentNumber}`);
     add(checks, "scenario A creates one version and token", issuedA.versions.length === 1 && issuedA.verificationTokens.length === 1, `${issuedA.versions.length}/${issuedA.verificationTokens.length}`);
+    add(checks, "scenario A official QR has no preview warning", issuedA.generatedContent?.includes("PREVIEW QR") === false && issuedA.generatedContent?.includes("NOT VALID FOR VERIFICATION") === false, issuedA.generatedContent?.slice(0, 160) || "missing content");
+    add(checks, "scenario A official QR uses verification wording", issuedA.generatedContent?.includes("SCAN TO VERIFY") === true || issuedA.generatedContent?.includes("Scan to verify") === true, "official QR label");
 
     const approval = await createDefinition(fixture, `${runId}_APPROVAL`, "Approval Required", { payment: false, approval: true, approverRole: admin.role }, definitionIds, templateSetIds, workflowIds);
     const requestB = await createRequest(fixture, approval.definitionId, approval.templateVersionId, runId, { status: DocumentRequestStatus.SUBMITTED });
@@ -149,6 +149,9 @@ async function main() {
     requestIds.push(qrRequest.id);
     const qrIssue = await generateDocument(context, qrRequest.id, { mode: DocumentGenerationMode.ISSUE, idempotencyKey: `${runId}:qr-issue` });
     const rawToken = qrIssue.verificationUrl?.split("/").pop() || "";
+    const qrIssuedState = await requestState(qrRequest.id);
+    add(checks, "localhost official verification URL is accepted", qrIssue.verificationUrl?.startsWith("http://localhost:3000/verify/documents/") === true, qrIssue.verificationUrl ?? "missing url");
+    add(checks, "official generated QR output does not contain preview wording", qrIssuedState.generatedContent?.includes("PREVIEW QR") === false && qrIssuedState.generatedContent?.includes("NOT VALID FOR VERIFICATION") === false, qrIssuedState.generatedContent?.slice(0, 160) || "missing content");
     add(checks, "valid QR verification succeeds", (await verifyDocumentToken(rawToken)).status === "VALID", rawToken ? "token available" : "missing token");
     const tokenRow = await platformPrisma.documentVerificationToken.findFirstOrThrow({ where: { tenantId: fixture.tenantId, requestId: qrRequest.id } });
     await platformPrisma.documentVerificationToken.update({ where: { id: tokenRow.id }, data: { expiresAt: new Date(Date.now() - 60_000) } });

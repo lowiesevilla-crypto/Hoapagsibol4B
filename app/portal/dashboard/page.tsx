@@ -7,6 +7,7 @@ import { StatusBadge } from "@/components/status-badge";
 import { refreshOverdueBills } from "@/lib/actions/billing";
 import { getAppUrl } from "@/lib/app-url";
 import { prisma } from "@/lib/db";
+import { homeownerAccountNumber } from "@/lib/homeowner-account";
 import { requireHomeownerProfile } from "@/lib/portal";
 import { getStatementOfAccount } from "@/lib/services/statement-of-account";
 import { documentTypeLabel } from "@/lib/services/documents";
@@ -30,6 +31,7 @@ export default async function PortalDashboard() {
     getEnabledTenantModules(profile.tenantId),
   ]);
   const bondsHeld = Number(bondTotals._sum.amount ?? 0) - Number(bondTotals._sum.amountRefunded ?? 0) - Number(bondTotals._sum.amountForfeited ?? 0);
+  const accountNumber = homeownerAccountNumber(profile);
   const latestPayment = soa.paymentHistory.find((payment) => payment.status === "Active");
   const nextDue = openBills[0];
   const quickActions = [
@@ -49,7 +51,7 @@ export default async function PortalDashboard() {
       <div className="mt-3 grid gap-5 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-end">
         <div>
           <h1 className="break-words text-3xl font-black tracking-tight sm:text-4xl">Hello, {profile.user.name.split(" ")[0]}</h1>
-          <p className="mt-2 max-w-2xl text-sm leading-6 text-pine-50">Block {profile.block}, Lot {profile.lot} account overview with tenant-scoped balances, requests, and community updates.</p>
+          <p className="mt-2 max-w-2xl text-sm leading-6 text-pine-50">Account {accountNumber} · Block {profile.block}, Lot {profile.lot} overview with tenant-scoped balances, requests, and community updates.</p>
         </div>
         <div className="rounded-3xl bg-white/10 p-4 ring-1 ring-white/15">
           <p className="text-xs font-bold uppercase text-leaf-100">Collection status</p>

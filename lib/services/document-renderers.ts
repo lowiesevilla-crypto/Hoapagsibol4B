@@ -2,7 +2,7 @@ import "server-only";
 
 import QRCode from "qrcode";
 import { DocumentOutputFormat } from "@prisma/client";
-import { type DocumentRenderBlock, type DocumentRenderModel } from "@/lib/services/document-render-model";
+import { type DocumentRenderBlock, type DocumentRenderMode, type DocumentRenderModel } from "@/lib/services/document-render-model";
 import { defaultQrConfig, type DocumentRichText, type DocumentTextMarks } from "@/lib/services/document-template-builder";
 
 /**
@@ -43,23 +43,25 @@ export const htmlDocumentRenderer: DocumentRenderer = {
   outputFormat: DocumentOutputFormat.HTML,
   validate(model) {
     const errors: string[] = [];
-    if (!model.metadata.title.trim()) errors.push("Document title is required.");
-    if (!model.preview && !model.metadata.documentNumber.trim()) errors.push("Official document number is required.");
-    if (!model.sections.body.some((block) => block.visible && block.content.trim())) errors.push("Document body is empty.");
+    if (!safeText(model.metadata.title).trim()) errors.push("Document title is required.");
+    if (model.renderMode.mode === "official" && !safeText(model.metadata.documentNumber).trim()) errors.push("Official document number is required.");
+    if (model.renderMode.mode === "official" && model.renderMode.verificationRequired) {
+      if (!model.renderMode.verificationUrl || !isHttpUrl(model.renderMode.verificationUrl) || !model.renderMode.verificationToken) errors.push("Official verification URL and token are required.");
+    }
+    if (!model.sections.body.some((block) => block.visible && safeText(block.content).trim())) errors.push("Document body is empty.");
     return errors;
   },
   async render(model) {
     const errors = this.validate(model);
     if (errors.length) throw new Error(errors.join(" "));
-    // FIX: Use the real verification URL for official documents.
-    // For preview mode, use the sentinel payload so the QR contains no real token.
-    const qrPayload = model.preview ? PREVIEW_QR_PAYLOAD : model.metadata.verificationUrl;
+    const preview = model.renderMode.mode === "preview";
+    const qrPayload = preview ? PREVIEW_QR_PAYLOAD : model.renderMode.verificationUrl;
     const sections = await Promise.all([
-      renderSection(model.sections.header, "header", qrPayload, model.visualLayout, model.preview),
-      renderSection(model.sections.body, "body", qrPayload, model.visualLayout, model.preview),
-      renderSection(model.sections.footer, "footer", qrPayload, model.visualLayout, model.preview),
+      renderSection(model.sections.header, "header", qrPayload, model.visualLayout, model.renderMode.mode),
+      renderSection(model.sections.body, "body", qrPayload, model.visualLayout, model.renderMode.mode),
+      renderSection(model.sections.footer, "footer", qrPayload, model.visualLayout, model.renderMode.mode),
     ]);
-    const html = `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${escapeHtml(model.metadata.title)}</title><style>${documentCss(model)}</style></head><body>${model.preview ? '<div class="preview-banner">PREVIEW ONLY - NOT AN OFFICIAL DOCUMENT</div>' : ""}<main class="document-page${model.preview ? " preview" : ""}${model.visualLayout ? " visual-layout" : ""}">${renderWatermark(model)}${sections.join("")}</main></body></html>`;
+    const html = `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${escapeHtml(model.metadata.title)}</title><style>${documentCss(model)}</style></head><body>${preview ? '<div class="preview-banner">PREVIEW ONLY - NOT AN OFFICIAL DOCUMENT</div>' : ""}<main class="document-page${preview ? " preview" : ""}${model.visualLayout ? " visual-layout" : ""}">${renderWatermark(model)}${sections.join("")}</main></body></html>`;
     return { outputFormat: DocumentOutputFormat.HTML, contentType: "text/html; charset=utf-8", content: html, outputSize: Buffer.byteLength(html, "utf8"), pageCount: null, rendererName: this.name, rendererVersion: this.version, warnings: model.warnings };
   },
 };
@@ -69,53 +71,62 @@ export function getDocumentRenderer(format: DocumentOutputFormat) {
   throw new Error(`Unsupported document output format: ${format}.`);
 }
 
-async function renderSection(blocks: DocumentRenderBlock[], name: string, qrPayload: string | null, visualLayout: boolean, preview: boolean) {
-  const content = await Promise.all(blocks.filter((block) => block.visible).map((block) => renderBlock(block, qrPayload, visualLayout, preview)));
+async function renderSection(blocks: DocumentRenderBlock[], name: string, qrPayload: string | null, visualLayout: boolean, renderMode: DocumentRenderMode["mode"]) {
+  const content = await Promise.all(blocks.filter((block) => block.visible).map((block) => renderBlock(block, qrPayload, visualLayout, renderMode)));
   return `<section class="section section-${name}${visualLayout ? " visual-section" : ""}">${content.join("")}</section>`;
 }
 
-async function renderBlock(block: DocumentRenderBlock, qrPayload: string | null, visualLayout: boolean, preview: boolean) {
+async function renderBlock(block: DocumentRenderBlock, qrPayload: string | null, visualLayout: boolean, renderMode: DocumentRenderMode["mode"]) {
   const style = blockStyle(block, visualLayout);
+  const preview = renderMode === "preview";
   if (block.type === "pageBreak") return '<div class="page-break" aria-hidden="true"></div>';
   if (block.type === "divider" || block.type === "horizontalLine") return `<div class="line-element horizontal-line" style="${lineStyle(block, visualLayout)}" aria-hidden="true"></div>`;
   if (block.type === "verticalLine") return `<div class="line-element vertical-line" style="${lineStyle(block, visualLayout)}" aria-hidden="true"></div>`;
   if (block.type === "spacer") return `<div aria-hidden="true" style="height:${Math.max(4, block.style?.height ?? 16)}px"></div>`;
   // FIX: Pass qrPayload into renderQr so it can distinguish real vs preview URLs.
-  if (block.type === "qrVerification") return qrPayload ? renderQr(block, await QRCode.toDataURL(qrPayload, { width: 240, margin: block.qr?.quietZone || 1, errorCorrectionLevel: "M" }), style, preview, qrPayload) : "";
+  if (block.type === "qrVerification") return qrPayload ? renderQr(block, await QRCode.toDataURL(qrPayload, { width: 240, margin: block.qr?.quietZone || 1, errorCorrectionLevel: "M" }), style, renderMode) : "";
   if (block.type === "officerList") return renderOfficerList(block, style);
-  const imageSource = block.image?.src || (block.type === "logo" ? block.content : "");
+  const imageSource = safeText(block.image?.src) || (block.type === "logo" ? safeText(block.content) : "");
   if ((block.type === "logo" || block.type === "image") && imageSource) return `<div class="image-element" style="${style}"><img src="${escapeAttribute(imageSource)}" alt="${escapeAttribute(block.image?.alt ?? block.label ?? "Document image")}" style="${imageStyle(block)}"></div>`;
   if (block.table?.rows?.length) return `<table style="${style}"><tbody>${block.table.rows.map((row) => `<tr>${row.map((cell) => `<td>${escapeHtml(cell)}</td>`).join("")}</tr>`).join("")}</tbody></table>`;
   const tag = ["documentTitle", "tenantName", "heading"].includes(block.type) ? "h1" : "div";
-  return `<${tag} class="block block-${escapeAttribute(block.type)}" style="${style}">${block.richText ? renderRichText(block.richText, preview) : escapeHtml(preview ? previewSafeText(block.content) : block.content).replaceAll("\n", "<br>")}</${tag}>`;
+  const content = safeText(block.content);
+  return `<${tag} class="block block-${escapeAttribute(block.type)}" style="${style}">${block.richText ? renderRichText(block.richText, preview) : escapeHtml(preview ? previewSafeText(content) : content).replaceAll("\n", "<br>")}</${tag}>`;
 }
 
 /**
  * Render the QR verification block.
  *
- * FIX: The `qrPayload` parameter is now used to detect whether this is a real
- * issued-document URL (starts with http/https) or the preview sentinel.
- * The preview label is shown ONLY when the payload is the preview sentinel —
- * never when a real verification URL is present, regardless of the `preview` flag.
- * This is a defense-in-depth guard: if a view page incorrectly calls the renderer
- * with preview=true but passes a real verification URL, the official label is shown.
+ * Preview/official behavior is driven only by the explicit render mode.
+ * Official output never trusts a persisted template label that contains preview
+ * warning text, because older QR blocks saved the preview warning as their label.
  */
-function renderQr(block: DocumentRenderBlock, qrDataUrl: string, style: string, preview: boolean, qrPayload: string) {
+function renderQr(block: DocumentRenderBlock, qrDataUrl: string, style: string, renderMode: DocumentRenderMode["mode"]) {
   const qr = block.qr || defaultQrConfig;
-
-  // A "real" verification URL is any http/https URL — never the preview sentinel.
-  const isRealVerificationUrl = qrPayload.startsWith("https://") || qrPayload.startsWith("http://");
-
-  // Show preview label only when in preview mode AND there is no real URL.
-  const showPreviewLabel = preview && !isRealVerificationUrl;
-
-  const label = showPreviewLabel ? previewQrLabel : qr.label;
-  const altText = showPreviewLabel ? "Preview QR - not valid for verification" : "Document verification QR code";
+  const preview = renderMode === "preview";
+  const label = preview ? previewQrLabel : officialQrText(qr.label, "SCAN TO VERIFY");
+  const instruction = preview ? qr.instruction : officialQrText(qr.instruction, "Scan to verify");
+  const altText = preview ? "Preview QR - not valid for verification" : "Document verification QR code";
 
   const image = `<img class="qr-code-image" src="${qrDataUrl}" alt="${escapeAttribute(altText)}" style="--qr-quiet-zone:${qr.quietZone}">`;
   const labelMarkup = qr.showLabel ? `<figcaption>${escapeHtml(label)}</figcaption>` : "";
-  const instructionMarkup = qr.showInstruction ? `<small>${escapeHtml(qr.instruction)}</small>` : "";
+  const instructionMarkup = qr.showInstruction ? `<small>${escapeHtml(instruction)}</small>` : "";
   return `<figure class="qr-block" style="${style}">${image}${labelMarkup}${instructionMarkup}</figure>`;
+}
+
+function officialQrText(value: string | undefined, fallback: string) {
+  const text = safeText(value).trim();
+  if (!text || /preview|not valid/i.test(text)) return fallback;
+  return text;
+}
+
+function isHttpUrl(value: string) {
+  try {
+    const url = new URL(value);
+    return url.protocol === "http:" || url.protocol === "https:";
+  } catch {
+    return false;
+  }
 }
 
 function imageStyle(block: DocumentRenderBlock) {
@@ -139,7 +150,7 @@ function lineStyle(block: DocumentRenderBlock, visualLayout: boolean) {
 
 function renderRichText(richText: DocumentRichText, preview: boolean) {
   return richText.children.map((node) => {
-    const text = node.resolvedText ?? (node.type === "placeholder" ? `{{${node.key}}}` : node.text);
+    const text = safeText(node.resolvedText ?? (node.type === "placeholder" ? `{{${node.key}}}` : node.text));
     return `<span style="${marksStyle(node.marks)}">${escapeHtml(preview ? previewSafeText(text) : text).replaceAll("\n", "<br>")}</span>`;
   }).join("");
 }
@@ -211,6 +222,10 @@ function renderWatermark(model: DocumentRenderModel) {
 
 function escapeHtml(value: string) {
   return value.replace(/[&<>"']/g, (character) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[character]!);
+}
+
+function safeText(value: unknown) {
+  return typeof value === "string" || typeof value === "number" ? String(value) : "";
 }
 
 function previewSafeText(value: string) {

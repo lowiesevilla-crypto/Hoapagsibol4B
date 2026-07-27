@@ -8,12 +8,25 @@ import { NextRequest, NextResponse } from "next/server";
 import { getAccessibleGeneratedDocument } from "@/lib/document-access";
 import { prisma } from "@/lib/db";
 import { documentTypeLabel, isPassDocument } from "@/lib/services/documents";
+import { getIssuedDocumentRenderSource, renderIssuedDocumentPdf } from "@/lib/services/issued-document-export";
 import { getAssociationSettings } from "@/lib/system-settings";
 import { shortDate } from "@/lib/utils";
 
 export async function GET(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const { user, request: documentRequest } = await getAccessibleGeneratedDocument(id, { requireDownload: true });
+  const currentVersion = documentRequest.versions[0] ?? null;
+  if (currentVersion?.rendererName === "hoahub-safe-html") {
+    try {
+      const source = await getIssuedDocumentRenderSource(id, { requireDownload: true });
+      const bytes = await renderIssuedDocumentPdf(source);
+      await prisma.auditLog.create({ data: { tenantId: user.tenantId, actorId: user.id, module: "DOCUMENTS", action: "DOWNLOAD_PDF", entityType: "DocumentVersion", entityId: source.version.id, metadata: { documentNumber: source.version.documentNumber, immutableVersion: source.version.version, renderer: source.version.rendererName } } });
+      return new NextResponse(bytes, { headers: { "Content-Type": "application/pdf", "Content-Disposition": `attachment; filename="${source.filenameBase}.pdf"`, "Cache-Control": "private, no-store", "X-Content-Type-Options": "nosniff" } });
+    } catch (error) {
+      console.error("Issued document PDF export failed", { tenantId: user.tenantId, requestId: documentRequest.id, documentVersionId: currentVersion.id, code: error instanceof Error && "code" in error ? (error as { code: string }).code : "ISSUED_DOCUMENT_PDF_GENERATION_FAILED" });
+      return NextResponse.json({ error: "We could not finish exporting this issued document PDF. Please try again or contact HOA staff." }, { status: 500 });
+    }
+  }
   const association = await getAssociationSettings(user.tenantId);
   const host = request.headers.get("x-forwarded-host") || request.headers.get("host") || request.nextUrl.host;
   const proto = request.headers.get("x-forwarded-proto") || (host.includes("localhost") || host.startsWith("127.") ? "http" : "https");

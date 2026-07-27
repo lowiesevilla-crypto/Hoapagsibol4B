@@ -147,8 +147,8 @@ export function evaluateDefinitionCompleteness(definition: DocumentDefinition & 
 
   if (status === "ARCHIVED") errors.push("Definition is archived.");
   if (status === "INACTIVE") errors.push("Definition is inactive.");
-  if (!definition.code.trim()) errors.push("Code is required.");
-  if (!definition.displayName.trim()) errors.push("Display name is required.");
+  if (!safeText(definition.code).trim()) errors.push("Code is required.");
+  if (!safeText(definition.displayName).trim()) errors.push("Display name is required.");
   const effectivePreset = workflowPresetForDefinitionFields(definition);
   const expectedWorkflow = effectivePreset === "CUSTOM" ? null : workflowFieldsForPreset(workflowPresetForDeliveryMode(definition.deliveryMode));
   if (expectedWorkflow) {
@@ -259,6 +259,10 @@ export async function getWalkInDocumentDefinitions(tenantId: string) {
 
 export function workflowPresetForDefinition(definition: Pick<DocumentDefinition, "deliveryMode" | "paymentRequired" | "approvalRequired" | "requiresAdminReview" | "allowImmediateDownload" | "paymentBeforeApproval">) {
   return workflowPresetForDefinitionFields(definition);
+}
+
+function safeText(value: unknown) {
+  return typeof value === "string" || typeof value === "number" ? String(value) : "";
 }
 
 export const documentSequenceScopeOptions = Object.values(DocumentSequenceScope);

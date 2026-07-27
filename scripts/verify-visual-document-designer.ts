@@ -37,6 +37,7 @@ async function main() {
     rendererVersion: "1.0.0",
     mode: DocumentGenerationMode.ISSUE,
     preview: false,
+    renderMode: { mode: "official", documentNumber: "COR-2026-000001", verificationUrl: null, verificationToken: null, verificationRequired: false },
     metadata: { title: "Visual Certificate", documentNumber: "COR-2026-000001", issueDate: "July 19, 2026", validUntil: null, verificationUrl: null, locale: "en-PH" },
     page: visual.page,
     visualLayout: true,
@@ -75,7 +76,7 @@ async function main() {
     organization: { tenantId: "tenant-a", term: "CY 2025-2026", officers },
     permissions: new Set<string>(),
   };
-  const officerModel = buildDocumentRenderModel({ templateDefinition: { ...reference, sections: { ...reference.sections, body: reference.sections.body.map((block) => block.type === "officerList" ? { ...block, officerList: { ...defaultOfficerListConfig, roleFilters: ["President", "Vice President"], maxOfficers: 2 } } : block) }, blocks: [] }, title: "Certificate of Residency", documentNumber: "COR-2026-000001", issueDate: "July 19, 2026", validUntil: "July 31, 2026", verificationUrl: "https://example.test/verify/token", mode: DocumentGenerationMode.ISSUE, placeholderContext: context, placeholderDefinitions });
+  const officerModel = buildDocumentRenderModel({ templateDefinition: { ...reference, sections: { ...reference.sections, body: reference.sections.body.map((block) => block.type === "officerList" ? { ...block, officerList: { ...defaultOfficerListConfig, roleFilters: ["President", "Vice President"], maxOfficers: 2 } } : block) }, blocks: [] }, title: "Certificate of Residency", documentNumber: "COR-2026-000001", issueDate: "July 19, 2026", validUntil: "July 31, 2026", verificationUrl: "https://example.test/verify/token", verificationToken: "token", requireVerification: true, mode: DocumentGenerationMode.ISSUE, placeholderContext: context, placeholderDefinitions });
   assert(officerModel.officerListValidationErrors?.length === 0 && officerModel.officerListSnapshot?.officers.length === 2, "same-tenant officer source resolves, filters, orders, and caps the list");
   assert(officerModel.officerListSnapshot?.officers[0]?.fullName === "Officer Beta", "officer list ordering follows the configured display order");
   const officerRendered = await htmlDocumentRenderer.render(officerModel);

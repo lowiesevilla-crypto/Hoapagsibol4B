@@ -9,6 +9,7 @@ import { saveAdminHouseholdMemberAction } from "@/lib/actions/documents";
 import { deleteHomeownerAction } from "@/lib/actions/homeowners";
 import { requireUser } from "@/lib/auth";
 import { prisma } from "@/lib/db";
+import { homeownerAccountNumber } from "@/lib/homeowner-account";
 import { canValidateHouseholdMembers, householdMemberEligibility, householdMemberValidationLabel, householdMemberValidationStatus } from "@/lib/services/household-member-eligibility";
 import { shortDate } from "@/lib/utils";
 
@@ -36,8 +37,14 @@ export default async function EditHomeownerPage({ params, searchParams }: { para
   const latestAuditByMemberId = new Map<string, (typeof validationAudits)[number]>();
   for (const audit of validationAudits) if (audit.entityId && !latestAuditByMemberId.has(audit.entityId)) latestAuditByMemberId.set(audit.entityId, audit);
   const canValidate = canValidateHouseholdMembers(user.role);
+  const accountNumber = homeownerAccountNumber(homeowner);
   return <><PageHeader eyebrow="Homeowners" title={homeowner.user.name} description={`Block ${homeowner.block}, Lot ${homeowner.lot}`} action={<><Link className="btn-secondary" href={`/admin/homeowners/${homeowner.id}/soa`}><FileText className="size-4" /> Statement of Account</Link><form action={deleteHomeownerAction}><input type="hidden" name="id" value={homeowner.id} /><DeleteButton label="Delete profile" /></form></>} />
     {query.error && <Notice kind="error">{query.error}</Notice>}{query.success && <Notice kind="success">{query.message || "Saved."}</Notice>}
+    <section className="mb-6 grid gap-3 sm:grid-cols-3">
+      <Info label="Homeowner Account Number" value={accountNumber} mono />
+      <Info label="Property" value={`Block ${homeowner.block}, Lot ${homeowner.lot}`} />
+      <Info label="Tenant" value={homeowner.tenantId} mono />
+    </section>
     <HomeownerForm homeowner={homeowner} />
     <section className="card mt-6">
       <h2 className="text-lg font-black">Household and family members</h2>
@@ -87,6 +94,10 @@ export default async function EditHomeownerPage({ params, searchParams }: { para
 }
 
 function Notice({ kind, children }: { kind: "error" | "success"; children: React.ReactNode }) { return <div className={`mb-5 rounded-2xl border p-4 text-sm font-semibold ${kind === "error" ? "border-rose-200 bg-rose-50 text-rose-800" : "border-emerald-200 bg-emerald-50 text-emerald-800"}`}>{children}</div>; }
+
+function Info({ label, value, mono = false }: { label: string; value: string; mono?: boolean }) {
+  return <div className="rounded-xl border border-slate-200 bg-white p-4"><p className="text-xs font-bold uppercase tracking-wide text-slate-500">{label}</p><p className={`mt-1 break-words font-black text-slate-900 ${mono ? "font-mono text-sm" : ""}`}>{value}</p></div>;
+}
 
 function auditMetadataText(metadata: unknown, key: string) {
   if (!metadata || typeof metadata !== "object" || Array.isArray(metadata)) return null;

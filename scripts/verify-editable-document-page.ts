@@ -71,6 +71,7 @@ async function main() {
     rendererVersion: "1.0.0",
     mode: DocumentGenerationMode.ISSUE,
     preview: false,
+    renderMode: { mode: "official", documentNumber: "PAGE-2026-000001", verificationUrl: null, verificationToken: null, verificationRequired: false },
     metadata: { title: "Editable Page Test", documentNumber: "PAGE-2026-000001", issueDate: "July 19, 2026", validUntil: null, verificationUrl: null, locale: "en-PH" },
     page: setup.page,
     visualLayout: true,

@@ -8,6 +8,7 @@ import {
   type Prisma,
 } from "@prisma/client";
 import { platformPrisma } from "@/lib/db";
+import { isValidHomeownerAccountNumber } from "@/lib/services/homeowner-account-number";
 import type { DocumentCapabilities } from "@/lib/services/document-capabilities";
 import { normalizeDocumentFields, validateDocumentRequestData } from "@/lib/services/document-field-validation";
 import type { DocumentGenerationIssue } from "@/lib/services/document-generation-types";
@@ -59,6 +60,7 @@ export function validateGenerationEligibility(input: {
   if (blockedRequestStates.has(request.status)) block("REQUEST_STATE_BLOCKED", "REQUEST", "Cancelled or rejected requests cannot be issued.");
   if (!request.subjectSnapshot) block("SUBJECT_MISSING", "REQUEST", "The immutable request subject snapshot is missing.");
   if (request.subjectMember && request.subjectMember.tenantId !== context.tenantId) block("CROSS_TENANT_SUBJECT", "AUTHORIZATION", "Household-member subject belongs to another tenant.");
+  if (!isValidHomeownerAccountNumber(request.homeowner.accountNumber)) block("HOMEOWNER_ACCOUNT_NUMBER_MISSING", "REQUEST", "The homeowner profile is missing a valid 11-digit account number.", "Run the account-number backfill or update the homeowner profile before issuance.");
   if (!request.homeowner.address || !request.homeowner.block || !request.homeowner.lot) block("PROPERTY_RELATIONSHIP_MISSING", "REQUEST", "The requesting homeowner property relationship is incomplete.", "Complete the homeowner property profile.");
   const requestData = record(request.reviewedDataSnapshot ?? request.requestDataSnapshot);
   const fields = record(requestData.fields ?? requestData);

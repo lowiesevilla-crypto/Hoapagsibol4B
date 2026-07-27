@@ -672,6 +672,7 @@ model HomeownerProfile {
   propertyType      String?
   occupancyStatus   String?
   messengerId       String?
+  accountNumber     String?           @unique @db.VarChar(11)
   status            HomeownerStatus   @default(ACTIVE)
   monthlyDuesAmount Decimal           @db.Decimal(12, 2)
   bills             Bill[]
@@ -689,6 +690,21 @@ model HomeownerProfile {
   @@unique([tenantId, id])
   @@unique([tenantId, block, lot])
   @@index([status])
+  @@index([tenantId])
+}
+
+model HomeownerAccountNumberReservation {
+  tenantId      String   @default("tenant_pagsibol4b_default")
+  id            String   @id @default(cuid())
+  accountNumber String   @unique @db.VarChar(11)
+  homeownerId   String?
+  reason        String   @default("ASSIGNED")
+  reservedAt    DateTime @default(now())
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@unique([tenantId, id])
+  @@index([tenantId, homeownerId])
   @@index([tenantId])
 }
 

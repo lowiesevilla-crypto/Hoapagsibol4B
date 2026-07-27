@@ -12,7 +12,7 @@ export type PlaceholderResolutionContext = {
   tenant?: { name?: string; address?: string; tin?: string; secRegistration?: string; contactNumber?: string; email?: string; logo?: string };
   document?: { number?: string; title?: string; issueDate?: string; issuePlace?: string; status?: string; validUntil?: string };
   subject?: { fullName?: string; relationship?: string; address?: string; birthDate?: string; civilStatus?: string; nationality?: string; status?: string; residencyStartDate?: string; age?: string | number; occupation?: string; contactNumber?: string; phase?: string; propertyType?: string; occupancyStatus?: string };
-  property?: { block?: string; lot?: string; address?: string; accountLabel?: string; phase?: string; subdivision?: string };
+  property?: { block?: string; lot?: string; address?: string; accountNumber?: string; accountLabel?: string; phase?: string; subdivision?: string };
   request?: { purpose?: string; remarks?: string; copies?: string | number; requestedAt?: string };
   signatory?: { name?: string; position?: string };
   verification?: { url?: string; code?: string };
@@ -46,7 +46,7 @@ export async function listDocumentPlaceholders(context: DocumentExecutionContext
   assertDocumentTenant(context, context.tenantId);
   const custom = await platformPrisma.documentPlaceholderDefinition.findMany({ where: { OR: [{ tenantId: null, ownership: DocumentPlaceholderOwnership.PLATFORM }, { tenantId: context.tenantId, ownership: DocumentPlaceholderOwnership.TENANT }], active: true, ...(options.category ? { category: options.category } : {}) }, orderBy: [{ category: "asc" }, { key: "asc" }] });
   const customKeys = new Set(custom.map((item) => item.key));
-  const search = options.search!.trim().toLowerCase();
+  const search = typeof options.search === "string" ? options.search.trim().toLowerCase() : "";
   const platform = staticDefinitions.filter((item) => !customKeys.has(item.key) && (!options.category || item.category.toLowerCase() === options.category.toLowerCase()) && (!search || `${item.key} ${item.displayName} ${item.description}`.toLowerCase().includes(search)));
   return [...platform, ...custom.map((item) => ({ key: item.key, category: item.category, displayName: item.displayName, description: item.description || "Tenant-defined placeholder.", dataType: item.dataType, sample: item.exampleValue || sampleTemplateValue(item.key), sensitivity: item.sensitivity, ownership: item.ownership }))];
 }

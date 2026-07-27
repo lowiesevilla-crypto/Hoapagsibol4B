@@ -9,30 +9,30 @@ async function main() {
   let preserved = 0;
   let assigned = 0;
   const invalid: string[] = [];
+  let reassignedExistingValid = 0;
   for (const homeowner of homeowners) {
     if (homeowner.accountNumber) {
       if (isValidHomeownerAccountNumber(homeowner.accountNumber)) {
+        const before = homeowner.accountNumber;
         await platformPrisma.homeownerAccountNumberReservation.upsert({
           where: { accountNumber: homeowner.accountNumber },
           create: { tenantId: homeowner.tenantId, homeownerId: homeowner.id, accountNumber: homeowner.accountNumber, reason: "BACKFILL_PRESERVE" },
           update: { homeownerId: homeowner.id },
         });
+        if (homeowner.accountNumber !== before) reassignedExistingValid++;
         preserved++;
-        console.log(`PRESERVED homeowner=${homeowner.id}`);
         continue;
       }
       invalid.push(homeowner.id);
-      console.log(`INVALID homeowner=${homeowner.id}`);
       continue;
     }
     await ensureHomeownerAccountNumber(homeowner);
     assigned++;
-    console.log(`ASSIGNED homeowner=${homeowner.id}`);
   }
   if (invalid.length) {
     throw new Error(`Found ${invalid.length} homeowner profile(s) with invalid existing account numbers. Correct them before backfill can be considered complete.`);
   }
-  console.log(`DONE total=${homeowners.length} preserved=${preserved} assigned=${assigned}`);
+  console.log(`DONE total=${homeowners.length} preserved=${preserved} assigned=${assigned} invalid=${invalid.length} reassignedExistingValid=${reassignedExistingValid}`);
 }
 
 main()

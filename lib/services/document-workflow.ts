@@ -13,6 +13,7 @@ import {
 } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { asJson } from "@/lib/organization";
+import { homeownerAccountNumber, homeownerPropertyLabel } from "@/lib/homeowner-account";
 import { documentTypeLabel } from "@/lib/services/documents";
 import { money } from "@/lib/utils";
 
@@ -52,6 +53,7 @@ export type RequestSubjectSnapshot = {
   propertyAddress: string;
   block: string;
   lot: string;
+  accountNumber: string;
   accountLabel: string;
 };
 
@@ -113,6 +115,7 @@ export function legacyRequestFields(values: Record<string, string | boolean>) {
   return {
     purpose: text("purpose"),
     remarks: text("remarks"),
+    validityDate: text("validityDate"),
     scheduledDate: text("scheduledDate"),
     startTime: text("startTime"),
     endTime: text("endTime"),
@@ -144,7 +147,8 @@ export function buildSubjectSnapshot(args: {
     propertyAddress: homeowner.address,
     block: homeowner.block,
     lot: homeowner.lot,
-    accountLabel: `Block ${homeowner.block}, Lot ${homeowner.lot}`,
+    accountNumber: homeownerAccountNumber(homeowner),
+    accountLabel: homeownerPropertyLabel(homeowner),
   };
 }
 

@@ -3,7 +3,7 @@
 import { randomUUID } from "node:crypto";
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { DocumentDefinitionStatus, DocumentDeliveryMode, DocumentFieldType, DocumentOutstandingBalancePolicy, DocumentPlaceholderOwnership, DocumentRequestStatus, DocumentSequenceScope, DocumentSubjectType, DocumentTemplateOwnership, DocumentTemplateVersionStatus, DocumentType, DocumentWorkflowApprovalMode, DocumentWorkflowStepType, NotificationType, Prisma, Role } from "@prisma/client";
+import { DocumentDefinitionStatus, DocumentDeliveryMode, DocumentFieldType, DocumentGenerationMode, DocumentOutstandingBalancePolicy, DocumentPlaceholderOwnership, DocumentRequestStatus, DocumentSequenceScope, DocumentSubjectType, DocumentTemplateOwnership, DocumentTemplateVersionStatus, DocumentType, DocumentWorkflowApprovalMode, DocumentWorkflowStepType, NotificationType, Prisma, Role } from "@prisma/client";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { requireUser } from "@/lib/auth";
@@ -26,6 +26,8 @@ import { CERTIFICATE_OF_RESIDENCY_CODE } from "@/lib/services/certificate-of-res
 import { recordDocumentNotification } from "@/lib/services/document-notifications";
 import { documentContextFromUser } from "@/lib/services/document-runtime-context";
 import { approveDocumentWorkflowRequest, executeDocumentWorkflowAfterSubmission, retryDocumentGeneration } from "@/lib/services/document-workflow-executor";
+import { ensureHomeownerAccountNumber } from "@/lib/services/homeowner-account-number";
+import { resolveEffectiveDocumentTemplate } from "@/lib/services/document-template-runtime";
 
 export type DocumentRequestSubmissionState = {
   status: "idle" | "success" | "error";
@@ -118,7 +120,9 @@ async function submitDocumentRequest(user: Awaited<ReturnType<typeof requireUser
   const context = documentContextFromUser(user);
   const platformCertificate = definitionRecord?.code === CERTIFICATE_OF_RESIDENCY_CODE;
   if (platformCertificate && (workflowRecord.approvalRequired || workflowRecord.requiresAdminReview) && !definitionRecord.workflowDefinitionId) fail("This document requires approval, but no approval workflow is configured. Please contact the HOA office.");
-  const subjectSnapshot = buildSubjectSnapshot({ subjectType, homeowner: homeownerRecord, member });
+  const accountNumber = await ensureHomeownerAccountNumber(homeownerRecord);
+  const subjectSnapshot = buildSubjectSnapshot({ subjectType, homeowner: { ...homeownerRecord, accountNumber }, member });
+  const publishedTemplate = definitionRecord ? await resolveEffectiveDocumentTemplate(context, { definitionId: definitionRecord.id, mode: DocumentGenerationMode.ISSUE }) : null;
   const requestDataSnapshot = definitionRecord
     ? asJson({ definitionId: definitionRecord.id, definitionVersion: definitionRecord.version, code: definitionRecord.code, displayName: definitionRecord.displayName, legacyType: definitionRecord.legacyType, fields: parsed.values, numberOfCopies })
     : requestDataSnapshotJson(configRecord!, parsed.values, numberOfCopies);
@@ -132,8 +136,8 @@ async function submitDocumentRequest(user: Awaited<ReturnType<typeof requireUser
       tenantId: user.tenantId, submissionKey, homeownerId, type: legacyType, configurationId: configRecord?.id, configurationVersion: configRecord?.version,
       definitionId: definitionRecord?.id, definitionVersionSnapshot: definitionRecord?.version,
       definitionSnapshot: definitionRecord ? asJson({ id: definitionRecord.id, code: definitionRecord.code, displayName: definitionRecord.displayName, version: definitionRecord.version, legacyType: definitionRecord.legacyType, deliveryMode: definitionRecord.deliveryMode, approvalRequired: definitionRecord.approvalRequired, paymentRequired: definitionRecord.paymentRequired, feeAmount: String(definitionRecord.feeAmount), numberingFormat: definitionRecord.numberingFormat, outstandingBalancePolicy: definitionRecord.outstandingBalancePolicy }) : undefined,
-      templateVersionIdSnapshot: definitionRecord?.assignedTemplateVersion?.id, templateDefinitionSnapshot: definitionRecord?.assignedTemplateVersion?.definitionJson ?? undefined,
-      templateIdSnapshot: configRecord?.template?.id, templateVersionSnapshot: configRecord?.template?.version, subjectType, subjectMemberId: member?.id,
+      templateVersionIdSnapshot: publishedTemplate?.id, templateDefinitionSnapshot: publishedTemplate?.definitionJson ?? undefined,
+      templateIdSnapshot: configRecord?.template?.id, templateVersionSnapshot: publishedTemplate?.version ?? configRecord?.template?.version, subjectType, subjectMemberId: member?.id,
       subjectSnapshot: subjectSnapshotJson(subjectSnapshot), requestDataSnapshot, deliveryModeSnapshot: workflowRecord.deliveryMode,
       approvalRequiredSnapshot: workflowRecord.approvalRequired || workflowRecord.requiresAdminReview, paymentRequiredSnapshot: workflowRecord.paymentRequired,
       feeAmountSnapshot: workflowRecord.feeAmount, numberOfCopies, purpose: purposeValue, remarks, scheduledDate, startTime: legacy.startTime, endTime: legacy.endTime,
@@ -416,40 +420,59 @@ export async function repairDocumentDefinitionAction(formData: FormData) {
 
 export async function generateManualDocumentAction(formData: FormData) {
   const admin = await requireUser(Role.ADMIN);
-  const homeownerId = String(formData.get("homeownerId") || "");
+  const homeownerId = clean(formData.get("homeownerId"));
   const definitionId = clean(formData.get("definitionId"));
-  const purpose = clean(formData.get("purpose"));
   const onBehalfReason = clean(formData.get("onBehalfReason"));
-  if (!homeownerId || !definitionId || !purpose || !onBehalfReason) redirect("/admin/documents/new?error=Select%20a%20homeowner%2C%20document%20type%2C%20purpose%2C%20and%20office%20request%20reason.");
+  const subjectType = String(formData.get("subjectType") || DocumentSubjectType.SELF) === DocumentSubjectType.HOUSEHOLD_MEMBER ? DocumentSubjectType.HOUSEHOLD_MEMBER : DocumentSubjectType.SELF;
+  const subjectMemberId = clean(formData.get("subjectMemberId"));
+  if (!homeownerId || !definitionId || !onBehalfReason) redirect("/admin/documents/new?error=Select%20a%20homeowner%2C%20document%20type%2C%20and%20office%20request%20reason.");
   const [homeowner, definition] = await Promise.all([
     prisma.homeownerProfile.findFirst({ where: { id: homeownerId, tenantId: admin.tenantId }, include: { user: true } }),
     prisma.documentDefinition.findFirst({ where: { id: definitionId, tenantId: admin.tenantId }, include: { fields: { where: { active: true }, orderBy: [{ displayOrder: "asc" }] }, assignedTemplateVersion: { include: { templateSet: true } } } }),
   ]);
   if (!homeowner) redirect("/admin/documents/new?error=Homeowner%20not%20found.");
   if (!definition || !definition.active || definition.status !== DocumentDefinitionStatus.ACTIVE || definition.archivedAt || !definition.walkInEnabled) redirect("/admin/documents/new?error=This%20document%20type%20is%20not%20available%20for%20walk-in%20requests.");
+  if (subjectType === DocumentSubjectType.HOUSEHOLD_MEMBER && !definition.householdMemberEnabled) redirect("/admin/documents/new?error=This%20document%20type%20does%20not%20allow%20household-member%20subjects.");
   const completeness = evaluateDefinitionCompleteness(definition);
   if (!completeness.requestable) redirect(`/admin/documents/new?error=${encodeURIComponent(`This document type is not ready for walk-in requests: ${completeness.errors[0] || completeness.status}.`)}`);
-  const requestValues = { purpose, remarks: clean(formData.get("remarks")) || "", validityDate: String(formData.get("validityDate") || ""), scheduledDate: String(formData.get("scheduledDate") || ""), startTime: clean(formData.get("startTime")) || "", endTime: clean(formData.get("endTime")) || "", passType: clean(formData.get("passType")) || "", vehicleDetails: clean(formData.get("vehicleDetails")) || "", partyName: clean(formData.get("partyName")) || "", contractorDetails: clean(formData.get("contractorDetails")) || "", representativeName: clean(formData.get("representativeName")) || "", propertyDetails: clean(formData.get("propertyDetails")) || homeowner!.address };
+  const parsed = parseConfiguredFields(formData, definition.fields);
+  if (parsed.errors.length) redirect(`/admin/documents/new?error=${encodeURIComponent(parsed.errors[0])}`);
+  const legacy = legacyRequestFields(parsed.values);
+  const purpose = clean(formData.get("purpose")) || legacy.purpose;
+  if (!purpose || purpose.length < 3) redirect("/admin/documents/new?error=Enter%20the%20purpose%20of%20the%20request.");
+  const member = subjectType === DocumentSubjectType.HOUSEHOLD_MEMBER
+    ? await prisma.householdMember.findFirst({ where: { id: subjectMemberId || "", tenantId: admin.tenantId, homeownerId } })
+    : null;
+  if (subjectType === DocumentSubjectType.HOUSEHOLD_MEMBER) {
+    const eligibility = householdMemberEligibility(member, { tenantId: admin.tenantId, homeownerId });
+    if (!eligibility.eligible) redirect(`/admin/documents/new?error=${encodeURIComponent(eligibility.reason)}`);
+  }
+  const requestValues = { ...parsed.values, purpose, remarks: legacy.remarks || "", validityDate: legacy.validityDate || "", scheduledDate: legacy.scheduledDate || "", startTime: legacy.startTime || "", endTime: legacy.endTime || "", passType: legacy.passType || "", vehicleDetails: legacy.vehicleDetails || "", partyName: legacy.partyName || "", contractorDetails: legacy.contractorDetails || "", representativeName: legacy.representativeName || "", propertyDetails: legacy.propertyDetails || homeowner!.address };
   const outstandingBalance = await getQualifyingHomeownerBalance(admin.tenantId, homeownerId);
   if (definition.outstandingBalancePolicy === DocumentOutstandingBalancePolicy.BLOCK_REQUEST && outstandingBalance > 0) redirect(`/admin/documents/new?error=${encodeURIComponent(balancePolicyLockMessage(definition.outstandingBalancePolicy, outstandingBalance))}`);
   const expectedStatus = statusForConfiguration(definition);
   const initialStatus = expectedStatus;
-  const subjectSnapshot = buildSubjectSnapshot({ subjectType: DocumentSubjectType.SELF, homeowner: homeowner! });
+  const accountNumber = await ensureHomeownerAccountNumber(homeowner!);
+  const subjectSnapshot = buildSubjectSnapshot({ subjectType, homeowner: { ...homeowner!, accountNumber }, member });
+  const context = documentContextFromUser(admin);
+  const publishedTemplate = await resolveEffectiveDocumentTemplate(context, { definitionId: definition!.id, mode: DocumentGenerationMode.ISSUE });
   const request = await platformPrisma.$transaction(async (tx) => {
-    const created = await tx.documentRequest.create({ data: { tenantId: admin.tenantId, homeownerId, type: definition!.legacyType, definitionId: definition!.id, definitionVersionSnapshot: definition!.version, definitionSnapshot: asJson({ id: definition!.id, code: definition!.code, displayName: definition!.displayName, version: definition!.version, deliveryMode: definition!.deliveryMode, approvalRequired: definition!.approvalRequired, paymentRequired: definition!.paymentRequired, feeAmount: String(definition!.feeAmount), outstandingBalancePolicy: definition!.outstandingBalancePolicy }), templateVersionIdSnapshot: definition!.assignedTemplateVersion!.id, templateDefinitionSnapshot: definition!.assignedTemplateVersion!.definitionJson ?? undefined, subjectType: DocumentSubjectType.SELF, subjectSnapshot: subjectSnapshotJson(subjectSnapshot), requestDataSnapshot: asJson({ definitionId: definition!.id, fields: requestValues, numberOfCopies: 1 }), deliveryModeSnapshot: definition!.deliveryMode, approvalRequiredSnapshot: definition!.approvalRequired || definition!.requiresAdminReview, paymentRequiredSnapshot: definition!.paymentRequired, feeAmountSnapshot: definition!.feeAmount, numberOfCopies: 1, origin: "ADMIN", initiatedById: admin.id, status: initialStatus, purpose, remarks: requestValues.remarks, validityDate: optionalDate(formData.get("validityDate")), scheduledDate: optionalDate(formData.get("scheduledDate")), startTime: requestValues.startTime, endTime: requestValues.endTime, passType: requestValues.passType, vehicleDetails: requestValues.vehicleDetails, partyName: requestValues.partyName, contractorDetails: requestValues.contractorDetails, representativeName: requestValues.representativeName, propertyDetails: requestValues.propertyDetails, outstandingBalanceAtRequest: outstandingBalance } });
+    const created = await tx.documentRequest.create({ data: { tenantId: admin.tenantId, homeownerId, type: definition!.legacyType, definitionId: definition!.id, definitionVersionSnapshot: definition!.version, definitionSnapshot: asJson({ id: definition!.id, code: definition!.code, displayName: definition!.displayName, version: definition!.version, deliveryMode: definition!.deliveryMode, approvalRequired: definition!.approvalRequired, paymentRequired: definition!.paymentRequired, feeAmount: String(definition!.feeAmount), outstandingBalancePolicy: definition!.outstandingBalancePolicy }), templateVersionIdSnapshot: publishedTemplate.id, templateVersionSnapshot: publishedTemplate.version, templateDefinitionSnapshot: publishedTemplate.definitionJson ?? undefined, subjectType, subjectMemberId: member?.id, subjectSnapshot: subjectSnapshotJson(subjectSnapshot), requestDataSnapshot: asJson({ definitionId: definition!.id, definitionVersion: definition!.version, code: definition!.code, displayName: definition!.displayName, legacyType: definition!.legacyType, fields: requestValues, numberOfCopies: 1, origin: "ADMIN" }), deliveryModeSnapshot: definition!.deliveryMode, approvalRequiredSnapshot: definition!.approvalRequired || definition!.requiresAdminReview, paymentRequiredSnapshot: definition!.paymentRequired, feeAmountSnapshot: definition!.feeAmount, numberOfCopies: 1, origin: "ADMIN", initiatedById: admin.id, status: initialStatus, purpose, remarks: requestValues.remarks, validityDate: optionalDateFromString(requestValues.validityDate), scheduledDate: optionalDateFromString(requestValues.scheduledDate), startTime: requestValues.startTime, endTime: requestValues.endTime, passType: requestValues.passType, vehicleDetails: requestValues.vehicleDetails, partyName: requestValues.partyName, contractorDetails: requestValues.contractorDetails, representativeName: requestValues.representativeName, propertyDetails: requestValues.propertyDetails, outstandingBalanceAtRequest: outstandingBalance } });
     await tx.documentRequestHistory.create({ data: { tenantId: admin.tenantId, requestId: created.id, status: initialStatus, actorId: admin.id, note: `Created by administrator for an office-assisted transaction. Reason: ${onBehalfReason}` } });
-    await tx.auditLog.create({ data: { tenantId: admin.tenantId, actorId: admin.id, module: "DOCUMENTS", action: "ADMIN_INITIATE_DOCUMENT", entityType: "DocumentRequest", entityId: created.id, reason: onBehalfReason, metadata: { homeownerId, definitionId: definition!.id, code: definition!.code, role: admin.role, status: initialStatus } } });
+    await tx.auditLog.create({ data: { tenantId: admin.tenantId, actorId: admin.id, module: "DOCUMENTS", action: "ADMIN_INITIATE_DOCUMENT", entityType: "DocumentRequest", entityId: created.id, reason: onBehalfReason, metadata: { homeownerId, definitionId: definition!.id, code: definition!.code, role: admin.role, status: initialStatus, subjectType, subjectMemberId: member?.id ?? null } } });
     return created;
   });
-  await recordDocumentNotification({ context: documentContextFromUser(admin), recipientId: homeowner.user.id, event: "REQUEST_SUBMITTED", subject: "Office-assisted document request created", message: `${definition.displayName} was created by the HOA office.`, entityType: "DocumentRequest", entityId: request.id, eventKey: `REQUEST_SUBMITTED:DocumentRequest:${request.id}` });
-  const result = await executeDocumentWorkflowAfterSubmission(documentContextFromUser(admin), request.id);
+  await recordDocumentNotification({ context, recipientId: homeowner.user.id, event: "REQUEST_SUBMITTED", subject: "Office-assisted document request created", message: `${definition.displayName} was created by the HOA office.`, entityType: "DocumentRequest", entityId: request.id, eventKey: `REQUEST_SUBMITTED:DocumentRequest:${request.id}` });
+  const result = await executeDocumentWorkflowAfterSubmission(context, request.id);
   const nextStep = result.action === "GENERATED"
     ? "Issued through the document workflow engine."
     : result.action === "PAYMENT_REQUIRED"
       ? "Confirm the document fee payment."
       : result.action === "APPROVAL_REQUIRED"
         ? "Submit for approval."
-        : "Manual processing.";
+        : result.action === "GENERATION_FAILED"
+          ? "Generation failed safely; review the error and use Retry Generation after correcting the issue."
+          : "Manual processing.";
   redirect(`/admin/documents/${request.id}?success=created&message=${encodeURIComponent(`Walk-In / Office Request created. Next step: ${nextStep}`)}`);
 }
 

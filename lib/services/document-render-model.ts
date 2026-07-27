@@ -14,6 +14,7 @@ import {
   type PlaceholderMode,
   type PlaceholderResolutionContext,
 } from "@/lib/services/document-placeholders";
+import { DocumentRuntimeError } from "@/lib/services/document-runtime-errors";
 
 export type DocumentRenderBlock = Omit<DocumentTemplateBlock, "content" | "text" | "table"> & {
   content: string;
@@ -42,11 +43,28 @@ export type DocumentRenderBlock = Omit<DocumentTemplateBlock, "content" | "text"
   };
 };
 
+export type DocumentRenderMode =
+  | {
+      mode: "preview";
+      documentNumber: "PREVIEW" | "PENDING";
+      verificationUrl: null;
+      verificationToken: null;
+      verificationRequired: false;
+    }
+  | {
+      mode: "official";
+      documentNumber: string;
+      verificationUrl: string | null;
+      verificationToken: string | null;
+      verificationRequired: boolean;
+    };
+
 export type DocumentRenderModel = {
   schemaVersion: 1;
   rendererVersion: string;
   mode: DocumentGenerationMode;
   preview: boolean;
+  renderMode: DocumentRenderMode;
   metadata: {
     title: string;
     documentNumber: string;
@@ -77,6 +95,8 @@ export function buildDocumentRenderModel(input: {
   issueDate: string;
   validUntil?: string | null;
   verificationUrl?: string | null;
+  verificationToken?: string | null;
+  requireVerification?: boolean;
   mode: DocumentGenerationMode;
   placeholderMode?: PlaceholderMode;
   placeholderContext: PlaceholderResolutionContext;
@@ -146,11 +166,13 @@ export function buildDocumentRenderModel(input: {
   const page = input.mode === "PREVIEW"
     ? { ...template.page, watermark: { ...template.page.watermark, enabled: true, text: "PREVIEW - NOT VALID FOR ISSUANCE", opacity: 0.14 } }
     : template.page;
+  const renderMode = buildRenderMode(input);
   return {
     schemaVersion: 1,
     rendererVersion: "1.0.0",
     mode: input.mode,
     preview: input.mode === "PREVIEW",
+    renderMode,
     metadata: { title: input.title, documentNumber: input.documentNumber, issueDate: input.issueDate, validUntil: input.validUntil ?? null, verificationUrl: input.verificationUrl ?? null, locale: "en-PH" },
     page,
     visualLayout,
@@ -162,6 +184,33 @@ export function buildDocumentRenderModel(input: {
     officerListValidationErrors: [...officerListValidationErrors],
     warnings: [...warnings],
   };
+}
+
+function buildRenderMode(input: { mode: DocumentGenerationMode; documentNumber: string; verificationUrl?: string | null; verificationToken?: string | null; requireVerification?: boolean }): DocumentRenderMode {
+  const official = input.mode === "ISSUE" || input.mode === "REISSUE";
+  if (!official) return { mode: "preview", documentNumber: input.documentNumber === "PENDING" ? "PENDING" : "PREVIEW", verificationUrl: null, verificationToken: null, verificationRequired: false };
+  const documentNumber = safeText(input.documentNumber).trim();
+  const verificationUrl = safeText(input.verificationUrl).trim() || null;
+  const verificationToken = safeText(input.verificationToken).trim() || null;
+  const verificationRequired = input.requireVerification === true;
+  if (verificationRequired) {
+    if (!documentNumber || documentNumber === "PREVIEW" || documentNumber === "PENDING") {
+      throw new DocumentRuntimeError("OFFICIAL_VERIFICATION_CONTEXT_MISSING", "Official document generation could not continue because the document number was not created.");
+    }
+    if (!verificationUrl || !isValidVerificationUrl(verificationUrl) || !verificationToken) {
+      throw new DocumentRuntimeError("OFFICIAL_VERIFICATION_CONTEXT_MISSING", "Official document generation could not continue because the verification URL was not created.");
+    }
+  }
+  return { mode: "official", documentNumber, verificationUrl, verificationToken, verificationRequired };
+}
+
+function isValidVerificationUrl(value: string) {
+  try {
+    const url = new URL(value);
+    return url.protocol === "http:" || url.protocol === "https:";
+  } catch {
+    return false;
+  }
 }
 
 function resolveRichText(richText: DocumentRichText, resolveText: (value: string) => ReturnType<typeof resolveDocumentPlaceholders>, collect: (result: ReturnType<typeof resolveDocumentPlaceholders>) => void) {
@@ -198,10 +247,11 @@ function resolveOfficerList(config: NonNullable<DocumentTemplateBlock["officerLi
     errors.push("Officer list source does not belong to the authenticated tenant.");
     return { snapshot: null, errors, warnings };
   }
-  const roles = config.roleFilters.map((role) => role.trim().toLowerCase()).filter(Boolean);
-  const invalidRoles = roles.filter((role) => !organization.officers.some((officer) => officer.position.trim().toLowerCase() === role));
+  const roles = Array.isArray(config.roleFilters) ? config.roleFilters.map((role) => safeText(role).trim().toLowerCase()).filter(Boolean) : [];
+  const officerPosition = (officer: { position?: unknown }) => safeText(officer.position).trim().toLowerCase();
+  const invalidRoles = roles.filter((role) => !organization.officers.some((officer) => officerPosition(officer) === role));
   if (invalidRoles.length) errors.push("Officer list role filter does not match an active tenant officer position.");
-  const filtered = organization.officers.filter((officer) => !roles.length || roles.includes(officer.position.trim().toLowerCase()));
+  const filtered = organization.officers.filter((officer) => !roles.length || roles.includes(officerPosition(officer)));
   if (!filtered.length) {
     errors.push("Officer list has no available active tenant officers.");
     return { snapshot: null, errors, warnings };
@@ -218,4 +268,8 @@ function resolveOfficerList(config: NonNullable<DocumentTemplateBlock["officerLi
 function officerListText(list: NonNullable<DocumentRenderBlock["officerListData"]>) {
   const lines = [list.showHeading ? list.heading : "", list.showTerm && list.term ? `${list.termLabel ? `${list.termLabel} ` : ""}${list.term}` : "", ...list.officers.flatMap((officer) => [officer.fullName, officer.position])];
   return lines.filter(Boolean).join("\n");
+}
+
+function safeText(value: unknown) {
+  return typeof value === "string" || typeof value === "number" ? String(value) : "";
 }

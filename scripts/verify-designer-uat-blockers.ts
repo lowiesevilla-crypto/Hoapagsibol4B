@@ -3,6 +3,7 @@ import { readFile } from "node:fs/promises";
 import { allowedDocumentPlaceholders, defaultTemplateDefinition, normalizeTemplateDefinition, validateTemplateDefinition } from "../lib/services/document-template-builder";
 import { buildDocumentRenderModel } from "../lib/services/document-render-model";
 import { htmlDocumentRenderer } from "../lib/services/document-renderers";
+import { DocumentRuntimeError } from "../lib/services/document-runtime-errors";
 
 function assert(condition: unknown, message: string): asserts condition {
   if (!condition) throw new Error(`FAIL: ${message}`);
@@ -53,13 +54,26 @@ async function main() {
   assert(rendered.content.includes("--officer-heading-size:14pt") && rendered.content.includes("--officer-term-size:10pt") && rendered.content.includes("--officer-name-size:10pt") && rendered.content.includes("--officer-position-size:8pt") && rendered.content.includes("--officer-spacing:5mm") && rendered.content.includes("--officer-name-weight:normal") && rendered.content.includes("--officer-position-color:#163B72"), "officer typography matches preview and issued renderer output");
   assert(rendered.content.includes("Rendered Officer"), "officer names remain tenant-bound and are rendered from tenant data");
 
-  const officialModel = buildDocumentRenderModel({ templateDefinition: definition, title: "UAT Certificate", documentNumber: "COR-2026-000001", issueDate: "July 19, 2026", verificationUrl: "https://example.test/verify/secure-token", mode: DocumentGenerationMode.ISSUE, placeholderContext: { tenantId: "tenant-a", tenant: { name: "Tenant A", logo: "/uploads/tenant/logo.png" }, organization: { tenantId: "tenant-a", officers: [] }, permissions: new Set<string>(["DOCUMENT_PLACEHOLDER:PERSONAL"]) }, placeholderDefinitions });
+  const officialModel = buildDocumentRenderModel({ templateDefinition: definition, title: "UAT Certificate", documentNumber: "COR-2026-000001", issueDate: "July 19, 2026", verificationUrl: "http://localhost:3000/verify/documents/secure-token", verificationToken: "secure-token", requireVerification: true, mode: DocumentGenerationMode.ISSUE, placeholderContext: { tenantId: "tenant-a", tenant: { name: "Tenant A", logo: "/uploads/tenant/logo.png" }, organization: { tenantId: "tenant-a", officers: [] }, permissions: new Set<string>(["DOCUMENT_PLACEHOLDER:PERSONAL"]) }, placeholderDefinitions });
   const officialRendered = await htmlDocumentRenderer.render(officialModel);
-  assert(officialRendered.content.includes("data:image/png;base64,") && !officialRendered.content.includes("PREVIEW QR — NOT VALID FOR VERIFICATION"), "official QR rendering remains secure and uses the real verification URL without preview labeling");
+  assert(officialModel.renderMode.mode === "official" && officialModel.renderMode.verificationUrl?.startsWith("http://localhost:3000/verify/documents/"), "official render mode accepts localhost verification URLs");
+  assert(officialRendered.content.includes("data:image/png;base64,") && !officialRendered.content.includes("PREVIEW QR") && !officialRendered.content.includes("NOT VALID FOR VERIFICATION"), "official QR rendering uses the real verification URL without preview labeling");
+  assert(officialRendered.content.includes("SCAN TO VERIFY") || officialRendered.content.includes("Scan to verify"), "official QR keeps only verification wording");
+  const missingContext = captureError(() => buildDocumentRenderModel({ templateDefinition: definition, title: "UAT Certificate", documentNumber: "COR-2026-000002", issueDate: "July 19, 2026", verificationUrl: null, verificationToken: null, requireVerification: true, mode: DocumentGenerationMode.ISSUE, placeholderContext: { tenantId: "tenant-a", tenant: { name: "Tenant A" }, organization: { tenantId: "tenant-a", officers: [] }, permissions: new Set<string>(["DOCUMENT_PLACEHOLDER:PERSONAL"]) }, placeholderDefinitions }));
+  assert(missingContext instanceof DocumentRuntimeError && missingContext.code === "OFFICIAL_VERIFICATION_CONTEXT_MISSING", "missing official verification context fails with structured error");
 
   const legacy = buildDocumentRenderModel({ templateDefinition: normalizeTemplateDefinition({ ...base, sections: { ...base.sections, body: [{ ...base.sections.body[0], content: "Type to edit" }] } }, "Legacy"), title: "Legacy", documentNumber: "PREVIEW", issueDate: "July 19, 2026", mode: DocumentGenerationMode.PREVIEW, placeholderContext: { tenantId: "tenant-a", tenant: { name: "Tenant A" }, organization: { tenantId: "tenant-a", officers: [] }, permissions: new Set<string>() }, placeholderDefinitions });
   const legacyRendered = await htmlDocumentRenderer.render(legacy);
   assert(legacyRendered.content.includes("Type to edit"), "legacy intentional literal content remains unchanged");
+}
+
+function captureError(fn: () => unknown) {
+  try {
+    fn();
+    return null;
+  } catch (error) {
+    return error;
+  }
 }
 
 main().catch((error) => { console.error(error); process.exitCode = 1; });

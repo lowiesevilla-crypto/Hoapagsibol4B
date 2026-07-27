@@ -203,7 +203,7 @@ async function continueAfterPaymentOrApproval(context: DocumentExecutionContext,
 
 async function issueOfficialDocument(context: DocumentExecutionContext, request: WorkflowRequest): Promise<DocumentWorkflowExecutorResult> {
   if (request.currentVersion > 0 || issuedStatuses.has(request.status)) return { requestId: request.id, status: request.status, action: "NOOP", documentNumber: request.documentNumber };
-  if (!request.definition?.assignedTemplateVersion) throw new DocumentRuntimeError("TEMPLATE_UNAVAILABLE", "No active published template version is assigned to this document definition.");
+  if (!request.templateVersionIdSnapshot && !request.definition?.assignedTemplateVersion) throw new DocumentRuntimeError("DOCUMENT_TEMPLATE_VERSION_NOT_AVAILABLE", "No approved and published template version is available for this document definition.");
   await ensureStatus(context, request, DocumentRequestStatus.GENERATING, "Official document generation started.");
   try {
     const result = await generateDocument(context, request.id, { mode: DocumentGenerationMode.ISSUE, idempotencyKey: `workflow:issue:${request.id}` });

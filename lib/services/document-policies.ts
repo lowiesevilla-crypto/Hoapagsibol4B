@@ -110,13 +110,17 @@ async function evaluatePolicy(context: DocumentExecutionContext, policy: { id: s
     if (policy.type === DocumentPolicyType.PROPERTY_OWNERSHIP) {
       if (!input.homeownerId) return { ...base, status: "ERROR", summary: "Homeowner context is required.", reasons: ["No homeowner was supplied for property evaluation."], relevantMetadata: {} };
       const homeowner = await platformPrisma.homeownerProfile.findFirst({ where: { id: input.homeownerId, tenantId: context.tenantId }, select: { address: true, block: true, lot: true } });
-      const passed = Boolean(homeowner?.address.trim() && homeowner.block.trim() && homeowner.lot.trim());
+      const passed = Boolean(safeText(homeowner?.address).trim() && safeText(homeowner?.block).trim() && safeText(homeowner?.lot).trim());
       return { ...base, status: passed ? "PASS" : policy.blocking ? "FAIL" : "WARNING", summary: passed ? "Tenant property relationship is verified." : "Tenant property relationship is incomplete.", reasons: passed ? [] : ["A tenant-scoped address, block, and lot relationship is required."], relevantMetadata: { propertyRelationshipVerified: passed } };
     }
     return { ...base, status: "SKIPPED", summary: "No safe evaluator is registered for this policy type yet.", reasons: ["The policy remains configurable for a future domain adapter."], relevantMetadata: {} };
   } catch (error) {
     return { ...base, status: "ERROR", summary: "Policy evaluation failed.", reasons: [error instanceof Error ? error.message : "Unknown evaluation error."], relevantMetadata: {} };
   }
+}
+
+function safeText(value: unknown) {
+  return typeof value === "string" || typeof value === "number" ? String(value) : "";
 }
 
 function validatePolicyParameters(type: DocumentPolicyType, value: unknown) {

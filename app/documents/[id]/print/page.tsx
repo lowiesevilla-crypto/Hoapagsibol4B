@@ -2,14 +2,21 @@ import { headers } from "next/headers";
 import QRCode from "qrcode";
 import { AssociationLogo } from "@/components/association-logo";
 import { DocumentPreview } from "@/components/document-preview";
+import { IssuedDocumentPrintRunner } from "@/components/issued-document-print-runner";
 import { getAccessibleGeneratedDocument } from "@/lib/document-access";
 import { documentTypeLabel, isPassDocument } from "@/lib/services/documents";
+import { getIssuedDocumentRenderSource, renderIssuedDocumentPrintHtml } from "@/lib/services/issued-document-export";
 import { getAssociationSettings } from "@/lib/system-settings";
 import { shortDate } from "@/lib/utils";
 
 export default async function PrintDocumentPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const { user, request } = await getAccessibleGeneratedDocument(id, { requireDownload: true });
+  const currentVersion = request.versions[0] ?? null;
+  if (currentVersion?.rendererName === "hoahub-safe-html") {
+    const source = await getIssuedDocumentRenderSource(id, { requireDownload: true });
+    return <DocumentOnlyPrint html={renderIssuedDocumentPrintHtml(source)} />;
+  }
   const [currentAssociation, requestHeaders] = await Promise.all([getAssociationSettings(user.tenantId), headers()]);
   const association = request.associationSnapshot && typeof request.associationSnapshot === "object" ? { ...currentAssociation, ...request.associationSnapshot as Partial<typeof currentAssociation> } : currentAssociation;
   const host = requestHeaders.get("x-forwarded-host") || requestHeaders.get("host") || "localhost:3000";
@@ -17,6 +24,10 @@ export default async function PrintDocumentPage({ params }: { params: Promise<{ 
   const verifyUrl = `${proto}://${host}/verify/documents/${request.verificationCode}`;
   const qrDataUrl = await QRCode.toDataURL(verifyUrl, { width: 220, margin: 1, errorCorrectionLevel: "M" });
   return <DocumentPreview backHref={`/documents/${id}`} downloadHref={`/documents/${id}/pdf`}>{isPassDocument(request.type) ? <PassSheet request={request} association={association} qr={qrDataUrl} /> : request.type === "CERTIFICATE_OF_RESIDENCY" ? <ResidencySheet request={request} association={association} qr={qrDataUrl} /> : <ClearanceSheet request={request} association={association} qr={qrDataUrl} />}</DocumentPreview>;
+}
+
+function DocumentOnlyPrint({ html }: { html: string }) {
+  return <main><div dangerouslySetInnerHTML={{ __html: html }} /><IssuedDocumentPrintRunner /></main>;
 }
 
 type Request = Awaited<ReturnType<typeof getAccessibleGeneratedDocument>>["request"];

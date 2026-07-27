@@ -7,7 +7,7 @@ import { prisma } from "@/lib/db";
 
 export async function requireHomeownerProfile() {
   const user = await requireUser(Role.HOMEOWNER);
-  const profile = await prisma.homeownerProfile.findUnique({ where: { userId: user.id }, include: { user: true } });
+  const profile = await prisma.homeownerProfile.findFirst({ where: { userId: user.id, tenantId: user.tenantId }, include: { user: true } });
   if (!profile) notFound();
   return profile;
 }

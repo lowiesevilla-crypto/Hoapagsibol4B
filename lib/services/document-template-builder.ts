@@ -31,6 +31,7 @@ export const allowedDocumentPlaceholders = [
   "property.block",
   "property.lot",
   "property.address",
+  "property.accountNumber",
   "property.accountLabel",
   "property.phase",
   "property.subdivision",
@@ -87,6 +88,7 @@ export const placeholderGroups: { group: string; items: { key: AllowedDocumentPl
     { key: "property.block", label: "Block", sample: "1" },
     { key: "property.lot", label: "Lot", sample: "2" },
     { key: "property.address", label: "Property address", sample: "Block 1 Lot 2, Test HOA" },
+    { key: "property.accountNumber", label: "Homeowner account number", sample: "12345678901" },
     { key: "property.accountLabel", label: "Account label", sample: "Block 1 Lot 2" },
     { key: "property.phase", label: "Phase", sample: "Phase 2" },
     { key: "property.subdivision", label: "Subdivision", sample: "Test HOA" },
@@ -486,7 +488,7 @@ export function validateTemplateDefinition(value: unknown, options: { allowedPla
       if (block.type === "qrVerification" && (position.width < 25 || position.height < 25)) warnings.push(`The QR code is below the recommended printable size (${block.label || block.id}).`);
       if (block.type === "qrVerification" && block.qr?.squareLocked && Math.abs(position.width - position.height) > 0.1) errors.push(`The QR code must remain square (${block.label || block.id}).`);
     }
-    const text = block.content ?? block.text ?? "";
+    const text = safeTemplateText(block.content ?? block.text);
     if (["text", "textBox", "paragraph", "bodyText", "tenantName", "address", "heading"].includes(block.type) && !text.trim() && !(block.richText?.children.length)) warnings.push(`This text element is empty and will not appear in the document (${block.label || block.id}).`);
     for (const placeholder of extractPlaceholders(text)) {
       if (!knownPlaceholders.has(placeholder)) errors.push(`Unsupported placeholder: ${placeholder}`);
@@ -516,7 +518,8 @@ export function validateTemplateDefinition(value: unknown, options: { allowedPla
       const config = block.officerList || defaultOfficerListConfig;
       if (config.source !== "TENANT_ORGANIZATION_OFFICERS") errors.push(`Officer list ${block.id} must use the trusted tenant organization source.`);
       if (config.termMode !== "CURRENT") errors.push(`Officer list ${block.id} must use the current organization term.`);
-      if (!Array.isArray(config.roleFilters) || config.roleFilters.some((role) => typeof role !== "string" || role.trim().length === 0 || role.length > 100)) errors.push(`Officer list ${block.id} has invalid role filters.`);
+      const roleFilters = Array.isArray(config.roleFilters) ? config.roleFilters : [];
+      if (!Array.isArray(config.roleFilters) || roleFilters.some((role) => typeof role !== "string" || safeTemplateText(role).trim().length === 0 || safeTemplateText(role).length > 100)) errors.push(`Officer list ${block.id} has invalid role filters.`);
       if (!["displayOrder", "position", "fullName"].includes(config.sortBy)) errors.push(`Officer list ${block.id} has an invalid sort field.`);
       if (!["asc", "desc"].includes(config.sortDirection)) errors.push(`Officer list ${block.id} has an invalid sort direction.`);
       if (!Number.isInteger(config.maxOfficers) || config.maxOfficers < 1 || config.maxOfficers > 30) errors.push(`Officer list ${block.id} must show between 1 and 30 officers.`);
@@ -532,7 +535,8 @@ export function validateTemplateDefinition(value: unknown, options: { allowedPla
       if (!["normal", "bold"].includes(config.positionFontWeight)) errors.push(`Officer list ${block.id} position font weight is invalid.`);
       for (const [label, color] of [["heading", config.headingColor], ["term", config.termColor], ["name", config.nameColor], ["position", config.positionColor]] as const) if (!isSafeColor(color)) errors.push(`Officer list ${block.id} ${label} text color is invalid.`);
       if (options.activeOfficerCount === 0) errors.push(`Officer list ${block.id} has no available active tenant officers.`);
-      if (options.officerPositions && config.roleFilters.some((role) => !options.officerPositions!.some((position) => position.trim().toLowerCase() === role.trim().toLowerCase()))) errors.push(`Officer list ${block.id} contains a role filter that does not match an active tenant officer position.`);
+      const normalizedOfficerPositions = options.officerPositions?.map((position) => safeTemplateText(position).trim().toLowerCase()).filter(Boolean);
+      if (normalizedOfficerPositions && roleFilters.filter((role): role is string => typeof role === "string").some((role) => !normalizedOfficerPositions.includes(safeTemplateText(role).trim().toLowerCase()))) errors.push(`Officer list ${block.id} contains a role filter that does not match an active tenant officer position.`);
       if (block.position && block.position.height < 18 + (config.showHeading ? 12 : 0) + (config.showTerm ? 8 : 0) + config.maxOfficers * 9) errors.push(`Officer list ${block.label || block.id} may overflow its sidebar height for the configured officer count.`);
     }
   }
@@ -755,6 +759,10 @@ function sectionValidationBlocks(value: unknown, fallbackSection: DocumentTempla
 
 function validateRawOfficerTypography(value: unknown, blockId: string, errors: string[]) {
   if (!isRecord(value)) return;
+  if ("roleFilters" in value) {
+    const roleFilters = Array.isArray(value.roleFilters) ? value.roleFilters : [];
+    if (!Array.isArray(value.roleFilters) || roleFilters.some((role) => typeof role !== "string" || safeTemplateText(role).trim().length === 0 || safeTemplateText(role).length > 100)) errors.push(`Officer list ${blockId} has invalid role filters.`);
+  }
   const numericRules = [
     ["headingFontSize", 8, 18, "heading font size", "pt"],
     ["termFontSize", 6, 16, "term font size", "pt"],
@@ -940,6 +948,10 @@ function clampNumber(value: unknown, min: number, max: number, fallback: number 
 
 function sanitizeText(text: string) {
   return text.replace(/\r\n/g, "\n").replace(/\r/g, "\n").replace(/[<>]/g, "").slice(0, 8000);
+}
+
+function safeTemplateText(value: unknown) {
+  return typeof value === "string" || typeof value === "number" ? String(value) : "";
 }
 
 function containsUnsafeTemplateContent(text: string) {

@@ -16,6 +16,7 @@ import { listDocumentPlaceholders, validateTemplatePlaceholdersForTenant } from 
 import { getActiveOrganizationOfficers } from "@/lib/organization";
 import { requireDocumentPermission, type DocumentExecutionContext } from "@/lib/services/document-runtime-context";
 import { writeDocumentAudit } from "@/lib/services/document-runtime-audit";
+import { DocumentRuntimeError } from "@/lib/services/document-runtime-errors";
 
 export async function listDocumentTemplateSets(context: DocumentExecutionContext, definitionId?: string) {
   requireDocumentPermission(context, "VIEW_TEMPLATES");
@@ -146,7 +147,7 @@ export async function resolveActiveDocumentTemplate(context: DocumentExecutionCo
   return platformPrisma.documentTemplateVersion.findFirst({ where: { tenantId: context.tenantId, status: DocumentTemplateVersionStatus.PUBLISHED, templateSet: { tenantId: context.tenantId, definitionId, active: true } }, orderBy: { version: "desc" } });
 }
 
-export async function resolveDocumentTemplateForGeneration(context: DocumentExecutionContext, input: { definitionId: string; mode: DocumentGenerationMode; requestTemplateVersionId?: string | null; draftTemplateVersionId?: string | null }) {
+export async function resolveEffectiveDocumentTemplate(context: DocumentExecutionContext, input: { definitionId: string; mode: DocumentGenerationMode; requestId?: string | null; requestTemplateVersionId?: string | null; draftTemplateVersionId?: string | null }) {
   await assertDefinition(context, input.definitionId);
   if (input.draftTemplateVersionId) {
     if (input.mode !== DocumentGenerationMode.PREVIEW) throw new Error("Draft templates may be used only for an explicit preview.");
@@ -158,10 +159,21 @@ export async function resolveDocumentTemplateForGeneration(context: DocumentExec
   if (input.requestTemplateVersionId) {
     const captured = await platformPrisma.documentTemplateVersion.findFirst({ where: { tenantId: context.tenantId, id: input.requestTemplateVersionId, status: { in: [DocumentTemplateVersionStatus.PUBLISHED, DocumentTemplateVersionStatus.RETIRED] }, templateSet: { tenantId: context.tenantId, definitionId: input.definitionId } }, include: { templateSet: true } });
     if (captured) return captured;
+    throw new DocumentRuntimeError("DOCUMENT_TEMPLATE_VERSION_NOT_AVAILABLE", "The captured template version is not valid for this tenant and document definition.");
   }
   const active = await platformPrisma.documentTemplateVersion.findFirst({ where: { tenantId: context.tenantId, status: DocumentTemplateVersionStatus.PUBLISHED, templateSet: { tenantId: context.tenantId, definitionId: input.definitionId, active: true } }, include: { templateSet: true }, orderBy: { version: "desc" } });
-  if (!active) throw new Error("No valid published template is available for this document definition.");
+  if (!active) throw new DocumentRuntimeError("DOCUMENT_TEMPLATE_VERSION_NOT_AVAILABLE", "No approved and published template version is available for this document definition.");
+  if (input.requestId) {
+    await platformPrisma.documentRequest.updateMany({
+      where: { tenantId: context.tenantId, id: input.requestId, definitionId: input.definitionId, templateVersionIdSnapshot: null },
+      data: { templateVersionIdSnapshot: active.id, templateVersionSnapshot: active.version, templateDefinitionSnapshot: asJson(active.definitionJson) },
+    });
+  }
   return active;
+}
+
+export async function resolveDocumentTemplateForGeneration(context: DocumentExecutionContext, input: { definitionId: string; mode: DocumentGenerationMode; requestId?: string | null; requestTemplateVersionId?: string | null; draftTemplateVersionId?: string | null }) {
+  return resolveEffectiveDocumentTemplate(context, input);
 }
 
 async function assertDefinition(context: DocumentExecutionContext, definitionId: string) {

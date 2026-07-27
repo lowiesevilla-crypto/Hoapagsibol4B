@@ -11,6 +11,7 @@
     "build": "next build",
     "start": "node scripts/prepare-prisma-engines.mjs && prisma migrate deploy && next start",
     "hostinger:build": "node scripts/prepare-prisma-engines.mjs && prisma generate && prisma migrate deploy && next build",
+    "hostinger:build:backfill": "pnpm run hostinger:build && tsx scripts/backfill-homeowner-account-numbers.ts && tsx scripts/verify-homeowner-account-numbers.ts",
     "smoke:production": "node scripts/production-smoke.mjs",
     "lint": "eslint . --ext .js,.jsx,.ts,.tsx --max-warnings=0",
     "typecheck": "tsc --noEmit",

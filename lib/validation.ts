@@ -8,7 +8,7 @@ const optionalText = (max: number) => z.preprocess(emptyToUndefined, z.string().
 
 export const loginSchema = z.object({
   email: z.string().trim().toLowerCase().email("Enter a valid email."),
-  password: z.string().min(8, "Password must be at least 8 characters.").max(72),
+  password: z.string().min(6, "Password must be at least 6 characters.").max(72),
 });
 
 export const forgotPasswordSchema = z.object({

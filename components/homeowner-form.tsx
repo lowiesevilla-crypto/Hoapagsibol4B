@@ -2,18 +2,17 @@ import type { HomeownerProfile, User } from "@prisma/client";
 import Link from "next/link";
 import { saveHomeownerAction } from "@/lib/actions/homeowners";
 import { SubmitButton } from "@/components/ui";
-import { PasswordInput } from "@/components/password-input";
 
 type Record = HomeownerProfile & { user: Pick<User, "name" | "email"> };
 
 export function HomeownerForm({ homeowner }: { homeowner?: Record }) {
   return <form action={saveHomeownerAction} className="card max-w-4xl space-y-6">
     {homeowner && <input type="hidden" name="id" value={homeowner.id} />}
-    <div><h2 className="text-lg font-black">Account information</h2><p className="text-sm text-slate-500">Login details and primary contact name.</p></div>
+    <div><h2 className="text-lg font-black">Account information</h2><p className="text-sm text-slate-500">{homeowner ? "Login details and primary contact name." : "A secure activation email will be sent to the registered email after creation."}</p></div>
     <div className="grid gap-4 sm:grid-cols-2">
       <Field label="Full name" name="name" defaultValue={homeowner?.user.name} required />
       <Field label="Email" name="email" type="email" defaultValue={homeowner?.user.email} required />
-      <Field label={homeowner ? "New password (optional)" : "Temporary password"} name="password" type="password" minLength={8} required={!homeowner} />
+      {homeowner && <Field label="New password (optional)" name="password" type="password" minLength={8} />}
       <Field label="Phone" name="phone" type="tel" defaultValue={homeowner?.phone} required />
     </div>
     <div className="border-t border-slate-100 pt-6"><h2 className="text-lg font-black">Certificate information</h2><p className="text-sm text-slate-500">Used in the Personal Information and Property Information panels of official certificates.</p></div>
@@ -41,5 +40,5 @@ export function HomeownerForm({ homeowner }: { homeowner?: Record }) {
 }
 
 function Field({ label, name, ...props }: React.InputHTMLAttributes<HTMLInputElement> & { label: string; name: string }) {
-  return <div><label className="label" htmlFor={name}>{label}</label>{props.type === "password" ? <PasswordInput id={name} name={name} {...props} /> : <input className="field" id={name} name={name} {...props} />}</div>;
+  return <div><label className="label" htmlFor={name}>{label}</label><input className="field" id={name} name={name} {...props} /></div>;
 }

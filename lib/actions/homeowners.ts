@@ -1,15 +1,15 @@
 "use server";
 
-import { NotificationType, Prisma, Role, type HomeownerStatus } from "@prisma/client";
+import { randomUUID } from "node:crypto";
+import { HomeownerActivationStatus, HomeownerEmailVerificationStatus, Prisma, Role, type HomeownerStatus } from "@prisma/client";
 import { hash } from "bcryptjs";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { requireUser } from "@/lib/auth";
-import { getAppUrl } from "@/lib/app-url";
 import { prisma } from "@/lib/db";
 import { homeownerSchema } from "@/lib/validation";
-import { sendEmailNotification } from "@/lib/services/notifications";
 import { generateUniqueHomeownerAccountNumber } from "@/lib/services/homeowner-account-number";
+import { createHomeownerActivationCredential, sendHomeownerActivationEmail } from "@/lib/services/homeowner-activation";
 
 export async function saveHomeownerAction(formData: FormData) {
   const admin = await requireUser(Role.ADMIN);
@@ -51,13 +51,11 @@ export async function saveHomeownerAction(formData: FormData) {
       }),
     ]);
   } else {
-    if (!data.password || data.password.length < 8) throw new Error("A password of at least 8 characters is required.");
-    const passwordHash = await hash(data.password, 12);
     const created = await createHomeownerWithAccountNumber({
       name: data.name,
       email: data.email,
       tenantId: admin.tenantId,
-      passwordHash,
+      createdById: admin.id,
       profile: {
         phone: data.phone,
         birthDate: optionalProfileDate(data.birthDate),
@@ -76,28 +74,27 @@ export async function saveHomeownerAction(formData: FormData) {
         monthlyDuesAmount: data.monthlyDuesAmount,
       },
     });
-    await sendEmailNotification({
+    await sendHomeownerActivationEmail({
       tenantId: admin.tenantId,
-      recipientId: created.id,
+      userId: created.user.id,
       email: created.email,
-      subject: "Welcome to the HOA Digital Hub",
-      heading: "New homeowner account",
-      message: `Hello ${created.name},\nYour homeowner portal account has been created. For security, passwords are never sent by email. Sign in using the credentials issued by the HOA office, or use Forgot Password to create a new password securely.`,
-      type: NotificationType.WELCOME,
-      actionLabel: "Open homeowner login",
-      actionUrl: `${getAppUrl()}/login`,
-    }).catch(async (error) => prisma.auditLog.create({ data: { actorId: admin.id, module: "EMAIL", action: "WELCOME_EMAIL_LOG_FAILED", entityType: "User", entityId: created.id, metadata: { error: error instanceof Error ? error.message.slice(0, 300) : "Unknown email logging error" } } }));
+      name: created.name,
+      accountNumber: created.accountNumber,
+      temporaryPassword: created.activation.temporaryPassword,
+      expiresAt: created.activation.expiresAt,
+      actorId: admin.id,
+    });
   }
 
   revalidatePath("/admin/homeowners");
-  redirect(data.id ? "/admin/homeowners?success=saved&message=Homeowner%20record%20updated%20successfully." : "/admin/homeowners?success=created&message=Homeowner%20record%20and%20portal%20account%20created%20successfully.");
+  redirect(data.id ? "/admin/homeowners?success=saved&message=Homeowner%20record%20updated%20successfully." : "/admin/homeowners?success=created&message=Homeowner%20record%20created%20and%20activation%20email%20queued.");
 }
 
 async function createHomeownerWithAccountNumber(input: {
   name: string;
   email: string;
   tenantId: string;
-  passwordHash: string;
+  createdById: string;
   profile: {
     phone: string;
     birthDate: Date | null;
@@ -120,18 +117,22 @@ async function createHomeownerWithAccountNumber(input: {
     const accountNumber = await generateUniqueHomeownerAccountNumber();
     try {
       return await prisma.$transaction(async (tx) => {
+        const passwordHash = await hash(generateSystemPasswordPlaceholder(), 12);
         const user = await tx.user.create({
           data: {
             name: input.name,
             email: input.email,
             tenantId: input.tenantId,
-            passwordHash: input.passwordHash,
+            passwordHash,
             role: Role.HOMEOWNER,
             homeownerProfile: {
               create: {
                 ...input.profile,
                 tenantId: input.tenantId,
                 accountNumber,
+                activationStatus: HomeownerActivationStatus.PENDING_ACTIVATION,
+                emailStatus: HomeownerEmailVerificationStatus.UNVERIFIED,
+                activationSentAt: new Date(),
               },
             },
           },
@@ -140,7 +141,19 @@ async function createHomeownerWithAccountNumber(input: {
         await tx.homeownerAccountNumberReservation.create({
           data: { tenantId: input.tenantId, homeownerId: user.homeownerProfile?.id, accountNumber, reason: "ASSIGNED" },
         });
-        return user;
+        const activation = await createHomeownerActivationCredential({ tenantId: input.tenantId, userId: user.id, createdById: input.createdById, tx });
+        await tx.auditLog.create({
+          data: {
+            tenantId: input.tenantId,
+            actorId: input.createdById,
+            module: "AUTH",
+            action: "HOMEOWNER_ACTIVATION_CREATED",
+            entityType: "User",
+            entityId: user.id,
+            metadata: { accountNumber },
+          },
+        });
+        return { user, activation, id: user.id, email: user.email, name: user.name, accountNumber };
       });
     } catch (error) {
       if (isUniqueAccountNumberCollision(error)) continue;
@@ -151,6 +164,10 @@ async function createHomeownerWithAccountNumber(input: {
 }
 
 function optionalProfileDate(value?: string) { return value ? new Date(`${value}T00:00:00.000Z`) : null; }
+
+function generateSystemPasswordPlaceholder() {
+  return `activation-only-${randomUUID()}`;
+}
 
 function isUniqueAccountNumberCollision(error: unknown) {
   return error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002";

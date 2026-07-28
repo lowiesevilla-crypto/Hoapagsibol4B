@@ -16,33 +16,17 @@ export function LoginForm({ tenantSlug }: { tenantSlug?: string }) {
       {tenantSlug && <input type="hidden" name="tenantSlug" value={tenantSlug} />}
 
       <div>
-        <label className="label text-slate-700" htmlFor="email">Email address</label>
+        <label className="label text-slate-700" htmlFor="identifier">Email address or 11-digit account number</label>
         <input
           className="field min-h-12 border-slate-300 bg-white text-[#10354c]"
-          id="email"
-          name="email"
-          type="email"
-          placeholder="name@example.com"
-          autoComplete="email"
+          id="identifier"
+          name="identifier"
+          type="text"
+          placeholder="Enter your verified email or account number"
+          autoComplete="username"
           required
         />
       </div>
-
-      {universal && (
-        <div>
-          <label className="label text-slate-700" htmlFor="accountNumber">Homeowner account number</label>
-          <input
-            className="field min-h-12 border-slate-300 bg-white text-[#10354c]"
-            id="accountNumber"
-            name="accountNumber"
-            inputMode="numeric"
-            pattern="[0-9]{11}"
-            maxLength={11}
-            placeholder="11 digits"
-            autoComplete="off"
-          />
-        </div>
-      )}
 
       <div>
         <label className="label text-slate-700" htmlFor="password">Password</label>

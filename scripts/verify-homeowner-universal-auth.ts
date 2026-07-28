@@ -26,7 +26,11 @@ function assertSourceSafeguards() {
   const manifest = readFileSync("app/manifest.ts", "utf8");
   const nextConfig = readFileSync("next.config.ts", "utf8");
   const loginForm = readFileSync("components/login-form.tsx", "utf8");
+  const tenantLoginScreen = readFileSync("components/tenant-login-screen.tsx", "utf8");
   const passkeyService = readFileSync("lib/services/passkeys.ts", "utf8");
+  const passkeyButton = readFileSync("components/passkey-login-button.tsx", "utf8");
+  const authActions = readFileSync("lib/actions/auth.ts", "utf8");
+  const loginOptionsRoute = readFileSync("app/api/auth/passkeys/login/options/route.ts", "utf8");
   const homeownerActions = readFileSync("lib/actions/homeowners.ts", "utf8");
   const notifications = readFileSync("lib/services/notifications.ts", "utf8");
   const searchInput = readFileSync("components/ui.tsx", "utf8");
@@ -39,7 +43,13 @@ function assertSourceSafeguards() {
   assert(manifest.includes('start_url: "/login"'), "PWA manifest must start installed apps at universal login.");
   assert(nextConfig.includes("no-store, max-age=0"), "Auth/protected routes must send no-store cache headers.");
   assert(nextConfig.includes("publickey-credentials-create=(self)") && nextConfig.includes("publickey-credentials-get=(self)"), "Passkey browser permissions are not configured.");
+  assert(loginForm.includes('name="identifier"') && loginForm.includes("Email address or 11-digit account number") && !loginForm.includes('name="accountNumber"') && !loginForm.includes('name="email"'), "Login form must use one identifier field and must not require both email and account number.");
+  assert(tenantLoginScreen.includes("Sign in using your verified email or 11-digit homeowner account number.") && tenantLoginScreen.includes("You have been signed out securely."), "Login screen copy or signed-out message is missing.");
   assert(loginForm.includes("PasskeyLoginButton"), "Universal login must expose passkey login.");
+  assert(passkeyButton.includes('data.get("identifier")') && !passkeyButton.includes("Enter your registered email first."), "Passkey login must be independent of required email/account-number fields.");
+  assert(loginOptionsRoute.includes("generatePasskeyDiscoveryAuthenticationOptions") && loginOptionsRoute.includes("hoa_passkey_login_challenge"), "Passkey login options must support discoverable passkeys without an identifier.");
+  assert(authActions.includes("identifierType") && authActions.includes("/login?loggedOut=1") && authActions.includes("`/${tenant.slug}/login?loggedOut=1`"), "Login action must use identifier resolution and deterministic logout routing.");
+  assert(authActions.includes("emailStatus === \"VERIFIED\"") && authActions.includes("Incorrect identifier or password."), "Returning homeowner email login must require verified email and use generic invalid-login errors.");
   assert(passkeyService.includes("verifyRegistrationResponse") && passkeyService.includes("verifyAuthenticationResponse"), "Passkey implementation must use server-side WebAuthn verification.");
   assert(passkeyService.includes("const appUrl = getAppUrl()") && passkeyService.includes("rpID: url.hostname") && passkeyService.includes("origin: url.origin"), "Passkey RP ID and expected origin must derive consistently from APP_URL.");
   assert(passkeyService.includes("active: true") && passkeyService.includes("activationStatus: HomeownerActivationStatus.ACTIVE") && passkeyService.includes("!credentialRecord.user.active"), "Passkey login must reject digitally disabled homeowner accounts.");

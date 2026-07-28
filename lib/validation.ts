@@ -7,7 +7,7 @@ const emptyToUndefined = (value: unknown) => value === "" ? undefined : value;
 const optionalText = (max: number) => z.preprocess(emptyToUndefined, z.string().trim().max(max).optional());
 
 export const loginSchema = z.object({
-  email: z.string().trim().toLowerCase().email("Enter a valid email."),
+  identifier: z.string().trim().min(1, "Enter your email address or account number.").max(254),
   password: z.string().min(6, "Password must be at least 6 characters.").max(72),
 });
 

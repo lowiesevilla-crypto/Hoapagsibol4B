@@ -130,9 +130,10 @@ export async function verifyPasskeyRegistration(input: { userId: string; tenantI
   ]);
 }
 
-export async function findPasskeyLoginUser(input: { email: string; accountNumber?: string; tenantSlug?: string }) {
-  const email = normalizeActivationEmail(input.email);
-  const accountNumber = normalizeAccountNumber(input.accountNumber || "");
+export async function findPasskeyLoginUser(input: { email?: string; accountNumber?: string; identifier?: string; tenantSlug?: string }) {
+  const identifier = String(input.identifier || "").trim();
+  const accountNumber = normalizeAccountNumber(input.accountNumber || (/^\d{11}$/.test(identifier) ? identifier : ""));
+  const email = normalizeActivationEmail(input.email || (accountNumber ? "" : identifier));
   const tenantSlug = String(input.tenantSlug || "").trim().toLowerCase();
   if (tenantSlug) {
     const tenant = await resolveTenant(tenantSlug);
@@ -141,10 +142,10 @@ export async function findPasskeyLoginUser(input: { email: string; accountNumber
     const user = await platformPrisma.user.findFirst({
       where: {
         tenantId: tenant.id,
-        email,
+        ...(accountNumber ? {} : { email }),
         active: true,
         role: Role.HOMEOWNER,
-        homeownerProfile: { status: "ACTIVE", activationStatus: HomeownerActivationStatus.ACTIVE, activatedAt: { not: null } },
+        homeownerProfile: { status: "ACTIVE", activationStatus: HomeownerActivationStatus.ACTIVE, activatedAt: { not: null }, ...(accountNumber ? { accountNumber } : {}) },
       },
       include: { homeownerProfile: true, tenant: { include: { advisories: { where: { active: true }, orderBy: { createdAt: "desc" }, take: 1 }, moduleEntitlements: true } }, passkeyCredentials: true },
     });
@@ -160,11 +161,11 @@ export async function findPasskeyLoginUser(input: { email: string; accountNumber
   }
   const users = await platformPrisma.user.findMany({
     where: {
-      email,
+      ...(accountNumber ? {} : { email }),
       active: true,
       role: Role.HOMEOWNER,
       tenant: { status: "ACTIVE", subscriptionStatus: { not: "CANCELLED" } },
-      homeownerProfile: { status: "ACTIVE", activationStatus: HomeownerActivationStatus.ACTIVE, activatedAt: { not: null } },
+      homeownerProfile: { status: "ACTIVE", activationStatus: HomeownerActivationStatus.ACTIVE, activatedAt: { not: null }, ...(accountNumber ? { accountNumber } : {}) },
     },
     include: { homeownerProfile: true, tenant: { include: { advisories: { where: { active: true }, orderBy: { createdAt: "desc" }, take: 1 }, moduleEntitlements: true } }, passkeyCredentials: true },
     take: 10,
@@ -215,7 +216,16 @@ export async function generatePasskeyAuthenticationOptions(input: { userId: stri
   return options;
 }
 
-export async function verifyPasskeyAuthentication(input: { response: AuthenticationResponseJSON }) {
+export async function generatePasskeyDiscoveryAuthenticationOptions() {
+  const rp = passkeyRp();
+  return generateAuthenticationOptions({
+    rpID: rp.rpID,
+    timeout: PASSKEY_TIMEOUT_MS,
+    userVerification: "preferred",
+  });
+}
+
+export async function verifyPasskeyAuthentication(input: { response: AuthenticationResponseJSON; discoveryChallengeHash?: string }) {
   const credentialRecord = await platformPrisma.userPasskeyCredential.findUnique({
     where: { credentialId: input.response.id },
     include: { user: { include: { tenant: { include: { advisories: { where: { active: true }, orderBy: { createdAt: "desc" }, take: 1 }, moduleEntitlements: true } }, homeownerProfile: true } } },
@@ -233,6 +243,7 @@ export async function verifyPasskeyAuthentication(input: { response: Authenticat
   });
 
   let challengeId = "";
+  let discoveryChallengeMatched = false;
   const rp = passkeyRp();
   const verification = await verifyAuthenticationResponse({
     response: input.response,
@@ -241,11 +252,12 @@ export async function verifyPasskeyAuthentication(input: { response: Authenticat
     requireUserVerification: false,
     credential: toWebAuthnCredential(credentialRecord),
     expectedChallenge: async (challenge) => {
+      const challengeHash = passkeyChallengeHash(challenge);
       const record = await prisma.userPasskeyChallenge.findFirst({
         where: {
           tenantId: credentialRecord.tenantId,
           userId: credentialRecord.userId,
-          challengeHash: passkeyChallengeHash(challenge),
+          challengeHash,
           type: PasskeyChallengeType.AUTHENTICATION,
           usedAt: null,
           expiresAt: { gt: new Date() },
@@ -254,13 +266,14 @@ export async function verifyPasskeyAuthentication(input: { response: Authenticat
         select: { id: true },
       });
       challengeId = record?.id || "";
-      return Boolean(record);
+      discoveryChallengeMatched = !record && Boolean(input.discoveryChallengeHash) && input.discoveryChallengeHash === challengeHash;
+      return Boolean(record) || discoveryChallengeMatched;
     },
   });
-  if (!verification.verified || !challengeId) throw new Error("Passkey authentication could not be verified.");
+  if (!verification.verified || (!challengeId && !discoveryChallengeMatched)) throw new Error("Passkey authentication could not be verified.");
 
   await prisma.$transaction([
-    prisma.userPasskeyChallenge.update({ where: { id: challengeId }, data: { usedAt: new Date() } }),
+    ...(challengeId ? [prisma.userPasskeyChallenge.update({ where: { id: challengeId }, data: { usedAt: new Date() } })] : []),
     prisma.userPasskeyCredential.update({
       where: { id: credentialRecord.id },
       data: {

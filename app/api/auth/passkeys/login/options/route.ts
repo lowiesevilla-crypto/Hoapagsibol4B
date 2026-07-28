@@ -1,10 +1,24 @@
 import { NextResponse } from "next/server";
-import { findPasskeyLoginUser, generatePasskeyAuthenticationOptions } from "@/lib/services/passkeys";
+import { findPasskeyLoginUser, generatePasskeyAuthenticationOptions, generatePasskeyDiscoveryAuthenticationOptions, passkeyChallengeHash } from "@/lib/services/passkeys";
+
+const DISCOVERY_CHALLENGE_COOKIE = "hoa_passkey_login_challenge";
 
 export async function POST(request: Request) {
-  const body = await request.json().catch(() => null) as { email?: string; accountNumber?: string; tenantSlug?: string } | null;
-  if (!body?.email) return NextResponse.json({ error: "Registered email is required." }, { status: 400 });
-  const resolved = await findPasskeyLoginUser({ email: body.email, accountNumber: body.accountNumber, tenantSlug: body.tenantSlug });
+  const body = await request.json().catch(() => null) as { identifier?: string; email?: string; accountNumber?: string; tenantSlug?: string } | null;
+  const identifier = String(body?.identifier || "").trim();
+  if (!identifier) {
+    const options = await generatePasskeyDiscoveryAuthenticationOptions();
+    const response = NextResponse.json(options);
+    response.cookies.set(DISCOVERY_CHALLENGE_COOKIE, passkeyChallengeHash(options.challenge), {
+      httpOnly: true,
+      sameSite: "lax",
+      secure: process.env.NODE_ENV === "production",
+      path: "/",
+      maxAge: 5 * 60,
+    });
+    return response;
+  }
+  const resolved = await findPasskeyLoginUser({ identifier, email: body?.email, accountNumber: body?.accountNumber, tenantSlug: body?.tenantSlug });
   if ("error" in resolved) return NextResponse.json({ error: resolved.error }, { status: 400 });
   const options = await generatePasskeyAuthenticationOptions({
     tenantId: resolved.user.tenantId,

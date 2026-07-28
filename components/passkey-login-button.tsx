@@ -15,14 +15,12 @@ export function PasskeyLoginButton({ formRef }: { formRef: RefObject<HTMLFormEle
     try {
       const form = formRef.current;
       const data = new FormData(form ?? undefined);
-      const email = String(data.get("email") || "").trim();
-      const accountNumber = String(data.get("accountNumber") || "").trim();
+      const identifier = String(data.get("identifier") || "").trim();
       const tenantSlug = String(data.get("tenantSlug") || "").trim();
-      if (!email) throw new Error("Enter your registered email first.");
       const optionsResponse = await fetch("/api/auth/passkeys/login/options", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, accountNumber, tenantSlug }),
+        body: JSON.stringify({ identifier, tenantSlug }),
       });
       const options = await optionsResponse.json();
       if (!optionsResponse.ok) throw new Error(options.error || "Could not start passkey login.");

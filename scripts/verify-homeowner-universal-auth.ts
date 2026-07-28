@@ -51,7 +51,10 @@ function assertSourceSafeguards() {
   assert(authActions.includes("identifierType") && authActions.includes("/login?loggedOut=1") && authActions.includes("`/${tenant.slug}/login?loggedOut=1`"), "Login action must use identifier resolution and deterministic logout routing.");
   assert(authActions.includes("emailStatus === \"VERIFIED\"") && authActions.includes("Incorrect identifier or password."), "Returning homeowner email login must require verified email and use generic invalid-login errors.");
   assert(passkeyService.includes("verifyRegistrationResponse") && passkeyService.includes("verifyAuthenticationResponse"), "Passkey implementation must use server-side WebAuthn verification.");
-  assert(passkeyService.includes("const appUrl = getAppUrl()") && passkeyService.includes("rpID: url.hostname") && passkeyService.includes("origin: url.origin"), "Passkey RP ID and expected origin must derive consistently from APP_URL.");
+  assert(passkeyService.includes("WEBAUTHN_ORIGIN") && passkeyService.includes("WEBAUTHN_RP_ID") && passkeyService.includes("PASSKEY_DOMAIN_CONFIGURATION_ERROR"), "Passkey RP ID and expected origin must use explicit WebAuthn configuration.");
+  assert((passkeyService.match(/const rp = passkeyRp\(\)/g) || []).length >= 5, "Registration and authentication generation/verification must use matching passkeyRp configuration.");
+  assert(passkeyService.includes("expectedOrigin: rp.origin") && passkeyService.includes("expectedRPID: rp.rpID"), "Passkey verification must use configured origin and RP ID.");
+  assert(passkeyService.includes("isIpAddress") && passkeyService.includes('value.includes("://")') && passkeyService.includes('value.includes(":")'), "Passkey RP ID must reject IPs, schemes, ports, and paths.");
   assert(passkeyService.includes("active: true") && passkeyService.includes("activationStatus: HomeownerActivationStatus.ACTIVE") && passkeyService.includes("!credentialRecord.user.active"), "Passkey login must reject digitally disabled homeowner accounts.");
   assert(homeownerActions.includes("regenerateHomeownerActivationAction") && homeownerActions.includes("disableHomeownerActivationAction"), "Admin activation management actions are missing.");
   assert(homeownerActions.includes("enableHomeownerDigitalAccessAction"), "Enable Digital Access admin action is missing.");
@@ -84,7 +87,7 @@ function assertSourceSafeguards() {
   assert(homeownerList.includes("take: pageSize") && homeownerList.includes("skip,"), "Homeowner list must use explicit server-side pagination.");
   assert(homeownerList.includes("digitalFilters") && homeownerList.includes("operationalStatus"), "Digital activation filters must be separate from operational status filters.");
   assert(homeownerList.includes("Eligible for First-Time Activation") && homeownerList.includes("Missing Email"), "Homeowner summary cards are missing.");
-  assert(appUrl.includes("PUBLIC_APP_URL") && appUrl.includes("http://127.0.0.1:3000"), "APP_URL helper must normalize local UAT to 127.0.0.1 when no env override exists.");
+  assert(appUrl.includes("PUBLIC_APP_URL") && appUrl.includes("http://localhost:3000"), "APP_URL helper must normalize local UAT to localhost when no env override exists.");
 }
 
 function loadLocalEnv() {
@@ -122,11 +125,60 @@ function searchMatches(query: string, row: string) {
   return !terms.some((term) => !haystack.includes(term));
 }
 
+async function assertWebAuthnConfiguration() {
+  const { PASSKEY_DOMAIN_CONFIGURATION_ERROR, passkeyRp } = await import("../lib/services/passkeys");
+  const keys = ["APP_URL", "PUBLIC_APP_URL", "WEBAUTHN_ORIGIN", "WEBAUTHN_RP_ID", "NODE_ENV"] as const;
+  const env = process.env as Record<string, string | undefined>;
+  const previous = Object.fromEntries(keys.map((key) => [key, env[key]]));
+  try {
+    env.NODE_ENV = "development";
+    env.APP_URL = "http://localhost:3000";
+    env.PUBLIC_APP_URL = "http://localhost:3000";
+    delete env.WEBAUTHN_ORIGIN;
+    delete env.WEBAUTHN_RP_ID;
+    const local = passkeyRp();
+    assert(local.origin === "http://localhost:3000", "Local WebAuthn origin must resolve to http://localhost:3000.");
+    assert(local.rpID === "localhost", "Local WebAuthn RP ID must resolve to localhost.");
+    assert(!local.rpID.includes("://") && !local.rpID.includes(":") && !local.rpID.includes("/"), "Local WebAuthn RP ID must not include scheme, port, or path.");
+
+    env.NODE_ENV = "production";
+    env.APP_URL = "https://hoahub.tech";
+    env.PUBLIC_APP_URL = "https://hoahub.tech";
+    env.WEBAUTHN_ORIGIN = "https://hoahub.tech";
+    env.WEBAUTHN_RP_ID = "hoahub.tech";
+    const production = passkeyRp();
+    assert(production.origin === "https://hoahub.tech", "Production WebAuthn origin must resolve to https://hoahub.tech.");
+    assert(production.rpID === "hoahub.tech", "Production WebAuthn RP ID must resolve to hoahub.tech.");
+    assert(!production.rpID.includes("://") && !production.rpID.includes(":") && !production.rpID.includes("/"), "Production WebAuthn RP ID must not include scheme, port, or path.");
+
+    for (const invalidRpID of ["127.0.0.1", "https://hoahub.tech", "hoahub.tech:443", "hoahub.tech/path"]) {
+      env.WEBAUTHN_ORIGIN = invalidRpID === "127.0.0.1" ? "http://127.0.0.1:3000" : "https://hoahub.tech";
+      env.WEBAUTHN_RP_ID = invalidRpID;
+      let rejected = false;
+      try {
+        passkeyRp();
+      } catch (error) {
+        rejected = error instanceof Error && error.message === PASSKEY_DOMAIN_CONFIGURATION_ERROR;
+      }
+      assert(rejected, `Invalid WebAuthn RP ID was not rejected safely: ${invalidRpID}`);
+    }
+  } finally {
+    for (const key of keys) {
+      const value = previous[key];
+      if (value === undefined) delete env[key];
+      else env[key] = value;
+    }
+  }
+}
+
 async function main() {
   requireLocalClone();
   assertSourceSafeguards();
-  assert(process.env.APP_URL === "http://127.0.0.1:3000", "Local UAT APP_URL must be http://127.0.0.1:3000.");
-  assert(process.env.PUBLIC_APP_URL === "http://127.0.0.1:3000", "Local UAT PUBLIC_APP_URL must be http://127.0.0.1:3000.");
+  await assertWebAuthnConfiguration();
+  assert(process.env.APP_URL === "http://localhost:3000", "Local UAT APP_URL must be http://localhost:3000 for WebAuthn.");
+  assert(process.env.PUBLIC_APP_URL === "http://localhost:3000", "Local UAT PUBLIC_APP_URL must be http://localhost:3000 for WebAuthn.");
+  assert(process.env.WEBAUTHN_ORIGIN === "http://localhost:3000", "Local UAT WEBAUTHN_ORIGIN must be http://localhost:3000.");
+  assert(process.env.WEBAUTHN_RP_ID === "localhost", "Local UAT WEBAUTHN_RP_ID must be localhost.");
   assert(!passwordPolicyAccepts("abcdef"), "Password policy must require a number.");
   assert(!passwordPolicyAccepts("123456"), "Password policy must require a letter.");
   assert(!passwordPolicyAccepts("A1"), "Password policy must enforce minimum length.");

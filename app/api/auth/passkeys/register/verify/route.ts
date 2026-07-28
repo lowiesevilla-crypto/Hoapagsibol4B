@@ -2,7 +2,7 @@ import type { RegistrationResponseJSON } from "@simplewebauthn/server";
 import { Role } from "@prisma/client";
 import { NextResponse } from "next/server";
 import { requireUser } from "@/lib/auth";
-import { verifyPasskeyRegistration } from "@/lib/services/passkeys";
+import { PASSKEY_DOMAIN_CONFIGURATION_ERROR, verifyPasskeyRegistration } from "@/lib/services/passkeys";
 
 export async function POST(request: Request) {
   const user = await requireUser(Role.HOMEOWNER);
@@ -16,7 +16,7 @@ export async function POST(request: Request) {
       deviceName: body.deviceName,
     });
     return NextResponse.json({ ok: true });
-  } catch {
-    return NextResponse.json({ error: "Passkey registration could not be verified." }, { status: 400 });
+  } catch (error) {
+    return NextResponse.json({ error: error instanceof Error && error.message === PASSKEY_DOMAIN_CONFIGURATION_ERROR ? error.message : "Passkey registration could not be verified." }, { status: 400 });
   }
 }

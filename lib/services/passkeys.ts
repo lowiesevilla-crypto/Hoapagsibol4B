@@ -12,13 +12,22 @@ import { resolveTenant, tenantCanSignIn } from "@/lib/tenant";
 
 const PASSKEY_TIMEOUT_MS = 60_000;
 const CHALLENGE_TTL_MS = 5 * 60_000;
+export const PASSKEY_DOMAIN_CONFIGURATION_ERROR = "Passkey enrollment requires localhost during local testing or a secure HTTPS domain in production.";
 
-export function passkeyRp() {
-  const appUrl = getAppUrl();
-  const url = new URL(appUrl);
+export type WebAuthnRpConfig = {
+  rpName: string;
+  rpID: string;
+  origin: string;
+};
+
+export function passkeyRp(): WebAuthnRpConfig {
+  const origin = process.env.WEBAUTHN_ORIGIN?.trim() || (process.env.NODE_ENV === "production" ? getAppUrl() : "http://localhost:3000");
+  const url = parseWebAuthnOrigin(origin);
+  const rpID = (process.env.WEBAUTHN_RP_ID?.trim() || url.hostname).toLowerCase();
+  assertValidWebAuthnRpID(rpID);
   return {
     rpName: "HOAHub",
-    rpID: url.hostname,
+    rpID,
     origin: url.origin,
   };
 }
@@ -315,4 +324,30 @@ function toWebAuthnCredential(credential: { credentialId: string; publicKey: str
 function transportsFromJson(value: unknown): AuthenticatorTransportFuture[] | undefined {
   if (!Array.isArray(value)) return undefined;
   return value.filter((item): item is AuthenticatorTransportFuture => typeof item === "string");
+}
+
+function parseWebAuthnOrigin(value: string) {
+  try {
+    const url = new URL(value);
+    if (!["http:", "https:"].includes(url.protocol) || url.pathname !== "/" || url.search || url.hash) {
+      throw new Error(PASSKEY_DOMAIN_CONFIGURATION_ERROR);
+    }
+    return url;
+  } catch (error) {
+    if (error instanceof Error && error.message === PASSKEY_DOMAIN_CONFIGURATION_ERROR) throw error;
+    throw new Error(PASSKEY_DOMAIN_CONFIGURATION_ERROR);
+  }
+}
+
+function assertValidWebAuthnRpID(value: string) {
+  if (!value || value.includes("://") || value.includes("/") || value.includes(":") || /\s/.test(value)) {
+    throw new Error(PASSKEY_DOMAIN_CONFIGURATION_ERROR);
+  }
+  if (value !== "localhost" && isIpAddress(value)) {
+    throw new Error(PASSKEY_DOMAIN_CONFIGURATION_ERROR);
+  }
+}
+
+function isIpAddress(value: string) {
+  return /^\d{1,3}(?:\.\d{1,3}){3}$/.test(value) || value.startsWith("[") || value.includes("::");
 }

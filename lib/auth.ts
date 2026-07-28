@@ -1,9 +1,11 @@
 import "server-only";
 
-import { Role } from "@prisma/client";
+import { createHash, randomUUID } from "node:crypto";
+import { Prisma, Role } from "@prisma/client";
 import { SignJWT } from "jose/jwt/sign";
 import { jwtVerify } from "jose/jwt/verify";
 import { cookies } from "next/headers";
+import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/db";
 import { adminHomeForRole } from "@/lib/role-access";
@@ -16,7 +18,12 @@ if (process.env.NODE_ENV === "production" && (!configuredSecret || configuredSec
 }
 const secret = new TextEncoder().encode(configuredSecret || "development-only-secret-change-me-now");
 
-export type SessionPayload = { userId: string; role: Role; tenantId: string; tenantSlug: string };
+export type SessionPayload = { userId: string; role: Role; tenantId: string; tenantSlug: string; sessionId?: string };
+export type PreparedSession = {
+  payload: SessionPayload & { sessionId: string };
+  maxAge: number;
+  data: Prisma.UserSessionUncheckedCreateInput;
+};
 
 function homeForRole(role: Role) {
   if (role === Role.HOMEOWNER) return "/portal/dashboard";
@@ -34,14 +41,38 @@ function canUseRole(actualRole: Role, requiredRole: Role) {
 }
 
 export async function createSession(payload: SessionPayload) {
+  const prepared = await prepareSession(payload);
+  await prisma.userSession.create({ data: prepared.data });
+  await setSessionCookie(prepared);
+}
+
+export async function prepareSession(payload: SessionPayload): Promise<PreparedSession> {
   const configuredMaxAge = Number(process.env.SESSION_MAX_AGE_SECONDS);
   const maxAge = Number.isInteger(configuredMaxAge) && configuredMaxAge >= 900 && configuredMaxAge <= 60 * 60 * 24 * 30
     ? configuredMaxAge
     : 60 * 60 * 8;
-  const token = await new SignJWT(payload)
+  const sessionId = payload.sessionId ?? randomUUID();
+  const expiresAt = new Date(Date.now() + maxAge * 1000);
+  const requestHeaders = await safeRequestHeaders();
+  return {
+    payload: { ...payload, sessionId },
+    maxAge,
+    data: {
+      tenantId: payload.tenantId,
+      userId: payload.userId,
+      tokenHash: sessionHash(sessionId),
+      expiresAt,
+      userAgentHash: optionalHash(requestHeaders.get("user-agent")),
+      ipHash: optionalHash(requestHeaders.get("x-forwarded-for")?.split(",")[0]?.trim() || requestHeaders.get("x-real-ip")),
+    },
+  };
+}
+
+export async function setSessionCookie(prepared: PreparedSession) {
+  const token = await new SignJWT(prepared.payload)
     .setProtectedHeader({ alg: "HS256" })
     .setIssuedAt()
-    .setExpirationTime(`${maxAge}s`)
+    .setExpirationTime(`${prepared.maxAge}s`)
     .sign(secret);
   const store = await cookies();
   store.set(COOKIE_NAME, token, {
@@ -49,11 +80,19 @@ export async function createSession(payload: SessionPayload) {
     sameSite: "lax",
     secure: process.env.NODE_ENV === "production",
     path: "/",
-    maxAge,
+    maxAge: prepared.maxAge,
   });
 }
 
 export async function deleteSession() {
+  const session = await readSession();
+  if (session?.sessionId) {
+    setTenantContext({ tenantId: session.tenantId, role: session.role, platform: session.role === Role.SUPER_ADMIN || session.role === Role.PLATFORM_ADMIN });
+    await prisma.userSession.updateMany({
+      where: { tenantId: session.tenantId, tokenHash: sessionHash(session.sessionId), revokedAt: null },
+      data: { revokedAt: new Date() },
+    }).catch(() => undefined);
+  }
   const store = await cookies();
   store.delete(COOKIE_NAME);
 }
@@ -64,7 +103,7 @@ export async function readSession(): Promise<SessionPayload | null> {
   try {
     const { payload } = await jwtVerify(token, secret);
     if (typeof payload.userId !== "string" || typeof payload.tenantId !== "string" || typeof payload.tenantSlug !== "string" || !Object.values(Role).includes(payload.role as Role)) return null;
-    return { userId: payload.userId, role: payload.role as Role, tenantId: payload.tenantId, tenantSlug: payload.tenantSlug };
+    return { userId: payload.userId, role: payload.role as Role, tenantId: payload.tenantId, tenantSlug: payload.tenantSlug, sessionId: typeof payload.sessionId === "string" ? payload.sessionId : undefined };
   } catch {
     return null;
   }
@@ -73,7 +112,13 @@ export async function readSession(): Promise<SessionPayload | null> {
 export async function sessionIsCurrent(session: SessionPayload) {
   setTenantContext({ tenantId: session.tenantId, role: session.role, platform: session.role === Role.SUPER_ADMIN || session.role === Role.PLATFORM_ADMIN });
   const user = await prisma.user.findFirst({ where: { id: session.userId, tenantId: session.tenantId, role: session.role, active: true, tenant: { slug: session.tenantSlug, status: "ACTIVE", subscriptionStatus: { not: "CANCELLED" } } }, select: { id: true } });
-  return Boolean(user);
+  if (!user) return false;
+  if (!session.sessionId) return false;
+  const activeSession = await prisma.userSession.findFirst({
+    where: { tenantId: session.tenantId, userId: session.userId, tokenHash: sessionHash(session.sessionId), revokedAt: null, expiresAt: { gt: new Date() } },
+    select: { id: true },
+  });
+  return Boolean(activeSession);
 }
 
 export async function requireUser(requiredRole?: Role) {
@@ -89,6 +134,15 @@ export async function requireUser(requiredRole?: Role) {
     select: { id: true, tenantId: true, name: true, email: true, role: true, active: true, tenant: { select: { slug: true, status: true, subscriptionStatus: true } }, homeownerProfile: { select: { id: true } }, employeeProfile: { select: { id: true } } },
   });
   if (!user || !user.active || user.role !== session.role || user.tenantId !== session.tenantId || user.tenant.slug !== session.tenantSlug) redirect("/login");
+  if (!session.sessionId) redirect("/login");
+  if (session.sessionId) {
+    const activeSession = await prisma.userSession.findFirst({
+      where: { tenantId: session.tenantId, userId: session.userId, tokenHash: sessionHash(session.sessionId), revokedAt: null, expiresAt: { gt: new Date() } },
+      select: { id: true },
+    });
+    if (!activeSession) redirect("/login");
+    await prisma.userSession.update({ where: { id: activeSession.id }, data: { lastSeenAt: new Date() } }).catch(() => undefined);
+  }
   if (user.tenant.status !== "ACTIVE" || user.tenant.subscriptionStatus === "CANCELLED") redirect(`/${session.tenantSlug}/login?error=tenant-inactive`);
   if (requiredRole && !canUseRole(user.role, requiredRole)) redirect(homeForRole(user.role));
   if (!platform) {
@@ -100,4 +154,20 @@ export async function requireUser(requiredRole?: Role) {
 
 export function defaultHomeForRole(role: Role) {
   return homeForRole(role);
+}
+
+function sessionHash(value: string) {
+  return createHash("sha256").update(value).digest("hex");
+}
+
+function optionalHash(value?: string | null) {
+  return value ? sessionHash(value) : null;
+}
+
+async function safeRequestHeaders() {
+  try {
+    return await headers();
+  } catch {
+    return new Headers();
+  }
 }

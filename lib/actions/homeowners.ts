@@ -1,15 +1,25 @@
 "use server";
 
-import { NotificationType, Prisma, Role, type HomeownerStatus } from "@prisma/client";
+import { createHash, randomBytes, randomUUID } from "node:crypto";
+import { HomeownerActivationStatus, HomeownerEmailVerificationStatus, NotificationStatus, NotificationType, Prisma, Role, type HomeownerStatus } from "@prisma/client";
 import { hash } from "bcryptjs";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { requireUser } from "@/lib/auth";
 import { getAppUrl } from "@/lib/app-url";
+import { requireUser } from "@/lib/auth";
 import { prisma } from "@/lib/db";
+import { homeownerAccountNumber } from "@/lib/homeowner-account";
 import { homeownerSchema } from "@/lib/validation";
-import { sendEmailNotification } from "@/lib/services/notifications";
 import { generateUniqueHomeownerAccountNumber } from "@/lib/services/homeowner-account-number";
+import { createHomeownerActivationCredential, sendHomeownerActivationEmail } from "@/lib/services/homeowner-activation";
+import { homeownerDigitalActivationEligibility, maskAccountNumber, nextInvitationStatus } from "@/lib/services/homeowner-digital-activation";
+import { sendEmailNotification } from "@/lib/services/notifications";
+import { getPasswordPolicy } from "@/lib/system-settings";
+import { runWithTenant } from "@/lib/tenant-context";
+
+const BULK_INVITATION_BATCH_SIZE = 25;
+const BULK_EMAIL_DELAY_MS = 100;
+const homeownerActivationAdminRoles = new Set<Role>([Role.SUPER_ADMIN, Role.SYSTEM_ADMIN, Role.HOA_ADMIN, Role.ADMIN]);
 
 export async function saveHomeownerAction(formData: FormData) {
   const admin = await requireUser(Role.ADMIN);
@@ -26,7 +36,6 @@ export async function saveHomeownerAction(formData: FormData) {
         data: {
           name: data.name,
           email: data.email,
-          ...(data.password ? { passwordHash: await hash(data.password, 12) } : {}),
         },
       }),
       prisma.homeownerProfile.update({
@@ -51,13 +60,11 @@ export async function saveHomeownerAction(formData: FormData) {
       }),
     ]);
   } else {
-    if (!data.password || data.password.length < 8) throw new Error("A password of at least 8 characters is required.");
-    const passwordHash = await hash(data.password, 12);
     const created = await createHomeownerWithAccountNumber({
       name: data.name,
       email: data.email,
       tenantId: admin.tenantId,
-      passwordHash,
+      createdById: admin.id,
       profile: {
         phone: data.phone,
         birthDate: optionalProfileDate(data.birthDate),
@@ -76,28 +83,28 @@ export async function saveHomeownerAction(formData: FormData) {
         monthlyDuesAmount: data.monthlyDuesAmount,
       },
     });
-    await sendEmailNotification({
+    await sendHomeownerActivationEmail({
       tenantId: admin.tenantId,
-      recipientId: created.id,
+      userId: created.user.id,
       email: created.email,
-      subject: "Welcome to the HOA Digital Hub",
-      heading: "New homeowner account",
-      message: `Hello ${created.name},\nYour homeowner portal account has been created. For security, passwords are never sent by email. Sign in using the credentials issued by the HOA office, or use Forgot Password to create a new password securely.`,
-      type: NotificationType.WELCOME,
-      actionLabel: "Open homeowner login",
-      actionUrl: `${getAppUrl()}/login`,
-    }).catch(async (error) => prisma.auditLog.create({ data: { actorId: admin.id, module: "EMAIL", action: "WELCOME_EMAIL_LOG_FAILED", entityType: "User", entityId: created.id, metadata: { error: error instanceof Error ? error.message.slice(0, 300) : "Unknown email logging error" } } }));
+      name: created.name,
+      accountNumber: created.accountNumber,
+      temporaryPassword: created.activation.temporaryPassword,
+      emailVerificationToken: created.activation.emailVerificationToken,
+      expiresAt: created.activation.expiresAt,
+      actorId: admin.id,
+    });
   }
 
   revalidatePath("/admin/homeowners");
-  redirect(data.id ? "/admin/homeowners?success=saved&message=Homeowner%20record%20updated%20successfully." : "/admin/homeowners?success=created&message=Homeowner%20record%20and%20portal%20account%20created%20successfully.");
+  redirect(data.id ? "/admin/homeowners?success=saved&message=Homeowner%20record%20updated%20successfully." : "/admin/homeowners?success=created&message=Homeowner%20record%20created%20and%20activation%20email%20queued.");
 }
 
 async function createHomeownerWithAccountNumber(input: {
   name: string;
   email: string;
   tenantId: string;
-  passwordHash: string;
+  createdById: string;
   profile: {
     phone: string;
     birthDate: Date | null;
@@ -120,18 +127,22 @@ async function createHomeownerWithAccountNumber(input: {
     const accountNumber = await generateUniqueHomeownerAccountNumber();
     try {
       return await prisma.$transaction(async (tx) => {
+        const passwordHash = await hash(generateSystemPasswordPlaceholder(), 12);
         const user = await tx.user.create({
           data: {
             name: input.name,
             email: input.email,
             tenantId: input.tenantId,
-            passwordHash: input.passwordHash,
+            passwordHash,
             role: Role.HOMEOWNER,
             homeownerProfile: {
               create: {
                 ...input.profile,
                 tenantId: input.tenantId,
                 accountNumber,
+                activationStatus: HomeownerActivationStatus.INVITATION_SENT,
+                emailStatus: HomeownerEmailVerificationStatus.UNVERIFIED,
+                activationSentAt: new Date(),
               },
             },
           },
@@ -140,7 +151,19 @@ async function createHomeownerWithAccountNumber(input: {
         await tx.homeownerAccountNumberReservation.create({
           data: { tenantId: input.tenantId, homeownerId: user.homeownerProfile?.id, accountNumber, reason: "ASSIGNED" },
         });
-        return user;
+        const activation = await createHomeownerActivationCredential({ tenantId: input.tenantId, userId: user.id, createdById: input.createdById, tx });
+        await tx.auditLog.create({
+          data: {
+            tenantId: input.tenantId,
+            actorId: input.createdById,
+            module: "AUTH",
+            action: "HOMEOWNER_ACTIVATION_CREATED",
+            entityType: "User",
+            entityId: user.id,
+            metadata: { accountMasked: maskAccountNumber(accountNumber) },
+          },
+        });
+        return { user, activation, id: user.id, email: user.email, name: user.name, accountNumber };
       });
     } catch (error) {
       if (isUniqueAccountNumberCollision(error)) continue;
@@ -151,6 +174,10 @@ async function createHomeownerWithAccountNumber(input: {
 }
 
 function optionalProfileDate(value?: string) { return value ? new Date(`${value}T00:00:00.000Z`) : null; }
+
+function generateSystemPasswordPlaceholder() {
+  return `activation-only-${randomUUID()}`;
+}
 
 function isUniqueAccountNumberCollision(error: unknown) {
   return error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002";
@@ -165,4 +192,356 @@ export async function deleteHomeownerAction(formData: FormData) {
   await prisma.user.delete({ where: { id: profile.userId } });
   revalidatePath("/admin/homeowners");
   redirect("/admin/homeowners?success=deleted");
+}
+
+export async function regenerateHomeownerActivationAction(formData: FormData) {
+  const admin = await requireHomeownerActivationAdmin();
+  const id = String(formData.get("id") || "");
+  const result = await sendActivationInvitation(admin, id, "HOMEOWNER_ACTIVATION_REGENERATED");
+  if (!result.ok) throw new Error(result.reason);
+  revalidatePath("/admin/homeowners");
+  revalidatePath(`/admin/homeowners/${id}`);
+  redirect(`/admin/homeowners/${id}?success=activation&message=Activation%20invitation%20sent.`);
+}
+
+export async function sendHomeownerActivationInvitationAction(formData: FormData) {
+  const admin = await requireHomeownerActivationAdmin();
+  const id = String(formData.get("id") || "");
+  const result = await sendActivationInvitation(admin, id, "HOMEOWNER_ACTIVATION_INVITATION_SENT");
+  if (!result.ok) throw new Error(result.reason);
+  revalidatePath("/admin/homeowners");
+  revalidatePath(`/admin/homeowners/${id}`);
+  redirect(`/admin/homeowners/${id}?success=activation&message=Activation%20invitation%20sent.`);
+}
+
+export async function cancelHomeownerActivationAction(formData: FormData) {
+  const admin = await requireHomeownerActivationAdmin();
+  const id = String(formData.get("id") || "");
+  const profile = await prisma.homeownerProfile.findFirst({
+    where: { id, tenantId: admin.tenantId },
+    include: { user: true },
+  });
+  if (!profile) throw new Error("Homeowner not found.");
+  if (profile.activationStatus === HomeownerActivationStatus.ACTIVE && profile.activatedAt) throw new Error("Activated homeowner accounts cannot be cancelled through invitation controls.");
+  await prisma.$transaction([
+    prisma.homeownerActivationCredential.updateMany({ where: { tenantId: admin.tenantId, userId: profile.userId, usedAt: null, revokedAt: null }, data: { revokedAt: new Date() } }),
+    prisma.homeownerEmailVerificationToken.updateMany({ where: { tenantId: admin.tenantId, userId: profile.userId, usedAt: null }, data: { usedAt: new Date() } }),
+    prisma.homeownerProfile.update({ where: { tenantId_id: { tenantId: admin.tenantId, id: profile.id } }, data: { activationStatus: HomeownerActivationStatus.CANCELLED } }),
+    prisma.auditLog.create({
+      data: {
+        tenantId: admin.tenantId,
+        actorId: admin.id,
+        module: "AUTH",
+        action: "HOMEOWNER_ACTIVATION_CANCELLED",
+        entityType: "User",
+        entityId: profile.userId,
+        metadata: { homeownerId: profile.id, accountMasked: maskAccountNumber(homeownerAccountNumber(profile)) },
+      },
+    }),
+  ]);
+  revalidatePath("/admin/homeowners");
+  revalidatePath(`/admin/homeowners/${profile.id}`);
+  redirect(`/admin/homeowners/${profile.id}?success=activation&message=Activation%20invitation%20cancelled.`);
+}
+
+export async function disableHomeownerActivationAction(formData: FormData) {
+  const admin = await requireHomeownerActivationAdmin();
+  const id = String(formData.get("id") || "");
+  const reason = safeDigitalAccessReason(formData.get("reason"), "Digital access disabled by HOA administrator.");
+  const profile = await prisma.homeownerProfile.findFirst({ where: { id, tenantId: admin.tenantId }, include: { user: true } });
+  if (!profile) throw new Error("Homeowner not found.");
+  if (profile.user.role !== Role.HOMEOWNER) throw new Error("Homeowner not found.");
+  const now = new Date();
+  await runWithTenant(admin.tenantId, () => prisma.$transaction(async (tx) => {
+    const current = await tx.homeownerProfile.findFirst({ where: { id: profile.id, tenantId: admin.tenantId, userId: profile.userId }, include: { user: true } });
+    if (!current || current.user.role !== Role.HOMEOWNER) throw new Error("Homeowner not found.");
+    await tx.homeownerActivationCredential.updateMany({
+      where: { tenantId: admin.tenantId, userId: current.userId, usedAt: null, revokedAt: null },
+      data: { revokedAt: now },
+    });
+    await tx.homeownerEmailVerificationToken.updateMany({ where: { tenantId: admin.tenantId, userId: current.userId, usedAt: null }, data: { usedAt: now } });
+    await tx.userSession.updateMany({ where: { tenantId: admin.tenantId, userId: current.userId, revokedAt: null }, data: { revokedAt: now } });
+    await tx.user.update({ where: { id: current.userId }, data: { active: false } });
+    await tx.homeownerProfile.update({
+      where: { tenantId_id: { tenantId: admin.tenantId, id: current.id } },
+      data: { activationStatus: HomeownerActivationStatus.DISABLED },
+    });
+    await tx.auditLog.create({
+      data: {
+        tenantId: admin.tenantId,
+        actorId: admin.id,
+        module: "AUTH",
+        action: "HOMEOWNER_ACTIVATION_DISABLED",
+        entityType: "User",
+        entityId: current.userId,
+        reason,
+        metadata: {
+          homeownerId: current.id,
+          accountMasked: maskAccountNumber(homeownerAccountNumber(current)),
+          previousActivationStatus: current.activationStatus,
+          disabledAt: now.toISOString(),
+          sessionsRevoked: true,
+          passkeysPreserved: true,
+        },
+      },
+    });
+  }), { role: admin.role });
+  revalidatePath("/admin/homeowners");
+  revalidatePath(`/admin/homeowners/${profile.id}`);
+  redirect(`/admin/homeowners/${profile.id}?success=activation&message=Activation%20has%20been%20disabled.`);
+}
+
+export async function enableHomeownerDigitalAccessAction(formData: FormData) {
+  const admin = await requireHomeownerActivationAdmin();
+  const id = String(formData.get("id") || "");
+  const reason = safeDigitalAccessReason(formData.get("reason"), "Digital access enabled by HOA administrator.");
+  const profile = await prisma.homeownerProfile.findFirst({ where: { id, tenantId: admin.tenantId }, include: { user: true } });
+  if (!profile || profile.user.role !== Role.HOMEOWNER) throw new Error("Homeowner not found.");
+  if (profile.activationStatus !== HomeownerActivationStatus.DISABLED && profile.user.active) throw new Error("Digital access is not disabled.");
+  const now = new Date();
+  let restoredStatus: HomeownerActivationStatus = HomeownerActivationStatus.NOT_INVITED;
+  await runWithTenant(admin.tenantId, () => prisma.$transaction(async (tx) => {
+    const current = await tx.homeownerProfile.findFirst({ where: { id: profile.id, tenantId: admin.tenantId, userId: profile.userId }, include: { user: true } });
+    if (!current || current.user.role !== Role.HOMEOWNER) throw new Error("Homeowner not found.");
+    restoredStatus = current.activatedAt ? HomeownerActivationStatus.ACTIVE : HomeownerActivationStatus.NOT_INVITED;
+    await tx.userSession.updateMany({ where: { tenantId: admin.tenantId, userId: current.userId, revokedAt: null }, data: { revokedAt: now } });
+    await tx.user.update({ where: { id: current.userId }, data: { active: true } });
+    await tx.homeownerProfile.update({
+      where: { tenantId_id: { tenantId: admin.tenantId, id: current.id } },
+      data: {
+        activationStatus: restoredStatus,
+        ...(restoredStatus === HomeownerActivationStatus.NOT_INVITED ? { activationSentAt: null } : {}),
+      },
+    });
+    await tx.auditLog.create({
+      data: {
+        tenantId: admin.tenantId,
+        actorId: admin.id,
+        module: "AUTH",
+        action: "HOMEOWNER_ACTIVATION_ENABLED",
+        entityType: "User",
+        entityId: current.userId,
+        reason,
+        metadata: {
+          homeownerId: current.id,
+          accountMasked: maskAccountNumber(homeownerAccountNumber(current)),
+          previousActivationStatus: current.activationStatus,
+          restoredActivationStatus: restoredStatus,
+          activatedBeforeDisable: Boolean(current.activatedAt),
+          sessionsRevoked: true,
+          sessionCreated: false,
+          passwordPreserved: true,
+          passkeysPreserved: true,
+          enabledAt: now.toISOString(),
+        },
+      },
+    });
+  }), { role: admin.role });
+  revalidatePath("/admin/homeowners");
+  revalidatePath(`/admin/homeowners/${profile.id}`);
+  const message = profile.activatedAt
+    ? "Digital%20access%20enabled.%20Homeowner%20must%20sign%20in%20again."
+    : "Digital%20access%20enabled.%20Send%20a%20new%20activation%20invitation%20to%20complete%20setup.";
+  redirect(`/admin/homeowners/${profile.id}?success=activation&message=${message}`);
+}
+
+export async function revokeHomeownerDigitalSessionsAction(formData: FormData) {
+  const admin = await requireHomeownerActivationAdmin();
+  const id = String(formData.get("id") || "");
+  const profile = await prisma.homeownerProfile.findFirst({ where: { id, tenantId: admin.tenantId }, include: { user: true } });
+  if (!profile) throw new Error("Homeowner not found.");
+  if (profile.activationStatus !== HomeownerActivationStatus.ACTIVE || !profile.activatedAt) throw new Error("Only activated homeowner digital accounts can have sessions revoked.");
+  const now = new Date();
+  await prisma.$transaction([
+    prisma.userSession.updateMany({ where: { tenantId: admin.tenantId, userId: profile.userId, revokedAt: null }, data: { revokedAt: now } }),
+    prisma.auditLog.create({
+      data: {
+        tenantId: admin.tenantId,
+        actorId: admin.id,
+        module: "AUTH",
+        action: "HOMEOWNER_SESSIONS_REVOKED",
+        entityType: "User",
+        entityId: profile.userId,
+        metadata: { homeownerId: profile.id, accountMasked: maskAccountNumber(homeownerAccountNumber(profile)) },
+      },
+    }),
+  ]);
+  revalidatePath(`/admin/homeowners/${profile.id}`);
+  redirect(`/admin/homeowners/${profile.id}?success=activation&message=Active%20homeowner%20sessions%20revoked.`);
+}
+
+export async function sendHomeownerPasswordResetEmailAction(formData: FormData) {
+  const admin = await requireHomeownerActivationAdmin();
+  const id = String(formData.get("id") || "");
+  const profile = await prisma.homeownerProfile.findFirst({
+    where: { id, tenantId: admin.tenantId },
+    include: { user: { include: { tenant: true } } },
+  });
+  if (!profile) throw new Error("Homeowner not found.");
+  if (profile.user.role !== Role.HOMEOWNER) throw new Error("Password reset can only be sent to homeowner accounts.");
+  if (!profile.user.active) throw new Error("Digital user access is disabled.");
+  if (profile.activationStatus !== HomeownerActivationStatus.ACTIVE || !profile.activatedAt) throw new Error("First-time activation must be completed before password reset.");
+  if (!profile.user.email.trim()) throw new Error("Registered email is required before sending a password reset.");
+
+  const policy = await getPasswordPolicy(admin.tenantId);
+  const rawToken = randomBytes(32).toString("base64url");
+  const tokenHash = passwordResetFingerprint(rawToken);
+  const expiresAt = new Date(Date.now() + policy.expiryMinutes * 60 * 1000);
+  await prisma.$transaction([
+    prisma.passwordResetToken.updateMany({ where: { tenantId: admin.tenantId, userId: profile.userId, usedAt: null }, data: { usedAt: new Date() } }),
+    prisma.passwordResetToken.create({ data: { tenantId: admin.tenantId, userId: profile.userId, tokenHash, expiresAt } }),
+  ]);
+
+  const resetUrl = `${getAppUrl()}/reset-password?token=${encodeURIComponent(rawToken)}&tenantSlug=${encodeURIComponent(profile.user.tenant.slug)}`;
+  const notification = await sendEmailNotification({
+    tenantId: admin.tenantId,
+    recipientId: profile.userId,
+    email: profile.user.email,
+    subject: "Reset your HOAHub homeowner password",
+    heading: "Secure password reset",
+    message: `Hello ${profile.user.name},\nHOA staff sent a password reset link for your activated homeowner account. This secure link expires in ${policy.expiryMinutes} minutes and can be used only once.\nIf you did not request this, contact your HOA office.`,
+    type: NotificationType.PASSWORD_RESET,
+    actionLabel: "Reset password",
+    actionUrl: resetUrl,
+    logMessage: "Homeowner password reset email attempted. The secure reset link and full email address are redacted from logs.",
+  });
+  const sent = notification.status === NotificationStatus.SENT;
+  if (!sent) await prisma.passwordResetToken.updateMany({ where: { tenantId: admin.tenantId, userId: profile.userId, tokenHash, usedAt: null }, data: { usedAt: new Date() } });
+  await prisma.auditLog.create({
+    data: {
+      tenantId: admin.tenantId,
+      actorId: admin.id,
+      module: "AUTH",
+      action: sent ? "HOMEOWNER_PASSWORD_RESET_EMAIL_SENT" : "HOMEOWNER_PASSWORD_RESET_EMAIL_FAILED",
+      entityType: "User",
+      entityId: profile.userId,
+      metadata: {
+        homeownerId: profile.id,
+        notificationId: notification.id,
+        status: notification.status,
+        errorCategory: sent ? null : passwordResetEmailErrorCategory(notification.errorMessage || "Email delivery failed."),
+      },
+    },
+  });
+  revalidatePath(`/admin/homeowners/${profile.id}`);
+  redirect(`/admin/homeowners/${profile.id}?success=activation&message=${sent ? "Password%20reset%20email%20sent." : "Password%20reset%20email%20could%20not%20be%20delivered."}`);
+}
+
+export async function bulkSendHomeownerActivationInvitationsAction(formData: FormData) {
+  const admin = await requireHomeownerActivationAdmin();
+  const selectedIds = formData.getAll("homeownerId").map((value) => String(value)).filter(Boolean);
+  if (!selectedIds.length) redirect("/admin/homeowners?error=Select%20at%20least%20one%20eligible%20homeowner.");
+  const homeowners = await prisma.homeownerProfile.findMany({ where: { tenantId: admin.tenantId, id: { in: selectedIds } }, include: { user: true }, orderBy: { user: { name: "asc" } }, take: selectedIds.length });
+  let sent = 0;
+  let skipped = 0;
+  let failed = 0;
+  for (let index = 0; index < homeowners.length; index += BULK_INVITATION_BATCH_SIZE) {
+    const batch = homeowners.slice(index, index + BULK_INVITATION_BATCH_SIZE);
+    for (const homeowner of batch) {
+      const result = await sendActivationInvitation(admin, homeowner.id, "HOMEOWNER_ACTIVATION_BULK_INVITATION_SENT", homeowner);
+      if (result.ok) sent++;
+      else if (result.skipped) skipped++;
+      else failed++;
+      await delay(BULK_EMAIL_DELAY_MS);
+    }
+  }
+  await prisma.auditLog.create({
+    data: {
+      tenantId: admin.tenantId,
+      actorId: admin.id,
+      module: "AUTH",
+      action: "HOMEOWNER_ACTIVATION_BULK_COMPLETED",
+      entityType: "HomeownerProfile",
+      entityId: "selected",
+      metadata: { mode: "selected", selectedCount: selectedIds.length, processed: homeowners.length, sent, skipped, failed },
+    },
+  });
+  revalidatePath("/admin/homeowners");
+  redirect(`/admin/homeowners?success=bulkActivation&message=${encodeURIComponent(`Activation invitations processed. Sent: ${sent}. Skipped: ${skipped}. Failed: ${failed}.`)}`);
+}
+
+async function sendActivationInvitation(
+  admin: { id: string; tenantId: string },
+  homeownerId: string,
+  auditAction: string,
+  loadedProfile?: Prisma.HomeownerProfileGetPayload<{ include: { user: true } }>,
+) {
+  const profile = loadedProfile ?? await prisma.homeownerProfile.findFirst({ where: { id: homeownerId, tenantId: admin.tenantId }, include: { user: true } });
+  if (!profile) return { ok: false, skipped: true, reason: "Homeowner not found." } as const;
+  const eligibility = homeownerDigitalActivationEligibility(profile);
+  if (!eligibility.eligible) return { ok: false, skipped: true, reason: eligibility.reason } as const;
+  const accountNumber = homeownerAccountNumber(profile);
+  try {
+    const activation = await prisma.$transaction(async (tx) => {
+      const created = await createHomeownerActivationCredential({ tenantId: admin.tenantId, userId: profile.userId, createdById: admin.id, tx });
+      await tx.homeownerProfile.update({
+        where: { tenantId_id: { tenantId: admin.tenantId, id: profile.id } },
+        data: { activationStatus: nextInvitationStatus(profile.activationStatus), emailStatus: HomeownerEmailVerificationStatus.UNVERIFIED, activationSentAt: new Date() },
+      });
+      await tx.auditLog.create({
+        data: {
+          tenantId: admin.tenantId,
+          actorId: admin.id,
+          module: "AUTH",
+          action: auditAction,
+          entityType: "User",
+          entityId: profile.userId,
+          metadata: { homeownerId: profile.id, accountMasked: maskAccountNumber(accountNumber) },
+        },
+      });
+      return created;
+    });
+    await sendHomeownerActivationEmail({
+      tenantId: admin.tenantId,
+      userId: profile.userId,
+      name: profile.user.name,
+      email: profile.user.email,
+      accountNumber,
+      temporaryPassword: activation.temporaryPassword,
+      emailVerificationToken: activation.emailVerificationToken,
+      expiresAt: activation.expiresAt,
+      actorId: admin.id,
+    });
+    return { ok: true } as const;
+  } catch (error) {
+    await prisma.auditLog.create({
+      data: {
+        tenantId: admin.tenantId,
+        actorId: admin.id,
+        module: "AUTH",
+        action: "HOMEOWNER_ACTIVATION_INVITATION_FAILED",
+        entityType: "User",
+        entityId: profile.userId,
+        metadata: { homeownerId: profile.id, error: error instanceof Error ? error.message.slice(0, 160) : "Unknown error" },
+      },
+    });
+    return { ok: false, skipped: false, reason: "Invitation failed." } as const;
+  }
+}
+
+function delay(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function requireHomeownerActivationAdmin() {
+  const admin = await requireUser(Role.ADMIN);
+  if (!homeownerActivationAdminRoles.has(admin.role)) throw new Error("Your role is not authorized to manage homeowner activation.");
+  return admin;
+}
+
+function passwordResetFingerprint(value: string) {
+  return createHash("sha256").update(value).digest("hex");
+}
+
+function safeDigitalAccessReason(value: FormDataEntryValue | null, fallback: string) {
+  const text = String(value || "").replace(/[\r\n\t]+/g, " ").replace(/\s+/g, " ").trim();
+  return (text || fallback).slice(0, 240);
+}
+
+function passwordResetEmailErrorCategory(message: string) {
+  if (/not configured|username|password|sender/i.test(message)) return "CONFIGURATION";
+  if (/authentication|invalid login|535|EAUTH/i.test(message)) return "AUTHENTICATION";
+  if (/timeout|timed out|connection|ECONN|ETIMEDOUT/i.test(message)) return "CONNECTION";
+  if (/recipient|mailbox|address/i.test(message)) return "RECIPIENT";
+  return "PROVIDER";
 }

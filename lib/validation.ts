@@ -7,8 +7,8 @@ const emptyToUndefined = (value: unknown) => value === "" ? undefined : value;
 const optionalText = (max: number) => z.preprocess(emptyToUndefined, z.string().trim().max(max).optional());
 
 export const loginSchema = z.object({
-  email: z.string().trim().toLowerCase().email("Enter a valid email."),
-  password: z.string().min(8, "Password must be at least 8 characters.").max(72),
+  identifier: z.string().trim().min(1, "Enter your email address or account number.").max(254),
+  password: z.string().min(6, "Password must be at least 6 characters.").max(72),
 });
 
 export const forgotPasswordSchema = z.object({
@@ -40,7 +40,6 @@ export const homeownerSchema = z.object({
   id: z.string().optional(),
   name: required.max(100),
   email: z.string().trim().toLowerCase().email(),
-  password: z.string().max(72).optional(),
   phone: required.max(30),
   birthDate: z.string().date().or(z.literal("")).optional(),
   civilStatus: z.string().trim().max(50).optional(),

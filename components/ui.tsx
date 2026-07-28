@@ -16,5 +16,14 @@ export function ConfirmSubmitButton({ children, message, name, value, className 
 }
 
 export function SearchInput({ placeholder = "Search..." }: { placeholder?: string }) {
-  return <input className="field max-w-full sm:max-w-xs" type="search" name="q" placeholder={placeholder} onChange={(event) => { const term = event.currentTarget.value.toLowerCase(); document.querySelectorAll<HTMLElement>("[data-search]").forEach((row) => { row.hidden = !row.dataset.search?.includes(term); }); }} />;
+  return <input className="field max-w-full sm:max-w-xs" type="search" name="q" placeholder={placeholder} onChange={(event) => { const terms = normalizeSearch(event.currentTarget.value).split(" ").filter(Boolean); document.querySelectorAll<HTMLElement>("[data-search]").forEach((row) => { const haystack = normalizeSearch(row.dataset.search || ""); row.hidden = terms.some((term) => !haystack.includes(term)); }); }} />;
+}
+
+function normalizeSearch(value: string) {
+  return value
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9@._-]+/g, " ")
+    .trim();
 }

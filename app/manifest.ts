@@ -5,7 +5,7 @@ export default function manifest(): MetadataRoute.Manifest {
     name: "HOAHub",
     short_name: "HOAHub",
     description: "Secure multi-tenant HOA management platform",
-    start_url: "/portal/dashboard",
+    start_url: "/login",
     scope: "/",
     display: "standalone",
     background_color: "#f5fbff",

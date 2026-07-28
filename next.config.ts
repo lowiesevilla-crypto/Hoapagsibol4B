@@ -25,17 +25,28 @@ const nextConfig: NextConfig = {
       "frame-src 'self'",
       !isDevelopment ? "upgrade-insecure-requests" : "",
     ].filter(Boolean).join("; ");
-    return [{
-      source: "/:path*",
-      headers: [
-        { key: "Content-Security-Policy", value: contentSecurityPolicy },
-        { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
-        { key: "X-Content-Type-Options", value: "nosniff" },
-        { key: "X-Frame-Options", value: "SAMEORIGIN" },
-        { key: "Permissions-Policy", value: "camera=(), microphone=(), geolocation=(), payment=()" },
-        ...(process.env.APP_URL?.startsWith("https://") ? [{ key: "Strict-Transport-Security", value: "max-age=31536000; includeSubDomains" }] : []),
-      ],
-    }];
+    const securityHeaders = [
+      { key: "Content-Security-Policy", value: contentSecurityPolicy },
+      { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
+      { key: "X-Content-Type-Options", value: "nosniff" },
+      { key: "X-Frame-Options", value: "SAMEORIGIN" },
+      { key: "Permissions-Policy", value: "camera=(), microphone=(), geolocation=(), payment=(), publickey-credentials-create=(self), publickey-credentials-get=(self)" },
+      ...(process.env.APP_URL?.startsWith("https://") ? [{ key: "Strict-Transport-Security", value: "max-age=31536000; includeSubDomains" }] : []),
+    ];
+    const noStoreHeaders = [
+      { key: "Cache-Control", value: "no-store, max-age=0" },
+      { key: "Pragma", value: "no-cache" },
+    ];
+    return [
+      { source: "/:path*", headers: securityHeaders },
+      { source: "/login", headers: noStoreHeaders },
+      { source: "/activate", headers: noStoreHeaders },
+      { source: "/:tenantSlug/login", headers: noStoreHeaders },
+      { source: "/portal/:path*", headers: noStoreHeaders },
+      { source: "/admin/:path*", headers: noStoreHeaders },
+      { source: "/employee/:path*", headers: noStoreHeaders },
+      { source: "/platform/:path*", headers: noStoreHeaders },
+    ];
   },
 };
 

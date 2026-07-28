@@ -57,6 +57,29 @@ enum HomeownerStatus {
   INACTIVE
 }
 
+enum HomeownerActivationStatus {
+  NOT_INVITED
+  INVITATION_SENT
+  ACTIVATION_IN_PROGRESS
+  EMAIL_PENDING_VERIFICATION
+  PASSWORD_CREATION_REQUIRED
+  ACTIVE
+  EXPIRED
+  CANCELLED
+  DISABLED
+  PENDING_ACTIVATION
+}
+
+enum HomeownerEmailVerificationStatus {
+  UNVERIFIED
+  VERIFIED
+}
+
+enum PasskeyChallengeType {
+  REGISTRATION
+  AUTHENTICATION
+}
+
 enum BillStatus {
   PAID
   PARTIAL
@@ -510,88 +533,94 @@ model Tenant {
 }
 
 model User {
-  tenantId                              String                           @default("tenant_pagsibol4b_default")
-  id                                    String                           @id @default(cuid())
+  tenantId                              String                            @default("tenant_pagsibol4b_default")
+  id                                    String                            @id @default(cuid())
   name                                  String
   email                                 String
   username                              String?
   passwordHash                          String
-  role                                  Role                             @default(HOMEOWNER)
-  active                                Boolean                          @default(true)
+  role                                  Role                              @default(HOMEOWNER)
+  active                                Boolean                           @default(true)
   lastLoginAt                           DateTime?
   homeownerProfile                      HomeownerProfile?
-  employeeProfile                       EmployeeProfile?                 @relation("EmployeeUser")
-  announcementsCreated                  Announcement[]                   @relation("AnnouncementCreator")
-  eventsCreated                         Event[]                          @relation("EventCreator")
-  notificationLogs                      NotificationLog[]                @relation("NotificationRecipient")
-  collectionsCreated                    Collection[]                     @relation("CollectionCreator")
-  refundsProcessed                      BondRefund[]                     @relation("RefundProcessor")
-  forfeituresProcessed                  Collection[]                     @relation("ForfeitureProcessor")
-  payrollPeriodsCreated                 PayrollPeriod[]                  @relation("PayrollCreator")
-  expensesCreated                       Expense[]                        @relation("ExpenseCreator")
-  duesExemptionsCreated                 DuesExemption[]                  @relation("DuesExemptionCreator")
-  createdAt                             DateTime                         @default(now())
-  updatedAt                             DateTime                         @updatedAt
-  systemSettingsUpdated                 SystemSetting[]                  @relation("SystemSettingUpdater")
-  paymentRequestsReviewed               PaymentRequest[]                 @relation("PaymentRequestReviewer")
-  payrollAccesses                       PayrollAccess[]                  @relation("PayrollAccessUser")
-  payrollAccessGranted                  PayrollAccess[]                  @relation("PayrollAccessGrantedBy")
-  auditLogs                             AuditLog[]                       @relation("AuditActor")
-  calendarDaysCreated                   PayrollCalendarDay[]             @relation("PayrollCalendarCreator")
-  schedulesCreated                      EmployeeSchedule[]               @relation("EmployeeScheduleCreator")
-  attendanceAdjustmentsRequested        AttendanceAdjustment[]           @relation("AttendanceAdjustmentRequester")
-  attendanceAdjustmentsReviewed         AttendanceAdjustment[]           @relation("AttendanceAdjustmentReviewer")
-  overtimeRecordsCreated                OvertimeRecord[]                 @relation("OvertimeRecordCreator")
-  overtimeRecordsReviewed               OvertimeRecord[]                 @relation("OvertimeRecordReviewer")
-  payrollArchivesDeleted                PayrollArchive[]                 @relation("PayrollArchiveDeletedBy")
-  billsArchived                         Bill[]                           @relation("BillArchivedBy")
-  paymentsVoided                        Payment[]                        @relation("PaymentVoidedBy")
-  paymentsProcessed                     Payment[]                        @relation("PaymentProcessor")
-  paymentArchivesVoided                 PaymentArchive[]                 @relation("PaymentArchiveVoidedBy")
-  dataMigrationsCreated                 DataMigration[]                  @relation("DataMigrationCreator")
-  billingRulesCreated                   BillingRule[]                    @relation("BillingRuleCreator")
-  billingRulesUpdated                   BillingRule[]                    @relation("BillingRuleUpdater")
-  documentTemplatesUpdated              DocumentTemplate[]               @relation("DocumentTemplateUpdater")
-  documentTypeConfigurationsUpdated     DocumentTypeConfiguration[]      @relation("DocumentTypeConfigurationUpdater")
-  documentRequestsProcessed             DocumentRequest[]                @relation("DocumentRequestProcessor")
-  documentRequestsApproved              DocumentRequest[]                @relation("DocumentRequestApprover")
-  documentDownloadOverrides             DocumentRequest[]                @relation("DocumentDownloadOverride")
-  documentRequestsInitiated             DocumentRequest[]                @relation("DocumentInitiator")
-  documentRequestsArchived              DocumentRequest[]                @relation("DocumentArchiver")
-  documentRequestEditAudits             DocumentRequestEditAudit[]       @relation("DocumentRequestEditAuditActor")
-  documentVersionsGenerated             DocumentVersion[]                @relation("DocumentVersionGenerator")
-  documentVersionsReleased              DocumentVersion[]                @relation("DocumentVersionReleaser")
-  documentVersionsRevoked               DocumentVersion[]                @relation("DocumentVersionRevoker")
-  documentRequestHistory                DocumentRequestHistory[]         @relation("DocumentRequestHistoryActor")
-  documentDefinitionsCreated            DocumentDefinition[]             @relation("DocumentDefinitionCreator")
-  documentDefinitionsUpdated            DocumentDefinition[]             @relation("DocumentDefinitionUpdater")
-  documentTemplateVersionsCreated       DocumentTemplateVersion[]        @relation("DocumentTemplateVersionCreator")
-  documentTemplateVersionsPublished     DocumentTemplateVersion[]        @relation("DocumentTemplateVersionPublisher")
-  documentVerificationTokensRevoked     DocumentVerificationToken[]      @relation("DocumentVerificationTokenRevoker")
-  documentGenerationAttempts            DocumentGenerationAttempt[]      @relation("DocumentGenerationAttemptActor")
-  documentWorkflowDefinitionsCreated    DocumentWorkflowDefinition[]     @relation("DocumentWorkflowDefinitionCreator")
-  documentWorkflowDefinitionsUpdated    DocumentWorkflowDefinition[]     @relation("DocumentWorkflowDefinitionUpdater")
-  documentWorkflowStepsCreated          DocumentWorkflowStep[]           @relation("DocumentWorkflowStepCreator")
-  documentWorkflowStepsUpdated          DocumentWorkflowStep[]           @relation("DocumentWorkflowStepUpdater")
-  documentPoliciesCreated               DocumentPolicy[]                 @relation("DocumentPolicyCreator")
-  documentPoliciesUpdated               DocumentPolicy[]                 @relation("DocumentPolicyUpdater")
-  documentNumberingConfigsCreated       DocumentNumberingConfiguration[] @relation("DocumentNumberingConfigurationCreator")
-  documentNumberingConfigsUpdated       DocumentNumberingConfiguration[] @relation("DocumentNumberingConfigurationUpdater")
-  documentPlaceholderDefinitionsCreated DocumentPlaceholderDefinition[]  @relation("DocumentPlaceholderDefinitionCreator")
-  documentPlaceholderDefinitionsUpdated DocumentPlaceholderDefinition[]  @relation("DocumentPlaceholderDefinitionUpdater")
-  documentWorkflowApproverSteps         DocumentWorkflowStep[]           @relation("DocumentWorkflowStepApprover")
-  organizationOfficersUpdated           OrganizationOfficer[]            @relation("OrganizationOfficerUpdater")
-  organizationHistoryCreated            OrganizationOfficerHistory[]     @relation("OrganizationOfficerHistoryActor")
-  chatConversationsHomeowner            ChatConversation[]               @relation("ChatConversationHomeowner")
-  chatConversationsCreated              ChatConversation[]               @relation("ChatConversationCreator")
-  chatConversationsAssigned             ChatConversation[]               @relation("ChatConversationAssignee")
+  employeeProfile                       EmployeeProfile?                  @relation("EmployeeUser")
+  announcementsCreated                  Announcement[]                    @relation("AnnouncementCreator")
+  eventsCreated                         Event[]                           @relation("EventCreator")
+  notificationLogs                      NotificationLog[]                 @relation("NotificationRecipient")
+  collectionsCreated                    Collection[]                      @relation("CollectionCreator")
+  refundsProcessed                      BondRefund[]                      @relation("RefundProcessor")
+  forfeituresProcessed                  Collection[]                      @relation("ForfeitureProcessor")
+  payrollPeriodsCreated                 PayrollPeriod[]                   @relation("PayrollCreator")
+  expensesCreated                       Expense[]                         @relation("ExpenseCreator")
+  duesExemptionsCreated                 DuesExemption[]                   @relation("DuesExemptionCreator")
+  createdAt                             DateTime                          @default(now())
+  updatedAt                             DateTime                          @updatedAt
+  systemSettingsUpdated                 SystemSetting[]                   @relation("SystemSettingUpdater")
+  paymentRequestsReviewed               PaymentRequest[]                  @relation("PaymentRequestReviewer")
+  payrollAccesses                       PayrollAccess[]                   @relation("PayrollAccessUser")
+  payrollAccessGranted                  PayrollAccess[]                   @relation("PayrollAccessGrantedBy")
+  auditLogs                             AuditLog[]                        @relation("AuditActor")
+  calendarDaysCreated                   PayrollCalendarDay[]              @relation("PayrollCalendarCreator")
+  schedulesCreated                      EmployeeSchedule[]                @relation("EmployeeScheduleCreator")
+  attendanceAdjustmentsRequested        AttendanceAdjustment[]            @relation("AttendanceAdjustmentRequester")
+  attendanceAdjustmentsReviewed         AttendanceAdjustment[]            @relation("AttendanceAdjustmentReviewer")
+  overtimeRecordsCreated                OvertimeRecord[]                  @relation("OvertimeRecordCreator")
+  overtimeRecordsReviewed               OvertimeRecord[]                  @relation("OvertimeRecordReviewer")
+  payrollArchivesDeleted                PayrollArchive[]                  @relation("PayrollArchiveDeletedBy")
+  billsArchived                         Bill[]                            @relation("BillArchivedBy")
+  paymentsVoided                        Payment[]                         @relation("PaymentVoidedBy")
+  paymentsProcessed                     Payment[]                         @relation("PaymentProcessor")
+  paymentArchivesVoided                 PaymentArchive[]                  @relation("PaymentArchiveVoidedBy")
+  dataMigrationsCreated                 DataMigration[]                   @relation("DataMigrationCreator")
+  billingRulesCreated                   BillingRule[]                     @relation("BillingRuleCreator")
+  billingRulesUpdated                   BillingRule[]                     @relation("BillingRuleUpdater")
+  documentTemplatesUpdated              DocumentTemplate[]                @relation("DocumentTemplateUpdater")
+  documentTypeConfigurationsUpdated     DocumentTypeConfiguration[]       @relation("DocumentTypeConfigurationUpdater")
+  documentRequestsProcessed             DocumentRequest[]                 @relation("DocumentRequestProcessor")
+  documentRequestsApproved              DocumentRequest[]                 @relation("DocumentRequestApprover")
+  documentDownloadOverrides             DocumentRequest[]                 @relation("DocumentDownloadOverride")
+  documentRequestsInitiated             DocumentRequest[]                 @relation("DocumentInitiator")
+  documentRequestsArchived              DocumentRequest[]                 @relation("DocumentArchiver")
+  documentRequestEditAudits             DocumentRequestEditAudit[]        @relation("DocumentRequestEditAuditActor")
+  documentVersionsGenerated             DocumentVersion[]                 @relation("DocumentVersionGenerator")
+  documentVersionsReleased              DocumentVersion[]                 @relation("DocumentVersionReleaser")
+  documentVersionsRevoked               DocumentVersion[]                 @relation("DocumentVersionRevoker")
+  documentRequestHistory                DocumentRequestHistory[]          @relation("DocumentRequestHistoryActor")
+  documentDefinitionsCreated            DocumentDefinition[]              @relation("DocumentDefinitionCreator")
+  documentDefinitionsUpdated            DocumentDefinition[]              @relation("DocumentDefinitionUpdater")
+  documentTemplateVersionsCreated       DocumentTemplateVersion[]         @relation("DocumentTemplateVersionCreator")
+  documentTemplateVersionsPublished     DocumentTemplateVersion[]         @relation("DocumentTemplateVersionPublisher")
+  documentVerificationTokensRevoked     DocumentVerificationToken[]       @relation("DocumentVerificationTokenRevoker")
+  documentGenerationAttempts            DocumentGenerationAttempt[]       @relation("DocumentGenerationAttemptActor")
+  documentWorkflowDefinitionsCreated    DocumentWorkflowDefinition[]      @relation("DocumentWorkflowDefinitionCreator")
+  documentWorkflowDefinitionsUpdated    DocumentWorkflowDefinition[]      @relation("DocumentWorkflowDefinitionUpdater")
+  documentWorkflowStepsCreated          DocumentWorkflowStep[]            @relation("DocumentWorkflowStepCreator")
+  documentWorkflowStepsUpdated          DocumentWorkflowStep[]            @relation("DocumentWorkflowStepUpdater")
+  documentPoliciesCreated               DocumentPolicy[]                  @relation("DocumentPolicyCreator")
+  documentPoliciesUpdated               DocumentPolicy[]                  @relation("DocumentPolicyUpdater")
+  documentNumberingConfigsCreated       DocumentNumberingConfiguration[]  @relation("DocumentNumberingConfigurationCreator")
+  documentNumberingConfigsUpdated       DocumentNumberingConfiguration[]  @relation("DocumentNumberingConfigurationUpdater")
+  documentPlaceholderDefinitionsCreated DocumentPlaceholderDefinition[]   @relation("DocumentPlaceholderDefinitionCreator")
+  documentPlaceholderDefinitionsUpdated DocumentPlaceholderDefinition[]   @relation("DocumentPlaceholderDefinitionUpdater")
+  documentWorkflowApproverSteps         DocumentWorkflowStep[]            @relation("DocumentWorkflowStepApprover")
+  organizationOfficersUpdated           OrganizationOfficer[]             @relation("OrganizationOfficerUpdater")
+  organizationHistoryCreated            OrganizationOfficerHistory[]      @relation("OrganizationOfficerHistoryActor")
+  chatConversationsHomeowner            ChatConversation[]                @relation("ChatConversationHomeowner")
+  chatConversationsCreated              ChatConversation[]                @relation("ChatConversationCreator")
+  chatConversationsAssigned             ChatConversation[]                @relation("ChatConversationAssignee")
   chatParticipants                      ChatParticipant[]
-  chatMessages                          ChatMessage[]                    @relation("ChatMessageSender")
+  chatMessages                          ChatMessage[]                     @relation("ChatMessageSender")
   presence                              UserPresence?
   passwordResetTokens                   PasswordResetToken[]
+  homeownerActivationCredentials        HomeownerActivationCredential[]   @relation("HomeownerActivationUser")
+  homeownerActivationCredentialsCreated HomeownerActivationCredential[]   @relation("HomeownerActivationCreator")
+  homeownerEmailVerificationTokens      HomeownerEmailVerificationToken[]
+  passkeyCredentials                    UserPasskeyCredential[]
+  passkeyChallenges                     UserPasskeyChallenge[]
+  sessions                              UserSession[]
   userRoleAssignments                   UserRoleAssignment[]
-  assignedRoleAssignments               UserRoleAssignment[]             @relation("UserRoleAssignmentAssignedBy")
-  tenant                                Tenant                           @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  assignedRoleAssignments               UserRoleAssignment[]              @relation("UserRoleAssignmentAssignedBy")
+  tenant                                Tenant                            @relation(fields: [tenantId], references: [id], onDelete: Restrict)
 
   @@unique([tenantId, email])
   @@unique([tenantId, username])
@@ -655,26 +684,32 @@ model TenantSequence {
 }
 
 model HomeownerProfile {
-  tenantId          String            @default("tenant_pagsibol4b_default")
-  id                String            @id @default(cuid())
-  userId            String            @unique
-  user              User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tenantId          String                           @default("tenant_pagsibol4b_default")
+  id                String                           @id @default(cuid())
+  userId            String                           @unique
+  user              User                             @relation(fields: [userId], references: [id], onDelete: Cascade)
   address           String
   block             String
   lot               String
   phone             String
-  birthDate         DateTime?         @db.Date
+  birthDate         DateTime?                        @db.Date
   civilStatus       String?
   citizenship       String?
   occupation        String?
-  residencyDate     DateTime?         @db.Date
+  residencyDate     DateTime?                        @db.Date
   phase             String?
   propertyType      String?
   occupancyStatus   String?
   messengerId       String?
-  accountNumber     String?           @unique @db.VarChar(11)
-  status            HomeownerStatus   @default(ACTIVE)
-  monthlyDuesAmount Decimal           @db.Decimal(12, 2)
+  accountNumber     String?                          @unique @db.VarChar(11)
+  status            HomeownerStatus                  @default(ACTIVE)
+  activationStatus  HomeownerActivationStatus        @default(NOT_INVITED)
+  emailStatus       HomeownerEmailVerificationStatus @default(UNVERIFIED)
+  emailVerifiedAt   DateTime?
+  mobileConfirmedAt DateTime?
+  activationSentAt  DateTime?
+  activatedAt       DateTime?
+  monthlyDuesAmount Decimal                          @db.Decimal(12, 2)
   bills             Bill[]
   payments          Payment[]
   paymentRequests   PaymentRequest[]
@@ -684,8 +719,8 @@ model HomeownerProfile {
   dataMigrations    DataMigration[]
   documentRequests  DocumentRequest[]
   householdMembers  HouseholdMember[]
-  createdAt         DateTime          @default(now())
-  updatedAt         DateTime          @updatedAt
+  createdAt         DateTime                         @default(now())
+  updatedAt         DateTime                         @updatedAt
 
   @@unique([tenantId, id])
   @@unique([tenantId, block, lot])
@@ -2366,6 +2401,95 @@ model PasswordResetAttempt {
 
   @@index([emailHash, createdAt])
   @@index([ipHash, createdAt])
+  @@index([tenantId])
+}
+
+model HomeownerActivationCredential {
+  tenantId       String    @default("tenant_pagsibol4b_default")
+  id             String    @id @default(cuid())
+  userId         String
+  user           User      @relation("HomeownerActivationUser", fields: [userId], references: [id], onDelete: Cascade)
+  credentialHash String    @unique
+  createdById    String?
+  createdBy      User?     @relation("HomeownerActivationCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  expiresAt      DateTime
+  usedAt         DateTime?
+  revokedAt      DateTime?
+  attemptCount   Int       @default(0)
+  lastAttemptAt  DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  @@index([tenantId, userId, expiresAt])
+  @@index([tenantId, createdById])
+  @@index([expiresAt, usedAt, revokedAt])
+  @@index([tenantId])
+}
+
+model HomeownerEmailVerificationToken {
+  tenantId  String    @default("tenant_pagsibol4b_default")
+  id        String    @id @default(cuid())
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash String    @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([tenantId, userId, expiresAt])
+  @@index([expiresAt, usedAt])
+  @@index([tenantId])
+}
+
+model UserPasskeyCredential {
+  tenantId     String    @default("tenant_pagsibol4b_default")
+  id           String    @id @default(cuid())
+  userId       String
+  user         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  credentialId String    @unique @db.VarChar(512)
+  publicKey    String    @db.Text
+  counter      BigInt    @default(0)
+  transports   Json?
+  deviceName   String?   @db.VarChar(120)
+  backedUp     Boolean   @default(false)
+  createdAt    DateTime  @default(now())
+  lastUsedAt   DateTime?
+
+  @@index([tenantId, userId])
+  @@index([tenantId])
+}
+
+model UserPasskeyChallenge {
+  tenantId      String               @default("tenant_pagsibol4b_default")
+  id            String               @id @default(cuid())
+  userId        String?
+  user          User?                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  challengeHash String               @unique
+  type          PasskeyChallengeType
+  expiresAt     DateTime
+  usedAt        DateTime?
+  createdAt     DateTime             @default(now())
+
+  @@index([tenantId, userId, type, expiresAt])
+  @@index([expiresAt, usedAt])
+  @@index([tenantId])
+}
+
+model UserSession {
+  tenantId      String    @default("tenant_pagsibol4b_default")
+  id            String    @id @default(cuid())
+  userId        String
+  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash     String    @unique
+  expiresAt     DateTime
+  revokedAt     DateTime?
+  userAgentHash String?
+  ipHash        String?
+  createdAt     DateTime  @default(now())
+  lastSeenAt    DateTime?
+
+  @@index([tenantId, userId, expiresAt])
+  @@index([expiresAt, revokedAt])
   @@index([tenantId])
 }
 

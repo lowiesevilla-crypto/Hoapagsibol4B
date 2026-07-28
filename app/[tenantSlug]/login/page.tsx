@@ -16,7 +16,7 @@ export default async function TenantLoginPage({
   searchParams,
 }: {
   params: Promise<{ tenantSlug: string }>;
-  searchParams: Promise<{ reset?: string }>;
+  searchParams: Promise<{ reset?: string; loggedOut?: string }>;
 }) {
   const { tenantSlug } = await params;
   const query = await searchParams;
@@ -35,6 +35,7 @@ export default async function TenantLoginPage({
   return (
     <TenantLoginScreen
       reset={query.reset}
+      loggedOut={query.loggedOut}
       tenant={{
         name: tenant.name,
         slug: tenant.slug,

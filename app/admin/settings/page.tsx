@@ -40,7 +40,7 @@ export default async function SystemSettingsPage({ searchParams }: { searchParam
   const setupRows = allSettingFields.map((field) => ({ ...field, ...sourceFor(field.category, field.key) }));
   const endpointRows = [
     ["Public login URL", `${getAppUrl()}/login`],
-    ["Local login URL", "http://localhost:3000/login"],
+    ["Local login URL", `${getAppUrl()}/login`],
     ["System settings", "/admin/settings"],
     ["Homeowner QR payment", "/portal/pay"],
     ["Admin QR review", "/admin/payments/requests"],

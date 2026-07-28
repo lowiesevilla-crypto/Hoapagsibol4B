@@ -132,8 +132,10 @@ function clientIp(input: Headers) { return input.get("x-forwarded-for")?.split("
 function requestBaseUrl(input: Headers) {
   const configured = process.env.APP_URL?.trim() || process.env.BASE_URL?.trim() || process.env.PUBLIC_APP_URL?.trim();
   if (configured) return getAppUrl();
-  const host = (input.get("x-forwarded-host") || input.get("host") || "localhost:3000").toLowerCase();
+  const fallback = getAppUrl();
+  const fallbackHost = new URL(fallback).host;
+  const host = (input.get("x-forwarded-host") || input.get("host") || fallbackHost).toLowerCase();
   const safeHost = host === "localhost:3000" || host === "127.0.0.1:3000" || host === "hoahub.tech" || host === "www.hoahub.tech";
-  if (!safeHost) return "http://localhost:3000";
+  if (!safeHost) return fallback;
   return `${input.get("x-forwarded-proto") || (host.includes("localhost") || host.startsWith("127.") ? "http" : "https")}://${host}`;
 }

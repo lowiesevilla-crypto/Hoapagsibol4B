@@ -6,11 +6,11 @@ import { ConfirmSubmitButton, DeleteButton } from "@/components/ui";
 import { HomeownerForm } from "@/components/homeowner-form";
 import { PageHeader } from "@/components/page-header";
 import { saveAdminHouseholdMemberAction } from "@/lib/actions/documents";
-import { cancelHomeownerActivationAction, deleteHomeownerAction, disableHomeownerActivationAction, regenerateHomeownerActivationAction, sendHomeownerActivationInvitationAction } from "@/lib/actions/homeowners";
+import { cancelHomeownerActivationAction, deleteHomeownerAction, disableHomeownerActivationAction, regenerateHomeownerActivationAction, revokeHomeownerDigitalSessionsAction, sendHomeownerActivationInvitationAction, sendHomeownerPasswordResetEmailAction } from "@/lib/actions/homeowners";
 import { requireUser } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { homeownerAccountNumber } from "@/lib/homeowner-account";
-import { activationInvitationExpiresAt, deliveryStatusLabel, digitalActivationLabel, homeownerDigitalActivationEligibility, homeownerHasCompletedDigitalActivation, maskAccountNumber, maskEmail } from "@/lib/services/homeowner-digital-activation";
+import { activationInvitationExpiresAt, deliveryStatusLabel, digitalActivationLabel, homeownerDigitalActivationEligibility, homeownerHasCompletedDigitalActivation, maskAccountNumber, maskEmail, type HomeownerDeliveryStatus } from "@/lib/services/homeowner-digital-activation";
 import { canValidateHouseholdMembers, householdMemberEligibility, householdMemberValidationLabel, householdMemberValidationStatus } from "@/lib/services/household-member-eligibility";
 import { shortDate } from "@/lib/utils";
 
@@ -42,11 +42,18 @@ export default async function EditHomeownerPage({ params, searchParams }: { para
   const activationComplete = homeownerHasCompletedDigitalActivation(homeowner);
   const activationEligibility = homeownerDigitalActivationEligibility(homeowner);
   const invitationExpiration = activationInvitationExpiresAt(homeowner);
-  const latestDelivery = await prisma.notificationLog.findFirst({
-    where: { tenantId: user.tenantId, recipientId: homeowner.userId, type: NotificationType.WELCOME },
-    orderBy: { createdAt: "desc" },
-    select: { status: true, createdAt: true, sentAt: true, errorMessage: true },
-  });
+  const [latestDelivery, latestCredential] = await Promise.all([
+    prisma.notificationLog.findFirst({
+      where: { tenantId: user.tenantId, recipientId: homeowner.userId, type: NotificationType.WELCOME },
+      orderBy: { createdAt: "desc" },
+      select: { status: true, createdAt: true, sentAt: true, errorMessage: true },
+    }),
+    prisma.homeownerActivationCredential.findFirst({
+      where: { tenantId: user.tenantId, userId: homeowner.userId },
+      orderBy: { createdAt: "desc" },
+      select: { createdAt: true, expiresAt: true, usedAt: true, revokedAt: true, attemptCount: true, lastAttemptAt: true },
+    }),
+  ]);
   return <><PageHeader eyebrow="Homeowners" title={homeowner.user.name} description={`Block ${homeowner.block}, Lot ${homeowner.lot}`} action={<><Link className="btn-secondary" href={`/admin/homeowners/${homeowner.id}/soa`}><FileText className="size-4" /> Statement of Account</Link><form action={deleteHomeownerAction}><input type="hidden" name="id" value={homeowner.id} /><DeleteButton label="Delete profile" /></form></>} />
     {query.error && <Notice kind="error">{query.error}</Notice>}{query.success && <Notice kind="success">{query.message || "Saved."}</Notice>}
     <section className="mb-6 grid gap-3 sm:grid-cols-3">
@@ -56,24 +63,35 @@ export default async function EditHomeownerPage({ params, searchParams }: { para
       <Info label="Operational Homeowner Status" value={homeowner.status} />
       <Info label="Digital Activation Status" value={digitalActivationLabel(homeowner.activationStatus)} />
       <Info label="Masked Registered Email" value={maskEmail(homeowner.user.email)} />
-      <Info label="Registered Email Verification" value={homeowner.emailStatus === "VERIFIED" ? "Verified" : "Unverified"} />
-      <Info label="Invitation Sent" value={homeowner.activationSentAt ? shortDate(homeowner.activationSentAt) : "Not sent"} />
-      <Info label="Invitation Expiration" value={invitationExpiration ? shortDate(invitationExpiration) : "Not set"} />
-      <Info label="Activation Completed" value={homeowner.activatedAt ? shortDate(homeowner.activatedAt) : "Not completed"} />
-      <Info label="Latest Delivery" value={deliveryStatusLabel(latestDelivery)} />
     </section>
     <section className="card mb-6">
       <h2 className="text-lg font-black">Digital Account Activation</h2>
-      <p className="mb-4 text-sm text-slate-500">Operational homeowner status is separate from digital login activation. Invitations revoke unused temporary credentials and email a fresh one-time password to the registered email.</p>
-      <p className={`mb-4 rounded-xl p-3 text-sm font-semibold ${activationEligibility.eligible ? "bg-emerald-50 text-emerald-800" : "bg-slate-50 text-slate-600"}`}>{activationEligibility.reason}</p>
-      {latestDelivery?.errorMessage && <p className="mb-4 rounded-xl bg-rose-50 p-3 text-sm font-semibold text-rose-700">{latestDelivery.errorMessage}</p>}
+      <p className="text-sm text-slate-500">Operational homeowner status is separate from digital login activation. HOA staff never set the homeowner permanent password.</p>
+      <div className="my-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+        <ActivationInfo label="Operational Status" value={homeowner.status} />
+        <ActivationInfo label="Digital Activation Status" value={digitalActivationLabel(homeowner.activationStatus)} />
+        <ActivationInfo label="Registered Email" value={maskEmail(homeowner.user.email)} />
+        <ActivationInfo label="Masked Account Number" value={maskAccountNumber(accountNumber)} mono />
+        <ActivationInfo label="Email Verification Status" value={homeowner.emailStatus === "VERIFIED" ? "Verified" : "Unverified"} />
+        <ActivationInfo label="Invitation Sent" value={homeowner.activationSentAt ? shortDate(homeowner.activationSentAt) : "Not sent"} />
+        <ActivationInfo label="Invitation Expiration" value={invitationExpiration ? shortDate(invitationExpiration) : "Not set"} />
+        <ActivationInfo label="Activation Completed" value={homeowner.activatedAt ? shortDate(homeowner.activatedAt) : "Not completed"} />
+        <ActivationInfo label="Latest Email Delivery" value={safeDeliveryStatus(latestDelivery)} />
+        <ActivationInfo label="Temporary Credential State" value={credentialStateLabel(latestCredential)} />
+      </div>
+      <p className={`mb-4 rounded-xl p-3 text-sm font-semibold ${activationEligibility.eligible ? "bg-emerald-50 text-emerald-800" : homeowner.user.email.trim() ? "bg-slate-50 text-slate-600" : "bg-amber-50 text-amber-800"}`}>{activationEligibility.reason}</p>
+      {latestDelivery?.status === "FAILED" && <p className="mb-4 rounded-xl bg-rose-50 p-3 text-sm font-semibold text-rose-700">Latest activation email delivery failed. Review Mail Settings or server email logs, then retry.</p>}
       <div className="flex flex-wrap gap-3">
         {!activationComplete && activationEligibility.eligible && !homeowner.activationSentAt && <form action={sendHomeownerActivationInvitationAction}><input type="hidden" name="id" value={homeowner.id} /><ConfirmSubmitButton className="btn-primary" message="Send first-time activation invitation?">Send Activation Invitation</ConfirmSubmitButton></form>}
         {!activationComplete && activationEligibility.eligible && homeowner.activationSentAt && <form action={sendHomeownerActivationInvitationAction}><input type="hidden" name="id" value={homeowner.id} /><ConfirmSubmitButton className="btn-primary" message="Resend activation invitation?">Resend Invitation</ConfirmSubmitButton></form>}
-        {!activationComplete && activationEligibility.eligible && <form action={regenerateHomeownerActivationAction}><input type="hidden" name="id" value={homeowner.id} /><ConfirmSubmitButton className="btn-secondary" message="Regenerate the temporary password and email a fresh activation invitation?">Regenerate Temporary Password</ConfirmSubmitButton></form>}
-        {!activationComplete && homeowner.activationStatus !== "CANCELLED" && <form action={cancelHomeownerActivationAction}><input type="hidden" name="id" value={homeowner.id} /><ConfirmSubmitButton className="btn-secondary" message="Cancel activation and revoke unused temporary credentials?">Cancel Activation</ConfirmSubmitButton></form>}
-        {homeowner.activationStatus !== "DISABLED" && <form action={disableHomeownerActivationAction}><input type="hidden" name="id" value={homeowner.id} /><ConfirmSubmitButton className="btn-danger" message="Disable digital access and revoke active sessions?">Disable Digital Access</ConfirmSubmitButton></form>}
+        {!activationComplete && activationEligibility.eligible && <form action={regenerateHomeownerActivationAction}><input type="hidden" name="id" value={homeowner.id} /><ConfirmSubmitButton className="btn-secondary" message="Regenerate the temporary password and email a fresh activation invitation?">Regenerate & Email Activation</ConfirmSubmitButton></form>}
+        {!activationComplete && homeowner.activationStatus !== "CANCELLED" && homeowner.activationStatus !== "DISABLED" && <form action={cancelHomeownerActivationAction}><input type="hidden" name="id" value={homeowner.id} /><ConfirmSubmitButton className="btn-secondary" message="Cancel activation and revoke unused temporary credentials?">Cancel Activation</ConfirmSubmitButton></form>}
+        {activationComplete && <form action={sendHomeownerPasswordResetEmailAction}><input type="hidden" name="id" value={homeowner.id} /><ConfirmSubmitButton className="btn-secondary" message="Send a password reset email to the registered homeowner email?">Send Password Reset</ConfirmSubmitButton></form>}
+        {activationComplete && <form action={revokeHomeownerDigitalSessionsAction}><input type="hidden" name="id" value={homeowner.id} /><ConfirmSubmitButton className="btn-secondary" message="Revoke active sessions for this homeowner?">Revoke Sessions</ConfirmSubmitButton></form>}
+        {activationComplete && homeowner.activationStatus !== "DISABLED" && <form action={disableHomeownerActivationAction}><input type="hidden" name="id" value={homeowner.id} /><ConfirmSubmitButton className="btn-danger" message="Disable digital access and revoke active sessions?">Disable Digital Access</ConfirmSubmitButton></form>}
       </div>
+      {!activationEligibility.eligible && !activationComplete && <ActionHint>{homeowner.user.email.trim() ? "Resolve the eligibility reason above before sending an activation invitation." : "Activation unavailable. A registered email is required before a first-time invitation can be sent."}</ActionHint>}
+      {activationComplete && <ActionHint>This homeowner has completed first-time activation. Use password-reset email or session revocation for account recovery and security support.</ActionHint>}
     </section>
     <HomeownerForm homeowner={homeowner} />
     <section className="card mt-6">
@@ -127,6 +145,29 @@ function Notice({ kind, children }: { kind: "error" | "success"; children: React
 
 function Info({ label, value, mono = false }: { label: string; value: string; mono?: boolean }) {
   return <div className="rounded-xl border border-slate-200 bg-white p-4"><p className="text-xs font-bold uppercase tracking-wide text-slate-500">{label}</p><p className={`mt-1 break-words font-black text-slate-900 ${mono ? "font-mono text-sm" : ""}`}>{value}</p></div>;
+}
+
+function ActivationInfo({ label, value, mono = false }: { label: string; value: string; mono?: boolean }) {
+  return <div className="rounded-xl bg-slate-50 p-3"><p className="text-xs font-bold uppercase tracking-wide text-slate-500">{label}</p><p className={`mt-1 break-words text-sm font-black text-slate-900 ${mono ? "font-mono" : ""}`}>{value}</p></div>;
+}
+
+function ActionHint({ children }: { children: React.ReactNode }) {
+  return <p className="mt-4 rounded-xl bg-blue-50 p-3 text-sm font-semibold text-blue-800">{children}</p>;
+}
+
+function safeDeliveryStatus(delivery: HomeownerDeliveryStatus) {
+  if (!delivery) return "No delivery attempt";
+  if (delivery.status === "FAILED") return "Failed";
+  return deliveryStatusLabel(delivery);
+}
+
+function credentialStateLabel(credential: { createdAt: Date; expiresAt: Date; usedAt: Date | null; revokedAt: Date | null; attemptCount: number; lastAttemptAt: Date | null } | null) {
+  if (!credential) return "No temporary credential";
+  const attempts = credential.attemptCount ? `; ${credential.attemptCount} failed attempt${credential.attemptCount === 1 ? "" : "s"}` : "";
+  if (credential.usedAt) return `Used ${shortDate(credential.usedAt)}${attempts}`;
+  if (credential.revokedAt) return `Revoked ${shortDate(credential.revokedAt)}${attempts}`;
+  if (credential.expiresAt <= new Date()) return `Expired ${shortDate(credential.expiresAt)}${attempts}`;
+  return `Active until ${shortDate(credential.expiresAt)}${attempts}`;
 }
 
 function auditMetadataText(metadata: unknown, key: string) {

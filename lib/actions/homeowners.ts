@@ -1,10 +1,11 @@
 "use server";
 
-import { randomUUID } from "node:crypto";
-import { HomeownerActivationStatus, HomeownerEmailVerificationStatus, Prisma, Role, type HomeownerStatus } from "@prisma/client";
+import { createHash, randomBytes, randomUUID } from "node:crypto";
+import { HomeownerActivationStatus, HomeownerEmailVerificationStatus, NotificationStatus, NotificationType, Prisma, Role, type HomeownerStatus } from "@prisma/client";
 import { hash } from "bcryptjs";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
+import { getAppUrl } from "@/lib/app-url";
 import { requireUser } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { homeownerAccountNumber } from "@/lib/homeowner-account";
@@ -12,9 +13,12 @@ import { homeownerSchema } from "@/lib/validation";
 import { generateUniqueHomeownerAccountNumber } from "@/lib/services/homeowner-account-number";
 import { createHomeownerActivationCredential, sendHomeownerActivationEmail } from "@/lib/services/homeowner-activation";
 import { homeownerDigitalActivationEligibility, maskAccountNumber, nextInvitationStatus } from "@/lib/services/homeowner-digital-activation";
+import { sendEmailNotification } from "@/lib/services/notifications";
+import { getPasswordPolicy } from "@/lib/system-settings";
 
 const BULK_INVITATION_BATCH_SIZE = 25;
 const BULK_EMAIL_DELAY_MS = 100;
+const homeownerActivationAdminRoles = new Set<Role>([Role.SUPER_ADMIN, Role.SYSTEM_ADMIN, Role.HOA_ADMIN, Role.ADMIN]);
 
 export async function saveHomeownerAction(formData: FormData) {
   const admin = await requireUser(Role.ADMIN);
@@ -31,7 +35,6 @@ export async function saveHomeownerAction(formData: FormData) {
         data: {
           name: data.name,
           email: data.email,
-          ...(data.password ? { passwordHash: await hash(data.password, 12) } : {}),
         },
       }),
       prisma.homeownerProfile.update({
@@ -191,7 +194,7 @@ export async function deleteHomeownerAction(formData: FormData) {
 }
 
 export async function regenerateHomeownerActivationAction(formData: FormData) {
-  const admin = await requireUser(Role.ADMIN);
+  const admin = await requireHomeownerActivationAdmin();
   const id = String(formData.get("id") || "");
   const result = await sendActivationInvitation(admin, id, "HOMEOWNER_ACTIVATION_REGENERATED");
   if (!result.ok) throw new Error(result.reason);
@@ -201,7 +204,7 @@ export async function regenerateHomeownerActivationAction(formData: FormData) {
 }
 
 export async function sendHomeownerActivationInvitationAction(formData: FormData) {
-  const admin = await requireUser(Role.ADMIN);
+  const admin = await requireHomeownerActivationAdmin();
   const id = String(formData.get("id") || "");
   const result = await sendActivationInvitation(admin, id, "HOMEOWNER_ACTIVATION_INVITATION_SENT");
   if (!result.ok) throw new Error(result.reason);
@@ -211,7 +214,7 @@ export async function sendHomeownerActivationInvitationAction(formData: FormData
 }
 
 export async function cancelHomeownerActivationAction(formData: FormData) {
-  const admin = await requireUser(Role.ADMIN);
+  const admin = await requireHomeownerActivationAdmin();
   const id = String(formData.get("id") || "");
   const profile = await prisma.homeownerProfile.findFirst({
     where: { id, tenantId: admin.tenantId },
@@ -241,7 +244,7 @@ export async function cancelHomeownerActivationAction(formData: FormData) {
 }
 
 export async function disableHomeownerActivationAction(formData: FormData) {
-  const admin = await requireUser(Role.ADMIN);
+  const admin = await requireHomeownerActivationAdmin();
   const id = String(formData.get("id") || "");
   const profile = await prisma.homeownerProfile.findFirst({ where: { id, tenantId: admin.tenantId }, include: { user: true } });
   if (!profile) throw new Error("Homeowner not found.");
@@ -274,8 +277,90 @@ export async function disableHomeownerActivationAction(formData: FormData) {
   redirect(`/admin/homeowners/${profile.id}?success=activation&message=Activation%20has%20been%20disabled.`);
 }
 
+export async function revokeHomeownerDigitalSessionsAction(formData: FormData) {
+  const admin = await requireHomeownerActivationAdmin();
+  const id = String(formData.get("id") || "");
+  const profile = await prisma.homeownerProfile.findFirst({ where: { id, tenantId: admin.tenantId }, include: { user: true } });
+  if (!profile) throw new Error("Homeowner not found.");
+  if (profile.activationStatus !== HomeownerActivationStatus.ACTIVE || !profile.activatedAt) throw new Error("Only activated homeowner digital accounts can have sessions revoked.");
+  const now = new Date();
+  await prisma.$transaction([
+    prisma.userSession.updateMany({ where: { tenantId: admin.tenantId, userId: profile.userId, revokedAt: null }, data: { revokedAt: now } }),
+    prisma.auditLog.create({
+      data: {
+        tenantId: admin.tenantId,
+        actorId: admin.id,
+        module: "AUTH",
+        action: "HOMEOWNER_SESSIONS_REVOKED",
+        entityType: "User",
+        entityId: profile.userId,
+        metadata: { homeownerId: profile.id, accountMasked: maskAccountNumber(homeownerAccountNumber(profile)) },
+      },
+    }),
+  ]);
+  revalidatePath(`/admin/homeowners/${profile.id}`);
+  redirect(`/admin/homeowners/${profile.id}?success=activation&message=Active%20homeowner%20sessions%20revoked.`);
+}
+
+export async function sendHomeownerPasswordResetEmailAction(formData: FormData) {
+  const admin = await requireHomeownerActivationAdmin();
+  const id = String(formData.get("id") || "");
+  const profile = await prisma.homeownerProfile.findFirst({
+    where: { id, tenantId: admin.tenantId },
+    include: { user: { include: { tenant: true } } },
+  });
+  if (!profile) throw new Error("Homeowner not found.");
+  if (profile.user.role !== Role.HOMEOWNER) throw new Error("Password reset can only be sent to homeowner accounts.");
+  if (!profile.user.active) throw new Error("Digital user access is disabled.");
+  if (profile.activationStatus !== HomeownerActivationStatus.ACTIVE || !profile.activatedAt) throw new Error("First-time activation must be completed before password reset.");
+  if (!profile.user.email.trim()) throw new Error("Registered email is required before sending a password reset.");
+
+  const policy = await getPasswordPolicy(admin.tenantId);
+  const rawToken = randomBytes(32).toString("base64url");
+  const tokenHash = passwordResetFingerprint(rawToken);
+  const expiresAt = new Date(Date.now() + policy.expiryMinutes * 60 * 1000);
+  await prisma.$transaction([
+    prisma.passwordResetToken.updateMany({ where: { tenantId: admin.tenantId, userId: profile.userId, usedAt: null }, data: { usedAt: new Date() } }),
+    prisma.passwordResetToken.create({ data: { tenantId: admin.tenantId, userId: profile.userId, tokenHash, expiresAt } }),
+  ]);
+
+  const resetUrl = `${getAppUrl()}/reset-password?token=${encodeURIComponent(rawToken)}&tenantSlug=${encodeURIComponent(profile.user.tenant.slug)}`;
+  const notification = await sendEmailNotification({
+    tenantId: admin.tenantId,
+    recipientId: profile.userId,
+    email: profile.user.email,
+    subject: "Reset your HOAHub homeowner password",
+    heading: "Secure password reset",
+    message: `Hello ${profile.user.name},\nHOA staff sent a password reset link for your activated homeowner account. This secure link expires in ${policy.expiryMinutes} minutes and can be used only once.\nIf you did not request this, contact your HOA office.`,
+    type: NotificationType.PASSWORD_RESET,
+    actionLabel: "Reset password",
+    actionUrl: resetUrl,
+    logMessage: "Homeowner password reset email attempted. The secure reset link and full email address are redacted from logs.",
+  });
+  const sent = notification.status === NotificationStatus.SENT;
+  if (!sent) await prisma.passwordResetToken.updateMany({ where: { tenantId: admin.tenantId, userId: profile.userId, tokenHash, usedAt: null }, data: { usedAt: new Date() } });
+  await prisma.auditLog.create({
+    data: {
+      tenantId: admin.tenantId,
+      actorId: admin.id,
+      module: "AUTH",
+      action: sent ? "HOMEOWNER_PASSWORD_RESET_EMAIL_SENT" : "HOMEOWNER_PASSWORD_RESET_EMAIL_FAILED",
+      entityType: "User",
+      entityId: profile.userId,
+      metadata: {
+        homeownerId: profile.id,
+        notificationId: notification.id,
+        status: notification.status,
+        errorCategory: sent ? null : passwordResetEmailErrorCategory(notification.errorMessage || "Email delivery failed."),
+      },
+    },
+  });
+  revalidatePath(`/admin/homeowners/${profile.id}`);
+  redirect(`/admin/homeowners/${profile.id}?success=activation&message=${sent ? "Password%20reset%20email%20sent." : "Password%20reset%20email%20could%20not%20be%20delivered."}`);
+}
+
 export async function bulkSendHomeownerActivationInvitationsAction(formData: FormData) {
-  const admin = await requireUser(Role.ADMIN);
+  const admin = await requireHomeownerActivationAdmin();
   const mode = String(formData.get("mode") || "selected");
   const selectedIds = formData.getAll("homeownerId").map((value) => String(value)).filter(Boolean);
   const where = mode === "allEligible"
@@ -371,4 +456,22 @@ async function sendActivationInvitation(
 
 function delay(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function requireHomeownerActivationAdmin() {
+  const admin = await requireUser(Role.ADMIN);
+  if (!homeownerActivationAdminRoles.has(admin.role)) throw new Error("Your role is not authorized to manage homeowner activation.");
+  return admin;
+}
+
+function passwordResetFingerprint(value: string) {
+  return createHash("sha256").update(value).digest("hex");
+}
+
+function passwordResetEmailErrorCategory(message: string) {
+  if (/not configured|username|password|sender/i.test(message)) return "CONFIGURATION";
+  if (/authentication|invalid login|535|EAUTH/i.test(message)) return "AUTHENTICATION";
+  if (/timeout|timed out|connection|ECONN|ETIMEDOUT/i.test(message)) return "CONNECTION";
+  if (/recipient|mailbox|address/i.test(message)) return "RECIPIENT";
+  return "PROVIDER";
 }

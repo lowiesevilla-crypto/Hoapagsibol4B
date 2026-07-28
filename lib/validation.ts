@@ -40,7 +40,6 @@ export const homeownerSchema = z.object({
   id: z.string().optional(),
   name: required.max(100),
   email: z.string().trim().toLowerCase().email(),
-  password: z.string().max(72).optional(),
   phone: required.max(30),
   birthDate: z.string().date().or(z.literal("")).optional(),
   civilStatus: z.string().trim().max(50).optional(),

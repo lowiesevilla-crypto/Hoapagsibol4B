@@ -3,7 +3,7 @@ import "server-only";
 import { createHash } from "node:crypto";
 import { generateAuthenticationOptions, generateRegistrationOptions, verifyAuthenticationResponse, verifyRegistrationResponse } from "@simplewebauthn/server";
 import type { AuthenticationResponseJSON, AuthenticatorTransportFuture, RegistrationResponseJSON, WebAuthnCredential } from "@simplewebauthn/server";
-import { HomeownerActivationStatus, PasskeyChallengeType, Role } from "@prisma/client";
+import { HomeownerActivationStatus, HomeownerEmailVerificationStatus, PasskeyChallengeType, Role } from "@prisma/client";
 import { getAppUrl } from "@/lib/app-url";
 import { platformPrisma, prisma } from "@/lib/db";
 import { normalizeAccountNumber, normalizeActivationEmail } from "@/lib/services/homeowner-activation";
@@ -154,7 +154,7 @@ export async function findPasskeyLoginUser(input: { email?: string; accountNumbe
         ...(accountNumber ? {} : { email }),
         active: true,
         role: Role.HOMEOWNER,
-        homeownerProfile: { status: "ACTIVE", activationStatus: HomeownerActivationStatus.ACTIVE, activatedAt: { not: null }, ...(accountNumber ? { accountNumber } : {}) },
+        homeownerProfile: { status: "ACTIVE", activationStatus: HomeownerActivationStatus.ACTIVE, emailStatus: HomeownerEmailVerificationStatus.VERIFIED, activatedAt: { not: null }, ...(accountNumber ? { accountNumber } : {}) },
       },
       include: { homeownerProfile: true, tenant: { include: { advisories: { where: { active: true }, orderBy: { createdAt: "desc" }, take: 1 }, moduleEntitlements: true } }, passkeyCredentials: true },
     });
@@ -174,7 +174,7 @@ export async function findPasskeyLoginUser(input: { email?: string; accountNumbe
       active: true,
       role: Role.HOMEOWNER,
       tenant: { status: "ACTIVE", subscriptionStatus: { not: "CANCELLED" } },
-      homeownerProfile: { status: "ACTIVE", activationStatus: HomeownerActivationStatus.ACTIVE, activatedAt: { not: null }, ...(accountNumber ? { accountNumber } : {}) },
+      homeownerProfile: { status: "ACTIVE", activationStatus: HomeownerActivationStatus.ACTIVE, emailStatus: HomeownerEmailVerificationStatus.VERIFIED, activatedAt: { not: null }, ...(accountNumber ? { accountNumber } : {}) },
     },
     include: { homeownerProfile: true, tenant: { include: { advisories: { where: { active: true }, orderBy: { createdAt: "desc" }, take: 1 }, moduleEntitlements: true } }, passkeyCredentials: true },
     take: 10,
@@ -239,7 +239,8 @@ export async function verifyPasskeyAuthentication(input: { response: Authenticat
     where: { credentialId: input.response.id },
     include: { user: { include: { tenant: { include: { advisories: { where: { active: true }, orderBy: { createdAt: "desc" }, take: 1 }, moduleEntitlements: true } }, homeownerProfile: true } } },
   });
-  if (!credentialRecord || !credentialRecord.user.active || credentialRecord.user.role !== Role.HOMEOWNER || credentialRecord.user.homeownerProfile?.activationStatus !== HomeownerActivationStatus.ACTIVE || !credentialRecord.user.homeownerProfile.activatedAt) {
+  const homeownerProfile = credentialRecord?.user.homeownerProfile;
+  if (!credentialRecord || !credentialRecord.user.active || credentialRecord.user.role !== Role.HOMEOWNER || homeownerProfile?.activationStatus !== HomeownerActivationStatus.ACTIVE || homeownerProfile?.emailStatus !== HomeownerEmailVerificationStatus.VERIFIED || !homeownerProfile?.activatedAt) {
     throw new Error("Passkey authentication could not be verified.");
   }
   if (!tenantCanSignIn(credentialRecord.user.tenant)) throw new Error(credentialRecord.user.tenant.advisories[0]?.message || "This HOA portal is currently unavailable.");

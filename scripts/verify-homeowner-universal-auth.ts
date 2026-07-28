@@ -29,6 +29,8 @@ function assertSourceSafeguards() {
   const tenantLoginScreen = readFileSync("components/tenant-login-screen.tsx", "utf8");
   const passkeyService = readFileSync("lib/services/passkeys.ts", "utf8");
   const passkeyButton = readFileSync("components/passkey-login-button.tsx", "utf8");
+  const passkeyLoginVerifyRoute = readFileSync("app/api/auth/passkeys/login/verify/route.ts", "utf8");
+  const authCore = readFileSync("lib/auth.ts", "utf8");
   const authActions = readFileSync("lib/actions/auth.ts", "utf8");
   const loginOptionsRoute = readFileSync("app/api/auth/passkeys/login/options/route.ts", "utf8");
   const homeownerActions = readFileSync("lib/actions/homeowners.ts", "utf8");
@@ -55,7 +57,11 @@ function assertSourceSafeguards() {
   assert((passkeyService.match(/const rp = passkeyRp\(\)/g) || []).length >= 5, "Registration and authentication generation/verification must use matching passkeyRp configuration.");
   assert(passkeyService.includes("expectedOrigin: rp.origin") && passkeyService.includes("expectedRPID: rp.rpID"), "Passkey verification must use configured origin and RP ID.");
   assert(passkeyService.includes("isIpAddress") && passkeyService.includes('value.includes("://")') && passkeyService.includes('value.includes(":")'), "Passkey RP ID must reject IPs, schemes, ports, and paths.");
-  assert(passkeyService.includes("active: true") && passkeyService.includes("activationStatus: HomeownerActivationStatus.ACTIVE") && passkeyService.includes("!credentialRecord.user.active"), "Passkey login must reject digitally disabled homeowner accounts.");
+  assert(passkeyService.includes("active: true") && passkeyService.includes("activationStatus: HomeownerActivationStatus.ACTIVE") && passkeyService.includes("emailStatus: HomeownerEmailVerificationStatus.VERIFIED") && passkeyService.includes("!credentialRecord.user.active"), "Passkey login must reject digitally disabled or email-unverified homeowner accounts.");
+  assert(passkeyService.includes("const homeownerProfile = credentialRecord?.user.homeownerProfile") && passkeyService.includes("homeownerProfile?.emailStatus !== HomeownerEmailVerificationStatus.VERIFIED"), "Passkey authentication must resolve and validate the server-side homeowner profile before session creation.");
+  assert(passkeyLoginVerifyRoute.includes("runWithTenant(session.tenantId") && passkeyLoginVerifyRoute.includes("() => createSession(session)") && passkeyLoginVerifyRoute.indexOf("await verifyPasskeyAuthentication") < passkeyLoginVerifyRoute.indexOf("await runWithTenant"), "Passkey login must create UserSession inside the resolved tenant context.");
+  assert(passkeyLoginVerifyRoute.includes('return NextResponse.json({ error: "Passkey authentication could not be verified." }') && !passkeyLoginVerifyRoute.includes("error instanceof Error ? error.message"), "Passkey login verification must return a generic safe error.");
+  assert(authCore.indexOf("await prisma.userSession.create({ data: prepared.data })") >= 0 && authCore.indexOf("await prisma.userSession.create({ data: prepared.data })") < authCore.indexOf("await setSessionCookie(prepared)"), "Session cookie must be set only after UserSession.create succeeds.");
   assert(homeownerActions.includes("regenerateHomeownerActivationAction") && homeownerActions.includes("disableHomeownerActivationAction"), "Admin activation management actions are missing.");
   assert(homeownerActions.includes("enableHomeownerDigitalAccessAction"), "Enable Digital Access admin action is missing.");
   assert(homeownerActions.includes("homeownerActivationAdminRoles") && homeownerActions.includes("Role.SUPER_ADMIN") && homeownerActions.includes("Role.SYSTEM_ADMIN") && homeownerActions.includes("Role.HOA_ADMIN") && homeownerActions.includes("Role.ADMIN") && !homeownerActions.includes("Role.PLATFORM_ADMIN, Role.HOA_ADMIN"), "Enable/disable digital access roles must match the approved tenant-admin role model.");
@@ -553,6 +559,7 @@ async function assertActivationCompletionTransaction(tenant: { id: string; slug:
 async function assertDigitalAccessEnableDisable(tenant: { id: string; slug: string }) {
   const { prisma: scopedPrisma } = await import("../lib/db");
   const { runWithTenant } = await import("../lib/tenant-context");
+  const { prepareSession } = await import("../lib/auth");
   const passkeys = await import("../lib/services/passkeys");
   const createdUserIds: string[] = [];
   const otherTenant = await prisma.tenant.create({ data: { name: "UAT Digital Access Tenant", shortName: "UATD", slug: `uat-digital-${Date.now()}`, status: "ACTIVE" } });
@@ -639,6 +646,17 @@ async function assertDigitalAccessEnableDisable(tenant: { id: string; slug: stri
     assert(enabledPasskeys === 1, "Enable Digital Access removed a registered passkey.");
     assert(sessionsAfterEnable === 0, "Enable Digital Access automatically created a session.");
     assert(!("error" in reenabledPasskeyLogin), "Re-enabled activated account could not start passkey login with preserved passkey.");
+    const preparedPasskeySession = await prepareSession({ userId: activated.user.id, role: Role.HOMEOWNER, tenantId: tenant.id, tenantSlug: tenant.slug });
+    await runWithTenant(tenant.id, async () => await scopedPrisma.userSession.create({ data: preparedPasskeySession.data }), { role: Role.HOMEOWNER });
+    const passkeySessions = await prisma.userSession.findMany({ where: { tenantId: tenant.id, userId: activated.user.id, revokedAt: null, expiresAt: { gt: new Date() } } });
+    assert(passkeySessions.length === 1 && passkeySessions[0].tenantId === tenant.id, "Resolved passkey login did not create a tenant-scoped UserSession.");
+    let crossTenantPasskeySessionRejected = false;
+    try {
+      await runWithTenant(otherTenant.id, async () => await scopedPrisma.userSession.create({ data: preparedPasskeySession.data }), { role: Role.HOMEOWNER });
+    } catch {
+      crossTenantPasskeySessionRejected = true;
+    }
+    assert(crossTenantPasskeySessionRejected, "Cross-tenant passkey UserSession.create was not rejected.");
 
     await runWithTenant(tenant.id, async () => await scopedPrisma.$transaction(async (tx) => {
       await tx.user.update({ where: { id: unactivated.user.id }, data: { active: false } });

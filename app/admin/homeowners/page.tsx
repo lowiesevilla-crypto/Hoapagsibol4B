@@ -14,12 +14,20 @@ export default async function HomeownersPage() {
   const homeowners = await prisma.homeownerProfile.findMany({ where: { tenantId: user.tenantId }, include: { user: true, _count: { select: { bills: true } } }, orderBy: { user: { name: "asc" } } });
   return <><PageHeader eyebrow="Directory" title="Homeowners" description={`${homeowners.length} registered household${homeowners.length === 1 ? "" : "s"}.`} action={<Link className="btn-primary" href="/admin/homeowners/new"><Plus className="size-4" /> Add homeowner</Link>} />
     <div className="mb-4"><SearchInput placeholder="Search name, email, account number, block or lot" /></div>
-    <div className="table-wrap"><table className="data-table"><thead><tr><th>Homeowner</th><th>Account</th><th>Property</th><th>Contact</th><th>Monthly dues</th><th>Status</th><th></th></tr></thead><tbody>
+    <div className="table-wrap"><table className="data-table"><thead><tr><th>Homeowner</th><th>Account</th><th>Property</th><th>Contact</th><th>Monthly dues</th><th>Status</th><th>Activation</th><th></th></tr></thead><tbody>
       {homeowners.map((homeowner) => {
         const accountNumber = homeownerAccountNumber(homeowner);
-        return <tr key={homeowner.id} data-search={`${homeowner.user.name} ${homeowner.user.email} ${accountNumber} ${homeowner.block} ${homeowner.lot}`.toLowerCase()}><td><p className="font-bold">{homeowner.user.name}</p><p className="text-xs text-slate-400">{homeowner.user.email}</p></td><td className="font-mono text-xs font-bold">{accountNumber}</td><td>Block {homeowner.block}, Lot {homeowner.lot}</td><td>{homeowner.phone}</td><td className="font-bold">{money(homeowner.monthlyDuesAmount)}</td><td><StatusBadge status={homeowner.status} /></td><td className="text-right"><Link className="font-bold text-pine-600 hover:underline" href={`/admin/homeowners/${homeowner.id}`}>View & edit</Link></td></tr>;
+        return <tr key={homeowner.id} data-search={`${homeowner.user.name} ${homeowner.user.email} ${accountNumber} ${homeowner.block} ${homeowner.lot} ${homeowner.activationStatus} ${homeowner.emailStatus}`.toLowerCase()}><td><p className="font-bold">{homeowner.user.name}</p><p className="text-xs text-slate-400">{homeowner.user.email}</p></td><td className="font-mono text-xs font-bold">{accountNumber}</td><td>Block {homeowner.block}, Lot {homeowner.lot}</td><td>{homeowner.phone}</td><td className="font-bold">{money(homeowner.monthlyDuesAmount)}</td><td><StatusBadge status={homeowner.status} /></td><td><p className="font-bold">{activationLabel(homeowner.activationStatus)}</p><p className="text-xs text-slate-400">{emailLabel(homeowner.emailStatus)}</p></td><td className="text-right"><Link className="font-bold text-pine-600 hover:underline" href={`/admin/homeowners/${homeowner.id}`}>View & edit</Link></td></tr>;
       })}
-      {!homeowners.length && <tr><td colSpan={7} className="py-12 text-center text-slate-500">No homeowners yet. Add the first profile to begin.</td></tr>}
+      {!homeowners.length && <tr><td colSpan={8} className="py-12 text-center text-slate-500">No homeowners yet. Add the first profile to begin.</td></tr>}
     </tbody></table></div>
   </>;
+}
+
+function activationLabel(value: string) {
+  return value.replaceAll("_", " ").toLowerCase().replace(/\b\w/g, (char) => char.toUpperCase());
+}
+
+function emailLabel(value: string) {
+  return value === "VERIFIED" ? "Registered email verified" : "Registered email unverified";
 }

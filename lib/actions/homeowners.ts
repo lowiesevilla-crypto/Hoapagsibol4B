@@ -7,6 +7,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { requireUser } from "@/lib/auth";
 import { prisma } from "@/lib/db";
+import { homeownerAccountNumber } from "@/lib/homeowner-account";
 import { homeownerSchema } from "@/lib/validation";
 import { generateUniqueHomeownerAccountNumber } from "@/lib/services/homeowner-account-number";
 import { createHomeownerActivationCredential, sendHomeownerActivationEmail } from "@/lib/services/homeowner-activation";
@@ -182,4 +183,81 @@ export async function deleteHomeownerAction(formData: FormData) {
   await prisma.user.delete({ where: { id: profile.userId } });
   revalidatePath("/admin/homeowners");
   redirect("/admin/homeowners?success=deleted");
+}
+
+export async function regenerateHomeownerActivationAction(formData: FormData) {
+  const admin = await requireUser(Role.ADMIN);
+  const id = String(formData.get("id") || "");
+  const profile = await prisma.homeownerProfile.findFirst({
+    where: { id, tenantId: admin.tenantId },
+    include: { user: true },
+  });
+  if (!profile) throw new Error("Homeowner not found.");
+  if (profile.status !== "ACTIVE" || !profile.user.active) throw new Error("Only active homeowner accounts can receive activation credentials.");
+  if (profile.activationStatus === HomeownerActivationStatus.ACTIVE && profile.activatedAt) throw new Error("This homeowner account is already activated.");
+  const accountNumber = homeownerAccountNumber(profile);
+  const activation = await prisma.$transaction(async (tx) => {
+    const created = await createHomeownerActivationCredential({ tenantId: admin.tenantId, userId: profile.userId, createdById: admin.id, tx });
+    await tx.homeownerProfile.update({
+      where: { tenantId_id: { tenantId: admin.tenantId, id: profile.id } },
+      data: { activationStatus: HomeownerActivationStatus.PENDING_ACTIVATION, emailStatus: HomeownerEmailVerificationStatus.UNVERIFIED, activationSentAt: new Date() },
+    });
+    await tx.auditLog.create({
+      data: {
+        tenantId: admin.tenantId,
+        actorId: admin.id,
+        module: "AUTH",
+        action: "HOMEOWNER_ACTIVATION_REGENERATED",
+        entityType: "User",
+        entityId: profile.userId,
+        metadata: { homeownerId: profile.id, accountNumber },
+      },
+    });
+    return created;
+  });
+  await sendHomeownerActivationEmail({
+    tenantId: admin.tenantId,
+    userId: profile.userId,
+    name: profile.user.name,
+    email: profile.user.email,
+    accountNumber,
+    temporaryPassword: activation.temporaryPassword,
+    expiresAt: activation.expiresAt,
+    actorId: admin.id,
+  });
+  revalidatePath("/admin/homeowners");
+  revalidatePath(`/admin/homeowners/${profile.id}`);
+  redirect(`/admin/homeowners/${profile.id}?success=activation&message=Activation%20credential%20regenerated%20and%20email%20queued.`);
+}
+
+export async function disableHomeownerActivationAction(formData: FormData) {
+  const admin = await requireUser(Role.ADMIN);
+  const id = String(formData.get("id") || "");
+  const profile = await prisma.homeownerProfile.findFirst({ where: { id, tenantId: admin.tenantId }, include: { user: true } });
+  if (!profile) throw new Error("Homeowner not found.");
+  if (profile.activationStatus === HomeownerActivationStatus.ACTIVE && profile.activatedAt) throw new Error("Activated homeowner accounts cannot be disabled through activation controls.");
+  await prisma.$transaction([
+    prisma.homeownerActivationCredential.updateMany({
+      where: { tenantId: admin.tenantId, userId: profile.userId, usedAt: null, revokedAt: null },
+      data: { revokedAt: new Date() },
+    }),
+    prisma.homeownerProfile.update({
+      where: { tenantId_id: { tenantId: admin.tenantId, id: profile.id } },
+      data: { activationStatus: HomeownerActivationStatus.DISABLED },
+    }),
+    prisma.auditLog.create({
+      data: {
+        tenantId: admin.tenantId,
+        actorId: admin.id,
+        module: "AUTH",
+        action: "HOMEOWNER_ACTIVATION_DISABLED",
+        entityType: "User",
+        entityId: profile.userId,
+        metadata: { homeownerId: profile.id, accountNumber: homeownerAccountNumber(profile) },
+      },
+    }),
+  ]);
+  revalidatePath("/admin/homeowners");
+  revalidatePath(`/admin/homeowners/${profile.id}`);
+  redirect(`/admin/homeowners/${profile.id}?success=activation&message=Activation%20has%20been%20disabled.`);
 }

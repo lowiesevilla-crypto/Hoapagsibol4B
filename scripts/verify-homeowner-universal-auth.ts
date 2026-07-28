@@ -24,11 +24,13 @@ function assertSourceSafeguards() {
   const nextConfig = readFileSync("next.config.ts", "utf8");
   const loginForm = readFileSync("components/login-form.tsx", "utf8");
   const passkeyService = readFileSync("lib/services/passkeys.ts", "utf8");
+  const homeownerActions = readFileSync("lib/actions/homeowners.ts", "utf8");
   assert(manifest.includes('start_url: "/login"'), "PWA manifest must start installed apps at universal login.");
   assert(nextConfig.includes("no-store, max-age=0"), "Auth/protected routes must send no-store cache headers.");
   assert(nextConfig.includes("publickey-credentials-create=(self)") && nextConfig.includes("publickey-credentials-get=(self)"), "Passkey browser permissions are not configured.");
   assert(loginForm.includes("PasskeyLoginButton"), "Universal login must expose passkey login.");
   assert(passkeyService.includes("verifyRegistrationResponse") && passkeyService.includes("verifyAuthenticationResponse"), "Passkey implementation must use server-side WebAuthn verification.");
+  assert(homeownerActions.includes("regenerateHomeownerActivationAction") && homeownerActions.includes("disableHomeownerActivationAction"), "Admin activation management actions are missing.");
 }
 
 function passwordPolicyAccepts(value: string) {
@@ -98,9 +100,50 @@ async function main() {
       const failed = await compare("WrongTemp123", credential.credentialHash);
       assert(!failed, "Incorrect temporary activation credential was accepted.");
 
+      const regeneratedPassword = `TmpR${Date.now().toString().slice(-6)}`;
+      await tx.homeownerActivationCredential.updateMany({
+        where: { tenantId: tenant.id, userId: user.id, usedAt: null, revokedAt: null },
+        data: { revokedAt: new Date() },
+      });
+      const regenerated = await tx.homeownerActivationCredential.create({
+        data: {
+          tenantId: tenant.id,
+          userId: user.id,
+          credentialHash: await hash(regeneratedPassword, 12),
+          expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
+        },
+      });
+      const revokedOriginal = await tx.homeownerActivationCredential.findUnique({ where: { id: credential.id } });
+      assert(revokedOriginal?.revokedAt, "Regenerating activation did not revoke the previous temporary credential.");
+      assert(await compare(regeneratedPassword, regenerated.credentialHash), "Regenerated activation credential did not verify.");
+
+      await tx.homeownerActivationCredential.updateMany({
+        where: { tenantId: tenant.id, userId: user.id, usedAt: null, revokedAt: null },
+        data: { revokedAt: new Date() },
+      });
+      await tx.homeownerProfile.update({ where: { id: user.homeownerProfile.id }, data: { activationStatus: HomeownerActivationStatus.DISABLED } });
+      const disabledProfile = await tx.homeownerProfile.findUnique({ where: { id: user.homeownerProfile.id } });
+      const activeCredentialsAfterDisable = await tx.homeownerActivationCredential.count({ where: { tenantId: tenant.id, userId: user.id, usedAt: null, revokedAt: null } });
+      assert(disabledProfile?.activationStatus === HomeownerActivationStatus.DISABLED, "Disable activation did not update homeowner status.");
+      assert(activeCredentialsAfterDisable === 0, "Disable activation left an active temporary credential.");
+
+      const finalTemporaryPassword = `TmpF${Date.now().toString().slice(-6)}`;
+      const finalCredential = await tx.homeownerActivationCredential.create({
+        data: {
+          tenantId: tenant.id,
+          userId: user.id,
+          credentialHash: await hash(finalTemporaryPassword, 12),
+          expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
+        },
+      });
+      await tx.homeownerProfile.update({
+        where: { id: user.homeownerProfile.id },
+        data: { activationStatus: HomeownerActivationStatus.PENDING_ACTIVATION, activationSentAt: new Date() },
+      });
+
       const activatedAt = new Date();
       await tx.user.update({ where: { id: user.id }, data: { passwordHash: await hash(permanentPassword, 12), lastLoginAt: activatedAt } });
-      await tx.homeownerActivationCredential.update({ where: { id: credential.id }, data: { usedAt: activatedAt } });
+      await tx.homeownerActivationCredential.update({ where: { id: finalCredential.id }, data: { usedAt: activatedAt } });
       await tx.homeownerProfile.update({
         where: { id: user.homeownerProfile.id },
         data: {

@@ -2,11 +2,11 @@ import { notFound } from "next/navigation";
 import { Role } from "@prisma/client";
 import { FileText } from "lucide-react";
 import Link from "next/link";
-import { DeleteButton } from "@/components/ui";
+import { ConfirmSubmitButton, DeleteButton } from "@/components/ui";
 import { HomeownerForm } from "@/components/homeowner-form";
 import { PageHeader } from "@/components/page-header";
 import { saveAdminHouseholdMemberAction } from "@/lib/actions/documents";
-import { deleteHomeownerAction } from "@/lib/actions/homeowners";
+import { deleteHomeownerAction, disableHomeownerActivationAction, regenerateHomeownerActivationAction } from "@/lib/actions/homeowners";
 import { requireUser } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { homeownerAccountNumber } from "@/lib/homeowner-account";
@@ -38,13 +38,25 @@ export default async function EditHomeownerPage({ params, searchParams }: { para
   for (const audit of validationAudits) if (audit.entityId && !latestAuditByMemberId.has(audit.entityId)) latestAuditByMemberId.set(audit.entityId, audit);
   const canValidate = canValidateHouseholdMembers(user.role);
   const accountNumber = homeownerAccountNumber(homeowner);
+  const activationComplete = homeowner.activationStatus === "ACTIVE" && Boolean(homeowner.activatedAt);
   return <><PageHeader eyebrow="Homeowners" title={homeowner.user.name} description={`Block ${homeowner.block}, Lot ${homeowner.lot}`} action={<><Link className="btn-secondary" href={`/admin/homeowners/${homeowner.id}/soa`}><FileText className="size-4" /> Statement of Account</Link><form action={deleteHomeownerAction}><input type="hidden" name="id" value={homeowner.id} /><DeleteButton label="Delete profile" /></form></>} />
     {query.error && <Notice kind="error">{query.error}</Notice>}{query.success && <Notice kind="success">{query.message || "Saved."}</Notice>}
     <section className="mb-6 grid gap-3 sm:grid-cols-3">
       <Info label="Homeowner Account Number" value={accountNumber} mono />
       <Info label="Property" value={`Block ${homeowner.block}, Lot ${homeowner.lot}`} />
       <Info label="Tenant" value={homeowner.tenantId} mono />
+      <Info label="Activation Status" value={activationLabel(homeowner.activationStatus)} />
+      <Info label="Registered Email" value={homeowner.emailStatus === "VERIFIED" ? "Verified" : "Unverified"} />
+      <Info label="Activation Sent" value={homeowner.activationSentAt ? shortDate(homeowner.activationSentAt) : "Not sent"} />
     </section>
+    {!activationComplete && <section className="card mb-6">
+      <h2 className="text-lg font-black">Activation management</h2>
+      <p className="mb-4 text-sm text-slate-500">Regenerating activation revokes unused temporary credentials and emails a fresh one-time password to the registered email.</p>
+      <div className="flex flex-wrap gap-3">
+        <form action={regenerateHomeownerActivationAction}><input type="hidden" name="id" value={homeowner.id} /><ConfirmSubmitButton className="btn-primary" message="Regenerate and email a new activation credential?">Regenerate & email activation</ConfirmSubmitButton></form>
+        {homeowner.activationStatus !== "DISABLED" && <form action={disableHomeownerActivationAction}><input type="hidden" name="id" value={homeowner.id} /><ConfirmSubmitButton className="btn-danger" message="Disable activation and revoke unused temporary credentials?">Disable activation</ConfirmSubmitButton></form>}
+      </div>
+    </section>}
     <HomeownerForm homeowner={homeowner} />
     <section className="card mt-6">
       <h2 className="text-lg font-black">Household and family members</h2>
@@ -97,6 +109,10 @@ function Notice({ kind, children }: { kind: "error" | "success"; children: React
 
 function Info({ label, value, mono = false }: { label: string; value: string; mono?: boolean }) {
   return <div className="rounded-xl border border-slate-200 bg-white p-4"><p className="text-xs font-bold uppercase tracking-wide text-slate-500">{label}</p><p className={`mt-1 break-words font-black text-slate-900 ${mono ? "font-mono text-sm" : ""}`}>{value}</p></div>;
+}
+
+function activationLabel(value: string) {
+  return value.replaceAll("_", " ").toLowerCase().replace(/\b\w/g, (char) => char.toUpperCase());
 }
 
 function auditMetadataText(metadata: unknown, key: string) {

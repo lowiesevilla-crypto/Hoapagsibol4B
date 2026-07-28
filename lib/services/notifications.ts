@@ -15,6 +15,7 @@ type EmailInput = {
   heading?: string;
   actionLabel?: string;
   actionUrl?: string;
+  logMessage?: string;
 };
 
 export type MailConfiguration = {
@@ -136,11 +137,12 @@ export async function sendEmailNotification(input: EmailInput) {
 
   return prisma.notificationLog.create({
     data: {
+      tenantId: input.tenantId,
       recipientId: input.recipientId,
       type: input.type,
       channel: NotificationChannel.EMAIL,
       subject: input.subject,
-      message: brandedMessage,
+      message: input.logMessage || brandedMessage,
       status,
       sentAt,
       providerMessageId,

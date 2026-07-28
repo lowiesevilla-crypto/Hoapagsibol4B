@@ -6,6 +6,7 @@ import { HomeownerActivationStatus, HomeownerEmailVerificationStatus, Notificati
 import { getAppUrl } from "@/lib/app-url";
 import { platformPrisma, prisma } from "@/lib/db";
 import { sendEmailNotification } from "@/lib/services/notifications";
+import { getAssociationSettings } from "@/lib/system-settings";
 import { setTenantContext } from "@/lib/tenant-context";
 
 const ACTIVATION_TTL_DAYS = 7;
@@ -56,6 +57,10 @@ export async function createHomeownerActivationCredential(input: {
     where: { tenantId: input.tenantId, userId: input.userId, usedAt: null, revokedAt: null },
     data: { revokedAt: new Date() },
   });
+  await db.homeownerEmailVerificationToken.updateMany({
+    where: { tenantId: input.tenantId, userId: input.userId, usedAt: null },
+    data: { usedAt: new Date() },
+  });
   await db.homeownerActivationCredential.create({
     data: {
       tenantId: input.tenantId,
@@ -89,6 +94,7 @@ export async function sendHomeownerActivationEmail(input: {
 }) {
   const activationUrl = `${getAppUrl()}/activate`;
   const emailVerificationUrl = input.emailVerificationToken ? `${activationUrl}/verify?token=${encodeURIComponent(input.emailVerificationToken)}` : activationUrl;
+  const association = await getAssociationSettings(input.tenantId);
   try {
     const notification = await sendEmailNotification({
       tenantId: input.tenantId,
@@ -98,19 +104,28 @@ export async function sendHomeownerActivationEmail(input: {
       heading: "Homeowner account activation",
       message: [
         `Hello ${input.name},`,
-        "Your HOAHub homeowner account is ready for activation.",
+        `${association.name} has prepared your HOAHub homeowner account for first-time activation.`,
+        `Activation page: ${activationUrl}`,
         `Account number: ${input.accountNumber}`,
         `Temporary password: ${input.temporaryPassword}`,
         `This temporary password expires on ${input.expiresAt.toLocaleDateString("en-PH", { year: "numeric", month: "long", day: "numeric" })}.`,
         `Verify registered email: ${emailVerificationUrl}`,
-        "Open the activation page, enter your registered email, account number, and temporary password, then create your permanent password.",
+        "First-time login: open the activation page, verify your registered email, enter your account number and temporary password, then create your permanent password.",
+        "Permanent password requirement: 6 to 24 characters with at least one letter and one number.",
+        "Optional passkey/device authentication: after activation, open My Profile and enroll a passkey on your trusted phone, tablet, or computer.",
+        "Android Chrome install: open HOAHub in Chrome, tap the menu, then tap Add to Home screen or Install app.",
+        "iPhone Safari install: open HOAHub in Safari, tap Share, then tap Add to Home Screen.",
+        "Desktop Chrome/Edge install: open HOAHub, select the install icon in the address bar or use the browser menu to install the app.",
+        "Security warning: never share your temporary password, permanent password, passkey prompt, or verification link. HOA staff will not ask for your password.",
+        `Support: ${association.email || association.contactNumber || "contact your HOA office"}`,
       ].join("\n"),
       type: NotificationType.WELCOME,
       actionLabel: "Verify email and activate account",
       actionUrl: emailVerificationUrl,
+      logMessage: "Homeowner activation email sent. Sensitive activation instructions, temporary password, verification link, and full account number are redacted from logs.",
     });
     await prisma.auditLog.create({
-      data: {
+        data: {
         tenantId: input.tenantId,
         actorId: input.actorId ?? null,
         module: "AUTH",
@@ -169,6 +184,7 @@ export async function verifyHomeownerEmailVerificationToken(token: string) {
       data: {
         emailStatus: HomeownerEmailVerificationStatus.VERIFIED,
         emailVerifiedAt: profile.emailVerifiedAt ?? now,
+        activationStatus: profile.activatedAt ? HomeownerActivationStatus.ACTIVE : HomeownerActivationStatus.PASSWORD_CREATION_REQUIRED,
       },
     }),
     platformPrisma.auditLog.create({
@@ -209,6 +225,7 @@ export async function verifyHomeownerActivationCredential(input: {
     enabledModules: new Set(profile.user.tenant.moduleEntitlements.filter((item) => item.enabled).map((item) => item.module)),
   });
   if (profile.activationStatus === HomeownerActivationStatus.DISABLED) return { error: "This homeowner activation has been disabled. Contact the HOA office." } as const;
+  if (profile.activationStatus === HomeownerActivationStatus.CANCELLED) return { error: "This homeowner activation invitation was cancelled. Contact the HOA office." } as const;
   if (profile.activationStatus === HomeownerActivationStatus.ACTIVE && profile.activatedAt) return { error: "This homeowner account is already activated. Use the login page to sign in." } as const;
 
   const credential = await prisma.homeownerActivationCredential.findFirst({
@@ -229,6 +246,10 @@ export async function verifyHomeownerActivationCredential(input: {
       data: { attemptCount: { increment: 1 }, lastAttemptAt: new Date() },
     });
     return { error: "Activation details do not match an active homeowner account." } as const;
+  }
+  if (profile.emailStatus !== HomeownerEmailVerificationStatus.VERIFIED) {
+    await prisma.homeownerProfile.update({ where: { id: profile.id }, data: { activationStatus: HomeownerActivationStatus.EMAIL_PENDING_VERIFICATION } });
+    return { error: "Verify your registered email using the link in the activation email before creating your permanent password." } as const;
   }
 
   return { profile, credential } as const;

@@ -47,7 +47,7 @@ export async function loginAction(_state: LoginState, formData: FormData): Promi
     ]);
     return { error: "Incorrect email or password." };
   }
-  if (user.role === "HOMEOWNER" && user.homeownerProfile?.activationStatus !== HomeownerActivationStatus.ACTIVE) {
+  if (user.role === "HOMEOWNER" && (user.homeownerProfile?.activationStatus !== HomeownerActivationStatus.ACTIVE || !user.homeownerProfile.activatedAt)) {
     return { error: "This homeowner account must be activated before portal login. Open Activate account and use the temporary password sent to the registered email." };
   }
 

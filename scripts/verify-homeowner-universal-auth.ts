@@ -2,6 +2,7 @@ import { createHash, randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { compare, hash } from "bcryptjs";
 import { HomeownerActivationStatus, HomeownerEmailVerificationStatus, PrismaClient, Role } from "@prisma/client";
+import { homeownerDigitalActivationEligibility } from "../lib/services/homeowner-digital-activation";
 
 const prisma = new PrismaClient();
 const rollback = new Error("ROLLBACK_HOMEOWNER_UNIVERSAL_AUTH_VERIFICATION");
@@ -25,6 +26,7 @@ function assertSourceSafeguards() {
   const loginForm = readFileSync("components/login-form.tsx", "utf8");
   const passkeyService = readFileSync("lib/services/passkeys.ts", "utf8");
   const homeownerActions = readFileSync("lib/actions/homeowners.ts", "utf8");
+  const notifications = readFileSync("lib/services/notifications.ts", "utf8");
   const searchInput = readFileSync("components/ui.tsx", "utf8");
   const activationService = readFileSync("lib/services/homeowner-activation.ts", "utf8");
   const emailVerificationRoute = readFileSync("app/activate/verify/route.ts", "utf8");
@@ -41,6 +43,11 @@ function assertSourceSafeguards() {
   assert(activationService.includes("emailVerificationToken") && activationService.includes("/verify?token="), "Activation email must include a registered-email verification link.");
   assert(activationService.includes("HOMEOWNER_EMAIL_VERIFIED"), "Email verification must create an audit event.");
   assert(emailVerificationRoute.includes("verifyHomeownerEmailVerificationToken"), "Activation email verification route is missing.");
+  assert(activationService.includes("Android Chrome install") && activationService.includes("iPhone Safari install") && activationService.includes("Desktop Chrome/Edge install"), "Activation email must include mobile and desktop installation instructions.");
+  assert(activationService.includes("logMessage:") && activationService.includes("redacted from logs"), "Activation notification logs must redact temporary passwords, verification links, and full account numbers.");
+  assert(homeownerActions.includes("bulkSendHomeownerActivationInvitationsAction"), "Bulk homeowner activation invitation action is missing.");
+  assert(homeownerActions.includes("accountMasked") && !homeownerActions.includes("metadata: { accountNumber }"), "Activation audit metadata must not store complete account numbers.");
+  assert(notifications.includes("username: maskEmailLike") && !notifications.includes("passwordLength"), "SMTP diagnostics must mask usernames and avoid password detail logging.");
 }
 
 function passwordPolicyAccepts(value: string) {
@@ -109,7 +116,7 @@ async function main() {
               lot: `LOT-${Date.now().toString().slice(-4)}`,
               accountNumber,
               status: "ACTIVE",
-              activationStatus: HomeownerActivationStatus.PENDING_ACTIVATION,
+              activationStatus: HomeownerActivationStatus.INVITATION_SENT,
               emailStatus: HomeownerEmailVerificationStatus.UNVERIFIED,
               activationSentAt: new Date(),
               monthlyDuesAmount: "1.00",
@@ -120,6 +127,7 @@ async function main() {
       });
       assert(user.homeownerProfile?.accountNumber === accountNumber, "Homeowner account-number snapshot was not stored.");
       assert(user.name.endsWith("Sevillañ"), "Unicode homeowner name was not preserved.");
+      assert(homeownerDigitalActivationEligibility({ ...user.homeownerProfile, user: { active: true, email } }).eligible, "Operationally ACTIVE unactivated homeowner should be eligible for digital invitation.");
 
       const credential = await tx.homeownerActivationCredential.create({
         data: {
@@ -149,6 +157,7 @@ async function main() {
       const revokedOriginal = await tx.homeownerActivationCredential.findUnique({ where: { id: credential.id } });
       assert(revokedOriginal?.revokedAt, "Regenerating activation did not revoke the previous temporary credential.");
       assert(await compare(regeneratedPassword, regenerated.credentialHash), "Regenerated activation credential did not verify.");
+      assert(!(await compare(temporaryPassword, regenerated.credentialHash)), "Regeneration reused the previous temporary credential.");
 
       await tx.homeownerActivationCredential.updateMany({
         where: { tenantId: tenant.id, userId: user.id, usedAt: null, revokedAt: null },
@@ -171,7 +180,7 @@ async function main() {
       });
       await tx.homeownerProfile.update({
         where: { id: user.homeownerProfile.id },
-        data: { activationStatus: HomeownerActivationStatus.PENDING_ACTIVATION, activationSentAt: new Date() },
+        data: { activationStatus: HomeownerActivationStatus.INVITATION_SENT, activationSentAt: new Date() },
       });
 
       const activatedAt = new Date();
@@ -190,6 +199,9 @@ async function main() {
       assert(activated?.activationStatus === HomeownerActivationStatus.ACTIVE, "Activation did not move homeowner to ACTIVE.");
       assert(activated.emailStatus === HomeownerEmailVerificationStatus.VERIFIED, "Registered email was not marked verified.");
       assert(activated.emailVerifiedAt && activated.activatedAt, "Activation/email verification timestamps were not stored.");
+      assert(!homeownerDigitalActivationEligibility({ ...activated, user: { active: true, email } }).eligible, "Digitally activated homeowner should not be eligible for first-time re-invitation.");
+      const permanentPasswordStillWorks = await compare(permanentPassword, (await tx.user.findUniqueOrThrow({ where: { id: user.id }, select: { passwordHash: true } })).passwordHash);
+      assert(permanentPasswordStillWorks, "Existing permanent homeowner password was not preserved after activation.");
 
       const emailToken = await tx.homeownerEmailVerificationToken.create({
         data: {
@@ -244,6 +256,33 @@ async function main() {
         select: { id: true },
       });
       assert(!crossTenant, "Account-number lookup crossed tenant boundaries.");
+
+      const missingEmailUser = await tx.user.create({
+        data: {
+          tenantId: tenant.id,
+          name: "Missing Email UAT",
+          email: `missing.${Date.now()}@example.test`,
+          passwordHash: await hash(`activation-only-${randomUUID()}`, 12),
+          role: Role.HOMEOWNER,
+          active: true,
+          homeownerProfile: {
+            create: {
+              tenantId: tenant.id,
+              phone: "09990000001",
+              address: "Universal Auth Missing Email",
+              block: `UM-${Date.now().toString().slice(-4)}`,
+              lot: `LOT-M-${Date.now().toString().slice(-4)}`,
+              accountNumber: testAccountNumber(),
+              status: "ACTIVE",
+              activationStatus: HomeownerActivationStatus.NOT_INVITED,
+              emailStatus: HomeownerEmailVerificationStatus.UNVERIFIED,
+              monthlyDuesAmount: "1.00",
+            },
+          },
+        },
+        include: { homeownerProfile: true },
+      });
+      assert(!homeownerDigitalActivationEligibility({ ...missingEmailUser.homeownerProfile!, user: { active: true, email: "" } }).eligible, "Missing-email homeowner should be skipped safely.");
 
       throw rollback;
     });

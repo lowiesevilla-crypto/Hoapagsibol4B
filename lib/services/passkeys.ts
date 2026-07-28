@@ -144,7 +144,7 @@ export async function findPasskeyLoginUser(input: { email: string; accountNumber
         email,
         active: true,
         role: Role.HOMEOWNER,
-        homeownerProfile: { status: "ACTIVE", activationStatus: HomeownerActivationStatus.ACTIVE },
+        homeownerProfile: { status: "ACTIVE", activationStatus: HomeownerActivationStatus.ACTIVE, activatedAt: { not: null } },
       },
       include: { homeownerProfile: true, tenant: { include: { advisories: { where: { active: true }, orderBy: { createdAt: "desc" }, take: 1 }, moduleEntitlements: true } }, passkeyCredentials: true },
     });
@@ -164,7 +164,7 @@ export async function findPasskeyLoginUser(input: { email: string; accountNumber
       active: true,
       role: Role.HOMEOWNER,
       tenant: { status: "ACTIVE", subscriptionStatus: { not: "CANCELLED" } },
-      homeownerProfile: { status: "ACTIVE", activationStatus: HomeownerActivationStatus.ACTIVE },
+      homeownerProfile: { status: "ACTIVE", activationStatus: HomeownerActivationStatus.ACTIVE, activatedAt: { not: null } },
     },
     include: { homeownerProfile: true, tenant: { include: { advisories: { where: { active: true }, orderBy: { createdAt: "desc" }, take: 1 }, moduleEntitlements: true } }, passkeyCredentials: true },
     take: 10,
@@ -220,7 +220,7 @@ export async function verifyPasskeyAuthentication(input: { response: Authenticat
     where: { credentialId: input.response.id },
     include: { user: { include: { tenant: { include: { advisories: { where: { active: true }, orderBy: { createdAt: "desc" }, take: 1 }, moduleEntitlements: true } }, homeownerProfile: true } } },
   });
-  if (!credentialRecord || !credentialRecord.user.active || credentialRecord.user.role !== Role.HOMEOWNER || credentialRecord.user.homeownerProfile?.activationStatus !== HomeownerActivationStatus.ACTIVE) {
+  if (!credentialRecord || !credentialRecord.user.active || credentialRecord.user.role !== Role.HOMEOWNER || credentialRecord.user.homeownerProfile?.activationStatus !== HomeownerActivationStatus.ACTIVE || !credentialRecord.user.homeownerProfile.activatedAt) {
     throw new Error("Passkey authentication could not be verified.");
   }
   if (!tenantCanSignIn(credentialRecord.user.tenant)) throw new Error(credentialRecord.user.tenant.advisories[0]?.message || "This HOA portal is currently unavailable.");

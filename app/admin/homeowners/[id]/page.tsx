@@ -1,15 +1,16 @@
 import { notFound } from "next/navigation";
-import { Role } from "@prisma/client";
+import { NotificationType, Role } from "@prisma/client";
 import { FileText } from "lucide-react";
 import Link from "next/link";
 import { ConfirmSubmitButton, DeleteButton } from "@/components/ui";
 import { HomeownerForm } from "@/components/homeowner-form";
 import { PageHeader } from "@/components/page-header";
 import { saveAdminHouseholdMemberAction } from "@/lib/actions/documents";
-import { deleteHomeownerAction, disableHomeownerActivationAction, regenerateHomeownerActivationAction } from "@/lib/actions/homeowners";
+import { cancelHomeownerActivationAction, deleteHomeownerAction, disableHomeownerActivationAction, regenerateHomeownerActivationAction, sendHomeownerActivationInvitationAction } from "@/lib/actions/homeowners";
 import { requireUser } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { homeownerAccountNumber } from "@/lib/homeowner-account";
+import { activationInvitationExpiresAt, deliveryStatusLabel, digitalActivationLabel, homeownerDigitalActivationEligibility, homeownerHasCompletedDigitalActivation, maskAccountNumber, maskEmail } from "@/lib/services/homeowner-digital-activation";
 import { canValidateHouseholdMembers, householdMemberEligibility, householdMemberValidationLabel, householdMemberValidationStatus } from "@/lib/services/household-member-eligibility";
 import { shortDate } from "@/lib/utils";
 
@@ -38,25 +39,42 @@ export default async function EditHomeownerPage({ params, searchParams }: { para
   for (const audit of validationAudits) if (audit.entityId && !latestAuditByMemberId.has(audit.entityId)) latestAuditByMemberId.set(audit.entityId, audit);
   const canValidate = canValidateHouseholdMembers(user.role);
   const accountNumber = homeownerAccountNumber(homeowner);
-  const activationComplete = homeowner.activationStatus === "ACTIVE" && Boolean(homeowner.activatedAt);
+  const activationComplete = homeownerHasCompletedDigitalActivation(homeowner);
+  const activationEligibility = homeownerDigitalActivationEligibility(homeowner);
+  const invitationExpiration = activationInvitationExpiresAt(homeowner);
+  const latestDelivery = await prisma.notificationLog.findFirst({
+    where: { tenantId: user.tenantId, recipientId: homeowner.userId, type: NotificationType.WELCOME },
+    orderBy: { createdAt: "desc" },
+    select: { status: true, createdAt: true, sentAt: true, errorMessage: true },
+  });
   return <><PageHeader eyebrow="Homeowners" title={homeowner.user.name} description={`Block ${homeowner.block}, Lot ${homeowner.lot}`} action={<><Link className="btn-secondary" href={`/admin/homeowners/${homeowner.id}/soa`}><FileText className="size-4" /> Statement of Account</Link><form action={deleteHomeownerAction}><input type="hidden" name="id" value={homeowner.id} /><DeleteButton label="Delete profile" /></form></>} />
     {query.error && <Notice kind="error">{query.error}</Notice>}{query.success && <Notice kind="success">{query.message || "Saved."}</Notice>}
     <section className="mb-6 grid gap-3 sm:grid-cols-3">
-      <Info label="Homeowner Account Number" value={accountNumber} mono />
+      <Info label="Masked Homeowner Account Number" value={maskAccountNumber(accountNumber)} mono />
       <Info label="Property" value={`Block ${homeowner.block}, Lot ${homeowner.lot}`} />
       <Info label="Tenant" value={homeowner.tenantId} mono />
-      <Info label="Activation Status" value={activationLabel(homeowner.activationStatus)} />
-      <Info label="Registered Email" value={homeowner.emailStatus === "VERIFIED" ? "Verified" : "Unverified"} />
-      <Info label="Activation Sent" value={homeowner.activationSentAt ? shortDate(homeowner.activationSentAt) : "Not sent"} />
+      <Info label="Operational Homeowner Status" value={homeowner.status} />
+      <Info label="Digital Activation Status" value={digitalActivationLabel(homeowner.activationStatus)} />
+      <Info label="Masked Registered Email" value={maskEmail(homeowner.user.email)} />
+      <Info label="Registered Email Verification" value={homeowner.emailStatus === "VERIFIED" ? "Verified" : "Unverified"} />
+      <Info label="Invitation Sent" value={homeowner.activationSentAt ? shortDate(homeowner.activationSentAt) : "Not sent"} />
+      <Info label="Invitation Expiration" value={invitationExpiration ? shortDate(invitationExpiration) : "Not set"} />
+      <Info label="Activation Completed" value={homeowner.activatedAt ? shortDate(homeowner.activatedAt) : "Not completed"} />
+      <Info label="Latest Delivery" value={deliveryStatusLabel(latestDelivery)} />
     </section>
-    {!activationComplete && <section className="card mb-6">
-      <h2 className="text-lg font-black">Activation management</h2>
-      <p className="mb-4 text-sm text-slate-500">Regenerating activation revokes unused temporary credentials and emails a fresh one-time password to the registered email.</p>
+    <section className="card mb-6">
+      <h2 className="text-lg font-black">Digital Account Activation</h2>
+      <p className="mb-4 text-sm text-slate-500">Operational homeowner status is separate from digital login activation. Invitations revoke unused temporary credentials and email a fresh one-time password to the registered email.</p>
+      <p className={`mb-4 rounded-xl p-3 text-sm font-semibold ${activationEligibility.eligible ? "bg-emerald-50 text-emerald-800" : "bg-slate-50 text-slate-600"}`}>{activationEligibility.reason}</p>
+      {latestDelivery?.errorMessage && <p className="mb-4 rounded-xl bg-rose-50 p-3 text-sm font-semibold text-rose-700">{latestDelivery.errorMessage}</p>}
       <div className="flex flex-wrap gap-3">
-        <form action={regenerateHomeownerActivationAction}><input type="hidden" name="id" value={homeowner.id} /><ConfirmSubmitButton className="btn-primary" message="Regenerate and email a new activation credential?">Regenerate & email activation</ConfirmSubmitButton></form>
-        {homeowner.activationStatus !== "DISABLED" && <form action={disableHomeownerActivationAction}><input type="hidden" name="id" value={homeowner.id} /><ConfirmSubmitButton className="btn-danger" message="Disable activation and revoke unused temporary credentials?">Disable activation</ConfirmSubmitButton></form>}
+        {!activationComplete && activationEligibility.eligible && !homeowner.activationSentAt && <form action={sendHomeownerActivationInvitationAction}><input type="hidden" name="id" value={homeowner.id} /><ConfirmSubmitButton className="btn-primary" message="Send first-time activation invitation?">Send Activation Invitation</ConfirmSubmitButton></form>}
+        {!activationComplete && activationEligibility.eligible && homeowner.activationSentAt && <form action={sendHomeownerActivationInvitationAction}><input type="hidden" name="id" value={homeowner.id} /><ConfirmSubmitButton className="btn-primary" message="Resend activation invitation?">Resend Invitation</ConfirmSubmitButton></form>}
+        {!activationComplete && activationEligibility.eligible && <form action={regenerateHomeownerActivationAction}><input type="hidden" name="id" value={homeowner.id} /><ConfirmSubmitButton className="btn-secondary" message="Regenerate the temporary password and email a fresh activation invitation?">Regenerate Temporary Password</ConfirmSubmitButton></form>}
+        {!activationComplete && homeowner.activationStatus !== "CANCELLED" && <form action={cancelHomeownerActivationAction}><input type="hidden" name="id" value={homeowner.id} /><ConfirmSubmitButton className="btn-secondary" message="Cancel activation and revoke unused temporary credentials?">Cancel Activation</ConfirmSubmitButton></form>}
+        {homeowner.activationStatus !== "DISABLED" && <form action={disableHomeownerActivationAction}><input type="hidden" name="id" value={homeowner.id} /><ConfirmSubmitButton className="btn-danger" message="Disable digital access and revoke active sessions?">Disable Digital Access</ConfirmSubmitButton></form>}
       </div>
-    </section>}
+    </section>
     <HomeownerForm homeowner={homeowner} />
     <section className="card mt-6">
       <h2 className="text-lg font-black">Household and family members</h2>
@@ -109,10 +127,6 @@ function Notice({ kind, children }: { kind: "error" | "success"; children: React
 
 function Info({ label, value, mono = false }: { label: string; value: string; mono?: boolean }) {
   return <div className="rounded-xl border border-slate-200 bg-white p-4"><p className="text-xs font-bold uppercase tracking-wide text-slate-500">{label}</p><p className={`mt-1 break-words font-black text-slate-900 ${mono ? "font-mono text-sm" : ""}`}>{value}</p></div>;
-}
-
-function activationLabel(value: string) {
-  return value.replaceAll("_", " ").toLowerCase().replace(/\b\w/g, (char) => char.toUpperCase());
 }
 
 function auditMetadataText(metadata: unknown, key: string) {

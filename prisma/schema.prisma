@@ -58,10 +58,16 @@ enum HomeownerStatus {
 }
 
 enum HomeownerActivationStatus {
-  PENDING_ACTIVATION
+  NOT_INVITED
+  INVITATION_SENT
+  ACTIVATION_IN_PROGRESS
+  EMAIL_PENDING_VERIFICATION
+  PASSWORD_CREATION_REQUIRED
   ACTIVE
-  DISABLED
   EXPIRED
+  CANCELLED
+  DISABLED
+  PENDING_ACTIVATION
 }
 
 enum HomeownerEmailVerificationStatus {
@@ -697,7 +703,7 @@ model HomeownerProfile {
   messengerId       String?
   accountNumber     String?                          @unique @db.VarChar(11)
   status            HomeownerStatus                  @default(ACTIVE)
-  activationStatus  HomeownerActivationStatus        @default(ACTIVE)
+  activationStatus  HomeownerActivationStatus        @default(NOT_INVITED)
   emailStatus       HomeownerEmailVerificationStatus @default(UNVERIFIED)
   emailVerifiedAt   DateTime?
   mobileConfirmedAt DateTime?

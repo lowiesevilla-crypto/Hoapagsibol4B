@@ -31,6 +31,7 @@ function assertSourceSafeguards() {
   const notifications = readFileSync("lib/services/notifications.ts", "utf8");
   const searchInput = readFileSync("components/ui.tsx", "utf8");
   const activationService = readFileSync("lib/services/homeowner-activation.ts", "utf8");
+  const homeownerActivationAction = readFileSync("lib/actions/homeowner-activation.ts", "utf8");
   const emailVerificationRoute = readFileSync("app/activate/verify/route.ts", "utf8");
   const homeownerList = readFileSync("app/admin/homeowners/page.tsx", "utf8");
   const appUrl = readFileSync("lib/app-url.ts", "utf8");
@@ -57,6 +58,9 @@ function assertSourceSafeguards() {
   assert(notifications.includes("html?: string") && notifications.includes("input.html ?? emailHtml"), "Notification service must support structured activation email HTML.");
   assert(emailVerificationRoute.includes("new URL(\"/activate\", getAppUrl())"), "Email verification redirects must use configured APP_URL.");
   assert(activationService.includes("runWithTenant(record.tenantId") && activationService.includes("prisma.$transaction(async (tx)"), "Email verification must mutate through tenant-scoped transactional Prisma context.");
+  assert(activationService.includes("completeHomeownerActivation") && activationService.includes("await tx.userSession.create({ data: preparedSession.data })"), "Activation completion must create the UserSession inside the transaction client.");
+  assert(activationService.includes("SIMULATED_USER_SESSION_CREATE_FAILURE"), "Activation rollback test hook is missing.");
+  assert(homeownerActivationAction.includes("const completion = await completeHomeownerActivation") && homeownerActivationAction.includes("await setSessionCookie(session)") && homeownerActivationAction.indexOf("const completion = await completeHomeownerActivation") < homeownerActivationAction.lastIndexOf("await setSessionCookie(session)"), "Activation cookie must be set only after completion commits.");
   assert(activationService.includes("GENERIC_EMAIL_VERIFICATION_ERROR"), "Invalid, used, expired, revoked, or cross-tenant tokens must return a safe generic result.");
   assert(homeownerList.includes("prisma.homeownerProfile.count({ where: baseWhere })"), "Homeowner list must show total tenant homeowner count.");
   assert(homeownerList.includes("take: pageSize") && homeownerList.includes("skip,"), "Homeowner list must use explicit server-side pagination.");
@@ -122,6 +126,7 @@ async function main() {
   const tenant = await prisma.tenant.findFirst({ where: { status: "ACTIVE" }, orderBy: { createdAt: "asc" } });
   assert(tenant, "No active tenant fixture found.");
   await assertEmailVerificationService(tenant);
+  await assertActivationCompletionTransaction(tenant);
 
   try {
     await prisma.$transaction(async (tx) => {
@@ -315,7 +320,7 @@ async function main() {
       assert(!homeownerDigitalActivationEligibility({ ...missingEmailUser.homeownerProfile!, user: { active: true, email: "" } }).eligible, "Missing-email homeowner should be skipped safely.");
 
       throw rollback;
-    });
+    }, { timeout: 30_000 });
   } catch (error) {
     if (error !== rollback) throw error;
   }
@@ -376,6 +381,101 @@ async function assertEmailVerificationService(tenant: { id: string; slug: string
     await prisma.user.deleteMany({ where: { id: { in: createdUserIds } } });
     await prisma.homeownerEmailVerificationToken.deleteMany({ where: { tenantId: crossTenant.id } });
     await prisma.tenant.delete({ where: { id: crossTenant.id } }).catch(() => undefined);
+  }
+}
+
+async function assertActivationCompletionTransaction(tenant: { id: string; slug: string }) {
+  const service = await import("../lib/services/homeowner-activation");
+  const { prisma: scopedPrisma } = await import("../lib/db");
+  const { runWithTenant } = await import("../lib/tenant-context");
+  const createdUserIds: string[] = [];
+  const previousTestHook = process.env.HOAHUB_AUTH_TEST_HOOKS;
+  process.env.HOAHUB_AUTH_TEST_HOOKS = "true";
+  const permanentPassword = "Home123";
+  const retryPassword = "Home124";
+  const otherTenant = await prisma.tenant.create({ data: { name: "UAT Session Tenant", shortName: "UATS", slug: `uat-session-${Date.now()}`, status: "ACTIVE" } });
+  try {
+    const success = await createActivationFixture(tenant.id, service);
+    createdUserIds.push(success.user.id);
+    await service.verifyHomeownerEmailVerificationToken(success.emailVerificationToken);
+    const completed = await service.completeHomeownerActivation({ accountNumber: success.accountNumber, email: success.email, temporaryPassword: success.temporaryPassword, password: permanentPassword });
+    assert(!("error" in completed) && "session" in completed, "Successful activation completion returned an error.");
+    const activatedProfile = await prisma.homeownerProfile.findUniqueOrThrow({ where: { id: success.profile.id } });
+    const activatedCredential = await prisma.homeownerActivationCredential.findFirstOrThrow({ where: { tenantId: tenant.id, userId: success.user.id }, orderBy: { createdAt: "desc" } });
+    const activeSessions = await prisma.userSession.findMany({ where: { tenantId: tenant.id, userId: success.user.id, revokedAt: null, expiresAt: { gt: new Date() } } });
+    const successAudit = await prisma.auditLog.findFirst({ where: { action: "HOMEOWNER_ACTIVATED", entityId: success.user.id }, orderBy: { createdAt: "desc" } });
+    const userAfterSuccess = await prisma.user.findUniqueOrThrow({ where: { id: success.user.id }, select: { passwordHash: true } });
+    assert(await compare(permanentPassword, userAfterSuccess.passwordHash), "Permanent password was not saved on successful activation.");
+    assert(activatedProfile.activationStatus === HomeownerActivationStatus.ACTIVE && activatedProfile.activatedAt, "Successful activation did not mark homeowner ACTIVE with completion timestamp.");
+    assert(activatedCredential.usedAt, "Successful activation did not consume the temporary credential.");
+    assert(activeSessions.length === 1 && activeSessions[0].tenantId === tenant.id, "Successful activation did not create exactly one tenant-scoped full-access UserSession.");
+    assert(successAudit?.metadata && JSON.stringify(successAudit.metadata).includes("sessionCreated"), "Successful activation audit record was not written.");
+
+    const failure = await createActivationFixture(tenant.id, service);
+    createdUserIds.push(failure.user.id);
+    await service.verifyHomeownerEmailVerificationToken(failure.emailVerificationToken);
+    const beforeFailure = await prisma.user.findUniqueOrThrow({ where: { id: failure.user.id }, select: { passwordHash: true } });
+    const failureCredential = await prisma.homeownerActivationCredential.findFirstOrThrow({ where: { tenantId: tenant.id, userId: failure.user.id, usedAt: null, revokedAt: null }, orderBy: { createdAt: "desc" } });
+    const failed = await service.completeHomeownerActivation({ accountNumber: failure.accountNumber, email: failure.email, temporaryPassword: failure.temporaryPassword, password: permanentPassword, failSessionCreateForTest: true });
+    assert("error" in failed, "Simulated UserSession.create failure was not reported.");
+    const failedProfile = await prisma.homeownerProfile.findUniqueOrThrow({ where: { id: failure.profile.id } });
+    const failedUser = await prisma.user.findUniqueOrThrow({ where: { id: failure.user.id }, select: { passwordHash: true } });
+    const failedCredential = await prisma.homeownerActivationCredential.findUniqueOrThrow({ where: { id: failureCredential.id } });
+    const failedSessions = await prisma.userSession.count({ where: { tenantId: tenant.id, userId: failure.user.id, revokedAt: null } });
+    const failedAudit = await prisma.auditLog.findFirst({ where: { action: "HOMEOWNER_ACTIVATED", entityId: failure.user.id }, orderBy: { createdAt: "desc" } });
+    assert(failedUser.passwordHash === beforeFailure.passwordHash, "Rollback test changed the permanent password.");
+    assert(failedProfile.activationStatus !== HomeownerActivationStatus.ACTIVE && !failedProfile.activatedAt, "Rollback test left homeowner ACTIVE or completed.");
+    assert(!failedCredential.usedAt, "Rollback test consumed the temporary credential.");
+    assert(failedSessions === 0, "Rollback test left an active full-access session.");
+    assert(!failedAudit, "Rollback test wrote a success audit record.");
+    const retry = await service.completeHomeownerActivation({ accountNumber: failure.accountNumber, email: failure.email, temporaryPassword: failure.temporaryPassword, password: retryPassword });
+    assert(!("error" in retry), "Retry after simulated safe failure did not complete.");
+
+    const otherUser = await prisma.user.create({
+      data: {
+        tenantId: otherTenant.id,
+        name: "Cross Tenant Session UAT",
+        email: `cross.session.${Date.now()}@example.test`,
+        passwordHash: await hash(`activation-only-${randomUUID()}`, 12),
+        role: Role.HOMEOWNER,
+        homeownerProfile: {
+          create: {
+            tenantId: otherTenant.id,
+            phone: "09990000003",
+            address: "Cross Tenant Session UAT",
+            block: `XS-${Date.now().toString().slice(-5)}`,
+            lot: `XL-${Date.now().toString().slice(-5)}`,
+            accountNumber: testAccountNumber(),
+            status: "ACTIVE",
+            monthlyDuesAmount: "1.00",
+          },
+        },
+      },
+    });
+    createdUserIds.push(otherUser.id);
+    let crossTenantRejected = false;
+    try {
+      await runWithTenant(tenant.id, () => scopedPrisma.userSession.create({
+        data: {
+          tenantId: otherTenant.id,
+          userId: otherUser.id,
+          tokenHash: challengeHash(`cross-session-${randomUUID()}`),
+          expiresAt: new Date(Date.now() + 60 * 60 * 1000),
+        },
+      }), { role: Role.HOMEOWNER });
+    } catch {
+      crossTenantRejected = true;
+    }
+    assert(crossTenantRejected, "Cross-tenant UserSession.create was not rejected by tenant context.");
+  } finally {
+    if (previousTestHook === undefined) delete process.env.HOAHUB_AUTH_TEST_HOOKS;
+    else process.env.HOAHUB_AUTH_TEST_HOOKS = previousTestHook;
+    await prisma.auditLog.deleteMany({ where: { OR: [{ entityId: { in: createdUserIds } }, { actorId: { in: createdUserIds } }] } });
+    await prisma.userSession.deleteMany({ where: { userId: { in: createdUserIds } } });
+    await prisma.homeownerEmailVerificationToken.deleteMany({ where: { userId: { in: createdUserIds } } });
+    await prisma.homeownerActivationCredential.deleteMany({ where: { userId: { in: createdUserIds } } });
+    await prisma.user.deleteMany({ where: { id: { in: createdUserIds } } });
+    await prisma.tenant.delete({ where: { id: otherTenant.id } }).catch(() => undefined);
   }
 }
 

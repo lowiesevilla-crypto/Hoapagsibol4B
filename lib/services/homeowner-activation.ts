@@ -4,9 +4,11 @@ import { randomBytes, createHash } from "node:crypto";
 import { compare, hash } from "bcryptjs";
 import { HomeownerActivationStatus, HomeownerEmailVerificationStatus, NotificationStatus, NotificationType, Prisma, Role } from "@prisma/client";
 import { getAppUrl } from "@/lib/app-url";
+import { prepareSession } from "@/lib/auth";
 import { platformPrisma, prisma } from "@/lib/db";
 import { sendEmailNotification } from "@/lib/services/notifications";
 import { getAssociationSettings } from "@/lib/system-settings";
+import { tenantCanSignIn } from "@/lib/tenant";
 import { runWithTenant, setTenantContext } from "@/lib/tenant-context";
 
 const ACTIVATION_TTL_DAYS = 7;
@@ -289,6 +291,105 @@ export async function markHomeownerActivated(input: {
       },
     }),
   ]), { role: Role.HOMEOWNER });
+}
+
+export async function completeHomeownerActivation(input: {
+  accountNumber: string;
+  email: string;
+  temporaryPassword: string;
+  password: string;
+  failSessionCreateForTest?: boolean;
+}) {
+  const verification = await verifyHomeownerActivationCredential({
+    accountNumber: input.accountNumber,
+    email: input.email,
+    temporaryPassword: input.temporaryPassword,
+  });
+  if ("error" in verification) return verification;
+  const { profile, credential } = verification;
+  if (!tenantCanSignIn(profile.user.tenant)) return { error: profile.user.tenant.advisories[0]?.message || "This HOA portal is currently unavailable." } as const;
+  const preparedSession = await prepareSession({
+    userId: profile.userId,
+    role: profile.user.role,
+    tenantId: profile.tenantId,
+    tenantSlug: profile.user.tenant.slug,
+  });
+  const passwordHash = await hash(input.password, 12);
+  const now = new Date();
+
+  try {
+    await runWithTenant(profile.tenantId, () => prisma.$transaction(async (tx) => {
+      const currentProfile = await tx.homeownerProfile.findFirst({
+        where: {
+          id: profile.id,
+          tenantId: profile.tenantId,
+          userId: profile.userId,
+          user: {
+            id: profile.userId,
+            tenantId: profile.tenantId,
+            email: normalizeActivationEmail(input.email),
+            role: Role.HOMEOWNER,
+            active: true,
+          },
+        },
+        include: { user: { include: { tenant: true } } },
+      });
+      if (!currentProfile || currentProfile.user.tenantId !== currentProfile.tenantId) throw new Error("Activation details could not be confirmed.");
+      if (currentProfile.emailStatus !== HomeownerEmailVerificationStatus.VERIFIED) throw new Error("Verify your registered email before creating your permanent password.");
+      if (currentProfile.activationStatus === HomeownerActivationStatus.ACTIVE && currentProfile.activatedAt) throw new Error("This homeowner account is already activated.");
+
+      const currentCredential = await tx.homeownerActivationCredential.findFirst({
+        where: {
+          id: credential.id,
+          tenantId: currentProfile.tenantId,
+          userId: currentProfile.userId,
+          usedAt: null,
+          revokedAt: null,
+          expiresAt: { gt: now },
+        },
+      });
+      if (!currentCredential || !(await compare(input.temporaryPassword, currentCredential.credentialHash))) {
+        throw new Error("Activation details do not match an active homeowner account.");
+      }
+
+      await tx.userSession.updateMany({
+        where: { tenantId: currentProfile.tenantId, userId: currentProfile.userId, revokedAt: null },
+        data: { revokedAt: now },
+      });
+      await tx.user.update({ where: { id: currentProfile.userId }, data: { passwordHash, lastLoginAt: now } });
+      await tx.homeownerActivationCredential.update({ where: { id: currentCredential.id }, data: { usedAt: now } });
+      await tx.homeownerEmailVerificationToken.updateMany({
+        where: { tenantId: currentProfile.tenantId, userId: currentProfile.userId, usedAt: null },
+        data: { usedAt: now },
+      });
+      await tx.homeownerProfile.update({
+        where: { tenantId_id: { tenantId: currentProfile.tenantId, id: currentProfile.id } },
+        data: {
+          activationStatus: HomeownerActivationStatus.ACTIVE,
+          emailStatus: HomeownerEmailVerificationStatus.VERIFIED,
+          emailVerifiedAt: currentProfile.emailVerifiedAt ?? now,
+          activatedAt: now,
+        },
+      });
+      if (input.failSessionCreateForTest && process.env.HOAHUB_AUTH_TEST_HOOKS === "true") throw new Error("SIMULATED_USER_SESSION_CREATE_FAILURE");
+      await tx.userSession.create({ data: preparedSession.data });
+      await tx.auditLog.create({
+        data: {
+          tenantId: currentProfile.tenantId,
+          actorId: currentProfile.userId,
+          module: "AUTH",
+          action: "HOMEOWNER_ACTIVATED",
+          entityType: "User",
+          entityId: currentProfile.userId,
+          metadata: { sessionCreated: true },
+        },
+      });
+    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable }), { role: Role.HOMEOWNER });
+  } catch (error) {
+    return { error: error instanceof Error && error.message !== "SIMULATED_USER_SESSION_CREATE_FAILURE" ? error.message : "Activation could not be completed. Please try again or ask HOA staff to send a new activation invitation." } as const;
+  }
+
+  return { profile, credential, session: preparedSession } as const;
 }
 
 function activationEmailErrorCategory(message: string) {

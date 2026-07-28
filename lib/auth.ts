@@ -1,7 +1,7 @@
 import "server-only";
 
 import { createHash, randomUUID } from "node:crypto";
-import { Role } from "@prisma/client";
+import { Prisma, Role } from "@prisma/client";
 import { SignJWT } from "jose/jwt/sign";
 import { jwtVerify } from "jose/jwt/verify";
 import { cookies } from "next/headers";
@@ -19,6 +19,11 @@ if (process.env.NODE_ENV === "production" && (!configuredSecret || configuredSec
 const secret = new TextEncoder().encode(configuredSecret || "development-only-secret-change-me-now");
 
 export type SessionPayload = { userId: string; role: Role; tenantId: string; tenantSlug: string; sessionId?: string };
+export type PreparedSession = {
+  payload: SessionPayload & { sessionId: string };
+  maxAge: number;
+  data: Prisma.UserSessionUncheckedCreateInput;
+};
 
 function homeForRole(role: Role) {
   if (role === Role.HOMEOWNER) return "/portal/dashboard";
@@ -36,14 +41,22 @@ function canUseRole(actualRole: Role, requiredRole: Role) {
 }
 
 export async function createSession(payload: SessionPayload) {
+  const prepared = await prepareSession(payload);
+  await prisma.userSession.create({ data: prepared.data });
+  await setSessionCookie(prepared);
+}
+
+export async function prepareSession(payload: SessionPayload): Promise<PreparedSession> {
   const configuredMaxAge = Number(process.env.SESSION_MAX_AGE_SECONDS);
   const maxAge = Number.isInteger(configuredMaxAge) && configuredMaxAge >= 900 && configuredMaxAge <= 60 * 60 * 24 * 30
     ? configuredMaxAge
     : 60 * 60 * 8;
   const sessionId = payload.sessionId ?? randomUUID();
   const expiresAt = new Date(Date.now() + maxAge * 1000);
-  const requestHeaders = await headers();
-  await prisma.userSession.create({
+  const requestHeaders = await safeRequestHeaders();
+  return {
+    payload: { ...payload, sessionId },
+    maxAge,
     data: {
       tenantId: payload.tenantId,
       userId: payload.userId,
@@ -52,11 +65,14 @@ export async function createSession(payload: SessionPayload) {
       userAgentHash: optionalHash(requestHeaders.get("user-agent")),
       ipHash: optionalHash(requestHeaders.get("x-forwarded-for")?.split(",")[0]?.trim() || requestHeaders.get("x-real-ip")),
     },
-  });
-  const token = await new SignJWT({ ...payload, sessionId })
+  };
+}
+
+export async function setSessionCookie(prepared: PreparedSession) {
+  const token = await new SignJWT(prepared.payload)
     .setProtectedHeader({ alg: "HS256" })
     .setIssuedAt()
-    .setExpirationTime(`${maxAge}s`)
+    .setExpirationTime(`${prepared.maxAge}s`)
     .sign(secret);
   const store = await cookies();
   store.set(COOKIE_NAME, token, {
@@ -64,7 +80,7 @@ export async function createSession(payload: SessionPayload) {
     sameSite: "lax",
     secure: process.env.NODE_ENV === "production",
     path: "/",
-    maxAge,
+    maxAge: prepared.maxAge,
   });
 }
 
@@ -146,4 +162,12 @@ function sessionHash(value: string) {
 
 function optionalHash(value?: string | null) {
   return value ? sessionHash(value) : null;
+}
+
+async function safeRequestHeaders() {
+  try {
+    return await headers();
+  } catch {
+    return new Headers();
+  }
 }

@@ -2,7 +2,7 @@ import "server-only";
 
 import { randomBytes, createHash } from "node:crypto";
 import { compare, hash } from "bcryptjs";
-import { HomeownerActivationStatus, HomeownerEmailVerificationStatus, NotificationType, Prisma, Role } from "@prisma/client";
+import { HomeownerActivationStatus, HomeownerEmailVerificationStatus, NotificationStatus, NotificationType, Prisma, Role } from "@prisma/client";
 import { getAppUrl } from "@/lib/app-url";
 import { platformPrisma, prisma } from "@/lib/db";
 import { sendEmailNotification } from "@/lib/services/notifications";
@@ -63,6 +63,14 @@ export async function createHomeownerActivationCredential(input: {
       expiresAt,
     },
   });
+  await db.homeownerEmailVerificationToken.create({
+    data: {
+      tenantId: input.tenantId,
+      userId: input.userId,
+      tokenHash: hashOpaqueToken(randomBytes(32).toString("base64url")),
+      expiresAt,
+    },
+  });
   return { temporaryPassword, expiresAt };
 }
 
@@ -77,34 +85,59 @@ export async function sendHomeownerActivationEmail(input: {
   actorId?: string | null;
 }) {
   const activationUrl = `${getAppUrl()}/activate`;
-  return sendEmailNotification({
-    tenantId: input.tenantId,
-    recipientId: input.userId,
-    email: input.email,
-    subject: "Activate your HOAHub homeowner account",
-    heading: "Homeowner account activation",
-    message: [
-      `Hello ${input.name},`,
-      "Your HOAHub homeowner account is ready for activation.",
-      `Account number: ${input.accountNumber}`,
-      `Temporary password: ${input.temporaryPassword}`,
-      `This temporary password expires on ${input.expiresAt.toLocaleDateString("en-PH", { year: "numeric", month: "long", day: "numeric" })}.`,
-      "Open the activation page, enter your registered email, account number, and temporary password, then create your permanent password.",
-    ].join("\n"),
-    type: NotificationType.WELCOME,
-    actionLabel: "Activate homeowner account",
-    actionUrl: activationUrl,
-  }).catch((error) => prisma.auditLog.create({
-    data: {
+  try {
+    const notification = await sendEmailNotification({
       tenantId: input.tenantId,
-      actorId: input.actorId ?? null,
-      module: "AUTH",
-      action: "HOMEOWNER_ACTIVATION_EMAIL_FAILED",
-      entityType: "User",
-      entityId: input.userId,
-      metadata: { error: error instanceof Error ? error.message.slice(0, 300) : "Unknown email error" },
-    },
-  }));
+      recipientId: input.userId,
+      email: input.email,
+      subject: "Activate your HOAHub homeowner account",
+      heading: "Homeowner account activation",
+      message: [
+        `Hello ${input.name},`,
+        "Your HOAHub homeowner account is ready for activation.",
+        `Account number: ${input.accountNumber}`,
+        `Temporary password: ${input.temporaryPassword}`,
+        `This temporary password expires on ${input.expiresAt.toLocaleDateString("en-PH", { year: "numeric", month: "long", day: "numeric" })}.`,
+        "Open the activation page, enter your registered email, account number, and temporary password, then create your permanent password.",
+      ].join("\n"),
+      type: NotificationType.WELCOME,
+      actionLabel: "Activate homeowner account",
+      actionUrl: activationUrl,
+    });
+    await prisma.auditLog.create({
+      data: {
+        tenantId: input.tenantId,
+        actorId: input.actorId ?? null,
+        module: "AUTH",
+        action: "HOMEOWNER_ACTIVATION_EMAIL_ATTEMPTED",
+        entityType: "User",
+        entityId: input.userId,
+        metadata: {
+          notificationId: notification.id,
+          status: notification.status,
+          providerMessageIdPresent: Boolean(notification.providerMessageId),
+          errorCategory: notification.errorMessage ? activationEmailErrorCategory(notification.errorMessage) : null,
+        },
+      },
+    });
+    return notification;
+  } catch (error) {
+    return prisma.auditLog.create({
+      data: {
+        tenantId: input.tenantId,
+        actorId: input.actorId ?? null,
+        module: "AUTH",
+        action: "HOMEOWNER_ACTIVATION_EMAIL_ATTEMPTED",
+        entityType: "User",
+        entityId: input.userId,
+        metadata: {
+          status: NotificationStatus.FAILED,
+          providerMessageIdPresent: false,
+          errorCategory: activationEmailErrorCategory(error instanceof Error ? error.message : "Unknown email error"),
+        },
+      },
+    });
+  }
 }
 
 export async function verifyHomeownerActivationCredential(input: {
@@ -166,6 +199,7 @@ export async function markHomeownerActivated(input: {
   await prisma.$transaction([
     prisma.user.update({ where: { id: input.userId }, data: { passwordHash: await hash(input.password, 12), lastLoginAt: now } }),
     prisma.homeownerActivationCredential.update({ where: { id: input.credentialId }, data: { usedAt: now } }),
+    prisma.homeownerEmailVerificationToken.updateMany({ where: { tenantId: input.tenantId, userId: input.userId, usedAt: null, expiresAt: { gt: now } }, data: { usedAt: now } }),
     prisma.homeownerProfile.update({
       where: { id: input.profileId },
       data: {
@@ -186,4 +220,12 @@ export async function markHomeownerActivated(input: {
       },
     }),
   ]);
+}
+
+function activationEmailErrorCategory(message: string) {
+  if (/not configured|username|password|sender/i.test(message)) return "CONFIGURATION";
+  if (/authentication|invalid login|535|EAUTH/i.test(message)) return "AUTHENTICATION";
+  if (/timeout|timed out|connection|ECONN|ETIMEDOUT/i.test(message)) return "CONNECTION";
+  if (/recipient|mailbox|address/i.test(message)) return "RECIPIENT";
+  return "PROVIDER";
 }

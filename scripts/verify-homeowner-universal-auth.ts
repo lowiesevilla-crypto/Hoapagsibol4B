@@ -25,12 +25,18 @@ function assertSourceSafeguards() {
   const loginForm = readFileSync("components/login-form.tsx", "utf8");
   const passkeyService = readFileSync("lib/services/passkeys.ts", "utf8");
   const homeownerActions = readFileSync("lib/actions/homeowners.ts", "utf8");
+  const searchInput = readFileSync("components/ui.tsx", "utf8");
+  const activationService = readFileSync("lib/services/homeowner-activation.ts", "utf8");
   assert(manifest.includes('start_url: "/login"'), "PWA manifest must start installed apps at universal login.");
   assert(nextConfig.includes("no-store, max-age=0"), "Auth/protected routes must send no-store cache headers.");
   assert(nextConfig.includes("publickey-credentials-create=(self)") && nextConfig.includes("publickey-credentials-get=(self)"), "Passkey browser permissions are not configured.");
   assert(loginForm.includes("PasskeyLoginButton"), "Universal login must expose passkey login.");
   assert(passkeyService.includes("verifyRegistrationResponse") && passkeyService.includes("verifyAuthenticationResponse"), "Passkey implementation must use server-side WebAuthn verification.");
   assert(homeownerActions.includes("regenerateHomeownerActivationAction") && homeownerActions.includes("disableHomeownerActivationAction"), "Admin activation management actions are missing.");
+  assert(searchInput.includes("terms.some((term) => !haystack.includes(term))"), "Admin search must match typed terms independently.");
+  assert(searchInput.includes('normalize("NFKD")'), "Admin search must normalize accented search text.");
+  assert(activationService.includes("HOMEOWNER_ACTIVATION_EMAIL_ATTEMPTED"), "Activation email attempts must be audited safely.");
+  assert(activationService.includes("homeownerEmailVerificationToken.create"), "Activation credential generation must create an email-verification record.");
 }
 
 function passwordPolicyAccepts(value: string) {
@@ -41,6 +47,21 @@ function challengeHash(value: string) {
   return createHash("sha256").update(value).digest("hex");
 }
 
+function normalizeSearch(value: string) {
+  return value
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9@._-]+/g, " ")
+    .trim();
+}
+
+function searchMatches(query: string, row: string) {
+  const terms = normalizeSearch(query).split(" ").filter(Boolean);
+  const haystack = normalizeSearch(row);
+  return !terms.some((term) => !haystack.includes(term));
+}
+
 async function main() {
   requireLocalClone();
   assertSourceSafeguards();
@@ -49,6 +70,14 @@ async function main() {
   assert(!passwordPolicyAccepts("A1"), "Password policy must enforce minimum length.");
   assert(!passwordPolicyAccepts("A1234567890123456789012345"), "Password policy must enforce maximum length.");
   assert(passwordPolicyAccepts("Home123"), "Password policy should accept BRD-compliant passwords.");
+  const searchRow = "Lowie Sevilla lowie@example.test 77123456729 block 1 lot 2";
+  assert(searchMatches("Lowie", searchRow), "First-name search failed.");
+  assert(searchMatches("Sevilla", searchRow), "Surname search failed.");
+  assert(searchMatches("Lowie Sevilla", searchRow), "Stored-order full-name search failed.");
+  assert(searchMatches("Sevilla Lowie", searchRow), "Reverse-order full-name search failed.");
+  assert(searchMatches("77123456729", searchRow), "Account-number search failed.");
+  assert(searchMatches("lowie@example.test", searchRow), "Email search failed.");
+  assert(!searchMatches("Other Lowie", searchRow), "Search must not match terms across absent values.");
 
   const tenant = await prisma.tenant.findFirst({ where: { status: "ACTIVE" }, orderBy: { createdAt: "asc" } });
   assert(tenant, "No active tenant fixture found.");

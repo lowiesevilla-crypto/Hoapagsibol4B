@@ -93,13 +93,12 @@ function debugMailConfiguration(operation: "send" | "verify", config: MailConfig
     port: config.port,
     encryption: config.encryption,
     secure: smtpTransportOptions(config).secure,
-    username: config.username,
-    senderEmail: config.fromAddress,
-    configuredSenderEmail: config.configuredFromAddress,
+    username: maskEmailLike(config.username),
+    senderEmail: maskEmailLike(config.fromAddress),
+    configuredSenderEmail: maskEmailLike(config.configuredFromAddress),
     senderAddressAdjusted: config.senderAddressAdjusted,
     credentialSource: config.credentialSource,
     passwordPresent: Boolean(config.password),
-    passwordLength: config.password.length,
   });
 }
 
@@ -194,6 +193,12 @@ function escapeHtml(value: string) {
 }
 
 function escapeAttribute(value: string) { return escapeHtml(value).replace(/`/g, "&#96;"); }
+function maskEmailLike(value: string) {
+  if (!value) return "";
+  const [local, domain = ""] = value.split("@");
+  if (!domain) return `${value.slice(0, 2)}***`;
+  return `${local.slice(0, 1)}***${local.slice(-1)}@${domain.slice(0, 1)}***`;
+}
 export function safeMailError(error: unknown) {
   const details = error as { code?: string; responseCode?: number; message?: string };
   const message = error instanceof Error ? error.message : details?.message || "Email delivery failed.";

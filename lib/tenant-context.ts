@@ -13,7 +13,7 @@ const globalForTenantContext = globalThis as unknown as {
 };
 
 const storage = globalForTenantContext.tenantRequestContext ?? new AsyncLocalStorage<TenantRequestContext>();
-if (process.env.NODE_ENV !== "production") globalForTenantContext.tenantRequestContext = storage;
+globalForTenantContext.tenantRequestContext = storage;
 
 export function currentTenantContext() {
   return storage.getStore();

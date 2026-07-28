@@ -14,21 +14,33 @@ import { documentTypeLabel } from "@/lib/services/documents";
 import { getEnabledTenantModules } from "@/lib/tenant";
 import { collectionLabel, money, monthLabel, shortDate } from "@/lib/utils";
 
+async function traceDashboardOperation<T>(operation: string, task: () => Promise<T>) {
+  try {
+    return await task();
+  } catch (error) {
+    console.error("[portal-dashboard] render operation failed", {
+      operation,
+      errorName: error instanceof Error ? error.name : typeof error,
+    });
+    throw error;
+  }
+}
+
 export default async function PortalDashboard() {
-  const profile = await requireHomeownerProfile();
-  await refreshOverdueBills();
+  const profile = await traceDashboardOperation("requireHomeownerProfile", () => requireHomeownerProfile());
+  await traceDashboardOperation("refreshOverdueBills", () => refreshOverdueBills());
   const now = new Date();
   const today = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
   const [soa, openBills, recentBills, bondTotals, announcement, event, documentRequest, paymentRequest, enabledModules] = await Promise.all([
-    getStatementOfAccount(profile.id, profile.tenantId, getAppUrl()),
-    prisma.bill.findMany({ take: 3, where: { tenantId: profile.tenantId, homeownerId: profile.id, balance: { gt: 0 }, archivedAt: null }, orderBy: [{ dueDate: "asc" }, { billingMonth: "desc" }] }),
-    prisma.bill.findMany({ take: 5, where: { tenantId: profile.tenantId, homeownerId: profile.id, archivedAt: null }, orderBy: { billingMonth: "desc" } }),
-    prisma.collection.aggregate({ _sum: { amount: true, amountRefunded: true, amountForfeited: true }, where: { tenantId: profile.tenantId, homeownerId: profile.id, refundable: true } }),
-    prisma.announcement.findFirst({ where: { tenantId: profile.tenantId, status: "PUBLISHED" }, orderBy: { createdAt: "desc" } }),
-    prisma.event.findFirst({ where: { tenantId: profile.tenantId, status: "PUBLISHED", eventDate: { gte: today } }, orderBy: { eventDate: "asc" } }),
-    prisma.documentRequest.findFirst({ where: { tenantId: profile.tenantId, homeownerId: profile.id, archivedAt: null, status: { in: ["SUBMITTED", "PENDING_PAYMENT", "PAYMENT_CONFIRMED", "PENDING_APPROVAL", "UNDER_REVIEW", "APPROVED", "GENERATING", "ISSUED", "GENERATED"] } }, include: { definition: true, configuration: true }, orderBy: { requestedAt: "desc" } }),
-    prisma.paymentRequest.findFirst({ where: { tenantId: profile.tenantId, homeownerId: profile.id, status: "PENDING_REVIEW" }, orderBy: { createdAt: "desc" } }),
-    getEnabledTenantModules(profile.tenantId),
+    traceDashboardOperation("statementOfAccount", () => getStatementOfAccount(profile.id, profile.tenantId, getAppUrl())),
+    traceDashboardOperation("openBills", () => prisma.bill.findMany({ take: 3, where: { tenantId: profile.tenantId, homeownerId: profile.id, balance: { gt: 0 }, archivedAt: null }, orderBy: [{ dueDate: "asc" }, { billingMonth: "desc" }] })),
+    traceDashboardOperation("recentBills", () => prisma.bill.findMany({ take: 5, where: { tenantId: profile.tenantId, homeownerId: profile.id, archivedAt: null }, orderBy: { billingMonth: "desc" } })),
+    traceDashboardOperation("refundableCollectionAggregate", () => prisma.collection.aggregate({ _sum: { amount: true, amountRefunded: true, amountForfeited: true }, where: { tenantId: profile.tenantId, homeownerId: profile.id, refundable: true } })),
+    traceDashboardOperation("latestAnnouncement", () => prisma.announcement.findFirst({ where: { tenantId: profile.tenantId, status: "PUBLISHED" }, orderBy: { createdAt: "desc" } })),
+    traceDashboardOperation("nextEvent", () => prisma.event.findFirst({ where: { tenantId: profile.tenantId, status: "PUBLISHED", eventDate: { gte: today } }, orderBy: { eventDate: "asc" } })),
+    traceDashboardOperation("activeDocumentRequest", () => prisma.documentRequest.findFirst({ where: { tenantId: profile.tenantId, homeownerId: profile.id, archivedAt: null, status: { in: ["SUBMITTED", "PENDING_PAYMENT", "PAYMENT_CONFIRMED", "PENDING_APPROVAL", "UNDER_REVIEW", "APPROVED", "GENERATING", "ISSUED", "GENERATED"] } }, include: { definition: true, configuration: true }, orderBy: { requestedAt: "desc" } })),
+    traceDashboardOperation("pendingPaymentRequest", () => prisma.paymentRequest.findFirst({ where: { tenantId: profile.tenantId, homeownerId: profile.id, status: "PENDING_REVIEW" }, orderBy: { createdAt: "desc" } })),
+    traceDashboardOperation("enabledTenantModules", () => getEnabledTenantModules(profile.tenantId)),
   ]);
   const bondsHeld = Number(bondTotals._sum.amount ?? 0) - Number(bondTotals._sum.amountRefunded ?? 0) - Number(bondTotals._sum.amountForfeited ?? 0);
   const accountNumber = homeownerAccountNumber(profile);

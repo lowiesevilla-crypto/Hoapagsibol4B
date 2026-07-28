@@ -2,7 +2,7 @@ import { createHash, randomUUID } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
 import "./register-server-only-shim.cjs";
 import { compare, hash } from "bcryptjs";
-import { HomeownerActivationStatus, HomeownerEmailVerificationStatus, PrismaClient, Role } from "@prisma/client";
+import { BillStatus, CollectionType, HomeownerActivationStatus, HomeownerEmailVerificationStatus, PaymentMethod, PayerType, PrismaClient, RefundStatus, Role } from "@prisma/client";
 import { homeownerDigitalActivationEligibility } from "../lib/services/homeowner-digital-activation";
 
 loadLocalEnv();
@@ -32,6 +32,9 @@ function assertSourceSafeguards() {
   const passkeyLoginVerifyRoute = readFileSync("app/api/auth/passkeys/login/verify/route.ts", "utf8");
   const authCore = readFileSync("lib/auth.ts", "utf8");
   const authActions = readFileSync("lib/actions/auth.ts", "utf8");
+  const tenantContext = readFileSync("lib/tenant-context.ts", "utf8");
+  const portalDashboard = readFileSync("app/portal/dashboard/page.tsx", "utf8");
+  const portalError = readFileSync("app/portal/error.tsx", "utf8");
   const loginOptionsRoute = readFileSync("app/api/auth/passkeys/login/options/route.ts", "utf8");
   const homeownerActions = readFileSync("lib/actions/homeowners.ts", "utf8");
   const notifications = readFileSync("lib/services/notifications.ts", "utf8");
@@ -61,6 +64,9 @@ function assertSourceSafeguards() {
   assert(passkeyService.includes("const homeownerProfile = credentialRecord?.user.homeownerProfile") && passkeyService.includes("homeownerProfile?.emailStatus !== HomeownerEmailVerificationStatus.VERIFIED"), "Passkey authentication must resolve and validate the server-side homeowner profile before session creation.");
   assert(passkeyLoginVerifyRoute.includes("runWithTenant(session.tenantId") && passkeyLoginVerifyRoute.includes("() => createSession(session)") && passkeyLoginVerifyRoute.indexOf("await verifyPasskeyAuthentication") < passkeyLoginVerifyRoute.indexOf("await runWithTenant"), "Passkey login must create UserSession inside the resolved tenant context.");
   assert(passkeyLoginVerifyRoute.includes('return NextResponse.json({ error: "Passkey authentication could not be verified." }') && !passkeyLoginVerifyRoute.includes("error instanceof Error ? error.message"), "Passkey login verification must return a generic safe error.");
+  assert(tenantContext.includes("globalForTenantContext.tenantRequestContext = storage") && !tenantContext.includes('NODE_ENV !== "production"'), "Tenant AsyncLocalStorage must share a singleton in production server bundles.");
+  assert(portalDashboard.includes("traceDashboardOperation") && portalDashboard.includes('"refundableCollectionAggregate"') && portalDashboard.includes('"pendingPaymentRequest"') && portalDashboard.includes('"enabledTenantModules"'), "Portal dashboard must trace tenant-scoped render operations safely.");
+  assert(portalError.includes('"use client"') && portalError.includes("error.digest") && portalError.includes("reset()") && portalError.includes("Your signed-in session is preserved.") && !portalError.includes("error.message"), "Portal routes must have a safe retry error boundary.");
   assert(authCore.indexOf("await prisma.userSession.create({ data: prepared.data })") >= 0 && authCore.indexOf("await prisma.userSession.create({ data: prepared.data })") < authCore.indexOf("await setSessionCookie(prepared)"), "Session cookie must be set only after UserSession.create succeeds.");
   assert(homeownerActions.includes("regenerateHomeownerActivationAction") && homeownerActions.includes("disableHomeownerActivationAction"), "Admin activation management actions are missing.");
   assert(homeownerActions.includes("enableHomeownerDigitalAccessAction"), "Enable Digital Access admin action is missing.");
@@ -204,6 +210,7 @@ async function main() {
   await assertEmailVerificationService(tenant);
   await assertActivationCompletionTransaction(tenant);
   await assertDigitalAccessEnableDisable(tenant);
+  await assertPortalDashboardTenantScopedRenderData(tenant);
 
   try {
     await prisma.$transaction(async (tx) => {
@@ -402,7 +409,7 @@ async function main() {
     if (error !== rollback) throw error;
   }
 
-  console.log("Homeowner universal auth verification passed: tenant-scoped email verification, token rejection, credential regeneration, full homeowner pagination/search safeguards, activation email structure, URL consistency, session revocation, password rules, PWA cache safeguards, and passkey storage/config are valid.");
+  console.log("Homeowner universal auth verification passed: tenant-scoped email verification, token rejection, credential regeneration, full homeowner pagination/search safeguards, activation email structure, URL consistency, session revocation, password rules, PWA cache safeguards, passkey storage/config, and portal dashboard tenant-scoped render data are valid.");
 }
 
 main().finally(async () => prisma.$disconnect());
@@ -553,6 +560,150 @@ async function assertActivationCompletionTransaction(tenant: { id: string; slug:
     await prisma.homeownerActivationCredential.deleteMany({ where: { userId: { in: createdUserIds } } });
     await prisma.user.deleteMany({ where: { id: { in: createdUserIds } } });
     await prisma.tenant.delete({ where: { id: otherTenant.id } }).catch(() => undefined);
+  }
+}
+
+async function assertPortalDashboardTenantScopedRenderData(tenant: { id: string; slug: string }) {
+  const { prisma: scopedPrisma } = await import("../lib/db");
+  const { currentTenantContext, runWithTenant } = await import("../lib/tenant-context");
+  const { getStatementOfAccount } = await import("../lib/services/statement-of-account");
+  const { getEnabledTenantModules } = await import("../lib/tenant");
+  const { money, monthLabel, shortDate } = await import("../lib/utils");
+  const createdUserIds: string[] = [];
+  const billIds: string[] = [];
+  const paymentIds: string[] = [];
+  const collectionIds: string[] = [];
+  const sessionIds: string[] = [];
+  try {
+    const empty = await createDigitalAccessFixture(tenant.id, { activated: true, passkey: false });
+    createdUserIds.push(empty.user.id);
+    const billed = await createDigitalAccessFixture(tenant.id, { activated: true, passkey: false });
+    createdUserIds.push(billed.user.id);
+    const legacy = await createDigitalAccessFixture(tenant.id, { activated: true, passkey: false });
+    createdUserIds.push(legacy.user.id);
+
+    await prisma.homeownerProfile.update({
+      where: { id: legacy.profile.id },
+      data: { birthDate: null, civilStatus: null, occupation: null, phase: null, propertyType: null, occupancyStatus: null, messengerId: null },
+    });
+
+    const bill = await prisma.bill.create({
+      data: {
+        tenantId: tenant.id,
+        homeownerId: billed.profile.id,
+        billingMonth: new Date(Date.UTC(2026, 0, 1)),
+        coverageYear: 2026,
+        coverageMonth: 1,
+        amount: "100.00",
+        penalty: "0.00",
+        totalAmount: "100.00",
+        amountPaid: "25.00",
+        balance: "75.00",
+        dueDate: new Date(Date.UTC(2026, 0, 15)),
+        status: BillStatus.PARTIAL,
+      },
+    });
+    billIds.push(bill.id);
+
+    const payment = await prisma.payment.create({
+      data: {
+        tenantId: tenant.id,
+        billId: bill.id,
+        homeownerId: billed.profile.id,
+        amount: "25.00",
+        paymentDate: new Date(Date.UTC(2026, 0, 10)),
+        method: PaymentMethod.CASH,
+        referenceNumber: null,
+        receiptNumber: null,
+      },
+    });
+    paymentIds.push(payment.id);
+
+    const collection = await prisma.collection.create({
+      data: {
+        tenantId: tenant.id,
+        type: CollectionType.CONSTRUCTION_BOND,
+        payerType: PayerType.HOMEOWNER,
+        homeownerId: billed.profile.id,
+        amount: "500.00",
+        collectionDate: new Date(Date.UTC(2026, 0, 9)),
+        method: PaymentMethod.CASH,
+        referenceNumber: null,
+        receiptNumber: null,
+        refundable: true,
+        refundStatus: RefundStatus.HELD,
+        createdById: billed.user.id,
+      },
+    });
+    collectionIds.push(collection.id);
+
+    for (const fixture of [empty, billed, legacy]) {
+      const session = await prisma.userSession.create({
+        data: {
+          tenantId: tenant.id,
+          userId: fixture.user.id,
+          tokenHash: challengeHash(`portal-dashboard-${fixture.user.id}-${randomUUID()}`),
+          expiresAt: new Date(Date.now() + 60 * 60 * 1000),
+        },
+      });
+      sessionIds.push(session.id);
+    }
+
+    await assertPortalDashboardDataForFixture(empty.profile.id, empty.user.id, { expectedBills: 0, expectedPayments: 0 });
+    await assertPortalDashboardDataForFixture(billed.profile.id, billed.user.id, { expectedBills: 1, expectedPayments: 1 });
+    await assertPortalDashboardDataForFixture(legacy.profile.id, legacy.user.id, { expectedBills: 0, expectedPayments: 0 });
+  } finally {
+    await prisma.collection.deleteMany({ where: { id: { in: collectionIds } } });
+    await prisma.payment.deleteMany({ where: { id: { in: paymentIds } } });
+    await prisma.bill.deleteMany({ where: { id: { in: billIds } } });
+    await prisma.userSession.deleteMany({ where: { OR: [{ id: { in: sessionIds } }, { userId: { in: createdUserIds } }] } });
+    await prisma.auditLog.deleteMany({ where: { OR: [{ entityId: { in: createdUserIds } }, { actorId: { in: createdUserIds } }] } });
+    await prisma.userPasskeyChallenge.deleteMany({ where: { userId: { in: createdUserIds } } });
+    await prisma.userPasskeyCredential.deleteMany({ where: { userId: { in: createdUserIds } } });
+    await prisma.homeownerEmailVerificationToken.deleteMany({ where: { userId: { in: createdUserIds } } });
+    await prisma.homeownerActivationCredential.deleteMany({ where: { userId: { in: createdUserIds } } });
+    await prisma.user.deleteMany({ where: { id: { in: createdUserIds } } });
+  }
+
+  async function assertPortalDashboardDataForFixture(homeownerId: string, userId: string, expectation: { expectedBills: number; expectedPayments: number }) {
+    await runWithTenant(tenant.id, async () => {
+      assert(currentTenantContext()?.tenantId === tenant.id, "Portal dashboard tenant context was not active.");
+      const profile = await scopedPrisma.homeownerProfile.findFirst({ where: { tenantId: tenant.id, id: homeownerId }, include: { user: true } });
+      assert(profile?.tenantId === tenant.id && profile.userId === userId, "Portal dashboard could not load the homeowner profile in the active tenant context.");
+      const now = new Date();
+      const today = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+      const [soa, openBills, recentBills, bondTotals, announcement, event, documentRequest, paymentRequest, enabledModules, activeSession] = await Promise.all([
+        getStatementOfAccount(profile.id, profile.tenantId, "http://localhost:3000"),
+        scopedPrisma.bill.findMany({ take: 3, where: { tenantId: profile.tenantId, homeownerId: profile.id, balance: { gt: 0 }, archivedAt: null }, orderBy: [{ dueDate: "asc" }, { billingMonth: "desc" }] }),
+        scopedPrisma.bill.findMany({ take: 5, where: { tenantId: profile.tenantId, homeownerId: profile.id, archivedAt: null }, orderBy: { billingMonth: "desc" } }),
+        scopedPrisma.collection.aggregate({ _sum: { amount: true, amountRefunded: true, amountForfeited: true }, where: { tenantId: profile.tenantId, homeownerId: profile.id, refundable: true } }),
+        scopedPrisma.announcement.findFirst({ where: { tenantId: profile.tenantId, status: "PUBLISHED" }, orderBy: { createdAt: "desc" } }),
+        scopedPrisma.event.findFirst({ where: { tenantId: profile.tenantId, status: "PUBLISHED", eventDate: { gte: today } }, orderBy: { eventDate: "asc" } }),
+        scopedPrisma.documentRequest.findFirst({ where: { tenantId: profile.tenantId, homeownerId: profile.id, archivedAt: null, status: { in: ["SUBMITTED", "PENDING_PAYMENT", "PAYMENT_CONFIRMED", "PENDING_APPROVAL", "UNDER_REVIEW", "APPROVED", "GENERATING", "ISSUED", "GENERATED"] } }, include: { definition: true, configuration: true }, orderBy: { requestedAt: "desc" } }),
+        scopedPrisma.paymentRequest.findFirst({ where: { tenantId: profile.tenantId, homeownerId: profile.id, status: "PENDING_REVIEW" }, orderBy: { createdAt: "desc" } }),
+        getEnabledTenantModules(profile.tenantId),
+        scopedPrisma.userSession.findFirst({ where: { tenantId: profile.tenantId, userId, revokedAt: null, expiresAt: { gt: new Date() } } }),
+      ]);
+      const bondsHeld = Number(bondTotals._sum.amount ?? 0) - Number(bondTotals._sum.amountRefunded ?? 0) - Number(bondTotals._sum.amountForfeited ?? 0);
+      const latestPayment = soa.paymentHistory.find((item) => item.status === "Active");
+      const nextDue = openBills[0];
+      const renderValues = [
+        money(soa.summary.currentOutstandingBalance),
+        money(soa.summary.availableCredit),
+        latestPayment ? money(latestPayment.amount) : "None yet",
+        nextDue ? `${shortDate(nextDue.dueDate)} ${monthLabel(nextDue.billingMonth)}` : "No open dues",
+        money(bondsHeld),
+      ];
+      assert(activeSession?.tenantId === tenant.id, "Portal profile and dashboard did not share the same tenant-scoped active session.");
+      assert(recentBills.length === expectation.expectedBills, "Portal dashboard recent bill query did not return the expected fixture shape.");
+      assert(soa.paymentHistory.length === expectation.expectedPayments, "Portal dashboard SOA payment history did not return the expected fixture shape.");
+      assert(enabledModules instanceof Set && enabledModules.size > 0, "Portal dashboard enabled module query did not return a safe module set.");
+      assert(!announcement || announcement.tenantId === tenant.id, "Portal dashboard announcement query crossed tenant scope.");
+      assert(!event || event.tenantId === tenant.id, "Portal dashboard event query crossed tenant scope.");
+      assert(!documentRequest || documentRequest.tenantId === tenant.id, "Portal dashboard document request query crossed tenant scope.");
+      assert(!paymentRequest || paymentRequest.tenantId === tenant.id, "Portal dashboard payment request query crossed tenant scope.");
+      assert(renderValues.every((value) => typeof value === "string" && value.length > 0), "Portal dashboard formatting generated an unsafe display value.");
+    }, { role: Role.HOMEOWNER });
   }
 }
 

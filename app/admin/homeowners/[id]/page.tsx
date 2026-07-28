@@ -6,7 +6,7 @@ import { ConfirmSubmitButton, DeleteButton } from "@/components/ui";
 import { HomeownerForm } from "@/components/homeowner-form";
 import { PageHeader } from "@/components/page-header";
 import { saveAdminHouseholdMemberAction } from "@/lib/actions/documents";
-import { cancelHomeownerActivationAction, deleteHomeownerAction, disableHomeownerActivationAction, regenerateHomeownerActivationAction, revokeHomeownerDigitalSessionsAction, sendHomeownerActivationInvitationAction, sendHomeownerPasswordResetEmailAction } from "@/lib/actions/homeowners";
+import { cancelHomeownerActivationAction, deleteHomeownerAction, disableHomeownerActivationAction, enableHomeownerDigitalAccessAction, regenerateHomeownerActivationAction, revokeHomeownerDigitalSessionsAction, sendHomeownerActivationInvitationAction, sendHomeownerPasswordResetEmailAction } from "@/lib/actions/homeowners";
 import { requireUser } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { homeownerAccountNumber } from "@/lib/homeowner-account";
@@ -40,9 +40,10 @@ export default async function EditHomeownerPage({ params, searchParams }: { para
   const canValidate = canValidateHouseholdMembers(user.role);
   const accountNumber = homeownerAccountNumber(homeowner);
   const activationComplete = homeownerHasCompletedDigitalActivation(homeowner);
+  const digitallyDisabled = homeowner.activationStatus === "DISABLED" || !homeowner.user.active;
   const activationEligibility = homeownerDigitalActivationEligibility(homeowner);
   const invitationExpiration = activationInvitationExpiresAt(homeowner);
-  const [latestDelivery, latestCredential] = await Promise.all([
+  const [latestDelivery, latestCredential, activeSessionCount, latestDisabledAudit] = await Promise.all([
     prisma.notificationLog.findFirst({
       where: { tenantId: user.tenantId, recipientId: homeowner.userId, type: NotificationType.WELCOME },
       orderBy: { createdAt: "desc" },
@@ -52,6 +53,12 @@ export default async function EditHomeownerPage({ params, searchParams }: { para
       where: { tenantId: user.tenantId, userId: homeowner.userId },
       orderBy: { createdAt: "desc" },
       select: { createdAt: true, expiresAt: true, usedAt: true, revokedAt: true, attemptCount: true, lastAttemptAt: true },
+    }),
+    prisma.userSession.count({ where: { tenantId: user.tenantId, userId: homeowner.userId, revokedAt: null, expiresAt: { gt: new Date() } } }),
+    prisma.auditLog.findFirst({
+      where: { tenantId: user.tenantId, action: "HOMEOWNER_ACTIVATION_DISABLED", entityType: "User", entityId: homeowner.userId },
+      orderBy: { createdAt: "desc" },
+      select: { createdAt: true, reason: true, metadata: true, actor: { select: { name: true, email: true } } },
     }),
   ]);
   return <><PageHeader eyebrow="Homeowners" title={homeowner.user.name} description={`Block ${homeowner.block}, Lot ${homeowner.lot}`} action={<><Link className="btn-secondary" href={`/admin/homeowners/${homeowner.id}/soa`}><FileText className="size-4" /> Statement of Account</Link><form action={deleteHomeownerAction}><input type="hidden" name="id" value={homeowner.id} /><DeleteButton label="Delete profile" /></form></>} />
@@ -78,20 +85,27 @@ export default async function EditHomeownerPage({ params, searchParams }: { para
         <ActivationInfo label="Activation Completed" value={homeowner.activatedAt ? shortDate(homeowner.activatedAt) : "Not completed"} />
         <ActivationInfo label="Latest Email Delivery" value={safeDeliveryStatus(latestDelivery)} />
         <ActivationInfo label="Temporary Credential State" value={credentialStateLabel(latestCredential)} />
+        <ActivationInfo label="Active Sessions" value={String(activeSessionCount)} />
+        {digitallyDisabled && <ActivationInfo label="Disabled Date" value={latestDisabledAudit?.createdAt ? shortDate(latestDisabledAudit.createdAt) : "Not recorded"} />}
+        {digitallyDisabled && <ActivationInfo label="Disabled By" value={latestDisabledAudit?.actor ? latestDisabledAudit.actor.name || latestDisabledAudit.actor.email : "Not recorded"} />}
+        {digitallyDisabled && <ActivationInfo label="Safe Reason" value={safeAuditReason(latestDisabledAudit)} />}
       </div>
-      <p className={`mb-4 rounded-xl p-3 text-sm font-semibold ${activationEligibility.eligible ? "bg-emerald-50 text-emerald-800" : homeowner.user.email.trim() ? "bg-slate-50 text-slate-600" : "bg-amber-50 text-amber-800"}`}>{activationEligibility.reason}</p>
+      {digitallyDisabled ? <p className="mb-4 rounded-xl bg-amber-50 p-3 text-sm font-semibold text-amber-900">Digital Access Disabled. Enable digital access to restore the appropriate recovery path for this homeowner.</p> : <p className={`mb-4 rounded-xl p-3 text-sm font-semibold ${activationEligibility.eligible ? "bg-emerald-50 text-emerald-800" : homeowner.user.email.trim() ? "bg-slate-50 text-slate-600" : "bg-amber-50 text-amber-800"}`}>{activationEligibility.reason}</p>}
       {latestDelivery?.status === "FAILED" && <p className="mb-4 rounded-xl bg-rose-50 p-3 text-sm font-semibold text-rose-700">Latest activation email delivery failed. Review Mail Settings or server email logs, then retry.</p>}
       <div className="flex flex-wrap gap-3">
-        {!activationComplete && activationEligibility.eligible && !homeowner.activationSentAt && <form action={sendHomeownerActivationInvitationAction}><input type="hidden" name="id" value={homeowner.id} /><ConfirmSubmitButton className="btn-primary" message="Send first-time activation invitation?">Send Activation Invitation</ConfirmSubmitButton></form>}
-        {!activationComplete && activationEligibility.eligible && homeowner.activationSentAt && <form action={sendHomeownerActivationInvitationAction}><input type="hidden" name="id" value={homeowner.id} /><ConfirmSubmitButton className="btn-primary" message="Resend activation invitation?">Resend Invitation</ConfirmSubmitButton></form>}
-        {!activationComplete && activationEligibility.eligible && <form action={regenerateHomeownerActivationAction}><input type="hidden" name="id" value={homeowner.id} /><ConfirmSubmitButton className="btn-secondary" message="Regenerate the temporary password and email a fresh activation invitation?">Regenerate & Email Activation</ConfirmSubmitButton></form>}
-        {!activationComplete && homeowner.activationStatus !== "CANCELLED" && homeowner.activationStatus !== "DISABLED" && <form action={cancelHomeownerActivationAction}><input type="hidden" name="id" value={homeowner.id} /><ConfirmSubmitButton className="btn-secondary" message="Cancel activation and revoke unused temporary credentials?">Cancel Activation</ConfirmSubmitButton></form>}
-        {activationComplete && <form action={sendHomeownerPasswordResetEmailAction}><input type="hidden" name="id" value={homeowner.id} /><ConfirmSubmitButton className="btn-secondary" message="Send a password reset email to the registered homeowner email?">Send Password Reset</ConfirmSubmitButton></form>}
-        {activationComplete && <form action={revokeHomeownerDigitalSessionsAction}><input type="hidden" name="id" value={homeowner.id} /><ConfirmSubmitButton className="btn-secondary" message="Revoke active sessions for this homeowner?">Revoke Sessions</ConfirmSubmitButton></form>}
-        {activationComplete && homeowner.activationStatus !== "DISABLED" && <form action={disableHomeownerActivationAction}><input type="hidden" name="id" value={homeowner.id} /><ConfirmSubmitButton className="btn-danger" message="Disable digital access and revoke active sessions?">Disable Digital Access</ConfirmSubmitButton></form>}
+        {!digitallyDisabled && !activationComplete && activationEligibility.eligible && !homeowner.activationSentAt && <form action={sendHomeownerActivationInvitationAction}><input type="hidden" name="id" value={homeowner.id} /><ConfirmSubmitButton className="btn-primary" message="Send first-time activation invitation?">Send Activation Invitation</ConfirmSubmitButton></form>}
+        {!digitallyDisabled && !activationComplete && activationEligibility.eligible && homeowner.activationSentAt && <form action={sendHomeownerActivationInvitationAction}><input type="hidden" name="id" value={homeowner.id} /><ConfirmSubmitButton className="btn-primary" message="Resend activation invitation?">Resend Invitation</ConfirmSubmitButton></form>}
+        {!digitallyDisabled && !activationComplete && activationEligibility.eligible && <form action={regenerateHomeownerActivationAction}><input type="hidden" name="id" value={homeowner.id} /><ConfirmSubmitButton className="btn-secondary" message="Regenerate the temporary password and email a fresh activation invitation?">Regenerate & Email Activation</ConfirmSubmitButton></form>}
+        {!digitallyDisabled && !activationComplete && homeowner.activationStatus !== "CANCELLED" && <form action={cancelHomeownerActivationAction}><input type="hidden" name="id" value={homeowner.id} /><ConfirmSubmitButton className="btn-secondary" message="Cancel activation and revoke unused temporary credentials?">Cancel Activation</ConfirmSubmitButton></form>}
+        {!digitallyDisabled && activationComplete && <form action={sendHomeownerPasswordResetEmailAction}><input type="hidden" name="id" value={homeowner.id} /><ConfirmSubmitButton className="btn-secondary" message="Send a password reset email to the registered homeowner email?">Send Password Reset</ConfirmSubmitButton></form>}
+        {!digitallyDisabled && activationComplete && <form action={revokeHomeownerDigitalSessionsAction}><input type="hidden" name="id" value={homeowner.id} /><ConfirmSubmitButton className="btn-secondary" message="Revoke active sessions for this homeowner?">Revoke Sessions</ConfirmSubmitButton></form>}
+        {!digitallyDisabled && activationComplete && <form action={disableHomeownerActivationAction}><input type="hidden" name="id" value={homeowner.id} /><input type="hidden" name="reason" value="Digital access disabled by HOA administrator from homeowner profile." /><ConfirmSubmitButton className="btn-danger" message="Disable digital access and revoke active sessions?">Disable Digital Access</ConfirmSubmitButton></form>}
+        {digitallyDisabled && <form action={enableHomeownerDigitalAccessAction}><input type="hidden" name="id" value={homeowner.id} /><input type="hidden" name="reason" value="Digital access enabled by HOA administrator from homeowner profile." /><ConfirmSubmitButton className="btn-primary" message="Enable digital access? The homeowner must sign in again, and no session will be created automatically.">Enable Digital Access</ConfirmSubmitButton></form>}
       </div>
-      {!activationEligibility.eligible && !activationComplete && <ActionHint>{homeowner.user.email.trim() ? "Resolve the eligibility reason above before sending an activation invitation." : "Activation unavailable. A registered email is required before a first-time invitation can be sent."}</ActionHint>}
-      {activationComplete && <ActionHint>This homeowner has completed first-time activation. Use password-reset email or session revocation for account recovery and security support.</ActionHint>}
+      {!digitallyDisabled && !activationEligibility.eligible && !activationComplete && <ActionHint>{homeowner.user.email.trim() ? "Resolve the eligibility reason above before sending an activation invitation." : "Activation unavailable. A registered email is required before a first-time invitation can be sent."}</ActionHint>}
+      {!digitallyDisabled && activationComplete && activeSessionCount === 0 && <ActionHint>Digital access is active. This homeowner must sign in again before a new session exists.</ActionHint>}
+      {!digitallyDisabled && activationComplete && activeSessionCount > 0 && <ActionHint>This homeowner has completed first-time activation. Use password-reset email or session revocation for account recovery and security support.</ActionHint>}
+      {digitallyDisabled && <ActionHint>The recovery action is available above. Enabling a completed account preserves its password and passkeys; enabling an uncompleted account restores invitation eligibility.</ActionHint>}
     </section>
     <HomeownerForm homeowner={homeowner} />
     <section className="card mt-6">
@@ -168,6 +182,12 @@ function credentialStateLabel(credential: { createdAt: Date; expiresAt: Date; us
   if (credential.revokedAt) return `Revoked ${shortDate(credential.revokedAt)}${attempts}`;
   if (credential.expiresAt <= new Date()) return `Expired ${shortDate(credential.expiresAt)}${attempts}`;
   return `Active until ${shortDate(credential.expiresAt)}${attempts}`;
+}
+
+function safeAuditReason(audit: { reason: string | null; metadata: unknown } | null) {
+  if (audit?.reason) return audit.reason;
+  const reason = auditMetadataText(audit?.metadata, "reason");
+  return reason || "Not recorded";
 }
 
 function auditMetadataText(metadata: unknown, key: string) {

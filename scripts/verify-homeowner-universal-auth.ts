@@ -32,6 +32,7 @@ function assertSourceSafeguards() {
   const searchInput = readFileSync("components/ui.tsx", "utf8");
   const activationService = readFileSync("lib/services/homeowner-activation.ts", "utf8");
   const homeownerActivationAction = readFileSync("lib/actions/homeowner-activation.ts", "utf8");
+  const homeownerDetail = readFileSync("app/admin/homeowners/[id]/page.tsx", "utf8");
   const emailVerificationRoute = readFileSync("app/activate/verify/route.ts", "utf8");
   const homeownerList = readFileSync("app/admin/homeowners/page.tsx", "utf8");
   const appUrl = readFileSync("lib/app-url.ts", "utf8");
@@ -40,7 +41,14 @@ function assertSourceSafeguards() {
   assert(nextConfig.includes("publickey-credentials-create=(self)") && nextConfig.includes("publickey-credentials-get=(self)"), "Passkey browser permissions are not configured.");
   assert(loginForm.includes("PasskeyLoginButton"), "Universal login must expose passkey login.");
   assert(passkeyService.includes("verifyRegistrationResponse") && passkeyService.includes("verifyAuthenticationResponse"), "Passkey implementation must use server-side WebAuthn verification.");
+  assert(passkeyService.includes("const appUrl = getAppUrl()") && passkeyService.includes("rpID: url.hostname") && passkeyService.includes("origin: url.origin"), "Passkey RP ID and expected origin must derive consistently from APP_URL.");
+  assert(passkeyService.includes("active: true") && passkeyService.includes("activationStatus: HomeownerActivationStatus.ACTIVE") && passkeyService.includes("!credentialRecord.user.active"), "Passkey login must reject digitally disabled homeowner accounts.");
   assert(homeownerActions.includes("regenerateHomeownerActivationAction") && homeownerActions.includes("disableHomeownerActivationAction"), "Admin activation management actions are missing.");
+  assert(homeownerActions.includes("enableHomeownerDigitalAccessAction"), "Enable Digital Access admin action is missing.");
+  assert(homeownerActions.includes("homeownerActivationAdminRoles") && homeownerActions.includes("Role.SUPER_ADMIN") && homeownerActions.includes("Role.SYSTEM_ADMIN") && homeownerActions.includes("Role.HOA_ADMIN") && homeownerActions.includes("Role.ADMIN") && !homeownerActions.includes("Role.PLATFORM_ADMIN, Role.HOA_ADMIN"), "Enable/disable digital access roles must match the approved tenant-admin role model.");
+  assert(homeownerActions.includes("HOMEOWNER_ACTIVATION_ENABLED") && homeownerActions.includes("sessionCreated: false") && homeownerActions.includes("passwordPreserved: true") && homeownerActions.includes("passkeysPreserved: true"), "Enable Digital Access audit metadata must record safe restoration behavior.");
+  assert(homeownerActions.includes("runWithTenant(admin.tenantId") && homeownerActions.includes("tx.userSession.updateMany") && homeownerActions.includes("data: { active: true }"), "Enable/disable digital access must run tenant-scoped and avoid automatic session creation.");
+  assert(homeownerDetail.includes("Enable Digital Access") && homeownerDetail.includes("Digital Access Disabled") && homeownerDetail.includes("Disabled Date") && homeownerDetail.includes("Active Sessions"), "Admin homeowner panel must expose disabled-state recovery details.");
   assert(searchInput.includes("terms.some((term) => !haystack.includes(term))"), "Admin search must match typed terms independently.");
   assert(searchInput.includes('normalize("NFKD")'), "Admin search must normalize accented search text.");
   assert(activationService.includes("HOMEOWNER_ACTIVATION_EMAIL_ATTEMPTED"), "Activation email attempts must be audited safely.");
@@ -127,6 +135,7 @@ async function main() {
   assert(tenant, "No active tenant fixture found.");
   await assertEmailVerificationService(tenant);
   await assertActivationCompletionTransaction(tenant);
+  await assertDigitalAccessEnableDisable(tenant);
 
   try {
     await prisma.$transaction(async (tx) => {
@@ -477,6 +486,187 @@ async function assertActivationCompletionTransaction(tenant: { id: string; slug:
     await prisma.user.deleteMany({ where: { id: { in: createdUserIds } } });
     await prisma.tenant.delete({ where: { id: otherTenant.id } }).catch(() => undefined);
   }
+}
+
+async function assertDigitalAccessEnableDisable(tenant: { id: string; slug: string }) {
+  const { prisma: scopedPrisma } = await import("../lib/db");
+  const { runWithTenant } = await import("../lib/tenant-context");
+  const passkeys = await import("../lib/services/passkeys");
+  const createdUserIds: string[] = [];
+  const otherTenant = await prisma.tenant.create({ data: { name: "UAT Digital Access Tenant", shortName: "UATD", slug: `uat-digital-${Date.now()}`, status: "ACTIVE" } });
+  try {
+    const activated = await createDigitalAccessFixture(tenant.id, { activated: true, passkey: true });
+    createdUserIds.push(activated.user.id);
+    const untouched = await createDigitalAccessFixture(tenant.id, { activated: true, passkey: false });
+    createdUserIds.push(untouched.user.id);
+    const unactivated = await createDigitalAccessFixture(tenant.id, { activated: false, passkey: false });
+    createdUserIds.push(unactivated.user.id);
+    const crossTenant = await createDigitalAccessFixture(otherTenant.id, { activated: true, passkey: false });
+    createdUserIds.push(crossTenant.user.id);
+
+    const now = new Date();
+    await prisma.userSession.createMany({
+      data: [
+        { tenantId: tenant.id, userId: activated.user.id, tokenHash: challengeHash(`active-a-${randomUUID()}`), expiresAt: new Date(Date.now() + 60 * 60 * 1000) },
+        { tenantId: tenant.id, userId: activated.user.id, tokenHash: challengeHash(`active-b-${randomUUID()}`), expiresAt: new Date(Date.now() + 60 * 60 * 1000) },
+        { tenantId: tenant.id, userId: untouched.user.id, tokenHash: challengeHash(`untouched-${randomUUID()}`), expiresAt: new Date(Date.now() + 60 * 60 * 1000) },
+      ],
+    });
+
+    await runWithTenant(tenant.id, async () => await scopedPrisma.$transaction(async (tx) => {
+      const current = await tx.homeownerProfile.findFirstOrThrow({ where: { id: activated.profile.id, tenantId: tenant.id, userId: activated.user.id }, include: { user: true } });
+      await tx.userSession.updateMany({ where: { tenantId: tenant.id, userId: current.userId, revokedAt: null }, data: { revokedAt: now } });
+      await tx.user.update({ where: { id: current.userId }, data: { active: false } });
+      await tx.homeownerProfile.update({ where: { tenantId_id: { tenantId: tenant.id, id: current.id } }, data: { activationStatus: HomeownerActivationStatus.DISABLED } });
+      await tx.auditLog.create({
+        data: {
+          tenantId: tenant.id,
+          actorId: null,
+          module: "AUTH",
+          action: "HOMEOWNER_ACTIVATION_DISABLED",
+          entityType: "User",
+          entityId: current.userId,
+          reason: "UAT disable digital access.",
+          metadata: { homeownerId: current.id, accountMasked: "90*******00", sessionsRevoked: true, passkeysPreserved: true },
+        },
+      });
+    }), { role: Role.ADMIN });
+
+    const disabledUser = await prisma.user.findUniqueOrThrow({ where: { id: activated.user.id }, select: { active: true, passwordHash: true } });
+    const disabledProfile = await prisma.homeownerProfile.findUniqueOrThrow({ where: { id: activated.profile.id } });
+    const disabledSessions = await prisma.userSession.count({ where: { tenantId: tenant.id, userId: activated.user.id, revokedAt: null } });
+    const untouchedSessions = await prisma.userSession.count({ where: { tenantId: tenant.id, userId: untouched.user.id, revokedAt: null } });
+    const preservedPasskeys = await prisma.userPasskeyCredential.count({ where: { tenantId: tenant.id, userId: activated.user.id } });
+    const disabledPasskeyLogin = await passkeys.findPasskeyLoginUser({ email: activated.email, accountNumber: activated.accountNumber });
+    assert(disabledProfile.status === "ACTIVE", "Disabling digital access changed operational homeowner status.");
+    assert(disabledProfile.activationStatus === HomeownerActivationStatus.DISABLED && !disabledUser.active, "Digitally ACTIVE homeowner was not disabled.");
+    assert(disabledSessions === 0, "Disable Digital Access did not revoke all active sessions.");
+    assert(untouchedSessions === 1, "Disable Digital Access revoked another homeowner's session.");
+    assert(await compare(activated.permanentPassword, disabledUser.passwordHash), "Disable Digital Access changed the permanent password hash.");
+    assert(preservedPasskeys === 1, "Disable Digital Access removed a registered passkey.");
+    assert("error" in disabledPasskeyLogin, "Disabled digital account was allowed to start passkey login.");
+    assert(!disabledUser.active, "Disabled account would still satisfy password-login active-user checks.");
+
+    await runWithTenant(tenant.id, async () => await scopedPrisma.$transaction(async (tx) => {
+      const current = await tx.homeownerProfile.findFirstOrThrow({ where: { id: activated.profile.id, tenantId: tenant.id, userId: activated.user.id }, include: { user: true } });
+      const restoredStatus = current.activatedAt ? HomeownerActivationStatus.ACTIVE : HomeownerActivationStatus.NOT_INVITED;
+      await tx.userSession.updateMany({ where: { tenantId: tenant.id, userId: current.userId, revokedAt: null }, data: { revokedAt: new Date() } });
+      await tx.user.update({ where: { id: current.userId }, data: { active: true } });
+      await tx.homeownerProfile.update({ where: { tenantId_id: { tenantId: tenant.id, id: current.id } }, data: { activationStatus: restoredStatus } });
+      await tx.auditLog.create({
+        data: {
+          tenantId: tenant.id,
+          actorId: null,
+          module: "AUTH",
+          action: "HOMEOWNER_ACTIVATION_ENABLED",
+          entityType: "User",
+          entityId: current.userId,
+          reason: "UAT enable digital access.",
+          metadata: { homeownerId: current.id, restoredActivationStatus: restoredStatus, sessionCreated: false, passwordPreserved: true, passkeysPreserved: true },
+        },
+      });
+    }), { role: Role.ADMIN });
+
+    const enabledUser = await prisma.user.findUniqueOrThrow({ where: { id: activated.user.id }, select: { active: true, passwordHash: true } });
+    const enabledProfile = await prisma.homeownerProfile.findUniqueOrThrow({ where: { id: activated.profile.id } });
+    const sessionsAfterEnable = await prisma.userSession.count({ where: { tenantId: tenant.id, userId: activated.user.id, revokedAt: null } });
+    const enabledPasskeys = await prisma.userPasskeyCredential.count({ where: { tenantId: tenant.id, userId: activated.user.id } });
+    const reenabledPasskeyLogin = await passkeys.findPasskeyLoginUser({ email: activated.email, accountNumber: activated.accountNumber });
+    assert(enabledUser.active && enabledProfile.activationStatus === HomeownerActivationStatus.ACTIVE && enabledProfile.activatedAt, "Previously activated homeowner did not return to digitally ACTIVE.");
+    assert(await compare(activated.permanentPassword, enabledUser.passwordHash), "Enable Digital Access changed the permanent password hash.");
+    assert(enabledPasskeys === 1, "Enable Digital Access removed a registered passkey.");
+    assert(sessionsAfterEnable === 0, "Enable Digital Access automatically created a session.");
+    assert(!("error" in reenabledPasskeyLogin), "Re-enabled activated account could not start passkey login with preserved passkey.");
+
+    await runWithTenant(tenant.id, async () => await scopedPrisma.$transaction(async (tx) => {
+      await tx.user.update({ where: { id: unactivated.user.id }, data: { active: false } });
+      await tx.homeownerProfile.update({ where: { tenantId_id: { tenantId: tenant.id, id: unactivated.profile.id } }, data: { activationStatus: HomeownerActivationStatus.DISABLED } });
+      await tx.user.update({ where: { id: unactivated.user.id }, data: { active: true } });
+      await tx.homeownerProfile.update({ where: { tenantId_id: { tenantId: tenant.id, id: unactivated.profile.id } }, data: { activationStatus: HomeownerActivationStatus.NOT_INVITED, activationSentAt: null } });
+    }), { role: Role.ADMIN });
+    const restoredUnactivated = await prisma.homeownerProfile.findUniqueOrThrow({ where: { id: unactivated.profile.id }, include: { user: true } });
+    const unactivatedSessions = await prisma.userSession.count({ where: { tenantId: tenant.id, userId: unactivated.user.id, revokedAt: null } });
+    const unactivatedCreds = await prisma.homeownerActivationCredential.count({ where: { tenantId: tenant.id, userId: unactivated.user.id, usedAt: null, revokedAt: null } });
+    assert(restoredUnactivated.activationStatus === HomeownerActivationStatus.NOT_INVITED && !restoredUnactivated.activatedAt, "Never-activated homeowner was not restored to an invitation-ready state.");
+    assert(homeownerDigitalActivationEligibility(restoredUnactivated).eligible, "Re-enabled never-activated homeowner is not eligible for a new activation invitation.");
+    assert(unactivatedSessions === 0 && unactivatedCreds === 0, "Re-enabled never-activated homeowner received a session or temporary credential automatically.");
+    assert(await compare(unactivated.permanentPassword, restoredUnactivated.user.passwordHash), "Unactivated enable flow changed the existing password hash.");
+
+    let crossTenantDenied = false;
+    try {
+      await runWithTenant(tenant.id, async () => await scopedPrisma.homeownerProfile.update({
+        where: { tenantId_id: { tenantId: otherTenant.id, id: crossTenant.profile.id } },
+        data: { activationStatus: HomeownerActivationStatus.DISABLED },
+      }), { role: Role.ADMIN });
+    } catch {
+      crossTenantDenied = true;
+    }
+    assert(crossTenantDenied, "Cross-tenant digital access enable/disable was not denied.");
+    const crossTenantInvisible = await runWithTenant(tenant.id, async () => await scopedPrisma.homeownerProfile.findFirst({ where: { id: crossTenant.profile.id } }), { role: Role.ADMIN });
+    assert(!crossTenantInvisible, "Cross-tenant homeowner profile was visible through tenant-scoped Prisma.");
+
+    const disableAudit = await prisma.auditLog.findFirstOrThrow({ where: { action: "HOMEOWNER_ACTIVATION_DISABLED", entityId: activated.user.id }, orderBy: { createdAt: "desc" } });
+    const enableAudit = await prisma.auditLog.findFirstOrThrow({ where: { action: "HOMEOWNER_ACTIVATION_ENABLED", entityId: activated.user.id }, orderBy: { createdAt: "desc" } });
+    const auditText = JSON.stringify([disableAudit.reason, disableAudit.metadata, enableAudit.reason, enableAudit.metadata]);
+    assert(!auditText.includes(activated.permanentPassword) && !auditText.includes("tokenHash") && !auditText.includes("credential-"), "Digital access audit metadata leaked secrets.");
+  } finally {
+    await prisma.auditLog.deleteMany({ where: { OR: [{ entityId: { in: createdUserIds } }, { actorId: { in: createdUserIds } }] } });
+    await prisma.userSession.deleteMany({ where: { userId: { in: createdUserIds } } });
+    await prisma.userPasskeyChallenge.deleteMany({ where: { userId: { in: createdUserIds } } });
+    await prisma.userPasskeyCredential.deleteMany({ where: { userId: { in: createdUserIds } } });
+    await prisma.homeownerEmailVerificationToken.deleteMany({ where: { userId: { in: createdUserIds } } });
+    await prisma.homeownerActivationCredential.deleteMany({ where: { userId: { in: createdUserIds } } });
+    await prisma.user.deleteMany({ where: { id: { in: createdUserIds } } });
+    await prisma.tenant.delete({ where: { id: otherTenant.id } }).catch(() => undefined);
+  }
+}
+
+async function createDigitalAccessFixture(tenantId: string, options: { activated: boolean; passkey: boolean }) {
+  const stamp = `${Date.now()}${Math.floor(Math.random() * 1000)}`;
+  const permanentPassword = `Home${stamp.slice(-6)}A`;
+  const activatedAt = options.activated ? new Date() : null;
+  const email = `uat.digital.${stamp}@example.test`;
+  const accountNumber = testAccountNumber();
+  const user = await prisma.user.create({
+    data: {
+      tenantId,
+      name: `UAT Digital ${stamp}`,
+      email,
+      passwordHash: await hash(permanentPassword, 12),
+      role: Role.HOMEOWNER,
+      active: true,
+      homeownerProfile: {
+        create: {
+          tenantId,
+          phone: "09990000004",
+          address: "Digital Access UAT Address",
+          block: `DU-${stamp.slice(-5)}`,
+          lot: `DL-${stamp.slice(-5)}`,
+          accountNumber,
+          status: "ACTIVE",
+          activationStatus: options.activated ? HomeownerActivationStatus.ACTIVE : HomeownerActivationStatus.NOT_INVITED,
+          emailStatus: options.activated ? HomeownerEmailVerificationStatus.VERIFIED : HomeownerEmailVerificationStatus.UNVERIFIED,
+          emailVerifiedAt: activatedAt,
+          activatedAt,
+          monthlyDuesAmount: "1.00",
+        },
+      },
+    },
+    include: { homeownerProfile: true },
+  });
+  if (options.passkey) {
+    await prisma.userPasskeyCredential.create({
+      data: {
+        tenantId,
+        userId: user.id,
+        credentialId: `credential-${randomUUID()}`,
+        publicKey: Buffer.from(`public-key-${stamp}`).toString("base64url"),
+        transports: ["internal"],
+        backedUp: true,
+      },
+    });
+  }
+  return { user, profile: user.homeownerProfile!, email, accountNumber, permanentPassword };
 }
 
 async function createActivationFixture(tenantId: string, service: typeof import("../lib/services/homeowner-activation")) {

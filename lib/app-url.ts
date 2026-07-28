@@ -4,11 +4,11 @@ export function getAppUrl() {
   const configured = process.env.APP_URL?.trim()
     || process.env.BASE_URL?.trim()
     || process.env.PUBLIC_APP_URL?.trim()
-    || (process.env.NODE_ENV === "production" ? OFFICIAL_APP_URL : "http://localhost:3000");
+    || (process.env.NODE_ENV === "production" ? OFFICIAL_APP_URL : "http://127.0.0.1:3000");
   try {
     return new URL(configured).origin;
   } catch {
-    return process.env.NODE_ENV === "production" ? OFFICIAL_APP_URL : "http://localhost:3000";
+    return process.env.NODE_ENV === "production" ? OFFICIAL_APP_URL : "http://127.0.0.1:3000";
   }
 }
 

@@ -361,12 +361,9 @@ export async function sendHomeownerPasswordResetEmailAction(formData: FormData) 
 
 export async function bulkSendHomeownerActivationInvitationsAction(formData: FormData) {
   const admin = await requireHomeownerActivationAdmin();
-  const mode = String(formData.get("mode") || "selected");
   const selectedIds = formData.getAll("homeownerId").map((value) => String(value)).filter(Boolean);
-  const where = mode === "allEligible"
-    ? { tenantId: admin.tenantId }
-    : { tenantId: admin.tenantId, id: { in: selectedIds } };
-  const homeowners = await prisma.homeownerProfile.findMany({ where, include: { user: true }, orderBy: { user: { name: "asc" } }, take: mode === "allEligible" ? 500 : undefined });
+  if (!selectedIds.length) redirect("/admin/homeowners?error=Select%20at%20least%20one%20eligible%20homeowner.");
+  const homeowners = await prisma.homeownerProfile.findMany({ where: { tenantId: admin.tenantId, id: { in: selectedIds } }, include: { user: true }, orderBy: { user: { name: "asc" } }, take: selectedIds.length });
   let sent = 0;
   let skipped = 0;
   let failed = 0;
@@ -387,8 +384,8 @@ export async function bulkSendHomeownerActivationInvitationsAction(formData: For
       module: "AUTH",
       action: "HOMEOWNER_ACTIVATION_BULK_COMPLETED",
       entityType: "HomeownerProfile",
-      entityId: mode,
-      metadata: { mode, selectedCount: selectedIds.length, processed: homeowners.length, sent, skipped, failed },
+      entityId: "selected",
+      metadata: { mode: "selected", selectedCount: selectedIds.length, processed: homeowners.length, sent, skipped, failed },
     },
   });
   revalidatePath("/admin/homeowners");

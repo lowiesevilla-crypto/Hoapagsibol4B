@@ -1,9 +1,11 @@
 import { createHash, randomUUID } from "node:crypto";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
+import "./register-server-only-shim.cjs";
 import { compare, hash } from "bcryptjs";
 import { HomeownerActivationStatus, HomeownerEmailVerificationStatus, PrismaClient, Role } from "@prisma/client";
 import { homeownerDigitalActivationEligibility } from "../lib/services/homeowner-digital-activation";
 
+loadLocalEnv();
 const prisma = new PrismaClient();
 const rollback = new Error("ROLLBACK_HOMEOWNER_UNIVERSAL_AUTH_VERIFICATION");
 
@@ -17,7 +19,7 @@ function requireLocalClone() {
 }
 
 function testAccountNumber() {
-  return `9${String(Date.now()).slice(-10)}`;
+  return `9${Math.floor(Math.random() * 10_000_000_000).toString().padStart(10, "0")}`;
 }
 
 function assertSourceSafeguards() {
@@ -30,6 +32,8 @@ function assertSourceSafeguards() {
   const searchInput = readFileSync("components/ui.tsx", "utf8");
   const activationService = readFileSync("lib/services/homeowner-activation.ts", "utf8");
   const emailVerificationRoute = readFileSync("app/activate/verify/route.ts", "utf8");
+  const homeownerList = readFileSync("app/admin/homeowners/page.tsx", "utf8");
+  const appUrl = readFileSync("lib/app-url.ts", "utf8");
   assert(manifest.includes('start_url: "/login"'), "PWA manifest must start installed apps at universal login.");
   assert(nextConfig.includes("no-store, max-age=0"), "Auth/protected routes must send no-store cache headers.");
   assert(nextConfig.includes("publickey-credentials-create=(self)") && nextConfig.includes("publickey-credentials-get=(self)"), "Passkey browser permissions are not configured.");
@@ -43,11 +47,34 @@ function assertSourceSafeguards() {
   assert(activationService.includes("emailVerificationToken") && activationService.includes("/verify?token="), "Activation email must include a registered-email verification link.");
   assert(activationService.includes("HOMEOWNER_EMAIL_VERIFIED"), "Email verification must create an audit event.");
   assert(emailVerificationRoute.includes("verifyHomeownerEmailVerificationToken"), "Activation email verification route is missing.");
-  assert(activationService.includes("Android Chrome install") && activationService.includes("iPhone Safari install") && activationService.includes("Desktop Chrome/Edge install"), "Activation email must include mobile and desktop installation instructions.");
+  assert(activationService.includes("SECTION 1 - HEADER") && activationService.includes("ACCOUNT CREDENTIAL CARD") && activationService.includes("INSTALLATION GUIDE"), "Activation email must be sectioned, not a single paragraph.");
+  assert(activationService.includes("Android Chrome") && activationService.includes("iPhone Safari") && activationService.includes("Desktop Chrome / Edge"), "Activation email must include mobile and desktop installation instructions.");
   assert(activationService.includes("logMessage:") && activationService.includes("redacted from logs"), "Activation notification logs must redact temporary passwords, verification links, and full account numbers.");
   assert(homeownerActions.includes("bulkSendHomeownerActivationInvitationsAction"), "Bulk homeowner activation invitation action is missing.");
+  assert(homeownerActions.includes("selectedIds.length") && !homeownerActions.includes("take: mode === \"allEligible\" ? 500"), "Bulk activation must process selected homeowners only and must not cap all-eligible batches at 500.");
   assert(homeownerActions.includes("accountMasked") && !homeownerActions.includes("metadata: { accountNumber }"), "Activation audit metadata must not store complete account numbers.");
   assert(notifications.includes("username: maskEmailLike") && !notifications.includes("passwordLength"), "SMTP diagnostics must mask usernames and avoid password detail logging.");
+  assert(notifications.includes("html?: string") && notifications.includes("input.html ?? emailHtml"), "Notification service must support structured activation email HTML.");
+  assert(emailVerificationRoute.includes("new URL(\"/activate\", getAppUrl())"), "Email verification redirects must use configured APP_URL.");
+  assert(activationService.includes("runWithTenant(record.tenantId") && activationService.includes("prisma.$transaction(async (tx)"), "Email verification must mutate through tenant-scoped transactional Prisma context.");
+  assert(activationService.includes("GENERIC_EMAIL_VERIFICATION_ERROR"), "Invalid, used, expired, revoked, or cross-tenant tokens must return a safe generic result.");
+  assert(homeownerList.includes("prisma.homeownerProfile.count({ where: baseWhere })"), "Homeowner list must show total tenant homeowner count.");
+  assert(homeownerList.includes("take: pageSize") && homeownerList.includes("skip,"), "Homeowner list must use explicit server-side pagination.");
+  assert(homeownerList.includes("digitalFilters") && homeownerList.includes("operationalStatus"), "Digital activation filters must be separate from operational status filters.");
+  assert(homeownerList.includes("Eligible for First-Time Activation") && homeownerList.includes("Missing Email"), "Homeowner summary cards are missing.");
+  assert(appUrl.includes("PUBLIC_APP_URL") && appUrl.includes("http://127.0.0.1:3000"), "APP_URL helper must normalize local UAT to 127.0.0.1 when no env override exists.");
+}
+
+function loadLocalEnv() {
+  for (const file of [".env.local", ".env"]) {
+    if (!existsSync(file)) continue;
+    const text = readFileSync(file, "utf8");
+    for (const line of text.split(/\r?\n/)) {
+      const match = line.match(/^\s*([A-Z0-9_]+)\s*=\s*(.*)\s*$/);
+      if (!match || process.env[match[1]]) continue;
+      process.env[match[1]] = match[2].trim().replace(/^"(.*)"$/, "$1");
+    }
+  }
 }
 
 function passwordPolicyAccepts(value: string) {
@@ -76,6 +103,8 @@ function searchMatches(query: string, row: string) {
 async function main() {
   requireLocalClone();
   assertSourceSafeguards();
+  assert(process.env.APP_URL === "http://127.0.0.1:3000", "Local UAT APP_URL must be http://127.0.0.1:3000.");
+  assert(process.env.PUBLIC_APP_URL === "http://127.0.0.1:3000", "Local UAT PUBLIC_APP_URL must be http://127.0.0.1:3000.");
   assert(!passwordPolicyAccepts("abcdef"), "Password policy must require a number.");
   assert(!passwordPolicyAccepts("123456"), "Password policy must require a letter.");
   assert(!passwordPolicyAccepts("A1"), "Password policy must enforce minimum length.");
@@ -92,6 +121,7 @@ async function main() {
 
   const tenant = await prisma.tenant.findFirst({ where: { status: "ACTIVE" }, orderBy: { createdAt: "asc" } });
   assert(tenant, "No active tenant fixture found.");
+  await assertEmailVerificationService(tenant);
 
   try {
     await prisma.$transaction(async (tx) => {
@@ -290,7 +320,96 @@ async function main() {
     if (error !== rollback) throw error;
   }
 
-  console.log("Homeowner universal auth verification passed: activation, tenant isolation, session revocation, password rules, email verification, PWA cache safeguards, and passkey storage/config are valid.");
+  console.log("Homeowner universal auth verification passed: tenant-scoped email verification, token rejection, credential regeneration, full homeowner pagination/search safeguards, activation email structure, URL consistency, session revocation, password rules, PWA cache safeguards, and passkey storage/config are valid.");
 }
 
 main().finally(async () => prisma.$disconnect());
+
+async function assertEmailVerificationService(tenant: { id: string; slug: string }) {
+  const service = await import("../lib/services/homeowner-activation");
+  const createdUserIds: string[] = [];
+  const crossTenant = await prisma.tenant.create({ data: { name: "UAT Cross Tenant", shortName: "UATX", slug: `uat-cross-${Date.now()}`, status: "ACTIVE" } });
+  try {
+    const valid = await createActivationFixture(tenant.id, service);
+    createdUserIds.push(valid.user.id);
+    const verified = await service.verifyHomeownerEmailVerificationToken(valid.emailVerificationToken);
+    assert(!("error" in verified), "Tenant-scoped email verification returned an error.");
+    const verifiedProfile = await prisma.homeownerProfile.findUniqueOrThrow({ where: { id: valid.profile.id } });
+    assert(verifiedProfile.emailStatus === HomeownerEmailVerificationStatus.VERIFIED, "Email verification did not mark registered email verified.");
+    assert(verifiedProfile.activationStatus === HomeownerActivationStatus.PASSWORD_CREATION_REQUIRED, "Email verification must require password creation before full access.");
+    assert(!verifiedProfile.activatedAt, "Email verification alone must not activate dashboard access.");
+    const usedToken = await prisma.homeownerEmailVerificationToken.findUniqueOrThrow({ where: { id: valid.tokenRow.id } });
+    assert(usedToken.usedAt, "Email verification token was not marked used.");
+    const audit = await prisma.auditLog.findFirst({ where: { entityId: valid.profile.id, action: "HOMEOWNER_EMAIL_VERIFIED" }, orderBy: { createdAt: "desc" } });
+    const auditText = JSON.stringify(audit?.metadata ?? {});
+    assert(!auditText.includes(valid.emailVerificationToken) && !auditText.includes(valid.temporaryPassword), "Audit metadata leaked activation token or temporary password.");
+    const credentialCheck = await service.verifyHomeownerActivationCredential({ accountNumber: valid.accountNumber, email: valid.email, temporaryPassword: valid.temporaryPassword });
+    assert(!("error" in credentialCheck), "Verified email should allow the valid temporary credential to continue to password creation.");
+
+    const cross = await createActivationFixture(tenant.id, service);
+    createdUserIds.push(cross.user.id);
+    const crossRawToken = `cross-${randomUUID()}`;
+    await prisma.homeownerEmailVerificationToken.create({ data: { tenantId: crossTenant.id, userId: cross.user.id, tokenHash: service.hashOpaqueToken(crossRawToken), expiresAt: new Date(Date.now() + 60 * 60 * 1000) } });
+    assert("error" in await service.verifyHomeownerEmailVerificationToken(crossRawToken), "Cross-tenant email verification token was accepted.");
+
+    const used = await createActivationFixture(tenant.id, service);
+    createdUserIds.push(used.user.id);
+    await prisma.homeownerEmailVerificationToken.update({ where: { id: used.tokenRow.id }, data: { usedAt: new Date() } });
+    assert("error" in await service.verifyHomeownerEmailVerificationToken(used.emailVerificationToken), "Used token was accepted.");
+
+    const expired = await createActivationFixture(tenant.id, service);
+    createdUserIds.push(expired.user.id);
+    await prisma.homeownerEmailVerificationToken.update({ where: { id: expired.tokenRow.id }, data: { expiresAt: new Date(Date.now() - 60_000) } });
+    assert("error" in await service.verifyHomeownerEmailVerificationToken(expired.emailVerificationToken), "Expired token was accepted.");
+
+    const revoked = await createActivationFixture(tenant.id, service);
+    createdUserIds.push(revoked.user.id);
+    const regenerated = await service.createHomeownerActivationCredential({ tenantId: tenant.id, userId: revoked.user.id, tx: prisma });
+    assert("error" in await service.verifyHomeownerEmailVerificationToken(revoked.emailVerificationToken), "Revoked old token was accepted after regeneration.");
+    assert("error" in await service.verifyHomeownerActivationCredential({ accountNumber: revoked.accountNumber, email: revoked.email, temporaryPassword: revoked.temporaryPassword }), "Old temporary password was accepted after regeneration.");
+    const newPasswordResult = await service.verifyHomeownerActivationCredential({ accountNumber: revoked.accountNumber, email: revoked.email, temporaryPassword: regenerated.temporaryPassword });
+    assert("error" in newPasswordResult && typeof newPasswordResult.error === "string" && newPasswordResult.error.includes("Verify your registered email"), "Regenerated temporary password should be current but still require email verification.");
+  } finally {
+    await prisma.auditLog.deleteMany({ where: { OR: [{ entityId: { in: createdUserIds } }, { actorId: { in: createdUserIds } }] } });
+    await prisma.homeownerEmailVerificationToken.deleteMany({ where: { userId: { in: createdUserIds } } });
+    await prisma.homeownerActivationCredential.deleteMany({ where: { userId: { in: createdUserIds } } });
+    await prisma.user.deleteMany({ where: { id: { in: createdUserIds } } });
+    await prisma.homeownerEmailVerificationToken.deleteMany({ where: { tenantId: crossTenant.id } });
+    await prisma.tenant.delete({ where: { id: crossTenant.id } }).catch(() => undefined);
+  }
+}
+
+async function createActivationFixture(tenantId: string, service: typeof import("../lib/services/homeowner-activation")) {
+  const stamp = `${Date.now()}${Math.floor(Math.random() * 1000)}`;
+  const email = `uat.auth.${stamp}@example.test`;
+  const accountNumber = testAccountNumber();
+  const user = await prisma.user.create({
+    data: {
+      tenantId,
+      name: `UAT Auth ${stamp}`,
+      email,
+      passwordHash: await hash(`activation-only-${randomUUID()}`, 12),
+      role: Role.HOMEOWNER,
+      active: true,
+      homeownerProfile: {
+        create: {
+          tenantId,
+          phone: "09990000002",
+          address: "Authentication UAT Address",
+          block: `AU-${stamp.slice(-5)}`,
+          lot: `L-${stamp.slice(-5)}`,
+          accountNumber,
+          status: "ACTIVE",
+          activationStatus: HomeownerActivationStatus.INVITATION_SENT,
+          emailStatus: HomeownerEmailVerificationStatus.UNVERIFIED,
+          activationSentAt: new Date(),
+          monthlyDuesAmount: "1.00",
+        },
+      },
+    },
+    include: { homeownerProfile: true },
+  });
+  const activation = await service.createHomeownerActivationCredential({ tenantId, userId: user.id, tx: prisma });
+  const tokenRow = await prisma.homeownerEmailVerificationToken.findFirstOrThrow({ where: { tenantId, userId: user.id, usedAt: null }, orderBy: { createdAt: "desc" } });
+  return { user, profile: user.homeownerProfile!, email, accountNumber, tokenRow, temporaryPassword: activation.temporaryPassword, emailVerificationToken: activation.emailVerificationToken };
+}

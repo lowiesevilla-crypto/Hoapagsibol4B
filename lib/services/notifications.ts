@@ -16,6 +16,7 @@ type EmailInput = {
   actionLabel?: string;
   actionUrl?: string;
   logMessage?: string;
+  html?: string;
 };
 
 export type MailConfiguration = {
@@ -124,7 +125,7 @@ export async function sendEmailNotification(input: EmailInput) {
         to: input.email,
         subject: input.subject.replace(/[\r\n]+/g, " ").slice(0, 200),
         text: brandedMessage,
-        html: emailHtml(input, association, config.appUrl),
+        html: input.html ?? emailHtml(input, association, config.appUrl),
       });
       status = NotificationStatus.SENT;
       sentAt = new Date();

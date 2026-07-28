@@ -27,6 +27,7 @@ function assertSourceSafeguards() {
   const homeownerActions = readFileSync("lib/actions/homeowners.ts", "utf8");
   const searchInput = readFileSync("components/ui.tsx", "utf8");
   const activationService = readFileSync("lib/services/homeowner-activation.ts", "utf8");
+  const emailVerificationRoute = readFileSync("app/activate/verify/route.ts", "utf8");
   assert(manifest.includes('start_url: "/login"'), "PWA manifest must start installed apps at universal login.");
   assert(nextConfig.includes("no-store, max-age=0"), "Auth/protected routes must send no-store cache headers.");
   assert(nextConfig.includes("publickey-credentials-create=(self)") && nextConfig.includes("publickey-credentials-get=(self)"), "Passkey browser permissions are not configured.");
@@ -37,6 +38,9 @@ function assertSourceSafeguards() {
   assert(searchInput.includes('normalize("NFKD")'), "Admin search must normalize accented search text.");
   assert(activationService.includes("HOMEOWNER_ACTIVATION_EMAIL_ATTEMPTED"), "Activation email attempts must be audited safely.");
   assert(activationService.includes("homeownerEmailVerificationToken.create"), "Activation credential generation must create an email-verification record.");
+  assert(activationService.includes("emailVerificationToken") && activationService.includes("/verify?token="), "Activation email must include a registered-email verification link.");
+  assert(activationService.includes("HOMEOWNER_EMAIL_VERIFIED"), "Email verification must create an audit event.");
+  assert(emailVerificationRoute.includes("verifyHomeownerEmailVerificationToken"), "Activation email verification route is missing.");
 }
 
 function passwordPolicyAccepts(value: string) {

@@ -82,6 +82,7 @@ export async function saveHomeownerAction(formData: FormData) {
       name: created.name,
       accountNumber: created.accountNumber,
       temporaryPassword: created.activation.temporaryPassword,
+      emailVerificationToken: created.activation.emailVerificationToken,
       expiresAt: created.activation.expiresAt,
       actorId: admin.id,
     });
@@ -222,6 +223,7 @@ export async function regenerateHomeownerActivationAction(formData: FormData) {
     email: profile.user.email,
     accountNumber,
     temporaryPassword: activation.temporaryPassword,
+    emailVerificationToken: activation.emailVerificationToken,
     expiresAt: activation.expiresAt,
     actorId: admin.id,
   });

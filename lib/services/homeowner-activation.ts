@@ -13,6 +13,7 @@ const ACTIVATION_TTL_DAYS = 7;
 export type ActivationCredentialResult = {
   temporaryPassword: string;
   expiresAt: Date;
+  emailVerificationToken: string;
 };
 
 export function normalizeAccountNumber(value: FormDataEntryValue | string | null | undefined) {
@@ -49,6 +50,7 @@ export async function createHomeownerActivationCredential(input: {
 }): Promise<ActivationCredentialResult> {
   const db = (input.tx ?? prisma) as Prisma.TransactionClient;
   const temporaryPassword = generateTemporaryActivationPassword();
+  const emailVerificationToken = randomBytes(32).toString("base64url");
   const expiresAt = new Date(Date.now() + ACTIVATION_TTL_DAYS * 24 * 60 * 60 * 1000);
   await db.homeownerActivationCredential.updateMany({
     where: { tenantId: input.tenantId, userId: input.userId, usedAt: null, revokedAt: null },
@@ -67,11 +69,11 @@ export async function createHomeownerActivationCredential(input: {
     data: {
       tenantId: input.tenantId,
       userId: input.userId,
-      tokenHash: hashOpaqueToken(randomBytes(32).toString("base64url")),
+      tokenHash: hashOpaqueToken(emailVerificationToken),
       expiresAt,
     },
   });
-  return { temporaryPassword, expiresAt };
+  return { temporaryPassword, expiresAt, emailVerificationToken };
 }
 
 export async function sendHomeownerActivationEmail(input: {
@@ -81,10 +83,12 @@ export async function sendHomeownerActivationEmail(input: {
   email: string;
   accountNumber: string;
   temporaryPassword: string;
+  emailVerificationToken?: string;
   expiresAt: Date;
   actorId?: string | null;
 }) {
   const activationUrl = `${getAppUrl()}/activate`;
+  const emailVerificationUrl = input.emailVerificationToken ? `${activationUrl}/verify?token=${encodeURIComponent(input.emailVerificationToken)}` : activationUrl;
   try {
     const notification = await sendEmailNotification({
       tenantId: input.tenantId,
@@ -98,11 +102,12 @@ export async function sendHomeownerActivationEmail(input: {
         `Account number: ${input.accountNumber}`,
         `Temporary password: ${input.temporaryPassword}`,
         `This temporary password expires on ${input.expiresAt.toLocaleDateString("en-PH", { year: "numeric", month: "long", day: "numeric" })}.`,
+        `Verify registered email: ${emailVerificationUrl}`,
         "Open the activation page, enter your registered email, account number, and temporary password, then create your permanent password.",
       ].join("\n"),
       type: NotificationType.WELCOME,
-      actionLabel: "Activate homeowner account",
-      actionUrl: activationUrl,
+      actionLabel: "Verify email and activate account",
+      actionUrl: emailVerificationUrl,
     });
     await prisma.auditLog.create({
       data: {
@@ -138,6 +143,47 @@ export async function sendHomeownerActivationEmail(input: {
       },
     });
   }
+}
+
+export async function verifyHomeownerEmailVerificationToken(token: string) {
+  const value = String(token || "").trim();
+  if (!value || value.length > 512) return { error: "This email verification link is invalid." } as const;
+  const record = await platformPrisma.homeownerEmailVerificationToken.findUnique({
+    where: { tokenHash: hashOpaqueToken(value) },
+    include: { user: { include: { homeownerProfile: true, tenant: true } } },
+  });
+  if (!record) return { error: "This email verification link is invalid." } as const;
+  const profile = record.user.homeownerProfile;
+  if (!profile || profile.tenantId !== record.tenantId || record.user.role !== Role.HOMEOWNER || !record.user.active) return { error: "This email verification link is invalid." } as const;
+  if (record.usedAt) {
+    if (profile.emailStatus === HomeownerEmailVerificationStatus.VERIFIED) return { tenantSlug: record.user.tenant.slug, alreadyVerified: true } as const;
+    return { error: "This email verification link has already been used." } as const;
+  }
+  if (record.expiresAt <= new Date()) return { error: "This email verification link has expired. Ask HOA staff to send a new activation invitation." } as const;
+
+  const now = new Date();
+  await platformPrisma.$transaction([
+    platformPrisma.homeownerEmailVerificationToken.update({ where: { id: record.id }, data: { usedAt: now } }),
+    platformPrisma.homeownerProfile.update({
+      where: { id: profile.id },
+      data: {
+        emailStatus: HomeownerEmailVerificationStatus.VERIFIED,
+        emailVerifiedAt: profile.emailVerifiedAt ?? now,
+      },
+    }),
+    platformPrisma.auditLog.create({
+      data: {
+        tenantId: record.tenantId,
+        actorId: record.userId,
+        module: "AUTH",
+        action: "HOMEOWNER_EMAIL_VERIFIED",
+        entityType: "HomeownerProfile",
+        entityId: profile.id,
+        metadata: { method: "activation_email_link" },
+      },
+    }),
+  ]);
+  return { tenantSlug: record.user.tenant.slug } as const;
 }
 
 export async function verifyHomeownerActivationCredential(input: {

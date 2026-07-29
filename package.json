@@ -14,6 +14,7 @@
     "hostinger:build:backfill": "pnpm run hostinger:build && tsx scripts/backfill-homeowner-account-numbers.ts && tsx scripts/verify-homeowner-account-numbers.ts",
     "smoke:production": "node scripts/production-smoke.mjs",
     "verify:auth-navigation-cache": "tsx scripts/verify-auth-navigation-cache.ts",
+    "verify:complaint-management": "tsx scripts/verify-complaint-management.ts",
     "verify:homeowner-auth": "tsx scripts/verify-homeowner-universal-auth.ts",
     "lint": "eslint . --ext .js,.jsx,.ts,.tsx --max-warnings=0",
     "typecheck": "tsc --noEmit",

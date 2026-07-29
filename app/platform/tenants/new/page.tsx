@@ -1,11 +1,42 @@
 import { TenantModule } from "@prisma/client";
-import { createTenantAction } from "@/lib/actions/platform";
 import { PasswordInput } from "@/components/password-input";
+import { createTenantAction } from "@/lib/actions/platform";
 import { roleLabel, tenantAccessRoles } from "@/lib/tenant-roles";
 
 export default async function NewTenantPage({ searchParams }: { searchParams: Promise<{ error?: string }> }) {
   const { error } = await searchParams;
-  return <div className="mx-auto max-w-4xl"><h1 className="text-3xl font-black text-slate-900">Tenant Onboarding</h1><p className="mt-2 text-slate-600">Creates the HOA, its isolated settings, module access, and first tenant administrator.</p>{error && <p className="mt-4 rounded-xl bg-rose-50 p-3 text-rose-800">{error}</p>}<form action={createTenantAction} className="mt-6 grid gap-5 rounded-2xl border bg-white p-6 sm:grid-cols-2"><Field name="name" label="Association name" /><Field name="shortName" label="Short name" /><Field name="slug" label="Tenant URL slug" placeholder="sample-hoa" /><Field name="subscriptionPlan" label="Subscription plan" placeholder="STANDARD" /><Field name="address" label="Address" /><Field name="contactNumber" label="Contact number" /><Field name="email" label="Association email" type="email" /><Field name="secRegistrationNumber" label="SEC registration number" /><Field name="tinNumber" label="TIN number" /><div /><div className="sm:col-span-2 border-t pt-5"><h2 className="font-black text-slate-900">First tenant administrator</h2></div><Field name="adminName" label="Administrator name" /><Field name="adminEmail" label="Administrator email" type="email" /><Field name="password" label="Temporary password" type="password" /><label><span className="label">Administrator access</span><select className="field" name="adminRole" defaultValue="SYSTEM_ADMIN">{tenantAccessRoles.map((role) => <option key={role} value={role}>{roleLabel(role)}</option>)}</select></label><div className="sm:col-span-2"><span className="label">Enabled modules</span><div className="mt-2 grid gap-2 sm:grid-cols-3">{Object.values(TenantModule).map((module) => <label key={module} className="flex items-center gap-2 rounded-xl border p-3 text-sm"><input type="checkbox" name="modules" value={module} defaultChecked />{module.replaceAll("_", " ")}</label>)}</div></div><button className="btn-primary sm:col-span-2">Create tenant</button></form></div>;
+  return <div className="mx-auto max-w-4xl">
+    <h1 className="text-3xl font-black text-slate-900">Tenant Onboarding</h1>
+    <p className="mt-2 text-slate-600">Creates the HOA, its isolated settings, module access, and first tenant administrator.</p>
+    {error && <p className="mt-4 rounded-xl bg-rose-50 p-3 text-rose-800">{error}</p>}
+    <form action={createTenantAction} className="mt-6 grid gap-5 rounded-2xl border bg-white p-6 sm:grid-cols-2">
+      <Field name="name" label="Association name" />
+      <Field name="shortName" label="Short name" />
+      <Field name="slug" label="Tenant URL slug" placeholder="sample-hoa" />
+      <Field name="subscriptionPlan" label="Subscription plan" placeholder="STANDARD" />
+      <Field name="address" label="Address" />
+      <Field name="contactNumber" label="Contact number" />
+      <Field name="email" label="Association email" type="email" />
+      <Field name="secRegistrationNumber" label="SEC registration number" />
+      <Field name="tinNumber" label="TIN number" />
+      <div />
+      <div className="border-t pt-5 sm:col-span-2"><h2 className="font-black text-slate-900">First tenant administrator</h2></div>
+      <Field name="adminName" label="Administrator name" />
+      <Field name="adminEmail" label="Administrator email" type="email" />
+      <Field name="password" label="Temporary password" type="password" />
+      <label><span className="label">Administrator access</span><select className="field" name="adminRole" defaultValue="SYSTEM_ADMIN">{tenantAccessRoles.map((role) => <option key={role} value={role}>{roleLabel(role)}</option>)}</select></label>
+      <div className="sm:col-span-2">
+        <span className="label">Enabled modules</span>
+        <div className="mt-2 grid gap-2 sm:grid-cols-3">
+          {Object.values(TenantModule).map((module) => <label key={module} className="flex items-center gap-2 rounded-xl border p-3 text-sm"><input type="checkbox" name="modules" value={module} defaultChecked={module !== TenantModule.COMPLAINTS} />{module.replaceAll("_", " ")}</label>)}
+        </div>
+      </div>
+      <button className="btn-primary sm:col-span-2">Create tenant</button>
+    </form>
+  </div>;
 }
 
-function Field({ name, label, type = "text", placeholder }: { name: string; label: string; type?: string; placeholder?: string }) { const required = ["name","shortName","slug","adminName","adminEmail","password"].includes(name); return <label><span className="label">{label}</span>{type === "password" ? <PasswordInput className="field" name={name} placeholder={placeholder} minLength={10} autoComplete="new-password" required={required} /> : <input className="field" name={name} type={type} placeholder={placeholder} required={required} />}</label>; }
+function Field({ name, label, type = "text", placeholder }: { name: string; label: string; type?: string; placeholder?: string }) {
+  const required = ["name", "shortName", "slug", "adminName", "adminEmail", "password"].includes(name);
+  return <label><span className="label">{label}</span>{type === "password" ? <PasswordInput className="field" name={name} placeholder={placeholder} minLength={10} autoComplete="new-password" required={required} /> : <input className="field" name={name} type={type} placeholder={placeholder} required={required} />}</label>;
+}

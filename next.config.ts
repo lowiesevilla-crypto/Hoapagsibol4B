@@ -37,15 +37,25 @@ const nextConfig: NextConfig = {
       { key: "Cache-Control", value: "no-store, max-age=0" },
       { key: "Pragma", value: "no-cache" },
     ];
+    const revalidateHeaders = [
+      { key: "Cache-Control", value: "no-cache, max-age=0, must-revalidate" },
+      { key: "Pragma", value: "no-cache" },
+    ];
     return [
       { source: "/:path*", headers: securityHeaders },
+      { source: "/", headers: noStoreHeaders },
       { source: "/login", headers: noStoreHeaders },
       { source: "/activate", headers: noStoreHeaders },
+      { source: "/activate/verify", headers: noStoreHeaders },
       { source: "/:tenantSlug/login", headers: noStoreHeaders },
+      { source: "/api/auth/:path*", headers: noStoreHeaders },
       { source: "/portal/:path*", headers: noStoreHeaders },
       { source: "/admin/:path*", headers: noStoreHeaders },
       { source: "/employee/:path*", headers: noStoreHeaders },
       { source: "/platform/:path*", headers: noStoreHeaders },
+      { source: "/manifest.webmanifest", headers: revalidateHeaders },
+      { source: "/sw.js", headers: revalidateHeaders },
+      { source: "/service-worker.js", headers: revalidateHeaders },
     ];
   },
 };

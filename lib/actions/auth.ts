@@ -12,7 +12,8 @@ import { resolveTenant, tenantCanSignIn } from "@/lib/tenant";
 import { setTenantContext } from "@/lib/tenant-context";
 import { normalizeActivationEmail } from "@/lib/services/homeowner-activation";
 
-export type LoginState = { error?: string };
+export type AuthNavigationState = { error?: string; redirectTo?: string };
+export type LoginState = AuthNavigationState;
 
 export async function loginAction(_state: LoginState, formData: FormData): Promise<LoginState> {
   const parsed = loginSchema.safeParse(Object.fromEntries(formData.entries()));
@@ -65,7 +66,7 @@ export async function loginAction(_state: LoginState, formData: FormData): Promi
   ]);
 
   await createSession({ userId: user.id, role: user.role, tenantId: tenant.id, tenantSlug: tenant.slug });
-  redirect(defaultHomeForRole(user.role));
+  return { redirectTo: defaultHomeForRole(user.role) };
 }
 
 export async function logoutAction() {
@@ -90,6 +91,30 @@ export async function logoutAllSessionsAction() {
   });
   await deleteSession();
   redirect(redirectTo);
+}
+
+export async function logoutNavigationAction(_state: AuthNavigationState): Promise<AuthNavigationState> {
+  const session = await readSession();
+  const redirectTo = await logoutRedirectForSession(session);
+  await deleteSession();
+  return { redirectTo };
+}
+
+export async function logoutAllSessionsNavigationAction(_state: AuthNavigationState): Promise<AuthNavigationState> {
+  const session = await readSession();
+  const redirectTo = await logoutRedirectForSession(session);
+  if (!session) return { redirectTo };
+  setTenantContext({
+    tenantId: session.tenantId,
+    role: session.role,
+    platform: session.role === "SUPER_ADMIN" || session.role === "PLATFORM_ADMIN",
+  });
+  await prisma.userSession.updateMany({
+    where: { tenantId: session.tenantId, userId: session.userId, revokedAt: null },
+    data: { revokedAt: new Date() },
+  });
+  await deleteSession();
+  return { redirectTo };
 }
 
 async function resolveLoginUser(input: { tenantSlug: string; identifierType: "email" | "accountNumber"; identifier: string; password: string }) {

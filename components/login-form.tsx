@@ -1,15 +1,18 @@
 "use client";
 
 import Link from "next/link";
-import { useActionState, useRef } from "react";
+import { useActionState, useEffect, useRef } from "react";
 import { loginAction } from "@/lib/actions/auth";
 import { PasskeyLoginButton } from "@/components/passkey-login-button";
 import { PasswordInput } from "@/components/password-input";
 
 export function LoginForm({ tenantSlug }: { tenantSlug?: string }) {
   const [state, action, pending] = useActionState(loginAction, {});
-  const universal = !tenantSlug;
   const formRef = useRef<HTMLFormElement>(null);
+
+  useEffect(() => {
+    if (state.redirectTo) window.location.replace(state.redirectTo);
+  }, [state.redirectTo]);
 
   return (
     <form ref={formRef} action={action} className="space-y-3 sm:space-y-4">
@@ -60,7 +63,6 @@ export function LoginForm({ tenantSlug }: { tenantSlug?: string }) {
         {pending ? "Signing in..." : "Sign in securely"}
       </button>
       <PasskeyLoginButton formRef={formRef} />
-      {universal && <Link className="btn-secondary min-h-12 w-full" href="/activate">Activate homeowner account</Link>}
     </form>
   );
 }

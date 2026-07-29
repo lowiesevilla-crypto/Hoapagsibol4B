@@ -95,11 +95,12 @@ export async function sendHomeownerActivationEmail(input: {
   expiresAt: Date;
   actorId?: string | null;
 }) {
-  const activationUrl = `${getAppUrl()}/activate`;
-  const emailVerificationUrl = input.emailVerificationToken ? `${activationUrl}/verify?token=${encodeURIComponent(input.emailVerificationToken)}` : activationUrl;
+  const appUrl = getAppUrl();
+  const emailVerificationUrl = input.emailVerificationToken ? `${appUrl}/activate/verify?token=${encodeURIComponent(input.emailVerificationToken)}` : `${appUrl}/activate`;
+  const activationUrl = emailVerificationUrl;
   const association = await getAssociationSettings(input.tenantId);
   const textMessage = activationEmailText({ ...input, activationUrl, emailVerificationUrl, association });
-  const html = activationEmailHtml({ ...input, activationUrl, emailVerificationUrl, association, appUrl: getAppUrl() });
+  const html = activationEmailHtml({ ...input, activationUrl, emailVerificationUrl, association, appUrl });
   try {
     const notification = await sendEmailNotification({
       tenantId: input.tenantId,

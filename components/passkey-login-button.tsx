@@ -32,7 +32,7 @@ export function PasskeyLoginButton({ formRef }: { formRef: RefObject<HTMLFormEle
       });
       const result = await verifyResponse.json();
       if (!verifyResponse.ok) throw new Error(result.error || "Passkey login failed.");
-      window.location.assign(result.redirectTo || "/portal/dashboard");
+      window.location.replace(result.redirectTo || "/portal/dashboard");
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Passkey login failed.");
     } finally {

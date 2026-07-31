@@ -50,6 +50,8 @@ jobs:
       - run: pnpm exec prisma generate
       - run: pnpm exec prisma migrate deploy
       - run: pnpm db:seed
+      - name: Verify Complaint Management
+        run: pnpm run verify:complaint-management
       - run: pnpm typecheck
       - run: pnpm build
       - name: Application smoke check

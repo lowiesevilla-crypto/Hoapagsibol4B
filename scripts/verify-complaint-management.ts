@@ -1,5 +1,6 @@
 import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
+import { pathToFileURL } from "node:url";
 import "./register-server-only-shim.cjs";
 import { hash } from "bcryptjs";
 import { ComplaintPrivacyMode, ComplaintStatus, Role, TenantModule } from "@prisma/client";
@@ -17,8 +18,10 @@ import {
   updateComplaintStatus,
 } from "@/lib/services/complaints";
 
-loadLocalEnv();
-assertLocalDatabase();
+if (isMainModule()) {
+  loadLocalEnv();
+  assertComplaintVerificationDatabase();
+}
 
 const checks: string[] = [];
 const runId = Date.now().toString(36);
@@ -26,11 +29,13 @@ const tenantId = `tenant_cm_verify_${runId}`;
 const otherTenantId = `tenant_cm_other_${runId}`;
 const disabledTenantId = `tenant_cm_disabled_${runId}`;
 
-main().catch(async (error) => {
-  console.error(error);
-  await platformPrisma.$disconnect();
-  process.exit(1);
-});
+if (isMainModule()) {
+  main().catch(async (error) => {
+    console.error(error);
+    await platformPrisma.$disconnect();
+    process.exit(1);
+  });
+}
 
 async function main() {
   try {
@@ -237,19 +242,41 @@ function assertSourceInvariant(file: string, needle: string) {
   if (!content.includes(needle)) throw new Error(`Missing source invariant in ${file}: ${needle}`);
 }
 
-function assertLocalDatabase() {
-  const databaseUrl = process.env.DATABASE_URL || "";
+type ComplaintVerificationDatabaseEnvironment = "Local UAT" | "GitHub Actions CI";
+
+export function getComplaintVerificationDatabaseGuard(
+  databaseUrl = process.env.DATABASE_URL || "",
+  githubActions = process.env.GITHUB_ACTIONS,
+) {
   let url: URL;
   try {
     url = new URL(databaseUrl);
   } catch {
     throw new Error("DATABASE_URL is not a valid URL.");
   }
-  const localHost = url.hostname === "127.0.0.1" || url.hostname === "localhost";
-  if (!localHost || !url.pathname.includes("hoahub_prodclone_local")) {
-    throw new Error(`Refusing to run complaint verification outside local database. Current host=${url.hostname}, database=${url.pathname.replace("/", "")}`);
+  const host = url.hostname;
+  const databaseName = decodeURIComponent(url.pathname.replace(/^\/+/, ""));
+  const loopbackHost = host === "127.0.0.1" || host === "localhost";
+  const environment: ComplaintVerificationDatabaseEnvironment | null =
+    loopbackHost && databaseName === "hoahub_prodclone_local"
+      ? "Local UAT"
+      : githubActions === "true" && loopbackHost && databaseName === "hoa_portal"
+        ? "GitHub Actions CI"
+        : null;
+
+  if (!environment) {
+    throw new Error(`Refusing to run complaint verification outside an approved database. Current host=${host}, database=${databaseName}`);
   }
-  console.log(`Local DATABASE_URL verified: host=${url.hostname}, database=${url.pathname.replace("/", "")}`);
+
+  return { environment, host, databaseName };
+}
+
+function assertComplaintVerificationDatabase() {
+  const guard = getComplaintVerificationDatabaseGuard();
+  console.log(`Complaint verification database environment: ${guard.environment}`);
+  console.log(`Complaint verification database host: ${guard.host}`);
+  console.log(`Complaint verification database name: ${guard.databaseName}`);
+  console.log("Complaint verification database safety guard passed.");
 }
 
 function loadLocalEnv() {
@@ -262,4 +289,8 @@ function loadLocalEnv() {
       process.env[match[1]] = match[2].replace(/^"|"$/g, "");
     }
   }
+}
+
+function isMainModule() {
+  return Boolean(process.argv[1]) && pathToFileURL(path.resolve(process.argv[1])).href === import.meta.url;
 }

@@ -49,6 +49,8 @@ const nextConfig: NextConfig = {
       { source: "/activate/verify", headers: noStoreHeaders },
       { source: "/:tenantSlug/login", headers: noStoreHeaders },
       { source: "/api/auth/:path*", headers: noStoreHeaders },
+      { source: "/api/complaints/:path*", headers: noStoreHeaders },
+      { source: "/complaints/:path*", headers: noStoreHeaders },
       { source: "/portal/:path*", headers: noStoreHeaders },
       { source: "/admin/:path*", headers: noStoreHeaders },
       { source: "/employee/:path*", headers: noStoreHeaders },

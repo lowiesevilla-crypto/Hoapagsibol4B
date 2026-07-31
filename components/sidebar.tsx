@@ -4,12 +4,12 @@ import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { usePathname, useSearchParams } from "next/navigation";
 import type { LucideIcon } from "lucide-react";
-import { BellRing, Building2, CalendarDays, CarFront, ChevronDown, CircleDollarSign, CreditCard, FileBarChart, FileText, HardHat, KeyRound, Layers3, LayoutDashboard, ListChecks, Megaphone, Menu, MessageSquare, ReceiptText, Settings, ShieldCheck, UserRound, UsersRound } from "lucide-react";
+import { BellRing, Building2, CalendarDays, CarFront, ChevronDown, CircleDollarSign, CreditCard, FileBarChart, FileText, HardHat, KeyRound, Layers3, LayoutDashboard, ListChecks, Megaphone, Menu, MessageSquare, MessageSquareWarning, ReceiptText, Settings, ShieldCheck, UserRound, UsersRound } from "lucide-react";
 import { LogoutButton } from "@/components/auth-navigation-buttons";
 import { AssociationLogo } from "@/components/association-logo";
 import type { IconName, LinkItem } from "@/components/sidebar-links";
 
-const icons: Record<IconName, LucideIcon> = { audit: ShieldCheck, dashboard: LayoutDashboard, homeowners: UsersRound, contractors: HardHat, vehicles: CarFront, employees: UsersRound, attendance: CalendarDays, payroll: CreditCard, expenses: ReceiptText, billing: CircleDollarSign, payments: CreditCard, collections: ReceiptText, announcements: Megaphone, events: CalendarDays, reports: FileBarChart, data: FileBarChart, settings: Settings, profile: UserRound, licenses: KeyRound, chat: MessageSquare, documents: FileText, plans: Layers3, platform: Building2, subscriptions: ListChecks };
+const icons: Record<IconName, LucideIcon> = { audit: ShieldCheck, dashboard: LayoutDashboard, homeowners: UsersRound, contractors: HardHat, vehicles: CarFront, employees: UsersRound, attendance: CalendarDays, payroll: CreditCard, expenses: ReceiptText, billing: CircleDollarSign, payments: CreditCard, collections: ReceiptText, announcements: Megaphone, events: CalendarDays, reports: FileBarChart, data: FileBarChart, settings: Settings, profile: UserRound, licenses: KeyRound, chat: MessageSquare, complaints: MessageSquareWarning, documents: FileText, plans: Layers3, platform: Building2, subscriptions: ListChecks };
 type AssociationBrand = { name: string; logoUrl: string };
 const OPEN_SECTIONS_KEY = "hoahub.sidebar.openSections.v1";
 type SidebarBadges = Record<string, number>;

@@ -19,6 +19,7 @@ export type IconName =
   | "profile"
   | "licenses"
   | "chat"
+  | "complaints"
   | "documents"
   | "plans"
   | "platform"
@@ -47,6 +48,9 @@ export const adminLinks: LinkItem[] = [
   { href: "/admin/documents?section=requests", label: "Requests", icon: "documents", section: "Resident Services" },
   { href: "/admin/documents/new", label: "Create Walk-In / Office Request", icon: "documents", section: "Resident Services" },
   { href: "/admin/documents?section=issued", label: "Issued Documents", icon: "documents", section: "Resident Services" },
+  { href: "/admin/complaints", label: "Complaints", icon: "complaints", section: "Resident Services" },
+  { href: "/admin/complaints/settings", label: "Complaint Settings", icon: "complaints", section: "Resident Services" },
+  { href: "/admin/complaints/reports", label: "Complaint Reports", icon: "reports", section: "Resident Services" },
   { href: "/admin/announcements", label: "Announcements", icon: "announcements", section: "Community" },
   { href: "/admin/events", label: "Events", icon: "events", section: "Community" },
   { href: "/admin/chat", label: "Chat", icon: "chat", section: "Community" },
@@ -76,6 +80,7 @@ export const portalLinks: LinkItem[] = [
   { href: "/portal/dashboard", label: "Dashboard", icon: "dashboard", section: "Overview" }, { href: "/portal/profile", label: "My profile", icon: "profile", section: "Account" },
   { href: "/portal/billing", label: "My billing", icon: "billing", section: "Account" }, { href: "/portal/pay", label: "Pay by QR", icon: "payments", section: "Account" }, { href: "/portal/soa", label: "Statement of Account", icon: "reports", section: "Account" }, { href: "/portal/payments", label: "My payments", icon: "payments", section: "Account" }, { href: "/portal/collections", label: "Collections & bonds", icon: "collections", section: "Account" }, { href: "/portal/vehicles", label: "My vehicles", icon: "vehicles", section: "Account" },
   { href: "/portal/documents", label: "My Document Requests", icon: "documents", section: "Resident Services" }, { href: "/portal/documents?intent=request", label: "Request a Document", icon: "documents", section: "Resident Services" }, { href: "/portal/documents?section=issued", label: "Issued Documents", icon: "documents", section: "Resident Services" },
+  { href: "/portal/complaints", label: "My Complaints", icon: "complaints", section: "Resident Services" }, { href: "/portal/complaints/new", label: "Submit Complaint", icon: "complaints", section: "Resident Services" },
   { href: "/portal/announcements", label: "Announcements", icon: "announcements", section: "Community" }, { href: "/portal/events", label: "Events", icon: "events", section: "Community" }, { href: "/portal/chat", label: "Chat", icon: "chat", section: "Community" },
   { href: "/portal/organization", label: "HOA officers", icon: "homeowners", section: "Community" },
 ];

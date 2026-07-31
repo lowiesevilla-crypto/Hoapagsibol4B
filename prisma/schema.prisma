@@ -52,6 +52,85 @@ enum TenantSubscriptionStatus {
   CANCELLED
 }
 
+enum ComplaintPrivacyMode {
+  NAMED
+  CONFIDENTIAL
+  ANONYMOUS
+}
+
+enum ComplaintStatus {
+  DRAFT
+  SUBMITTED
+  ACKNOWLEDGED
+  TRIAGED
+  ASSIGNED
+  UNDER_REVIEW
+  WAITING_FOR_INFORMATION
+  ACTION_IN_PROGRESS
+  RESOLVED
+  CLOSED
+  REOPENED
+  REJECTED
+  WITHDRAWN
+  REFERRED
+  ARCHIVED
+}
+
+enum ComplaintSeverity {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+enum ComplaintPriority {
+  LOW
+  NORMAL
+  HIGH
+  URGENT
+}
+
+enum ComplaintVisibility {
+  PUBLIC
+  INTERNAL
+  CONFIDENTIAL
+}
+
+enum ComplaintAttachmentVisibility {
+  COMPLAINANT
+  STAFF
+  CONFIDENTIAL_IDENTITY
+}
+
+enum ComplaintMalwareScanStatus {
+  NOT_CONFIGURED
+  PENDING
+  PASSED
+  FAILED
+  BLOCKED
+}
+
+enum ComplaintIdentityAccessStatus {
+  REQUESTED
+  APPROVED
+  DENIED
+  EXPIRED
+  REVOKED
+}
+
+enum ComplaintTimelineEventType {
+  SUBMITTED
+  STATUS_CHANGED
+  COMMENTED
+  ASSIGNED
+  ATTACHMENT_ADDED
+  IDENTITY_ACCESS_REQUESTED
+  IDENTITY_DISCLOSED
+  REOPENED
+  CLOSED
+  SETTINGS_UPDATED
+}
+
 enum HomeownerStatus {
   ACTIVE
   INACTIVE
@@ -526,6 +605,17 @@ model Tenant {
   documentWorkflowSteps      DocumentWorkflowStep[]
   documentNumberingConfigs   DocumentNumberingConfiguration[]
   documentPlaceholders       DocumentPlaceholderDefinition[]
+  complaintSettings          ComplaintSetting?
+  complaintCategories        ComplaintCategory[]
+  complaints                 Complaint[]
+  complaintIdentities        ComplaintConfidentialIdentity[]
+  complaintCredentials       ComplaintTrackingCredential[]
+  complaintAttachments       ComplaintAttachment[]
+  complaintMessages          ComplaintMessage[]
+  complaintStatusHistory     ComplaintStatusHistory[]
+  complaintTimelineEvents    ComplaintTimelineEvent[]
+  complaintAssignments       ComplaintAssignment[]
+  complaintIdentityAccess    ComplaintIdentityAccessGrant[]
 
   @@index([name])
   @@index([status, subscriptionStatus])
@@ -618,6 +708,16 @@ model User {
   passkeyCredentials                    UserPasskeyCredential[]
   passkeyChallenges                     UserPasskeyChallenge[]
   sessions                              UserSession[]
+  complaintsSubmitted                   Complaint[]                       @relation("ComplaintSubmitter")
+  complaintsAssigned                    Complaint[]                       @relation("ComplaintAssignee")
+  complaintAttachmentsUploaded          ComplaintAttachment[]             @relation("ComplaintAttachmentUploader")
+  complaintMessages                     ComplaintMessage[]                @relation("ComplaintMessageAuthor")
+  complaintStatusChanges                ComplaintStatusHistory[]          @relation("ComplaintStatusActor")
+  complaintTimelineEvents               ComplaintTimelineEvent[]          @relation("ComplaintTimelineActor")
+  complaintAssignmentsReceived          ComplaintAssignment[]             @relation("ComplaintAssignmentAssignee")
+  complaintAssignmentsGiven             ComplaintAssignment[]             @relation("ComplaintAssignmentAssignedBy")
+  complaintIdentityAccessRequested      ComplaintIdentityAccessGrant[]    @relation("ComplaintIdentityAccessRequester")
+  complaintIdentityAccessApproved       ComplaintIdentityAccessGrant[]    @relation("ComplaintIdentityAccessApprover")
   userRoleAssignments                   UserRoleAssignment[]
   assignedRoleAssignments               UserRoleAssignment[]              @relation("UserRoleAssignmentAssignedBy")
   tenant                                Tenant                            @relation(fields: [tenantId], references: [id], onDelete: Restrict)
@@ -684,43 +784,45 @@ model TenantSequence {
 }
 
 model HomeownerProfile {
-  tenantId          String                           @default("tenant_pagsibol4b_default")
-  id                String                           @id @default(cuid())
-  userId            String                           @unique
-  user              User                             @relation(fields: [userId], references: [id], onDelete: Cascade)
-  address           String
-  block             String
-  lot               String
-  phone             String
-  birthDate         DateTime?                        @db.Date
-  civilStatus       String?
-  citizenship       String?
-  occupation        String?
-  residencyDate     DateTime?                        @db.Date
-  phase             String?
-  propertyType      String?
-  occupancyStatus   String?
-  messengerId       String?
-  accountNumber     String?                          @unique @db.VarChar(11)
-  status            HomeownerStatus                  @default(ACTIVE)
-  activationStatus  HomeownerActivationStatus        @default(NOT_INVITED)
-  emailStatus       HomeownerEmailVerificationStatus @default(UNVERIFIED)
-  emailVerifiedAt   DateTime?
-  mobileConfirmedAt DateTime?
-  activationSentAt  DateTime?
-  activatedAt       DateTime?
-  monthlyDuesAmount Decimal                          @db.Decimal(12, 2)
-  bills             Bill[]
-  payments          Payment[]
-  paymentRequests   PaymentRequest[]
-  collections       Collection[]
-  duesExemptions    DuesExemption[]
-  vehicles          Vehicle[]
-  dataMigrations    DataMigration[]
-  documentRequests  DocumentRequest[]
-  householdMembers  HouseholdMember[]
-  createdAt         DateTime                         @default(now())
-  updatedAt         DateTime                         @updatedAt
+  tenantId            String                           @default("tenant_pagsibol4b_default")
+  id                  String                           @id @default(cuid())
+  userId              String                           @unique
+  user                User                             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  address             String
+  block               String
+  lot                 String
+  phone               String
+  birthDate           DateTime?                        @db.Date
+  civilStatus         String?
+  citizenship         String?
+  occupation          String?
+  residencyDate       DateTime?                        @db.Date
+  phase               String?
+  propertyType        String?
+  occupancyStatus     String?
+  messengerId         String?
+  accountNumber       String?                          @unique @db.VarChar(11)
+  status              HomeownerStatus                  @default(ACTIVE)
+  activationStatus    HomeownerActivationStatus        @default(NOT_INVITED)
+  emailStatus         HomeownerEmailVerificationStatus @default(UNVERIFIED)
+  emailVerifiedAt     DateTime?
+  mobileConfirmedAt   DateTime?
+  activationSentAt    DateTime?
+  activatedAt         DateTime?
+  monthlyDuesAmount   Decimal                          @db.Decimal(12, 2)
+  bills               Bill[]
+  payments            Payment[]
+  paymentRequests     PaymentRequest[]
+  collections         Collection[]
+  duesExemptions      DuesExemption[]
+  vehicles            Vehicle[]
+  dataMigrations      DataMigration[]
+  documentRequests    DocumentRequest[]
+  householdMembers    HouseholdMember[]
+  complaints          Complaint[]
+  complaintIdentities ComplaintConfidentialIdentity[]
+  createdAt           DateTime                         @default(now())
+  updatedAt           DateTime                         @updatedAt
 
   @@unique([tenantId, id])
   @@unique([tenantId, block, lot])
@@ -2473,6 +2575,265 @@ model UserPasskeyChallenge {
   @@index([tenantId, userId, type, expiresAt])
   @@index([expiresAt, usedAt])
   @@index([tenantId])
+}
+
+model ComplaintSetting {
+  tenantId                String   @default("tenant_pagsibol4b_default")
+  id                      String   @id @default(cuid())
+  intakeEnabled           Boolean  @default(true)
+  namedEnabled            Boolean  @default(true)
+  confidentialEnabled     Boolean  @default(true)
+  anonymousEnabled        Boolean  @default(true)
+  maxAttachmentMb         Int      @default(10)
+  allowedMimeTypes        String   @default("image/jpeg,image/png,image/webp,application/pdf") @db.VarChar(500)
+  identityRevealRoles     String   @default("ADMIN,HOA_ADMIN,SYSTEM_ADMIN") @db.VarChar(300)
+  acknowledgementSlaHours Int      @default(72)
+  resolutionSlaDays       Int      @default(14)
+  updatedById             String?
+  createdAt               DateTime @default(now())
+  updatedAt               DateTime @updatedAt
+  tenant                  Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId])
+  @@index([tenantId])
+}
+
+model ComplaintCategory {
+  tenantId            String      @default("tenant_pagsibol4b_default")
+  id                  String      @id @default(cuid())
+  code                String
+  name                String
+  description         String?     @db.Text
+  active              Boolean     @default(true)
+  requiresBoardReview Boolean     @default(false)
+  displayOrder        Int         @default(0)
+  createdAt           DateTime    @default(now())
+  updatedAt           DateTime    @updatedAt
+  tenant              Tenant      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  complaints          Complaint[]
+
+  @@unique([tenantId, id])
+  @@unique([tenantId, code])
+  @@index([tenantId, active, displayOrder])
+}
+
+model Complaint {
+  tenantId             String                         @default("tenant_pagsibol4b_default")
+  id                   String                         @id @default(cuid())
+  complaintNumber      String
+  publicReference      String                         @unique
+  privacyMode          ComplaintPrivacyMode
+  status               ComplaintStatus                @default(SUBMITTED)
+  title                String
+  categoryId           String?
+  category             ComplaintCategory?             @relation(fields: [tenantId, categoryId], references: [tenantId, id], onDelete: Restrict, onUpdate: Cascade)
+  severity             ComplaintSeverity              @default(MEDIUM)
+  priority             ComplaintPriority              @default(NORMAL)
+  description          String                         @db.Text
+  requestedAction      String?                        @db.Text
+  location             String?
+  incidentDate         DateTime?                      @db.Date
+  submittedById        String?
+  submittedBy          User?                          @relation("ComplaintSubmitter", fields: [submittedById], references: [id], onDelete: SetNull)
+  homeownerId          String?
+  homeowner            HomeownerProfile?              @relation(fields: [tenantId, homeownerId], references: [tenantId, id], onDelete: Restrict, onUpdate: Cascade)
+  assignedToId         String?
+  assignedTo           User?                          @relation("ComplaintAssignee", fields: [assignedToId], references: [id], onDelete: SetNull)
+  dueAt                DateTime?
+  acknowledgedAt       DateTime?
+  resolvedAt           DateTime?
+  closedAt             DateTime?
+  reopenedAt           DateTime?
+  resolutionSummary    String?                        @db.Text
+  withdrawalReason     String?                        @db.Text
+  adminPrivateNotes    String?                        @db.Text
+  canNotifyByEmail     Boolean                        @default(true)
+  submittedAt          DateTime                       @default(now())
+  createdAt            DateTime                       @default(now())
+  updatedAt            DateTime                       @updatedAt
+  tenant               Tenant                         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  confidentialIdentity ComplaintConfidentialIdentity?
+  trackingCredential   ComplaintTrackingCredential?
+  attachments          ComplaintAttachment[]
+  messages             ComplaintMessage[]
+  statusHistory        ComplaintStatusHistory[]
+  timelineEvents       ComplaintTimelineEvent[]
+  assignments          ComplaintAssignment[]
+  identityAccess       ComplaintIdentityAccessGrant[]
+
+  @@unique([tenantId, id])
+  @@unique([tenantId, complaintNumber])
+  @@index([tenantId, status, submittedAt])
+  @@index([tenantId, privacyMode, submittedAt])
+  @@index([tenantId, categoryId])
+  @@index([tenantId, homeownerId])
+  @@index([submittedById])
+  @@index([assignedToId])
+}
+
+model ComplaintConfidentialIdentity {
+  tenantId        String            @default("tenant_pagsibol4b_default")
+  id              String            @id @default(cuid())
+  complaintId     String
+  complaint       Complaint         @relation(fields: [tenantId, complaintId], references: [tenantId, id], onDelete: Cascade, onUpdate: Cascade)
+  userId          String?
+  homeownerId     String?
+  homeowner       HomeownerProfile? @relation(fields: [tenantId, homeownerId], references: [tenantId, id], onDelete: Restrict, onUpdate: Cascade)
+  displayName     String?
+  email           String?
+  phone           String?
+  propertyAddress String?
+  block           String?
+  lot             String?
+  identityNote    String?           @db.Text
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+  tenant          Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, id])
+  @@unique([tenantId, complaintId])
+  @@index([tenantId, homeownerId])
+  @@index([userId])
+}
+
+model ComplaintTrackingCredential {
+  tenantId     String    @default("tenant_pagsibol4b_default")
+  id           String    @id @default(cuid())
+  complaintId  String
+  complaint    Complaint @relation(fields: [tenantId, complaintId], references: [tenantId, id], onDelete: Cascade, onUpdate: Cascade)
+  trackingCode String    @unique
+  pinHash      String
+  lastAccessAt DateTime?
+  disabledAt   DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  tenant       Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, id])
+  @@unique([tenantId, complaintId])
+  @@index([tenantId, trackingCode])
+}
+
+model ComplaintAttachment {
+  tenantId      String                        @default("tenant_pagsibol4b_default")
+  id            String                        @id @default(cuid())
+  complaintId   String
+  complaint     Complaint                     @relation(fields: [tenantId, complaintId], references: [tenantId, id], onDelete: Cascade, onUpdate: Cascade)
+  uploaderId    String?
+  uploader      User?                         @relation("ComplaintAttachmentUploader", fields: [uploaderId], references: [id], onDelete: SetNull)
+  originalName  String
+  storedName    String
+  url           String
+  contentType   String
+  fileSize      Int
+  sha256        String
+  visibility    ComplaintAttachmentVisibility @default(COMPLAINANT)
+  malwareStatus ComplaintMalwareScanStatus    @default(NOT_CONFIGURED)
+  scanNotes     String?                       @db.Text
+  createdAt     DateTime                      @default(now())
+  tenant        Tenant                        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, id])
+  @@index([tenantId, complaintId, visibility])
+  @@index([uploaderId])
+}
+
+model ComplaintMessage {
+  tenantId          String              @default("tenant_pagsibol4b_default")
+  id                String              @id @default(cuid())
+  complaintId       String
+  complaint         Complaint           @relation(fields: [tenantId, complaintId], references: [tenantId, id], onDelete: Cascade, onUpdate: Cascade)
+  authorId          String?
+  author            User?               @relation("ComplaintMessageAuthor", fields: [authorId], references: [id], onDelete: SetNull)
+  authorDisplayName String?
+  visibility        ComplaintVisibility @default(PUBLIC)
+  body              String              @db.Text
+  createdAt         DateTime            @default(now())
+  tenant            Tenant              @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, id])
+  @@index([tenantId, complaintId, visibility, createdAt])
+  @@index([authorId])
+}
+
+model ComplaintStatusHistory {
+  tenantId    String           @default("tenant_pagsibol4b_default")
+  id          String           @id @default(cuid())
+  complaintId String
+  complaint   Complaint        @relation(fields: [tenantId, complaintId], references: [tenantId, id], onDelete: Cascade, onUpdate: Cascade)
+  fromStatus  ComplaintStatus?
+  toStatus    ComplaintStatus
+  actorId     String?
+  actor       User?            @relation("ComplaintStatusActor", fields: [actorId], references: [id], onDelete: SetNull)
+  note        String?          @db.Text
+  createdAt   DateTime         @default(now())
+  tenant      Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, id])
+  @@index([tenantId, complaintId, createdAt])
+  @@index([actorId])
+}
+
+model ComplaintTimelineEvent {
+  tenantId    String                     @default("tenant_pagsibol4b_default")
+  id          String                     @id @default(cuid())
+  complaintId String
+  complaint   Complaint                  @relation(fields: [tenantId, complaintId], references: [tenantId, id], onDelete: Cascade, onUpdate: Cascade)
+  actorId     String?
+  actor       User?                      @relation("ComplaintTimelineActor", fields: [actorId], references: [id], onDelete: SetNull)
+  eventType   ComplaintTimelineEventType
+  message     String                     @db.Text
+  metadata    Json?
+  createdAt   DateTime                   @default(now())
+  tenant      Tenant                     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, id])
+  @@index([tenantId, complaintId, createdAt])
+  @@index([actorId])
+}
+
+model ComplaintAssignment {
+  tenantId     String    @default("tenant_pagsibol4b_default")
+  id           String    @id @default(cuid())
+  complaintId  String
+  complaint    Complaint @relation(fields: [tenantId, complaintId], references: [tenantId, id], onDelete: Cascade, onUpdate: Cascade)
+  assigneeId   String
+  assignee     User      @relation("ComplaintAssignmentAssignee", fields: [assigneeId], references: [id], onDelete: Restrict)
+  assignedById String?
+  assignedBy   User?     @relation("ComplaintAssignmentAssignedBy", fields: [assignedById], references: [id], onDelete: SetNull)
+  roleLabel    String?
+  active       Boolean   @default(true)
+  assignedAt   DateTime  @default(now())
+  unassignedAt DateTime?
+  tenant       Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, id])
+  @@index([tenantId, complaintId, active])
+  @@index([assigneeId, active])
+  @@index([assignedById])
+}
+
+model ComplaintIdentityAccessGrant {
+  tenantId      String                        @default("tenant_pagsibol4b_default")
+  id            String                        @id @default(cuid())
+  complaintId   String
+  complaint     Complaint                     @relation(fields: [tenantId, complaintId], references: [tenantId, id], onDelete: Cascade, onUpdate: Cascade)
+  requestedById String
+  requestedBy   User                          @relation("ComplaintIdentityAccessRequester", fields: [requestedById], references: [id], onDelete: Restrict)
+  approvedById  String?
+  approvedBy    User?                         @relation("ComplaintIdentityAccessApprover", fields: [approvedById], references: [id], onDelete: SetNull)
+  status        ComplaintIdentityAccessStatus @default(REQUESTED)
+  purpose       String
+  reason        String                        @db.Text
+  expiresAt     DateTime?
+  decidedAt     DateTime?
+  createdAt     DateTime                      @default(now())
+  tenant        Tenant                        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, id])
+  @@index([tenantId, complaintId, status])
+  @@index([requestedById, status])
+  @@index([approvedById])
 }
 
 model UserSession {

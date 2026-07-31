@@ -94,6 +94,17 @@ const modelModules: Partial<Record<string, TenantModule>> = {
   ChatMessage: TenantModule.CHAT,
   ChatAttachment: TenantModule.CHAT,
   UserPresence: TenantModule.CHAT,
+  ComplaintSetting: TenantModule.COMPLAINTS,
+  ComplaintCategory: TenantModule.COMPLAINTS,
+  Complaint: TenantModule.COMPLAINTS,
+  ComplaintConfidentialIdentity: TenantModule.COMPLAINTS,
+  ComplaintTrackingCredential: TenantModule.COMPLAINTS,
+  ComplaintAttachment: TenantModule.COMPLAINTS,
+  ComplaintMessage: TenantModule.COMPLAINTS,
+  ComplaintStatusHistory: TenantModule.COMPLAINTS,
+  ComplaintTimelineEvent: TenantModule.COMPLAINTS,
+  ComplaintAssignment: TenantModule.COMPLAINTS,
+  ComplaintIdentityAccessGrant: TenantModule.COMPLAINTS,
 };
 
 function asRecord(value: unknown): MutableRecord | undefined {

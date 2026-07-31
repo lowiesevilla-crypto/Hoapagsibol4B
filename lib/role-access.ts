@@ -31,6 +31,7 @@ const staffAllowedAdminPrefixes = [
   "/admin/announcements",
   "/admin/events",
   "/admin/documents",
+  "/admin/complaints",
 ];
 
 export function adminPrefixesForRole(role: Role) {

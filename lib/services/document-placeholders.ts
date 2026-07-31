@@ -13,7 +13,7 @@ export type PlaceholderResolutionContext = {
   document?: { number?: string; title?: string; issueDate?: string; issuePlace?: string; status?: string; validUntil?: string };
   subject?: { fullName?: string; relationship?: string; address?: string; birthDate?: string; civilStatus?: string; nationality?: string; status?: string; residencyStartDate?: string; age?: string | number; occupation?: string; contactNumber?: string; phase?: string; propertyType?: string; occupancyStatus?: string };
   property?: { block?: string; lot?: string; address?: string; accountNumber?: string; accountLabel?: string; phase?: string; subdivision?: string };
-  request?: { purpose?: string; remarks?: string; copies?: string | number; requestedAt?: string };
+  request?: { purpose?: string; remarks?: string; copies?: string | number; requestedAt?: string; passType?: string; scheduledDate?: string; startTime?: string; endTime?: string; driverName?: string; representativeName?: string; vehicleDetails?: string; destination?: string; movingCompany?: string; serviceProvider?: string; itemsSummary?: string; approvalDate?: string };
   signatory?: { name?: string; position?: string };
   verification?: { url?: string; code?: string };
   system?: { generatedAt?: string; platformName?: string };

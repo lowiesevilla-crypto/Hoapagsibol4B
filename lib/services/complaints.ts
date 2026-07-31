@@ -32,13 +32,17 @@ export const complaintPrivacyModes = Object.values(ComplaintPrivacyMode);
 
 export const complaintAdminRoles = new Set<Role>([Role.ADMIN, Role.SYSTEM_ADMIN, Role.HOA_ADMIN, Role.STAFF]);
 const platformRoles = new Set<Role>([Role.SUPER_ADMIN, Role.PLATFORM_ADMIN]);
-const allowedUploadTypes = new Set(["image/jpeg", "image/png", "image/webp", "application/pdf"]);
-const maxUploadBytes = 10 * 1024 * 1024;
+export const supportedComplaintUploadTypes = ["image/jpeg", "image/png", "image/webp", "application/pdf"] as const;
+const allowedUploadTypes = new Set<string>(supportedComplaintUploadTypes);
+const confidentialComplainantLabel = "Confidential Complainant";
+const defaultIdentityRevealRoles = new Set<Role>([Role.ADMIN, Role.HOA_ADMIN, Role.SYSTEM_ADMIN]);
 
 export type ComplaintIntakeState = {
   status: "idle" | "success" | "error";
   message: string;
   complaintId?: string;
+  publicReference?: string;
+  detailHref?: string;
   trackingCode?: string;
   trackingPin?: string;
 };
@@ -52,6 +56,7 @@ export type ComplaintTrackState = {
 export type PublicTrackedComplaint = {
   publicReference: string;
   title: string;
+  requestedAction: string | null;
   status: ComplaintStatus;
   submittedAt: Date;
   updatedAt: Date;
@@ -113,6 +118,16 @@ export async function getComplaintSettings(tenantId: string) {
   return prisma.complaintSetting.findUniqueOrThrow({ where: { tenantId } });
 }
 
+export async function canRevealConfidentialIdentity(user: Pick<User, "tenantId" | "role">) {
+  if (platformRoles.has(user.role)) return false;
+  const settings = await getComplaintSettings(user.tenantId);
+  return revealRoleSet(settings.identityRevealRoles).has(user.role);
+}
+
+export function allowedComplaintTransitions(status: ComplaintStatus) {
+  return complaintTransitionPolicy[status] ?? [];
+}
+
 export async function getComplaintCategories(tenantId: string, activeOnly = true) {
   await ensureComplaintDefaults(tenantId);
   return prisma.complaintCategory.findMany({
@@ -145,8 +160,10 @@ export async function submitComplaint(input: {
 
   const title = normalizeComplaintText(formData.get("title"), 160);
   const description = normalizeComplaintText(formData.get("description"), 4000);
+  const requestedAction = normalizeComplaintText(formData.get("requestedAction"), 1000);
   if (title.length < 5) throw new Error("Enter a complaint title.");
   if (description.length < 20) throw new Error("Enter complaint details with at least 20 characters.");
+  if (requestedAction.length < 5) throw new Error("Enter the requested action or outcome.");
   const categoryId = normalizeComplaintText(formData.get("categoryId"), 80) || null;
   const category = categoryId ? await prisma.complaintCategory.findFirst({ where: { tenantId: user.tenantId, id: categoryId, active: true }, select: { id: true } }) : null;
   if (categoryId && !category) throw new Error("Select a valid complaint category.");
@@ -165,7 +182,7 @@ export async function submitComplaint(input: {
     ? await prisma.homeownerProfile.findFirst({ where: { tenantId: user.tenantId, id: homeowner.id }, select: { phone: true, address: true, block: true, lot: true } })
     : null;
   const file = firstFile(formData.getAll("attachment"));
-  const attachment = file ? await stageAttachment(user.tenantId, tenantSlug, file) : null;
+  const attachment = file ? await stageAttachment(user.tenantId, tenantSlug, file, settings) : null;
 
   const complaint = await prisma.$transaction(async (tx) => {
     const created = await tx.complaint.create({
@@ -180,6 +197,7 @@ export async function submitComplaint(input: {
         severity,
         priority,
         description,
+        requestedAction,
         location,
         incidentDate,
         submittedById: privacyMode === ComplaintPrivacyMode.NAMED ? user.id : null,
@@ -205,7 +223,7 @@ export async function submitComplaint(input: {
       });
     }
     if (pinHash) await tx.complaintTrackingCredential.create({ data: { tenantId: user.tenantId, complaintId: created.id, trackingCode, pinHash } });
-    await tx.complaintMessage.create({ data: { tenantId: user.tenantId, complaintId: created.id, authorId: privacyMode === ComplaintPrivacyMode.NAMED ? user.id : null, authorDisplayName: privacyMode === ComplaintPrivacyMode.ANONYMOUS ? "Anonymous complainant" : user.name, body: description, visibility: ComplaintVisibility.PUBLIC } });
+    await tx.complaintMessage.create({ data: { tenantId: user.tenantId, complaintId: created.id, authorId: privacyMode === ComplaintPrivacyMode.NAMED ? user.id : null, authorDisplayName: initialComplainantLabel(privacyMode, user.name), body: description, visibility: ComplaintVisibility.PUBLIC } });
     await tx.complaintStatusHistory.create({ data: { tenantId: user.tenantId, complaintId: created.id, toStatus: ComplaintStatus.SUBMITTED, actorId: privacyMode === ComplaintPrivacyMode.NAMED ? user.id : null, note: "Complaint submitted." } });
     await tx.complaintTimelineEvent.create({ data: { tenantId: user.tenantId, complaintId: created.id, actorId: privacyMode === ComplaintPrivacyMode.NAMED ? user.id : null, eventType: ComplaintTimelineEventType.SUBMITTED, message: privacyMode === ComplaintPrivacyMode.ANONYMOUS ? "Anonymous complaint submitted." : "Complaint submitted." } });
     if (attachment) {
@@ -235,6 +253,8 @@ export async function submitComplaint(input: {
     status: "success",
     message: privacyMode === ComplaintPrivacyMode.ANONYMOUS ? "Anonymous complaint submitted. Keep your tracking code and PIN." : "Complaint submitted successfully.",
     complaintId: complaint.id,
+    publicReference: complaint.publicReference,
+    detailHref: privacyMode === ComplaintPrivacyMode.ANONYMOUS ? undefined : `/portal/complaints/${complaint.id}`,
     trackingCode: privacyMode === ComplaintPrivacyMode.ANONYMOUS ? trackingCode : undefined,
     trackingPin,
   };
@@ -274,8 +294,8 @@ export async function getAdminComplaintDetail(user: Pick<User, "tenantId" | "rol
       identityAccess: { include: { requestedBy: { select: { id: true, name: true } }, approvedBy: { select: { id: true, name: true } } }, orderBy: { createdAt: "desc" } },
     },
   });
-  if (!complaint) throw new Error("Complaint not found.");
-  return complaint;
+  if (!complaint) return null;
+  return maskComplaintForOrdinaryAdmin(complaint);
 }
 
 export async function getHomeownerComplaintList(user: Awaited<ReturnType<typeof requireUser>>) {
@@ -285,6 +305,8 @@ export async function getHomeownerComplaintList(user: Awaited<ReturnType<typeof 
       OR: [
         { privacyMode: ComplaintPrivacyMode.NAMED, submittedById: user.id },
         { privacyMode: ComplaintPrivacyMode.NAMED, homeownerId: user.homeownerProfile?.id ?? "" },
+        { privacyMode: ComplaintPrivacyMode.CONFIDENTIAL, confidentialIdentity: { is: { userId: user.id } } },
+        { privacyMode: ComplaintPrivacyMode.CONFIDENTIAL, confidentialIdentity: { is: { homeownerId: user.homeownerProfile?.id ?? "" } } },
       ],
     },
     include: { category: true, _count: { select: { messages: true, attachments: true } } },
@@ -295,11 +317,20 @@ export async function getHomeownerComplaintList(user: Awaited<ReturnType<typeof 
 
 export async function getHomeownerComplaintDetail(user: Awaited<ReturnType<typeof requireUser>>, id: string) {
   const complaint = await prisma.complaint.findFirst({
-    where: { tenantId: user.tenantId, id, privacyMode: ComplaintPrivacyMode.NAMED, OR: [{ submittedById: user.id }, { homeownerId: user.homeownerProfile?.id ?? "" }] },
-    include: { category: true, attachments: true, messages: { where: { visibility: ComplaintVisibility.PUBLIC }, orderBy: { createdAt: "asc" } }, statusHistory: { orderBy: { createdAt: "asc" } } },
+    where: {
+      tenantId: user.tenantId,
+      id,
+      OR: [
+        { privacyMode: ComplaintPrivacyMode.NAMED, submittedById: user.id },
+        { privacyMode: ComplaintPrivacyMode.NAMED, homeownerId: user.homeownerProfile?.id ?? "" },
+        { privacyMode: ComplaintPrivacyMode.CONFIDENTIAL, confidentialIdentity: { is: { userId: user.id } } },
+        { privacyMode: ComplaintPrivacyMode.CONFIDENTIAL, confidentialIdentity: { is: { homeownerId: user.homeownerProfile?.id ?? "" } } },
+      ],
+    },
+    include: { category: true, attachments: { where: { visibility: ComplaintAttachmentVisibility.COMPLAINANT } }, messages: { where: { visibility: ComplaintVisibility.PUBLIC }, orderBy: { createdAt: "asc" } }, statusHistory: { orderBy: { createdAt: "asc" } } },
   });
-  if (!complaint) throw new Error("Complaint not found.");
-  return complaint;
+  if (!complaint) return null;
+  return maskComplaintForHomeowner(complaint);
 }
 
 export async function trackAnonymousComplaint(trackingCode: string, pin: string): Promise<PublicTrackedComplaint> {
@@ -319,6 +350,7 @@ export async function trackAnonymousComplaint(trackingCode: string, pin: string)
   return {
     publicReference: credential.complaint.publicReference,
     title: credential.complaint.title,
+    requestedAction: credential.complaint.requestedAction,
     status: credential.complaint.status,
     submittedAt: credential.complaint.submittedAt,
     updatedAt: credential.complaint.updatedAt,
@@ -330,8 +362,11 @@ export async function updateComplaintStatus(user: Awaited<ReturnType<typeof requ
   const id = normalizeComplaintText(formData.get("id"), 80);
   const nextStatus = parseEnum(formData.get("status"), ComplaintStatus, ComplaintStatus.UNDER_REVIEW);
   const note = normalizeComplaintText(formData.get("note"), 1000) || null;
+  const referralDestination = normalizeComplaintText(formData.get("referralDestination"), 160) || null;
+  const confirmed = formData.get("confirmTransition") === "on";
   const complaint = await prisma.complaint.findFirst({ where: { tenantId: user.tenantId, id }, select: { id: true, status: true } });
   if (!complaint) throw new Error("Complaint not found.");
+  validateComplaintTransition(complaint.status, nextStatus, note, referralDestination, confirmed);
   await prisma.$transaction([
     prisma.complaint.update({
       where: { id: complaint.id },
@@ -342,12 +377,13 @@ export async function updateComplaintStatus(user: Awaited<ReturnType<typeof requ
         closedAt: nextStatus === ComplaintStatus.CLOSED ? new Date() : undefined,
         reopenedAt: nextStatus === ComplaintStatus.REOPENED ? new Date() : undefined,
         resolutionSummary: nextStatus === ComplaintStatus.RESOLVED ? note : undefined,
+        withdrawalReason: nextStatus === ComplaintStatus.WITHDRAWN ? note : undefined,
       },
     }),
     prisma.complaintStatusHistory.create({ data: { tenantId: user.tenantId, complaintId: complaint.id, fromStatus: complaint.status, toStatus: nextStatus, actorId: user.id, note } }),
-    prisma.complaintTimelineEvent.create({ data: { tenantId: user.tenantId, complaintId: complaint.id, actorId: user.id, eventType: nextStatus === ComplaintStatus.CLOSED ? ComplaintTimelineEventType.CLOSED : nextStatus === ComplaintStatus.REOPENED ? ComplaintTimelineEventType.REOPENED : ComplaintTimelineEventType.STATUS_CHANGED, message: `Status changed to ${complaintStatusLabel(nextStatus)}.`, metadata: note ? { note } : undefined } }),
+    prisma.complaintTimelineEvent.create({ data: { tenantId: user.tenantId, complaintId: complaint.id, actorId: user.id, eventType: nextStatus === ComplaintStatus.CLOSED ? ComplaintTimelineEventType.CLOSED : nextStatus === ComplaintStatus.REOPENED ? ComplaintTimelineEventType.REOPENED : ComplaintTimelineEventType.STATUS_CHANGED, message: `Status changed to ${complaintStatusLabel(nextStatus)}.`, metadata: safeTransitionMetadata(note, referralDestination) } }),
   ]);
-  await writeAuditLog({ actorId: user.id, module: "COMPLAINTS", action: "UPDATE_COMPLAINT_STATUS", entityType: "Complaint", entityId: complaint.id, metadata: { fromStatus: complaint.status, toStatus: nextStatus } });
+  await writeAuditLog({ actorId: user.id, module: "COMPLAINTS", action: "UPDATE_COMPLAINT_STATUS", entityType: "Complaint", entityId: complaint.id, metadata: { fromStatus: complaint.status, toStatus: nextStatus, hasReason: Boolean(note), hasReferralDestination: Boolean(referralDestination) } });
 }
 
 export async function addComplaintMessage(user: Awaited<ReturnType<typeof requireComplaintAdmin>>, formData: FormData) {
@@ -366,16 +402,19 @@ export async function addComplaintMessage(user: Awaited<ReturnType<typeof requir
 export async function assignComplaint(user: Awaited<ReturnType<typeof requireComplaintAdmin>>, formData: FormData) {
   const id = normalizeComplaintText(formData.get("id"), 80);
   const assigneeId = normalizeComplaintText(formData.get("assigneeId"), 80);
+  const reason = normalizeComplaintText(formData.get("assignmentReason"), 500) || null;
   const assignee = await prisma.user.findFirst({ where: { tenantId: user.tenantId, id: assigneeId, role: { in: Array.from(complaintAdminRoles) }, active: true }, select: { id: true, name: true } });
   if (!assignee) throw new Error("Assignee not found.");
   const complaint = await prisma.complaint.findFirst({ where: { tenantId: user.tenantId, id }, select: { id: true, status: true } });
   if (!complaint) throw new Error("Complaint not found.");
+  if (!reason || reason.length < 5) throw new Error("Enter an assignment reason.");
   await prisma.$transaction([
     prisma.complaintAssignment.updateMany({ where: { tenantId: user.tenantId, complaintId: complaint.id, active: true }, data: { active: false, unassignedAt: new Date() } }),
-    prisma.complaintAssignment.create({ data: { tenantId: user.tenantId, complaintId: complaint.id, assigneeId: assignee.id, assignedById: user.id } }),
+    prisma.complaintAssignment.create({ data: { tenantId: user.tenantId, complaintId: complaint.id, assigneeId: assignee.id, assignedById: user.id, roleLabel: reason } }),
     prisma.complaint.update({ where: { id: complaint.id }, data: { assignedToId: assignee.id, status: complaint.status === ComplaintStatus.SUBMITTED ? ComplaintStatus.ASSIGNED : undefined } }),
-    prisma.complaintTimelineEvent.create({ data: { tenantId: user.tenantId, complaintId: complaint.id, actorId: user.id, eventType: ComplaintTimelineEventType.ASSIGNED, message: `Assigned to ${assignee.name}.` } }),
+    prisma.complaintTimelineEvent.create({ data: { tenantId: user.tenantId, complaintId: complaint.id, actorId: user.id, eventType: ComplaintTimelineEventType.ASSIGNED, message: `Assigned to ${assignee.name}.`, metadata: { hasReason: true } } }),
   ]);
+  await writeAuditLog({ actorId: user.id, module: "COMPLAINTS", action: "ASSIGN_COMPLAINT", entityType: "Complaint", entityId: complaint.id, metadata: { assigneeId: assignee.id, hasReason: true } });
 }
 
 export async function requestIdentityAccess(user: Awaited<ReturnType<typeof requireComplaintAdmin>>, formData: FormData) {
@@ -389,17 +428,155 @@ export async function requestIdentityAccess(user: Awaited<ReturnType<typeof requ
     prisma.complaintIdentityAccessGrant.create({ data: { tenantId: user.tenantId, complaintId: complaint.id, requestedById: user.id, purpose, reason, status: ComplaintIdentityAccessStatus.REQUESTED } }),
     prisma.complaintTimelineEvent.create({ data: { tenantId: user.tenantId, complaintId: complaint.id, actorId: user.id, eventType: ComplaintTimelineEventType.IDENTITY_ACCESS_REQUESTED, message: "Confidential identity access requested." } }),
   ]);
+  await writeAuditLog({ actorId: user.id, module: "COMPLAINTS", action: "REQUEST_CONFIDENTIAL_IDENTITY_ACCESS", entityType: "Complaint", entityId: complaint.id, metadata: { result: "REQUESTED", hasReason: true } });
 }
 
-export async function getComplaintReports(user: Pick<User, "tenantId" | "role">) {
+export async function revealConfidentialIdentity(user: Awaited<ReturnType<typeof requireComplaintAdmin>>, formData: FormData) {
+  const id = normalizeComplaintText(formData.get("id"), 80);
+  const reason = normalizeComplaintText(formData.get("reason"), 1000);
+  const confirmed = formData.get("confirmReveal") === "on" || formData.get("confirmReveal") === "true";
+  if (!await canRevealConfidentialIdentity(user)) throw new Error("Confidential identity reveal is not permitted for this role.");
+  if (reason.length < 10) throw new Error("Enter a business reason for confidential identity reveal.");
+  if (!confirmed) throw new Error("Confirm that the confidential identity reveal is necessary.");
+  const complaint = await prisma.complaint.findFirst({
+    where: { tenantId: user.tenantId, id, privacyMode: ComplaintPrivacyMode.CONFIDENTIAL },
+    select: { id: true, publicReference: true, confidentialIdentity: { select: { displayName: true, email: true, phone: true, propertyAddress: true, block: true, lot: true } } },
+  });
+  if (!complaint || !complaint.confidentialIdentity) throw new Error("Confidential complaint not found.");
+  const now = new Date();
+  const grant = await prisma.$transaction(async (tx) => {
+    const access = await tx.complaintIdentityAccessGrant.create({
+      data: {
+        tenantId: user.tenantId,
+        complaintId: complaint.id,
+        requestedById: user.id,
+        approvedById: user.id,
+        purpose: "Authorized confidential identity reveal",
+        reason,
+        status: ComplaintIdentityAccessStatus.APPROVED,
+        decidedAt: now,
+        expiresAt: new Date(now.getTime() + 15 * 60 * 1000),
+      },
+    });
+    await tx.complaintTimelineEvent.create({ data: { tenantId: user.tenantId, complaintId: complaint.id, actorId: user.id, eventType: ComplaintTimelineEventType.IDENTITY_DISCLOSED, message: "Confidential identity disclosed to an authorized privacy role.", metadata: { accessGrantId: access.id } } });
+    return access;
+  });
+  await writeAuditLog({ actorId: user.id, module: "COMPLAINTS", action: "REVEAL_CONFIDENTIAL_IDENTITY", entityType: "Complaint", entityId: complaint.id, metadata: { publicReference: complaint.publicReference, result: "APPROVED", accessGrantId: grant.id, hasReason: true } });
+  return {
+    publicReference: complaint.publicReference,
+    displayName: complaint.confidentialIdentity.displayName,
+    email: complaint.confidentialIdentity.email,
+    phone: complaint.confidentialIdentity.phone,
+    propertyAddress: complaint.confidentialIdentity.propertyAddress,
+    block: complaint.confidentialIdentity.block,
+    lot: complaint.confidentialIdentity.lot,
+    revealedAt: now.toISOString(),
+    expiresAt: grant.expiresAt?.toISOString() ?? null,
+  };
+}
+
+export async function getComplaintReports(user: Pick<User, "tenantId" | "role">, query: { status?: string; privacy?: string; categoryId?: string; assignedToId?: string; dateFrom?: string; dateTo?: string; page?: string } = {}) {
   if (platformRoles.has(user.role)) throw new Error("Platform roles cannot access tenant complaint content by default.");
-  const [byStatus, byPrivacy, total, open] = await Promise.all([
+  const status = Object.values(ComplaintStatus).includes(query.status as ComplaintStatus) ? query.status as ComplaintStatus : undefined;
+  const privacyMode = Object.values(ComplaintPrivacyMode).includes(query.privacy as ComplaintPrivacyMode) ? query.privacy as ComplaintPrivacyMode : undefined;
+  const dateFrom = parseDate(query.dateFrom ?? null);
+  const dateTo = parseDate(query.dateTo ?? null);
+  const page = Math.max(1, Math.min(1000, Number(query.page) || 1));
+  const take = 25;
+  const where = {
+    tenantId: user.tenantId,
+    ...(status ? { status } : {}),
+    ...(privacyMode ? { privacyMode } : {}),
+    ...(query.categoryId ? { categoryId: query.categoryId } : {}),
+    ...(query.assignedToId ? { assignedToId: query.assignedToId } : {}),
+    ...(dateFrom || dateTo ? { submittedAt: { ...(dateFrom ? { gte: dateFrom } : {}), ...(dateTo ? { lte: new Date(dateTo.getTime() + 24 * 60 * 60 * 1000 - 1) } : {}) } } : {}),
+  };
+  const [byStatus, byPrivacy, byCategory, byHandler, total, open, filteredTotal, rows] = await Promise.all([
     prisma.complaint.groupBy({ by: ["status"], where: { tenantId: user.tenantId }, _count: { _all: true } }),
     prisma.complaint.groupBy({ by: ["privacyMode"], where: { tenantId: user.tenantId }, _count: { _all: true } }),
+    prisma.complaint.groupBy({ by: ["categoryId"], where: { tenantId: user.tenantId }, _count: { _all: true } }),
+    prisma.complaint.groupBy({ by: ["assignedToId"], where: { tenantId: user.tenantId }, _count: { _all: true } }),
     prisma.complaint.count({ where: { tenantId: user.tenantId } }),
     prisma.complaint.count({ where: { tenantId: user.tenantId, status: { notIn: [ComplaintStatus.CLOSED, ComplaintStatus.ARCHIVED, ComplaintStatus.WITHDRAWN, ComplaintStatus.REJECTED] } } }),
+    prisma.complaint.count({ where }),
+    prisma.complaint.findMany({
+      where,
+      select: { id: true, complaintNumber: true, publicReference: true, title: true, requestedAction: true, privacyMode: true, status: true, severity: true, priority: true, submittedAt: true, category: { select: { name: true } }, assignedTo: { select: { name: true } } },
+      orderBy: { submittedAt: "desc" },
+      skip: (page - 1) * take,
+      take,
+    }),
   ]);
-  return { total, open, byStatus, byPrivacy };
+  return { total, open, filteredTotal, page, pageSize: take, byStatus, byPrivacy, byCategory, byHandler, rows };
+}
+
+const complaintTransitionPolicy: Record<ComplaintStatus, ComplaintStatus[]> = {
+  [ComplaintStatus.DRAFT]: [ComplaintStatus.SUBMITTED, ComplaintStatus.WITHDRAWN],
+  [ComplaintStatus.SUBMITTED]: [ComplaintStatus.ACKNOWLEDGED, ComplaintStatus.TRIAGED, ComplaintStatus.ASSIGNED, ComplaintStatus.REJECTED, ComplaintStatus.WITHDRAWN, ComplaintStatus.REFERRED],
+  [ComplaintStatus.ACKNOWLEDGED]: [ComplaintStatus.TRIAGED, ComplaintStatus.ASSIGNED, ComplaintStatus.UNDER_REVIEW, ComplaintStatus.REJECTED, ComplaintStatus.WITHDRAWN, ComplaintStatus.REFERRED],
+  [ComplaintStatus.TRIAGED]: [ComplaintStatus.ASSIGNED, ComplaintStatus.UNDER_REVIEW, ComplaintStatus.REJECTED, ComplaintStatus.WITHDRAWN, ComplaintStatus.REFERRED],
+  [ComplaintStatus.ASSIGNED]: [ComplaintStatus.UNDER_REVIEW, ComplaintStatus.WAITING_FOR_INFORMATION, ComplaintStatus.ACTION_IN_PROGRESS, ComplaintStatus.REJECTED, ComplaintStatus.WITHDRAWN, ComplaintStatus.REFERRED],
+  [ComplaintStatus.UNDER_REVIEW]: [ComplaintStatus.WAITING_FOR_INFORMATION, ComplaintStatus.ACTION_IN_PROGRESS, ComplaintStatus.RESOLVED, ComplaintStatus.REJECTED, ComplaintStatus.WITHDRAWN, ComplaintStatus.REFERRED],
+  [ComplaintStatus.WAITING_FOR_INFORMATION]: [ComplaintStatus.UNDER_REVIEW, ComplaintStatus.ACTION_IN_PROGRESS, ComplaintStatus.REJECTED, ComplaintStatus.WITHDRAWN],
+  [ComplaintStatus.ACTION_IN_PROGRESS]: [ComplaintStatus.RESOLVED, ComplaintStatus.WAITING_FOR_INFORMATION, ComplaintStatus.REJECTED, ComplaintStatus.REFERRED],
+  [ComplaintStatus.RESOLVED]: [ComplaintStatus.CLOSED, ComplaintStatus.REOPENED],
+  [ComplaintStatus.CLOSED]: [ComplaintStatus.REOPENED, ComplaintStatus.ARCHIVED],
+  [ComplaintStatus.REOPENED]: [ComplaintStatus.ASSIGNED, ComplaintStatus.UNDER_REVIEW, ComplaintStatus.REJECTED, ComplaintStatus.WITHDRAWN],
+  [ComplaintStatus.REJECTED]: [ComplaintStatus.REOPENED, ComplaintStatus.ARCHIVED],
+  [ComplaintStatus.WITHDRAWN]: [ComplaintStatus.ARCHIVED],
+  [ComplaintStatus.REFERRED]: [ComplaintStatus.CLOSED, ComplaintStatus.REOPENED, ComplaintStatus.ARCHIVED],
+  [ComplaintStatus.ARCHIVED]: [],
+};
+
+function validateComplaintTransition(current: ComplaintStatus, next: ComplaintStatus, note: string | null, referralDestination: string | null, confirmed: boolean) {
+  if (current === next) throw new Error("Select a different complaint status.");
+  if (!allowedComplaintTransitions(current).includes(next)) throw new Error(`Cannot change status from ${complaintStatusLabel(current)} to ${complaintStatusLabel(next)}.`);
+  const needsReason = new Set<ComplaintStatus>([ComplaintStatus.REJECTED, ComplaintStatus.RESOLVED, ComplaintStatus.REOPENED, ComplaintStatus.WITHDRAWN, ComplaintStatus.REFERRED, ComplaintStatus.CLOSED]);
+  if (needsReason.has(next) && (!note || note.length < 10)) throw new Error(`${complaintStatusLabel(next)} requires a reason or summary of at least 10 characters.`);
+  if (next === ComplaintStatus.WITHDRAWN && !confirmed) throw new Error("Confirm the withdrawal before updating the complaint.");
+  if (next === ComplaintStatus.REFERRED && (!referralDestination || referralDestination.length < 3)) throw new Error("Referral requires a destination or office.");
+}
+
+function safeTransitionMetadata(note: string | null, referralDestination: string | null) {
+  if (!note && !referralDestination) return undefined;
+  return { ...(note ? { note } : {}), ...(referralDestination ? { referralDestination } : {}) };
+}
+
+function revealRoleSet(value: string | null | undefined) {
+  const roles = new Set<Role>();
+  for (const item of String(value || "").split(",")) {
+    const role = item.trim().toUpperCase();
+    if (Object.values(Role).includes(role as Role)) roles.add(role as Role);
+  }
+  return roles.size ? roles : defaultIdentityRevealRoles;
+}
+
+function initialComplainantLabel(privacyMode: ComplaintPrivacyMode, userName: string) {
+  if (privacyMode === ComplaintPrivacyMode.ANONYMOUS) return "Anonymous complainant";
+  if (privacyMode === ComplaintPrivacyMode.CONFIDENTIAL) return confidentialComplainantLabel;
+  return userName;
+}
+
+function maskComplaintForOrdinaryAdmin<T extends { privacyMode: ComplaintPrivacyMode; submittedBy?: unknown; homeowner?: unknown; messages: Array<{ authorId: string | null; authorDisplayName: string | null; author?: { role: Role; name: string } | null }> }>(complaint: T) {
+  if (complaint.privacyMode !== ComplaintPrivacyMode.CONFIDENTIAL) return complaint;
+  return {
+    ...complaint,
+    submittedBy: null,
+    homeowner: null,
+    messages: complaint.messages.map((message) => {
+      const complainantAuthored = !message.authorId || message.author?.role === Role.HOMEOWNER;
+      if (!complainantAuthored) return message;
+      return { ...message, author: null, authorDisplayName: confidentialComplainantLabel };
+    }),
+  };
+}
+
+function maskComplaintForHomeowner<T extends { privacyMode: ComplaintPrivacyMode; messages: Array<{ authorId: string | null; authorDisplayName: string | null }> }>(complaint: T) {
+  if (complaint.privacyMode !== ComplaintPrivacyMode.CONFIDENTIAL) return complaint;
+  return {
+    ...complaint,
+    messages: complaint.messages.map((message) => !message.authorId ? { ...message, authorDisplayName: confidentialComplainantLabel } : message),
+  };
 }
 
 async function nextComplaintNumber(tenantId: string) {
@@ -412,10 +589,13 @@ async function nextComplaintNumber(tenantId: string) {
   return `CM-${year}-${String(sequence.nextValue - 1).padStart(5, "0")}`;
 }
 
-async function stageAttachment(tenantId: string, tenantSlug: string, file: File) {
+async function stageAttachment(tenantId: string, tenantSlug: string, file: File, settings: { maxAttachmentMb: number; allowedMimeTypes: string }) {
   if (!file.size) return null;
-  if (file.size > maxUploadBytes) throw new Error("Attachment exceeds the 10 MB limit.");
-  if (!allowedUploadTypes.has(file.type)) throw new Error("Attachment type is not allowed.");
+  const maxUploadBytes = Math.max(1, Math.min(25, settings.maxAttachmentMb || 10)) * 1024 * 1024;
+  const tenantAllowedTypes = new Set(settings.allowedMimeTypes.split(",").map((item) => item.trim()).filter((item) => allowedUploadTypes.has(item)));
+  const effectiveAllowedTypes = tenantAllowedTypes.size ? tenantAllowedTypes : allowedUploadTypes;
+  if (file.size > maxUploadBytes) throw new Error(`Attachment exceeds the ${Math.round(maxUploadBytes / 1024 / 1024)} MB limit.`);
+  if (!effectiveAllowedTypes.has(file.type)) throw new Error("Attachment type is not allowed.");
   const buffer = Buffer.from(await file.arrayBuffer());
   if (!validFileSignature(file.type, buffer)) throw new Error("Attachment file signature does not match its type.");
   const folder = new Date().toISOString().slice(0, 7);

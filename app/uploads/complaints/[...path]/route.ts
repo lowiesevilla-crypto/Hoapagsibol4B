@@ -20,7 +20,12 @@ export async function GET(_request: Request, { params }: { params: Promise<{ pat
     where: {
       tenantId: user.tenantId,
       url,
-      complaint: staffRoles.has(user.role) ? {} : { privacyMode: "NAMED", OR: [{ submittedById: user.id }, { homeownerId: user.homeownerProfile?.id ?? "" }] },
+      complaint: staffRoles.has(user.role) ? {} : { OR: [
+        { privacyMode: "NAMED", submittedById: user.id },
+        { privacyMode: "NAMED", homeownerId: user.homeownerProfile?.id ?? "" },
+        { privacyMode: "CONFIDENTIAL", confidentialIdentity: { is: { userId: user.id } } },
+        { privacyMode: "CONFIDENTIAL", confidentialIdentity: { is: { homeownerId: user.homeownerProfile?.id ?? "" } } },
+      ] },
     },
     select: { originalName: true, contentType: true, fileSize: true },
   });
@@ -29,7 +34,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ pat
     const storedPath = await locateTenantUpload(tenantSlug, "complaints", ...segments.slice(1));
     const info = await stat(storedPath);
     if (!info.isFile()) return new Response("Attachment not found.", { status: 404 });
-    return new Response(new Uint8Array(await readFile(storedPath)), { headers: { "Content-Type": attachment.contentType || contentTypeFor(storedPath), "Content-Length": String(info.size), "Content-Disposition": `${attachment.contentType === "application/pdf" || attachment.contentType.startsWith("image/") ? "inline" : "attachment"}; filename="${attachment.originalName.replaceAll("\"", "")}"`, "Cache-Control": "private, no-store, max-age=0", "X-Content-Type-Options": "nosniff" } });
+    return new Response(new Uint8Array(await readFile(storedPath)), { headers: { "Content-Type": attachment.contentType || contentTypeFor(storedPath), "Content-Length": String(info.size), "Content-Disposition": `attachment; filename="${attachment.originalName.replaceAll("\"", "")}"`, "Cache-Control": "private, no-store, max-age=0", "X-Content-Type-Options": "nosniff" } });
   } catch {
     return new Response("Attachment not found.", { status: 404 });
   }

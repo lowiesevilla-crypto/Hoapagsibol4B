@@ -12,6 +12,7 @@ type ComplaintTrackState = {
   complaint?: {
     publicReference: string;
     title: string;
+    requestedAction: string | null;
     status: ComplaintStatus;
     submittedAt: Date;
     updatedAt: Date;
@@ -36,6 +37,7 @@ export function ComplaintTrackForm() {
           <div><p className="font-mono text-xs font-bold text-slate-500">{state.complaint.publicReference}</p><h2 className="text-xl font-black">{state.complaint.title}</h2><p className="text-sm text-slate-500">Submitted {shortDate(state.complaint.submittedAt)} | Updated {shortDate(state.complaint.updatedAt)}</p></div>
           <span className="badge badge-info">{complaintStatusLabel(state.complaint.status)}</span>
         </div>
+        <div className="mt-5 rounded-xl bg-slate-50 p-3 text-sm"><p className="font-black">Requested action</p><p className="mt-1 whitespace-pre-wrap text-slate-700">{state.complaint.requestedAction || "Not provided"}</p></div>
         <div className="mt-5 space-y-3">
           {state.complaint.messages.map((message, index) => <div key={`${message.createdAt.toISOString()}-${index}`} className="rounded-xl bg-slate-50 p-3 text-sm"><p className="font-bold">{message.authorDisplayName || "HOA update"} <span className="font-normal text-slate-500">- {shortDate(message.createdAt)}</span></p><p className="mt-1 whitespace-pre-wrap text-slate-700">{message.body}</p></div>)}
         </div>

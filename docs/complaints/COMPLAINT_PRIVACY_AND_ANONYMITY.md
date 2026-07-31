@@ -17,7 +17,9 @@ Confidential identity:
 
 - Admin case views state that identity is restricted.
 - Access requests are recorded in `ComplaintIdentityAccessGrant` with purpose and reason.
-- Direct identity disclosure is intentionally not implemented in MVP to avoid accidental exposure before policy approval.
+- Ordinary complaint list/detail/report responses mask confidential complainant message authors as `Confidential Complainant`, including older records that still contain a real `authorDisplayName`.
+- Direct identity disclosure is available only through the confidential identity reveal service for tenant-configured reveal roles, requires a business reason and explicit confirmation, returns data only to the no-store reveal interaction, and creates identity access and audit records.
+- Platform administrators do not receive default tenant complaint content or confidential identity access.
 
 Attachment privacy:
 

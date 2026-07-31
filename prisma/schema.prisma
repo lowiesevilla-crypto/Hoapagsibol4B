@@ -2586,6 +2586,7 @@ model ComplaintSetting {
   anonymousEnabled        Boolean  @default(true)
   maxAttachmentMb         Int      @default(10)
   allowedMimeTypes        String   @default("image/jpeg,image/png,image/webp,application/pdf") @db.VarChar(500)
+  identityRevealRoles     String   @default("ADMIN,HOA_ADMIN,SYSTEM_ADMIN") @db.VarChar(300)
   acknowledgementSlaHours Int      @default(72)
   resolutionSlaDays       Int      @default(14)
   updatedById             String?
@@ -2629,6 +2630,7 @@ model Complaint {
   severity             ComplaintSeverity              @default(MEDIUM)
   priority             ComplaintPriority              @default(NORMAL)
   description          String                         @db.Text
+  requestedAction      String?                        @db.Text
   location             String?
   incidentDate         DateTime?                      @db.Date
   submittedById        String?

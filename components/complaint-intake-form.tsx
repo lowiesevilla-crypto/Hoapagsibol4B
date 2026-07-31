@@ -9,6 +9,8 @@ type ComplaintIntakeState = {
   status: "idle" | "success" | "error";
   message: string;
   complaintId?: string;
+  publicReference?: string;
+  detailHref?: string;
   trackingCode?: string;
   trackingPin?: string;
 };
@@ -27,15 +29,18 @@ export function ComplaintIntakeForm({ categories }: { categories: Category[] }) 
       <label><span className="label">Location</span><input className="field" name="location" maxLength={250} /></label>
       <label><span className="label">Incident date</span><input className="field" type="date" name="incidentDate" /></label>
       <label className="md:col-span-2"><span className="label">Details</span><textarea className="field min-h-40" name="description" maxLength={4000} required /></label>
+      <label className="md:col-span-2"><span className="label">Requested action</span><textarea className="field min-h-28" name="requestedAction" maxLength={1000} required /></label>
       <label className="md:col-span-2"><span className="label">Attachment</span><input className="field" type="file" name="attachment" accept="image/jpeg,image/png,image/webp,application/pdf" /><span className="mt-1 block text-xs font-semibold text-slate-500">PDF, JPG, PNG, or WEBP up to 10 MB.</span></label>
     </div>
     {state.status === "error" && <p className="rounded-xl border border-rose-200 bg-rose-50 p-3 text-sm font-bold text-rose-800">{state.message}</p>}
     {state.status === "success" && <section className="rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm font-semibold text-emerald-900">
       <p>{state.message}</p>
+      {state.publicReference && <div className="mt-3 rounded-lg bg-white p-3"><p className="text-xs uppercase text-slate-500">Reference number</p><p className="font-mono text-lg font-black">{state.publicReference}</p>{state.detailHref && <a className="mt-2 inline-flex text-sm font-black text-pine-700 hover:underline" href={state.detailHref}>View complaint detail</a>}</div>}
       {state.trackingCode && <div className="mt-3 grid gap-2 sm:grid-cols-2">
         <div className="rounded-lg bg-white p-3"><p className="text-xs uppercase text-slate-500">Tracking code</p><p className="font-mono text-lg font-black">{state.trackingCode}</p></div>
         <div className="rounded-lg bg-white p-3"><p className="text-xs uppercase text-slate-500">PIN</p><p className="font-mono text-lg font-black">{state.trackingPin}</p></div>
       </div>}
+      {state.trackingCode && <p className="mt-3 text-xs font-bold text-amber-900">Save this tracking code and PIN now. The PIN cannot be recovered later.</p>}
     </section>}
     <SubmitButton>Submit complaint</SubmitButton>
   </form>;

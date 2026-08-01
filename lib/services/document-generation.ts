@@ -270,6 +270,7 @@ function placeholderContext(request: GenerationRequestRecord, association: Await
   const fields = record(requestData.fields ?? requestData);
   const subjectBirthDate = dateValue(subject.birthDate);
   const requestPurpose = text(fields.purpose) || request.purpose || "official purposes";
+  const passRequestValues = resolvePassRequestTemplateValues(request);
 
   // FIX: civilStatus — check subject snapshot first, then homeowner profile.
   // Fall back to "" (empty string, renders blank) instead of undefined.
@@ -301,13 +302,104 @@ function placeholderContext(request: GenerationRequestRecord, association: Await
     document: { number: documentNumber, title: request.definition?.displayName ?? "Official HOA Document", issueDate: shortDate(issueDate), issuePlace: association.address || association.name, status: documentNumber === "PREVIEW" ? "Preview" : "Issued", validUntil: resolvedValidUntil },
     subject: { fullName: text(subject.fullName) || request.homeowner.user.name, relationship: text(subject.relationship) || "Homeowner", address: text(subject.address) || request.homeowner.address, birthDate: subjectBirthDate ? shortDate(subjectBirthDate) : text(subject.birthDate), civilStatus: resolvedCivilStatus, nationality: resolvedNationality, status: request.homeowner.occupancyStatus || request.homeowner.propertyType || undefined, residencyStartDate: request.homeowner.residencyDate ? shortDate(request.homeowner.residencyDate) : undefined, age: subjectBirthDate ? String(ageAt(subjectBirthDate, issueDate)) : request.homeowner.birthDate ? String(ageAt(request.homeowner.birthDate, issueDate)) : undefined, occupation: request.homeowner.occupation || undefined, contactNumber: request.homeowner.phone || undefined, phase: request.homeowner.phase || undefined, propertyType: request.homeowner.propertyType || undefined, occupancyStatus: request.homeowner.occupancyStatus || undefined },
     property: { block: text(subject.block) || request.homeowner.block, lot: text(subject.lot) || request.homeowner.lot, address: text(subject.propertyAddress) || request.homeowner.address, accountNumber: text(subject.accountNumber) || homeownerAccountNumber(request.homeowner), accountLabel: text(subject.accountLabel) || homeownerPropertyLabel(request.homeowner), phase: request.homeowner.phase || undefined, subdivision: association.name },
-    request: { purpose: requestPurpose, remarks: text(fields.remarks) || request.remarks || undefined, copies: request.numberOfCopies, requestedAt: shortDate(request.requestedAt) },
+    request: { purpose: requestPurpose, remarks: text(fields.remarks) || request.remarks || "", copies: request.numberOfCopies, requestedAt: shortDate(request.requestedAt), ...passRequestValues },
     signatory: { name: signatory?.fullName, position: signatory?.position },
     verification: { url: verificationUrl ?? undefined, code: verificationUrl ? "Scan to verify" : undefined },
     system: { generatedAt: shortDate(issueDate), platformName: "HOAHub" },
     organization: { tenantId: context.tenantId, term: organizationOfficerTerm(officers), officers: officers.map((officer) => ({ id: officer.id, fullName: officer.fullName, position: officer.position, displayOrder: officer.displayOrder })) },
     permissions: new Set(context.role === Role.HOMEOWNER ? ["DOCUMENT_PLACEHOLDER:PERSONAL"] : ["DOCUMENT_PLACEHOLDER:PERSONAL", "DOCUMENT_PLACEHOLDER:FINANCIAL", "DOCUMENT_PLACEHOLDER:VIOLATION"]),
   };
+}
+
+export type PassTemplateRequestSource = {
+  requestDataSnapshot?: unknown;
+  reviewedDataSnapshot?: unknown;
+  purpose?: string | null;
+  remarks?: string | null;
+  scheduledDate?: Date | string | null;
+  startTime?: string | null;
+  endTime?: string | null;
+  passType?: string | null;
+  vehicleDetails?: string | null;
+  partyName?: string | null;
+  contractorDetails?: string | null;
+  representativeName?: string | null;
+  propertyDetails?: string | null;
+  approvedAt?: Date | string | null;
+};
+
+export function resolvePassRequestTemplateValues(request: PassTemplateRequestSource) {
+  const reviewedData = record(request.reviewedDataSnapshot);
+  const submittedData = record(request.requestDataSnapshot);
+  const reviewed = record(reviewedData.fields ?? reviewedData);
+  const submitted = record(submittedData.fields ?? submittedData);
+  const value = (key: string, columnValue?: unknown) => printableText(reviewed[key]) || printableText(submitted[key]) || printableText(columnValue) || "";
+  const date = (key: string, columnValue?: unknown) => printableDate(reviewed[key]) || printableDate(submitted[key]) || printableDate(columnValue) || "";
+  const representativeName = value("representativeName", request.representativeName) || value("partyName", request.partyName);
+  const contractorDetails = value("contractorDetails", request.contractorDetails);
+  return {
+    passType: formatPassType(value("passType", request.passType)),
+    scheduledDate: date("scheduledDate", request.scheduledDate),
+    startTime: value("startTime", request.startTime),
+    endTime: value("endTime", request.endTime),
+    driverName: representativeName,
+    representativeName,
+    vehicleDetails: value("vehicleDetails", request.vehicleDetails),
+    destination: value("destination"),
+    movingCompany: contractorDetails,
+    serviceProvider: contractorDetails,
+    itemsSummary: formatItemsSummary(reviewed, submitted),
+    approvalDate: printableDate(request.approvedAt),
+  };
+}
+
+function formatPassType(value: string) {
+  return value.replaceAll("_", " ").trim();
+}
+
+function formatItemsSummary(...sources: Record<string, unknown>[]) {
+  const items = sources.map((source) => parseItems(source).filter(Boolean)).find((sourceItems) => sourceItems.length > 0)?.slice(0, 8) ?? [];
+  if (!items.length) return "";
+  const summary = items.map((item, index) => `${index + 1}. ${item}`).join("\n");
+  return summary.length > 700 ? "See approved attachment" : summary;
+}
+
+function parseItems(source: Record<string, unknown>) {
+  const rawItems = source.items ?? source.itemRows ?? source.goods ?? source.householdGoods;
+  if (Array.isArray(rawItems)) return rawItems.map(formatItem);
+  const parsed = parseJsonArray(printableText(rawItems));
+  if (parsed.length) return parsed.map(formatItem);
+  const quantity = printableText(source.quantity);
+  const description = printableText(source.itemDescription ?? source.descriptionOfGoods);
+  if (description) return [`${quantity ? `${quantity} - ` : ""}${description}`];
+  return [];
+}
+
+function parseJsonArray(value: string) {
+  if (!value) return [];
+  try {
+    const parsed = JSON.parse(value);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return value.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+  }
+}
+
+function formatItem(value: unknown) {
+  if (typeof value === "string" || typeof value === "number") return printableText(value);
+  const item = record(value);
+  const quantity = printableText(item.quantity ?? item.qty);
+  const description = printableText(item.description ?? item.itemDescription ?? item.name);
+  return `${quantity ? `${quantity} - ` : ""}${description}`.trim();
+}
+
+function printableDate(value: unknown) {
+  const parsed = dateValue(value);
+  return parsed ? shortDate(parsed) : "";
+}
+
+function printableText(value: unknown) {
+  return (text(value) || "").replace(/[<>]/g, "").replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, "").replace(/[ \t]{2,}/g, " ").trim().slice(0, 500);
 }
 
 function definitionSnapshot(definition: { id: string; code: string; displayName: string; version: number; deliveryMode: string; approvalRequired: boolean; paymentRequired: boolean; releaseRequired: boolean; outstandingBalancePolicy: string; numberingFormat: string; qrEnabled: boolean }) {

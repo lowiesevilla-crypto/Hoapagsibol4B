@@ -61,7 +61,7 @@ async function renderPreview(templateDefinitionOverride: unknown, params: Promis
       document: { number: "PREVIEW", title: version.templateSet.definition.displayName, issueDate: shortDate(issueDate), issuePlace: association.address || association.name, status: "Preview" },
       subject: { fullName: "Juan Dela Cruz", relationship: "Homeowner", address: "Block 1 Lot 2", birthDate: "January 1, 1990", civilStatus: "Married", nationality: "Filipino", status: "Owner occupied", residencyStartDate: "January 1, 2020", age: 39, occupation: "Property manager", contactNumber: "0917 000 0000", phase: "Phase 2", propertyType: "Residential", occupancyStatus: "Owner occupied" },
       property: { block: "1", lot: "2", address: "Block 1 Lot 2", accountNumber: "12345678901", accountLabel: "Block 1 Lot 2", phase: "Phase 2", subdivision: association.name },
-      request: { purpose: "For official purposes", remarks: "No remarks", copies: 1, requestedAt: shortDate(issueDate) },
+      request: { purpose: "For official purposes", remarks: "No remarks", copies: 1, requestedAt: shortDate(issueDate), passType: "MOVE IN", scheduledDate: "July 31, 2026", startTime: "08:00", endTime: "10:00", driverName: "Pedro Santos", representativeName: "Pedro Santos", vehicleDetails: "White delivery van ABC 1234", destination: "Main gate", movingCompany: "Sample Moving Services", serviceProvider: "Sample Moving Services", itemsSummary: "1. 2 - Office chairs\n2. 1 - Refrigerator", approvalDate: shortDate(issueDate) },
       signatory: { name: officers[0]?.fullName || "Authorized HOA Officer", position: officers[0]?.position || "Authorized Signatory" },
       verification: { code: "PREVIEW" },
       system: { generatedAt: shortDate(issueDate), platformName: "HOAHub" },

@@ -1,0 +1,1871 @@
+{
+  "packageVersion": 1,
+  "kind": "HOAHubApprovedPassTemplateDraft",
+  "layoutId": "move-in-out-two-copy-a4",
+  "displayName": "Move-In/Move-Out Two-Copy A4",
+  "approvedSource": "Project Owner visual UAT approved local Template Editor draft",
+  "contentHash": "sha256:06d6241c92cf70f6c24c789c872b5c70c7a651a681f861dfc10eade7760fbf93",
+  "definition": {
+    "schemaVersion": 2,
+    "page": {
+      "id": "page-1",
+      "format": "A4",
+      "orientation": "portrait",
+      "widthMm": 210,
+      "heightMm": 297,
+      "pageNumber": 1,
+      "marginPreset": "custom",
+      "margins": {
+        "top": 5,
+        "right": 5,
+        "bottom": 5,
+        "left": 5
+      },
+      "padding": {
+        "top": 0,
+        "right": 0,
+        "bottom": 0,
+        "left": 0
+      },
+      "headerHeightMm": 0,
+      "footerHeightMm": 0,
+      "headerLocked": false,
+      "footerLocked": false,
+      "showHeaderBoundary": false,
+      "showFooterBoundary": false,
+      "headerDistance": 0,
+      "footerDistance": 0,
+      "columns": {
+        "count": 1,
+        "gap": 0
+      },
+      "border": {
+        "enabled": false,
+        "style": "solid",
+        "width": 1,
+        "color": "#071f4f"
+      },
+      "backgroundColor": "#ffffff",
+      "backgroundOpacity": 1,
+      "watermark": {
+        "enabled": false,
+        "text": "",
+        "opacity": 0.08,
+        "fontSize": 34,
+        "position": "center",
+        "rotation": -28
+      },
+      "canvas": {
+        "gridSize": 1,
+        "snapToGrid": true,
+        "showGrid": false,
+        "showRulers": false,
+        "showMarginGuides": false,
+        "showCenterGuides": true
+      },
+      "guides": {
+        "horizontal": [
+          {
+            "positionMm": 148,
+            "label": "Cut line"
+          }
+        ],
+        "vertical": []
+      },
+      "safeArea": {
+        "showBoundary": false,
+        "showNonPrintableArea": false,
+        "warnOnOverflow": false,
+        "minimumMarginMm": 5
+      }
+    },
+    "sections": {
+      "header": [],
+      "body": [
+        {
+          "id": "mio-marshal-logo",
+          "section": "body",
+          "type": "logo",
+          "binding": "tenant.logo",
+          "content": "{{tenant.logo}}",
+          "order": 10,
+          "visible": true,
+          "position": {
+            "x": 9,
+            "y": 6,
+            "width": 22,
+            "height": 23,
+            "zIndex": 20
+          },
+          "style": {
+            "align": "center",
+            "borderColor": "#c79318",
+            "borderWidth": 1,
+            "radius": 16,
+            "padding": 2
+          },
+          "image": {
+            "fit": "contain",
+            "positionX": "center",
+            "positionY": "center",
+            "opacity": 1
+          }
+        },
+        {
+          "id": "mio-marshal-tenant",
+          "section": "body",
+          "type": "text",
+          "content": "{{tenant.name}}\n{{tenant.address}}\nContact: {{tenant.contactNumber}} | {{tenant.email}}\nTIN: {{tenant.tin}} | SEC Registration No.: {{tenant.secRegistration}}",
+          "order": 20,
+          "visible": true,
+          "position": {
+            "x": 39,
+            "y": 4,
+            "width": 118,
+            "height": 21,
+            "zIndex": 10
+          },
+          "style": {
+            "fontFamily": "Arial",
+            "fontSize": 6.2,
+            "lineHeight": 1.02,
+            "textColor": "#071f4f",
+            "padding": 0,
+            "margin": 0,
+            "align": "center",
+            "fontWeight": "bold"
+          }
+        },
+        {
+          "id": "mio-marshal-gold-left",
+          "section": "body",
+          "type": "horizontalLine",
+          "order": 30,
+          "visible": true,
+          "position": {
+            "x": 50,
+            "y": 32,
+            "width": 32,
+            "height": 1,
+            "zIndex": 9
+          },
+          "style": {
+            "lineColor": "#c79318",
+            "lineWidth": 1,
+            "lineStyle": "solid",
+            "opacity": 1
+          }
+        },
+        {
+          "id": "mio-marshal-gold-right",
+          "section": "body",
+          "type": "horizontalLine",
+          "order": 40,
+          "visible": true,
+          "position": {
+            "x": 128,
+            "y": 32,
+            "width": 32,
+            "height": 1,
+            "zIndex": 9
+          },
+          "style": {
+            "lineColor": "#c79318",
+            "lineWidth": 1,
+            "lineStyle": "solid",
+            "opacity": 1
+          }
+        },
+        {
+          "id": "mio-marshal-title",
+          "section": "body",
+          "type": "documentTitle",
+          "content": "MOVE-IN / MOVE-OUT PASS",
+          "order": 50,
+          "visible": true,
+          "position": {
+            "x": 43,
+            "y": 33.5,
+            "width": 124,
+            "height": 9,
+            "zIndex": 10
+          },
+          "style": {
+            "fontFamily": "Times New Roman",
+            "fontSize": 17,
+            "lineHeight": 1,
+            "textColor": "#071f4f",
+            "padding": 0,
+            "margin": 0,
+            "align": "center",
+            "fontWeight": "bold"
+          }
+        },
+        {
+          "id": "mio-marshal-copy-label",
+          "section": "body",
+          "type": "textBox",
+          "content": "MARSHAL'S COPY",
+          "order": 60,
+          "visible": true,
+          "position": {
+            "x": 162,
+            "y": 6,
+            "width": 39,
+            "height": 7,
+            "zIndex": 10
+          },
+          "style": {
+            "fontFamily": "Arial",
+            "fontSize": 7.2,
+            "lineHeight": 1,
+            "textColor": "#ffffff",
+            "padding": 2,
+            "margin": 0,
+            "borderColor": "#c79318",
+            "borderWidth": 1,
+            "radius": 3,
+            "align": "center",
+            "backgroundColor": "#071f4f",
+            "fontWeight": "bold"
+          }
+        },
+        {
+          "id": "mio-marshal-badge",
+          "section": "body",
+          "type": "textBox",
+          "content": "{{document.status}}\nMOVE-IN / MOVE-OUT PASS",
+          "order": 70,
+          "visible": true,
+          "position": {
+            "x": 166,
+            "y": 18,
+            "width": 31,
+            "height": 22,
+            "zIndex": 10
+          },
+          "style": {
+            "fontFamily": "Arial",
+            "fontSize": 7.2,
+            "lineHeight": 1.03,
+            "textColor": "#071f4f",
+            "padding": 5,
+            "margin": 0,
+            "borderColor": "#c79318",
+            "borderWidth": 1,
+            "radius": 6,
+            "align": "center",
+            "fontWeight": "bold"
+          }
+        },
+        {
+          "id": "mio-marshal-doc-no",
+          "section": "body",
+          "type": "textBox",
+          "content": "Document No.:\n{{document.number}}",
+          "order": 80,
+          "visible": true,
+          "position": {
+            "x": 9,
+            "y": 45,
+            "width": 49,
+            "height": 9,
+            "zIndex": 10
+          },
+          "style": {
+            "fontFamily": "Arial",
+            "fontSize": 5.25,
+            "lineHeight": 1.06,
+            "textColor": "#071f4f",
+            "padding": 2,
+            "margin": 0,
+            "borderColor": "#64748b",
+            "borderWidth": 1,
+            "radius": 0
+          }
+        },
+        {
+          "id": "mio-marshal-issued",
+          "section": "body",
+          "type": "textBox",
+          "content": "Date Issued:\n{{document.issueDate}}",
+          "order": 90,
+          "visible": true,
+          "position": {
+            "x": 58,
+            "y": 45,
+            "width": 49,
+            "height": 9,
+            "zIndex": 10
+          },
+          "style": {
+            "fontFamily": "Arial",
+            "fontSize": 5.25,
+            "lineHeight": 1.06,
+            "textColor": "#071f4f",
+            "padding": 2,
+            "margin": 0,
+            "borderColor": "#64748b",
+            "borderWidth": 1,
+            "radius": 0
+          }
+        },
+        {
+          "id": "mio-marshal-valid",
+          "section": "body",
+          "type": "textBox",
+          "content": "Validity Date:\n{{document.validUntil}}",
+          "order": 100,
+          "visible": true,
+          "position": {
+            "x": 107,
+            "y": 45,
+            "width": 49,
+            "height": 9,
+            "zIndex": 10
+          },
+          "style": {
+            "fontFamily": "Arial",
+            "fontSize": 5.25,
+            "lineHeight": 1.06,
+            "textColor": "#071f4f",
+            "padding": 2,
+            "margin": 0,
+            "borderColor": "#64748b",
+            "borderWidth": 1,
+            "radius": 0
+          }
+        },
+        {
+          "id": "mio-marshal-status",
+          "section": "body",
+          "type": "textBox",
+          "content": "Status:\n{{document.status}}",
+          "order": 110,
+          "visible": true,
+          "position": {
+            "x": 156,
+            "y": 45,
+            "width": 45,
+            "height": 9,
+            "zIndex": 10
+          },
+          "style": {
+            "fontFamily": "Arial",
+            "fontSize": 5.25,
+            "lineHeight": 1.06,
+            "textColor": "#071f4f",
+            "padding": 2,
+            "margin": 0,
+            "borderColor": "#64748b",
+            "borderWidth": 1,
+            "radius": 0
+          }
+        },
+        {
+          "id": "mio-marshal-resident-label",
+          "section": "body",
+          "type": "textBox",
+          "content": "HOMEOWNER / RESIDENT INFORMATION",
+          "order": 120,
+          "visible": true,
+          "position": {
+            "x": 9,
+            "y": 57,
+            "width": 72,
+            "height": 6,
+            "zIndex": 10
+          },
+          "style": {
+            "fontFamily": "Arial",
+            "fontSize": 6.8,
+            "lineHeight": 1,
+            "textColor": "#ffffff",
+            "padding": 2,
+            "margin": 0,
+            "borderColor": "#071f4f",
+            "borderWidth": 1,
+            "radius": 1,
+            "backgroundColor": "#071f4f",
+            "fontWeight": "bold"
+          }
+        },
+        {
+          "id": "mio-marshal-name",
+          "section": "body",
+          "type": "textBox",
+          "content": "Homeowner / Resident Name:\n{{subject.fullName}}",
+          "order": 130,
+          "visible": true,
+          "position": {
+            "x": 9,
+            "y": 64,
+            "width": 110,
+            "height": 8.5,
+            "zIndex": 10
+          },
+          "style": {
+            "fontFamily": "Arial",
+            "fontSize": 5.25,
+            "lineHeight": 1.06,
+            "textColor": "#071f4f",
+            "padding": 2,
+            "margin": 0,
+            "borderColor": "#64748b",
+            "borderWidth": 1,
+            "radius": 0
+          }
+        },
+        {
+          "id": "mio-marshal-account",
+          "section": "body",
+          "type": "textBox",
+          "content": "Account No.:\n{{property.accountNumber}}",
+          "order": 140,
+          "visible": true,
+          "position": {
+            "x": 119,
+            "y": 64,
+            "width": 82,
+            "height": 8.5,
+            "zIndex": 10
+          },
+          "style": {
+            "fontFamily": "Arial",
+            "fontSize": 5.25,
+            "lineHeight": 1.06,
+            "textColor": "#071f4f",
+            "padding": 2,
+            "margin": 0,
+            "borderColor": "#64748b",
+            "borderWidth": 1,
+            "radius": 0
+          }
+        },
+        {
+          "id": "mio-marshal-address",
+          "section": "body",
+          "type": "textBox",
+          "content": "Address / Property:\n{{property.address}}",
+          "order": 150,
+          "visible": true,
+          "position": {
+            "x": 9,
+            "y": 72.5,
+            "width": 135,
+            "height": 8.5,
+            "zIndex": 10
+          },
+          "style": {
+            "fontFamily": "Arial",
+            "fontSize": 5.25,
+            "lineHeight": 1.06,
+            "textColor": "#071f4f",
+            "padding": 2,
+            "margin": 0,
+            "borderColor": "#64748b",
+            "borderWidth": 1,
+            "radius": 0
+          }
+        },
+        {
+          "id": "mio-marshal-contact",
+          "section": "body",
+          "type": "textBox",
+          "content": "Contact No.:\n{{subject.contactNumber}}",
+          "order": 160,
+          "visible": true,
+          "position": {
+            "x": 144,
+            "y": 72.5,
+            "width": 57,
+            "height": 8.5,
+            "zIndex": 10
+          },
+          "style": {
+            "fontFamily": "Arial",
+            "fontSize": 5.25,
+            "lineHeight": 1.06,
+            "textColor": "#071f4f",
+            "padding": 2,
+            "margin": 0,
+            "borderColor": "#64748b",
+            "borderWidth": 1,
+            "radius": 0
+          }
+        },
+        {
+          "id": "mio-marshal-blocklot",
+          "section": "body",
+          "type": "textBox",
+          "content": "Block / Lot:\nBlock {{property.block}}, Lot {{property.lot}}",
+          "order": 170,
+          "visible": true,
+          "position": {
+            "x": 9,
+            "y": 81,
+            "width": 192,
+            "height": 8.5,
+            "zIndex": 10
+          },
+          "style": {
+            "fontFamily": "Arial",
+            "fontSize": 5.25,
+            "lineHeight": 1.06,
+            "textColor": "#071f4f",
+            "padding": 2,
+            "margin": 0,
+            "borderColor": "#64748b",
+            "borderWidth": 1,
+            "radius": 0
+          }
+        },
+        {
+          "id": "mio-marshal-qr",
+          "section": "body",
+          "type": "qrVerification",
+          "content": "Scan to verify this document.",
+          "order": 180,
+          "visible": true,
+          "position": {
+            "x": 12,
+            "y": 124,
+            "width": 23,
+            "height": 23,
+            "zIndex": 30
+          },
+          "style": {
+            "align": "center",
+            "fontFamily": "Arial",
+            "fontSize": 6,
+            "lineHeight": 1.05,
+            "textColor": "#071f4f",
+            "padding": 1,
+            "margin": 0
+          },
+          "qr": {
+            "label": "SCAN TO VERIFY",
+            "instruction": "Scan to verify this document.",
+            "showLabel": true,
+            "showInstruction": true,
+            "squareLocked": true,
+            "quietZone": 1
+          }
+        },
+        {
+          "id": "mio-marshal-requested-line",
+          "section": "body",
+          "type": "horizontalLine",
+          "order": 190,
+          "visible": true,
+          "position": {
+            "x": 42,
+            "y": 128,
+            "width": 42,
+            "height": 1,
+            "zIndex": 20
+          },
+          "style": {
+            "lineColor": "#111827",
+            "lineWidth": 1,
+            "lineStyle": "solid",
+            "opacity": 1
+          }
+        },
+        {
+          "id": "mio-marshal-requested-label",
+          "section": "body",
+          "type": "text",
+          "content": "Requested by\n{{subject.fullName}}",
+          "order": 200,
+          "visible": true,
+          "position": {
+            "x": 42,
+            "y": 129.5,
+            "width": 42,
+            "height": 10,
+            "zIndex": 10
+          },
+          "style": {
+            "fontFamily": "Arial",
+            "fontSize": 5.15,
+            "lineHeight": 1.05,
+            "textColor": "#071f4f",
+            "padding": 0,
+            "margin": 0,
+            "align": "center"
+          }
+        },
+        {
+          "id": "mio-marshal-approved-line",
+          "section": "body",
+          "type": "horizontalLine",
+          "order": 210,
+          "visible": true,
+          "position": {
+            "x": 90,
+            "y": 128,
+            "width": 44,
+            "height": 1,
+            "zIndex": 20
+          },
+          "style": {
+            "lineColor": "#111827",
+            "lineWidth": 1,
+            "lineStyle": "solid",
+            "opacity": 1
+          }
+        },
+        {
+          "id": "mio-marshal-approved-label",
+          "section": "body",
+          "type": "text",
+          "content": "Approved by\n{{signatory.name}}\n{{signatory.position}}",
+          "order": 220,
+          "visible": true,
+          "position": {
+            "x": 90,
+            "y": 129.5,
+            "width": 44,
+            "height": 10,
+            "zIndex": 10
+          },
+          "style": {
+            "fontFamily": "Arial",
+            "fontSize": 5.15,
+            "lineHeight": 1.05,
+            "textColor": "#071f4f",
+            "padding": 0,
+            "margin": 0,
+            "align": "center"
+          }
+        },
+        {
+          "id": "mio-marshal-marshal-use",
+          "section": "body",
+          "type": "textBox",
+          "content": "MARSHAL USE\nActual entry time: __________\nActual exit time: __________\nVerified by Marshal: ________\nMarshal remarks: ___________",
+          "order": 230,
+          "visible": true,
+          "position": {
+            "x": 140,
+            "y": 123,
+            "width": 61,
+            "height": 19,
+            "zIndex": 10
+          },
+          "style": {
+            "fontFamily": "Arial",
+            "fontSize": 5.1,
+            "lineHeight": 1.03,
+            "textColor": "#071f4f",
+            "padding": 3,
+            "margin": 0,
+            "borderColor": "#071f4f",
+            "borderWidth": 1,
+            "radius": 0
+          }
+        },
+        {
+          "id": "mio-marshal-footer-line",
+          "section": "body",
+          "type": "horizontalLine",
+          "order": 240,
+          "visible": true,
+          "position": {
+            "x": 52,
+            "y": 140.6,
+            "width": 86,
+            "height": 1,
+            "zIndex": 9
+          },
+          "style": {
+            "lineColor": "#c79318",
+            "lineWidth": 1,
+            "lineStyle": "solid",
+            "opacity": 1
+          }
+        },
+        {
+          "id": "mio-marshal-footer",
+          "section": "body",
+          "type": "text",
+          "content": "This pass is valid only for the stated purpose and validity period.",
+          "order": 250,
+          "visible": true,
+          "position": {
+            "x": 48,
+            "y": 142.5,
+            "width": 92,
+            "height": 4,
+            "zIndex": 10
+          },
+          "style": {
+            "fontFamily": "Arial",
+            "fontSize": 5.5,
+            "lineHeight": 1,
+            "textColor": "#071f4f",
+            "padding": 0,
+            "margin": 0,
+            "align": "center",
+            "fontWeight": "bold"
+          }
+        },
+        {
+          "id": "mio-marshal-details-label",
+          "section": "body",
+          "type": "textBox",
+          "content": "MOVEMENT DETAILS",
+          "order": 260,
+          "visible": true,
+          "position": {
+            "x": 9,
+            "y": 92,
+            "width": 55,
+            "height": 6,
+            "zIndex": 10
+          },
+          "style": {
+            "fontFamily": "Arial",
+            "fontSize": 6.8,
+            "lineHeight": 1,
+            "textColor": "#ffffff",
+            "padding": 2,
+            "margin": 0,
+            "borderColor": "#071f4f",
+            "borderWidth": 1,
+            "radius": 1,
+            "backgroundColor": "#071f4f",
+            "fontWeight": "bold"
+          }
+        },
+        {
+          "id": "mio-marshal-type",
+          "section": "body",
+          "type": "textBox",
+          "content": "Movement Type:\n{{request.passType}}",
+          "order": 270,
+          "visible": true,
+          "position": {
+            "x": 9,
+            "y": 99,
+            "width": 48,
+            "height": 8.2,
+            "zIndex": 10
+          },
+          "style": {
+            "fontFamily": "Arial",
+            "fontSize": 5.25,
+            "lineHeight": 1.06,
+            "textColor": "#071f4f",
+            "padding": 2,
+            "margin": 0,
+            "borderColor": "#64748b",
+            "borderWidth": 1,
+            "radius": 0
+          }
+        },
+        {
+          "id": "mio-marshal-schedule",
+          "section": "body",
+          "type": "textBox",
+          "content": "Scheduled Date:\n{{request.scheduledDate}}",
+          "order": 280,
+          "visible": true,
+          "position": {
+            "x": 57,
+            "y": 99,
+            "width": 48,
+            "height": 8.2,
+            "zIndex": 10
+          },
+          "style": {
+            "fontFamily": "Arial",
+            "fontSize": 5.25,
+            "lineHeight": 1.06,
+            "textColor": "#071f4f",
+            "padding": 2,
+            "margin": 0,
+            "borderColor": "#64748b",
+            "borderWidth": 1,
+            "radius": 0
+          }
+        },
+        {
+          "id": "mio-marshal-time",
+          "section": "body",
+          "type": "textBox",
+          "content": "Time:\n{{request.startTime}} - {{request.endTime}}",
+          "order": 290,
+          "visible": true,
+          "position": {
+            "x": 105,
+            "y": 99,
+            "width": 46,
+            "height": 8.2,
+            "zIndex": 10
+          },
+          "style": {
+            "fontFamily": "Arial",
+            "fontSize": 5.25,
+            "lineHeight": 1.06,
+            "textColor": "#071f4f",
+            "padding": 2,
+            "margin": 0,
+            "borderColor": "#64748b",
+            "borderWidth": 1,
+            "radius": 0
+          }
+        },
+        {
+          "id": "mio-marshal-driver",
+          "section": "body",
+          "type": "textBox",
+          "content": "Driver / Representative:\n{{request.driverName}}",
+          "order": 300,
+          "visible": true,
+          "position": {
+            "x": 151,
+            "y": 99,
+            "width": 50,
+            "height": 8.2,
+            "zIndex": 10
+          },
+          "style": {
+            "fontFamily": "Arial",
+            "fontSize": 5.25,
+            "lineHeight": 1.06,
+            "textColor": "#071f4f",
+            "padding": 2,
+            "margin": 0,
+            "borderColor": "#64748b",
+            "borderWidth": 1,
+            "radius": 0
+          }
+        },
+        {
+          "id": "mio-marshal-company",
+          "section": "body",
+          "type": "textBox",
+          "content": "Moving Company / Service Provider:\n{{request.movingCompany}}",
+          "order": 310,
+          "visible": true,
+          "position": {
+            "x": 9,
+            "y": 107.2,
+            "width": 96,
+            "height": 8.2,
+            "zIndex": 10
+          },
+          "style": {
+            "fontFamily": "Arial",
+            "fontSize": 5.25,
+            "lineHeight": 1.06,
+            "textColor": "#071f4f",
+            "padding": 2,
+            "margin": 0,
+            "borderColor": "#64748b",
+            "borderWidth": 1,
+            "radius": 0
+          }
+        },
+        {
+          "id": "mio-marshal-vehicle",
+          "section": "body",
+          "type": "textBox",
+          "content": "Vehicle / Plate:\n{{request.vehicleDetails}}",
+          "order": 320,
+          "visible": true,
+          "position": {
+            "x": 105,
+            "y": 107.2,
+            "width": 96,
+            "height": 8.2,
+            "zIndex": 10
+          },
+          "style": {
+            "fontFamily": "Arial",
+            "fontSize": 5.25,
+            "lineHeight": 1.06,
+            "textColor": "#071f4f",
+            "padding": 2,
+            "margin": 0,
+            "borderColor": "#64748b",
+            "borderWidth": 1,
+            "radius": 0
+          }
+        },
+        {
+          "id": "mio-marshal-items",
+          "section": "body",
+          "type": "textBox",
+          "content": "Items / Household Goods:\n{{request.itemsSummary}}",
+          "order": 330,
+          "visible": true,
+          "position": {
+            "x": 9,
+            "y": 115.4,
+            "width": 94,
+            "height": 8.2,
+            "zIndex": 10
+          },
+          "style": {
+            "fontFamily": "Arial",
+            "fontSize": 5.25,
+            "lineHeight": 1.06,
+            "textColor": "#071f4f",
+            "padding": 2,
+            "margin": 0,
+            "borderColor": "#64748b",
+            "borderWidth": 1,
+            "radius": 0
+          }
+        },
+        {
+          "id": "mio-marshal-remarks",
+          "section": "body",
+          "type": "textBox",
+          "content": "Purpose / Remarks:\n{{request.purpose}} | {{request.remarks}}",
+          "order": 340,
+          "visible": true,
+          "position": {
+            "x": 103,
+            "y": 115.4,
+            "width": 98,
+            "height": 8.2,
+            "zIndex": 10
+          },
+          "style": {
+            "fontFamily": "Arial",
+            "fontSize": 5.25,
+            "lineHeight": 1.06,
+            "textColor": "#071f4f",
+            "padding": 2,
+            "margin": 0,
+            "borderColor": "#64748b",
+            "borderWidth": 1,
+            "radius": 0
+          }
+        },
+        {
+          "id": "mio-cut-line",
+          "section": "body",
+          "type": "horizontalLine",
+          "order": 350,
+          "visible": true,
+          "position": {
+            "x": 9,
+            "y": 148,
+            "width": 192,
+            "height": 1,
+            "zIndex": 40
+          },
+          "style": {
+            "lineColor": "#111827",
+            "lineWidth": 1,
+            "lineStyle": "dashed",
+            "opacity": 1
+          }
+        },
+        {
+          "id": "mio-cut-text",
+          "section": "body",
+          "type": "text",
+          "content": "CUT HERE",
+          "order": 360,
+          "visible": true,
+          "position": {
+            "x": 72,
+            "y": 145.5,
+            "width": 24,
+            "height": 4,
+            "zIndex": 10
+          },
+          "style": {
+            "fontFamily": "Arial",
+            "fontSize": 5.8,
+            "lineHeight": 1.12,
+            "textColor": "#071f4f",
+            "padding": 0,
+            "margin": 0,
+            "align": "center",
+            "fontWeight": "bold",
+            "backgroundColor": "#ffffff"
+          }
+        },
+        {
+          "id": "mio-homeowner-logo",
+          "section": "body",
+          "type": "logo",
+          "binding": "tenant.logo",
+          "content": "{{tenant.logo}}",
+          "order": 370,
+          "visible": true,
+          "position": {
+            "x": 9,
+            "y": 155,
+            "width": 22,
+            "height": 23,
+            "zIndex": 20
+          },
+          "style": {
+            "align": "center",
+            "borderColor": "#c79318",
+            "borderWidth": 1,
+            "radius": 16,
+            "padding": 2
+          },
+          "image": {
+            "fit": "contain",
+            "positionX": "center",
+            "positionY": "center",
+            "opacity": 1
+          }
+        },
+        {
+          "id": "mio-homeowner-tenant",
+          "section": "body",
+          "type": "text",
+          "content": "{{tenant.name}}\n{{tenant.address}}\nContact: {{tenant.contactNumber}} | {{tenant.email}}\nTIN: {{tenant.tin}} | SEC Registration No.: {{tenant.secRegistration}}",
+          "order": 380,
+          "visible": true,
+          "position": {
+            "x": 39,
+            "y": 153,
+            "width": 118,
+            "height": 21,
+            "zIndex": 10
+          },
+          "style": {
+            "fontFamily": "Arial",
+            "fontSize": 6.2,
+            "lineHeight": 1.02,
+            "textColor": "#071f4f",
+            "padding": 0,
+            "margin": 0,
+            "align": "center",
+            "fontWeight": "bold"
+          }
+        },
+        {
+          "id": "mio-homeowner-gold-left",
+          "section": "body",
+          "type": "horizontalLine",
+          "order": 390,
+          "visible": true,
+          "position": {
+            "x": 50,
+            "y": 181,
+            "width": 32,
+            "height": 1,
+            "zIndex": 9
+          },
+          "style": {
+            "lineColor": "#c79318",
+            "lineWidth": 1,
+            "lineStyle": "solid",
+            "opacity": 1
+          }
+        },
+        {
+          "id": "mio-homeowner-gold-right",
+          "section": "body",
+          "type": "horizontalLine",
+          "order": 400,
+          "visible": true,
+          "position": {
+            "x": 128,
+            "y": 181,
+            "width": 32,
+            "height": 1,
+            "zIndex": 9
+          },
+          "style": {
+            "lineColor": "#c79318",
+            "lineWidth": 1,
+            "lineStyle": "solid",
+            "opacity": 1
+          }
+        },
+        {
+          "id": "mio-homeowner-title",
+          "section": "body",
+          "type": "documentTitle",
+          "content": "MOVE-IN / MOVE-OUT PASS",
+          "order": 410,
+          "visible": true,
+          "position": {
+            "x": 43,
+            "y": 182.5,
+            "width": 124,
+            "height": 9,
+            "zIndex": 10
+          },
+          "style": {
+            "fontFamily": "Times New Roman",
+            "fontSize": 17,
+            "lineHeight": 1,
+            "textColor": "#071f4f",
+            "padding": 0,
+            "margin": 0,
+            "align": "center",
+            "fontWeight": "bold"
+          }
+        },
+        {
+          "id": "mio-homeowner-copy-label",
+          "section": "body",
+          "type": "textBox",
+          "content": "HOMEOWNER'S COPY",
+          "order": 420,
+          "visible": true,
+          "position": {
+            "x": 162,
+            "y": 155,
+            "width": 39,
+            "height": 7,
+            "zIndex": 10
+          },
+          "style": {
+            "fontFamily": "Arial",
+            "fontSize": 7.2,
+            "lineHeight": 1,
+            "textColor": "#ffffff",
+            "padding": 2,
+            "margin": 0,
+            "borderColor": "#c79318",
+            "borderWidth": 1,
+            "radius": 3,
+            "align": "center",
+            "backgroundColor": "#071f4f",
+            "fontWeight": "bold"
+          }
+        },
+        {
+          "id": "mio-homeowner-badge",
+          "section": "body",
+          "type": "textBox",
+          "content": "{{document.status}}\nMOVE-IN / MOVE-OUT PASS",
+          "order": 430,
+          "visible": true,
+          "position": {
+            "x": 166,
+            "y": 167,
+            "width": 31,
+            "height": 22,
+            "zIndex": 10
+          },
+          "style": {
+            "fontFamily": "Arial",
+            "fontSize": 7.2,
+            "lineHeight": 1.03,
+            "textColor": "#071f4f",
+            "padding": 5,
+            "margin": 0,
+            "borderColor": "#c79318",
+            "borderWidth": 1,
+            "radius": 6,
+            "align": "center",
+            "fontWeight": "bold"
+          }
+        },
+        {
+          "id": "mio-homeowner-doc-no",
+          "section": "body",
+          "type": "textBox",
+          "content": "Document No.:\n{{document.number}}",
+          "order": 440,
+          "visible": true,
+          "position": {
+            "x": 9,
+            "y": 194,
+            "width": 49,
+            "height": 9,
+            "zIndex": 10
+          },
+          "style": {
+            "fontFamily": "Arial",
+            "fontSize": 5.25,
+            "lineHeight": 1.06,
+            "textColor": "#071f4f",
+            "padding": 2,
+            "margin": 0,
+            "borderColor": "#64748b",
+            "borderWidth": 1,
+            "radius": 0
+          }
+        },
+        {
+          "id": "mio-homeowner-issued",
+          "section": "body",
+          "type": "textBox",
+          "content": "Date Issued:\n{{document.issueDate}}",
+          "order": 450,
+          "visible": true,
+          "position": {
+            "x": 58,
+            "y": 194,
+            "width": 49,
+            "height": 9,
+            "zIndex": 10
+          },
+          "style": {
+            "fontFamily": "Arial",
+            "fontSize": 5.25,
+            "lineHeight": 1.06,
+            "textColor": "#071f4f",
+            "padding": 2,
+            "margin": 0,
+            "borderColor": "#64748b",
+            "borderWidth": 1,
+            "radius": 0
+          }
+        },
+        {
+          "id": "mio-homeowner-valid",
+          "section": "body",
+          "type": "textBox",
+          "content": "Validity Date:\n{{document.validUntil}}",
+          "order": 460,
+          "visible": true,
+          "position": {
+            "x": 107,
+            "y": 194,
+            "width": 49,
+            "height": 9,
+            "zIndex": 10
+          },
+          "style": {
+            "fontFamily": "Arial",
+            "fontSize": 5.25,
+            "lineHeight": 1.06,
+            "textColor": "#071f4f",
+            "padding": 2,
+            "margin": 0,
+            "borderColor": "#64748b",
+            "borderWidth": 1,
+            "radius": 0
+          }
+        },
+        {
+          "id": "mio-homeowner-status",
+          "section": "body",
+          "type": "textBox",
+          "content": "Status:\n{{document.status}}",
+          "order": 470,
+          "visible": true,
+          "position": {
+            "x": 156,
+            "y": 194,
+            "width": 45,
+            "height": 9,
+            "zIndex": 10
+          },
+          "style": {
+            "fontFamily": "Arial",
+            "fontSize": 5.25,
+            "lineHeight": 1.06,
+            "textColor": "#071f4f",
+            "padding": 2,
+            "margin": 0,
+            "borderColor": "#64748b",
+            "borderWidth": 1,
+            "radius": 0
+          }
+        },
+        {
+          "id": "mio-homeowner-resident-label",
+          "section": "body",
+          "type": "textBox",
+          "content": "HOMEOWNER / RESIDENT INFORMATION",
+          "order": 480,
+          "visible": true,
+          "position": {
+            "x": 9,
+            "y": 206,
+            "width": 72,
+            "height": 6,
+            "zIndex": 10
+          },
+          "style": {
+            "fontFamily": "Arial",
+            "fontSize": 6.8,
+            "lineHeight": 1,
+            "textColor": "#ffffff",
+            "padding": 2,
+            "margin": 0,
+            "borderColor": "#071f4f",
+            "borderWidth": 1,
+            "radius": 1,
+            "backgroundColor": "#071f4f",
+            "fontWeight": "bold"
+          }
+        },
+        {
+          "id": "mio-homeowner-name",
+          "section": "body",
+          "type": "textBox",
+          "content": "Homeowner / Resident Name:\n{{subject.fullName}}",
+          "order": 490,
+          "visible": true,
+          "position": {
+            "x": 9,
+            "y": 213,
+            "width": 110,
+            "height": 8.5,
+            "zIndex": 10
+          },
+          "style": {
+            "fontFamily": "Arial",
+            "fontSize": 5.25,
+            "lineHeight": 1.06,
+            "textColor": "#071f4f",
+            "padding": 2,
+            "margin": 0,
+            "borderColor": "#64748b",
+            "borderWidth": 1,
+            "radius": 0
+          }
+        },
+        {
+          "id": "mio-homeowner-account",
+          "section": "body",
+          "type": "textBox",
+          "content": "Account No.:\n{{property.accountNumber}}",
+          "order": 500,
+          "visible": true,
+          "position": {
+            "x": 119,
+            "y": 213,
+            "width": 82,
+            "height": 8.5,
+            "zIndex": 10
+          },
+          "style": {
+            "fontFamily": "Arial",
+            "fontSize": 5.25,
+            "lineHeight": 1.06,
+            "textColor": "#071f4f",
+            "padding": 2,
+            "margin": 0,
+            "borderColor": "#64748b",
+            "borderWidth": 1,
+            "radius": 0
+          }
+        },
+        {
+          "id": "mio-homeowner-address",
+          "section": "body",
+          "type": "textBox",
+          "content": "Address / Property:\n{{property.address}}",
+          "order": 510,
+          "visible": true,
+          "position": {
+            "x": 9,
+            "y": 221.5,
+            "width": 135,
+            "height": 8.5,
+            "zIndex": 10
+          },
+          "style": {
+            "fontFamily": "Arial",
+            "fontSize": 5.25,
+            "lineHeight": 1.06,
+            "textColor": "#071f4f",
+            "padding": 2,
+            "margin": 0,
+            "borderColor": "#64748b",
+            "borderWidth": 1,
+            "radius": 0
+          }
+        },
+        {
+          "id": "mio-homeowner-contact",
+          "section": "body",
+          "type": "textBox",
+          "content": "Contact No.:\n{{subject.contactNumber}}",
+          "order": 520,
+          "visible": true,
+          "position": {
+            "x": 144,
+            "y": 221.5,
+            "width": 57,
+            "height": 8.5,
+            "zIndex": 10
+          },
+          "style": {
+            "fontFamily": "Arial",
+            "fontSize": 5.25,
+            "lineHeight": 1.06,
+            "textColor": "#071f4f",
+            "padding": 2,
+            "margin": 0,
+            "borderColor": "#64748b",
+            "borderWidth": 1,
+            "radius": 0
+          }
+        },
+        {
+          "id": "mio-homeowner-blocklot",
+          "section": "body",
+          "type": "textBox",
+          "content": "Block / Lot:\nBlock {{property.block}}, Lot {{property.lot}}",
+          "order": 530,
+          "visible": true,
+          "position": {
+            "x": 9,
+            "y": 230,
+            "width": 192,
+            "height": 8.5,
+            "zIndex": 10
+          },
+          "style": {
+            "fontFamily": "Arial",
+            "fontSize": 5.25,
+            "lineHeight": 1.06,
+            "textColor": "#071f4f",
+            "padding": 2,
+            "margin": 0,
+            "borderColor": "#64748b",
+            "borderWidth": 1,
+            "radius": 0
+          }
+        },
+        {
+          "id": "mio-homeowner-qr",
+          "section": "body",
+          "type": "qrVerification",
+          "content": "Scan to verify this document.",
+          "order": 540,
+          "visible": true,
+          "position": {
+            "x": 12,
+            "y": 273,
+            "width": 23,
+            "height": 23,
+            "zIndex": 30
+          },
+          "style": {
+            "align": "center",
+            "fontFamily": "Arial",
+            "fontSize": 6,
+            "lineHeight": 1.05,
+            "textColor": "#071f4f",
+            "padding": 1,
+            "margin": 0
+          },
+          "qr": {
+            "label": "SCAN TO VERIFY",
+            "instruction": "Scan to verify this document.",
+            "showLabel": true,
+            "showInstruction": true,
+            "squareLocked": true,
+            "quietZone": 1
+          }
+        },
+        {
+          "id": "mio-homeowner-requested-line",
+          "section": "body",
+          "type": "horizontalLine",
+          "order": 550,
+          "visible": true,
+          "position": {
+            "x": 42,
+            "y": 277,
+            "width": 42,
+            "height": 1,
+            "zIndex": 20
+          },
+          "style": {
+            "lineColor": "#111827",
+            "lineWidth": 1,
+            "lineStyle": "solid",
+            "opacity": 1
+          }
+        },
+        {
+          "id": "mio-homeowner-requested-label",
+          "section": "body",
+          "type": "text",
+          "content": "Requested by\n{{subject.fullName}}",
+          "order": 560,
+          "visible": true,
+          "position": {
+            "x": 42,
+            "y": 278.5,
+            "width": 42,
+            "height": 10,
+            "zIndex": 10
+          },
+          "style": {
+            "fontFamily": "Arial",
+            "fontSize": 5.15,
+            "lineHeight": 1.05,
+            "textColor": "#071f4f",
+            "padding": 0,
+            "margin": 0,
+            "align": "center"
+          }
+        },
+        {
+          "id": "mio-homeowner-approved-line",
+          "section": "body",
+          "type": "horizontalLine",
+          "order": 570,
+          "visible": true,
+          "position": {
+            "x": 90,
+            "y": 277,
+            "width": 44,
+            "height": 1,
+            "zIndex": 20
+          },
+          "style": {
+            "lineColor": "#111827",
+            "lineWidth": 1,
+            "lineStyle": "solid",
+            "opacity": 1
+          }
+        },
+        {
+          "id": "mio-homeowner-approved-label",
+          "section": "body",
+          "type": "text",
+          "content": "Approved by\n{{signatory.name}}\n{{signatory.position}}",
+          "order": 580,
+          "visible": true,
+          "position": {
+            "x": 90,
+            "y": 278.5,
+            "width": 44,
+            "height": 10,
+            "zIndex": 10
+          },
+          "style": {
+            "fontFamily": "Arial",
+            "fontSize": 5.15,
+            "lineHeight": 1.05,
+            "textColor": "#071f4f",
+            "padding": 0,
+            "margin": 0,
+            "align": "center"
+          }
+        },
+        {
+          "id": "mio-homeowner-homeowner-note",
+          "section": "body",
+          "type": "textBox",
+          "content": "Present this copy to the assigned marshal or security personnel upon entry or exit.\n\nApproval Date: {{request.approvalDate}}",
+          "order": 590,
+          "visible": true,
+          "position": {
+            "x": 140,
+            "y": 272,
+            "width": 61,
+            "height": 19,
+            "zIndex": 10
+          },
+          "style": {
+            "fontFamily": "Arial",
+            "fontSize": 5.2,
+            "lineHeight": 1.06,
+            "textColor": "#071f4f",
+            "padding": 3,
+            "margin": 0,
+            "borderColor": "#071f4f",
+            "borderWidth": 1,
+            "radius": 0
+          }
+        },
+        {
+          "id": "mio-homeowner-footer-line",
+          "section": "body",
+          "type": "horizontalLine",
+          "order": 600,
+          "visible": true,
+          "position": {
+            "x": 52,
+            "y": 289.6,
+            "width": 86,
+            "height": 1,
+            "zIndex": 9
+          },
+          "style": {
+            "lineColor": "#c79318",
+            "lineWidth": 1,
+            "lineStyle": "solid",
+            "opacity": 1
+          }
+        },
+        {
+          "id": "mio-homeowner-footer",
+          "section": "body",
+          "type": "text",
+          "content": "This pass is valid only for the stated purpose and validity period.",
+          "order": 610,
+          "visible": true,
+          "position": {
+            "x": 48,
+            "y": 291.5,
+            "width": 92,
+            "height": 4,
+            "zIndex": 10
+          },
+          "style": {
+            "fontFamily": "Arial",
+            "fontSize": 5.5,
+            "lineHeight": 1,
+            "textColor": "#071f4f",
+            "padding": 0,
+            "margin": 0,
+            "align": "center",
+            "fontWeight": "bold"
+          }
+        },
+        {
+          "id": "mio-homeowner-details-label",
+          "section": "body",
+          "type": "textBox",
+          "content": "MOVEMENT DETAILS",
+          "order": 620,
+          "visible": true,
+          "position": {
+            "x": 9,
+            "y": 241,
+            "width": 55,
+            "height": 6,
+            "zIndex": 10
+          },
+          "style": {
+            "fontFamily": "Arial",
+            "fontSize": 6.8,
+            "lineHeight": 1,
+            "textColor": "#ffffff",
+            "padding": 2,
+            "margin": 0,
+            "borderColor": "#071f4f",
+            "borderWidth": 1,
+            "radius": 1,
+            "backgroundColor": "#071f4f",
+            "fontWeight": "bold"
+          }
+        },
+        {
+          "id": "mio-homeowner-type",
+          "section": "body",
+          "type": "textBox",
+          "content": "Movement Type:\n{{request.passType}}",
+          "order": 630,
+          "visible": true,
+          "position": {
+            "x": 9,
+            "y": 248,
+            "width": 48,
+            "height": 8.2,
+            "zIndex": 10
+          },
+          "style": {
+            "fontFamily": "Arial",
+            "fontSize": 5.25,
+            "lineHeight": 1.06,
+            "textColor": "#071f4f",
+            "padding": 2,
+            "margin": 0,
+            "borderColor": "#64748b",
+            "borderWidth": 1,
+            "radius": 0
+          }
+        },
+        {
+          "id": "mio-homeowner-schedule",
+          "section": "body",
+          "type": "textBox",
+          "content": "Scheduled Date:\n{{request.scheduledDate}}",
+          "order": 640,
+          "visible": true,
+          "position": {
+            "x": 57,
+            "y": 248,
+            "width": 48,
+            "height": 8.2,
+            "zIndex": 10
+          },
+          "style": {
+            "fontFamily": "Arial",
+            "fontSize": 5.25,
+            "lineHeight": 1.06,
+            "textColor": "#071f4f",
+            "padding": 2,
+            "margin": 0,
+            "borderColor": "#64748b",
+            "borderWidth": 1,
+            "radius": 0
+          }
+        },
+        {
+          "id": "mio-homeowner-time",
+          "section": "body",
+          "type": "textBox",
+          "content": "Time:\n{{request.startTime}} - {{request.endTime}}",
+          "order": 650,
+          "visible": true,
+          "position": {
+            "x": 105,
+            "y": 248,
+            "width": 46,
+            "height": 8.2,
+            "zIndex": 10
+          },
+          "style": {
+            "fontFamily": "Arial",
+            "fontSize": 5.25,
+            "lineHeight": 1.06,
+            "textColor": "#071f4f",
+            "padding": 2,
+            "margin": 0,
+            "borderColor": "#64748b",
+            "borderWidth": 1,
+            "radius": 0
+          }
+        },
+        {
+          "id": "mio-homeowner-driver",
+          "section": "body",
+          "type": "textBox",
+          "content": "Driver / Representative:\n{{request.driverName}}",
+          "order": 660,
+          "visible": true,
+          "position": {
+            "x": 151,
+            "y": 248,
+            "width": 50,
+            "height": 8.2,
+            "zIndex": 10
+          },
+          "style": {
+            "fontFamily": "Arial",
+            "fontSize": 5.25,
+            "lineHeight": 1.06,
+            "textColor": "#071f4f",
+            "padding": 2,
+            "margin": 0,
+            "borderColor": "#64748b",
+            "borderWidth": 1,
+            "radius": 0
+          }
+        },
+        {
+          "id": "mio-homeowner-company",
+          "section": "body",
+          "type": "textBox",
+          "content": "Moving Company / Service Provider:\n{{request.movingCompany}}",
+          "order": 670,
+          "visible": true,
+          "position": {
+            "x": 9,
+            "y": 256.2,
+            "width": 96,
+            "height": 8.2,
+            "zIndex": 10
+          },
+          "style": {
+            "fontFamily": "Arial",
+            "fontSize": 5.25,
+            "lineHeight": 1.06,
+            "textColor": "#071f4f",
+            "padding": 2,
+            "margin": 0,
+            "borderColor": "#64748b",
+            "borderWidth": 1,
+            "radius": 0
+          }
+        },
+        {
+          "id": "mio-homeowner-vehicle",
+          "section": "body",
+          "type": "textBox",
+          "content": "Vehicle / Plate:\n{{request.vehicleDetails}}",
+          "order": 680,
+          "visible": true,
+          "position": {
+            "x": 105,
+            "y": 256.2,
+            "width": 96,
+            "height": 8.2,
+            "zIndex": 10
+          },
+          "style": {
+            "fontFamily": "Arial",
+            "fontSize": 5.25,
+            "lineHeight": 1.06,
+            "textColor": "#071f4f",
+            "padding": 2,
+            "margin": 0,
+            "borderColor": "#64748b",
+            "borderWidth": 1,
+            "radius": 0
+          }
+        },
+        {
+          "id": "mio-homeowner-items",
+          "section": "body",
+          "type": "textBox",
+          "content": "Items / Household Goods:\n{{request.itemsSummary}}",
+          "order": 690,
+          "visible": true,
+          "position": {
+            "x": 9,
+            "y": 264.4,
+            "width": 94,
+            "height": 8.2,
+            "zIndex": 10
+          },
+          "style": {
+            "fontFamily": "Arial",
+            "fontSize": 5.25,
+            "lineHeight": 1.06,
+            "textColor": "#071f4f",
+            "padding": 2,
+            "margin": 0,
+            "borderColor": "#64748b",
+            "borderWidth": 1,
+            "radius": 0
+          }
+        },
+        {
+          "id": "mio-homeowner-remarks",
+          "section": "body",
+          "type": "textBox",
+          "content": "Purpose / Remarks:\n{{request.purpose}} | {{request.remarks}}",
+          "order": 700,
+          "visible": true,
+          "position": {
+            "x": 103,
+            "y": 264.4,
+            "width": 98,
+            "height": 8.2,
+            "zIndex": 10
+          },
+          "style": {
+            "fontFamily": "Arial",
+            "fontSize": 5.25,
+            "lineHeight": 1.06,
+            "textColor": "#071f4f",
+            "padding": 2,
+            "margin": 0,
+            "borderColor": "#64748b",
+            "borderWidth": 1,
+            "radius": 0
+          }
+        }
+      ],
+      "footer": []
+    },
+    "blocks": [],
+    "meta": {
+      "editor": "professional-document-editor",
+      "requiresSignatory": true,
+      "revisionNote": "Local draft visual UAT redesign: two-copy navy/gold pass layout."
+    }
+  }
+}

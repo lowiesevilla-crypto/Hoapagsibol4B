@@ -64,14 +64,16 @@ export default async function InstallApprovedPassTemplatesPage({ searchParams }:
                 <h3 className="text-base font-black text-slate-950">{plan.definitionName || plan.target}</h3>
                 <p className="mt-1 text-xs font-semibold text-slate-500">Definition {plan.definitionId}</p>
               </div>
-              <span className={`badge ${plan.action === "BLOCKED" ? "badge-overdue" : plan.action === "CREATE_DRAFT" ? "badge-info" : "badge-paid"}`}>{plan.action.replaceAll("_", " ")}</span>
+              <span className={`badge ${plan.action === "BLOCKED" ? "badge-overdue" : plan.action === "ALREADY_INSTALLED" ? "badge-paid" : "badge-info"}`}>{plan.action.replaceAll("_", " ")}</span>
             </div>
             {plan.blockReason && <p className="mt-3 rounded-lg bg-rose-50 p-3 text-sm font-bold text-rose-800">{plan.blockReason}</p>}
+            {plan.preservedDraftVersions.length > 0 && plan.action !== "ALREADY_INSTALLED" && <p className="mt-3 rounded-lg bg-amber-50 p-3 text-sm font-bold text-amber-900">Existing Drafts v{plan.preservedDraftVersions.join(", v")} will be preserved. Planned approved Draft: v{plan.nextVersion}.</p>}
             <div className="mt-4 grid gap-3 text-sm sm:grid-cols-2 xl:grid-cols-3">
-              <Info label="Assigned published" value={`v${plan.assignedPublishedVersionNumber} ${plan.assignedStatus}`} />
+              <Info label="Published unchanged" value={`v${plan.assignedPublishedVersionNumber} ${plan.assignedStatus}`} />
+              <Info label="Existing Drafts preserved" value={plan.preservedDraftVersions.length ? `v${plan.preservedDraftVersions.join(", v")}` : "None"} />
+              <Info label="Planned approved Draft" value={plan.action === "ALREADY_INSTALLED" ? "Already installed" : `v${plan.nextVersion}`} />
               <Info label="Template set" value={plan.templateSetId} />
               <Info label="Highest version" value={`v${plan.currentHighestVersion}`} />
-              <Info label="Next draft" value={`v${plan.nextVersion}`} />
               <Info label="Approved hash" value={plan.approvedPackageContentHash} />
               <Info label="Assigned version ID" value={plan.assignedTemplateVersionId} />
             </div>
@@ -105,9 +107,17 @@ export default async function InstallApprovedPassTemplatesPage({ searchParams }:
               <span className="label">Confirmation phrase</span>
               <input className="field" name="confirmationPhrase" placeholder={snapshot?.confirmationPhrase ?? ""} disabled={!applyReady} required />
             </label>
+            <label className="block">
+              <span className="label">Preserve Drafts Confirmation Phrase</span>
+              <input className="field" name="preserveDraftsConfirmationPhrase" placeholder={snapshot?.preserveDraftsConfirmationPhrase ?? ""} disabled={!applyReady} required />
+            </label>
             <label className="flex items-start gap-3 rounded-xl bg-slate-50 p-3 text-sm font-semibold text-slate-700">
               <input className="mt-1 size-5" type="checkbox" name="publishedUnchanged" disabled={!applyReady} required />
               Published templates and assigned versions will remain unchanged.
+            </label>
+            <label className="flex items-start gap-3 rounded-xl bg-slate-50 p-3 text-sm font-semibold text-slate-700">
+              <input className="mt-1 size-5" type="checkbox" name="preserveDraftsUnchanged" disabled={!applyReady} required />
+              Existing Drafts will remain and new approved Draft versions will be created.
             </label>
             <button className="btn-primary min-h-11 w-full disabled:cursor-not-allowed disabled:opacity-50" type="submit" disabled={!applyReady}>Create Draft Versions</button>
           </form>

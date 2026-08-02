@@ -1,7 +1,7 @@
 import "server-only";
 
 import crypto from "node:crypto";
-import { DocumentTemplateVersionStatus, Prisma, Role, type DocumentTemplateOwnership } from "@prisma/client";
+import { DocumentTemplateOwnership, DocumentTemplateVersionStatus, Prisma, Role } from "@prisma/client";
 import gatePassPackage from "@/templates/pass-templates/gate-pass-two-copy-a4.json";
 import moveInOutPackage from "@/templates/pass-templates/move-in-out-two-copy-a4.json";
 import { platformPrisma } from "@/lib/db";
@@ -10,6 +10,7 @@ import { allowedDocumentPlaceholders, extractPlaceholders, validateTemplateDefin
 export const approvedPassTemplateInstallerPath = "/admin/settings/document-templates/install-approved-passes";
 export const approvedPassTemplateInstallerFlag = "ENABLE_APPROVED_PASS_TEMPLATE_INSTALLER";
 export const approvedPassTemplateConfirmationPhrase = "INSTALL APPROVED PASS DRAFTS";
+export const approvedPassTemplatePreserveDraftsConfirmationPhrase = "PRESERVE EXISTING DRAFTS AND CREATE APPROVED VERSIONS";
 export const targetTenantId = "tenant_pagsibol4b_default";
 
 export type ApprovedPassTemplatePackage = {
@@ -76,7 +77,7 @@ export type ApprovedPassTemplatePlan = {
   key: TargetPassTemplate["key"];
   target: string;
   definitionName: string;
-  action: "CREATE_DRAFT" | "ALREADY_INSTALLED" | "BLOCKED";
+  action: "CREATE_DRAFT" | "PRESERVE_EXISTING_DRAFTS_CREATE_NEW" | "ALREADY_INSTALLED" | "BLOCKED";
   blockReason?: string;
   definitionId: string;
   assignedTemplateVersionId: string;
@@ -91,6 +92,8 @@ export type ApprovedPassTemplatePlan = {
   assignedPublishedVersionNumber: number;
   existingVersionId?: string;
   existingDraftVersionId?: string;
+  preservedDraftVersionIds: string[];
+  preservedDraftVersions: number[];
   versionStatuses: Array<{
     version: number;
     status: DocumentTemplateVersionStatus;
@@ -131,13 +134,15 @@ export async function applyApprovedPassTemplateInstallation(input: { actorUserId
   assertTargetTenant(input.tenantId);
   return platformPrisma.$transaction(async (tx) => {
     const plans = await analyzeApprovedPassTemplateInstallation({ tenantId: input.tenantId, client: tx });
+    const transactionDigest = installationPlanDigest({ actorUserId: input.actorUserId, tenantId: input.tenantId, plans });
+    if (transactionDigest !== input.dryRunDigest) throw new Error("Production template state changed after dry-run. Run dry-run again before applying.");
     const blocked = plans.find((plan) => plan.action === "BLOCKED");
-    if (blocked) throw new Error(blocked.blockReason || "EXISTING PRODUCTION DRAFT REQUIRES REVIEW");
+    if (blocked) throw new Error(blocked.blockReason || "Approved pass template installation is blocked.");
 
     const packages = new Map(loadApprovedPassTemplatePackages().map((item) => [item.target.key, item]));
     const createdVersions: ApprovedPassTemplateApplyResult["createdVersions"] = [];
     for (const plan of plans) {
-      if (plan.action !== "CREATE_DRAFT") continue;
+      if (plan.action !== "CREATE_DRAFT" && plan.action !== "PRESERVE_EXISTING_DRAFTS_CREATE_NEW") continue;
       const item = packages.get(plan.key);
       if (!item) throw new Error(`Approved package is unavailable for ${plan.target}.`);
       const created = await tx.documentTemplateVersion.create({
@@ -177,6 +182,11 @@ export async function applyApprovedPassTemplateInstallation(input: { actorUserId
           targetTenantId: input.tenantId,
           createdVersions,
           results: plans.map(sanitizePlanForAudit),
+          preservedExistingDrafts: plans.map((plan) => ({
+            target: plan.target,
+            preservedDraftVersions: plan.preservedDraftVersions,
+            preservedDraftVersionIds: plan.preservedDraftVersionIds,
+          })),
           timestamp: new Date().toISOString(),
         }),
       },
@@ -203,6 +213,7 @@ export function planApprovedPassTemplateFromState(target: TargetPassTemplate, pk
     throw new Error(`PRODUCTION TEMPLATE STATE CHANGED: ${target.label} assigned template set is not tied to the expected definition.`);
   }
   if (!templateSet.editable) throw new Error(`PRODUCTION TEMPLATE STATE CHANGED: ${target.label} template set is not editable.`);
+  if (templateSet.ownershipType !== DocumentTemplateOwnership.TENANT) throw new Error(`PRODUCTION TEMPLATE STATE CHANGED: ${target.label} template set is not tenant-owned.`);
 
   const versionSummaries = templateSet.versions.map((version) => ({
     id: version.id,
@@ -213,7 +224,7 @@ export function planApprovedPassTemplateFromState(target: TargetPassTemplate, pk
   }));
   const drafts = versionSummaries.filter((version) => version.status === DocumentTemplateVersionStatus.DRAFT);
   const exactDraft = drafts.find((version) => version.matchesApprovedPackage);
-  const differentDraft = drafts.find((version) => !version.matchesApprovedPackage);
+  const differentDrafts = drafts.filter((version) => !version.matchesApprovedPackage);
   const alreadyPresent = versionSummaries.find((version) => version.matchesApprovedPackage);
   const currentHighestVersion = versionSummaries.reduce((max, version) => Math.max(max, version.version), 0);
   const common = {
@@ -231,27 +242,23 @@ export function planApprovedPassTemplateFromState(target: TargetPassTemplate, pk
     expectedNewDraftVersion: currentHighestVersion + 1,
     approvedPackageContentHash: pkg.contentHash,
     assignedPublishedVersionNumber: assigned.version,
+    preservedDraftVersionIds: differentDrafts.map((version) => version.id),
+    preservedDraftVersions: differentDrafts.map((version) => version.version).sort((left, right) => left - right),
     versionStatuses: versionSummaries.map((version) => ({
       version: version.version,
       status: version.status,
       matchesApprovedPackage: version.matchesApprovedPackage,
     })),
   };
-  if (differentDraft) {
-    return {
-      ...common,
-      action: "BLOCKED",
-      blockReason: "EXISTING PRODUCTION DRAFT REQUIRES REVIEW",
-      existingDraftVersionId: differentDraft.id,
-    };
-  }
   if (exactDraft || alreadyPresent) {
     return {
       ...common,
       action: "ALREADY_INSTALLED",
       existingVersionId: (exactDraft ?? alreadyPresent)?.id,
+      existingDraftVersionId: exactDraft?.id,
     };
   }
+  if (differentDrafts.length) return { ...common, action: "PRESERVE_EXISTING_DRAFTS_CREATE_NEW" };
   return { ...common, action: "CREATE_DRAFT" };
 }
 
@@ -300,9 +307,11 @@ export function assertApprovedPassTemplateInstallerRole(role: Role) {
   }
 }
 
-export function assertInstallerConfirmation(input: { phrase: FormDataEntryValue | null; acknowledged: FormDataEntryValue | null }) {
+export function assertInstallerConfirmation(input: { phrase: FormDataEntryValue | null; preservePhrase: FormDataEntryValue | null; acknowledged: FormDataEntryValue | null; preserveAcknowledged: FormDataEntryValue | null }) {
   if (String(input.phrase || "").trim() !== approvedPassTemplateConfirmationPhrase) throw new Error("The confirmation phrase did not match.");
   if (input.acknowledged !== "on") throw new Error("Confirm that published templates will not be changed.");
+  if (String(input.preservePhrase || "").trim() !== approvedPassTemplatePreserveDraftsConfirmationPhrase) throw new Error("The preserve-existing-drafts confirmation phrase did not match.");
+  if (input.preserveAcknowledged !== "on") throw new Error("Confirm that existing Drafts will be preserved and new approved Draft versions will be created.");
 }
 
 export function sanitizePlanForDisplay(plan: ApprovedPassTemplatePlan) {
@@ -322,6 +331,8 @@ export function sanitizePlanForDisplay(plan: ApprovedPassTemplatePlan) {
     approvedPackageContentHash: plan.approvedPackageContentHash,
     existingDraftVersionId: plan.existingDraftVersionId,
     existingVersionId: plan.existingVersionId,
+    preservedDraftVersionIds: plan.preservedDraftVersionIds,
+    preservedDraftVersions: plan.preservedDraftVersions,
     versionStatuses: plan.versionStatuses,
   };
 }
@@ -386,7 +397,9 @@ function sanitizePlanForAudit(plan: ApprovedPassTemplatePlan) {
     currentHighestVersion: plan.currentHighestVersion,
     nextVersion: plan.nextVersion,
     approvedPackageContentHash: plan.approvedPackageContentHash,
-    createdDraftExpected: plan.action === "CREATE_DRAFT",
+    createdDraftExpected: plan.action === "CREATE_DRAFT" || plan.action === "PRESERVE_EXISTING_DRAFTS_CREATE_NEW",
+    preservedDraftVersions: plan.preservedDraftVersions,
+    preservedDraftVersionIds: plan.preservedDraftVersionIds,
   };
 }
 

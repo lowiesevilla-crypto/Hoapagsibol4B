@@ -1,5 +1,5 @@
 import { Role } from "@prisma/client";
-import { ArrowLeft, Download, List } from "lucide-react";
+import { ArrowLeft, Download, List, ReceiptText } from "lucide-react";
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { AssociationLogo } from "@/components/association-logo";
@@ -86,11 +86,11 @@ export default async function ReceiptPage({ params }: { params: Promise<{ kind: 
 
   return (
     <main className="print-document mx-auto min-h-screen max-w-4xl bg-white p-4 sm:p-8">
-      <div className="print-hidden mb-5 flex flex-wrap justify-end gap-2">
-        {kind === "payment" && user.role !== Role.HOMEOWNER && <Link className="btn-secondary" href="/admin/payments/record"><ArrowLeft className="size-4" /> Return to Record Payment</Link>}
-        {kind === "payment" && user.role !== Role.HOMEOWNER && <Link className="btn-secondary" href="/admin/payments/active"><List className="size-4" /> Return to Payments</Link>}
-        {kind === "payment" && user.role === Role.HOMEOWNER && <Link className="btn-secondary" href="/portal/payments"><ArrowLeft className="size-4" /> Return to My Payments</Link>}
-        <Link className="btn-secondary" href={`/receipts/${kind}/${id}/pdf`}><Download className="size-4" /> Download PDF</Link>
+      <div className="print-hidden mb-5 grid gap-2 sm:flex sm:flex-wrap sm:justify-end">
+        {kind === "payment" && user.role !== Role.HOMEOWNER && <Link className="btn-secondary min-h-12" href="/admin/payments/record"><ArrowLeft className="size-4" /> Return to Record Payment</Link>}
+        {kind === "payment" && user.role !== Role.HOMEOWNER && <Link className="btn-secondary min-h-12" href="/admin/payments/active"><List className="size-4" /> Return to Payments</Link>}
+        {kind === "payment" && user.role === Role.HOMEOWNER && <Link className="btn-secondary min-h-12" href="/portal/payments"><ArrowLeft className="size-4" /> Return to My Payments</Link>}
+        <Link className="btn-secondary min-h-12" href={`/receipts/${kind}/${id}/pdf`}><Download className="size-4" /> Download PDF</Link>
         <PrintButton label="Print Receipt" />
       </div>
       <section className="border-2 border-ink p-4 sm:p-7">
@@ -120,7 +120,23 @@ export default async function ReceiptPage({ params }: { params: Promise<{ kind: 
           <Field label="Payment For" value={receipt.purpose} />
         </div>
 
-        <div className="overflow-x-auto">
+        <div className="space-y-3 sm:hidden">
+          {receipt.allocations.map((allocation) => <article key={allocation.key} className="rounded-2xl border border-ink/20 p-3">
+            <div className="flex items-start gap-3">
+              <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-pine-50 text-pine-700"><ReceiptText className="size-5" aria-hidden="true" /></span>
+              <div className="min-w-0 flex-1">
+                <p className="break-words font-black">{allocation.coverage}</p>
+                <p className="mt-1 text-xs font-semibold text-slate-500">{allocation.billType}</p>
+                <dl className="mt-3 grid grid-cols-2 gap-2 text-sm">
+                  <div><dt className="text-[10px] font-black uppercase text-slate-500">Applied</dt><dd className="font-black">{money(allocation.amount)}</dd></div>
+                  <div><dt className="text-[10px] font-black uppercase text-slate-500">Bill balance</dt><dd className="font-bold">{allocation.remainingBalance === null ? "-" : money(allocation.remainingBalance)}</dd></div>
+                </dl>
+              </div>
+            </div>
+          </article>)}
+        </div>
+
+        <div className="hidden overflow-x-auto sm:block">
           <table className="w-full min-w-[520px] border-collapse text-sm">
             <thead><tr><th className="border border-ink p-2 text-left">Covered billing / particulars</th><th className="w-40 border border-ink p-2 text-right">Amount applied</th><th className="w-40 border border-ink p-2 text-right">Remaining bill balance</th></tr></thead>
             <tbody>

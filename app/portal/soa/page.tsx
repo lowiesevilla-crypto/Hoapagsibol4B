@@ -1,7 +1,9 @@
 import Link from "next/link";
 import { CalendarDays, CreditCard, Download, FileText, QrCode, ReceiptText } from "lucide-react";
+import { PaymentAreaNavigation } from "@/components/homeowner/payments/payment-cards";
 import { PageHeader } from "@/components/page-header";
 import { PortalMobileListItem, PortalPageContainer, PortalSectionHeader, PortalSummaryCard } from "@/components/portal-mobile-shell";
+import { SoaPrintButton } from "@/components/soa-print-button";
 import { StatusBadge } from "@/components/status-badge";
 import { getAppUrl } from "@/lib/app-url";
 import { requireHomeownerProfile } from "@/lib/portal";
@@ -13,7 +15,8 @@ export default async function PortalStatementOfAccountPage() {
   const soa = await getStatementOfAccount(profile.id, profile.tenantId, getAppUrl());
 
   return <PortalPageContainer className="space-y-6">
-    <PageHeader eyebrow="My account" title="Statement of Account" description="A tenant-scoped summary of your balances, payments, and billing activity." action={<Link className="btn-primary" href="/portal/pay"><QrCode className="size-4" /> Pay dues</Link>} />
+    <PaymentAreaNavigation active="soa" />
+    <PageHeader eyebrow="My account" title="Statement of Account" description="A tenant-scoped summary of your balances, payments, and billing activity." action={<div className="flex flex-wrap gap-2"><Link className="btn-secondary" href="/portal/pay"><QrCode className="size-4" /> Pay dues</Link><SoaPrintButton /></div>} />
 
     <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
       <PortalSummaryCard label="Outstanding balance" value={money(soa.summary.currentOutstandingBalance)} note={soa.summary.collectionStatus} icon={ReceiptText} tone={soa.summary.currentOutstandingBalance > 0 ? "warning" : "success"} />
@@ -56,7 +59,7 @@ export default async function PortalStatementOfAccountPage() {
       </div>
     </section>
 
-    <p className="flex flex-wrap items-center gap-2 rounded-3xl bg-pine-50 p-4 text-sm font-semibold text-pine-900"><Download className="size-4" /> Official downloadable SOA PDF remains available through the HOA office while the homeowner mobile app foundation is finalized.</p>
+    <p className="flex flex-wrap items-center gap-2 rounded-3xl bg-pine-50 p-4 text-sm font-semibold text-pine-900"><Download className="size-4" /> Use Print for the homeowner mobile statement. Official downloadable SOA PDF remains available through the HOA office.</p>
   </PortalPageContainer>;
 }
 

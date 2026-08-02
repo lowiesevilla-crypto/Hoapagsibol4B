@@ -14,6 +14,7 @@ type PwaPlatform = "ios" | "android" | "desktop" | "unknown";
 
 type PwaInstallContextValue = {
   canInstall: boolean;
+  installAvailable: boolean;
   installed: boolean;
   online: boolean;
   platform: PwaPlatform;
@@ -105,6 +106,7 @@ export function PwaInstallProvider({ children }: { children: React.ReactNode }) 
 
   const contextValue = useMemo<PwaInstallContextValue>(() => ({
     canInstall: !installed && !suppressed && (!dismissed || sheetOpen) && (Boolean(deferredPrompt) || platform === "ios" || platform === "desktop"),
+    installAvailable: !installed && !suppressed && (Boolean(deferredPrompt) || platform === "ios" || platform === "desktop"),
     installed,
     online,
     platform,
@@ -182,6 +184,38 @@ export function InstallHoaHubBanner() {
         </button>
         <button type="button" className="btn-secondary flex-1" onClick={pwa.openInstallSheet}>
           How to install
+        </button>
+      </div>
+    </section>
+  );
+}
+
+export function PwaInstallActionCard() {
+  const pwa = usePwaInstall();
+  const disabled = pwa.installed;
+  const title = pwa.installed ? "HOAHub is installed" : "Install HOAHub";
+  const description = pwa.installed ? "Open HOAHub from your device app list or home screen." : "Add HOAHub to this device using the approved browser install flow.";
+
+  return (
+    <section className="rounded-3xl border border-pine-100 bg-white p-4 shadow-sm" aria-label="Install HOAHub">
+      <div className="flex items-start gap-3">
+        <span className="grid size-12 shrink-0 place-items-center rounded-2xl bg-pine-50 text-pine-700">
+          <Smartphone className="size-5" aria-hidden="true" />
+        </span>
+        <div className="min-w-0 flex-1">
+          <h2 className="text-base font-black text-ink">{title}</h2>
+          <p className="mt-1 text-sm leading-6 text-slate-500">{description}</p>
+        </div>
+      </div>
+      <div className="mt-4 flex flex-wrap gap-2">
+        {!disabled && pwa.installAvailable && (
+          <button type="button" className="btn-primary min-h-12 flex-1" onClick={pwa.runInstallPrompt}>
+            <Download className="size-4" aria-hidden="true" />
+            Install
+          </button>
+        )}
+        <button type="button" className="btn-secondary min-h-12 flex-1" onClick={pwa.openInstallSheet}>
+          {disabled ? "View status" : "How to install"}
         </button>
       </div>
     </section>
@@ -312,7 +346,7 @@ function InstructionPanel({ title, steps }: { title: string; steps: string[] }) 
   );
 }
 
-function usePwaInstall() {
+export function usePwaInstall() {
   const context = useContext(PwaInstallContext);
   if (!context) throw new Error("PWA install components must be rendered inside PwaInstallProvider.");
   return context;

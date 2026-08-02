@@ -6,6 +6,8 @@ import { chunkRecoveryKey, isChunkLoadFailure, routeCategory } from "@/lib/chunk
 
 const LEGACY_CACHE_NAME_PATTERN = /^(next-pwa|workbox|pwa|offline)(-|$)/i;
 const LEGACY_SERVICE_WORKER_PATH_PATTERN = /\/service-worker\.js$|\/workbox-/i;
+const DEVELOPMENT_HOAHUB_CACHE_PREFIX = "hoahub-pwa-";
+const HOAHUB_SERVICE_WORKER_PATH = "/sw.js";
 
 export function BrowserCacheRecovery() {
   const pathname = usePathname();
@@ -64,9 +66,21 @@ async function removeStaleServiceWorkerCaches() {
       return;
     }
     if (parsed.origin !== window.location.origin) return;
-    if (LEGACY_SERVICE_WORKER_PATH_PATTERN.test(parsed.pathname)) await registration.unregister();
+    if (LEGACY_SERVICE_WORKER_PATH_PATTERN.test(parsed.pathname) || shouldRemoveDevelopmentHoaHubWorker(parsed)) await registration.unregister();
   }));
   if (!("caches" in window)) return;
   const cacheNames = await window.caches.keys().catch(() => []);
-  await Promise.all(cacheNames.filter((name) => LEGACY_CACHE_NAME_PATTERN.test(name)).map((name) => window.caches.delete(name)));
+  await Promise.all(cacheNames.filter((name) => LEGACY_CACHE_NAME_PATTERN.test(name) || shouldRemoveDevelopmentHoaHubCache(name)).map((name) => window.caches.delete(name)));
+}
+
+function shouldRemoveDevelopmentHoaHubWorker(scriptUrl: URL) {
+  return process.env.NODE_ENV !== "production" && isLocalDevelopmentOrigin() && scriptUrl.pathname === HOAHUB_SERVICE_WORKER_PATH;
+}
+
+function shouldRemoveDevelopmentHoaHubCache(cacheName: string) {
+  return process.env.NODE_ENV !== "production" && isLocalDevelopmentOrigin() && cacheName.startsWith(DEVELOPMENT_HOAHUB_CACHE_PREFIX);
+}
+
+function isLocalDevelopmentOrigin() {
+  return window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1" || window.location.hostname === "::1" || window.location.hostname === "[::1]";
 }

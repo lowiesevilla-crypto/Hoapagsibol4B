@@ -48,16 +48,16 @@ self.addEventListener("message", (event) => {
 self.addEventListener("fetch", (event) => {
   const { request } = event;
   if (request.method !== "GET") return;
+  if (isServerActionRequest(request) || isReactServerComponentRequest(request) || isRouterPrefetchRequest(request)) return;
 
   const url = new URL(request.url);
   if (url.origin !== self.location.origin) return;
-  if (request.mode === "navigate") {
-    event.respondWith(networkFirstNavigation(request));
-    return;
-  }
-
   if (hasSensitiveRequest(url.pathname)) {
     event.respondWith(fetch(request));
+    return;
+  }
+  if (request.mode === "navigate") {
+    event.respondWith(networkFirstNavigation(request));
     return;
   }
 
@@ -68,6 +68,23 @@ self.addEventListener("fetch", (event) => {
 
 function hasSensitiveRequest(pathname) {
   return NETWORK_ONLY_PREFIXES.some((prefix) => pathname === prefix || pathname.startsWith(prefix));
+}
+
+function isServerActionRequest(request) {
+  return request.headers.has("Next-Action");
+}
+
+function isReactServerComponentRequest(request) {
+  const accept = request.headers.get("Accept") || "";
+  return request.headers.has("RSC") || accept.includes("text/x-component");
+}
+
+function isRouterPrefetchRequest(request) {
+  return request.headers.has("Next-Router-State-Tree")
+    || request.headers.has("Next-Router-Prefetch")
+    || request.headers.get("Purpose") === "prefetch"
+    || request.headers.get("Sec-Purpose") === "prefetch"
+    || request.headers.get("X-Middleware-Prefetch") === "1";
 }
 
 async function networkFirstNavigation(request) {

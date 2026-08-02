@@ -16,6 +16,7 @@
     "verify:auth-navigation-cache": "tsx scripts/verify-auth-navigation-cache.ts",
     "verify:complaint-management": "tsx scripts/verify-complaint-management.ts",
     "verify:homeowner-auth": "tsx scripts/verify-homeowner-universal-auth.ts",
+    "verify:homeowner-mobile-dashboard": "tsx scripts/verify-homeowner-mobile-dashboard.ts",
     "verify:homeowner-mobile-shell": "tsx scripts/verify-homeowner-mobile-shell.ts",
     "verify:homeowner-pwa": "tsx scripts/verify-homeowner-pwa.ts",
     "verify:pass-template-tokens": "tsx scripts/verify-pass-template-tokens.ts",

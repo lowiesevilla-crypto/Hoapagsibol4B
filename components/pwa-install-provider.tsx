@@ -29,6 +29,8 @@ const PwaInstallContext = createContext<PwaInstallContextValue | null>(null);
 const DISMISSED_UNTIL_KEY = "hoahub:pwa-install-dismissed-until";
 const DISMISS_COUNT_KEY = "hoahub:pwa-install-dismiss-count";
 const DISMISS_MS = 14 * 24 * 60 * 60 * 1000;
+const PWA_SERVICE_WORKER_PATH = "/sw.js";
+const DEVELOPMENT_HOAHUB_CACHE_PREFIX = "hoahub-pwa-";
 
 export function PwaInstallProvider({ children }: { children: React.ReactNode }) {
   const pathname = usePathname() || "/";
@@ -77,7 +79,14 @@ export function PwaInstallProvider({ children }: { children: React.ReactNode }) 
     if (!("serviceWorker" in navigator)) return;
     let disposed = false;
 
-    navigator.serviceWorker.register("/sw.js", { scope: "/" }).then((registration) => {
+    if (process.env.NODE_ENV !== "production") {
+      void removeDevelopmentHoaHubServiceWorker();
+      return () => {
+        disposed = true;
+      };
+    }
+
+    navigator.serviceWorker.register(PWA_SERVICE_WORKER_PATH, { scope: "/" }).then((registration) => {
       if (disposed) return;
       if (registration.waiting) setUpdateRegistration(registration);
       registration.addEventListener("updatefound", () => {
@@ -394,4 +403,33 @@ function clearInstallDismissal() {
 
 function isSuppressedInstallPath(pathname: string) {
   return pathname.includes("/print") || pathname.includes("/preview") || pathname.startsWith("/documents/") || pathname.startsWith("/receipts/");
+}
+
+async function removeDevelopmentHoaHubServiceWorker() {
+  if (typeof window === "undefined") return;
+  if (process.env.NODE_ENV === "production") return;
+  if (!isLocalDevelopmentOrigin(window.location)) return;
+  const registrations = await navigator.serviceWorker.getRegistrations().catch(() => []);
+  await Promise.all(registrations.map(async (registration) => {
+    const scriptUrl = registration.active?.scriptURL || registration.waiting?.scriptURL || registration.installing?.scriptURL || "";
+    if (!isHoaHubServiceWorkerUrl(scriptUrl, window.location.origin)) return;
+    await registration.unregister();
+  }));
+  if (!("caches" in window)) return;
+  const cacheNames = await window.caches.keys().catch(() => []);
+  await Promise.all(cacheNames.filter((name) => name.startsWith(DEVELOPMENT_HOAHUB_CACHE_PREFIX)).map((name) => window.caches.delete(name)));
+}
+
+function isLocalDevelopmentOrigin(location: Location) {
+  return location.hostname === "localhost" || location.hostname === "127.0.0.1" || location.hostname === "::1" || location.hostname === "[::1]";
+}
+
+function isHoaHubServiceWorkerUrl(scriptUrl: string, expectedOrigin: string) {
+  if (!scriptUrl) return false;
+  try {
+    const parsed = new URL(scriptUrl);
+    return parsed.origin === expectedOrigin && parsed.pathname === PWA_SERVICE_WORKER_PATH;
+  } catch {
+    return false;
+  }
 }

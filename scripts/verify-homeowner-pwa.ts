@@ -56,10 +56,19 @@ const serviceWorker = readProjectFile("public/sw.js");
 record("service worker precaches only generic shell assets", hasAll(serviceWorker, ["OFFLINE_URL", "/offline", "APP_SHELL_ASSETS"]));
 record("service worker routes private prefixes to network-only handling", hasAll(serviceWorker, ["/api/", "/admin", "/portal", "/employee", "/platform", "/app", "/documents/", "/receipts/", "/uploads/", "/login", "/activate"]));
 record("service worker does not handle mutations from cache", serviceWorker.includes('request.method !== "GET"'));
+record("service worker leaves Server Action requests network-only", hasAll(serviceWorker, ["isServerActionRequest", 'request.headers.has("Next-Action")']) && serviceWorker.indexOf("isServerActionRequest(request)") < serviceWorker.indexOf("event.respondWith"));
+record("service worker leaves RSC requests network-only", hasAll(serviceWorker, ["isReactServerComponentRequest", 'request.headers.has("RSC")', "text/x-component"]));
+record("service worker leaves router prefetch requests network-only", hasAll(serviceWorker, ["isRouterPrefetchRequest", "Next-Router-State-Tree", "Next-Router-Prefetch", "prefetch"]));
+record("private portal HTML is network-only before navigation fallback", serviceWorker.indexOf("hasSensitiveRequest(url.pathname)") < serviceWorker.indexOf('request.mode === "navigate"'));
 record("service worker provides generic navigation offline fallback", hasAll(serviceWorker, ['request.mode === "navigate"', "networkFirstNavigation", "cache.match(OFFLINE_URL)"]));
 record("service worker avoids caching credential-setting responses", serviceWorker.includes('!response.headers.has("set-cookie")'));
+record("service worker caches only reviewed static assets", serviceWorker.includes('url.pathname.startsWith("/_next/static/")') && !serviceWorker.includes('url.pathname.startsWith("/_next/") ||'));
 
 const provider = readProjectFile("components/pwa-install-provider.tsx");
+record("development mode does not register production service worker", hasAll(provider, ['process.env.NODE_ENV !== "production"', "removeDevelopmentHoaHubServiceWorker", "navigator.serviceWorker.register(PWA_SERVICE_WORKER_PATH"]) && provider.indexOf('process.env.NODE_ENV !== "production"') < provider.indexOf("navigator.serviceWorker.register(PWA_SERVICE_WORKER_PATH"));
+record("production build still registers /sw.js", hasAll(provider, ['const PWA_SERVICE_WORKER_PATH = "/sw.js"', "navigator.serviceWorker.register(PWA_SERVICE_WORKER_PATH", 'scope: "/"']));
+record("development cleanup targets only local HOAHub /sw.js and caches", hasAll(provider, ["isLocalDevelopmentOrigin", "isHoaHubServiceWorkerUrl", "DEVELOPMENT_HOAHUB_CACHE_PREFIX", "cacheNames.filter((name) => name.startsWith(DEVELOPMENT_HOAHUB_CACHE_PREFIX))"]));
+record("single PWA provider registration path", (provider.match(/serviceWorker\.register/g) || []).length === 1);
 record("Chromium deferred install prompt is captured safely", hasAll(provider, ["beforeinstallprompt", "event.preventDefault()", "deferredPrompt", ".prompt()", "userChoice"]));
 record("installed app state hides install UI", hasAll(provider, ["appinstalled", "setInstalled(true)", "isStandaloneMode"]));
 record("iOS install instructions exist", hasAll(provider, ["IOSInstallInstructions", "Add to Home Screen", "Safari"]));
@@ -73,12 +82,23 @@ record("install UI is suppressed for print and document preview routes", hasAll(
 
 const portalLayout = readProjectFile("app/portal/layout.tsx");
 record("homeowner portal integrates PWA provider", hasAll(portalLayout, ["PwaInstallProvider", "<PwaInstallProvider>"]));
+record("no duplicate PWA provider in portal layout", (portalLayout.match(/<PwaInstallProvider>/g) || []).length === 1);
 
 const appLauncher = readProjectFile("app/app/page.tsx");
 record("global PWA launcher is role-aware", hasAll(appLauncher, ["readSession", "defaultHomeForRole", "redirect(\"/login\")"]));
 
 const cacheRecovery = readProjectFile("components/browser-cache-recovery.tsx");
-record("cache recovery does not unregister the new /sw.js", !cacheRecovery.includes("/\\/(sw|service-worker)\\\\.js") && cacheRecovery.includes("LEGACY_SERVICE_WORKER_PATH_PATTERN"));
+record("cache recovery removes HOAHub /sw.js only in local development", hasAll(cacheRecovery, ["shouldRemoveDevelopmentHoaHubWorker", 'process.env.NODE_ENV !== "production"', "isLocalDevelopmentOrigin", 'scriptUrl.pathname === HOAHUB_SERVICE_WORKER_PATH']));
+record("cache recovery removes only HOAHub-owned development caches", hasAll(cacheRecovery, ["shouldRemoveDevelopmentHoaHubCache", "DEVELOPMENT_HOAHUB_CACHE_PREFIX", "cacheName.startsWith(DEVELOPMENT_HOAHUB_CACHE_PREFIX)"]));
+
+const authButtons = readProjectFile("components/auth-navigation-buttons.tsx");
+const authActions = readProjectFile("lib/actions/auth.ts");
+const profilePage = readProjectFile("app/portal/profile/page.tsx");
+const morePage = readProjectFile("app/portal/more/page.tsx");
+record("logout buttons use stable named server actions", hasAll(authButtons, ["logoutNavigationAction", "logoutAllSessionsNavigationAction", "useActionState"]));
+record("logout server actions are named exports", hasAll(authActions, ["export async function logoutNavigationAction", "export async function logoutAllSessionsNavigationAction", "return { redirectTo }"]));
+record("profile and more contain no inline logout action", hasAll(profilePage, ["LogoutButton"]) && hasAll(morePage, ["LogoutButton"]) && !profilePage.includes("logoutAction") && !morePage.includes("logoutAction") && !profilePage.includes("form action={async") && !morePage.includes("form action={async"));
+record("logout navigation performs document redirect after server-side session deletion", hasAll(authButtons, ["window.location.replace(state.redirectTo)", "disabled={pending}"]) && hasAll(authActions, ["await deleteSession()", "logoutRedirectForSession"]));
 
 const nextConfig = readProjectFile("next.config.ts");
 record("service worker served with safe headers", hasAll(nextConfig, ["Service-Worker-Allowed", "no-cache, no-store, must-revalidate"]));

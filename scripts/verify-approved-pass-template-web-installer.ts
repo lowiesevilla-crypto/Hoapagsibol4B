@@ -6,6 +6,7 @@ import { DocumentTemplateOwnership, DocumentTemplateVersionStatus, Role } from "
 import {
   approvedPassTemplateConfirmationPhrase,
   approvedPassTemplateInstallerEnabled,
+  approvedPassTemplatePreserveDraftsConfirmationPhrase,
   assertApprovedPassTemplateInstallerRole,
   assertInstallerConfirmation,
   assertTargetTenant,
@@ -44,8 +45,10 @@ assertThrows(() => assertApprovedPassTemplateInstallerRole(Role.ADMIN), "System 
 assertApprovedPassTemplateInstallerRole(Role.SYSTEM_ADMIN);
 assertThrows(() => assertTargetTenant("tenant_other"), "restricted", "wrong tenant is rejected");
 assertTargetTenant(targetTenantId);
-assertThrows(() => assertInstallerConfirmation({ phrase: "INSTALL", acknowledged: "on" }), "confirmation phrase", "invalid confirmation phrase is rejected");
-assertThrows(() => assertInstallerConfirmation({ phrase: approvedPassTemplateConfirmationPhrase, acknowledged: null }), "Confirm", "missing checkbox confirmation is rejected");
+assertThrows(() => assertInstallerConfirmation({ phrase: "INSTALL", preservePhrase: approvedPassTemplatePreserveDraftsConfirmationPhrase, acknowledged: "on", preserveAcknowledged: "on" }), "confirmation phrase", "invalid confirmation phrase is rejected");
+assertThrows(() => assertInstallerConfirmation({ phrase: approvedPassTemplateConfirmationPhrase, preservePhrase: "PRESERVE", acknowledged: "on", preserveAcknowledged: "on" }), "preserve-existing-drafts", "invalid preserve-existing-drafts confirmation blocks apply");
+assertThrows(() => assertInstallerConfirmation({ phrase: approvedPassTemplateConfirmationPhrase, preservePhrase: approvedPassTemplatePreserveDraftsConfirmationPhrase, acknowledged: null, preserveAcknowledged: "on" }), "Confirm", "missing published-unchanged checkbox confirmation is rejected");
+assertThrows(() => assertInstallerConfirmation({ phrase: approvedPassTemplateConfirmationPhrase, preservePhrase: approvedPassTemplatePreserveDraftsConfirmationPhrase, acknowledged: "on", preserveAcknowledged: null }), "existing Drafts", "missing preserve-existing-drafts checkbox confirmation is rejected");
 
 for (const { target, pkg } of packages) {
   assert(pkg.contentHash === target.expectedContentHash, `${target.label} approved package hash matches pinned hash`);
@@ -54,7 +57,7 @@ for (const { target, pkg } of packages) {
   assertThrows(() => validateApprovedPassTemplatePackage(invalid, target), "approved hash", `${target.label} package hash mismatch is rejected`);
 }
 
-const [gate] = packages;
+const [gate, moveInOut] = packages;
 const createPlan = planApprovedPassTemplateFromState(gate.target, gate.pkg, state(gate.target, gate.pkg, [{ version: 2, status: DocumentTemplateVersionStatus.PUBLISHED, matchesPackage: false }]));
 assert(createPlan.action === "CREATE_DRAFT", "no existing Draft plans CREATE_DRAFT");
 assert(createPlan.nextVersion === 3, "next version uses MAX(existing version) + 1");
@@ -63,11 +66,33 @@ const maxPlan = planApprovedPassTemplateFromState(gate.target, gate.pkg, state(g
   { version: 9, status: DocumentTemplateVersionStatus.RETIRED, matchesPackage: false },
 ]));
 assert(maxPlan.nextVersion === 10, "version calculation uses highest version across all statuses");
-const blockedPlan = planApprovedPassTemplateFromState(gate.target, gate.pkg, state(gate.target, gate.pkg, [
+const differentDraftState = state(gate.target, gate.pkg, [
   { version: 2, status: DocumentTemplateVersionStatus.PUBLISHED, matchesPackage: false },
   { version: 3, status: DocumentTemplateVersionStatus.DRAFT, matchesPackage: false },
+]);
+const differentDraftStateBefore = JSON.stringify(differentDraftState);
+const preservePlan = planApprovedPassTemplateFromState(gate.target, gate.pkg, differentDraftState);
+assert(preservePlan.action === "PRESERVE_EXISTING_DRAFTS_CREATE_NEW", "different existing Drafts are preserved while planning a new approved Draft");
+assert(preservePlan.preservedDraftVersions.join(",") === "3", "existing Draft versions are listed as preserved");
+assert(preservePlan.nextVersion === 4, "preserved Draft scenario still uses MAX + 1");
+assert(JSON.stringify(differentDraftState) === differentDraftStateBefore, "planning leaves existing Draft IDs and data unchanged");
+const gateProductionPlan = planApprovedPassTemplateFromState(gate.target, gate.pkg, state(gate.target, gate.pkg, [
+  { version: 2, status: DocumentTemplateVersionStatus.PUBLISHED, matchesPackage: false },
+  { version: 3, status: DocumentTemplateVersionStatus.DRAFT, matchesPackage: false },
+  { version: 4, status: DocumentTemplateVersionStatus.DRAFT, matchesPackage: false },
+  { version: 5, status: DocumentTemplateVersionStatus.DRAFT, matchesPackage: false },
 ]));
-assert(blockedPlan.action === "BLOCKED" && blockedPlan.blockReason === "EXISTING PRODUCTION DRAFT REQUIRES REVIEW", "different existing Draft blocks installation");
+assert(gateProductionPlan.action === "PRESERVE_EXISTING_DRAFTS_CREATE_NEW", "Gate Pass production state preserves existing different Drafts");
+assert(gateProductionPlan.preservedDraftVersions.join(",") === "3,4,5", "Gate Pass existing Drafts v3, v4, v5 are preserved");
+assert(gateProductionPlan.nextVersion === 6, "Gate Pass approved Draft is planned as v6 for supplied state");
+const moveProductionPlan = planApprovedPassTemplateFromState(moveInOut.target, moveInOut.pkg, state(moveInOut.target, moveInOut.pkg, [
+  { version: 1, status: DocumentTemplateVersionStatus.PUBLISHED, matchesPackage: false },
+  { version: 2, status: DocumentTemplateVersionStatus.DRAFT, matchesPackage: false },
+  { version: 3, status: DocumentTemplateVersionStatus.DRAFT, matchesPackage: false },
+]));
+assert(moveProductionPlan.action === "PRESERVE_EXISTING_DRAFTS_CREATE_NEW", "Move-In/Move-Out production state preserves existing different Drafts");
+assert(moveProductionPlan.preservedDraftVersions.join(",") === "2,3", "Move-In/Move-Out existing Drafts v2, v3 are preserved");
+assert(moveProductionPlan.nextVersion === 4, "Move-In/Move-Out approved Draft is planned as v4 for supplied state");
 const installedPlan = planApprovedPassTemplateFromState(gate.target, gate.pkg, state(gate.target, gate.pkg, [
   { version: 2, status: DocumentTemplateVersionStatus.PUBLISHED, matchesPackage: false },
   { version: 3, status: DocumentTemplateVersionStatus.DRAFT, matchesPackage: true },
@@ -87,6 +112,8 @@ assert(!safeJson.includes("definitionJson") && !safeJson.includes("sections") &&
 const serviceSource = fs.readFileSync(path.join(process.cwd(), "lib", "services", "approved-pass-template-installer.ts"), "utf8");
 assert(serviceSource.includes("$transaction(async (tx)"), "apply uses one interactive Prisma transaction");
 assert(serviceSource.indexOf("const blocked = plans.find") < serviceSource.indexOf("documentTemplateVersion.create"), "transaction validates both plans before creating Drafts");
+assert(serviceSource.includes("transactionDigest") && serviceSource.includes("input.dryRunDigest"), "transaction stops when state differs from dry-run");
+assert(serviceSource.includes("PRESERVE_EXISTING_DRAFTS_CREATE_NEW"), "transaction creates approved Drafts while preserving existing Drafts");
 assert(!/documentDefinition\.update/.test(serviceSource), "assigned published versions are not updated");
 assert(!/status:\s*DocumentTemplateVersionStatus\.PUBLISHED/.test(serviceSource), "web installer never creates published template versions");
 assert(!/publishedAt:\s*new Date|publishedById:\s*input\.actorUserId/.test(serviceSource), "web installer does not set publishedAt or publishedBy");

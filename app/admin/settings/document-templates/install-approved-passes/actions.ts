@@ -10,6 +10,7 @@ import {
   approvedPassTemplateConfirmationPhrase,
   approvedPassTemplateInstallerEnabled,
   approvedPassTemplateInstallerPath,
+  approvedPassTemplatePreserveDraftsConfirmationPhrase,
   assertApprovedPassTemplateInstallerRole,
   assertInstallerConfirmation,
   assertTargetTenant,
@@ -54,7 +55,12 @@ export async function applyApprovedPassTemplateInstallerAction(formData: FormDat
     if (!approvedPassTemplateInstallerEnabled()) throw new Error("Approved pass template installer is unavailable.");
     assertApprovedPassTemplateInstallerRole(admin.role);
     assertTargetTenant(admin.tenantId);
-    assertInstallerConfirmation({ phrase: formData.get("confirmationPhrase"), acknowledged: formData.get("publishedUnchanged") });
+    assertInstallerConfirmation({
+      phrase: formData.get("confirmationPhrase"),
+      preservePhrase: formData.get("preserveDraftsConfirmationPhrase"),
+      acknowledged: formData.get("publishedUnchanged"),
+      preserveAcknowledged: formData.get("preserveDraftsUnchanged"),
+    });
     const plans = await analyzeApprovedPassTemplateInstallation({ tenantId: admin.tenantId });
     if (plans.some((plan) => plan.action === "BLOCKED")) throw new Error("EXISTING PRODUCTION DRAFT REQUIRES REVIEW");
     const digest = installationPlanDigest({ actorUserId: admin.id, tenantId: admin.tenantId, plans });
@@ -95,6 +101,7 @@ export async function approvedPassTemplateInstallerSnapshot(input: { actorUserId
   return {
     dryRunReady,
     confirmationPhrase: approvedPassTemplateConfirmationPhrase,
+    preserveDraftsConfirmationPhrase: approvedPassTemplatePreserveDraftsConfirmationPhrase,
     plans: plans.map(sanitizePlanForDisplay),
   };
 }

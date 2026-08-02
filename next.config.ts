@@ -41,10 +41,19 @@ const nextConfig: NextConfig = {
       { key: "Cache-Control", value: "no-cache, max-age=0, must-revalidate" },
       { key: "Pragma", value: "no-cache" },
     ];
+    const serviceWorkerHeaders = [
+      { key: "Cache-Control", value: "no-cache, no-store, must-revalidate" },
+      { key: "Pragma", value: "no-cache" },
+      { key: "Service-Worker-Allowed", value: "/" },
+    ];
+    const iconHeaders = [
+      { key: "Cache-Control", value: "public, max-age=31536000, immutable" },
+    ];
     return [
       { source: "/:path*", headers: securityHeaders },
       { source: "/", headers: noStoreHeaders },
       { source: "/login", headers: noStoreHeaders },
+      { source: "/app", headers: noStoreHeaders },
       { source: "/activate", headers: noStoreHeaders },
       { source: "/activate/verify", headers: noStoreHeaders },
       { source: "/:tenantSlug/login", headers: noStoreHeaders },
@@ -56,8 +65,11 @@ const nextConfig: NextConfig = {
       { source: "/employee/:path*", headers: noStoreHeaders },
       { source: "/platform/:path*", headers: noStoreHeaders },
       { source: "/manifest.webmanifest", headers: revalidateHeaders },
-      { source: "/sw.js", headers: revalidateHeaders },
+      { source: "/sw.js", headers: serviceWorkerHeaders },
       { source: "/service-worker.js", headers: revalidateHeaders },
+      { source: "/icons/:path*", headers: iconHeaders },
+      { source: "/apple-touch-icon.png", headers: iconHeaders },
+      { source: "/favicon.ico", headers: iconHeaders },
     ];
   },
 };

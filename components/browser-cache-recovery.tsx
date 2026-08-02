@@ -4,8 +4,8 @@ import { useEffect } from "react";
 import { usePathname } from "next/navigation";
 import { chunkRecoveryKey, isChunkLoadFailure, routeCategory } from "@/lib/chunk-recovery";
 
-const CACHE_NAME_PATTERN = /^(hoahub|next-pwa|workbox|pwa|offline)/i;
-const SERVICE_WORKER_PATH_PATTERN = /\/(sw|service-worker)\.js$|\/workbox-/i;
+const LEGACY_CACHE_NAME_PATTERN = /^(next-pwa|workbox|pwa|offline)(-|$)/i;
+const LEGACY_SERVICE_WORKER_PATH_PATTERN = /\/service-worker\.js$|\/workbox-/i;
 
 export function BrowserCacheRecovery() {
   const pathname = usePathname();
@@ -64,9 +64,9 @@ async function removeStaleServiceWorkerCaches() {
       return;
     }
     if (parsed.origin !== window.location.origin) return;
-    if (SERVICE_WORKER_PATH_PATTERN.test(parsed.pathname)) await registration.unregister();
+    if (LEGACY_SERVICE_WORKER_PATH_PATTERN.test(parsed.pathname)) await registration.unregister();
   }));
   if (!("caches" in window)) return;
   const cacheNames = await window.caches.keys().catch(() => []);
-  await Promise.all(cacheNames.filter((name) => CACHE_NAME_PATTERN.test(name)).map((name) => window.caches.delete(name)));
+  await Promise.all(cacheNames.filter((name) => LEGACY_CACHE_NAME_PATTERN.test(name)).map((name) => window.caches.delete(name)));
 }

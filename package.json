@@ -18,6 +18,7 @@
     "verify:homeowner-auth": "tsx scripts/verify-homeowner-universal-auth.ts",
     "verify:pass-template-tokens": "tsx scripts/verify-pass-template-tokens.ts",
     "verify:pass-template-packages": "tsx scripts/verify-approved-pass-template-packages.ts",
+    "verify:approved-pass-web-installer": "tsx scripts/verify-approved-pass-template-web-installer.ts",
     "templates:inspect-production-passes": "tsx scripts/inspect-production-pass-templates.ts",
     "templates:install-approved-passes": "tsx scripts/install-approved-pass-template-drafts.ts",
     "lint": "eslint . --ext .js,.jsx,.ts,.tsx --max-warnings=0",

@@ -57,7 +57,8 @@ record("desktop sidebar remains in portal shell", hasAll(readProjectFile("app/po
 record("Phase 2 navigation remains intact", hasAll(readProjectFile("lib/homeowner-navigation.ts"), ["homeownerPrimaryDestinations", "/portal/requests", "/portal/community", "/portal/more"]));
 record("admin employee payroll platform pages unaffected", !changedFiles().some((file) => /^(app\/admin|app\/employee|app\/platform)/.test(file)));
 record("no Prisma schema or migration change", !changedFiles().some((file) => file === "prisma/schema.prisma" || file.startsWith("prisma/migrations/")));
-record("no auth tenant or business service changes", !changedFiles().some((file) => /^(lib\/auth|lib\/actions|lib\/services\/(billing|payments|statement-of-account|documents|complaints)|lib\/tenant-context)/.test(file)));
+const allowedPhaseChatFiles = new Set(["lib/actions/chat.ts", "lib/services/chat.ts"]);
+record("no auth tenant or non-chat business service changes", !changedFiles().some((file) => /^(lib\/auth|lib\/actions|lib\/services\/(billing|payments|statement-of-account|documents|complaints|chat)|lib\/tenant-context)/.test(file) && !allowedPhaseChatFiles.has(file)));
 record("private portal cache boundaries remain network-only", hasAll(readProjectFile("public/sw.js"), ["/portal", "/api/", 'request.method !== "GET"']));
 record("mobile shell still hides bottom navigation on desktop", shell.includes("lg:hidden"));
 

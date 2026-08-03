@@ -21,6 +21,8 @@ export async function PATCH(request: Request) {
   const conversationId = String(body.conversationId || "");
   const pinned = Boolean(body.pinned);
   if (!conversationId) return NextResponse.json({ error: "Conversation is required." }, { status: 400 });
+  const participant = await prisma.chatParticipant.findFirst({ where: { tenantId: user.tenantId, conversationId, userId: user.id, conversation: { tenantId: user.tenantId } } });
+  if (!participant) return NextResponse.json({ error: "You do not have access to this conversation." }, { status: 403 });
   await prisma.chatParticipant.update({
     where: { conversationId_userId: { conversationId, userId: user.id } },
     data: { pinnedAt: pinned ? new Date() : null },
@@ -33,6 +35,8 @@ export async function DELETE(request: Request) {
   const url = new URL(request.url);
   const conversationId = url.searchParams.get("conversationId") || "";
   if (!conversationId) return NextResponse.json({ error: "Conversation is required." }, { status: 400 });
+  const participant = await prisma.chatParticipant.findFirst({ where: { tenantId: user.tenantId, conversationId, userId: user.id, conversation: { tenantId: user.tenantId } } });
+  if (!participant) return NextResponse.json({ error: "You do not have access to this conversation." }, { status: 403 });
   await prisma.chatParticipant.update({
     where: { conversationId_userId: { conversationId, userId: user.id } },
     data: { deletedAt: new Date() },

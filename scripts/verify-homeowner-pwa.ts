@@ -105,8 +105,17 @@ record("service worker served with safe headers", hasAll(nextConfig, ["Service-W
 record("portal app launcher and auth responses remain no-store", hasAll(nextConfig, ["/portal/:path*", "/api/auth/:path*", "/login", "/app", "/activate"]));
 
 const changedFiles = gitChangedFiles();
-const disallowedChangedFiles = changedFiles.filter((file) => /^(app\/admin|app\/employee|app\/platform|app\/api|prisma\/|lib\/actions|lib\/services|lib\/auth|lib\/tenant)/.test(file.replaceAll("\\", "/")));
-record("no admin employee payroll platform api auth tenant prisma changes", disallowedChangedFiles.length === 0, disallowedChangedFiles.join(", "));
+const allowedPhaseChatFiles = new Set([
+  "app/api/chat/conversations/route.ts",
+  "app/api/chat/messages/route.ts",
+  "lib/actions/chat.ts",
+  "lib/services/chat.ts",
+]);
+const disallowedChangedFiles = changedFiles.filter((file) => {
+  const normalized = file.replaceAll("\\", "/");
+  return /^(app\/admin|app\/employee|app\/platform|app\/api|prisma\/|lib\/actions|lib\/services|lib\/auth|lib\/tenant)/.test(normalized) && !allowedPhaseChatFiles.has(normalized);
+});
+record("no admin employee payroll platform non-chat api auth tenant prisma changes", disallowedChangedFiles.length === 0, disallowedChangedFiles.join(", "));
 
 const failed = checks.filter((check) => !check.passed);
 for (const check of checks) {

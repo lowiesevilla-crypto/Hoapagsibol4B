@@ -74,6 +74,7 @@ export function ChatMessenger({
   const [error, setError] = useState("");
   const [visibleMessages, setVisibleMessages] = useState(50);
   const [notificationsEnabled, setNotificationsEnabled] = useState(false);
+  const [online, setOnline] = useState(true);
   const [chatViewportHeight, setChatViewportHeight] = useState("100dvh");
   const fileInputRef = useRef<HTMLInputElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -134,6 +135,19 @@ export function ChatMessenger({
       document.body.style.overflow = previousOverflow;
     };
   }, [mobileFullscreen]);
+
+  useEffect(() => {
+    function updateOnlineState() {
+      setOnline(navigator.onLine);
+    }
+    updateOnlineState();
+    window.addEventListener("online", updateOnlineState);
+    window.addEventListener("offline", updateOnlineState);
+    return () => {
+      window.removeEventListener("online", updateOnlineState);
+      window.removeEventListener("offline", updateOnlineState);
+    };
+  }, []);
 
   async function refresh(showError = true, showLoading = false, conversationOverride?: string) {
     if (showLoading) setLoadingHistory(true);
@@ -203,6 +217,10 @@ export function ChatMessenger({
   async function uploadFiles(files: FileList | File[]) {
     const selected = Array.from(files);
     if (!selected.length) return;
+    if (!online) {
+      setError("Reconnect before uploading an attachment.");
+      return;
+    }
     const maxBytes = data.settings.maxAttachmentMb * 1024 * 1024;
     for (const file of selected) {
       if (!data.settings.allowedMimeTypes.includes(file.type)) {
@@ -230,6 +248,10 @@ export function ChatMessenger({
 
   async function sendMessage() {
     if (!selectedConversation || sending || uploading || (!draft.trim() && attachments.length === 0)) return;
+    if (!online) {
+      setError("Reconnect before sending a message.");
+      return;
+    }
     setError("");
     setSending(true);
     try {
@@ -343,6 +365,7 @@ export function ChatMessenger({
                 <button type="button" className="btn-danger min-h-9 px-3 py-1 text-xs" onClick={() => deleteConversation(selectedConversation.id)}><Trash2 className="size-4" /> Delete for me</button>
               </div>
             </header>
+            {!online && <p className="mx-4 mt-3 rounded-2xl bg-amber-50 p-3 text-sm font-bold text-amber-900" role="status">You are offline. Messages and attachments are not queued.</p>}
             {error && <p className="mx-4 mt-3 rounded-2xl bg-rose-50 p-3 text-sm font-bold text-rose-700">{error}</p>}
             <div ref={scrollRef} className="min-h-0 flex-1 space-y-3 overflow-y-auto overflow-x-hidden overscroll-contain bg-gradient-to-b from-slate-50 to-white p-3 sm:p-4" onScroll={(event) => { const node = event.currentTarget; nearBottomRef.current = node.scrollHeight - node.scrollTop - node.clientHeight < 120; if (node.scrollTop < 24) setVisibleMessages((value) => Math.min(value + 30, selectedConversation.messages.length)); }}>
               {loadingHistory && <p className="sticky top-0 z-10 mx-auto w-fit rounded-full border border-slate-200 bg-white/95 px-4 py-2 text-center text-xs font-black uppercase tracking-wider text-slate-500 shadow-sm">Loading chat history...</p>}
@@ -360,16 +383,16 @@ export function ChatMessenger({
               {replyTo && <div className="mb-2 flex items-center justify-between gap-3 rounded-2xl bg-pine-50 p-3 text-sm"><p className="min-w-0 truncate"><span className="font-black">Replying to {replyTo.sender.name}:</span> {replyTo.body || replyTo.attachments[0]?.fileName}</p><button type="button" onClick={() => setReplyTo(null)}><X className="size-4" /></button></div>}
               {attachments.length > 0 && <div className="mb-3 flex flex-wrap gap-2">{attachments.map((attachment) => <AttachmentPreview key={attachment.url} attachment={attachment} removable onRemove={() => setAttachments((current) => current.filter((item) => item.url !== attachment.url))} />)}</div>}
               <div className="max-w-full rounded-3xl border border-slate-200 bg-slate-50 p-3" onDragOver={(event) => event.preventDefault()} onDrop={(event) => { event.preventDefault(); uploadFiles(event.dataTransfer.files); }}>
-                <textarea value={draft} onChange={(event) => setDraft(event.target.value)} className="max-h-32 min-h-16 w-full resize-none overflow-y-auto bg-transparent p-2 text-sm outline-none" placeholder="Write a message..." disabled={sending} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) { event.preventDefault(); sendMessage(); } }} />
+                <textarea value={draft} onChange={(event) => setDraft(event.target.value)} className="max-h-32 min-h-16 w-full resize-none overflow-y-auto bg-transparent p-2 text-sm outline-none" placeholder="Write a message..." disabled={sending || !online} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) { event.preventDefault(); sendMessage(); } }} />
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <div className="relative flex flex-wrap gap-2">
                     <input ref={fileInputRef} type="file" accept={acceptedTypes} multiple className="hidden" onChange={(event) => event.target.files && uploadFiles(event.target.files)} />
-                    <button type="button" className="btn-secondary min-h-9 px-3 py-1 text-xs" onClick={() => fileInputRef.current?.click()}><Paperclip className="size-4" /> {uploading ? "Uploading..." : "Upload Attachment"}</button>
+                    <button type="button" className="btn-secondary min-h-9 px-3 py-1 text-xs" onClick={() => fileInputRef.current?.click()} disabled={!online}><Paperclip className="size-4" /> {uploading ? "Uploading..." : "Upload Attachment"}</button>
                     <button type="button" className="btn-secondary min-h-9 px-3 py-1 text-xs" onClick={() => setShowEmoji((value) => !value)}><Smile className="size-4" /> Emoji</button>
                     {showEmoji && <div className="absolute bottom-11 left-0 z-20 flex gap-1 rounded-2xl border border-slate-100 bg-white p-2 shadow-xl">{emojis.map((emoji) => <button key={emoji} type="button" className="rounded-xl p-2 text-xl hover:bg-slate-50" onClick={() => setDraft((value) => `${value}${emoji}`)}>{emoji}</button>)}</div>}
                     <p className="basis-full text-xs text-slate-400">Drag and drop files here. Max {data.settings.maxAttachmentMb}MB per file.</p>
                   </div>
-                  <button type="button" className="btn-primary w-full sm:w-auto" onClick={sendMessage} disabled={sending || uploading || (!draft.trim() && attachments.length === 0)}><Send className="size-4" /> {sending ? "Sending..." : "Send"}</button>
+                  <button type="button" className="btn-primary w-full sm:w-auto" onClick={sendMessage} disabled={!online || sending || uploading || (!draft.trim() && attachments.length === 0)}><Send className="size-4" /> {sending ? "Sending..." : "Send"}</button>
                 </div>
               </div>
             </footer>

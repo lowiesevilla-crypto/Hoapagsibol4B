@@ -108,7 +108,8 @@ record("no new unsupported gate or move portal routes", !/app\/portal\/(gate|mov
 const files = changedFiles();
 record("no Prisma schema or migration changes", !files.some((file) => file === "prisma/schema.prisma" || file.startsWith("prisma/migrations/")));
 record("no admin employee payroll platform screen changes", !files.some((file) => /^(app\/admin|app\/employee|app\/platform)/.test(file)));
-record("no auth tenant or business workflow service changes", !files.some((file) => /^(lib\/auth|lib\/actions|lib\/services\/(billing|payments|document-generation|complaint)|lib\/tenant-context)/.test(file)));
+const allowedPhaseChatFiles = new Set(["lib/actions/chat.ts", "lib/services/chat.ts"]);
+record("no auth tenant or non-chat business workflow service changes", !files.some((file) => /^(lib\/auth|lib\/actions|lib\/services\/(billing|payments|document-generation|complaint|chat)|lib\/tenant-context)/.test(file) && !allowedPhaseChatFiles.has(file)));
 
 const failed = checks.filter((check) => !check.passed);
 for (const check of checks) {

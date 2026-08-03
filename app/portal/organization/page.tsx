@@ -1,12 +1,50 @@
-import { OrganizationImage } from "@/components/organization-image";
+import { Mail, MapPin, Phone, UsersRound } from "lucide-react";
+import { CommunityEmptyState, InfoTile, OfficerMobileCard } from "@/components/homeowner/community/community-cards";
 import { PageHeader } from "@/components/page-header";
+import { PortalPageContainer, PortalSectionHeader } from "@/components/portal-mobile-shell";
 import { getActiveOrganizationOfficers } from "@/lib/organization";
 import { requireHomeownerProfile } from "@/lib/portal";
+import { getAssociationSettings } from "@/lib/system-settings";
 
 export default async function PortalOrganizationPage() {
   const profile = await requireHomeownerProfile();
-  const officers = await getActiveOrganizationOfficers(profile.tenantId);
-  return <><PageHeader eyebrow="Your association" title="HOA officers" description="Meet the active officers and committees serving the community." />
-    {officers.length === 0 ? <section className="card py-12 text-center text-sm text-slate-500">The organization roster is being updated.</section> : <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">{officers.map((officer) => <article className="card text-center" key={officer.id}><div className="mx-auto grid size-24 place-items-center overflow-hidden rounded-full bg-pine-50 text-3xl font-black text-pine-700"><OrganizationImage src={officer.photoUrl} alt={officer.fullName} className="size-full object-cover" fallback={officer.fullName.slice(0, 1)} /></div><h2 className="mt-4 text-lg font-black">{officer.fullName}</h2><p className="font-bold text-pine-700">{officer.position}</p>{officer.committee && <p className="mt-1 text-sm text-slate-500">{officer.committee}</p>}<p className="mt-3 break-words text-xs text-slate-500">{[officer.contactNumber, officer.email].filter(Boolean).join(" | ")}</p>{officer.signatureUrl && <div className="mx-auto mt-4 grid h-14 max-w-40 place-items-center overflow-hidden rounded-xl border bg-white p-2"><OrganizationImage src={officer.signatureUrl} alt={`${officer.fullName} signature`} className="max-h-full max-w-full object-contain" fallback={<span className="text-[10px] font-bold text-slate-400">Signature unavailable</span>} /></div>}</article>)}</section>}
-  </>;
+  const [officers, association] = await Promise.all([
+    getActiveOrganizationOfficers(profile.tenantId),
+    getAssociationSettings(profile.tenantId),
+  ]);
+
+  return (
+    <PortalPageContainer className="space-y-5">
+      <PageHeader eyebrow="Your association" title="HOA information" description="Contact details and active officers serving the community." />
+      <section className="rounded-3xl border border-pine-100 bg-white p-4 shadow-soft sm:p-5" aria-label="Association contacts">
+        <PortalSectionHeader eyebrow="Contact" title={association.name} />
+        <div className="grid gap-3 md:grid-cols-3">
+          <InfoTile label="Office address" value={association.address} icon={MapPin} />
+          <InfoTile label="Contact number" value={association.contactNumber} icon={Phone} />
+          <InfoTile label="Email" value={association.email} icon={Mail} />
+        </div>
+      </section>
+      <section className="space-y-3" aria-label="HOA officers">
+        <PortalSectionHeader eyebrow="Roster" title="Active officers" />
+        {officers.length === 0 ? (
+          <CommunityEmptyState title="Officer roster is being updated" description="The association will publish officer information when available." />
+        ) : (
+          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+            {officers.map((officer) => (
+              <OfficerMobileCard key={officer.id} name={officer.fullName} position={officer.position} committee={officer.committee} contact={officer.contactNumber} email={officer.email} photoUrl={officer.photoUrl} signatureUrl={officer.signatureUrl} />
+            ))}
+          </div>
+        )}
+      </section>
+      <section className="rounded-3xl border border-pine-100 bg-pine-900 p-5 text-white shadow-soft">
+        <div className="flex items-start gap-3">
+          <span className="grid size-12 shrink-0 place-items-center rounded-2xl bg-white/10"><UsersRound className="size-5" aria-hidden="true" /></span>
+          <div>
+            <p className="font-black">Official HOA communication</p>
+            <p className="mt-1 text-sm leading-6 text-pine-50">Use the published contact details or HOAHub chat when enabled by your association.</p>
+          </div>
+        </div>
+      </section>
+    </PortalPageContainer>
+  );
 }

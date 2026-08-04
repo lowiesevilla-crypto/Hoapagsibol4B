@@ -1,0 +1,127 @@
+name: Bug report
+description: Report a reproducible defect, regression, data-integrity problem, or unexpected behavior.
+title: "[Bug]: "
+labels:
+  - bug
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Do not include production secrets, credentials, private homeowner information, or exploit details that would create unnecessary risk.
+
+  - type: dropdown
+    id: severity
+    attributes:
+      label: Severity
+      description: Select the highest applicable impact.
+      options:
+        - P0 Critical — outage, cross-tenant exposure, material financial corruption, credential compromise, or unrecoverable data loss
+        - P1 High — critical workflow blocked or substantial security, finance, reliability, or multi-user impact
+        - P2 Medium — important defect with an acceptable temporary workaround
+        - P3 Low — limited impact, polish, or uncommon edge case
+    validations:
+      required: true
+
+  - type: dropdown
+    id: product_area
+    attributes:
+      label: Product area
+      options:
+        - Platform
+        - Homeowners
+        - Finance
+        - Community
+        - Documents
+        - HRIS
+        - Mobile
+        - AI
+        - Operations
+        - Documentation
+    validations:
+      required: true
+
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment and build
+      description: Identify local, test, UAT, or production; include version, commit, browser/device, and relevant configuration without secrets.
+      placeholder: Environment, URL category, release/commit, browser/device, database type...
+    validations:
+      required: true
+
+  - type: textarea
+    id: preconditions
+    attributes:
+      label: Preconditions and test data
+      description: Identify tenant/test account role and required state using sanitized information.
+
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Steps to reproduce
+      description: Provide the smallest reliable sequence.
+      placeholder: |
+        1. ...
+        2. ...
+        3. ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+    validations:
+      required: true
+
+  - type: textarea
+    id: impact
+    attributes:
+      label: User, operational, and financial impact
+      description: Explain who is affected, how often, whether data or money is at risk, and whether a workaround exists.
+    validations:
+      required: true
+
+  - type: textarea
+    id: security
+    attributes:
+      label: Security, privacy, authorization, or tenant-isolation impact
+      description: Describe any unauthorized access, sensitive data, audit, session, permission, or cross-tenant concern. Avoid publishing exploit details.
+      placeholder: State "No known material impact" only after assessment.
+    validations:
+      required: true
+
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Evidence
+      description: Add sanitized screenshots, logs, generated artifacts, error messages, request IDs, or related links.
+
+  - type: textarea
+    id: regression
+    attributes:
+      label: Regression and test requirements
+      description: State the automated and UAT scenarios needed to prove the fix and prevent recurrence.
+      placeholder: |
+        - [ ] Reproduction test fails before the fix
+        - [ ] Test passes after the fix
+        - [ ] Related finance/authorization/tenant-isolation scenarios pass
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: confirmation
+    attributes:
+      label: Submission checks
+      options:
+        - label: I searched open and closed issues for duplicates.
+          required: true
+        - label: I removed credentials, secrets, and unnecessary personal data from this report.
+          required: true

@@ -46,12 +46,14 @@ jobs:
           node-version: 22
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      - name: Lint
+        run: pnpm lint
       - run: pnpm exec prisma validate
       - run: pnpm exec prisma generate
       - run: pnpm exec prisma migrate deploy
       - run: pnpm db:seed
-      - name: Verify Complaint Management
-        run: pnpm run verify:complaint-management
+      - name: Critical verification suite
+        run: pnpm test:critical
       - run: pnpm typecheck
       - run: pnpm build
       - name: Application smoke check

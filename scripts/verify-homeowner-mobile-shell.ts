@@ -1,5 +1,5 @@
 import { execSync } from "node:child_process";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync } from "node:fs";
 import path from "node:path";
 import { TenantModule } from "@prisma/client";
 import {
@@ -22,6 +22,19 @@ function record(label: string, passed: boolean, detail?: string) {
 
 function readProjectFile(relativePath: string) {
   return readFileSync(path.join(root, relativePath), "utf8");
+}
+
+function listProjectFiles(relativeDirectory: string): string[] {
+  const absoluteDirectory = path.join(root, relativeDirectory);
+  const files: string[] = [];
+
+  for (const entry of readdirSync(absoluteDirectory, { withFileTypes: true })) {
+    const relativeEntry = path.posix.join(relativeDirectory.replaceAll("\\", "/"), entry.name);
+    if (entry.isDirectory()) files.push(...listProjectFiles(relativeEntry));
+    else if (entry.isFile()) files.push(relativeEntry);
+  }
+
+  return files;
 }
 
 function hasAll(source: string, values: string[]) {
@@ -102,8 +115,8 @@ record("More aggregator keeps profile install and logout actions", hasAll(morePa
 record("More aggregator filters vehicles and documents by entitlement", hasAll(morePage, ["TenantModule.VEHICLES", "TenantModule.DOCUMENTS"]));
 record("More aggregator does not trust browser tenant data", !/searchParams|tenantId=|homeownerId=|role=|module=/.test(morePage));
 
-const routeFiles = execSync("rg --files app/portal", { cwd: root, encoding: "utf8" });
-record("no new unsupported gate or move portal routes", !/app\/portal\/(gate|move)/i.test(routeFiles.replaceAll("\\", "/")));
+const routeFiles = listProjectFiles("app/portal").join("\n");
+record("no new unsupported gate or move portal routes", !/app\/portal\/(gate|move)/i.test(routeFiles));
 
 const files = changedFiles();
 record("no Prisma schema or migration changes", !files.some((file) => file === "prisma/schema.prisma" || file.startsWith("prisma/migrations/")));

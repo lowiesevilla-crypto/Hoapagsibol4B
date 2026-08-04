@@ -1,0 +1,131 @@
+name: Feature or enhancement
+description: Propose a user-facing, operational, technical, or documentation improvement.
+title: "[Enhancement]: "
+labels:
+  - enhancement
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Provide enough detail for the issue to be prioritized, implemented, tested, and accepted without relying on a separate task document.
+
+  - type: dropdown
+    id: product_area
+    attributes:
+      label: Product area
+      options:
+        - Platform
+        - Homeowners
+        - Finance
+        - Community
+        - Documents
+        - HRIS
+        - Mobile
+        - AI
+        - Operations
+        - Documentation
+    validations:
+      required: true
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem or user need
+      description: Describe what is difficult, unsafe, inaccurate, slow, or unavailable today.
+      placeholder: Who is affected, what happens, and why the current behavior is insufficient?
+    validations:
+      required: true
+
+  - type: textarea
+    id: value
+    attributes:
+      label: Business value and affected users
+      description: Explain the expected outcome and the users or operational roles that benefit.
+    validations:
+      required: true
+
+  - type: textarea
+    id: scope
+    attributes:
+      label: Scope
+      description: State the capabilities and workflow steps included in this issue.
+    validations:
+      required: true
+
+  - type: textarea
+    id: exclusions
+    attributes:
+      label: Explicit exclusions
+      description: State what this issue will not implement so scope does not expand silently.
+      placeholder: Out of scope for this issue...
+    validations:
+      required: true
+
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance criteria
+      description: Use measurable, testable checklist items.
+      placeholder: |
+        - [ ] ...
+        - [ ] ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: security
+    attributes:
+      label: Security, privacy, authorization, and tenant isolation
+      description: Identify server-side permissions, tenant scope, audit logging, sensitive data, retention, and abuse cases.
+      placeholder: State "No material impact" only after assessing these areas.
+    validations:
+      required: true
+
+  - type: textarea
+    id: finance
+    attributes:
+      label: Finance and data-integrity impact
+      description: Identify calculation, balance, ledger, idempotency, migration, reconciliation, or data-quality requirements.
+      placeholder: State "No material impact" when applicable.
+    validations:
+      required: true
+
+  - type: textarea
+    id: ux
+    attributes:
+      label: Mobile and accessibility requirements
+      description: Describe responsive layouts, keyboard/focus behavior, labels, errors, and supported user journeys.
+      placeholder: State the applicable desktop, tablet, mobile, and accessibility expectations.
+    validations:
+      required: true
+
+  - type: textarea
+    id: tests
+    attributes:
+      label: Required test scenarios
+      description: Include happy path, boundary, invalid, authorization, cross-tenant, retry/idempotency, and recovery scenarios as applicable.
+      placeholder: |
+        - Happy path:
+        - Boundary/invalid:
+        - Authorization/tenant isolation:
+        - Recovery/regression:
+    validations:
+      required: true
+
+  - type: textarea
+    id: dependencies
+    attributes:
+      label: Dependencies and risks
+      description: Link related issues, decisions, migrations, integrations, or known blockers.
+
+  - type: textarea
+    id: definition_of_done
+    attributes:
+      label: Definition of done
+      description: Include implementation, review, tests, CI, documentation, UAT, deployment, and operational evidence as applicable.
+      placeholder: |
+        - [ ] Implementation reviewed and merged
+        - [ ] Required automated tests and CI pass
+        - [ ] Documentation/UAT/release evidence complete
+    validations:
+      required: true

@@ -39,12 +39,12 @@ export default async function PortalPaymentsPage({ searchParams }: { searchParam
     <PortalPageContainer className="space-y-6">
       <PaymentAreaNavigation active="payments" />
       <section className="grid gap-3 md:grid-cols-3">
-        <PaymentMetricCard label="Receipts" value={String(totalPayments)} note="Filtered payment records" icon={CreditCard} />
-        <PaymentMetricCard label="Latest Payment" value={latest ? money(latest.amount) : "None"} note={latest ? shortDate(latest.paymentDate) : "No recorded payment"} icon={Printer} tone={latest ? "success" : "default"} />
-        <PaymentMetricCard label="Recent Credit" value={money(activeSummary.reduce((sum, payment) => sum + paymentUnappliedCredit(payment), 0))} note="From recent active payments" icon={CreditCard} tone="info" />
+        <PaymentMetricCard label="Receipts" value={String(totalPayments)} note="Filtered payment records" icon={CreditCard} href="#receipts" />
+        <PaymentMetricCard label="Latest Payment" value={latest ? money(latest.amount) : "None"} note={latest ? shortDate(latest.paymentDate) : "No recorded payment"} icon={Printer} tone={latest ? "success" : "default"} href={latest ? `/receipts/payment/${latest.id}` : "#receipts"} />
+        <PaymentMetricCard label="Recent Credit" value={money(activeSummary.reduce((sum, payment) => sum + paymentUnappliedCredit(payment), 0))} note="From recent active payments" icon={CreditCard} tone="info" href="/portal/soa" />
       </section>
 
-      <section className="rounded-3xl border border-pine-100 bg-white p-4 shadow-soft sm:p-5">
+      <section id="receipts" className="scroll-mt-28 rounded-3xl border border-pine-100 bg-white p-4 shadow-soft sm:p-5">
         <PortalSectionHeader eyebrow="Search and filter" title="Payment History" />
         <form className="grid gap-3 md:grid-cols-5" action="/portal/payments">
           <label className="md:col-span-2"><span className="label">Search receipt or reference</span><input className="field min-h-12" name="q" defaultValue={query.q || ""} placeholder="Receipt, reference, remarks" /></label>

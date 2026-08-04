@@ -18,6 +18,7 @@
     "verify:homeowner-auth": "tsx scripts/verify-homeowner-universal-auth.ts",
     "verify:homeowner-mobile-dashboard": "tsx scripts/verify-homeowner-mobile-dashboard.ts",
     "verify:homeowner-mobile-community": "tsx scripts/verify-homeowner-mobile-community.ts",
+    "verify:homeowner-mobile-hardening": "tsx scripts/verify-homeowner-mobile-hardening.ts",
     "verify:homeowner-mobile-payments": "tsx scripts/verify-homeowner-mobile-payments.ts",
     "verify:homeowner-mobile-requests": "tsx scripts/verify-homeowner-mobile-requests.ts",
     "verify:homeowner-mobile-shell": "tsx scripts/verify-homeowner-mobile-shell.ts",

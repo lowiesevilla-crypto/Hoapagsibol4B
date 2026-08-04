@@ -39,7 +39,7 @@ export function PayByQrForm({ openBills, today, documentPayment }: { openBills: 
   const [selectedBills, setSelectedBills] = useState<string[]>([]);
   const [referenceNumber, setReferenceNumber] = useState("");
   const [otherAmount, setOtherAmount] = useState("");
-  const [online, setOnline] = useState(typeof navigator === "undefined" ? true : navigator.onLine);
+  const [online, setOnline] = useState(typeof window === "undefined" ? true : navigator.onLine);
   const selectedTotal = useMemo(() => openBills.filter((bill) => selectedBills.includes(bill.id)).reduce((sum, bill) => sum + bill.balance, 0), [openBills, selectedBills]);
   const selectedTotalLabel = new Intl.NumberFormat("en-PH", { style: "currency", currency: "PHP" }).format(selectedTotal);
   const isDocumentFee = Boolean(documentPayment);

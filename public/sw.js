@@ -1,4 +1,4 @@
-const SHELL_CACHE = "hoahub-pwa-shell-v1";
+const SHELL_CACHE = "hoahub-pwa-shell-v2";
 const OFFLINE_URL = "/offline";
 const APP_SHELL_ASSETS = [
   OFFLINE_URL,
@@ -20,11 +20,31 @@ const NETWORK_ONLY_PREFIXES = [
   "/receipts/",
   "/uploads/",
   "/login",
+  "/logout",
   "/activate",
   "/reset-password",
   "/forgot-password",
   "/complaints",
   "/verify/documents",
+];
+
+const NETWORK_ONLY_PATH_PATTERNS = [
+  /payment-proof/i,
+  /proof/i,
+  /receipt/i,
+  /generated-document/i,
+  /complaint/i,
+  /chat/i,
+  /profile/i,
+  /vehicle/i,
+  /document-preview/i,
+];
+
+const NETWORK_ONLY_QUERY_KEYS = [
+  "_rsc",
+  "__flight__",
+  "next-router-state-tree",
+  "next-router-prefetch",
 ];
 
 self.addEventListener("install", (event) => {
@@ -52,7 +72,7 @@ self.addEventListener("fetch", (event) => {
 
   const url = new URL(request.url);
   if (url.origin !== self.location.origin) return;
-  if (hasSensitiveRequest(url.pathname)) {
+  if (hasSensitiveRequest(url)) {
     event.respondWith(fetch(request));
     return;
   }
@@ -66,12 +86,15 @@ self.addEventListener("fetch", (event) => {
   }
 });
 
-function hasSensitiveRequest(pathname) {
-  return NETWORK_ONLY_PREFIXES.some((prefix) => pathname === prefix || pathname.startsWith(prefix));
+function hasSensitiveRequest(url) {
+  const pathname = url.pathname;
+  if (NETWORK_ONLY_PREFIXES.some((prefix) => pathname === prefix || pathname.startsWith(prefix))) return true;
+  if (NETWORK_ONLY_PATH_PATTERNS.some((pattern) => pattern.test(pathname))) return true;
+  return NETWORK_ONLY_QUERY_KEYS.some((key) => url.searchParams.has(key));
 }
 
 function isServerActionRequest(request) {
-  return request.headers.has("Next-Action");
+  return request.headers.has("Next-Action") || request.headers.has("next-action");
 }
 
 function isReactServerComponentRequest(request) {
@@ -102,8 +125,17 @@ async function cacheFirstStatic(request) {
   if (cached) return cached;
 
   const response = await fetch(request);
-  if (response.ok && !response.headers.has("set-cookie")) {
+  if (isCacheableStaticResponse(response)) {
     await cache.put(request, response.clone());
   }
   return response;
+}
+
+function isCacheableStaticResponse(response) {
+  if (!(response.ok && !response.headers.has("set-cookie"))) return false;
+  const cacheControl = response.headers.get("cache-control") || "";
+  if (/\b(no-store|private)\b/i.test(cacheControl)) return false;
+  const contentType = response.headers.get("content-type") || "";
+  if (/text\/html|application\/json|text\/x-component/i.test(contentType)) return false;
+  return true;
 }

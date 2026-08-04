@@ -31,6 +31,7 @@ const DISMISS_COUNT_KEY = "hoahub:pwa-install-dismiss-count";
 const DISMISS_MS = 14 * 24 * 60 * 60 * 1000;
 const PWA_SERVICE_WORKER_PATH = "/sw.js";
 const DEVELOPMENT_HOAHUB_CACHE_PREFIX = "hoahub-pwa-";
+const UPDATE_RELOAD_KEY = "hoahub:pwa-update-reload-started";
 
 export function PwaInstallProvider({ children }: { children: React.ReactNode }) {
   const pathname = usePathname() || "/";
@@ -41,6 +42,7 @@ export function PwaInstallProvider({ children }: { children: React.ReactNode }) 
   const [online, setOnline] = useState(true);
   const [updateRegistration, setUpdateRegistration] = useState<ServiceWorkerRegistration | null>(null);
   const [platform, setPlatform] = useState<PwaPlatform>("unknown");
+  const updatingRef = useRef(false);
   const suppressed = isSuppressedInstallPath(pathname);
 
   useEffect(() => {
@@ -144,13 +146,12 @@ export function PwaInstallProvider({ children }: { children: React.ReactNode }) 
     },
     refreshForUpdate: () => {
       const waiting = updateRegistration?.waiting;
-      if (!waiting) return;
-      let refreshing = false;
+      if (!waiting || updatingRef.current) return;
+      updatingRef.current = true;
       navigator.serviceWorker.addEventListener("controllerchange", () => {
-        if (refreshing) return;
-        refreshing = true;
+        if (updateReloadAlreadyStarted()) return;
         window.location.reload();
-      });
+      }, { once: true });
       waiting.postMessage({ type: "SKIP_WAITING" });
     },
   }), [deferredPrompt, dismissed, installed, online, platform, sheetOpen, suppressed, updateRegistration]);
@@ -234,23 +235,44 @@ export function PwaInstallActionCard() {
 export function InstallHoaHubBottomSheet({ open, onClose }: { open: boolean; onClose: () => void }) {
   const pwa = usePwaInstall();
   const closeButtonRef = useRef<HTMLButtonElement>(null);
+  const sheetRef = useRef<HTMLElement>(null);
 
   useEffect(() => {
     if (open) closeButtonRef.current?.focus();
+  }, [open]);
+
+  useEffect(() => {
+    if (!open) return;
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "Tab") return;
+      const focusable = sheetRef.current?.querySelectorAll<HTMLElement>("a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex='-1'])");
+      if (!focusable?.length) return;
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
   }, [open]);
 
   if (!open) return null;
 
   return (
     <div className="fixed inset-0 z-[70] bg-slate-950/35 px-3 pb-3 pt-16 backdrop-blur-sm" role="presentation" onClick={onClose}>
-      <section className="mx-auto flex max-h-[calc(100dvh-5rem)] w-full max-w-lg flex-col rounded-t-[1.5rem] rounded-b-2xl bg-white shadow-2xl lg:rounded-3xl" role="dialog" aria-modal="true" aria-labelledby="install-hoahub-title" onClick={(event) => event.stopPropagation()}>
+      <section ref={sheetRef} className="mx-auto flex max-h-[calc(100dvh-5rem)] w-full max-w-lg flex-col rounded-t-[1.5rem] rounded-b-2xl bg-white shadow-2xl lg:rounded-3xl" role="dialog" aria-modal="true" aria-labelledby="install-hoahub-title" aria-describedby="install-hoahub-description" onClick={(event) => event.stopPropagation()}>
         <div className="flex items-start gap-3 border-b border-slate-100 p-4">
           <span className="grid size-12 shrink-0 place-items-center rounded-2xl bg-pine-50 text-pine-700">
             <Smartphone className="size-6" aria-hidden="true" />
           </span>
           <div className="min-w-0 flex-1">
             <h2 id="install-hoahub-title" className="text-lg font-black text-ink">Install HOAHub</h2>
-            <p className="mt-1 text-sm leading-6 text-slate-600">Use your browser&apos;s safe app install flow. No homeowner data is stored by this prompt.</p>
+            <p id="install-hoahub-description" className="mt-1 text-sm leading-6 text-slate-600">Use your browser&apos;s safe app install flow. No homeowner data is stored by this prompt.</p>
           </div>
           <button ref={closeButtonRef} type="button" className="grid size-10 place-items-center rounded-xl text-slate-500 hover:bg-slate-50 focus-visible:outline focus-visible:outline-4 focus-visible:outline-pine-500/20" onClick={onClose} aria-label="Close install instructions">
             <X className="size-5" aria-hidden="true" />
@@ -310,7 +332,7 @@ export function PwaUpdateAvailableNotice() {
   if (!pwa.updateAvailable) return null;
 
   return (
-    <section className="fixed inset-x-3 bottom-[calc(5.75rem+env(safe-area-inset-bottom))] z-[60] mx-auto max-w-lg rounded-2xl border border-pine-100 bg-white p-3 shadow-soft lg:bottom-6 lg:left-auto lg:right-6 lg:mx-0" aria-label="HOAHub update available">
+    <section className="fixed inset-x-3 bottom-[calc(5.75rem+env(safe-area-inset-bottom))] z-[60] mx-auto max-w-lg rounded-2xl border border-pine-100 bg-white p-3 shadow-soft lg:bottom-6 lg:left-auto lg:right-6 lg:mx-0" aria-label="HOAHub update available" role="status" aria-live="polite">
       <div className="flex items-center gap-3">
         <Info className="size-5 shrink-0 text-pine-700" aria-hidden="true" />
         <p className="min-w-0 flex-1 text-sm font-bold text-ink">A safer, newer HOAHub version is ready.</p>
@@ -399,6 +421,16 @@ function clearInstallDismissal() {
   } catch {
     // Local storage may be unavailable in private or restricted browser modes.
   }
+}
+
+function updateReloadAlreadyStarted() {
+  try {
+    if (window.sessionStorage.getItem(UPDATE_RELOAD_KEY) === "1") return true;
+    window.sessionStorage.setItem(UPDATE_RELOAD_KEY, "1");
+  } catch {
+    // Restricted storage should not block a confirmed service-worker update.
+  }
+  return false;
 }
 
 function isSuppressedInstallPath(pathname: string) {

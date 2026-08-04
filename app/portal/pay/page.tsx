@@ -8,6 +8,7 @@ import { getAppUrl } from "@/lib/app-url";
 import { requireHomeownerProfile } from "@/lib/portal";
 import { getStatementOfAccount } from "@/lib/services/statement-of-account";
 import { getAssociationSettings, getPaymentSettings } from "@/lib/system-settings";
+import { locateTenantUpload, locateUpload } from "@/lib/storage";
 import { canSubmitDocumentFeePayment, documentFeePaymentPurpose, documentFeePaymentStatusLabel, documentRequestPublicReference } from "@/lib/services/document-fee-payments";
 import { documentTypeLabel } from "@/lib/services/documents";
 import { collectionLabel, inputDate, money, monthLabel, shortDate } from "@/lib/utils";
@@ -70,6 +71,7 @@ export default async function PortalPayPage({ searchParams }: { searchParams: Pr
     purpose: documentFeePaymentPurpose({ documentType: selectedDocumentType, requestReference: selectedRequestReference }),
     statusLabel: documentFeePaymentStatusLabel(selectedDocumentRequest),
   } : null;
+  const gcashQrImageUrl = await availableGcashQrImageUrl(paymentSettings.gcashQrImageUrl);
 
   return (
     <PortalPageContainer className="space-y-6">
@@ -123,7 +125,7 @@ export default async function PortalPayPage({ searchParams }: { searchParams: Pr
               <div className="min-w-0"><p className="text-xs font-bold uppercase tracking-wider text-slate-500">Tenant payment account</p><p className="break-words font-black text-slate-950">{association.name}</p></div>
             </div>
             <div className="mb-4 flex items-center gap-3"><span className="grid size-11 place-items-center rounded-2xl bg-pine-50 text-pine-700"><QrCode className="size-5" /></span><div><h2 className="text-lg font-black">Official GCash QR</h2><p className="text-sm text-slate-500">Verify these details before sending payment.</p></div></div>
-            {paymentSettings.gcashQrImageUrl ? <div className="overflow-hidden rounded-3xl border border-slate-200 bg-white p-3"><img src={paymentSettings.gcashQrImageUrl} alt="Official HOA GCash QR code" className="mx-auto aspect-square max-h-[420px] w-full max-w-[420px] object-contain" /></div> : <div className="grid min-h-72 place-items-center rounded-3xl border border-dashed border-slate-300 bg-slate-50 p-6 text-center text-sm font-bold text-slate-600">GCash QR is currently unavailable. Please contact Admin.</div>}
+            {gcashQrImageUrl ? <div className="overflow-hidden rounded-3xl border border-slate-200 bg-white p-3"><img src={gcashQrImageUrl} alt="Official HOA GCash QR code" className="mx-auto aspect-square max-h-[420px] w-full max-w-[420px] object-contain" /></div> : <div className="grid min-h-72 place-items-center rounded-3xl border border-dashed border-slate-300 bg-slate-50 p-6 text-center text-sm font-bold text-slate-600">GCash QR is currently unavailable. Please contact Admin.</div>}
             <dl className="mt-5 grid gap-3 rounded-2xl bg-pine-50/70 p-4 text-sm">
               <div><dt className="font-bold uppercase tracking-wide text-slate-500">Account name</dt><dd className="break-words text-lg font-black text-pine-900">{paymentSettings.gcashAccountName || "Not configured"}</dd></div>
               <div><dt className="font-bold uppercase tracking-wide text-slate-500">Mobile number</dt><dd className="break-words text-lg font-black text-pine-900">{paymentSettings.gcashMobileNumber || "Not configured"}</dd></div>
@@ -171,4 +173,22 @@ function requestTone(status: string): PaymentTone {
 
 function homeownerSafeRemarks(remarks?: string | null) {
   return remarks?.trim() || null;
+}
+
+async function availableGcashQrImageUrl(url?: string | null) {
+  const value = url?.trim();
+  if (!value) return null;
+  if (!value.startsWith("/uploads/settings/")) return value;
+  const segments = value.slice("/uploads/settings/".length).split("/").filter(Boolean);
+  if (!segments.length || segments.some((segment) => segment.includes("..") || segment.includes("/") || segment.includes("\\"))) return null;
+  try {
+    if (segments.length >= 3 && segments[1] === "gcash") {
+      await locateTenantUpload(segments[0], "settings", ...segments.slice(1));
+    } else {
+      await locateUpload("settings", ...segments);
+    }
+    return value;
+  } catch {
+    return null;
+  }
 }

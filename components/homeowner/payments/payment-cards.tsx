@@ -101,9 +101,8 @@ export function PaymentHeroCard({
   );
 }
 
-export function PaymentMetricCard({ label, value, note, icon: Icon, tone = "default" }: { label: string; value: string; note?: string; icon: LucideIcon; tone?: PaymentTone }) {
-  return (
-    <section className={`rounded-3xl border p-4 shadow-sm ${toneClasses[tone]}`}>
+export function PaymentMetricCard({ label, value, note, icon: Icon, tone = "default", href }: { label: string; value: string; note?: string; icon: LucideIcon; tone?: PaymentTone; href?: string }) {
+  const content = (
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <p className="text-xs font-black uppercase tracking-[.14em] text-slate-500">{label}</p>
@@ -112,8 +111,11 @@ export function PaymentMetricCard({ label, value, note, icon: Icon, tone = "defa
         </div>
         <span className="grid size-11 shrink-0 place-items-center rounded-2xl bg-white text-pine-700 shadow-sm ring-1 ring-pine-100"><Icon className="size-5" aria-hidden="true" /></span>
       </div>
-    </section>
   );
+  const className = `block rounded-3xl border p-4 shadow-sm ${toneClasses[tone]}`;
+  return href
+    ? <Link href={href} className={`${className} transition hover:-translate-y-0.5 hover:shadow-soft focus-visible:outline focus-visible:outline-4 focus-visible:outline-pine-500/20`}>{content}</Link>
+    : <section className={className}>{content}</section>;
 }
 
 export function UnpaidBillingCard({

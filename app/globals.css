@@ -32,6 +32,20 @@ button, a, summary { -webkit-tap-highlight-color: transparent; touch-action: man
 main, section, article, header, footer, aside, nav, form, div { min-width: 0; }
 ::selection { background: #dff8d2; color: #0a3b57; }
 * { scrollbar-color: #9bd7f3 transparent; scrollbar-width: thin; }
+:focus-visible {
+  outline: 3px solid rgba(7, 139, 201, .35);
+  outline-offset: 3px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html:focus-within { scroll-behavior: auto; }
+  *, *::before, *::after {
+    animation-duration: .01ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+    transition-duration: .01ms !important;
+  }
+}
 
 .document-preview-page {
   min-height: 100dvh;
@@ -390,6 +404,87 @@ main, section, article, header, footer, aside, nav, form, div { min-width: 0; }
     margin-top: -2mm !important;
     font-size: 6pt !important;
     line-height: 1.1 !important;
+  }
+  body:has(.homeowner-soa-print) aside,
+  body:has(.homeowner-soa-print) header.sticky,
+  body:has(.homeowner-soa-print) nav[aria-label="Homeowner primary navigation"] {
+    display: none !important;
+  }
+  body:has(.homeowner-soa-print) main {
+    width: 100% !important;
+    max-width: none !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+  .homeowner-soa-print {
+    width: 100% !important;
+    max-width: none !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    color: #0f172a !important;
+    background: #fff !important;
+  }
+  .homeowner-soa-print > * + * {
+    margin-top: 3mm !important;
+  }
+  .homeowner-soa-print header,
+  .homeowner-soa-print section,
+  .homeowner-soa-print .rounded-3xl,
+  .homeowner-soa-print .rounded-2xl {
+    border-radius: 0 !important;
+    box-shadow: none !important;
+    background: #fff !important;
+    break-inside: avoid !important;
+    page-break-inside: avoid !important;
+  }
+  .homeowner-soa-print header {
+    padding: 0 0 3mm 0 !important;
+    border: 0 !important;
+    border-bottom: 1pt solid #0f172a !important;
+  }
+  .homeowner-soa-print header h1 {
+    font-size: 16pt !important;
+    line-height: 1.15 !important;
+  }
+  .homeowner-soa-print header p,
+  .homeowner-soa-print section p,
+  .homeowner-soa-print section dt,
+  .homeowner-soa-print section dd {
+    color: #0f172a !important;
+  }
+  .homeowner-soa-print section {
+    padding: 3mm !important;
+    border: 1pt solid #cbd5e1 !important;
+  }
+  .homeowner-soa-print .homeowner-soa-screen-cards {
+    display: none !important;
+  }
+  .homeowner-soa-print .homeowner-soa-print-table {
+    display: block !important;
+    overflow: visible !important;
+  }
+  .homeowner-soa-print .data-table {
+    width: 100% !important;
+    min-width: 0 !important;
+    table-layout: fixed !important;
+    border-collapse: collapse !important;
+    font-size: 7.2pt !important;
+    line-height: 1.2 !important;
+  }
+  .homeowner-soa-print .data-table thead {
+    display: table-header-group !important;
+  }
+  .homeowner-soa-print .data-table th,
+  .homeowner-soa-print .data-table td {
+    padding: 2pt 3pt !important;
+    border: 0.5pt solid #cbd5e1 !important;
+    white-space: normal !important;
+    overflow-wrap: break-word !important;
+    vertical-align: top !important;
+  }
+  .homeowner-soa-print .data-table tr {
+    break-inside: avoid !important;
+    page-break-inside: avoid !important;
   }
   .document-copy, .pass-sheet, .residency-sheet, .clearance-sheet { break-inside: avoid; page-break-inside: avoid; }
 }

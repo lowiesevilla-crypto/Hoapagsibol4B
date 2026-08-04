@@ -13,7 +13,6 @@ import {
   loadApprovedPassTemplatePackages,
   planApprovedPassTemplateFromState,
   sanitizePlanForDisplay,
-  targetPassTemplates,
   targetTenantId,
   validateApprovedPassTemplatePackage,
   type ApprovedPassDefinitionState,

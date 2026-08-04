@@ -1,18 +1,84 @@
-import Link from "next/link";
-import { TenantModule } from "@prisma/client";
-import type { LucideIcon } from "lucide-react";
-import { CalendarDays, CarFront, CircleDollarSign, CreditCard, FileText, HandCoins, Megaphone, MessageSquare, QrCode, ReceiptText } from "lucide-react";
-import { PortalEmptyState, PortalMobileListItem, PortalPageContainer, PortalQuickActionTile, PortalSectionHeader, PortalSummaryCard } from "@/components/portal-mobile-shell";
-import { StatusBadge } from "@/components/status-badge";
+import { ComplaintPrivacyMode, ComplaintStatus, DocumentRequestStatus, PaymentRequestStatus, TenantModule } from "@prisma/client";
+import { CalendarDays, CarFront, CreditCard, FileCheck2, FileQuestion, FileText, Megaphone, MessageSquare, MessageSquarePlus, QrCode, ShieldCheck } from "lucide-react";
+import {
+  BalanceSummaryCard,
+  DashboardAnnouncementCard,
+  DashboardList,
+  DashboardQuickActions,
+  DashboardSection,
+  HomeownerGreeting,
+  UpcomingEvents,
+  type DashboardAction,
+  type DashboardEvent,
+  type DashboardListItem,
+} from "@/components/homeowner/dashboard/dashboard-cards";
+import { PortalPageContainer } from "@/components/portal-mobile-shell";
 import { refreshOverdueBills } from "@/lib/actions/billing";
 import { getAppUrl } from "@/lib/app-url";
 import { prisma } from "@/lib/db";
-import { homeownerAccountNumber } from "@/lib/homeowner-account";
 import { requireHomeownerProfile } from "@/lib/portal";
-import { getStatementOfAccount } from "@/lib/services/statement-of-account";
 import { documentTypeLabel } from "@/lib/services/documents";
+import { getStatementOfAccount } from "@/lib/services/statement-of-account";
 import { getEnabledTenantModules } from "@/lib/tenant";
 import { collectionLabel, money, monthLabel, shortDate } from "@/lib/utils";
+
+type DashboardDocumentRequest = {
+  id: string;
+  documentNumber: string | null;
+  type: Parameters<typeof documentTypeLabel>[0] | null;
+  status: string;
+  requestedAt: Date;
+  definition: { displayName: string; code: string } | null;
+  configuration: { displayName: string } | null;
+  histories: Array<{ status: string; note: string | null; createdAt: Date }>;
+};
+
+type DashboardComplaint = {
+  id: string;
+  title: string;
+  complaintNumber: string;
+  status: string;
+  submittedAt: Date;
+  updatedAt: Date;
+};
+
+type DashboardPaymentRequest = {
+  id: string;
+  type: string;
+  collectionType: string | null;
+  description: string | null;
+  amount: string | number | { toString(): string };
+  status: string;
+  createdAt: Date;
+};
+
+type DashboardPayment = {
+  id: string;
+  amount: string | number | { toString(): string };
+  paymentDate: Date;
+  receiptNumber: string | null;
+  referenceNumber: string | null;
+} | null;
+
+type DashboardAnnouncementRecord = {
+  id: string;
+  title: string;
+  content: string;
+  imageUrl: string | null;
+  createdAt: Date;
+} | null;
+
+type DashboardEventRecord = {
+  id: string;
+  title: string;
+  description: string;
+  eventDate: Date;
+  eventTime: string;
+  startTime: string | null;
+  endTime: string | null;
+  location: string;
+  imageUrl: string | null;
+};
 
 async function traceDashboardOperation<T>(operation: string, task: () => Promise<T>) {
   try {
@@ -26,94 +92,272 @@ async function traceDashboardOperation<T>(operation: string, task: () => Promise
   }
 }
 
+const activeDocumentStatuses = [
+  DocumentRequestStatus.SUBMITTED,
+  DocumentRequestStatus.PENDING_PAYMENT,
+  DocumentRequestStatus.PAYMENT_CONFIRMED,
+  DocumentRequestStatus.PENDING_APPROVAL,
+  DocumentRequestStatus.UNDER_REVIEW,
+  DocumentRequestStatus.APPROVED,
+  DocumentRequestStatus.GENERATING,
+  DocumentRequestStatus.ISSUED,
+  DocumentRequestStatus.GENERATED,
+  DocumentRequestStatus.RETURNED_FOR_CORRECTION,
+];
+
+const activeComplaintStatuses = [
+  ComplaintStatus.SUBMITTED,
+  ComplaintStatus.ACKNOWLEDGED,
+  ComplaintStatus.TRIAGED,
+  ComplaintStatus.ASSIGNED,
+  ComplaintStatus.UNDER_REVIEW,
+  ComplaintStatus.WAITING_FOR_INFORMATION,
+  ComplaintStatus.ACTION_IN_PROGRESS,
+  ComplaintStatus.REFERRED,
+  ComplaintStatus.REOPENED,
+];
+
 export default async function PortalDashboard() {
   const profile = await traceDashboardOperation("requireHomeownerProfile", () => requireHomeownerProfile());
   await traceDashboardOperation("refreshOverdueBills", () => refreshOverdueBills());
+
   const now = new Date();
   const today = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
-  const [soa, openBills, recentBills, bondTotals, announcement, event, documentRequest, paymentRequest, enabledModules] = await Promise.all([
+  const [soa, openBills, latestPayment, recentPaymentRequests, documentRequests, complaints, announcement, events, enabledModules] = await Promise.all([
     traceDashboardOperation("statementOfAccount", () => getStatementOfAccount(profile.id, profile.tenantId, getAppUrl())),
-    traceDashboardOperation("openBills", () => prisma.bill.findMany({ take: 3, where: { tenantId: profile.tenantId, homeownerId: profile.id, balance: { gt: 0 }, archivedAt: null }, orderBy: [{ dueDate: "asc" }, { billingMonth: "desc" }] })),
-    traceDashboardOperation("recentBills", () => prisma.bill.findMany({ take: 5, where: { tenantId: profile.tenantId, homeownerId: profile.id, archivedAt: null }, orderBy: { billingMonth: "desc" } })),
-    traceDashboardOperation("refundableCollectionAggregate", () => prisma.collection.aggregate({ _sum: { amount: true, amountRefunded: true, amountForfeited: true }, where: { tenantId: profile.tenantId, homeownerId: profile.id, refundable: true } })),
-    traceDashboardOperation("latestAnnouncement", () => prisma.announcement.findFirst({ where: { tenantId: profile.tenantId, status: "PUBLISHED" }, orderBy: { createdAt: "desc" } })),
-    traceDashboardOperation("nextEvent", () => prisma.event.findFirst({ where: { tenantId: profile.tenantId, status: "PUBLISHED", eventDate: { gte: today } }, orderBy: { eventDate: "asc" } })),
-    traceDashboardOperation("activeDocumentRequest", () => prisma.documentRequest.findFirst({ where: { tenantId: profile.tenantId, homeownerId: profile.id, archivedAt: null, status: { in: ["SUBMITTED", "PENDING_PAYMENT", "PAYMENT_CONFIRMED", "PENDING_APPROVAL", "UNDER_REVIEW", "APPROVED", "GENERATING", "ISSUED", "GENERATED"] } }, include: { definition: true, configuration: true }, orderBy: { requestedAt: "desc" } })),
-    traceDashboardOperation("pendingPaymentRequest", () => prisma.paymentRequest.findFirst({ where: { tenantId: profile.tenantId, homeownerId: profile.id, status: "PENDING_REVIEW" }, orderBy: { createdAt: "desc" } })),
+    traceDashboardOperation("openBills", () => prisma.bill.findMany({
+      take: 4,
+      where: { tenantId: profile.tenantId, homeownerId: profile.id, balance: { gt: 0 }, archivedAt: null },
+      orderBy: [{ dueDate: "asc" }, { billingMonth: "asc" }],
+      select: { id: true, billingMonth: true, dueDate: true, balance: true, status: true },
+    })),
+    traceDashboardOperation("latestPayment", () => prisma.payment.findFirst({
+      where: { tenantId: profile.tenantId, homeownerId: profile.id, status: "ACTIVE" },
+      orderBy: [{ paymentDate: "desc" }, { createdAt: "desc" }],
+      select: { id: true, amount: true, paymentDate: true, receiptNumber: true, referenceNumber: true },
+    })),
+    traceDashboardOperation("paymentRequests", () => prisma.paymentRequest.findMany({
+      take: 3,
+      where: { tenantId: profile.tenantId, homeownerId: profile.id, status: PaymentRequestStatus.PENDING_REVIEW },
+      orderBy: { createdAt: "desc" },
+      select: { id: true, type: true, collectionType: true, description: true, amount: true, status: true, createdAt: true },
+    })),
+    traceDashboardOperation("documentRequests", () => prisma.documentRequest.findMany({
+      take: 4,
+      where: { tenantId: profile.tenantId, homeownerId: profile.id, archivedAt: null, status: { in: activeDocumentStatuses } },
+      include: { definition: { select: { displayName: true, code: true } }, configuration: { select: { displayName: true } }, histories: { orderBy: { createdAt: "desc" }, take: 1, select: { status: true, note: true, createdAt: true } } },
+      orderBy: { requestedAt: "desc" },
+    })),
+    traceDashboardOperation("complaints", () => prisma.complaint.findMany({
+      take: 3,
+      where: {
+        tenantId: profile.tenantId,
+        status: { in: activeComplaintStatuses },
+        OR: [
+          { privacyMode: ComplaintPrivacyMode.NAMED, submittedById: profile.userId },
+          { privacyMode: ComplaintPrivacyMode.NAMED, homeownerId: profile.id },
+          { privacyMode: ComplaintPrivacyMode.CONFIDENTIAL, confidentialIdentity: { is: { userId: profile.userId } } },
+          { privacyMode: ComplaintPrivacyMode.CONFIDENTIAL, confidentialIdentity: { is: { homeownerId: profile.id } } },
+        ],
+      },
+      orderBy: { submittedAt: "desc" },
+      select: { id: true, title: true, complaintNumber: true, status: true, submittedAt: true, updatedAt: true },
+    })),
+    traceDashboardOperation("latestAnnouncement", () => prisma.announcement.findFirst({
+      where: { tenantId: profile.tenantId, status: "PUBLISHED" },
+      orderBy: [{ createdAt: "desc" }],
+      select: { id: true, title: true, content: true, imageUrl: true, createdAt: true },
+    })),
+    traceDashboardOperation("upcomingEvents", () => prisma.event.findMany({
+      take: 3,
+      where: { tenantId: profile.tenantId, status: "PUBLISHED", eventDate: { gte: today } },
+      orderBy: [{ eventDate: "asc" }, { startTime: "asc" }],
+      select: { id: true, title: true, description: true, eventDate: true, eventTime: true, startTime: true, endTime: true, location: true, imageUrl: true },
+    })),
     traceDashboardOperation("enabledTenantModules", () => getEnabledTenantModules(profile.tenantId)),
   ]);
-  const bondsHeld = Number(bondTotals._sum.amount ?? 0) - Number(bondTotals._sum.amountRefunded ?? 0) - Number(bondTotals._sum.amountForfeited ?? 0);
-  const accountNumber = homeownerAccountNumber(profile);
-  const latestPayment = soa.paymentHistory.find((payment) => payment.status === "Active");
+
   const nextDue = openBills[0];
-  const quickActions = [
-    enabledModules.has(TenantModule.BILLING) && { href: "/portal/pay", label: "Pay Dues", description: "Submit a QR payment for open balances.", icon: QrCode },
-    enabledModules.has(TenantModule.BILLING) && { href: "/portal/soa", label: "View SOA", description: "Review your account summary and ledger.", icon: ReceiptText },
-    enabledModules.has(TenantModule.BILLING) && { href: "/portal/payments", label: "Receipts", description: "Open payment history and receipts.", icon: CreditCard },
-    enabledModules.has(TenantModule.DOCUMENTS) && { href: "/portal/documents", label: "Request Document", description: "Track certificates, passes, and clearances.", icon: FileText },
-    enabledModules.has(TenantModule.ANNOUNCEMENTS) && { href: "/portal/announcements", label: "Announcements", description: "Read the latest HOA notices.", icon: Megaphone },
-    enabledModules.has(TenantModule.CHAT) && { href: "/portal/chat", label: "Chat", description: "Message the HOA office.", icon: MessageSquare },
-    enabledModules.has(TenantModule.VEHICLES) && { href: "/portal/vehicles", label: "Vehicles", description: "Review registered vehicles and stickers.", icon: CarFront },
-    enabledModules.has(TenantModule.EVENTS) && { href: "/portal/events", label: "Events", description: "See upcoming community events.", icon: CalendarDays },
-  ].filter(Boolean) as Array<{ href: string; label: string; description: string; icon: LucideIcon }>;
+  const balanceAmount = soa.summary.currentOutstandingBalance;
+  const billingStatus = soa.billingHistory.length === 0 ? "No Billing Record" : balanceAmount <= 0 ? "Paid" : soa.summary.collectionStatus === "Overdue" ? "Overdue" : "Amount Due";
+  const quickActions = priorityQuickActions(enabledModules);
+  const requestItems = activeRequestItems({ documentRequests, complaints, paymentRequests: recentPaymentRequests });
+  const activityItems = activityFeedItems({ latestPayment, documentRequests, paymentRequests: recentPaymentRequests, announcement, events });
+  const firstName = profile.user.name.split(" ")[0] || "Homeowner";
+  const propertyLabel = profile.block || profile.lot ? `Block ${profile.block || "-"}, Lot ${profile.lot || "-"}` : undefined;
 
-  return <PortalPageContainer className="space-y-6">
-    <section className="overflow-hidden rounded-[2rem] border border-pine-100 bg-gradient-to-br from-pine-900 via-pine-700 to-pine-600 p-5 text-white shadow-brand sm:p-7">
-      <p className="text-xs font-black uppercase tracking-[.18em] text-leaf-100">Homeowner portal</p>
-      <div className="mt-3 grid gap-5 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-end">
-        <div>
-          <h1 className="break-words text-3xl font-black tracking-tight sm:text-4xl">Hello, {profile.user.name.split(" ")[0]}</h1>
-          <p className="mt-2 max-w-2xl text-sm leading-6 text-pine-50">Account {accountNumber} · Block {profile.block}, Lot {profile.lot} overview with tenant-scoped balances, requests, and community updates.</p>
+  return (
+    <PortalPageContainer className="space-y-5 lg:space-y-7">
+      <div className="grid gap-5 xl:grid-cols-[minmax(0,1.25fr)_minmax(22rem,.75fr)]">
+        <div className="space-y-5">
+          <HomeownerGreeting greeting={timeGreeting(now)} firstName={firstName} associationName={soa.association.name} propertyLabel={propertyLabel} />
+          <BalanceSummaryCard amount={money(balanceAmount)} status={billingStatus} dueDateLabel={nextDue ? shortDate(nextDue.dueDate) : undefined} coverageLabel={nextDue ? monthLabel(nextDue.billingMonth) : undefined} />
+          <DashboardQuickActions actions={quickActions} />
         </div>
-        <div className="rounded-3xl bg-white/10 p-4 ring-1 ring-white/15">
-          <p className="text-xs font-bold uppercase text-leaf-100">Collection status</p>
-          <p className="mt-1 text-2xl font-black">{soa.summary.collectionStatus}</p>
+
+        <div className="space-y-5">
+          <DashboardSection eyebrow="Requests" title="Active Requests" actionHref="/portal/requests">
+            <DashboardList items={requestItems} emptyTitle="No active requests" emptyDescription="Payment, document, and complaint requests that need attention will appear here." />
+          </DashboardSection>
+          <DashboardSection eyebrow="Activity" title="Recent Activity" actionHref="/portal/payments">
+            <DashboardList items={activityItems} emptyTitle="No recent activity" emptyDescription="Recent payments, request updates, and community activity will appear here." />
+          </DashboardSection>
         </div>
       </div>
-    </section>
 
-    <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-      <PortalSummaryCard label="Outstanding balance" value={money(soa.summary.currentOutstandingBalance)} note="From your current SOA" icon={CircleDollarSign} tone={soa.summary.currentOutstandingBalance > 0 ? "warning" : "success"} href="/portal/soa" />
-      <PortalSummaryCard label="Available credit" value={money(soa.summary.availableCredit)} note="Unapplied homeowner credit" icon={HandCoins} tone={soa.summary.availableCredit > 0 ? "success" : "default"} href="/portal/payments" />
-      <PortalSummaryCard label="Last payment" value={latestPayment ? money(latestPayment.amount) : "None yet"} note={latestPayment ? `${shortDate(latestPayment.paymentDate)} · ${latestPayment.officialReceiptNo}` : "No active receipts recorded"} icon={CreditCard} href="/portal/payments" />
-      <PortalSummaryCard label="Next due date" value={nextDue ? shortDate(nextDue.dueDate) : "No open dues"} note={nextDue ? `${monthLabel(nextDue.billingMonth)} · ${money(nextDue.balance)}` : "Your open billing queue is clear"} icon={CalendarDays} href="/portal/billing" />
-    </section>
+      <div className="grid gap-5 xl:grid-cols-[minmax(0,.9fr)_minmax(0,1.1fr)]">
+        <DashboardSection eyebrow="Announcement" title="Latest Announcement" actionHref={enabledModules.has(TenantModule.ANNOUNCEMENTS) ? "/portal/announcements" : undefined}>
+          <DashboardAnnouncementCard announcement={enabledModules.has(TenantModule.ANNOUNCEMENTS) && announcement ? {
+            href: `/portal/announcements/${announcement.id}`,
+            title: announcement.title,
+            summary: announcement.content,
+            dateLabel: shortDate(announcement.createdAt),
+            imageUrl: announcement.imageUrl,
+          } : null} />
+        </DashboardSection>
 
-    <section>
-      <PortalSectionHeader eyebrow="Fast actions" title="What would you like to do?" />
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">{quickActions.map((action) => <PortalQuickActionTile key={action.href} {...action} />)}</div>
-    </section>
-
-    <section className="grid gap-5 xl:grid-cols-[1.1fr_.9fr]">
-      <div className="rounded-3xl border border-pine-100 bg-white p-4 shadow-soft sm:p-5">
-        <PortalSectionHeader eyebrow="Billing" title="Recent billing" action={<Link className="text-sm font-black text-pine-700 hover:text-pine-900" href="/portal/billing">View all</Link>} />
-        <div className="space-y-3 md:hidden">
-          {recentBills.map((bill) => <PortalMobileListItem key={bill.id} title={monthLabel(bill.billingMonth)} meta={`${shortDate(bill.dueDate)} · ${bill.status.replaceAll("_", " ")}`} value={money(bill.balance)} icon={ReceiptText} />)}
-          {!recentBills.length && <PortalEmptyState title="No bills yet" description="No billing history is associated with your account." />}
-        </div>
-        <div className="table-wrap hidden shadow-none md:block"><table className="data-table"><thead><tr><th>Billing month</th><th>Due date</th><th>Status</th><th>Total</th><th>Balance</th></tr></thead><tbody>{recentBills.map((bill) => <tr key={bill.id}><td className="font-bold">{monthLabel(bill.billingMonth)}</td><td>{shortDate(bill.dueDate)}</td><td><StatusBadge status={bill.status} /></td><td>{money(bill.totalAmount)}</td><td className="font-black">{money(bill.balance)}</td></tr>)}{!recentBills.length && <tr><td colSpan={5} className="py-10 text-center text-slate-500">No bills are associated with your account.</td></tr>}</tbody></table></div>
+        <DashboardSection eyebrow="Events" title="Upcoming Events" actionHref={enabledModules.has(TenantModule.EVENTS) ? "/portal/events" : undefined}>
+          <UpcomingEvents events={enabledModules.has(TenantModule.EVENTS) ? events.map(eventToDashboardCard) : []} />
+        </DashboardSection>
       </div>
+    </PortalPageContainer>
+  );
+}
 
-      <div className="space-y-5">
-        <section className="rounded-3xl border border-pine-100 bg-white p-4 shadow-soft sm:p-5">
-          <PortalSectionHeader eyebrow="Community" title="Latest updates" />
-          <div className="space-y-3">
-            {announcement ? <PortalMobileListItem title={announcement.title} meta={`Announcement · ${shortDate(announcement.createdAt)}`} href={`/portal/announcements/${announcement.id}`} icon={Megaphone} /> : <PortalEmptyState title="No announcements" description="Published HOA notices will appear here." />}
-            {event ? <PortalMobileListItem title={event.title} meta={`Event · ${shortDate(event.eventDate)} · ${event.location}`} href={`/portal/events/${event.id}`} icon={CalendarDays} /> : <PortalEmptyState title="No upcoming events" description="Published community events will appear here." />}
-          </div>
-        </section>
+function priorityQuickActions(enabledModules: ReadonlySet<TenantModule>): DashboardAction[] {
+  const preferred = [
+    enabledModules.has(TenantModule.BILLING) && { href: "/portal/pay", label: "Pay Dues", description: "Submit a QR payment.", icon: QrCode },
+    enabledModules.has(TenantModule.DOCUMENTS) && { href: "/portal/documents", label: "Request Document", description: "Certificates and forms.", icon: FileQuestion },
+    enabledModules.has(TenantModule.DOCUMENTS) && { href: "/portal/documents", label: "Gate Pass", description: "Use document requests.", icon: ShieldCheck },
+    enabledModules.has(TenantModule.COMPLAINTS) && { href: "/portal/complaints/new", label: "Report an Issue", description: "Send a concern.", icon: MessageSquarePlus },
+  ];
+  const fallback = [
+    enabledModules.has(TenantModule.BILLING) && { href: "/portal/payments", label: "View Receipt", description: "Payment history.", icon: CreditCard },
+    enabledModules.has(TenantModule.CHAT) && { href: "/portal/chat", label: "Contact HOA", description: "Message the office.", icon: MessageSquare },
+    enabledModules.has(TenantModule.VEHICLES) && { href: "/portal/vehicles", label: "Vehicles", description: "Stickers and records.", icon: CarFront },
+    enabledModules.has(TenantModule.EVENTS) && { href: "/portal/events", label: "Events", description: "Community calendar.", icon: CalendarDays },
+    { href: "/portal/organization", label: "HOA Info", description: "Officers and contacts.", icon: Megaphone },
+  ];
+  return [...preferred, ...fallback].filter(Boolean).slice(0, 4) as DashboardAction[];
+}
 
-        <section className="rounded-3xl border border-pine-100 bg-white p-4 shadow-soft sm:p-5">
-          <PortalSectionHeader eyebrow="Requests" title="Active requests" />
-          <div className="space-y-3">
-            {paymentRequest && <PortalMobileListItem title={paymentRequest.type === "MONTHLY_DUES" ? "Payment request under review" : collectionLabel(String(paymentRequest.collectionType), paymentRequest.description)} meta={`${shortDate(paymentRequest.createdAt)} · ${paymentRequest.status.replaceAll("_", " ")}`} value={money(paymentRequest.amount)} href="/portal/pay" icon={QrCode} />}
-            {documentRequest && <PortalMobileListItem title="Document request" meta={`${shortDate(documentRequest.requestedAt)} · ${documentRequest.definition?.displayName || documentRequest.configuration?.displayName || documentTypeLabel(documentRequest.type)} · ${documentRequest.status.replaceAll("_", " ")}`} href="/portal/documents" icon={FileText} />}
-            {!paymentRequest && !documentRequest && <PortalEmptyState title="No active requests" description="Payment and document requests that need attention will appear here." />}
-          </div>
-        </section>
+function activeRequestItems({
+  documentRequests,
+  complaints,
+  paymentRequests,
+}: {
+  documentRequests: DashboardDocumentRequest[];
+  complaints: DashboardComplaint[];
+  paymentRequests: DashboardPaymentRequest[];
+}): DashboardListItem[] {
+  const payments = paymentRequests.map((request) => ({
+    href: "/portal/pay",
+    icon: QrCode,
+    title: request.type === "MONTHLY_DUES" ? "Payment under review" : collectionLabel(String(request.collectionType), request.description),
+    description: money(request.amount),
+    meta: `Submitted ${shortDate(request.createdAt)}`,
+    status: labelStatus(request.status),
+  }));
+  const documents = documentRequests.map((request) => ({
+    href: "/portal/documents",
+    icon: documentIcon(request.definition?.displayName || request.configuration?.displayName || request.type || ""),
+    title: request.definition?.displayName || request.configuration?.displayName || documentTypeLabel(request.type),
+    description: request.documentNumber || `Requested ${shortDate(request.requestedAt)}`,
+    meta: latestDocumentActivity(request),
+    status: labelStatus(request.status),
+  }));
+  const complaintItems = complaints.map((complaint) => ({
+    href: `/portal/complaints/${complaint.id}`,
+    icon: MessageSquarePlus,
+    title: complaint.title,
+    description: complaint.complaintNumber,
+    meta: `Updated ${shortDate(complaint.updatedAt)}`,
+    status: labelStatus(complaint.status),
+  }));
+  return [...payments, ...documents, ...complaintItems].slice(0, 5);
+}
 
-        <PortalSummaryCard label="Refundable bonds held" value={money(bondsHeld)} note="Construction bond balance where applicable" icon={HandCoins} />
-      </div>
-    </section>
-  </PortalPageContainer>;
+function activityFeedItems({
+  latestPayment,
+  documentRequests,
+  paymentRequests,
+  announcement,
+  events,
+}: {
+  latestPayment: DashboardPayment;
+  documentRequests: DashboardDocumentRequest[];
+  paymentRequests: DashboardPaymentRequest[];
+  announcement: DashboardAnnouncementRecord;
+  events: DashboardEventRecord[];
+}): DashboardListItem[] {
+  const items: DashboardListItem[] = [];
+  if (latestPayment) {
+    items.push({
+      href: "/portal/payments",
+      icon: CreditCard,
+      title: "Payment confirmed",
+      description: `${money(latestPayment.amount)}${latestPayment.receiptNumber || latestPayment.referenceNumber ? ` · ${latestPayment.receiptNumber || latestPayment.referenceNumber}` : ""}`,
+      meta: shortDate(latestPayment.paymentDate),
+      status: "Paid",
+    });
+  }
+  for (const request of paymentRequests.slice(0, 1)) {
+    items.push({ href: "/portal/pay", icon: QrCode, title: "Payment request submitted", description: money(request.amount), meta: shortDate(request.createdAt), status: labelStatus(request.status) });
+  }
+  for (const request of documentRequests.slice(0, 2)) {
+    items.push({ href: "/portal/documents", icon: FileText, title: "Document request update", description: request.definition?.displayName || request.configuration?.displayName || documentTypeLabel(request.type), meta: latestDocumentActivity(request), status: labelStatus(request.status) });
+  }
+  if (announcement) {
+    items.push({ href: `/portal/announcements/${announcement.id}`, icon: Megaphone, title: "Announcement published", description: announcement.title, meta: shortDate(announcement.createdAt) });
+  }
+  if (events[0]) {
+    items.push({ href: `/portal/events/${events[0].id}`, icon: CalendarDays, title: "Upcoming event", description: events[0].title, meta: shortDate(events[0].eventDate) });
+  }
+  return items.slice(0, 6);
+}
+
+function eventToDashboardCard(event: {
+  id: string;
+  title: string;
+  description: string;
+  eventDate: Date;
+  eventTime: string;
+  startTime: string | null;
+  endTime: string | null;
+  location: string;
+  imageUrl: string | null;
+}): DashboardEvent {
+  return {
+    href: `/portal/events/${event.id}`,
+    title: event.title,
+    description: event.description,
+    dateLabel: shortDate(event.eventDate),
+    timeLabel: `${event.startTime || event.eventTime}${event.endTime ? ` - ${event.endTime}` : ""}`,
+    location: event.location,
+    imageUrl: event.imageUrl,
+  };
+}
+
+function latestDocumentActivity(request: { requestedAt: Date; histories?: Array<{ createdAt: Date; note: string | null }> }) {
+  const latest = request.histories?.[0];
+  if (latest) return `${shortDate(latest.createdAt)}${latest.note ? ` · ${latest.note}` : ""}`;
+  return `Requested ${shortDate(request.requestedAt)}`;
+}
+
+function documentIcon(value: string | null) {
+  const label = String(value || "").toLowerCase();
+  if (label.includes("gate")) return ShieldCheck;
+  if (label.includes("move")) return FileCheck2;
+  return FileText;
+}
+
+function labelStatus(status: string) {
+  return status.replaceAll("_", " ").toLowerCase().replace(/\b\w/g, (letter) => letter.toUpperCase());
+}
+
+function timeGreeting(now: Date) {
+  const hour = now.getHours();
+  if (hour < 12) return "Morning";
+  if (hour < 18) return "Afternoon";
+  return "Evening";
 }

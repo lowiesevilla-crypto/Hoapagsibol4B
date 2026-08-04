@@ -26,8 +26,8 @@ export async function startChatAction(formData: FormData) {
   if (!parsed.success) throw new Error(parsed.error.issues[0]?.message || "Invalid chat message.");
   if (parsed.data.recipientId === user.id) throw new Error("Choose another person to chat with.");
 
-  const recipient = await prisma.user.findUnique({
-    where: { id: parsed.data.recipientId },
+  const recipient = await prisma.user.findFirst({
+    where: { id: parsed.data.recipientId, tenantId: user.tenantId },
     select: { id: true, role: true },
   });
   if (!recipient) throw new Error("Recipient not found.");
@@ -35,6 +35,7 @@ export async function startChatAction(formData: FormData) {
   const now = new Date();
   const conversation = await prisma.chatConversation.create({
     data: {
+      tenantId: user.tenantId,
       subject: parsed.data.subject || null,
       homeownerId: user.role === Role.HOMEOWNER ? user.id : recipient.role === Role.HOMEOWNER ? recipient.id : null,
       assignedToId: user.role === Role.HOMEOWNER ? recipient.id : user.id,
@@ -42,12 +43,13 @@ export async function startChatAction(formData: FormData) {
       lastMessageAt: now,
       participants: {
         create: [
-          { userId: user.id, lastReadAt: now },
-          { userId: recipient.id },
+          { tenantId: user.tenantId, userId: user.id, lastReadAt: now },
+          { tenantId: user.tenantId, userId: recipient.id },
         ],
       },
       messages: {
         create: {
+          tenantId: user.tenantId,
           senderId: user.id,
           body: parsed.data.message,
           attachmentUrl: parsed.data.attachmentUrl || null,
@@ -68,8 +70,8 @@ export async function sendChatMessageAction(formData: FormData) {
   const parsed = chatMessageSchema.safeParse(Object.fromEntries(formData.entries()));
   if (!parsed.success) throw new Error(parsed.error.issues[0]?.message || "Invalid chat message.");
 
-  const participant = await prisma.chatParticipant.findUnique({
-    where: { conversationId_userId: { conversationId: parsed.data.conversationId, userId: user.id } },
+  const participant = await prisma.chatParticipant.findFirst({
+    where: { tenantId: user.tenantId, conversationId: parsed.data.conversationId, userId: user.id, conversation: { tenantId: user.tenantId } },
   });
   if (!participant) throw new Error("You do not have access to this conversation.");
 
@@ -77,6 +79,7 @@ export async function sendChatMessageAction(formData: FormData) {
   await prisma.$transaction([
     prisma.chatMessage.create({
       data: {
+        tenantId: user.tenantId,
         conversationId: parsed.data.conversationId,
         senderId: user.id,
         body: parsed.data.message || null,
@@ -97,6 +100,8 @@ export async function markChatReadAction(formData: FormData) {
   const user = await requireUser();
   const conversationId = String(formData.get("conversationId") || "");
   if (!conversationId) throw new Error("Conversation is required.");
+  const participant = await prisma.chatParticipant.findFirst({ where: { tenantId: user.tenantId, conversationId, userId: user.id, conversation: { tenantId: user.tenantId } } });
+  if (!participant) throw new Error("You do not have access to this conversation.");
   await prisma.chatParticipant.update({
     where: { conversationId_userId: { conversationId, userId: user.id } },
     data: { lastReadAt: new Date() },
@@ -112,6 +117,8 @@ export async function deleteChatAction(formData: FormData) {
 
   if (parsed.data.mode === "ME") {
     if (!parsed.data.conversationId) throw new Error("Conversation is required.");
+    const participant = await prisma.chatParticipant.findFirst({ where: { tenantId: user.tenantId, conversationId: parsed.data.conversationId, userId: user.id, conversation: { tenantId: user.tenantId } } });
+    if (!participant) throw new Error("You do not have access to this conversation.");
     await prisma.chatParticipant.update({
       where: { conversationId_userId: { conversationId: parsed.data.conversationId, userId: user.id } },
       data: { deletedAt: new Date() },
@@ -123,7 +130,7 @@ export async function deleteChatAction(formData: FormData) {
 
   if (!parsed.data.messageId) throw new Error("Message is required.");
   const message = await prisma.chatMessage.findFirst({
-    where: { id: parsed.data.messageId, senderId: user.id, conversation: { participants: { some: { userId: user.id } } } },
+    where: { id: parsed.data.messageId, tenantId: user.tenantId, senderId: user.id, conversation: { tenantId: user.tenantId, participants: { some: { tenantId: user.tenantId, userId: user.id } } } },
   });
   if (!message) throw new Error("Only the sender can delete this message for everyone.");
   await prisma.chatMessage.update({ where: { id: message.id }, data: { deletedForEveryoneAt: new Date() } });

@@ -1,8 +1,8 @@
 import Link from "next/link";
 import type { LucideIcon } from "lucide-react";
-import { Bell, CalendarDays, ChevronRight, CreditCard, FileText, Home, MessageSquare, MoreHorizontal, QrCode, ReceiptText, UserRound } from "lucide-react";
+import { CalendarDays, ChevronRight, CreditCard, FileQuestion, FileText, Home, Megaphone, MessageSquare, MoreHorizontal, QrCode, ReceiptText, UserRound, UsersRound } from "lucide-react";
 import { AssociationLogo } from "@/components/association-logo";
-import type { LinkItem } from "@/components/sidebar-links";
+import { isHomeownerPrimaryActive, type HomeownerPrimaryDestination } from "@/lib/homeowner-navigation";
 
 type AssociationBrand = { name: string; logoUrl: string };
 type PortalUser = { name: string; email: string };
@@ -12,23 +12,27 @@ export function PortalMobileHeader({
   user,
   unreadCount,
   showChat = true,
+  title,
+  isDashboard = false,
 }: {
   association: AssociationBrand;
   user: PortalUser;
   unreadCount: number;
   showChat?: boolean;
+  title: string;
+  isDashboard?: boolean;
 }) {
   const firstName = user.name.split(" ")[0] || "Homeowner";
   return (
-    <header className="sticky top-0 z-40 border-b border-pine-100/80 bg-white/95 px-4 py-3 shadow-sm backdrop-blur lg:hidden">
+    <header className="sticky top-0 z-40 border-b border-pine-100/80 bg-white/95 px-4 pb-3 pt-[calc(.75rem+env(safe-area-inset-top))] shadow-sm backdrop-blur lg:hidden">
       <div className="flex items-center gap-3">
         <AssociationLogo className="size-11" src={association.logoUrl} alt={`${association.name} logo`} />
         <div className="min-w-0 flex-1">
           <p className="truncate text-[11px] font-black uppercase tracking-[.14em] text-pine-700">{association.name}</p>
-          <h1 className="truncate text-base font-black text-ink">Hi, {firstName}</h1>
+          <h1 className="truncate text-base font-black text-ink">{isDashboard ? `Hi, ${firstName}` : title}</h1>
         </div>
-        {showChat && <Link href="/portal/chat" aria-label={unreadCount > 0 ? `${unreadCount} unread chat messages` : "Open chat"} className="relative grid size-11 place-items-center rounded-2xl border border-pine-100 bg-pine-50 text-pine-700 focus-visible:outline focus-visible:outline-4 focus-visible:outline-pine-500/20">
-          <Bell className="size-5" />
+        {showChat && <Link href="/portal/chat" aria-label={unreadCount > 0 ? `Open chat, ${unreadCount} unread messages` : "Open chat"} className="relative grid size-11 place-items-center rounded-2xl border border-pine-100 bg-pine-50 text-pine-700 focus-visible:outline focus-visible:outline-4 focus-visible:outline-pine-500/20">
+          <MessageSquare className="size-5" />
           {unreadCount > 0 && <span className="absolute -right-1 -top-1 grid min-w-5 place-items-center rounded-full bg-rose-500 px-1 text-[10px] font-black text-white">{unreadCount > 99 ? "99+" : unreadCount}</span>}
         </Link>}
         <Link href="/portal/profile" aria-label="Open profile" className="grid size-11 place-items-center rounded-2xl border border-slate-200 bg-white text-ink focus-visible:outline focus-visible:outline-4 focus-visible:outline-pine-500/20">
@@ -39,19 +43,19 @@ export function PortalMobileHeader({
   );
 }
 
-export function PortalBottomNavigation({ links, pathname }: { links: LinkItem[]; pathname: string }) {
-  const entries = [
-    { label: "Home", href: "/portal/dashboard", icon: Home, prefixes: ["/portal/dashboard"] },
-    { label: "Payments", href: "/portal/pay", icon: QrCode, prefixes: ["/portal/pay", "/portal/payments"] },
-    { label: "SOA", href: "/portal/soa", icon: ReceiptText, prefixes: ["/portal/soa"] },
-    { label: "Documents", href: "/portal/documents", icon: FileText, prefixes: ["/portal/documents"] },
-    { label: "More", href: "/portal/profile", icon: MoreHorizontal, prefixes: ["/portal/profile", "/portal/announcements", "/portal/events", "/portal/chat", "/portal/vehicles", "/portal/collections", "/portal/organization"] },
-  ].filter((entry) => links.some((link) => link.href === entry.href) || entry.href === "/portal/profile");
+const bottomNavIcons: Record<HomeownerPrimaryDestination["icon"], LucideIcon> = {
+  home: Home,
+  payments: QrCode,
+  requests: FileQuestion,
+  community: UsersRound,
+  more: MoreHorizontal,
+};
 
+export function PortalBottomNavigation({ destinations, pathname }: { destinations: HomeownerPrimaryDestination[]; pathname: string }) {
   return (
     <nav aria-label="Homeowner primary navigation" className="fixed inset-x-0 bottom-0 z-40 border-t border-pine-100 bg-white/95 px-2 pb-[calc(.5rem+env(safe-area-inset-bottom))] pt-2 shadow-[0_-12px_30px_rgba(8,97,141,.12)] backdrop-blur lg:hidden">
-      <div className="mx-auto grid max-w-lg grid-cols-5 gap-1">
-        {entries.map((entry) => <BottomNavItem key={entry.href} {...entry} active={entry.prefixes.some((prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`))} />)}
+      <div className="mx-auto grid max-w-lg gap-1" style={{ gridTemplateColumns: `repeat(${Math.max(destinations.length, 1)}, minmax(0, 1fr))` }}>
+        {destinations.map((entry) => <BottomNavItem key={entry.id} href={entry.href} label={entry.label} icon={bottomNavIcons[entry.icon]} active={isHomeownerPrimaryActive(entry, pathname)} />)}
       </div>
     </nav>
   );
@@ -142,7 +146,7 @@ export const portalQuickActionIcons = {
   soa: ReceiptText,
   receipts: CreditCard,
   documents: FileText,
-  announcements: Bell,
+  announcements: Megaphone,
   chat: MessageSquare,
   vehicles: MoreHorizontal,
   events: CalendarDays,

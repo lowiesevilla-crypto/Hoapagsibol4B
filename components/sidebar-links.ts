@@ -1,3 +1,5 @@
+import { homeownerSidebarLinks } from "@/lib/homeowner-navigation";
+
 export type IconName =
   | "audit"
   | "dashboard"
@@ -76,14 +78,7 @@ export const platformLinks: LinkItem[] = [
   { href: "/platform/audit", label: "Platform audit", icon: "audit", section: "Platform" },
 ];
 
-export const portalLinks: LinkItem[] = [
-  { href: "/portal/dashboard", label: "Dashboard", icon: "dashboard", section: "Overview" }, { href: "/portal/profile", label: "My profile", icon: "profile", section: "Account" },
-  { href: "/portal/billing", label: "My billing", icon: "billing", section: "Account" }, { href: "/portal/pay", label: "Pay by QR", icon: "payments", section: "Account" }, { href: "/portal/soa", label: "Statement of Account", icon: "reports", section: "Account" }, { href: "/portal/payments", label: "My payments", icon: "payments", section: "Account" }, { href: "/portal/collections", label: "Collections & bonds", icon: "collections", section: "Account" }, { href: "/portal/vehicles", label: "My vehicles", icon: "vehicles", section: "Account" },
-  { href: "/portal/documents", label: "My Document Requests", icon: "documents", section: "Resident Services" }, { href: "/portal/documents?intent=request", label: "Request a Document", icon: "documents", section: "Resident Services" }, { href: "/portal/documents?section=issued", label: "Issued Documents", icon: "documents", section: "Resident Services" },
-  { href: "/portal/complaints", label: "My Complaints", icon: "complaints", section: "Resident Services" }, { href: "/portal/complaints/new", label: "Submit Complaint", icon: "complaints", section: "Resident Services" },
-  { href: "/portal/announcements", label: "Announcements", icon: "announcements", section: "Community" }, { href: "/portal/events", label: "Events", icon: "events", section: "Community" }, { href: "/portal/chat", label: "Chat", icon: "chat", section: "Community" },
-  { href: "/portal/organization", label: "HOA officers", icon: "homeowners", section: "Community" },
-];
+export const portalLinks: LinkItem[] = homeownerSidebarLinks;
 
 export const employeeLinks: LinkItem[] = [
   { href: "/employee/attendance", label: "Clock in / out", icon: "attendance", section: "Employee" },

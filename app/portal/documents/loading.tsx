@@ -1,1 +1,6 @@
-export default function Loading() { return <div className="space-y-4"><div className="h-24 animate-pulse rounded-3xl bg-slate-100" /><div className="h-72 animate-pulse rounded-3xl bg-slate-100" /><p className="text-center text-sm text-slate-500">Loading your documents...</p></div>; }
+import { RequestPageSkeleton } from "@/components/homeowner/requests/request-cards";
+import { PortalPageContainer } from "@/components/portal-mobile-shell";
+
+export default function PortalDocumentsLoading() {
+  return <PortalPageContainer><RequestPageSkeleton /></PortalPageContainer>;
+}

@@ -20,22 +20,22 @@ export function chatHome(role: Role) {
   return "/admin/chat";
 }
 
-export async function touchUserPresence(userId: string, context: string) {
+export async function touchUserPresence(userId: string, tenantId: string, context: string) {
   await prisma.userPresence.upsert({
     where: { userId },
-    update: { lastSeenAt: new Date(), context },
-    create: { userId, context },
+    update: { tenantId, lastSeenAt: new Date(), context },
+    create: { userId, tenantId, context },
   });
 }
 
 export async function getChatPayload(user: Pick<User, "id" | "role" | "tenantId">, selectedConversationId?: string | null, search = "") {
-  await touchUserPresence(user.id, "HOA Chat Center");
+  await touchUserPresence(user.id, user.tenantId, "HOA Chat Center");
   const scope = scopeForRole(user.role);
   const [settings, recipients, conversations] = await Promise.all([
     getChatSettings(user.tenantId),
-    getRecipients(scope, user.id, search),
+    getRecipients(scope, user.id, user.tenantId, search),
     prisma.chatConversation.findMany({
-      where: { participants: { some: { userId: user.id, deletedAt: null } } },
+      where: { tenantId: user.tenantId, participants: { some: { tenantId: user.tenantId, userId: user.id, deletedAt: null } } },
       include: conversationInclude,
       orderBy: [{ participants: { _count: "desc" } }, { lastMessageAt: "desc" }, { createdAt: "desc" }],
       take: 60,
@@ -51,7 +51,7 @@ export async function getChatPayload(user: Pick<User, "id" | "role" | "tenantId"
   const selectedId = selectedConversationId || null;
   const selectedConversation = selectedId
     ? await prisma.chatConversation.findFirst({
-        where: { id: selectedId, participants: { some: { userId: user.id, deletedAt: null } } },
+        where: { id: selectedId, tenantId: user.tenantId, participants: { some: { tenantId: user.tenantId, userId: user.id, deletedAt: null } } },
         include: {
           participants: conversationInclude.participants,
           messages: {
@@ -102,7 +102,7 @@ export async function getUnreadChatCount(userId: string) {
   return counts.reduce((sum, count) => sum + count, 0);
 }
 
-export async function getRecipients(scope: ChatScope, currentUserId: string, search = "") {
+export async function getRecipients(scope: ChatScope, currentUserId: string, tenantId: string, search = "") {
   const roleFilter =
     scope === "portal"
       ? [Role.ADMIN, Role.SYSTEM_ADMIN, Role.EMPLOYEE]
@@ -112,6 +112,7 @@ export async function getRecipients(scope: ChatScope, currentUserId: string, sea
   const normalized = search.trim();
   return prisma.user.findMany({
     where: {
+      tenantId,
       id: { not: currentUserId },
       role: { in: roleFilter },
       ...(normalized
@@ -134,15 +135,16 @@ export async function getRecipients(scope: ChatScope, currentUserId: string, sea
   });
 }
 
-export async function findOrCreateDirectConversation(currentUser: Pick<User, "id" | "role">, recipientId: string) {
+export async function findOrCreateDirectConversation(currentUser: Pick<User, "id" | "role" | "tenantId">, recipientId: string) {
   if (currentUser.id === recipientId) throw new Error("Choose another person to chat with.");
-  const recipient = await prisma.user.findUnique({ where: { id: recipientId }, select: { id: true, role: true, name: true } });
+  const recipient = await prisma.user.findFirst({ where: { id: recipientId, tenantId: currentUser.tenantId }, select: { id: true, role: true, name: true } });
   if (!recipient) throw new Error("Recipient not found.");
 
   const existing = await prisma.chatConversation.findFirst({
     where: {
-      participants: { every: { userId: { in: [currentUser.id, recipient.id] } }, some: { userId: currentUser.id }, },
-      AND: [{ participants: { some: { userId: recipient.id } } }],
+      tenantId: currentUser.tenantId,
+      participants: { every: { tenantId: currentUser.tenantId, userId: { in: [currentUser.id, recipient.id] } }, some: { tenantId: currentUser.tenantId, userId: currentUser.id }, },
+      AND: [{ participants: { some: { tenantId: currentUser.tenantId, userId: recipient.id } } }],
     },
     include: { participants: true },
     orderBy: { updatedAt: "desc" },
@@ -155,12 +157,13 @@ export async function findOrCreateDirectConversation(currentUser: Pick<User, "id
   const now = new Date();
   const conversation = await prisma.chatConversation.create({
     data: {
+      tenantId: currentUser.tenantId,
       subject: null,
       homeownerId: currentUser.role === Role.HOMEOWNER ? currentUser.id : recipient.role === Role.HOMEOWNER ? recipient.id : null,
       assignedToId: currentUser.role === Role.HOMEOWNER ? recipient.id : currentUser.id,
       createdById: currentUser.id,
       lastMessageAt: now,
-      participants: { create: [{ userId: currentUser.id, lastReadAt: now }, { userId: recipient.id }] },
+      participants: { create: [{ tenantId: currentUser.tenantId, userId: currentUser.id, lastReadAt: now }, { tenantId: currentUser.tenantId, userId: recipient.id }] },
     },
   });
   return conversation.id;
@@ -169,29 +172,32 @@ export async function findOrCreateDirectConversation(currentUser: Pick<User, "id
 export async function createChatMessage({
   conversationId,
   senderId,
+  tenantId,
   body,
   attachments,
   replyToId,
 }: {
   conversationId: string;
   senderId: string;
+  tenantId: string;
   body?: string | null;
   attachments?: { url: string; fileName: string; contentType: string; size: number }[];
   replyToId?: string | null;
 }) {
-  const participant = await prisma.chatParticipant.findUnique({ where: { conversationId_userId: { conversationId, userId: senderId } } });
+  const participant = await prisma.chatParticipant.findFirst({ where: { tenantId, conversationId, userId: senderId, conversation: { tenantId } } });
   if (!participant) throw new Error("You do not have access to this conversation.");
   const cleanBody = body?.trim() || null;
   const cleanAttachments = attachments?.filter((item) => item.url && item.fileName && item.contentType) ?? [];
   if (!cleanBody && cleanAttachments.length === 0) throw new Error("Enter a message or upload an attachment.");
   if (replyToId) {
-    const replyTarget = await prisma.chatMessage.findFirst({ where: { id: replyToId, conversationId } });
+    const replyTarget = await prisma.chatMessage.findFirst({ where: { id: replyToId, tenantId, conversationId } });
     if (!replyTarget) throw new Error("Reply target was not found.");
   }
   const now = new Date();
   const message = await prisma.$transaction(async (tx) => {
     const created = await tx.chatMessage.create({
       data: {
+        tenantId,
         conversationId,
         senderId,
         body: cleanBody,
@@ -199,7 +205,7 @@ export async function createChatMessage({
         attachmentUrl: cleanAttachments[0]?.url ?? null,
         attachmentName: cleanAttachments[0]?.fileName ?? null,
         attachmentContentType: cleanAttachments[0]?.contentType ?? null,
-        attachments: { create: cleanAttachments },
+        attachments: { create: cleanAttachments.map((item) => ({ ...item, tenantId })) },
       },
       include: { sender: { select: chatUserSelect }, attachments: true, replyTo: { include: { sender: { select: chatUserSelect } } } },
     });

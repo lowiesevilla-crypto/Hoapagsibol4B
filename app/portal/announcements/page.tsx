@@ -1,24 +1,67 @@
-import Link from "next/link";
-import { CalendarDays, Megaphone } from "lucide-react";
+import { Prisma, Role } from "@prisma/client";
+import { CalendarDays, Megaphone, MessageSquare, UsersRound } from "lucide-react";
+import { AnnouncementMobileCard, CommunityAreaNavigation, CommunityEmptyState, CommunitySearchBar } from "@/components/homeowner/community/community-cards";
 import { PageHeader } from "@/components/page-header";
+import { PortalPageContainer } from "@/components/portal-mobile-shell";
 import { prisma } from "@/lib/db";
-import { requireHomeownerProfile } from "@/lib/portal";
+import { requireUser } from "@/lib/auth";
 import { shortDate } from "@/lib/utils";
-import { ContentImage } from "@/components/content-image";
 
-export default async function PortalAnnouncementsPage() {
-  const profile = await requireHomeownerProfile();
-  const announcements = await prisma.announcement.findMany({ where: { tenantId: profile.tenantId, status: "PUBLISHED" }, include: { createdBy: true }, orderBy: [{ createdAt: "desc" }] });
-  return <>
-    <PageHeader eyebrow="Community" title="Announcements" description="Official published notices and neighborhood updates from your association." />
-    <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">{announcements.map((item) => <article className="card overflow-hidden p-0" key={item.id}>
-      {item.imageUrl ? <ContentImage src={item.imageUrl} alt={item.title} className="h-56 w-full object-contain" /> : <div className="grid h-36 place-items-center bg-gradient-to-br from-pine-800 to-leaf-600 text-white"><Megaphone className="size-12" /></div>}
-      <div className="p-5">
-        <div className="mb-3 flex flex-wrap items-center gap-2"><span className="rounded-full bg-pine-50 px-2.5 py-1 text-xs font-bold text-pine-700">{item.type.replaceAll("_", " ")}</span><span className="flex items-center gap-1 text-xs text-slate-400"><CalendarDays className="size-3" /> Posted {shortDate(item.createdAt)}</span></div>
-        <h2 className="text-lg font-black">{item.title}</h2>
-        <p className="mt-2 line-clamp-3 whitespace-pre-line text-sm leading-6 text-slate-600">{item.content}</p>
-        <Link className="btn-secondary mt-5" href={`/portal/announcements/${item.id}`}>Read More / View Details</Link>
-      </div>
-    </article>)}{!announcements.length && <div className="card text-center text-sm text-slate-500 md:col-span-2 xl:col-span-3">No published announcements are available right now.</div>}</section>
-  </>;
+const ANNOUNCEMENT_LIMIT = 12;
+
+export default async function PortalAnnouncementsPage({ searchParams }: { searchParams: Promise<{ q?: string }> }) {
+  const user = await requireUser(Role.HOMEOWNER);
+  const { q } = await searchParams;
+  const query = q?.trim() ?? "";
+  const where: Prisma.AnnouncementWhereInput = {
+    tenantId: user.tenantId,
+    status: "PUBLISHED",
+    ...(query ? { OR: [{ title: { contains: query } }, { content: { contains: query } }, { type: { contains: query } }] } : {}),
+  };
+  const [announcements, total] = await Promise.all([
+    prisma.announcement.findMany({
+      where,
+      select: { id: true, title: true, content: true, type: true, imageUrl: true, createdAt: true },
+      orderBy: [{ createdAt: "desc" }],
+      take: ANNOUNCEMENT_LIMIT,
+    }),
+    prisma.announcement.count({ where }),
+  ]);
+
+  return (
+    <PortalPageContainer className="space-y-5">
+      <PageHeader eyebrow="Community" title="Announcements" description="Published HOA notices, advisories, and resident updates." />
+      <CommunityAreaNavigation items={communityNav()} />
+      <CommunitySearchBar query={query} placeholder="Search announcements" />
+      {announcements.length ? (
+        <>
+          <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-3" aria-label="Published announcements">
+            {announcements.map((item) => (
+              <AnnouncementMobileCard
+                key={item.id}
+                href={`/portal/announcements/${item.id}`}
+                title={item.title}
+                content={item.content}
+                type={item.type}
+                postedLabel={`Posted ${shortDate(item.createdAt)}`}
+                imageUrl={item.imageUrl}
+              />
+            ))}
+          </section>
+          {total > ANNOUNCEMENT_LIMIT && <p className="rounded-2xl bg-slate-50 p-3 text-center text-sm font-bold text-slate-500">Showing latest {ANNOUNCEMENT_LIMIT} of {total}. Use search to narrow the list.</p>}
+        </>
+      ) : (
+        <CommunityEmptyState title="No announcements found" description={query ? "Try a different search term." : "Published HOA notices will appear here."} />
+      )}
+    </PortalPageContainer>
+  );
+}
+
+function communityNav() {
+  return [
+    { href: "/portal/community", label: "Community", description: "Overview", icon: UsersRound },
+    { href: "/portal/announcements", label: "Announcements", description: "Official notices", icon: Megaphone },
+    { href: "/portal/events", label: "Events", description: "Activities", icon: CalendarDays },
+    { href: "/portal/chat", label: "Chat", description: "Message HOA", icon: MessageSquare },
+  ];
 }

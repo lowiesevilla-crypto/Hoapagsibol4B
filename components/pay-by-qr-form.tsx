@@ -1,9 +1,10 @@
 "use client";
 
-import { CheckCircle2, CircleDollarSign, ReceiptText } from "lucide-react";
-import { useMemo, useState } from "react";
+import { AlertCircle, CheckCircle2, CircleDollarSign, ReceiptText, WifiOff } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import type { ReactNode } from "react";
+import { useFormStatus } from "react-dom";
 import { submitPaymentRequestAction } from "@/lib/actions/payment-requests";
-import { SubmitButton } from "@/components/ui";
 import { PaymentProofUpload } from "@/components/payment-proof-upload";
 
 type OpenBill = {
@@ -36,16 +37,35 @@ const transactionTypes = [
 export function PayByQrForm({ openBills, today, documentPayment }: { openBills: OpenBill[]; today: string; documentPayment?: DocumentFeePayment | null }) {
   const [transactionType, setTransactionType] = useState(documentPayment ? "DOCUMENT_FEE" : "MONTHLY_DUES");
   const [selectedBills, setSelectedBills] = useState<string[]>([]);
+  const [referenceNumber, setReferenceNumber] = useState("");
+  const [otherAmount, setOtherAmount] = useState("");
+  const [online, setOnline] = useState(typeof window === "undefined" ? true : navigator.onLine);
   const selectedTotal = useMemo(() => openBills.filter((bill) => selectedBills.includes(bill.id)).reduce((sum, bill) => sum + bill.balance, 0), [openBills, selectedBills]);
   const selectedTotalLabel = new Intl.NumberFormat("en-PH", { style: "currency", currency: "PHP" }).format(selectedTotal);
   const isDocumentFee = Boolean(documentPayment);
   const isMonthlyDues = transactionType === "MONTHLY_DUES" && !isDocumentFee;
+  const effectiveAmountLabel = documentPayment ? documentPayment.amountLabel : isMonthlyDues ? selectedTotalLabel : new Intl.NumberFormat("en-PH", { style: "currency", currency: "PHP" }).format(Number(otherAmount) || 0);
+  const hasAmount = documentPayment ? true : isMonthlyDues ? selectedBills.length > 0 : Number(otherAmount) > 0;
+  const canSubmit = online && hasAmount && referenceNumber.trim().length > 0;
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const onOnline = () => setOnline(true);
+    const onOffline = () => setOnline(false);
+    window.addEventListener("online", onOnline);
+    window.addEventListener("offline", onOffline);
+    return () => {
+      window.removeEventListener("online", onOnline);
+      window.removeEventListener("offline", onOffline);
+    };
+  }, []);
 
   function toggleBill(id: string) {
     setSelectedBills((current) => current.includes(id) ? current.filter((item) => item !== id) : [...current, id]);
   }
 
-  return <form action={submitPaymentRequestAction} className="card">
+  return <form id="qr-payment" action={submitPaymentRequestAction} className="rounded-3xl border border-pine-100 bg-white shadow-soft">
+    <fieldset className="p-4 sm:p-5" disabled={!online}>
     <div className="mb-5 flex items-start gap-3">
       <span className="grid size-11 shrink-0 place-items-center rounded-2xl bg-pine-50 text-pine-700"><ReceiptText className="size-5" /></span>
       <div>
@@ -53,6 +73,7 @@ export function PayByQrForm({ openBills, today, documentPayment }: { openBills: 
         <p className="text-sm leading-6 text-slate-500">{documentPayment ? "Pay the exact document fee through the configured HOA payment channel, then submit the reference number for verification." : "Choose the transaction type, scan/pay through GCash, then submit the reference number for HOA verification."}</p>
       </div>
     </div>
+    {!online && <div className="mb-4 flex items-start gap-3 rounded-2xl border border-amber-200 bg-amber-50 p-3 text-sm font-bold text-amber-950" role="status"><WifiOff className="mt-0.5 size-4 shrink-0" />Payment submission and proof upload are disabled while offline.</div>}
 
     <div className="grid gap-4 sm:grid-cols-2">
       {documentPayment ? <div className="sm:col-span-2 rounded-2xl border border-pine-100 bg-pine-50/70 p-4">
@@ -90,21 +111,38 @@ export function PayByQrForm({ openBills, today, documentPayment }: { openBills: 
           })}
           {!openBills.length && <p className="rounded-xl bg-white px-3 py-10 text-center text-sm text-slate-500">No unpaid monthly dues are available for QR payment.</p>}
         </div>
+        {selectedBills.length > 0 && <div className="mt-3 rounded-2xl border border-pine-100 bg-pine-50 p-3 text-sm font-bold text-pine-900">Selected coverage: {selectedBills.length} billing item{selectedBills.length === 1 ? "" : "s"} totaling {selectedTotalLabel}. The server will recheck ownership, balance, and pending-verification status before saving.</div>}
       </div> : isDocumentFee ? null : <>
         <input type="hidden" name="collectionType" value={transactionType} />
-        <div><label className="label">Amount paid</label><input className="field" name="amount" type="number" min="0.01" step="0.01" required={!isMonthlyDues} /></div>
+        <div><label className="label">Amount paid</label><input className="field" name="amount" type="number" min="0.01" step="0.01" value={otherAmount} onChange={(event) => setOtherAmount(event.target.value)} required={!isMonthlyDues} /></div>
         <div><label className="label">Description</label><input className="field" name="description" placeholder={transactionType === "OTHER" ? "Required for Other Payment" : "Optional"} /></div>
       </>}
 
       <div><label className="label">Payment date</label><input className="field" name="paymentDate" type="date" defaultValue={today} required /></div>
-      <div><label className="label">GCash reference number</label><input className="field" name="referenceNumber" required placeholder="Example: 1001 234 567890" /></div>
+      <div><label className="label">GCash reference number</label><input className="field" name="referenceNumber" value={referenceNumber} onChange={(event) => setReferenceNumber(event.target.value)} required placeholder="Example: 1001 234 567890" aria-describedby="reference-help" /><p id="reference-help" className="mt-1 text-xs font-semibold text-slate-500">Required for QR/GCash verification. Duplicate references are rejected by the server.</p></div>
       <PaymentProofUpload />
       <div className="sm:col-span-2"><label className="label">Notes</label><input className="field" name="payerNotes" placeholder="Optional message to the HOA treasurer" /></div>
     </div>
 
-    <div className="mt-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-      <p className="flex items-center gap-2 text-xs font-semibold text-slate-500"><CheckCircle2 className="size-4 text-leaf-600" /> {documentPayment ? "HOA verification confirms the fee, creates the receipt, and continues document processing." : "Approval creates the official receipt and updates your account."}</p>
-      <SubmitButton>{documentPayment ? "Submit Document Fee" : "Submit for verification"}</SubmitButton>
+    <div className="mt-5 flex items-start gap-2 rounded-2xl bg-slate-50 p-3 text-xs font-semibold text-slate-600">
+      <CheckCircle2 className="mt-0.5 size-4 shrink-0 text-leaf-600" />
+      <p>{documentPayment ? "HOA verification confirms the fee, creates the receipt, and continues document processing." : "Approval creates the official receipt and updates your account."}</p>
+    </div>
+    </fieldset>
+    <div className="sticky bottom-[calc(5.75rem+env(safe-area-inset-bottom))] z-20 border-t border-pine-100 bg-white/95 p-3 backdrop-blur lg:bottom-0">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="min-w-0">
+          <p className="text-[10px] font-black uppercase tracking-[.16em] text-slate-500">Ready to submit</p>
+          <p className="break-words text-xl font-black text-ink tabular-nums">{effectiveAmountLabel}</p>
+          {!canSubmit && <p className="mt-1 flex items-center gap-1 text-xs font-bold text-amber-800"><AlertCircle className="size-3" /> Select an amount and enter a reference while online.</p>}
+        </div>
+        <PaymentSubmitButton disabled={!canSubmit}>{documentPayment ? "Submit Document Fee" : "Submit for Verification"}</PaymentSubmitButton>
+      </div>
     </div>
   </form>;
+}
+
+function PaymentSubmitButton({ children, disabled }: { children: ReactNode; disabled: boolean }) {
+  const { pending } = useFormStatus();
+  return <button type="submit" className="btn-primary min-h-12 w-full sm:w-auto" disabled={disabled || pending}>{pending ? "Submitting..." : children}</button>;
 }

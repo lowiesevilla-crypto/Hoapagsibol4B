@@ -1,6 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { jwtVerify } from "jose/jwt/verify";
 import { allowedOrigins, getAppUrl } from "@/lib/app-url";
+import {
+  isProtectedApplicationPath,
+  protectedPathRedirect,
+} from "@/lib/authorization/protected-route-policy";
 
 const configuredSecret = process.env.AUTH_SECRET;
 if (process.env.NODE_ENV === "production" && (!configuredSecret || configuredSecret.length < 32)) {
@@ -44,8 +48,7 @@ export async function middleware(request: NextRequest) {
     return cors(response, request);
   }
 
-  const protectedPath = path.startsWith("/admin") || path.startsWith("/portal") || path.startsWith("/employee") || path.startsWith("/platform");
-  if (!protectedPath) return cors(NextResponse.next(), request);
+  if (!isProtectedApplicationPath(path)) return cors(NextResponse.next(), request);
 
   const token = request.cookies.get("hoa_session")?.value;
   const loginUrl = new URL("/login", request.url);
@@ -53,12 +56,8 @@ export async function middleware(request: NextRequest) {
   try {
     const { payload } = await jwtVerify(token, secret);
     const role = String(payload.role || "");
-    const isPlatformRole = role === "SUPER_ADMIN" || role === "PLATFORM_ADMIN";
-    const isAdminRole = role === "SUPER_ADMIN" || ["ADMIN", "SYSTEM_ADMIN", "HOA_ADMIN", "BILLING_MANAGER", "PAYROLL_MANAGER", "STAFF"].includes(role);
-    if (path.startsWith("/platform") && !isPlatformRole) return NextResponse.redirect(new URL("/admin/dashboard", request.url));
-    if (path.startsWith("/admin") && !isAdminRole) return NextResponse.redirect(new URL(role === "PLATFORM_ADMIN" ? "/platform/tenants" : "/portal/dashboard", request.url));
-    if (path.startsWith("/portal") && role !== "HOMEOWNER") return NextResponse.redirect(new URL(role === "SYSTEM_ADMIN" ? "/admin/settings" : role === "EMPLOYEE" ? "/employee/attendance" : "/admin/dashboard", request.url));
-    if (path.startsWith("/employee") && role !== "EMPLOYEE") return NextResponse.redirect(new URL(isAdminRole ? "/admin/dashboard" : "/portal/dashboard", request.url));
+    const redirectPath = protectedPathRedirect(role, path);
+    if (redirectPath) return NextResponse.redirect(new URL(redirectPath, request.url));
     const requestHeaders = new Headers(request.headers);
     requestHeaders.set("x-hoa-pathname", path);
     return NextResponse.next({ request: { headers: requestHeaders } });

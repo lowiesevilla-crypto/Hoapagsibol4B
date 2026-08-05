@@ -42,15 +42,17 @@ test("homeowner and staff assignments form an additive non-finance permission un
   assert.equal(permissions.has(Permission.SETTINGS_MANAGE), false);
 });
 
-test("tenant administrators receive explicit user, role, settings, and audit authority", () => {
+test("tenant administrators receive user, role, and audit authority without settings expansion", () => {
   for (const role of [Role.SYSTEM_ADMIN, Role.HOA_ADMIN, Role.ADMIN]) {
     assert.equal(hasEveryPermission([role], [
       Permission.USERS_MANAGE,
       Permission.ROLES_MANAGE,
-      Permission.SETTINGS_MANAGE,
       Permission.AUDIT_READ,
     ]), true, `${role} is missing a tenant administration permission`);
   }
+  assert.equal(hasPermission([Role.SYSTEM_ADMIN], Permission.SETTINGS_MANAGE), true);
+  assert.equal(hasPermission([Role.HOA_ADMIN], Permission.SETTINGS_MANAGE), false);
+  assert.equal(hasPermission([Role.ADMIN], Permission.SETTINGS_MANAGE), false);
 });
 
 test("unrelated role combinations do not acquire high-risk finance authority", () => {

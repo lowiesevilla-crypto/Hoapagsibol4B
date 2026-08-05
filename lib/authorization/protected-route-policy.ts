@@ -9,33 +9,45 @@ const adminRoles = new Set([
   "STAFF",
 ]);
 
+function normalizeRoles(roleOrRoles: string | readonly string[]) {
+  return Array.isArray(roleOrRoles) ? [...new Set(roleOrRoles)] : [roleOrRoles];
+}
+
+function hasAnyRole(roles: readonly string[], accepted: ReadonlySet<string>) {
+  return roles.some((role) => accepted.has(role));
+}
+
+function safeHomeForRoles(roles: readonly string[]) {
+  if (hasAnyRole(roles, platformRoles)) return "/platform/tenants";
+  if (hasAnyRole(roles, adminRoles)) return "/admin/dashboard";
+  if (roles.includes("HOMEOWNER")) return "/portal/dashboard";
+  if (roles.includes("EMPLOYEE")) return "/employee/attendance";
+  return "/login";
+}
+
 export function isProtectedApplicationPath(pathname: string) {
   return ["/admin", "/portal", "/employee", "/platform"].some((prefix) =>
     pathname.startsWith(prefix),
   );
 }
 
-export function protectedPathRedirect(role: string, pathname: string): string | null {
+export function protectedPathRedirect(roleOrRoles: string | readonly string[], pathname: string): string | null {
+  const roles = normalizeRoles(roleOrRoles);
   if (pathname.startsWith("/platform")) {
-    return platformRoles.has(role) ? null : "/admin/dashboard";
+    return hasAnyRole(roles, platformRoles) ? null : safeHomeForRoles(roles);
   }
   if (pathname.startsWith("/admin")) {
-    if (adminRoles.has(role)) return null;
-    return role === "PLATFORM_ADMIN" ? "/platform/tenants" : "/portal/dashboard";
+    return hasAnyRole(roles, adminRoles) ? null : safeHomeForRoles(roles);
   }
   if (pathname.startsWith("/portal")) {
-    if (role === "HOMEOWNER") return null;
-    if (role === "SYSTEM_ADMIN") return "/admin/settings";
-    if (role === "EMPLOYEE") return "/employee/attendance";
-    return "/admin/dashboard";
+    return roles.includes("HOMEOWNER") ? null : safeHomeForRoles(roles);
   }
   if (pathname.startsWith("/employee")) {
-    if (role === "EMPLOYEE") return null;
-    return adminRoles.has(role) ? "/admin/dashboard" : "/portal/dashboard";
+    return roles.includes("EMPLOYEE") ? null : safeHomeForRoles(roles);
   }
   return null;
 }
 
-export function canAccessProtectedPath(role: string, pathname: string) {
-  return protectedPathRedirect(role, pathname) === null;
+export function canAccessProtectedPath(roleOrRoles: string | readonly string[], pathname: string) {
+  return protectedPathRedirect(roleOrRoles, pathname) === null;
 }

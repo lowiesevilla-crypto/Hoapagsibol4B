@@ -119,10 +119,10 @@ await patch("lib/services/passkeys.ts", (source) => {
     'import { HomeownerActivationStatus, HomeownerEmailVerificationStatus, PasskeyChallengeType } from "@prisma/client";',
     "passkey Role import",
   );
-  const roleFilter = "        role: Role.HOMEOWNER,\n";
-  const occurrences = next.split(roleFilter).length - 1;
-  if (occurrences !== 2) throw new Error(`expected 2 homeowner role filters, found ${occurrences}`);
-  next = next.split(roleFilter).join("");
+  const roleFilterPattern = /^\s*role: Role\.HOMEOWNER,\n/gm;
+  const matches = next.match(roleFilterPattern) ?? [];
+  if (matches.length !== 2) throw new Error(`expected 2 homeowner role filters, found ${matches.length}`);
+  next = next.replace(roleFilterPattern, "");
   next = replaceOnce(
     next,
     "  if (!credentialRecord || !credentialRecord.user.active || credentialRecord.user.role !== Role.HOMEOWNER || homeownerProfile?.activationStatus !== HomeownerActivationStatus.ACTIVE || homeownerProfile?.emailStatus !== HomeownerEmailVerificationStatus.VERIFIED || !homeownerProfile?.activatedAt) {",

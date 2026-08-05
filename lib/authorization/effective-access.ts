@@ -1,5 +1,6 @@
 import { Role } from "@prisma/client";
 import { rolePermissionsForRoles } from "@/lib/authorization/role-policy";
+import { hasPermission, Permission } from "@/lib/authorization/permissions";
 
 export type RoleAssignmentLike = {
   role: Role;
@@ -40,6 +41,9 @@ export function primaryRoleForRoles(roles: readonly Role[], preferredRole?: Role
 }
 
 export function canUseAssignedRole(roles: readonly Role[], requiredRole: Role) {
+  if (requiredRole === Role.ADMIN) return hasPermission(roles, Permission.ADMIN_ACCESS);
+  if (requiredRole === Role.PLATFORM_ADMIN) return roles.includes(Role.PLATFORM_ADMIN) || roles.includes(Role.SUPER_ADMIN);
+  if (requiredRole === Role.SYSTEM_ADMIN) return roles.includes(Role.SYSTEM_ADMIN) || roles.includes(Role.PLATFORM_ADMIN) || roles.includes(Role.SUPER_ADMIN);
   return rolePermissionsForRoles(roles).has(requiredRole);
 }
 

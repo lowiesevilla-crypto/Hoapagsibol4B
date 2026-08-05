@@ -41,7 +41,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
     getActionableDocumentRequestCount(user.tenantId),
   ]);
   const isSystemAdmin = user.roles.includes(Role.SYSTEM_ADMIN) || user.roles.includes(Role.SUPER_ADMIN);
-  const canAccessPayroll = user.permissions.has(Permission.PAYROLL_MANAGE)
+  const canAccessPayroll = user.permissions.includes(Permission.PAYROLL_MANAGE)
     || await userCanAccessPayroll(user.id, user.role);
   const baseLinks = isSystemAdmin ? systemAdminLinks : adminLinks;
   const linksWithPlatform = user.roles.includes(Role.SUPER_ADMIN) ? [...baseLinks, ...platformLinks] : baseLinks;

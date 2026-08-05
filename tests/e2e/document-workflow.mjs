@@ -143,6 +143,7 @@ async function waitForRequest(where, description) {
 async function submitRequest(browser) {
   const context = await browser.createBrowserContext();
   const page = await createPage(context, { width: 390, height: 844, deviceScaleFactor: 1 });
+  let request;
   try {
     await login(page, homeownerEmail, homeownerPassword, "/portal/");
     await page.goto(`${baseUrl}/portal/documents`, { waitUntil: "networkidle2", timeout });
@@ -155,16 +156,22 @@ async function submitRequest(browser) {
       return Boolean(button && !button.disabled);
     }, { timeout });
     await clickByText(page, "button", "Submit request");
-    await expectText(page, "waiting for HOA approval", "approval-required submission confirmation");
-    await expectText(page, requestPurpose);
+
+    request = await waitForRequest(
+      { tenantId, homeownerId, definitionId, purpose: requestPurpose },
+      "the homeowner-submitted document request",
+    );
+
+    const historyUrl = new URL("/portal/documents", baseUrl);
+    historyUrl.searchParams.set("q", requestPurpose);
+    await page.goto(historyUrl.toString(), { waitUntil: "networkidle2", timeout });
+    await expectText(page, requestPurpose, "submitted request in homeowner history");
+    await expectText(page, "PENDING APPROVAL", "approval-required request status");
   } finally {
     await context.close();
   }
 
-  const request = await waitForRequest(
-    { tenantId, homeownerId, definitionId, purpose: requestPurpose },
-    "the homeowner-submitted document request",
-  );
+  assert.ok(request, "Expected the homeowner request to be persisted.");
   assert.equal(request.origin, "HOMEOWNER");
   assert.ok(["SUBMITTED", "PENDING_APPROVAL", "UNDER_REVIEW"].includes(request.status));
   assert.equal(request.generatedContent, null);

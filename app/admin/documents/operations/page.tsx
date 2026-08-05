@@ -2,7 +2,6 @@ import Link from "next/link";
 import {
   DocumentGenerationState,
   DocumentRequestStatus,
-  DocumentTemplateVersionStatus,
 } from "@prisma/client";
 import { DocumentationExportPanel } from "@/components/documentation-export-panel";
 import { PageHeader } from "@/components/page-header";
@@ -168,7 +167,7 @@ export default async function DocumentationOperationsPage() {
       eyebrow="Documentation operations"
       title="Document Operations Command Center"
       description="Monitor readiness, daily work queues, aging, generation recovery, and one-year operational performance for this tenant."
-      action={<div className="flex flex-wrap gap-2"><Link className="btn-secondary" href="/admin/documents/guide">Administrator runbook</Link><a className="btn-secondary" href="/admin/documents/export">Export CSV</a><Link className="btn-primary" href="/admin/documents?section=requests">Open request queue</Link></div>}
+      action={<div className="flex flex-wrap gap-2"><Link className="btn-secondary" href="/admin/documents/guide">Administrator runbook</Link><Link className="btn-secondary" href="/admin/documents/export">Export CSV</Link><Link className="btn-primary" href="/admin/documents?section=requests">Open request queue</Link></div>}
     />
 
     <DocumentationExportPanel />

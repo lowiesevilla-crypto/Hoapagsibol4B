@@ -8,7 +8,7 @@ import { requireUser } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { postMigration } from "@/lib/actions/data-migrations";
 import { parseOnboardingHomeownerCsv, type OnboardingImportPreview } from "@/lib/services/onboarding-homeowner-import";
-import { generateUniqueHomeownerAccountNumber } from "@/lib/services/homeowner-account-number";
+import { generateUniqueHomeownerAccountNumber, type HomeownerAccountNumberClient } from "@/lib/services/homeowner-account-number";
 import { createHomeownerActivationCredential, sendHomeownerActivationEmail } from "@/lib/services/homeowner-activation";
 
 export type OnboardingImportState = {
@@ -60,7 +60,7 @@ export async function commitOnboardingHomeownersAction(_state: OnboardingImportS
   const invitations: Array<{ userId: string; name: string; email: string; accountNumber: string; temporaryPassword: string; emailVerificationToken: string; expiresAt: Date }> = [];
   await prisma.$transaction(async (tx) => {
     for (const row of preview.rows) {
-      const accountNumber = row.data.accountNumber || await generateUniqueHomeownerAccountNumber(tx as never);
+      const accountNumber = row.data.accountNumber || await generateUniqueHomeownerAccountNumber(tx as unknown as HomeownerAccountNumberClient);
       const created = await tx.user.create({
         data: {
           tenantId: user.tenantId,
@@ -93,7 +93,7 @@ export async function commitOnboardingHomeownersAction(_state: OnboardingImportS
       invitations.push({ userId: created.id, name: created.name, email: created.email, accountNumber, ...credential });
       const openingBalance = Number(row.data.openingBalance || 0);
       if (openingBalance > 0) {
-        await postMigration(tx, {
+        await postMigration(tx as unknown as Prisma.TransactionClient, {
           kind: DataMigrationKind.DUES_OPENING_BALANCE,
           homeownerId: created.homeownerProfile!.id,
           period: firstDayOfCurrentMonth(),

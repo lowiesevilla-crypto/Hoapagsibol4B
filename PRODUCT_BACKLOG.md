@@ -1,103 +1,28 @@
 # HOAHub Product Backlog
 
-Version: 1.1
+**Status:** Superseded historical snapshot  
+**Owner:** Lowie Sevilla  
+**Superseded:** August 5, 2026  
+**Authority:** GitHub Issues are the source of truth for executable work.
 
-Status: Active
+This file is retained as historical product-discovery evidence. Its epic statuses, priorities, and feature lists are not current delivery commitments. The product owner deferred exhaustive migration of this snapshot in issue #27. When an item is selected for execution, create or update a GitHub Issue with current scope, owner, priority, acceptance criteria, security and tenant-isolation requirements, tests, dependencies, and definition of done.
 
-Owner: Lowie Sevilla
-
-Product: HOAHub – AI Powered Community Operating System
-
----
-
-# Product Management Process
-
-Every feature must follow this lifecycle.
-
-IDEA
-
-↓
-
-BACKLOG
-
-↓
-
-ANALYSIS
-
-↓
-
-DESIGN
-
-↓
-
-IMPLEMENTATION
-
-↓
-
-TESTING
-
-↓
-
-UAT
-
-↓
-
-PRODUCTION
-
-↓
-
-MAINTENANCE
+See `docs/product/LEGACY_DOCUMENT_REGISTER.md` for classification rules.
 
 ---
 
-# Priority Legend
+## Historical snapshot — Version 1.1
 
-Critical
+### Product-management lifecycle
 
-High
+IDEA → BACKLOG → ANALYSIS → DESIGN → IMPLEMENTATION → TESTING → UAT → PRODUCTION → MAINTENANCE
 
-Medium
+### EPIC-001 — Platform Foundation
 
-Low
+**Historical priority:** Critical  
+**Historical status:** Completed
 
----
-
-# Status Legend
-
-Backlog
-
-Analysis
-
-Development
-
-Testing
-
-Completed
-
-Deferred
----
-
-# EPIC-001
-
-Platform Foundation
-
-Version
-
-1.0
-
-Priority
-
-Critical
-
-Status
-
-Completed
-
-Description
-
-Establish the HOAHub production platform.
-
-Delivered
+Delivered snapshot:
 
 - Multi Tenant
 - Authentication
@@ -106,29 +31,14 @@ Delivered
 - GitHub CI/CD
 - Hostinger Deployment
 - Production UAT
----
 
-# EPIC-002
+### EPIC-002 — Subscription & Platform Management
 
-Subscription & Platform Management
+**Historical version:** 1.1  
+**Historical priority:** Critical  
+**Historical status:** Analysis / In Progress
 
-Version
-
-1.1
-
-Priority
-
-Critical
-
-Status
-
-Analysis
-
-Goal
-
-Transform HOAHub into a commercial SaaS platform.
-
-Features
+Historical features:
 
 - Subscription Plans
 - Tenant Subscription
@@ -136,42 +46,13 @@ Features
 - Platform Dashboard
 - Platform Settings
 - Platform Audit Logs
-
----
-
-# Version 1.1 – Commercial SaaS Foundation
-
-Release Goal
-
-Transform HOAHub into a production-ready commercial SaaS platform.
-
-Status
-
-In Progress
-
----
-
-## EPIC-002 Platform Management
-
-Priority: Critical
-
-Features
-
-- Platform Dashboard
 - Tenant Management
-- Subscription Plans
-- Tenant Subscription
-- License Management
-- Audit Logs
-- Platform Settings
 
----
+### EPIC-003 — User Experience
 
-## EPIC-003 User Experience
+**Historical priority:** Critical
 
-Priority: Critical
-
-Features
+Historical features:
 
 - Mobile Optimization
 - Responsive Tables
@@ -181,13 +62,11 @@ Features
 - Global Search
 - Better Forms
 
----
+### EPIC-004 — HOA Operations
 
-## EPIC-004 HOA Operations
+**Historical priority:** High
 
-Priority: High
-
-Features
+Historical features:
 
 - Complaint Management
 - Amenity Reservation
@@ -197,13 +76,11 @@ Features
 - QR Validation
 - Incident Reports
 
----
+### EPIC-005 — Finance
 
-## EPIC-005 Finance
+**Historical priority:** Critical
 
-Priority: Critical
-
-Features
+Historical features:
 
 - Monthly Dues
 - Special Assessment
@@ -213,13 +90,11 @@ Features
 - Aging Report
 - Bank Reconciliation
 
----
+### EPIC-006 — HRIS
 
-## EPIC-006 HRIS
+**Historical priority:** High
 
-Priority: High
-
-Features
+Historical features:
 
 - Attendance
 - Payroll
@@ -229,13 +104,11 @@ Features
 - Cash Advance
 - Employee Self Service
 
----
+### EPIC-007 — AI Platform
 
-## EPIC-007 AI Platform
+**Historical priority:** Future
 
-Priority: Future
-
-Features
+Historical features:
 
 - AI HOA Assistant
 - AI Treasurer

@@ -18,9 +18,9 @@ function clean(value: FormDataEntryValue | null) {
 
 async function requireRoleManager(tenantId: string) {
   const actor = await requireUser();
-  const platformManager = actor.permissions.has(Permission.PLATFORM_USERS_MANAGE);
+  const platformManager = actor.permissions.includes(Permission.PLATFORM_USERS_MANAGE);
   const tenantManager = actor.tenantId === tenantId
-    && actor.permissions.has(Permission.TENANT_SETTINGS_MANAGE);
+    && actor.permissions.includes(Permission.TENANT_SETTINGS_MANAGE);
   if (!platformManager && !tenantManager) redirect("/admin/dashboard?error=You%20do%20not%20have%20permission%20to%20manage%20user%20roles.");
   if (!platformManager && actor.tenantId !== tenantId) redirect("/admin/dashboard?error=Cross-tenant%20role%20management%20is%20not%20allowed.");
   return actor;

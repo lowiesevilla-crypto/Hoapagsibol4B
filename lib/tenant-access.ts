@@ -2,14 +2,11 @@ import "server-only";
 
 import { TenantModule } from "@prisma/client";
 import { requireUser } from "@/lib/auth";
-import {
-  platformRoles,
-  tenantRecord,
-  tenantWhere,
-} from "@/lib/authorization/tenant-scope";
+import { platformRoles } from "@/lib/authorization/tenant-scope";
 import { requireTenantModule } from "@/lib/tenant";
 
-export { platformRoles, tenantRecord, tenantWhere } from "@/lib/authorization/tenant-scope";
+export { tenantRecord, tenantWhere } from "@/lib/authorization/tenant-scope";
+export { platformRoles };
 
 export async function requireTenantAccess(module?: TenantModule) {
   const user = await requireUser();

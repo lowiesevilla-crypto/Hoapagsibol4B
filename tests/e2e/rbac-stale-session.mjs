@@ -7,7 +7,6 @@ import puppeteer from "puppeteer-core";
 const prisma = new PrismaClient();
 const baseUrl = process.env.E2E_BASE_URL || "http://127.0.0.1:3000";
 const tenantId = "tenant_pagsibol4b_default";
-const platformAdministratorId = "e2e_rbac_platform_administrator";
 const restrictedUserId = "e2e_rbac_restricted_user";
 const protectedTargetId = "e2e_rbac_protected_target";
 const platformAdministratorEmail =
@@ -223,7 +222,7 @@ async function run() {
 
   try {
     await login(platformPage, platformAdministratorEmail, securityPassword, "/platform/");
-    await expectText(platformPage, "Tenants", "platform administrator landing page");
+    await expectText(platformPage, "Tenant Management", "platform administrator landing page");
 
     await login(restrictedPage, restrictedUserEmail, securityPassword, "/admin/chat");
     await expectText(restrictedPage, "Chat", "restricted staff landing page");
@@ -251,8 +250,8 @@ async function run() {
       role: Role.SYSTEM_ADMIN,
     });
     assert.ok(
-      new URL(restrictedPage.url()).pathname.startsWith("/admin/chat"),
-      `Restricted server-action submission should return to the staff home, received ${restrictedPage.url()}`,
+      new URL(restrictedPage.url()).pathname.startsWith("/admin/dashboard"),
+      `Restricted server-action submission should be denied before mutation, received ${restrictedPage.url()}`,
     );
 
     const protectedTarget = await prisma.user.findFirst({

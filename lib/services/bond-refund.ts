@@ -4,6 +4,7 @@ import {
   RefundStatus,
 } from "@prisma/client";
 import { prisma } from "@/lib/db";
+import { currentTenantContext } from "@/lib/tenant-context";
 
 export type BondRefundActor = {
   id: string;
@@ -29,6 +30,10 @@ export async function recordBondRefund({
   remarks,
   actor,
 }: RecordBondRefundInput) {
+  const context = currentTenantContext();
+  if (!context || context.platform || context.tenantId !== actor.tenantId) {
+    throw new Error("Tenant-scoped refund context is required.");
+  }
   if (!Number.isFinite(amount) || amount <= 0) {
     throw new Error("Refund amount must be greater than zero.");
   }
@@ -84,7 +89,7 @@ export async function recordBondRefund({
           remarks: remarks || null,
           processedById: actor.id,
         },
-        select: { id: true, createdAt: true },
+        select: { id: true },
       });
       const refundReference = bondRefundReference(refund.id, refundDate);
 

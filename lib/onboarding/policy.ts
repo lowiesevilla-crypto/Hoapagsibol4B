@@ -12,9 +12,7 @@ export type TenantOnboardingState = {
   profile?: {
     completedAt: string;
     timezone: string;
-    locale: string;
     currency: string;
-    logoUrl: string | null;
     supportEmail: string | null;
     supportPhone: string | null;
     receiptPrefix: string;

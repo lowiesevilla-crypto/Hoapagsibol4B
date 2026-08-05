@@ -154,6 +154,34 @@ enum HomeownerEmailVerificationStatus {
   VERIFIED
 }
 
+enum TenantOnboardingStatus {
+  NOT_STARTED
+  IN_PROGRESS
+  READY
+  COMPLETE
+}
+
+enum TenantImportKind {
+  HOMEOWNERS_PROPERTIES
+}
+
+enum TenantImportStatus {
+  VALIDATING
+  INVALID
+  READY
+  COMMITTING
+  COMMITTED
+  FAILED
+}
+
+enum TenantImportRowStatus {
+  VALID
+  INVALID
+  CREATED
+  SKIPPED
+  FAILED
+}
+
 enum PasskeyChallengeType {
   REGISTRATION
   AUTHENTICATION
@@ -581,6 +609,14 @@ model Tenant {
   email                      String?
   secRegistrationNumber      String?
   tinNumber                  String?
+  locale                     String                               @default("en-PH") @db.VarChar(20)
+  timezone                   String                               @default("Asia/Manila") @db.VarChar(80)
+  currency                   String                               @default("PHP") @db.VarChar(3)
+  fiscalYearStartMonth       Int                                  @default(1)
+  defaultBillingDay          Int                                  @default(1)
+  defaultDueDay              Int                                  @default(15)
+  supportEmail               String?
+  supportPhone               String?                              @db.VarChar(50)
   status                     TenantStatus                         @default(ACTIVE)
   subscriptionPlan           String                               @default("STANDARD")
   subscriptionStatus         TenantSubscriptionStatus             @default(TRIAL)
@@ -591,6 +627,9 @@ model Tenant {
   advisories                 TenantAdvisory[]
   sequences                  TenantSequence[]
   userRoleAssignments        UserRoleAssignment[]
+  onboarding                 TenantOnboarding?
+  importBatches              TenantImportBatch[]
+  importRows                 TenantImportRow[]
   billingRules               BillingRule[]
   paymentAllocations         PaymentAllocation[]
   documentDefinitions        DocumentDefinition[]
@@ -720,6 +759,10 @@ model User {
   complaintIdentityAccessApproved       ComplaintIdentityAccessGrant[]    @relation("ComplaintIdentityAccessApprover")
   userRoleAssignments                   UserRoleAssignment[]
   assignedRoleAssignments               UserRoleAssignment[]              @relation("UserRoleAssignmentAssignedBy")
+  tenantOnboardingPrivacyAccepted       TenantOnboarding[]                 @relation("TenantOnboardingPrivacyAcceptedBy")
+  tenantOnboardingLastSaved             TenantOnboarding[]                 @relation("TenantOnboardingLastSavedBy")
+  tenantImportBatchesCreated            TenantImportBatch[]                @relation("TenantImportBatchCreatedBy")
+  tenantImportBatchesCommitted          TenantImportBatch[]                @relation("TenantImportBatchCommittedBy")
   tenant                                Tenant                            @relation(fields: [tenantId], references: [id], onDelete: Restrict)
 
   @@unique([tenantId, email])
@@ -744,6 +787,81 @@ model UserRoleAssignment {
   @@id([tenantId, userId, role])
   @@index([tenantId, active, role])
   @@index([userId, active])
+}
+
+model TenantOnboarding {
+  tenantId              String                   @id
+  status                TenantOnboardingStatus   @default(NOT_STARTED)
+  currentStep           String                   @default("PROFILE") @db.VarChar(40)
+  completedSteps        Json?
+  privacyNoticeVersion  String?                  @db.VarChar(40)
+  privacyAcceptedAt     DateTime?
+  privacyAcceptedById   String?
+  lastSavedById         String?
+  startedAt             DateTime                 @default(now())
+  completedAt           DateTime?
+  createdAt             DateTime                 @default(now())
+  updatedAt             DateTime                 @updatedAt
+  tenant                Tenant                   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  privacyAcceptedBy     User?                    @relation("TenantOnboardingPrivacyAcceptedBy", fields: [privacyAcceptedById], references: [id], onDelete: SetNull)
+  lastSavedBy           User?                    @relation("TenantOnboardingLastSavedBy", fields: [lastSavedById], references: [id], onDelete: SetNull)
+
+  @@index([status, updatedAt])
+}
+
+model TenantImportBatch {
+  id                 String             @id @default(cuid())
+  tenantId           String
+  kind               TenantImportKind
+  templateVersion    String             @db.VarChar(20)
+  originalFileName   String             @db.VarChar(255)
+  fileHash           String             @db.VarChar(64)
+  status             TenantImportStatus @default(VALIDATING)
+  rowCount           Int                @default(0)
+  validCount         Int                @default(0)
+  invalidCount       Int                @default(0)
+  createdCount       Int                @default(0)
+  updatedCount       Int                @default(0)
+  skippedCount       Int                @default(0)
+  failedCount        Int                @default(0)
+  errorReport        Json?
+  summary            Json?
+  createdById        String
+  committedById      String?
+  validatedAt        DateTime?
+  committedAt        DateTime?
+  expiresAt          DateTime?
+  createdAt          DateTime           @default(now())
+  updatedAt          DateTime           @updatedAt
+  tenant             Tenant             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  createdBy          User               @relation("TenantImportBatchCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  committedBy        User?              @relation("TenantImportBatchCommittedBy", fields: [committedById], references: [id], onDelete: SetNull)
+  rows               TenantImportRow[]
+
+  @@unique([tenantId, kind, fileHash])
+  @@index([tenantId, status, updatedAt])
+  @@index([createdById])
+  @@index([committedById])
+}
+
+model TenantImportRow {
+  id               String                @id @default(cuid())
+  tenantId         String
+  batchId          String
+  rowNumber        Int
+  naturalKey       String                @db.VarChar(255)
+  payload          Json
+  status           TenantImportRowStatus @default(VALID)
+  errors           Json?
+  createdEntityId  String?
+  createdAt        DateTime              @default(now())
+  updatedAt        DateTime              @updatedAt
+  tenant           Tenant                @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  batch            TenantImportBatch     @relation(fields: [batchId], references: [id], onDelete: Cascade)
+
+  @@unique([batchId, rowNumber])
+  @@index([tenantId, batchId, status])
+  @@index([tenantId, naturalKey])
 }
 
 model TenantModuleEntitlement {

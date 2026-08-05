@@ -14,6 +14,7 @@ const unrestrictedAdminRoles = new Set<Role>([
 ]);
 
 const adminRoutePermissions: readonly [string, PermissionValue][] = [
+  ["/admin/onboarding", Permission.TENANT_SETTINGS_MANAGE],
   ["/admin/settings/billing-rules", Permission.BILLING_MANAGE],
   ["/admin/settings/billing-exemptions", Permission.BILLING_MANAGE],
   ["/admin/settings", Permission.TENANT_SETTINGS_MANAGE],

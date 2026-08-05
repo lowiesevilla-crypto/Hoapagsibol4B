@@ -1,9 +1,10 @@
 "use server";
 
-import { CollectionType, PayerType, Prisma, RefundStatus, Role } from "@prisma/client";
+import { CollectionType, PayerType, Prisma, RefundStatus } from "@prisma/client";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { requireUser } from "@/lib/auth";
+import { requirePermission, requirePermissions } from "@/lib/authorization/guards";
+import { Permission } from "@/lib/authorization/permissions";
 import { prisma } from "@/lib/db";
 import { recordBondRefund } from "@/lib/services/bond-refund";
 import { allocateReceiptNumber, collectionReceiptSeries } from "@/lib/services/receipt";
@@ -12,7 +13,10 @@ import { bondRefundSchema, collectionSchema } from "@/lib/validation";
 const refundableTypes = new Set<CollectionType>([CollectionType.CONSTRUCTION_BOND, CollectionType.CONTRACTOR_BOND]);
 
 export async function recordCollectionAction(formData: FormData) {
-  const admin = await requireUser(Role.ADMIN);
+  const admin = await requirePermissions([
+    Permission.COLLECTIONS_RECORD,
+    Permission.RECEIPTS_ISSUE,
+  ]);
   const parsed = collectionSchema.safeParse(Object.fromEntries(formData.entries()));
   if (!parsed.success) throw new Error(parsed.error.issues[0]?.message || "Invalid collection details.");
   const data = parsed.data;
@@ -64,7 +68,7 @@ export async function recordCollectionAction(formData: FormData) {
 }
 
 export async function recordBondRefundAction(formData: FormData) {
-  const admin = await requireUser(Role.ADMIN);
+  const admin = await requirePermission(Permission.COLLECTIONS_REFUND);
   const parsed = bondRefundSchema.safeParse(Object.fromEntries(formData.entries()));
   if (!parsed.success) throw new Error(parsed.error.issues[0]?.message || "Invalid refund details.");
   const data = parsed.data;
@@ -84,7 +88,7 @@ export async function recordBondRefundAction(formData: FormData) {
 }
 
 export async function forfeitBondAction(formData: FormData) {
-  const admin = await requireUser(Role.ADMIN);
+  const admin = await requirePermission(Permission.COLLECTIONS_FORFEIT);
   const collectionId = String(formData.get("collectionId") || "");
   const reason = String(formData.get("reason") || "").trim();
   if (!reason) throw new Error("A violation or forfeiture reason is required.");
@@ -113,7 +117,7 @@ export async function forfeitBondAction(formData: FormData) {
 }
 
 export async function deleteCollectionAction(formData: FormData) {
-  await requireUser(Role.ADMIN);
+  await requirePermission(Permission.COLLECTIONS_MANAGE);
   const id = String(formData.get("id") || "");
   const collection = await prisma.collection.findUnique({ where: { id }, select: { _count: { select: { refunds: true } }, amountForfeited: true } });
   if (!collection) throw new Error("Collection not found.");

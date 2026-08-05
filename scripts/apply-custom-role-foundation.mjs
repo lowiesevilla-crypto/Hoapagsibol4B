@@ -1,4 +1,135 @@
-import { mkdir, readFile, writeFile } from "node:fs/promises";
-import path from "node:path";
+import { readFile, writeFile } from "node:fs/promises";
 
-const writes = {"lib/authorization/permissions.ts": "aW1wb3J0IHsgUm9sZSB9IGZyb20gIkBwcmlzbWEvY2xpZW50IjsKCmV4cG9ydCBjb25zdCBQZXJtaXNzaW9uID0gewogIFBMQVRGT1JNX0FDQ0VTUzogInBsYXRmb3JtLmFjY2VzcyIsCiAgUExBVEZPUk1fVEVOQU5UU19NQU5BR0U6ICJwbGF0Zm9ybS50ZW5hbnRzLm1hbmFnZSIsCiAgUExBVEZPUk1fVVNFUlNfTUFOQUdFOiAicGxhdGZvcm0udXNlcnMubWFuYWdlIiwKICBBRE1JTl9BQ0NFU1M6ICJhZG1pbi5hY2Nlc3MiLAogIFRFTkFOVF9TRVRUSU5HU19NQU5BR0U6ICJ0ZW5hbnQuc2V0dGluZ3MubWFuYWdlIiwKICBTRVRUSU5HU19NQU5BR0U6ICJzZXR0aW5ncy5tYW5hZ2UiLAogIFVTRVJTX01BTkFHRTogInVzZXJzLm1hbmFnZSIsCiAgUk9MRVNfTUFOQUdFOiAicm9sZXMubWFuYWdlIiwKICBBVURJVF9SRUFEOiAiYXVkaXQucmVhZCIsCiAgREFUQV9FWFBPUlQ6ICJkYXRhLmV4cG9ydCIsCiAgREFUQV9JTVBPUlQ6ICJkYXRhLmltcG9ydCIsCiAgREFUQV9NSUdSQVRFOiAiZGF0YS5taWdyYXRlIiwKICBIT01FT1dORVJTX1JFQUQ6ICJob21lb3duZXJzLnJlYWQiLAogIEhPTUVPV05FUlNfTUFOQUdFOiAiaG9tZW93bmVycy5tYW5hZ2UiLAogIFBST1BFUlRJRVNfUkVBRDogInByb3BlcnRpZXMucmVhZCIsCiAgUFJPUEVSVElFU19NQU5BR0U6ICJwcm9wZXJ0aWVzLm1hbmFnZSIsCiAgQklMTElOR19SRUFEOiAiYmlsbGluZy5yZWFkIiwKICBCSUxMSU5HX01BTkFHRTogImJpbGxpbmcubWFuYWdlIiwKICBCSUxMSU5HX0NPTkZJR1VSRTogImJpbGxpbmcuY29uZmlndXJlIiwKICBCSUxMSU5HX1BSRVZJRVc6ICJiaWxsaW5nLnByZXZpZXciLAogIEJJTExJTkdfR0VORVJBVEU6ICJiaWxsaW5nLmdlbmVyYXRlIiwKICBCSUxMSU5HX0FESlVTVDogImJpbGxpbmcuYWRqdXN0IiwKICBQQVlNRU5UU19SRUFEOiAicGF5bWVudHMucmVhZCIsCiAgUEFZTUVOVFNfTUFOQUdFOiAicGF5bWVudHMubWFuYWdlIiwKICBQQVlNRU5UU19SRVFVRVNUOiAicGF5bWVudHMucmVxdWVzdCIsCiAgUEFZTUVOVFNfUkVDT1JEOiAicGF5bWVudHMucmVjb3JkIiwKICBQQVlNRU5UU19BTExPQ0FURTogInBheW1lbnRzLmFsbG9jYXRlIiwKICBQQVlNRU5UU19WT0lEOiAicGF5bWVudHMudm9pZCIsCiAgUEFZTUVOVFNfUkVGVU5EOiAicGF5bWVudHMucmVmdW5kIiwKICBDT0xMRUNUSU9OU19NQU5BR0U6ICJjb2xsZWN0aW9ucy5tYW5hZ2UiLAogIENPTExFQ1RJT05TX1JFQ09SRDogImNvbGxlY3Rpb25zLnJlY29yZCIsCiAgQ09MTEVDVElPTlNfUkVGVU5EOiAiY29sbGVjdGlvbnMucmVmdW5kIiwKICBDT0xMRUNUSU9OU19GT1JGRUlUOiAiY29sbGVjdGlvbnMuZm9yZmVpdCIsCiAgUkVDRUlQVFNfSVNTVUU6ICJyZWNlaXB0cy5pc3N1ZSIsCiAgRVhQRU5TRVNfTUFOQUdFOiAiZXhwZW5zZXMubWFuYWdlIiwKICBSRVBPUlRTX1ZJRVc6ICJyZXBvcnRzLnZpZXciLAogIFJFUE9SVFNfRklOQU5DSUFMOiAicmVwb3J0cy5maW5hbmNpYWwiLAogIFBBWVJPTExfTUFOQUdFOiAicGF5cm9sbC5tYW5hZ2UiLAogIEFUVEVOREFOQ0VfTUFOQUdFOiAiYXR0ZW5kYW5jZS5tYW5hZ2UiLAogIERPQ1VNRU5UU19SRUFEOiAiZG9jdW1lbnRzLnJlYWQiLAogIERPQ1VNRU5UU19SRVFVRVNVOiAiZG9jdW1lbnRzLnJlcXVlc3QiLAogIERPQ1VNRU5UU19NQU5BR0U6ICJkb2N1bWVudHMubWFuYWdlIiwKICBET0NVTUVOVFNfQVBQUk9WRTogImRvY3VtZW50cy5hcHByb3ZlIiwKICBET0NVTUVOVFNfQ09ORklHVVJFOiAiZG9jdW1lbnRzLmNvbmZpZ3VyZSIsCiAgRE9DVU1FTlRTX0dFTkVSQVRFOiAiZG9jdW1lbnRzLmdlbmVyYXRlIiwKICBET0NVTUVOVFNfQVJDSElWRTogImRvY3VtZW50cy5hcmNoaXZlIiwKICBET0NVTUVOVFNfQkFMQU5DRV9PVkVSUklERTogImRvY3VtZW50cy5iYWxhbmNlLm92ZXJyaWRlIiwKICBDT01NVU5JVFlfTUFOQUdFOiAiY29tbXVuaXR5Lm1hbmFnZSIsCiAgQU5OT1VOQ0VNRU5UU19QVUJMSVNIOiAiYW5ub3VuY2VtZW50cy5wdWJsaXNoIiwKICBDT01QTEFJTlRTX01BTkFHRTogImNvbXBsYWludHMubWFuYWdlIiwKICBDSEFUX1VTRTogImNoYXQudXNlIiwKICBIT01FT1dORVJfUE9SVEFMX0FDQ0VTUzogImhvbWVvd25lci5wb3J0YWwuYWNjZXNzIiwKICBFTVBMT1lFRV9QT1JUQUxfQUNDRVNTOiAiZW1wbG95ZWUucG9ydGFsLmFjY2VzcyIsCn0gYXMgY29uc3Q7CgpleHBvcnQgdHlwZSBQZXJtaXNzaW9uID0gKHR5cGVvZiBQZXJtaXNzaW9uKVtrZXlvZiB0eXBlb2YgUGVybWlzc2lvbl07CgpleHBvcnQgY29uc3QgcGVybWlzc2lvblZhbHVlczogcmVhZG9ubHkgUGVybWlzc2lvbltdID0gT2JqZWN0LmZyZWV6ZShPYmplY3QudmFsdWVzKFBlcm1pc3Npb24pKTsKCmV4cG9ydCBmdW5jdGlvbiBpc1Blcm1pc3Npb24odmFsdWU6IHVua25vd24pOiB2YWx1ZSBpcyBQZXJtaXNzaW9uIHsKICByZXR1cm4gdHlwZW9mIHZhbHVlID09PSAic3RyaW5nIiAmJiBwZXJtaXNzaW9uVmFsdWVzLmluY2x1ZGVzKHZhbHVlIGFzIFBlcm1pc3Npb24pOwp9Cgpjb25zdCB0ZW5hbnRBZG1pbmlzdHJhdG9yUGVybWlzc2lvbnM6IHJlYWRvbmx5IFBlcm1pc3Npb25bXSA9IFsKICBQZXJtaXNzaW9uLkFETUlOX0FDQ0VTUywKICBQZXJtaXNzaW9uLlRFTkFOVF9TRVRUSU5HU19NQU5BR0UsCiAgUGVybWlzc2lvbi5VU0VSU19NQU5BR0UsCiAgUGVybWlzc2lvbi5ST0xFU19NQU5BR0UsCiAgUGVybWlzc2lvbi5BVURJVF9SRUFELAogIFBlcm1pc3Npb24uREFUQV9FWFBPUlQsCiAgUGVybWlzc2lvbi5EQVRBX0lNUE9SVCwKICBQZXJtaXNzaW9uLkRBVEFfTUlHUkFURSwKICBQZXJtaXNzaW9uLkhPTUVPV05FUlNfUkVBRCwKICBQZXJtaXNzaW9uLkhPTUVPV05FUlNfTUFOQUdF...
+async function patch(file, transform) {
+  const before = await readFile(file, "utf8");
+  const after = transform(before);
+  if (after === before) throw new Error(`${file}: expected patch made no changes`);
+  await writeFile(file, after);
+  console.log(`patched ${file}`);
+}
+
+function replaceOnce(source, search, replacement, label) {
+  const first = source.indexOf(search);
+  if (first < 0) throw new Error(`missing ${label}`);
+  if (source.indexOf(search, first + search.length) >= 0) throw new Error(`duplicate ${label}`);
+  return source.slice(0, first) + replacement + source.slice(first + search.length);
+}
+
+await patch("prisma/schema.prisma", (source) => {
+  let next = source;
+  next = replaceOnce(
+    next,
+    "  userRoleAssignments        UserRoleAssignment[]\n  billingRules               BillingRule[]",
+    "  userRoleAssignments        UserRoleAssignment[]\n  customRoles                TenantCustomRole[]\n  customRolePermissions      TenantCustomRolePermission[]\n  customRoleAssignments      UserTenantCustomRoleAssignment[]\n  billingRules               BillingRule[]",
+    "Tenant custom-role relations",
+  );
+  next = replaceOnce(
+    next,
+    "  userRoleAssignments                   UserRoleAssignment[]\n  assignedRoleAssignments               UserRoleAssignment[]              @relation(\"UserRoleAssignmentAssignedBy\")",
+    "  userRoleAssignments                   UserRoleAssignment[]\n  assignedRoleAssignments               UserRoleAssignment[]              @relation(\"UserRoleAssignmentAssignedBy\")\n  tenantCustomRoleAssignments           UserTenantCustomRoleAssignment[]  @relation(\"TenantCustomRoleAssignmentUser\")\n  tenantCustomRoleAssignmentsGranted    UserTenantCustomRoleAssignment[]  @relation(\"TenantCustomRoleAssignmentAssignedBy\")\n  tenantCustomRolesCreated              TenantCustomRole[]                 @relation(\"TenantCustomRoleCreatedBy\")\n  tenantCustomRolesUpdated              TenantCustomRole[]                 @relation(\"TenantCustomRoleUpdatedBy\")",
+    "User custom-role relations",
+  );
+  next = replaceOnce(
+    next,
+    "model TenantModuleEntitlement {",
+    `model TenantCustomRole {
+  id          String   @id @default(cuid())
+  tenantId    String
+  name        String   @db.VarChar(100)
+  key         String   @db.VarChar(80)
+  description String?  @db.VarChar(500)
+  active      Boolean  @default(true)
+  createdById String?
+  updatedById String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  tenant      Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  createdBy   User?    @relation("TenantCustomRoleCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  updatedBy   User?    @relation("TenantCustomRoleUpdatedBy", fields: [updatedById], references: [id], onDelete: SetNull)
+  permissions TenantCustomRolePermission[]
+  assignments UserTenantCustomRoleAssignment[]
+
+  @@unique([tenantId, name])
+  @@unique([tenantId, key])
+  @@index([tenantId, active])
+}
+
+model TenantCustomRolePermission {
+  tenantId   String
+  roleId     String
+  permission String
+  tenant     Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  role       TenantCustomRole @relation(fields: [roleId], references: [id], onDelete: Cascade)
+
+  @@id([roleId, permission])
+  @@index([tenantId, permission])
+}
+
+model UserTenantCustomRoleAssignment {
+  tenantId       String
+  userId         String
+  roleId         String
+  assignedBy     String?
+  assignedAt     DateTime         @default(now())
+  active         Boolean          @default(true)
+  tenant         Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user           User             @relation("TenantCustomRoleAssignmentUser", fields: [userId], references: [id], onDelete: Cascade)
+  role           TenantCustomRole @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  assignedByUser User?            @relation("TenantCustomRoleAssignmentAssignedBy", fields: [assignedBy], references: [id], onDelete: SetNull)
+
+  @@id([tenantId, userId, roleId])
+  @@index([tenantId, active, roleId])
+  @@index([userId, active])
+}
+
+model TenantModuleEntitlement {`,
+    "custom-role models",
+  );
+  return next;
+});
+
+await patch("components/sidebar-links.ts", (source) => replaceOnce(
+  source,
+  '  { href: "/admin/data/migrations", label: "Balance migration", icon: "data", section: "Reports" },\n];',
+  '  { href: "/admin/data/migrations", label: "Balance migration", icon: "data", section: "Reports" },\n  { href: "/admin/settings/roles", label: "Roles & permissions", icon: "settings", section: "Settings" },\n];',
+  "roles navigation",
+));
+
+await patch("lib/actions/homeowners.ts", (source) => replaceOnce(
+  source,
+  `            role: Role.HOMEOWNER,
+            homeownerProfile: {`,
+  `            role: Role.HOMEOWNER,
+            userRoleAssignments: {
+              create: {
+                tenantId: input.tenantId,
+                role: Role.HOMEOWNER,
+                active: true,
+                assignedBy: input.createdById,
+              },
+            },
+            homeownerProfile: {`,
+  "explicit homeowner role assignment",
+));
+
+await patch("lib/services/passkeys.ts", (source) => {
+  let next = replaceOnce(
+    source,
+    'import { HomeownerActivationStatus, HomeownerEmailVerificationStatus, PasskeyChallengeType, Role } from "@prisma/client";',
+    'import { HomeownerActivationStatus, HomeownerEmailVerificationStatus, PasskeyChallengeType } from "@prisma/client";',
+    "passkey Role import",
+  );
+  const roleFilter = "        role: Role.HOMEOWNER,\n";
+  const occurrences = next.split(roleFilter).length - 1;
+  if (occurrences !== 2) throw new Error(`expected 2 homeowner role filters, found ${occurrences}`);
+  next = next.split(roleFilter).join("");
+  next = replaceOnce(
+    next,
+    "  if (!credentialRecord || !credentialRecord.user.active || credentialRecord.user.role !== Role.HOMEOWNER || homeownerProfile?.activationStatus !== HomeownerActivationStatus.ACTIVE || homeownerProfile?.emailStatus !== HomeownerEmailVerificationStatus.VERIFIED || !homeownerProfile?.activatedAt) {",
+    "  if (!credentialRecord || !credentialRecord.user.active || !homeownerProfile || homeownerProfile.activationStatus !== HomeownerActivationStatus.ACTIVE || homeownerProfile.emailStatus !== HomeownerEmailVerificationStatus.VERIFIED || !homeownerProfile.activatedAt) {",
+    "passkey homeowner identity check",
+  );
+  return next;
+});
+
+console.log("custom-role schema and compatibility patches applied");

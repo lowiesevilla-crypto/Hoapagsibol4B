@@ -9,21 +9,29 @@ const adminRoles = new Set([
   "STAFF",
 ]);
 
-function normalizeRoles(roleOrRoles: string | readonly string[]) {
-  return typeof roleOrRoles === "string"
-    ? [roleOrRoles]
-    : [...new Set(roleOrRoles)];
+type ProtectedAccess = {
+  roles?: readonly string[];
+  permissions?: readonly string[];
+};
+
+function normalizeAccess(access: string | readonly string[] | ProtectedAccess) {
+  if (typeof access === "string") return { roles: [access], permissions: [] };
+  if (Array.isArray(access)) return { roles: [...new Set(access)], permissions: [] };
+  return {
+    roles: [...new Set(access.roles ?? [])],
+    permissions: [...new Set(access.permissions ?? [])],
+  };
 }
 
 function hasAnyRole(roles: readonly string[], accepted: ReadonlySet<string>) {
   return roles.some((role) => accepted.has(role));
 }
 
-function safeHomeForRoles(roles: readonly string[]) {
-  if (hasAnyRole(roles, platformRoles)) return "/platform/tenants";
-  if (hasAnyRole(roles, adminRoles)) return "/admin/dashboard";
-  if (roles.includes("HOMEOWNER")) return "/portal/dashboard";
-  if (roles.includes("EMPLOYEE")) return "/employee/attendance";
+function safeHomeForAccess(roles: readonly string[], permissions: readonly string[]) {
+  if (permissions.includes("platform.access") || hasAnyRole(roles, platformRoles)) return "/platform/tenants";
+  if (permissions.includes("admin.access") || hasAnyRole(roles, adminRoles)) return "/admin/dashboard";
+  if (permissions.includes("homeowner.portal.access") || roles.includes("HOMEOWNER")) return "/portal/dashboard";
+  if (permissions.includes("employee.portal.access") || roles.includes("EMPLOYEE")) return "/employee/attendance";
   return "/login";
 }
 
@@ -33,23 +41,33 @@ export function isProtectedApplicationPath(pathname: string) {
   );
 }
 
-export function protectedPathRedirect(roleOrRoles: string | readonly string[], pathname: string): string | null {
-  const roles = normalizeRoles(roleOrRoles);
+export function protectedPathRedirect(
+  access: string | readonly string[] | ProtectedAccess,
+  pathname: string,
+): string | null {
+  const { roles, permissions } = normalizeAccess(access);
   if (pathname.startsWith("/platform")) {
-    return hasAnyRole(roles, platformRoles) ? null : safeHomeForRoles(roles);
+    const allowed = permissions.includes("platform.access") || hasAnyRole(roles, platformRoles);
+    return allowed ? null : safeHomeForAccess(roles, permissions);
   }
   if (pathname.startsWith("/admin")) {
-    return hasAnyRole(roles, adminRoles) ? null : safeHomeForRoles(roles);
+    const allowed = permissions.includes("admin.access") || hasAnyRole(roles, adminRoles);
+    return allowed ? null : safeHomeForAccess(roles, permissions);
   }
   if (pathname.startsWith("/portal")) {
-    return roles.includes("HOMEOWNER") ? null : safeHomeForRoles(roles);
+    const allowed = permissions.includes("homeowner.portal.access") || roles.includes("HOMEOWNER");
+    return allowed ? null : safeHomeForAccess(roles, permissions);
   }
   if (pathname.startsWith("/employee")) {
-    return roles.includes("EMPLOYEE") ? null : safeHomeForRoles(roles);
+    const allowed = permissions.includes("employee.portal.access") || roles.includes("EMPLOYEE");
+    return allowed ? null : safeHomeForAccess(roles, permissions);
   }
   return null;
 }
 
-export function canAccessProtectedPath(roleOrRoles: string | readonly string[], pathname: string) {
-  return protectedPathRedirect(roleOrRoles, pathname) === null;
+export function canAccessProtectedPath(
+  access: string | readonly string[] | ProtectedAccess,
+  pathname: string,
+) {
+  return protectedPathRedirect(access, pathname) === null;
 }

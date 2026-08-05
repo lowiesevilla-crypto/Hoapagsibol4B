@@ -1,15 +1,16 @@
 "use server";
 
-import { HomeownerActivationStatus, Role } from "@prisma/client";
+import { HomeownerActivationStatus } from "@prisma/client";
 import { compare } from "bcryptjs";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
-import { createSession, defaultHomeForRoles, deleteSession, readSession } from "@/lib/auth";
+import { createSession, defaultHomeForAccess, deleteSession, readSession } from "@/lib/auth";
 import {
   effectiveRolesForUser,
-  isPlatformRoleSet,
   primaryRoleForRoles,
 } from "@/lib/authorization/effective-access";
+import { effectivePermissionsForAccess } from "@/lib/authorization/custom-roles";
+import { Permission } from "@/lib/authorization/permissions";
 import { platformPrisma, prisma } from "@/lib/db";
 import { clearRateLimit, rateLimitAvailable, recordRateLimitFailure } from "@/lib/rate-limit";
 import { loginSchema } from "@/lib/validation";
@@ -19,6 +20,15 @@ import { normalizeActivationEmail } from "@/lib/services/homeowner-activation";
 
 export type AuthNavigationState = { error?: string; redirectTo?: string };
 export type LoginState = AuthNavigationState;
+
+const customAssignmentInclude = {
+  where: { active: true },
+  include: {
+    role: {
+      include: { permissions: true },
+    },
+  },
+} as const;
 
 export async function loginAction(_state: LoginState, formData: FormData): Promise<LoginState> {
   const parsed = loginSchema.safeParse(Object.fromEntries(formData.entries()));
@@ -48,12 +58,14 @@ export async function loginAction(_state: LoginState, formData: FormData): Promi
   const { tenant, user } = resolved;
   const roles = effectiveRolesForUser(user.role, user.userRoleAssignments);
   const role = primaryRoleForRoles(roles, user.role);
+  const permissions = effectivePermissionsForAccess(roles, user.tenantCustomRoleAssignments);
 
   setTenantContext({
     tenantId: tenant.id,
     role,
     roles,
-    platform: isPlatformRoleSet(roles),
+    permissions,
+    platform: permissions.has(Permission.PLATFORM_ACCESS),
     enabledModules: new Set(tenant.moduleEntitlements.filter((item) => item.enabled).map((item) => item.module)),
   });
 
@@ -69,13 +81,13 @@ export async function loginAction(_state: LoginState, formData: FormData): Promi
         action: "TENANT_LOGIN",
         entityType: "User",
         entityId: user.id,
-        metadata: { tenantSlug: tenant.slug, roles },
+        metadata: { tenantSlug: tenant.slug, roles, permissions: [...permissions].sort() },
       },
     }),
   ]);
 
-  await createSession({ userId: user.id, role, roles, tenantId: tenant.id, tenantSlug: tenant.slug });
-  return { redirectTo: defaultHomeForRoles(roles, role) };
+  await createSession({ userId: user.id, role, roles, permissions: [...permissions], tenantId: tenant.id, tenantSlug: tenant.slug });
+  return { redirectTo: defaultHomeForAccess(roles, [...permissions], role) };
 }
 
 export async function logoutAction() {
@@ -94,7 +106,8 @@ export async function logoutAllSessionsAction() {
     tenantId: session.tenantId,
     role: session.role,
     roles,
-    platform: isPlatformRoleSet(roles),
+    permissions: new Set(session.permissions ?? []),
+    platform: session.permissions?.includes(Permission.PLATFORM_ACCESS) ?? false,
   });
   await prisma.userSession.updateMany({
     where: { tenantId: session.tenantId, userId: session.userId, revokedAt: null },
@@ -120,7 +133,8 @@ export async function logoutAllSessionsNavigationAction(_state: AuthNavigationSt
     tenantId: session.tenantId,
     role: session.role,
     roles,
-    platform: isPlatformRoleSet(roles),
+    permissions: new Set(session.permissions ?? []),
+    platform: session.permissions?.includes(Permission.PLATFORM_ACCESS) ?? false,
   });
   await prisma.userSession.updateMany({
     where: { tenantId: session.tenantId, userId: session.userId, revokedAt: null },
@@ -146,18 +160,17 @@ async function resolveLoginUser(input: { tenantSlug: string; identifierType: "em
     include: {
       homeownerProfile: true,
       userRoleAssignments: { where: { active: true }, select: { role: true, active: true } },
+      tenantCustomRoleAssignments: customAssignmentInclude,
       tenant: { include: { advisories: { where: { active: true }, orderBy: { createdAt: "desc" }, take: 1 }, moduleEntitlements: true } },
     },
     take: 10,
   });
   const authorized = users.filter((candidate) => {
     if (!tenantCanSignIn(candidate.tenant)) return false;
-    const roles = effectiveRolesForUser(candidate.role, candidate.userRoleAssignments);
-    if (!roles.includes(Role.HOMEOWNER)) return input.identifierType === "email";
     if (!candidate.homeownerProfile) return input.identifierType === "email";
     return candidate.homeownerProfile.status === "ACTIVE"
-      && candidate.homeownerProfile.emailStatus === "VERIFIED"
       && candidate.homeownerProfile.activationStatus === HomeownerActivationStatus.ACTIVE
+      && candidate.homeownerProfile.emailStatus === "VERIFIED"
       && Boolean(candidate.homeownerProfile.activatedAt);
   });
   const matches = [];
@@ -171,8 +184,7 @@ async function resolveLoginUser(input: { tenantSlug: string; identifierType: "em
 }
 
 async function logoutRedirectForSession(session: Awaited<ReturnType<typeof readSession>>) {
-  const roles = session?.roles ?? (session ? [session.role] : []);
-  if (!session || isPlatformRoleSet(roles)) return "/login?loggedOut=1";
+  if (!session || session.permissions?.includes(Permission.PLATFORM_ACCESS)) return "/login?loggedOut=1";
   const tenant = await platformPrisma.tenant.findFirst({
     where: { id: session.tenantId, slug: session.tenantSlug },
     select: { slug: true },

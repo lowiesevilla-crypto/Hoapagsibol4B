@@ -1,24 +1,28 @@
 import { Suspense } from "react";
 import type { Metadata } from "next";
-import { Role, TenantModule } from "@prisma/client";
+import { TenantModule } from "@prisma/client";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { Sidebar } from "@/components/sidebar";
 import { adminLinks, platformLinks, systemAdminLinks } from "@/components/sidebar-links";
 import { TransactionFeedback } from "@/components/transaction-feedback";
-import { requireUser } from "@/lib/auth";
+import { requirePermission } from "@/lib/authorization/guards";
 import { Permission } from "@/lib/authorization/permissions";
 import { filterLinksByModules, moduleForPath } from "@/lib/module-routing";
 import { routeTitle, tenantMetadata, tenantNameForMetadata } from "@/lib/metadata-title";
 import { userCanAccessPayroll } from "@/lib/payroll-access";
-import { adminHomeForRole, canAccessAdminPath, filterAdminLinksByRole } from "@/lib/role-access";
+import {
+  adminHomeForPermissions,
+  canAccessAdminPathWithPermissions,
+  filterAdminLinksByPermissions,
+} from "@/lib/role-access";
 import { getUnreadChatCount } from "@/lib/services/chat";
 import { getAssociationSettings } from "@/lib/system-settings";
 import { getEnabledTenantModules } from "@/lib/tenant";
 import { getActionableDocumentRequestCount } from "@/lib/services/document-request-action-count";
 
 export async function generateMetadata(): Promise<Metadata> {
-  const user = await requireUser(Role.ADMIN);
+  const user = await requirePermission(Permission.ADMIN_ACCESS);
   const pathname = (await headers()).get("x-hoa-pathname") || "/admin/dashboard";
   const association = await getAssociationSettings(user.tenantId);
   const tenantName = await tenantNameForMetadata(user.tenantId, association.name);
@@ -26,10 +30,12 @@ export async function generateMetadata(): Promise<Metadata> {
 }
 
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
-  const user = await requireUser(Role.ADMIN);
+  const user = await requirePermission(Permission.ADMIN_ACCESS);
   const pathname = (await headers()).get("x-hoa-pathname") || "/admin/dashboard";
-  if (!canAccessAdminPath(user.roles, pathname)) redirect(`${adminHomeForRole(user.roles)}?error=You%20do%20not%20have%20access%20to%20this%20module.`);
-  const platform = user.roles.includes(Role.SUPER_ADMIN) || user.roles.includes(Role.PLATFORM_ADMIN);
+  if (!canAccessAdminPathWithPermissions(user.permissions, pathname)) {
+    redirect(`${adminHomeForPermissions(user.permissions)}?error=You%20do%20not%20have%20access%20to%20this%20module.`);
+  }
+  const platform = user.permissions.includes(Permission.PLATFORM_ACCESS);
   const enabledModules = platform
     ? new Set(Object.values(TenantModule))
     : await getEnabledTenantModules(user.tenantId);
@@ -38,15 +44,19 @@ export default async function AdminLayout({ children }: { children: React.ReactN
   const [association, initialChatUnreadCount, actionableDocumentRequests] = await Promise.all([
     getAssociationSettings(user.tenantId),
     getUnreadChatCount(user.id),
-    getActionableDocumentRequestCount(user.tenantId),
+    user.permissions.includes(Permission.DOCUMENTS_READ)
+      ? getActionableDocumentRequestCount(user.tenantId)
+      : Promise.resolve(0),
   ]);
-  const isSystemAdmin = user.roles.includes(Role.SYSTEM_ADMIN) || user.roles.includes(Role.SUPER_ADMIN);
+  const isSystemAdmin = user.permissions.includes(Permission.SETTINGS_MANAGE);
   const canAccessPayroll = user.permissions.includes(Permission.PAYROLL_MANAGE)
     || await userCanAccessPayroll(user.id, user.role);
   const baseLinks = isSystemAdmin ? systemAdminLinks : adminLinks;
-  const linksWithPlatform = user.roles.includes(Role.SUPER_ADMIN) ? [...baseLinks, ...platformLinks] : baseLinks;
-  const links = filterAdminLinksByRole(filterLinksByModules(linksWithPlatform, enabledModules), user.roles)
-    .filter((item) => canAccessPayroll || !["/admin/employees", "/admin/attendance", "/admin/payroll"].includes(item.href));
+  const linksWithPlatform = platform ? [...baseLinks, ...platformLinks] : baseLinks;
+  const links = filterAdminLinksByPermissions(
+    filterLinksByModules(linksWithPlatform, enabledModules),
+    user.permissions,
+  ).filter((item) => canAccessPayroll || !["/admin/employees", "/admin/attendance", "/admin/payroll"].includes(item.href));
   const requestBadgeHref = "/admin/documents?section=requests";
   const showDocumentRequestBadge = links.some((item) => item.href === requestBadgeHref);
   const linkBadges: Record<string, number> = showDocumentRequestBadge ? { [requestBadgeHref]: actionableDocumentRequests } : {};

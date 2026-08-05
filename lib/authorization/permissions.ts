@@ -10,6 +10,9 @@ export const Permission = {
   USERS_MANAGE: "users.manage",
   ROLES_MANAGE: "roles.manage",
   AUDIT_READ: "audit.read",
+  DATA_EXPORT: "data.export",
+  DATA_IMPORT: "data.import",
+  DATA_MIGRATE: "data.migrate",
   HOMEOWNERS_READ: "homeowners.read",
   HOMEOWNERS_MANAGE: "homeowners.manage",
   PROPERTIES_READ: "properties.read",
@@ -22,6 +25,7 @@ export const Permission = {
   BILLING_ADJUST: "billing.adjust",
   PAYMENTS_READ: "payments.read",
   PAYMENTS_MANAGE: "payments.manage",
+  PAYMENTS_REQUEST: "payments.request",
   PAYMENTS_RECORD: "payments.record",
   PAYMENTS_ALLOCATE: "payments.allocate",
   PAYMENTS_VOID: "payments.void",
@@ -40,6 +44,10 @@ export const Permission = {
   DOCUMENTS_REQUEST: "documents.request",
   DOCUMENTS_MANAGE: "documents.manage",
   DOCUMENTS_APPROVE: "documents.approve",
+  DOCUMENTS_CONFIGURE: "documents.configure",
+  DOCUMENTS_GENERATE: "documents.generate",
+  DOCUMENTS_ARCHIVE: "documents.archive",
+  DOCUMENTS_BALANCE_OVERRIDE: "documents.balance.override",
   COMMUNITY_MANAGE: "community.manage",
   ANNOUNCEMENTS_PUBLISH: "announcements.publish",
   COMPLAINTS_MANAGE: "complaints.manage",
@@ -50,7 +58,11 @@ export const Permission = {
 
 export type Permission = (typeof Permission)[keyof typeof Permission];
 
-const allPermissions = Object.freeze(Object.values(Permission));
+export const permissionValues: readonly Permission[] = Object.freeze(Object.values(Permission));
+
+export function isPermission(value: unknown): value is Permission {
+  return typeof value === "string" && permissionValues.includes(value as Permission);
+}
 
 const tenantAdministratorPermissions: readonly Permission[] = [
   Permission.ADMIN_ACCESS,
@@ -58,6 +70,9 @@ const tenantAdministratorPermissions: readonly Permission[] = [
   Permission.USERS_MANAGE,
   Permission.ROLES_MANAGE,
   Permission.AUDIT_READ,
+  Permission.DATA_EXPORT,
+  Permission.DATA_IMPORT,
+  Permission.DATA_MIGRATE,
   Permission.HOMEOWNERS_READ,
   Permission.HOMEOWNERS_MANAGE,
   Permission.PROPERTIES_READ,
@@ -88,6 +103,10 @@ const tenantAdministratorPermissions: readonly Permission[] = [
   Permission.DOCUMENTS_REQUEST,
   Permission.DOCUMENTS_MANAGE,
   Permission.DOCUMENTS_APPROVE,
+  Permission.DOCUMENTS_CONFIGURE,
+  Permission.DOCUMENTS_GENERATE,
+  Permission.DOCUMENTS_ARCHIVE,
+  Permission.DOCUMENTS_BALANCE_OVERRIDE,
   Permission.COMMUNITY_MANAGE,
   Permission.ANNOUNCEMENTS_PUBLISH,
   Permission.COMPLAINTS_MANAGE,
@@ -126,8 +145,8 @@ const billingManagerPermissions: readonly Permission[] = [
 ];
 
 export const defaultRolePermissions: Readonly<Record<Role, readonly Permission[]>> = {
-  SUPER_ADMIN: allPermissions,
-  PLATFORM_ADMIN: allPermissions,
+  SUPER_ADMIN: permissionValues,
+  PLATFORM_ADMIN: permissionValues,
   SYSTEM_ADMIN: systemAdministratorPermissions,
   HOA_ADMIN: tenantAdministratorPermissions,
   ADMIN: tenantAdministratorPermissions,
@@ -145,6 +164,8 @@ export const defaultRolePermissions: Readonly<Record<Role, readonly Permission[]
     Permission.DOCUMENTS_REQUEST,
     Permission.DOCUMENTS_MANAGE,
     Permission.DOCUMENTS_APPROVE,
+    Permission.DOCUMENTS_GENERATE,
+    Permission.DOCUMENTS_ARCHIVE,
     Permission.COMMUNITY_MANAGE,
     Permission.ANNOUNCEMENTS_PUBLISH,
     Permission.COMPLAINTS_MANAGE,
@@ -154,6 +175,7 @@ export const defaultRolePermissions: Readonly<Record<Role, readonly Permission[]
     Permission.HOMEOWNER_PORTAL_ACCESS,
     Permission.DOCUMENTS_READ,
     Permission.DOCUMENTS_REQUEST,
+    Permission.PAYMENTS_REQUEST,
     Permission.CHAT_USE,
   ],
   EMPLOYEE: [Permission.EMPLOYEE_PORTAL_ACCESS, Permission.CHAT_USE],

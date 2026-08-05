@@ -59,7 +59,10 @@ export async function middleware(request: NextRequest) {
     const roles = Array.isArray(payload.roles)
       ? payload.roles.filter((role): role is string => typeof role === "string")
       : [primaryRole];
-    const redirectPath = protectedPathRedirect(roles.length ? roles : primaryRole, path);
+    const permissions = Array.isArray(payload.permissions)
+      ? payload.permissions.filter((permission): permission is string => typeof permission === "string")
+      : [];
+    const redirectPath = protectedPathRedirect({ roles: roles.length ? roles : [primaryRole], permissions }, path);
     if (redirectPath) return NextResponse.redirect(new URL(redirectPath, request.url));
     const requestHeaders = new Headers(request.headers);
     requestHeaders.set("x-hoa-pathname", path);

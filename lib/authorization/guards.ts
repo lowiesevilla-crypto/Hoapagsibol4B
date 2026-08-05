@@ -1,11 +1,11 @@
 import "server-only";
 
 import { redirect } from "next/navigation";
-import { defaultHomeForRoles, requireUser } from "@/lib/auth";
+import { defaultHomeForAccess, requireUser } from "@/lib/auth";
 import type { Permission } from "@/lib/authorization/permissions";
 
 function deniedHome(user: Awaited<ReturnType<typeof requireUser>>) {
-  return defaultHomeForRoles(user.roles, user.role);
+  return defaultHomeForAccess(user.roles, user.permissions, user.role);
 }
 
 export async function requirePermission(permission: Permission) {

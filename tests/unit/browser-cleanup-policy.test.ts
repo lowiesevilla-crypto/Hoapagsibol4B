@@ -9,6 +9,10 @@ const cleanupSource = readFileSync(
   "tests/e2e/safe-browser-context-cleanup.mjs",
   "utf8",
 );
+const homeownerDashboardSource = readFileSync(
+  "app/portal/dashboard/page.tsx",
+  "utf8",
+);
 
 test("critical browser suite preloads bounded context cleanup", () => {
   assert.match(
@@ -25,4 +29,11 @@ test("browser cleanup limits do not change business assertion timeouts", () => {
   assert.match(cleanupSource, /const pageCloseTimeout = 5_000/);
   assert.match(cleanupSource, /const browserCloseTimeout = 15_000/);
   assert.doesNotMatch(cleanupSource, /setDefaultTimeout|waitForFunction|waitForNavigation/);
+});
+
+test("homeowner dashboard render remains read-only", () => {
+  assert.match(homeownerDashboardSource, /requireHomeownerProfile/);
+  assert.match(homeownerDashboardSource, /getStatementOfAccount/);
+  assert.doesNotMatch(homeownerDashboardSource, /refreshOverdueBills/);
+  assert.doesNotMatch(homeownerDashboardSource, /prisma\.(bill|payment|collection)\.(update|updateMany|create|delete)/);
 });

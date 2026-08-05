@@ -7,7 +7,6 @@ import {
   DataMigrationTag,
   HomeownerActivationStatus,
   HomeownerEmailVerificationStatus,
-  Prisma,
   Role,
 } from "@prisma/client";
 import { hash } from "bcryptjs";
@@ -109,10 +108,16 @@ export async function applyOnboardingImport(input: {
     accountNumber: string;
     passwordHash: string;
   }>;
+  const batchAccountNumbers = new Set<string>();
   for (const row of validation.rows) {
+    let accountNumber = row.accountNumber;
+    while (!accountNumber || batchAccountNumbers.has(accountNumber)) {
+      accountNumber = await generateUniqueHomeownerAccountNumber();
+    }
+    batchAccountNumbers.add(accountNumber);
     prepared.push({
       row,
-      accountNumber: row.accountNumber ?? await generateUniqueHomeownerAccountNumber(),
+      accountNumber,
       passwordHash: await hash(`activation-only-${randomUUID()}`, 12),
     });
   }

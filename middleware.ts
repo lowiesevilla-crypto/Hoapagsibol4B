@@ -55,8 +55,11 @@ export async function middleware(request: NextRequest) {
   if (!token) return NextResponse.redirect(loginUrl);
   try {
     const { payload } = await jwtVerify(token, secret);
-    const role = String(payload.role || "");
-    const redirectPath = protectedPathRedirect(role, path);
+    const primaryRole = String(payload.role || "");
+    const roles = Array.isArray(payload.roles)
+      ? payload.roles.filter((role): role is string => typeof role === "string")
+      : [primaryRole];
+    const redirectPath = protectedPathRedirect(roles.length ? roles : primaryRole, path);
     if (redirectPath) return NextResponse.redirect(new URL(redirectPath, request.url));
     const requestHeaders = new Headers(request.headers);
     requestHeaders.set("x-hoa-pathname", path);

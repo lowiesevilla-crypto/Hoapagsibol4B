@@ -69,6 +69,7 @@ test("migrated sensitive actions no longer authorize through legacy administrato
   const migratedFiles = [
     "lib/actions/billing.ts",
     "lib/actions/collections.ts",
+    "lib/actions/payment-requests.ts",
     "lib/actions/payments.ts",
     "lib/actions/settings.ts",
     "lib/actions/user-role-assignments.ts",

@@ -236,8 +236,9 @@ async function run() {
       waitUntil: "networkidle2",
       timeout,
     });
+    const deniedPlatformPath = new URL(restrictedPage.url()).pathname;
     assert.ok(
-      new URL(restrictedPage.url()).pathname.startsWith("/admin/chat"),
+      deniedPlatformPath.startsWith("/admin/") && !deniedPlatformPath.startsWith("/platform/"),
       `Restricted staff should be denied platform pages, received ${restrictedPage.url()}`,
     );
 

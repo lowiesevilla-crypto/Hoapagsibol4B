@@ -145,8 +145,8 @@ export async function archiveBillAction(formData: FormData) {
 
   try {
     await prisma.$transaction(async (tx) => {
-      const bill = await tx.bill.findUnique({
-        where: { id },
+      const bill = await tx.bill.findFirst({
+        where: { id, tenantId: admin.tenantId },
         include: {
           homeowner: { include: { user: true } },
           _count: { select: { payments: true, paymentRequests: true } },
@@ -164,7 +164,11 @@ export async function archiveBillAction(formData: FormData) {
         },
       });
       const rejectedRequests = await tx.paymentRequest.updateMany({
-        where: { billId: id, status: PaymentRequestStatus.PENDING_REVIEW },
+        where: {
+          tenantId: admin.tenantId,
+          billId: id,
+          status: PaymentRequestStatus.PENDING_REVIEW,
+        },
         data: {
           status: PaymentRequestStatus.REJECTED,
           reviewedById: admin.id,
@@ -174,6 +178,7 @@ export async function archiveBillAction(formData: FormData) {
       });
       await tx.auditLog.create({
         data: {
+          tenantId: admin.tenantId,
           actorId: admin.id,
           module: "BILLING",
           action: "ARCHIVE_BILL",

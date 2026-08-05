@@ -161,7 +161,7 @@ async function setup() {
       allowPayLater: false,
       feeAmount: 0,
       receiptRequired: false,
-      numberingFormat: defaultNumberingFormat,
+      numberingFormat: defaultNumberingFormat("E2E"),
       sequenceScope: DocumentSequenceScope.ANNUAL,
       maxCopies: 3,
       qrEnabled: true,

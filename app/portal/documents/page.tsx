@@ -53,7 +53,7 @@ export default async function PortalDocumentsPage({ searchParams }: { searchPara
   });
   return <PortalPageContainer className="space-y-6">
     <RequestAreaNavigation active="documents" />
-    <PageHeader eyebrow="Homeowner services" title="Document requests" description="Request, track, and download official HOA certificates and passes." />
+    <PageHeader eyebrow="Homeowner services" title="Document requests" description="Request, track, and download official HOA certificates and passes." action={<Link className="btn-secondary" href="/portal/documents/guide">Request guide</Link>} />
     {query.error && <div className="mb-5 rounded-2xl border border-rose-200 bg-rose-50 p-4 text-sm font-semibold text-rose-800">{query.error}</div>}
     {query.success && <div className="mb-5 rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-sm font-semibold text-emerald-800">{query.message || "Request submitted successfully."}</div>}
     {unpaidBalance > 0 && <section className="card mb-6 border-amber-200 bg-amber-50">

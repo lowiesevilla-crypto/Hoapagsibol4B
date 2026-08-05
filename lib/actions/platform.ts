@@ -10,7 +10,7 @@ import { tenantAccessRoles, tenantUserRoles } from "@/lib/tenant-roles";
 
 async function requirePlatformUser() {
   const user = await requireUser();
-  if (user.role !== Role.SUPER_ADMIN && user.role !== Role.PLATFORM_ADMIN) redirect("/admin/dashboard");
+  if (!user.roles.includes(Role.SUPER_ADMIN) && !user.roles.includes(Role.PLATFORM_ADMIN)) redirect("/admin/dashboard");
   return user;
 }
 
@@ -31,8 +31,9 @@ export async function createTenantAction(formData: FormData) {
   const actor = await requirePlatformUser();
   const tenant = await prisma.$transaction(async (tx) => {
     const created = await tx.tenant.create({ data: { name, shortName, slug, address: clean(formData.get("address")) || null, contactNumber: clean(formData.get("contactNumber")) || null, email: clean(formData.get("email")) || null, secRegistrationNumber: clean(formData.get("secRegistrationNumber")) || null, tinNumber: clean(formData.get("tinNumber")) || null, subscriptionPlan: clean(formData.get("subscriptionPlan")) || "STANDARD", subscriptionStatus: TenantSubscriptionStatus.TRIAL, moduleEntitlements: { create: modules.map((module) => ({ module, enabled: formData.getAll("modules").includes(module) })) } } });
-    await tx.user.create({ data: { tenantId: created.id, name: adminName, email: adminEmail, passwordHash: await hash(password, 12), role: adminRole } });
-    await tx.auditLog.create({ data: { tenantId: created.id, actorId: actor.id, module: "PLATFORM", action: "TENANT_CREATED", entityType: "Tenant", entityId: created.id, metadata: { slug: created.slug, plan: created.subscriptionPlan } } });
+    const adminUser = await tx.user.create({ data: { tenantId: created.id, name: adminName, email: adminEmail, passwordHash: await hash(password, 12), role: adminRole } });
+    await tx.userRoleAssignment.create({ data: { tenantId: created.id, userId: adminUser.id, role: adminRole, assignedBy: actor.id } });
+    await tx.auditLog.create({ data: { tenantId: created.id, actorId: actor.id, module: "PLATFORM", action: "TENANT_CREATED", entityType: "Tenant", entityId: created.id, metadata: { slug: created.slug, plan: created.subscriptionPlan, initialAdminRole: adminRole } } });
     return created;
   });
   redirect(`/platform/tenants/${tenant.id}?success=created&message=Tenant%20and%20its%20first%20administrator%20were%20created%20successfully.`);
@@ -55,7 +56,8 @@ export async function createTenantUserAction(formData: FormData) {
   if (duplicate) redirect(`/platform/tenants/${tenantId}/users?error=Email%20or%20username%20is%20already%20used%20in%20this%20HOA.`);
   const created = await prisma.$transaction(async (tx) => {
     const user = await tx.user.create({ data: { tenantId, name, email, username, passwordHash: await hash(password, 12), role } });
-    await tx.auditLog.create({ data: { tenantId, actorId: actor.id, module: "PLATFORM", action: "TENANT_ACCESS_ACCOUNT_CREATED", entityType: "User", entityId: user.id, metadata: { role, email } } });
+    await tx.userRoleAssignment.create({ data: { tenantId, userId: user.id, role, assignedBy: actor.id } });
+    await tx.auditLog.create({ data: { tenantId, actorId: actor.id, module: "PLATFORM", action: "TENANT_ACCESS_ACCOUNT_CREATED", entityType: "User", entityId: user.id, metadata: { roles: [role], email } } });
     return user;
   });
   redirect(`/platform/tenants/${tenantId}/users/${created.id}?success=created&message=${encodeURIComponent(`${role.replaceAll("_", " ")} access account created successfully.`)}`);
@@ -90,20 +92,23 @@ export async function updateTenantUserAction(formData: FormData) {
   const actor = await requirePlatformUser(); const tenantId = clean(formData.get("tenantId")); const userId = clean(formData.get("userId"));
   const role = clean(formData.get("role")) as Role; const name = clean(formData.get("name")); const email = clean(formData.get("email")).toLowerCase(); const username = clean(formData.get("username")) || null;
   if (!tenantId || !userId || !name || !email || !tenantUserRoles.includes(role)) redirect(`/platform/tenants/${tenantId}/users/${userId}?error=Check%20the%20required%20user%20fields.`);
-  const user = await prisma.user.findFirst({ where: { id: userId, tenantId } }); if (!user) redirect(`/platform/tenants/${tenantId}/users?error=Tenant%20user%20not%20found.`);
+  const user = await prisma.user.findFirst({ where: { id: userId, tenantId }, include: { userRoleAssignments: { where: { active: true } } } }); if (!user) redirect(`/platform/tenants/${tenantId}/users?error=Tenant%20user%20not%20found.`);
   const duplicate = await prisma.user.findFirst({ where: { tenantId, id: { not: userId }, OR: [{ email }, ...(username ? [{ username }] : [])] } });
   if (duplicate) redirect(`/platform/tenants/${tenantId}/users/${userId}?error=Email%20or%20username%20is%20already%20used%20in%20this%20HOA.`);
-  const roleChanged = user.role !== role;
+  const oldRoles = user.userRoleAssignments.length ? user.userRoleAssignments.map((assignment) => assignment.role) : [user.role];
+  const roleChanged = oldRoles.length !== 1 || oldRoles[0] !== role;
   const changedAt = new Date();
   await prisma.$transaction(async (tx) => {
     await tx.user.update({ where: { id: userId }, data: { name, email, username, role } });
+    await tx.userRoleAssignment.upsert({ where: { tenantId_userId_role: { tenantId, userId, role } }, update: { active: true, assignedBy: actor.id, assignedAt: changedAt }, create: { tenantId, userId, role, assignedBy: actor.id, assignedAt: changedAt } });
+    await tx.userRoleAssignment.updateMany({ where: { tenantId, userId, role: { not: role }, active: true }, data: { active: false } });
     const revokedSessions = roleChanged
       ? await tx.userSession.updateMany({
           where: { tenantId, userId, revokedAt: null },
           data: { revokedAt: changedAt },
         })
       : { count: 0 };
-    await tx.auditLog.create({ data: { tenantId, actorId: actor.id, module: "PLATFORM", action: roleChanged ? "TENANT_USER_ROLE_UPDATED" : "TENANT_USER_UPDATED", entityType: "User", entityId: userId, metadata: { oldRole: user.role, newRole: role, revokedSessions: revokedSessions.count } } });
+    await tx.auditLog.create({ data: { tenantId, actorId: actor.id, module: "AUTHORIZATION", action: roleChanged ? "TENANT_USER_ROLES_REPLACED" : "TENANT_USER_UPDATED", entityType: "User", entityId: userId, metadata: { oldRoles, newRoles: [role], revokedSessions: revokedSessions.count } } });
   });
   redirect(`/platform/tenants/${tenantId}/users/${userId}?success=User%20updated%20successfully.`);
 }
@@ -136,9 +141,9 @@ export async function resetTenantUserPasswordAction(formData: FormData) {
 
 export async function removeTenantUserAction(formData: FormData) {
   const actor = await requirePlatformUser(); const tenantId = clean(formData.get("tenantId")); const userId = clean(formData.get("userId"));
-  const user = await prisma.user.findFirst({ where: { id: userId, tenantId }, include: { homeownerProfile: true, employeeProfile: true } });
+  const user = await prisma.user.findFirst({ where: { id: userId, tenantId }, include: { homeownerProfile: true, employeeProfile: true, userRoleAssignments: { where: { active: true } } } });
   if (!user || user.id === actor.id) redirect(`/platform/tenants/${tenantId}/users?error=This%20account%20cannot%20be%20removed.`);
   if (user.homeownerProfile || user.employeeProfile) redirect(`/platform/tenants/${tenantId}/users/${userId}?error=Users%20with%20homeowner%20or%20employee%20records%20must%20be%20deactivated,%20not%20removed.`);
-  await prisma.$transaction([prisma.auditLog.create({ data: { tenantId, actorId: actor.id, module: "PLATFORM", action: "TENANT_USER_REMOVED", entityType: "User", entityId: user.id, metadata: { email: user.email, role: user.role } } }), prisma.user.delete({ where: { id: user.id } })]);
+  await prisma.$transaction([prisma.auditLog.create({ data: { tenantId, actorId: actor.id, module: "PLATFORM", action: "TENANT_USER_REMOVED", entityType: "User", entityId: user.id, metadata: { email: user.email, roles: user.userRoleAssignments.map((assignment) => assignment.role) } } }), prisma.user.delete({ where: { id: user.id } })]);
   redirect(`/platform/tenants/${tenantId}/users?success=User%20removed%20from%20tenant.`);
 }

@@ -139,15 +139,15 @@ async function expectLoginPath(page, label) {
   );
 }
 
-async function captureRoleUpdateForm(page, userId) {
+async function captureRoleAssignmentForm(page, userId) {
   return page.evaluate((expectedUserId) => {
     const forms = Array.from(document.querySelectorAll("form"));
     const form = forms.find((candidate) => {
       const userInput = candidate.querySelector("input[name='userId']");
-      const roleSelect = candidate.querySelector("select[name='role']");
-      return userInput?.value === expectedUserId && Boolean(roleSelect);
+      const roleCheckbox = candidate.querySelector("input[type='checkbox'][name='roles']");
+      return userInput?.value === expectedUserId && Boolean(roleCheckbox);
     });
-    if (!form) throw new Error(`Role update form for ${expectedUserId} was not found.`);
+    if (!form) throw new Error(`Role assignment form for ${expectedUserId} was not found.`);
     return {
       action: form.action || window.location.href,
       method: form.method || "post",
@@ -165,24 +165,24 @@ async function submitCapturedForm(page, formSpec, overrides) {
       form.action = spec.action;
       form.method = spec.method;
       form.enctype = spec.enctype;
-      const included = new Set();
+      const overriddenNames = new Set(Object.keys(replacementValues));
       for (const [name, originalValue] of spec.entries) {
+        if (overriddenNames.has(name)) continue;
         const input = document.createElement("input");
         input.type = "hidden";
         input.name = name;
-        input.value = Object.prototype.hasOwnProperty.call(replacementValues, name)
-          ? replacementValues[name]
-          : originalValue;
-        included.add(name);
+        input.value = originalValue;
         form.appendChild(input);
       }
-      for (const [name, value] of Object.entries(replacementValues)) {
-        if (included.has(name)) continue;
-        const input = document.createElement("input");
-        input.type = "hidden";
-        input.name = name;
-        input.value = value;
-        form.appendChild(input);
+      for (const [name, replacement] of Object.entries(replacementValues)) {
+        const values = Array.isArray(replacement) ? replacement : [replacement];
+        for (const value of values) {
+          const input = document.createElement("input");
+          input.type = "hidden";
+          input.name = name;
+          input.value = value;
+          form.appendChild(input);
+        }
       }
       document.body.appendChild(form);
       form.submit();
@@ -191,6 +191,16 @@ async function submitCapturedForm(page, formSpec, overrides) {
   );
   await navigation;
   await page.waitForNetworkIdle({ idleTime: 300, timeout }).catch(() => undefined);
+}
+
+async function selectOnlyRole(page, role) {
+  await page.$$eval(
+    "input[type='checkbox'][name='roles']",
+    (inputs, selectedRole) => {
+      for (const input of inputs) input.checked = input.value === selectedRole;
+    },
+    role,
+  );
 }
 
 async function assertAllSessionsRevoked(userId, label) {
@@ -245,10 +255,10 @@ async function run() {
     const protectedTargetUrl = `${baseUrl}/platform/tenants/${tenantId}/users/${protectedTargetId}`;
     await platformPage.goto(protectedTargetUrl, { waitUntil: "networkidle2", timeout });
     await expectText(platformPage, "E2E Protected Target");
-    const protectedTargetForm = await captureRoleUpdateForm(platformPage, protectedTargetId);
+    const protectedTargetForm = await captureRoleAssignmentForm(platformPage, protectedTargetId);
 
     await submitCapturedForm(restrictedPage, protectedTargetForm, {
-      role: Role.SYSTEM_ADMIN,
+      roles: [Role.SYSTEM_ADMIN],
     });
     assert.ok(
       new URL(restrictedPage.url()).pathname.startsWith("/admin/dashboard"),
@@ -257,19 +267,27 @@ async function run() {
 
     const protectedTarget = await prisma.user.findFirst({
       where: { tenantId, id: protectedTargetId },
-      select: { role: true },
+      select: {
+        role: true,
+        userRoleAssignments: { where: { active: true }, select: { role: true } },
+      },
     });
     assert.equal(
       protectedTarget?.role,
       Role.STAFF,
-      "A restricted session must not change another user's role through a captured platform action.",
+      "A restricted session must not change another user's compatibility role through a captured platform action.",
+    );
+    assert.deepEqual(
+      protectedTarget?.userRoleAssignments.map((assignment) => assignment.role) ?? [],
+      [],
+      "A restricted session must not create active role assignments through a captured platform action.",
     );
     assert.equal(
       await prisma.auditLog.count({
         where: {
           tenantId,
           entityId: protectedTargetId,
-          action: "TENANT_USER_ROLE_UPDATED",
+          action: "TENANT_USER_ROLES_REPLACED",
         },
       }),
       0,
@@ -279,15 +297,23 @@ async function run() {
     const restrictedUserUrl = `${baseUrl}/platform/tenants/${tenantId}/users/${restrictedUserId}`;
     await platformPage.goto(restrictedUserUrl, { waitUntil: "networkidle2", timeout });
     await expectText(platformPage, "E2E Restricted Staff");
-    await platformPage.select("select[name='role']", Role.BILLING_MANAGER);
-    await clickAndWaitForNavigation(platformPage, "button", "Save User Changes");
+    await selectOnlyRole(platformPage, Role.BILLING_MANAGER);
+    await clickAndWaitForNavigation(platformPage, "button", "Save Role Assignments");
 
     const roleChangedUser = await prisma.user.findFirst({
       where: { tenantId, id: restrictedUserId },
-      select: { role: true, active: true },
+      select: {
+        role: true,
+        active: true,
+        userRoleAssignments: { where: { active: true }, select: { role: true } },
+      },
     });
     assert.equal(roleChangedUser?.role, Role.BILLING_MANAGER);
     assert.equal(roleChangedUser?.active, true);
+    assert.deepEqual(
+      roleChangedUser?.userRoleAssignments.map((assignment) => assignment.role) ?? [],
+      [Role.BILLING_MANAGER],
+    );
     await assertAllSessionsRevoked(restrictedUserId, "the role-changed user");
 
     await restrictedPage.goto(`${baseUrl}/admin/chat`, {
@@ -342,14 +368,14 @@ async function run() {
         where: {
           tenantId,
           entityId: restrictedUserId,
-          action: { in: ["TENANT_USER_ROLE_UPDATED", "TENANT_USER_DEACTIVATED"] },
+          action: { in: ["TENANT_USER_ROLES_REPLACED", "TENANT_USER_DEACTIVATED"] },
         },
         select: { action: true },
       });
       assert.deepEqual(
         new Set(auditActions.map((audit) => audit.action)),
-        new Set(["TENANT_USER_ROLE_UPDATED", "TENANT_USER_DEACTIVATED"]),
-        "Expected audit evidence for the legitimate role change and deactivation.",
+        new Set(["TENANT_USER_ROLES_REPLACED", "TENANT_USER_DEACTIVATED"]),
+        "Expected audit evidence for the legitimate role assignment replacement and deactivation.",
       );
     } finally {
       await billingContext.close();
@@ -357,9 +383,9 @@ async function run() {
 
     console.log("RBAC and stale-session browser suite passed:");
     console.log("- restricted platform page access denial passed");
-    console.log("- captured privileged server action denial passed");
-    console.log("- denied mutation and audit non-creation passed");
-    console.log("- role change revoked issued sessions passed");
+    console.log("- captured privileged role-assignment action denial passed");
+    console.log("- denied assignment mutation and audit non-creation passed");
+    console.log("- role assignment replacement revoked issued sessions passed");
     console.log("- stale pre-role-change session denial passed");
     console.log("- deactivation revoked issued sessions passed");
     console.log("- stale pre-deactivation session and inactive login denial passed");

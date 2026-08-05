@@ -4,7 +4,12 @@ import { HomeownerActivationStatus, Role } from "@prisma/client";
 import { compare } from "bcryptjs";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
-import { createSession, defaultHomeForRole, deleteSession, readSession } from "@/lib/auth";
+import { createSession, defaultHomeForRoles, deleteSession, readSession } from "@/lib/auth";
+import {
+  effectiveRolesForUser,
+  isPlatformRoleSet,
+  primaryRoleForRoles,
+} from "@/lib/authorization/effective-access";
 import { platformPrisma, prisma } from "@/lib/db";
 import { clearRateLimit, rateLimitAvailable, recordRateLimitFailure } from "@/lib/rate-limit";
 import { loginSchema } from "@/lib/validation";
@@ -41,10 +46,14 @@ export async function loginAction(_state: LoginState, formData: FormData): Promi
     return { error: resolved && "error" in resolved ? resolved.error : "Incorrect identifier or password." };
   }
   const { tenant, user } = resolved;
+  const roles = effectiveRolesForUser(user.role, user.userRoleAssignments);
+  const role = primaryRoleForRoles(roles, user.role);
 
   setTenantContext({
     tenantId: tenant.id,
-    platform: false,
+    role,
+    roles,
+    platform: isPlatformRoleSet(roles),
     enabledModules: new Set(tenant.moduleEntitlements.filter((item) => item.enabled).map((item) => item.module)),
   });
 
@@ -60,13 +69,13 @@ export async function loginAction(_state: LoginState, formData: FormData): Promi
         action: "TENANT_LOGIN",
         entityType: "User",
         entityId: user.id,
-        metadata: { tenantSlug: tenant.slug },
+        metadata: { tenantSlug: tenant.slug, roles },
       },
     }),
   ]);
 
-  await createSession({ userId: user.id, role: user.role, tenantId: tenant.id, tenantSlug: tenant.slug });
-  return { redirectTo: defaultHomeForRole(user.role) };
+  await createSession({ userId: user.id, role, roles, tenantId: tenant.id, tenantSlug: tenant.slug });
+  return { redirectTo: defaultHomeForRoles(roles, role) };
 }
 
 export async function logoutAction() {
@@ -80,10 +89,12 @@ export async function logoutAllSessionsAction() {
   const session = await readSession();
   const redirectTo = await logoutRedirectForSession(session);
   if (!session) redirect(redirectTo);
+  const roles = session.roles ?? [session.role];
   setTenantContext({
     tenantId: session.tenantId,
     role: session.role,
-    platform: session.role === "SUPER_ADMIN" || session.role === "PLATFORM_ADMIN",
+    roles,
+    platform: isPlatformRoleSet(roles),
   });
   await prisma.userSession.updateMany({
     where: { tenantId: session.tenantId, userId: session.userId, revokedAt: null },
@@ -104,10 +115,12 @@ export async function logoutAllSessionsNavigationAction(_state: AuthNavigationSt
   const session = await readSession();
   const redirectTo = await logoutRedirectForSession(session);
   if (!session) return { redirectTo };
+  const roles = session.roles ?? [session.role];
   setTenantContext({
     tenantId: session.tenantId,
     role: session.role,
-    platform: session.role === "SUPER_ADMIN" || session.role === "PLATFORM_ADMIN",
+    roles,
+    platform: isPlatformRoleSet(roles),
   });
   await prisma.userSession.updateMany({
     where: { tenantId: session.tenantId, userId: session.userId, revokedAt: null },
@@ -128,18 +141,21 @@ async function resolveLoginUser(input: { tenantSlug: string; identifierType: "em
       active: true,
       ...(input.identifierType === "email"
         ? { email: input.identifier }
-        : { role: Role.HOMEOWNER, homeownerProfile: { accountNumber: input.identifier } }),
+        : { homeownerProfile: { accountNumber: input.identifier } }),
     },
     include: {
       homeownerProfile: true,
+      userRoleAssignments: { where: { active: true }, select: { role: true, active: true } },
       tenant: { include: { advisories: { where: { active: true }, orderBy: { createdAt: "desc" }, take: 1 }, moduleEntitlements: true } },
     },
     take: 10,
   });
   const authorized = users.filter((candidate) => {
     if (!tenantCanSignIn(candidate.tenant)) return false;
-    if (candidate.role !== Role.HOMEOWNER) return input.identifierType === "email";
-    return candidate.homeownerProfile?.status === "ACTIVE"
+    const roles = effectiveRolesForUser(candidate.role, candidate.userRoleAssignments);
+    if (!roles.includes(Role.HOMEOWNER)) return input.identifierType === "email";
+    if (!candidate.homeownerProfile) return input.identifierType === "email";
+    return candidate.homeownerProfile.status === "ACTIVE"
       && candidate.homeownerProfile.emailStatus === "VERIFIED"
       && candidate.homeownerProfile.activationStatus === HomeownerActivationStatus.ACTIVE
       && Boolean(candidate.homeownerProfile.activatedAt);
@@ -155,7 +171,8 @@ async function resolveLoginUser(input: { tenantSlug: string; identifierType: "em
 }
 
 async function logoutRedirectForSession(session: Awaited<ReturnType<typeof readSession>>) {
-  if (!session || session.role === Role.SUPER_ADMIN || session.role === Role.PLATFORM_ADMIN) return "/login?loggedOut=1";
+  const roles = session?.roles ?? (session ? [session.role] : []);
+  if (!session || isPlatformRoleSet(roles)) return "/login?loggedOut=1";
   const tenant = await platformPrisma.tenant.findFirst({
     where: { id: session.tenantId, slug: session.tenantSlug },
     select: { slug: true },

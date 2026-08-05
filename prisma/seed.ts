@@ -27,6 +27,11 @@ async function seedBootstrapAdministrator() {
       role: Role.SYSTEM_ADMIN,
     },
   });
+  await prisma.userRoleAssignment.upsert({
+    where: { tenantId_userId_role: { tenantId, userId: user.id, role: Role.SYSTEM_ADMIN } },
+    update: { active: true, assignedBy: user.id },
+    create: { tenantId, userId: user.id, role: Role.SYSTEM_ADMIN, active: true, assignedBy: user.id },
+  });
   await prisma.payrollAccess.upsert({
     where: { userId_role: { userId: user.id, role: PayrollAccessRole.SYSTEM_ADMINISTRATOR } },
     update: { active: true, grantedById: user.id },

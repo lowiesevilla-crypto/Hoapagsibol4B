@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { requireUser } from "@/lib/auth";
 import { prisma } from "@/lib/db";
+import { confirmOnboardingBillingPreviewAction } from "@/lib/actions/onboarding-billing";
 import { HomeownerImportForm } from "./homeowner-import-form";
 
 export default async function TenantOnboardingPage() {
@@ -20,7 +21,7 @@ export default async function TenantOnboardingPage() {
     { title: "Privacy and operating checklist", complete: false, href: "/docs/Pagsibol_HOA_Portal_User_Manual.md", detail: "Review data handling, activation, retention, and support responsibilities." },
     { title: "Homeowners and properties", complete: homeownerCount > 0, href: "#homeowner-import", detail: `${homeownerCount} homeowner record${homeownerCount === 1 ? "" : "s"} currently loaded.` },
     { title: "Billing rules", complete: activeBillingRules > 0, href: "/admin/billing-rules", detail: `${activeBillingRules} active billing rule${activeBillingRules === 1 ? "" : "s"}.` },
-    { title: "First billing preview", complete: Boolean(lastPreview), href: "/admin/billing", detail: lastPreview ? `Confirmed ${lastPreview.createdAt.toLocaleString()}.` : "Preview is separate from generation; no bills are created by onboarding." },
+    { title: "First billing preview", complete: Boolean(lastPreview), href: "#billing-preview", detail: lastPreview ? `Confirmed ${lastPreview.createdAt.toLocaleString()}.` : "Preview is separate from generation; no bills are created by onboarding." },
   ];
   const completed = steps.filter((step) => step.complete).length;
   return (
@@ -40,10 +41,16 @@ export default async function TenantOnboardingPage() {
         ))}
       </section>
       <div id="homeowner-import"><HomeownerImportForm /></div>
-      <section className="rounded-xl border bg-white p-5 shadow-sm">
+      <section id="billing-preview" className="rounded-xl border bg-white p-5 shadow-sm">
         <h2 className="text-lg font-semibold">Billing safety gate</h2>
-        <p className="mt-1 text-sm text-slate-600">Configure rules and run a preview in Billing. Generation remains a separate permission-controlled action and is never triggered by this onboarding page.</p>
+        <p className="mt-1 text-sm text-slate-600">Configure rules and run the existing account-level preview in Billing. Return here to record review evidence. Generation remains a separate permission-controlled action and is never triggered by onboarding.</p>
         <div className="mt-4 flex flex-wrap gap-2"><Link className="rounded-md border px-3 py-2 text-sm font-medium" href="/admin/billing-rules">Configure billing rules</Link><Link className="rounded-md bg-slate-900 px-3 py-2 text-sm font-medium text-white" href="/admin/billing">Open billing preview</Link></div>
+        <form action={confirmOnboardingBillingPreviewAction} className="mt-5 grid gap-3 border-t pt-4 md:grid-cols-2">
+          <label className="text-sm font-medium">Preview cycle<input name="cycle" type="month" required className="mt-1 block w-full rounded-md border p-2" /></label>
+          <label className="text-sm font-medium md:col-span-2">Review reason and warnings resolved<textarea name="reason" required minLength={10} rows={3} className="mt-1 block w-full rounded-md border p-2" placeholder="Record affected-account review, exclusions, and resolved warnings." /></label>
+          <label className="flex items-start gap-2 text-sm md:col-span-2"><input name="confirm" type="checkbox" required className="mt-1" /><span>I reviewed the computed preview and understand this confirmation does not generate production bills.</span></label>
+          <button type="submit" className="rounded-md bg-emerald-700 px-4 py-2 text-sm font-semibold text-white md:w-fit">Record preview sign-off</button>
+        </form>
       </section>
     </main>
   );

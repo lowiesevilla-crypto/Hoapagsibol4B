@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { after, before, test } from "node:test";
 import {
   PaymentMethod,
+  Prisma,
   RecurringChargeType,
   Role,
   TenantModule,
@@ -256,18 +257,21 @@ test("cross-tenant bill identifiers cannot be used to record a payment", async (
   });
 
   await assert.rejects(
-    () => inBillingTenant(tenantAId, () => prisma.$transaction((tx) => recordMonthlyDuesPayment(tx, {
-      actor: actorA,
-      billIds: [tenantBBill.id],
-      amount: 500,
-      paymentDate: new Date("2026-08-10T00:00:00.000Z"),
-      method: PaymentMethod.CASH,
-      idempotencyKey: `${runId}-cross-tenant-payment`,
-      coverageFromMonth: 8,
-      coverageFromYear: 2026,
-      coverageToMonth: 8,
-      coverageToYear: 2026,
-    }))),
+    () => inBillingTenant(tenantAId, () => prisma.$transaction((tx) => recordMonthlyDuesPayment(
+      tx as unknown as Prisma.TransactionClient,
+      {
+        actor: actorA,
+        billIds: [tenantBBill.id],
+        amount: 500,
+        paymentDate: new Date("2026-08-10T00:00:00.000Z"),
+        method: PaymentMethod.CASH,
+        idempotencyKey: `${runId}-cross-tenant-payment`,
+        coverageFromMonth: 8,
+        coverageFromYear: 2026,
+        coverageToMonth: 8,
+        coverageToYear: 2026,
+      },
+    ))),
     /no longer open|authenticated tenant/,
   );
 
@@ -282,36 +286,42 @@ test("payment allocation, receipt, statement, idempotency, and void recovery rem
   assert.equal(bills.length, 2);
 
   const idempotencyKey = `${runId}-monthly-dues-payment`;
-  const confirmation = await inBillingTenant(tenantAId, () => prisma.$transaction((tx) => recordMonthlyDuesPayment(tx, {
-    actor: actorA,
-    billIds: bills.map((bill) => bill.id),
-    amount: 1500,
-    paymentDate: new Date("2026-09-10T00:00:00.000Z"),
-    method: PaymentMethod.CASH,
-    idempotencyKey,
-    remarks: "Disposable integration payment",
-    coverageFromMonth: 8,
-    coverageFromYear: 2026,
-    coverageToMonth: 9,
-    coverageToYear: 2026,
-  })));
+  const confirmation = await inBillingTenant(tenantAId, () => prisma.$transaction((tx) => recordMonthlyDuesPayment(
+    tx as unknown as Prisma.TransactionClient,
+    {
+      actor: actorA,
+      billIds: bills.map((bill) => bill.id),
+      amount: 1500,
+      paymentDate: new Date("2026-09-10T00:00:00.000Z"),
+      method: PaymentMethod.CASH,
+      idempotencyKey,
+      remarks: "Disposable integration payment",
+      coverageFromMonth: 8,
+      coverageFromYear: 2026,
+      coverageToMonth: 9,
+      coverageToYear: 2026,
+    },
+  )));
 
   assert.equal(confirmation.reused, false);
   assert.equal(confirmation.appliedAmount, 1500);
   assert.equal(confirmation.unappliedCredit, 0);
 
-  const repeated = await inBillingTenant(tenantAId, () => prisma.$transaction((tx) => recordMonthlyDuesPayment(tx, {
-    actor: actorA,
-    billIds: bills.map((bill) => bill.id),
-    amount: 1500,
-    paymentDate: new Date("2026-09-10T00:00:00.000Z"),
-    method: PaymentMethod.CASH,
-    idempotencyKey,
-    coverageFromMonth: 8,
-    coverageFromYear: 2026,
-    coverageToMonth: 9,
-    coverageToYear: 2026,
-  })));
+  const repeated = await inBillingTenant(tenantAId, () => prisma.$transaction((tx) => recordMonthlyDuesPayment(
+    tx as unknown as Prisma.TransactionClient,
+    {
+      actor: actorA,
+      billIds: bills.map((bill) => bill.id),
+      amount: 1500,
+      paymentDate: new Date("2026-09-10T00:00:00.000Z"),
+      method: PaymentMethod.CASH,
+      idempotencyKey,
+      coverageFromMonth: 8,
+      coverageFromYear: 2026,
+      coverageToMonth: 9,
+      coverageToYear: 2026,
+    },
+  )));
 
   assert.equal(repeated.reused, true);
   assert.equal(repeated.paymentId, confirmation.paymentId);

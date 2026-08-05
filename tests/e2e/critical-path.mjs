@@ -127,7 +127,7 @@ async function runAdminFlow(browser) {
     await page.goto(billingPreview.toString(), { waitUntil: "networkidle2", timeout });
     await expectText(page, "Billing generation");
     await expectText(page, "Projected new bills");
-    await clickAndWaitForNavigation(page, "button", /Generate.*bill/i);
+    await clickAndWaitForNavigation(page, "button", "Generate for Eligible Homeowners");
     await page.waitForFunction(() => new URL(window.location.href).searchParams.get("billingGenerated") === "1", { timeout });
     await expectText(page, homeownerName);
     await expectText(page, "E2E-RES-2099-001", "billing resolution reference");

@@ -14,7 +14,7 @@ import {
   defaultTemplateDefinition,
   documentTemplateSchemaVersion,
 } from "@/lib/services/document-template-builder";
-import { defaultNumberingFormat } from "@/lib/services/document-definitions";
+import { defaultNumberingFormat } from "@/lib/services/document-numbering";
 
 const prisma = new PrismaClient();
 

@@ -218,7 +218,9 @@ test("billing generation is tenant-scoped and repeated submissions are idempoten
   assert.ok(duplicateAudits >= 1);
 
   await assert.rejects(
-    () => inBillingTenant(tenantAId, () => prisma.bill.findMany({ where: { tenantId: tenantBId } })),
+    () => inBillingTenant(tenantAId, async () => {
+      await prisma.bill.findMany({ where: { tenantId: tenantBId } });
+    }),
     /Cross-tenant query blocked/,
   );
 });

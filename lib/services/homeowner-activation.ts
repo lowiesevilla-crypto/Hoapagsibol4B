@@ -67,16 +67,16 @@ export async function createHomeownerActivationCredential(input: {
   await db.homeownerActivationCredential.create({
     data: {
       tenantId: input.tenantId,
-      userId: input.userId,
+      user: { connect: { id: input.userId } },
       credentialHash: await hash(temporaryPassword, 12),
-      createdById: input.createdById ?? null,
+      ...(input.createdById ? { createdBy: { connect: { id: input.createdById } } } : {}),
       expiresAt,
     },
   });
   await db.homeownerEmailVerificationToken.create({
     data: {
       tenantId: input.tenantId,
-      userId: input.userId,
+      user: { connect: { id: input.userId } },
       tokenHash: hashOpaqueToken(emailVerificationToken),
       expiresAt,
     },

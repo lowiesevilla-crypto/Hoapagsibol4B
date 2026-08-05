@@ -27,6 +27,7 @@ const documentRequestId = "e2e_browser_document_request";
 
 const primaryEmail = process.env.E2E_HOMEOWNER_EMAIL || "ci-homeowner@example.invalid";
 const secondaryEmail = process.env.E2E_OTHER_HOMEOWNER_EMAIL || "ci-other-homeowner@example.invalid";
+const registeredHomeownerEmail = process.env.E2E_REGISTERED_HOMEOWNER_EMAIL || "ci-registered-homeowner@example.invalid";
 const homeownerPassword = process.env.E2E_HOMEOWNER_PASSWORD || "CI-Homeowner-Password-2026!";
 const announcementTitle = process.env.E2E_ANNOUNCEMENT_TITLE || "E2E Tenant Visibility Notice";
 const coverageYear = Number(process.env.E2E_COVERAGE_YEAR || 2099);
@@ -49,6 +50,29 @@ function assertSafeDatabase() {
   if (!Number.isInteger(coverageMonth) || coverageMonth < 1 || coverageMonth > 12) {
     throw new Error("E2E_COVERAGE_MONTH must be between 1 and 12.");
   }
+}
+
+async function removeRegisteredHomeownerFixture() {
+  const user = await prisma.user.findUnique({
+    where: { tenantId_email: { tenantId: primaryTenantId, email: registeredHomeownerEmail } },
+    include: { homeownerProfile: true },
+  });
+  if (!user) return;
+
+  await prisma.userSession.deleteMany({ where: { tenantId: primaryTenantId, userId: user.id } });
+  await prisma.homeownerActivationCredential.deleteMany({ where: { tenantId: primaryTenantId, userId: user.id } });
+  await prisma.homeownerEmailVerificationToken.deleteMany({ where: { tenantId: primaryTenantId, userId: user.id } });
+  await prisma.notificationLog.deleteMany({ where: { tenantId: primaryTenantId, recipientId: user.id } });
+  await prisma.auditLog.deleteMany({ where: { tenantId: primaryTenantId, actorId: user.id } });
+
+  if (user.homeownerProfile) {
+    await prisma.homeownerAccountNumberReservation.deleteMany({
+      where: { tenantId: primaryTenantId, homeownerId: user.homeownerProfile.id },
+    });
+    await prisma.homeownerProfile.delete({ where: { id: user.homeownerProfile.id } });
+  }
+
+  await prisma.user.delete({ where: { id: user.id } });
 }
 
 async function removeDynamicFixtures() {
@@ -163,6 +187,8 @@ async function setup() {
   });
   if (!administrator) throw new Error("The seeded system administrator was not found. Run pnpm db:seed first.");
 
+  await removeRegisteredHomeownerFixture();
+
   await prisma.tenant.upsert({
     where: { id: secondaryTenantId },
     update: { name: "E2E Isolation HOA", shortName: "E2E-B", slug: secondaryTenantSlug },
@@ -246,12 +272,14 @@ async function setup() {
   console.log("Critical browser fixtures prepared.");
   console.log(`Primary homeowner: ${primaryEmail}`);
   console.log(`Secondary homeowner: ${secondaryEmail}`);
+  console.log(`Reserved registration email: ${registeredHomeownerEmail}`);
   console.log(`Coverage: ${coverageYear}-${String(coverageMonth).padStart(2, "0")}`);
 }
 
 async function cleanup() {
   assertSafeDatabase();
   await removeDynamicFixtures();
+  await removeRegisteredHomeownerFixture();
   console.log("Critical browser dynamic fixtures removed.");
 }
 

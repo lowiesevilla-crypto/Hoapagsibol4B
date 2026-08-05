@@ -30,7 +30,7 @@ export function HomeownerActivationForm() {
         <PasswordInput className="field min-h-12 border-slate-300 bg-white pr-12 text-[#10354c]" id="confirmPassword" name="confirmPassword" autoComplete="new-password" minLength={6} maxLength={24} required />
       </div>
       {state.error && <p role="alert" className="rounded-xl bg-rose-50 px-3 py-2 text-sm text-rose-700">{state.error}</p>}
-      <button className="btn-primary min-h-12 w-full text-base" disabled={pending}>{pending ? "Activating..." : "Activate account"}</button>
+      <button type="submit" className="btn-primary min-h-12 w-full text-base" disabled={pending}>{pending ? "Activating..." : "Activate account"}</button>
       <Link className="btn-secondary min-h-12 w-full" href="/login">Back to login</Link>
     </form>
   );

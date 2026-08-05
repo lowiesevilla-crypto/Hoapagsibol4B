@@ -62,6 +62,7 @@ export const adminLinks: LinkItem[] = [
   { href: "/admin/reports", label: "Reports", icon: "reports", section: "Reports" },
   { href: "/admin/data", label: "Data management", icon: "data", section: "Reports" },
   { href: "/admin/data/migrations", label: "Balance migration", icon: "data", section: "Reports" },
+  { href: "/admin/settings/roles", label: "Roles & permissions", icon: "settings", section: "Settings" },
 ];
 
 export const systemAdminLinks: LinkItem[] = [

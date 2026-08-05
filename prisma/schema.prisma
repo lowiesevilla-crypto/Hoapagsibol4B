@@ -591,6 +591,9 @@ model Tenant {
   advisories                 TenantAdvisory[]
   sequences                  TenantSequence[]
   userRoleAssignments        UserRoleAssignment[]
+  customRoles                TenantCustomRole[]
+  customRolePermissions      TenantCustomRolePermission[]
+  customRoleAssignments      UserTenantCustomRoleAssignment[]
   billingRules               BillingRule[]
   paymentAllocations         PaymentAllocation[]
   documentDefinitions        DocumentDefinition[]
@@ -720,6 +723,10 @@ model User {
   complaintIdentityAccessApproved       ComplaintIdentityAccessGrant[]    @relation("ComplaintIdentityAccessApprover")
   userRoleAssignments                   UserRoleAssignment[]
   assignedRoleAssignments               UserRoleAssignment[]              @relation("UserRoleAssignmentAssignedBy")
+  tenantCustomRoleAssignments           UserTenantCustomRoleAssignment[]  @relation("TenantCustomRoleAssignmentUser")
+  tenantCustomRoleAssignmentsGranted    UserTenantCustomRoleAssignment[]  @relation("TenantCustomRoleAssignmentAssignedBy")
+  tenantCustomRolesCreated              TenantCustomRole[]                 @relation("TenantCustomRoleCreatedBy")
+  tenantCustomRolesUpdated              TenantCustomRole[]                 @relation("TenantCustomRoleUpdatedBy")
   tenant                                Tenant                            @relation(fields: [tenantId], references: [id], onDelete: Restrict)
 
   @@unique([tenantId, email])
@@ -743,6 +750,56 @@ model UserRoleAssignment {
 
   @@id([tenantId, userId, role])
   @@index([tenantId, active, role])
+  @@index([userId, active])
+}
+
+model TenantCustomRole {
+  id          String   @id @default(cuid())
+  tenantId    String
+  name        String   @db.VarChar(100)
+  key         String   @db.VarChar(80)
+  description String?  @db.VarChar(500)
+  active      Boolean  @default(true)
+  createdById String?
+  updatedById String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  tenant      Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  createdBy   User?    @relation("TenantCustomRoleCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  updatedBy   User?    @relation("TenantCustomRoleUpdatedBy", fields: [updatedById], references: [id], onDelete: SetNull)
+  permissions TenantCustomRolePermission[]
+  assignments UserTenantCustomRoleAssignment[]
+
+  @@unique([tenantId, name])
+  @@unique([tenantId, key])
+  @@index([tenantId, active])
+}
+
+model TenantCustomRolePermission {
+  tenantId   String
+  roleId     String
+  permission String
+  tenant     Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  role       TenantCustomRole @relation(fields: [roleId], references: [id], onDelete: Cascade)
+
+  @@id([roleId, permission])
+  @@index([tenantId, permission])
+}
+
+model UserTenantCustomRoleAssignment {
+  tenantId       String
+  userId         String
+  roleId         String
+  assignedBy     String?
+  assignedAt     DateTime         @default(now())
+  active         Boolean          @default(true)
+  tenant         Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user           User             @relation("TenantCustomRoleAssignmentUser", fields: [userId], references: [id], onDelete: Cascade)
+  role           TenantCustomRole @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  assignedByUser User?            @relation("TenantCustomRoleAssignmentAssignedBy", fields: [assignedBy], references: [id], onDelete: SetNull)
+
+  @@id([tenantId, userId, roleId])
+  @@index([tenantId, active, roleId])
   @@index([userId, active])
 }
 

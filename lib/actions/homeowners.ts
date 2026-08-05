@@ -135,6 +135,14 @@ async function createHomeownerWithAccountNumber(input: {
             tenantId: input.tenantId,
             passwordHash,
             role: Role.HOMEOWNER,
+            userRoleAssignments: {
+              create: {
+                tenantId: input.tenantId,
+                role: Role.HOMEOWNER,
+                active: true,
+                assignedBy: input.createdById,
+              },
+            },
             homeownerProfile: {
               create: {
                 ...input.profile,

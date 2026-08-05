@@ -219,7 +219,7 @@ export async function requireUser(requiredRole?: Role) {
     ...user,
     role: primaryRoleForRoles(roles, user.role),
     roles,
-    permissions,
+    permissions: [...permissions],
   };
 }
 

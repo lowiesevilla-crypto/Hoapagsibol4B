@@ -55,7 +55,6 @@ const allPermissions = Object.freeze(Object.values(Permission));
 const tenantAdministratorPermissions: readonly Permission[] = [
   Permission.ADMIN_ACCESS,
   Permission.TENANT_SETTINGS_MANAGE,
-  Permission.SETTINGS_MANAGE,
   Permission.USERS_MANAGE,
   Permission.ROLES_MANAGE,
   Permission.AUDIT_READ,
@@ -95,6 +94,11 @@ const tenantAdministratorPermissions: readonly Permission[] = [
   Permission.CHAT_USE,
 ];
 
+const systemAdministratorPermissions: readonly Permission[] = [
+  ...tenantAdministratorPermissions,
+  Permission.SETTINGS_MANAGE,
+];
+
 const billingManagerPermissions: readonly Permission[] = [
   Permission.ADMIN_ACCESS,
   Permission.HOMEOWNERS_READ,
@@ -124,7 +128,7 @@ const billingManagerPermissions: readonly Permission[] = [
 export const defaultRolePermissions: Readonly<Record<Role, readonly Permission[]>> = {
   SUPER_ADMIN: allPermissions,
   PLATFORM_ADMIN: allPermissions,
-  SYSTEM_ADMIN: tenantAdministratorPermissions,
+  SYSTEM_ADMIN: systemAdministratorPermissions,
   HOA_ADMIN: tenantAdministratorPermissions,
   ADMIN: tenantAdministratorPermissions,
   BILLING_MANAGER: billingManagerPermissions,

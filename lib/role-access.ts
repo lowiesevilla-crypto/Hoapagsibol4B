@@ -37,7 +37,9 @@ const adminRoutePermissions: readonly [string, PermissionValue][] = [
 ];
 
 function normalizeRoles(roleOrRoles: Role | readonly Role[]) {
-  return Array.isArray(roleOrRoles) ? [...new Set(roleOrRoles)] : [roleOrRoles];
+  return typeof roleOrRoles === "string"
+    ? [roleOrRoles]
+    : [...new Set(roleOrRoles)];
 }
 
 export function requiredPermissionForAdminPath(pathname: string) {

@@ -79,11 +79,11 @@ async function removeDynamicFixtures() {
 }
 
 async function ensureEntitlements(tenantId: string, modules: TenantModule[]) {
-  for (const module of modules) {
+  for (const tenantModule of modules) {
     await prisma.tenantModuleEntitlement.upsert({
-      where: { tenantId_module: { tenantId, module } },
+      where: { tenantId_module: { tenantId, module: tenantModule } },
       update: { enabled: true },
-      create: { tenantId, module, enabled: true },
+      create: { tenantId, module: tenantModule, enabled: true },
     });
   }
 }

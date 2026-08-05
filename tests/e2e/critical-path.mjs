@@ -358,7 +358,8 @@ async function runHomeownerRegistrationFlow(browser) {
     await clearAndType(activationPage, "#confirmPassword", registeredHomeownerPassword);
     await clickByText(activationPage, "button[type='submit']", "Activate account");
     await activationPage.waitForFunction(() => window.location.pathname.startsWith("/portal/dashboard"), { timeout });
-    await expectText(activationPage, "Welcome", "activated homeowner dashboard");
+    await activationPage.reload({ waitUntil: "networkidle2", timeout });
+    await expectText(activationPage, "Active Requests", "activated homeowner dashboard");
   } finally {
     await activationContext.close();
   }

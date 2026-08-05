@@ -1,7 +1,7 @@
 # HOAHub Testing Guide
 
 **Product:** HOAHub – Multi-Tenant Digital Community Management Platform  
-**Version:** 1.3  
+**Version:** 1.4  
 **Last Updated:** August 5, 2026  
 **Document Owner:** Lowie M. Sevilla
 
@@ -36,13 +36,15 @@ Priority examples:
 - penalties, discounts, exemptions, and adjustments;
 - balance and allocation calculations;
 - duplicate prevention and idempotency;
-- validation and authorization helpers.
+- validation, route policy, role, and tenant-scoping helpers.
 
 Run:
 
 ```bash
 pnpm test
 ```
+
+`pnpm test` is the standard local automated test command and runs the deterministic unit and policy suite. Use `pnpm test:unit` when the explicit layer name is preferable.
 
 ### 3.2 Integration testing
 
@@ -52,8 +54,9 @@ Priority examples:
 
 - billing rule → preview → generation;
 - billing → payment → allocation → receipt → statement of account;
-- payment void/refund → ledger and balance recalculation;
+- payment void and bond refund → ledger/liability and balance recalculation;
 - document request → fee payment → approval → generation;
+- password recovery → token consumption → session revocation;
 - tenant/user/role and homeowner/property relationships.
 
 Run after migrations and seed:
@@ -62,20 +65,44 @@ Run after migrations and seed:
 pnpm test:integration
 ```
 
+The integration command creates uniquely named tenants and records, uses `.invalid` identities, and removes its fixtures. It must never target production or a shared business-data database.
+
 ### 3.3 Security and tenant-isolation testing
 
 Verify allowed and denied scenarios for:
 
 - tenant-scoped reads, writes, exports, attachments, and generated documents;
 - role and permission enforcement;
-- homeowner ownership boundaries;
+- homeowner ownership and property-profile boundaries;
 - session creation, expiry, revocation, and recovery;
 - client-supplied identifiers and retry behavior;
 - sensitive audit logging and safe error output.
 
-The integration suite uses at least two independent tenants and includes repeated, concurrent, allowed, and denied finance scenarios.
+Isolation scenarios must use at least two independent tenants. Ownership scenarios should deliberately reuse human-readable data such as block, lot, address, or receipt sequence where practical so tenant and entity identity remain the decisive boundary.
 
-### 3.4 Regression verification
+The current automated matrix includes:
+
+- protected-route allow and deny decisions for platform, admin, homeowner, and employee areas;
+- finance, documents, payroll, community, and tenant-administration separation;
+- trusted tenant filters overriding attacker-supplied tenant identifiers;
+- cross-tenant homeowner-profile and collection-relation denial;
+- cross-tenant bill, reset-token, session, document, announcement, and bond-refund denial;
+- captured privileged server-action denial and stale-session rejection.
+
+### 3.4 Finance and audit testing
+
+Finance mutations require exact centavo assertions and complete persisted-state evidence. Tests must cover, as applicable:
+
+- source transaction and aggregate balance;
+- allocations, receipt number, and Statement of Account output;
+- idempotency, repeated requests, concurrent requests, and invalid amounts;
+- void, archive, refund, forfeiture, and restoration behavior;
+- successful audit evidence and non-creation of misleading success audits after rejected attempts;
+- unchanged state in every non-target tenant.
+
+Bond refund tests assert partial refund, final closure, over-refund denial, closed-bond replay denial, the sum of immutable refund rows, preservation of the original collection receipt, a stable refund audit reference, and Tenant B remaining unchanged.
+
+### 3.5 Regression verification
 
 The repository contains targeted `scripts/verify-*.ts` checks. These are regression safeguards, not a substitute for comprehensive unit, integration, browser, and UAT coverage.
 
@@ -94,26 +121,23 @@ The current critical suite covers:
 
 Verification scripts that explicitly require `127.0.0.1 / hoahub_prodclone_local` are intentionally excluded from shared CI until they are refactored to use an isolated, disposable test database safely.
 
-### 3.5 End-to-end and browser testing
+### 3.6 End-to-end and browser testing
 
 The supported browser layer uses `puppeteer-core` with Chrome or Chromium against the production Next.js build.
 
-The critical browser suite currently validates:
+The critical browser suites validate:
 
-- seeded system-administrator authentication;
-- billing preview and generation through the administrator UI;
-- payment recording through the administrator UI;
-- official receipt rendering and numbering;
+- system-administrator authentication;
+- billing preview and generation;
+- payment recording, allocation, and official receipt rendering;
 - homeowner mobile authentication and Statement of Account visibility;
-- homeowner and administrator visibility of a tenant-scoped document request;
-- announcement publication to the correct tenant;
-- denial of that announcement to a homeowner in a second tenant;
-- homeowner creation through the administrator UI;
-- automatic allocation of the new homeowner account number;
-- invitation email verification through the real activation route;
-- temporary-credential validation and permanent-password creation;
-- automatic activated-homeowner session creation and a fresh password login;
-- database verification that the registered homeowner remains owned by the correct tenant.
+- tenant-scoped document request, approval, generated document, PDF download, history, and cross-tenant denial;
+- announcement publication and tenant visibility;
+- homeowner registration, email verification, activation, automatic session creation, and fresh login;
+- platform-page denial and captured privileged server-action denial;
+- role-change and deactivation session revocation;
+- stale-session and inactive-account rejection;
+- legitimate security-change audit evidence.
 
 Commands:
 
@@ -131,9 +155,7 @@ HOAHUB_E2E_ALLOW_LOCAL=1
 
 The browser suite requires a running production build at `E2E_BASE_URL`, seeded administrator credentials, and a standard Chrome/Chromium executable. Set `PUPPETEER_EXECUTABLE_PATH` when the browser is installed outside the standard Linux paths.
 
-The registration scenario uses a reserved `.invalid` email identity. The administrator form creates the user and profile through production code. The CI-only test layer then replaces the random invitation secret with a known one-time test credential so the browser can exercise the real verification and activation routes without weakening production credential generation or logging sensitive invitation data.
-
-### 3.6 User acceptance testing
+### 3.7 User acceptance testing
 
 UAT validates the approved business process and user experience after technical validation.
 
@@ -169,9 +191,9 @@ pnpm test:e2e
 pnpm e2e:cleanup
 ```
 
-The CI workflow starts the production server, validates `/api/health`, executes the production smoke check, and then executes the critical browser suite. A failure in any layer blocks merging.
+The CI workflow starts a clean MySQL service, applies every migration, runs the configuration seed, starts the production server, validates `/api/health`, executes production smoke checks, and runs all critical browser suites. A failure in any layer blocks merging.
 
-Additional domain-specific tests are required when the standard critical suites do not exercise the changed behavior.
+Additional domain-specific tests are required when the standard suites do not exercise the changed behavior.
 
 ## 5. Test selection rules
 
@@ -181,6 +203,7 @@ Additional domain-specific tests are required when the standard critical suites 
 - A user-facing change requires responsive/mobile and accessibility review where applicable.
 - A production incident fix requires a documented reproduction, remediation validation, and monitoring or prevention follow-up.
 - Skipping or weakening a critical test requires a documented reason and product/engineering approval; skipped critical tests cannot become a permanent normal state.
+- A rejected mutation must be proven not to create transaction rows, aggregate changes, receipt changes, or success audit events.
 
 ## 6. Local validation safety
 
@@ -192,9 +215,9 @@ Before running a script, inspect whether it:
 - depends on environment secrets;
 - assumes a clean Git working tree.
 
-Never point verification or browser-fixture scripts at production. Browser fixtures use reserved `E2E` identifiers, a future billing period, and test-only homeowner identities, but they remain destructive test data and require a disposable database.
+Never point verification, integration, or browser-fixture scripts at production. Browser fixtures use reserved `E2E` identifiers, future billing periods, and test-only identities, but they remain destructive test data and require a disposable database.
 
-The registration fixture is deleted before and after the browser suite. The database safety guard rejects non-local hosts in CI and requires explicit `HOAHUB_E2E_ALLOW_LOCAL=1` authorization outside CI.
+Integration fixtures use process-specific tenant identifiers and clean their records in dependency-safe order. Database safety guards reject non-local hosts in CI and require explicit `HOAHUB_E2E_ALLOW_LOCAL=1` authorization for browser fixtures outside CI.
 
 ## 7. Mobile testing
 
@@ -208,7 +231,7 @@ Verify critical flows on approved desktop, tablet, and mobile viewports. Check:
 - receipts, statements, documents, and downloads;
 - authenticated data not being cached or exposed incorrectly.
 
-The automated browser suite uses a desktop administrator viewport and a 390 × 844 homeowner viewport, including the activation and fresh-login journey.
+The automated browser suite uses desktop administrator viewports and a 390 × 844 homeowner viewport, including activation and fresh-login journeys.
 
 ## 8. Release approval
 
@@ -222,9 +245,18 @@ A release is approved only when:
 - no unresolved release-blocking defect remains;
 - the product owner records approval.
 
-## 9. Issue #25 progression
+## 9. Issue #25 completion evidence
 
-Issue #25 now includes CI-enforced unit, database integration, security/tenant-isolation, critical regression, production smoke, critical browser, and browser-driven homeowner registration/activation layers. Remaining work should focus on the full document request → approval → generated-document workflow and any deterministic calculation or authorization scenarios still required by the issue acceptance criteria.
+Issue #25 is satisfied when a clean pull-request run confirms all of the following without skipped critical checks:
+
+- documented Node/tsx unit, disposable-MySQL integration, regression, smoke, and Puppeteer browser layers;
+- `pnpm test` as the standard deterministic local suite;
+- finance calculation, allocation, receipt, Statement of Account, duplicate-billing, void, and bond-refund coverage;
+- two-tenant isolation for records, relationships, mutations, sessions, documents, announcements, and sensitive identifiers;
+- allowed and denied RBAC scenarios for protected paths and privileged mutations;
+- homeowner registration, activation, property ownership, and cross-tenant relationship coverage;
+- repeatable fixture setup and dependency-safe cleanup;
+- mandatory lint, migration, seed, tests, typecheck, production build, smoke, and browser gates that block merging on failure.
 
 ## Document history
 
@@ -234,3 +266,4 @@ Issue #25 now includes CI-enforced unit, database integration, security/tenant-i
 | 1.1 | August 5, 2026 | Added mandatory lint and `test:critical` CI gate; clarified CI-safe versus local-clone-only verification |
 | 1.2 | August 5, 2026 | Added disposable MySQL integration and production-build critical browser test processes |
 | 1.3 | August 5, 2026 | Added browser-driven homeowner registration, invitation verification, activation, fresh login, and tenant-ownership coverage |
+| 1.4 | August 5, 2026 | Added password-reset/session security, route-policy matrices, overlapping-property ownership isolation, audited bond-refund consistency, and final Issue #25 completion criteria |

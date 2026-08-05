@@ -1,9 +1,10 @@
 "use server";
 
-import { BillStatus, NotificationType, PaymentRequestStatus, Prisma, RecurringChargeType, Role } from "@prisma/client";
+import { BillStatus, NotificationType, PaymentRequestStatus, Prisma, RecurringChargeType } from "@prisma/client";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { requireUser } from "@/lib/auth";
+import { requirePermission } from "@/lib/authorization/guards";
+import { Permission } from "@/lib/authorization/permissions";
 import { getAppUrl } from "@/lib/app-url";
 import { requireBillingSettingsAccess } from "@/lib/billing-access";
 import { prisma } from "@/lib/db";
@@ -16,7 +17,7 @@ function normalizedMonth(value: string) {
 }
 
 export async function refreshOverdueBills() {
-  const user = await requireUser();
+  const user = await requirePermission(Permission.BILLING_ADJUST);
   const today = new Date();
   today.setHours(0, 0, 0, 0);
   await prisma.bill.updateMany({
@@ -27,7 +28,7 @@ export async function refreshOverdueBills() {
 }
 
 export async function saveBillAction(formData: FormData) {
-  const admin = await requireUser(Role.ADMIN);
+  const admin = await requirePermission(Permission.BILLING_ADJUST);
   const parsed = billSchema.safeParse(Object.fromEntries(formData.entries()));
   if (!parsed.success) throw new Error(parsed.error.issues[0]?.message || "Invalid bill details.");
   const data = parsed.data;
@@ -67,7 +68,7 @@ export async function saveBillAction(formData: FormData) {
 }
 
 export async function generateMonthlyBillsAction(formData: FormData) {
-  const admin = await requireBillingSettingsAccess();
+  const admin = await requireBillingSettingsAccess(Permission.BILLING_GENERATE);
   const month = String(formData.get("billingMonth") || "");
   const due = String(formData.get("dueDate") || "");
   if (!/^\d{4}-\d{2}$/.test(month) || !/^\d{4}-\d{2}-\d{2}$/.test(due)) throw new Error("Choose a valid billing month and due date.");
@@ -85,7 +86,7 @@ export async function generateMonthlyBillsAction(formData: FormData) {
 }
 
 export async function generateBillingFromPreviewAction(formData: FormData) {
-  const admin = await requireBillingSettingsAccess();
+  const admin = await requireBillingSettingsAccess(Permission.BILLING_GENERATE);
   let redirectUrl = "/admin/billing?success=generated";
   try {
     const input = parseGenerationForm(admin, formData);
@@ -135,7 +136,7 @@ function periodLabel(year: number, month: number) {
 }
 
 export async function archiveBillAction(formData: FormData) {
-  const admin = await requireUser(Role.ADMIN);
+  const admin = await requirePermission(Permission.BILLING_ADJUST);
   const id = String(formData.get("id") || "");
   const confirmed = String(formData.get("confirmed") || "") === "yes";
   const reason = String(formData.get("reason") || "").trim();

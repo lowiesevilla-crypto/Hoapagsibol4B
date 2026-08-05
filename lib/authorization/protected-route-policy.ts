@@ -10,7 +10,9 @@ const adminRoles = new Set([
 ]);
 
 function normalizeRoles(roleOrRoles: string | readonly string[]) {
-  return Array.isArray(roleOrRoles) ? [...new Set(roleOrRoles)] : [roleOrRoles];
+  return typeof roleOrRoles === "string"
+    ? [roleOrRoles]
+    : [...new Set(roleOrRoles)];
 }
 
 function hasAnyRole(roles: readonly string[], accepted: ReadonlySet<string>) {

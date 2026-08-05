@@ -1,9 +1,10 @@
 "use server";
 
-import { NotificationStatus, NotificationType, Role, SystemSettingCategory } from "@prisma/client";
+import { NotificationStatus, NotificationType, SystemSettingCategory } from "@prisma/client";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { requireUser } from "@/lib/auth";
+import { requirePermission } from "@/lib/authorization/guards";
+import { Permission } from "@/lib/authorization/permissions";
 import { getAppUrl } from "@/lib/app-url";
 import { prisma } from "@/lib/db";
 import { removeStoredGcashQrImage, resolveGcashQrImage } from "@/lib/gcash-qr";
@@ -13,7 +14,7 @@ import { sendEmailNotification, verifyMailConnection } from "@/lib/services/noti
 import { emailSettingsSchema, testEmailSchema } from "@/lib/validation";
 
 export async function saveSystemSettingsAction(formData: FormData) {
-  const systemAdmin = await requireUser(Role.SYSTEM_ADMIN);
+  const systemAdmin = await requirePermission(Permission.SETTINGS_MANAGE);
   const category = String(formData.get("category") || "") as SystemSettingCategory;
   if (!Object.values(SystemSettingCategory).includes(category)) throw new Error("Invalid settings category.");
   const fields = allSettingFields.filter((field) => field.category === category);
@@ -87,7 +88,7 @@ export async function saveSystemSettingsAction(formData: FormData) {
 }
 
 export async function sendTestEmailAction(formData: FormData) {
-  const systemAdmin = await requireUser(Role.SYSTEM_ADMIN);
+  const systemAdmin = await requirePermission(Permission.SETTINGS_MANAGE);
   const parsed = testEmailSchema.safeParse(Object.fromEntries(formData.entries()));
   if (!parsed.success) redirect(`/admin/settings?error=${encodeURIComponent(parsed.error.issues[0]?.message || "Enter a valid email address.")}`);
   let outcome = "FAILED";

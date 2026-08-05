@@ -1,9 +1,10 @@
 "use server";
 
-import { CollectionType, PayerType, Prisma, RefundStatus, Role } from "@prisma/client";
+import { CollectionType, PayerType, Prisma, RefundStatus } from "@prisma/client";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { requireUser } from "@/lib/auth";
+import { requirePermission, requirePermissions } from "@/lib/authorization/guards";
+import { Permission } from "@/lib/authorization/permissions";
 import { prisma } from "@/lib/db";
 import { recordBondRefund } from "@/lib/services/bond-refund";
 import { allocateReceiptNumber, collectionReceiptSeries } from "@/lib/services/receipt";
@@ -12,7 +13,10 @@ import { bondRefundSchema, collectionSchema } from "@/lib/validation";
 const refundableTypes = new Set<CollectionType>([CollectionType.CONSTRUCTION_BOND, CollectionType.CONTRACTOR_BOND]);
 
 export async function recordCollectionAction(formData: FormData) {
-  const admin = await requireUser(Role.ADMIN);
+  const admin = await requirePermissions([
+    Permission.COLLECTIONS_RECORD,
+    Permission.RECEIPTS_ISSUE,
+  ]);
   const parsed = collectionSchema.safeParse(Object.fromEntries(formData.entries()));
   if (!parsed.success) throw new Error(parsed.error.issues[0]?.message || "Invalid collection details.");
   const data = parsed.data;
@@ -29,10 +33,14 @@ export async function recordCollectionAction(formData: FormData) {
   if (data.payerType === PayerType.CONTRACTOR && !data.contractorId) throw new Error("Select a contractor.");
 
   if (data.payerType === PayerType.HOMEOWNER) {
-    const exists = await prisma.homeownerProfile.count({ where: { id: data.homeownerId } });
+    const exists = await prisma.homeownerProfile.count({
+      where: { id: data.homeownerId, tenantId: admin.tenantId },
+    });
     if (!exists) throw new Error("Homeowner not found.");
   } else {
-    const exists = await prisma.contractorProfile.count({ where: { id: data.contractorId } });
+    const exists = await prisma.contractorProfile.count({
+      where: { id: data.contractorId, tenantId: admin.tenantId },
+    });
     if (!exists) throw new Error("Contractor not found.");
   }
 
@@ -64,7 +72,7 @@ export async function recordCollectionAction(formData: FormData) {
 }
 
 export async function recordBondRefundAction(formData: FormData) {
-  const admin = await requireUser(Role.ADMIN);
+  const admin = await requirePermission(Permission.COLLECTIONS_REFUND);
   const parsed = bondRefundSchema.safeParse(Object.fromEntries(formData.entries()));
   if (!parsed.success) throw new Error(parsed.error.issues[0]?.message || "Invalid refund details.");
   const data = parsed.data;
@@ -84,14 +92,16 @@ export async function recordBondRefundAction(formData: FormData) {
 }
 
 export async function forfeitBondAction(formData: FormData) {
-  const admin = await requireUser(Role.ADMIN);
+  const admin = await requirePermission(Permission.COLLECTIONS_FORFEIT);
   const collectionId = String(formData.get("collectionId") || "");
   const reason = String(formData.get("reason") || "").trim();
   if (!reason) throw new Error("A violation or forfeiture reason is required.");
   if (reason.length > 500) throw new Error("Forfeiture reason is too long.");
 
   await prisma.$transaction(async (tx) => {
-    const collection = await tx.collection.findUnique({ where: { id: collectionId } });
+    const collection = await tx.collection.findFirst({
+      where: { id: collectionId, tenantId: admin.tenantId },
+    });
     if (!collection || !collection.refundable) throw new Error("Refundable bond not found.");
     if (collection.refundStatus === RefundStatus.REFUNDED || collection.refundStatus === RefundStatus.FORFEITED) throw new Error("This bond is already closed.");
     const available = Number(collection.amount) - Number(collection.amountRefunded) - Number(collection.amountForfeited);
@@ -113,9 +123,12 @@ export async function forfeitBondAction(formData: FormData) {
 }
 
 export async function deleteCollectionAction(formData: FormData) {
-  await requireUser(Role.ADMIN);
+  const admin = await requirePermission(Permission.COLLECTIONS_MANAGE);
   const id = String(formData.get("id") || "");
-  const collection = await prisma.collection.findUnique({ where: { id }, select: { _count: { select: { refunds: true } }, amountForfeited: true } });
+  const collection = await prisma.collection.findFirst({
+    where: { id, tenantId: admin.tenantId },
+    select: { _count: { select: { refunds: true } }, amountForfeited: true },
+  });
   if (!collection) throw new Error("Collection not found.");
   if (collection._count.refunds || Number(collection.amountForfeited) > 0) throw new Error("A bond with refund or forfeiture history cannot be deleted.");
   await prisma.collection.delete({ where: { id } });

@@ -1,11 +1,11 @@
 "use server";
 
-import { BillStatus, NotificationType, PaymentRequestStatus, Prisma, RecurringChargeType, Role } from "@prisma/client";
+import { BillStatus, NotificationType, PaymentRequestStatus, Prisma, RecurringChargeType } from "@prisma/client";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { requireUser } from "@/lib/auth";
+import { requirePermission } from "@/lib/authorization/guards";
+import { Permission } from "@/lib/authorization/permissions";
 import { getAppUrl } from "@/lib/app-url";
-import { requireBillingSettingsAccess } from "@/lib/billing-access";
 import { prisma } from "@/lib/db";
 import { billSchema } from "@/lib/validation";
 import { sendEmailNotification } from "@/lib/services/notifications";
@@ -16,7 +16,7 @@ function normalizedMonth(value: string) {
 }
 
 export async function refreshOverdueBills() {
-  const user = await requireUser();
+  const user = await requirePermission(Permission.BILLING_ADJUST);
   const today = new Date();
   today.setHours(0, 0, 0, 0);
   await prisma.bill.updateMany({
@@ -27,7 +27,7 @@ export async function refreshOverdueBills() {
 }
 
 export async function saveBillAction(formData: FormData) {
-  const admin = await requireUser(Role.ADMIN);
+  const admin = await requirePermission(Permission.BILLING_ADJUST);
   const parsed = billSchema.safeParse(Object.fromEntries(formData.entries()));
   if (!parsed.success) throw new Error(parsed.error.issues[0]?.message || "Invalid bill details.");
   const data = parsed.data;
@@ -67,7 +67,7 @@ export async function saveBillAction(formData: FormData) {
 }
 
 export async function generateMonthlyBillsAction(formData: FormData) {
-  const admin = await requireBillingSettingsAccess();
+  const admin = await requirePermission(Permission.BILLING_GENERATE);
   const month = String(formData.get("billingMonth") || "");
   const due = String(formData.get("dueDate") || "");
   if (!/^\d{4}-\d{2}$/.test(month) || !/^\d{4}-\d{2}-\d{2}$/.test(due)) throw new Error("Choose a valid billing month and due date.");
@@ -85,7 +85,7 @@ export async function generateMonthlyBillsAction(formData: FormData) {
 }
 
 export async function generateBillingFromPreviewAction(formData: FormData) {
-  const admin = await requireBillingSettingsAccess();
+  const admin = await requirePermission(Permission.BILLING_GENERATE);
   let redirectUrl = "/admin/billing?success=generated";
   try {
     const input = parseGenerationForm(admin, formData);
@@ -110,7 +110,7 @@ export async function generateBillingFromPreviewAction(formData: FormData) {
   redirect(redirectUrl);
 }
 
-function parseGenerationForm(admin: Awaited<ReturnType<typeof requireBillingSettingsAccess>>, formData: FormData) {
+function parseGenerationForm(admin: Awaited<ReturnType<typeof requirePermission>>, formData: FormData) {
   const coverageYear = Number(formData.get("coverageYear"));
   const coverageMonth = Number(formData.get("coverageMonth"));
   if (!Number.isInteger(coverageYear) || coverageYear < 1900 || coverageYear > 2200) throw new Error("Enter a valid four-digit coverage year.");
@@ -135,7 +135,7 @@ function periodLabel(year: number, month: number) {
 }
 
 export async function archiveBillAction(formData: FormData) {
-  const admin = await requireUser(Role.ADMIN);
+  const admin = await requirePermission(Permission.BILLING_ADJUST);
   const id = String(formData.get("id") || "");
   const confirmed = String(formData.get("confirmed") || "") === "yes";
   const reason = String(formData.get("reason") || "").trim();
@@ -144,8 +144,8 @@ export async function archiveBillAction(formData: FormData) {
 
   try {
     await prisma.$transaction(async (tx) => {
-      const bill = await tx.bill.findUnique({
-        where: { id },
+      const bill = await tx.bill.findFirst({
+        where: { id, tenantId: admin.tenantId },
         include: {
           homeowner: { include: { user: true } },
           _count: { select: { payments: true, paymentRequests: true } },
@@ -163,7 +163,11 @@ export async function archiveBillAction(formData: FormData) {
         },
       });
       const rejectedRequests = await tx.paymentRequest.updateMany({
-        where: { billId: id, status: PaymentRequestStatus.PENDING_REVIEW },
+        where: {
+          tenantId: admin.tenantId,
+          billId: id,
+          status: PaymentRequestStatus.PENDING_REVIEW,
+        },
         data: {
           status: PaymentRequestStatus.REJECTED,
           reviewedById: admin.id,
@@ -173,6 +177,7 @@ export async function archiveBillAction(formData: FormData) {
       });
       await tx.auditLog.create({
         data: {
+          tenantId: admin.tenantId,
           actorId: admin.id,
           module: "BILLING",
           action: "ARCHIVE_BILL",

@@ -13,7 +13,6 @@ import {
   type DashboardListItem,
 } from "@/components/homeowner/dashboard/dashboard-cards";
 import { PortalPageContainer } from "@/components/portal-mobile-shell";
-import { refreshOverdueBills } from "@/lib/actions/billing";
 import { getAppUrl } from "@/lib/app-url";
 import { prisma } from "@/lib/db";
 import { requireHomeownerProfile } from "@/lib/portal";
@@ -119,7 +118,6 @@ const activeComplaintStatuses = [
 
 export default async function PortalDashboard() {
   const profile = await traceDashboardOperation("requireHomeownerProfile", () => requireHomeownerProfile());
-  await traceDashboardOperation("refreshOverdueBills", () => refreshOverdueBills());
 
   const now = new Date();
   const today = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));

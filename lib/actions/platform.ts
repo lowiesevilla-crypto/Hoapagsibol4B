@@ -93,17 +93,36 @@ export async function updateTenantUserAction(formData: FormData) {
   const user = await prisma.user.findFirst({ where: { id: userId, tenantId } }); if (!user) redirect(`/platform/tenants/${tenantId}/users?error=Tenant%20user%20not%20found.`);
   const duplicate = await prisma.user.findFirst({ where: { tenantId, id: { not: userId }, OR: [{ email }, ...(username ? [{ username }] : [])] } });
   if (duplicate) redirect(`/platform/tenants/${tenantId}/users/${userId}?error=Email%20or%20username%20is%20already%20used%20in%20this%20HOA.`);
-  await prisma.$transaction([
-    prisma.user.update({ where: { id: userId }, data: { name, email, username, role } }),
-    prisma.auditLog.create({ data: { tenantId, actorId: actor.id, module: "PLATFORM", action: user.role === role ? "TENANT_USER_UPDATED" : "TENANT_USER_ROLE_UPDATED", entityType: "User", entityId: userId, metadata: { oldRole: user.role, newRole: role } } }),
-  ]);
+  const roleChanged = user.role !== role;
+  const changedAt = new Date();
+  await prisma.$transaction(async (tx) => {
+    await tx.user.update({ where: { id: userId }, data: { name, email, username, role } });
+    const revokedSessions = roleChanged
+      ? await tx.userSession.updateMany({
+          where: { tenantId, userId, revokedAt: null },
+          data: { revokedAt: changedAt },
+        })
+      : { count: 0 };
+    await tx.auditLog.create({ data: { tenantId, actorId: actor.id, module: "PLATFORM", action: roleChanged ? "TENANT_USER_ROLE_UPDATED" : "TENANT_USER_UPDATED", entityType: "User", entityId: userId, metadata: { oldRole: user.role, newRole: role, revokedSessions: revokedSessions.count } } });
+  });
   redirect(`/platform/tenants/${tenantId}/users/${userId}?success=User%20updated%20successfully.`);
 }
 
 export async function toggleTenantUserAction(formData: FormData) {
   const actor = await requirePlatformUser(); const tenantId = clean(formData.get("tenantId")); const userId = clean(formData.get("userId"));
   const user = await prisma.user.findFirst({ where: { id: userId, tenantId } }); if (!user || user.id === actor.id) redirect(`/platform/tenants/${tenantId}/users?error=This%20account%20cannot%20be%20changed.`);
-  await prisma.$transaction([prisma.user.update({ where: { id: user.id }, data: { active: !user.active } }), prisma.auditLog.create({ data: { tenantId, actorId: actor.id, module: "PLATFORM", action: user.active ? "TENANT_USER_DEACTIVATED" : "TENANT_USER_ACTIVATED", entityType: "User", entityId: user.id } })]);
+  const nextActive = !user.active;
+  const changedAt = new Date();
+  await prisma.$transaction(async (tx) => {
+    await tx.user.update({ where: { id: user.id }, data: { active: nextActive } });
+    const revokedSessions = nextActive
+      ? { count: 0 }
+      : await tx.userSession.updateMany({
+          where: { tenantId, userId: user.id, revokedAt: null },
+          data: { revokedAt: changedAt },
+        });
+    await tx.auditLog.create({ data: { tenantId, actorId: actor.id, module: "PLATFORM", action: user.active ? "TENANT_USER_DEACTIVATED" : "TENANT_USER_ACTIVATED", entityType: "User", entityId: user.id, metadata: { active: nextActive, revokedSessions: revokedSessions.count } } });
+  });
   redirect(`/platform/tenants/${tenantId}/users?success=User%20status%20updated.`);
 }
 

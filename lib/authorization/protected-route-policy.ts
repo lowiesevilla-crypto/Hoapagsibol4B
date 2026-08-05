@@ -14,12 +14,18 @@ type ProtectedAccess = {
   permissions?: readonly string[];
 };
 
-function normalizeAccess(access: string | readonly string[] | ProtectedAccess) {
+type NormalizedAccess = {
+  roles: string[];
+  permissions: string[];
+};
+
+function normalizeAccess(access: string | readonly string[] | ProtectedAccess): NormalizedAccess {
   if (typeof access === "string") return { roles: [access], permissions: [] };
   if (Array.isArray(access)) return { roles: [...new Set(access)], permissions: [] };
+  const policy = access as ProtectedAccess;
   return {
-    roles: [...new Set(access.roles ?? [])],
-    permissions: [...new Set(access.permissions ?? [])],
+    roles: [...new Set(policy.roles ?? [])],
+    permissions: [...new Set(policy.permissions ?? [])],
   };
 }
 

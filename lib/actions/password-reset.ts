@@ -1,13 +1,14 @@
 "use server";
 
 import { createHash, randomBytes } from "node:crypto";
-import { NotificationStatus, NotificationType, Prisma, Role } from "@prisma/client";
+import { NotificationStatus, NotificationType, Role } from "@prisma/client";
 import { hash } from "bcryptjs";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { deleteSession } from "@/lib/auth";
 import { getAppUrl } from "@/lib/app-url";
 import { platformPrisma, prisma } from "@/lib/db";
+import { completePasswordReset } from "@/lib/services/password-reset-completion";
 import { sendEmailNotification } from "@/lib/services/notifications";
 import { getPasswordPolicy } from "@/lib/system-settings";
 import { forgotPasswordSchema } from "@/lib/validation";
@@ -90,13 +91,11 @@ export async function resetPasswordAction(_state: ResetPasswordState, formData: 
   if (!token || token.usedAt || token.expiresAt <= new Date()) return failedReset("This reset link is invalid or has expired. Request a new link.", token?.userId, tokenHash);
 
   try {
-    await prisma.$transaction(async (tx) => {
-      const consumed = await tx.passwordResetToken.updateMany({ where: { id: token.id, usedAt: null, expiresAt: { gt: new Date() } }, data: { usedAt: new Date() } });
-      if (consumed.count !== 1) throw new Error("RESET_TOKEN_ALREADY_USED");
-      await tx.user.update({ where: { id: token.userId }, data: { passwordHash: await hash(password, 12) } });
-      await tx.passwordResetToken.updateMany({ where: { userId: token.userId, usedAt: null }, data: { usedAt: new Date() } });
-      await tx.auditLog.create({ data: { actorId: token.userId, module: "AUTH", action: "PASSWORD_RESET_COMPLETED", entityType: "User", entityId: token.userId, metadata: { resetTokenId: token.id } } });
-    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+    await completePasswordReset({
+      tokenId: token.id,
+      userId: token.userId,
+      passwordHash: await hash(password, 12),
+    });
   } catch {
     return failedReset("This reset link has already been used. Request a new link.", token.userId, tokenHash);
   }

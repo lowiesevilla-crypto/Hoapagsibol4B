@@ -45,6 +45,22 @@ test("multiple roles produce the union of granular permissions", () => {
   assert.equal(permissions.has(Permission.PAYROLL_MANAGE), false);
 });
 
+test("content publication and billing reminder permissions remain separated", () => {
+  const staffPermissions = permissionsForRoles([Role.STAFF]);
+  const billingPermissions = permissionsForRoles([Role.BILLING_MANAGER]);
+  const combinedPermissions = permissionsForRoles([Role.STAFF, Role.BILLING_MANAGER]);
+
+  assert.equal(staffPermissions.has(Permission.ANNOUNCEMENTS_PUBLISH), true);
+  assert.equal(staffPermissions.has(Permission.COMMUNITY_MANAGE), true);
+  assert.equal(staffPermissions.has(Permission.BILLING_MANAGE), false);
+  assert.equal(billingPermissions.has(Permission.BILLING_MANAGE), true);
+  assert.equal(billingPermissions.has(Permission.ANNOUNCEMENTS_PUBLISH), false);
+  assert.equal(billingPermissions.has(Permission.COMMUNITY_MANAGE), false);
+  assert.equal(combinedPermissions.has(Permission.ANNOUNCEMENTS_PUBLISH), true);
+  assert.equal(combinedPermissions.has(Permission.COMMUNITY_MANAGE), true);
+  assert.equal(combinedPermissions.has(Permission.BILLING_MANAGE), true);
+});
+
 test("role compatibility checks operate over all assignments", () => {
   assert.equal(canUseAssignedRole([Role.BILLING_MANAGER, Role.HOMEOWNER], Role.ADMIN), true);
   assert.equal(canUseAssignedRole([Role.BILLING_MANAGER, Role.HOMEOWNER], Role.HOMEOWNER), true);

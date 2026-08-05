@@ -44,15 +44,20 @@ async function resolveBrowserExecutable() {
 }
 
 async function pageText(page) {
-  return page.evaluate(() => document.body?.innerText || "");
+  return page.evaluate(() => document.body?.textContent || "");
 }
 
 async function expectText(page, text, label = text) {
-  await page.waitForFunction(
-    (expected) => (document.body?.innerText || "").includes(expected),
-    { timeout },
-    text,
-  );
+  try {
+    await page.waitForFunction(
+      (expected) => (document.body?.textContent || "").includes(expected),
+      { timeout },
+      text,
+    );
+  } catch (error) {
+    const body = (await pageText(page)).replace(/\s+/g, " ").trim();
+    throw new Error(`Expected ${label} on ${page.url()}. Page text: ${body.slice(0, 2000)}`, { cause: error });
+  }
   const body = await pageText(page);
   assert.ok(body.includes(text), `Expected ${label} on ${page.url()}`);
 }

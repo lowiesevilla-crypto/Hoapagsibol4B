@@ -90,7 +90,7 @@ export default async function AdminDocumentsPage({ searchParams }: { searchParam
   const requestPages = Math.max(1, Math.ceil(requestCount / requestPageSize));
   const filters = new URLSearchParams(Object.entries({ section: "requests", view: requestView, q, status: status || "", type: type || "", date: query.date || "" }).filter(([, value]) => value));
   return <>
-    <PageHeader eyebrow="Resident services" title="Document Management" description="Manage document types, templates, homeowner requests, and issued HOA documents from one tenant-scoped workspace." action={<Link className="btn-secondary" href="/admin/documents/archive">Archive</Link>} />
+    <PageHeader eyebrow="Resident services" title="Document Management" description="Manage document types, templates, homeowner requests, and issued HOA documents from one tenant-scoped workspace." action={<div className="flex flex-wrap gap-2"><Link className="btn-secondary" href="/admin/documents/guide">Runbook</Link><Link className="btn-secondary" href="/admin/documents/archive">Archive</Link><Link className="btn-primary" href="/admin/documents/operations">Operations</Link></div>} />
     {query.notice === "legacy-templates" && <Notice kind="success">The legacy template screen now redirects here. Use Templates for draft, publishing, and version history.</Notice>}
     {query.error && <Notice kind="error">{query.error}</Notice>}
     {query.success && <Notice kind="success">{query.message || "Document request updated."}</Notice>}

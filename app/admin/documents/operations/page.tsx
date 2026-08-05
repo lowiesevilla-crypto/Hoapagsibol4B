@@ -4,6 +4,7 @@ import {
   DocumentRequestStatus,
   DocumentTemplateVersionStatus,
 } from "@prisma/client";
+import { DocumentationExportPanel } from "@/components/documentation-export-panel";
 import { PageHeader } from "@/components/page-header";
 import { requireDocumentTemplateAdmin } from "@/lib/document-template-admin";
 import { prisma } from "@/lib/db";
@@ -169,6 +170,8 @@ export default async function DocumentationOperationsPage() {
       description="Monitor readiness, daily work queues, aging, generation recovery, and one-year operational performance for this tenant."
       action={<div className="flex flex-wrap gap-2"><Link className="btn-secondary" href="/admin/documents/guide">Administrator runbook</Link><a className="btn-secondary" href="/admin/documents/export">Export CSV</a><Link className="btn-primary" href="/admin/documents?section=requests">Open request queue</Link></div>}
     />
+
+    <DocumentationExportPanel />
 
     <section className={`rounded-3xl border p-5 sm:p-7 ${readiness.productionReady ? "border-emerald-200 bg-emerald-50" : "border-amber-200 bg-amber-50"}`}>
       <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">

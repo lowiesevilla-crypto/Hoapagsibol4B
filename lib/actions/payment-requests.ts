@@ -4,6 +4,8 @@ import { CollectionType, DocumentDefinitionStatus, DocumentRequestStatus, Notifi
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { requireUser } from "@/lib/auth";
+import { requirePermission, requirePermissions } from "@/lib/authorization/guards";
+import { Permission } from "@/lib/authorization/permissions";
 import { getAppUrl } from "@/lib/app-url";
 import { prisma } from "@/lib/db";
 import { savePaymentProof } from "@/lib/payment-proofs";
@@ -37,34 +39,34 @@ export async function submitPaymentRequestAction(formData: FormData) {
     if (duplicateRequest) throw new Error("This payment reference number has already been submitted for verification.");
 
     if (data.transactionType === PaymentRequestType.MONTHLY_DUES) {
-    const billIds = formData.getAll("billIds").map(String).filter(Boolean);
-    if (!billIds.length) throw new Error("Select at least one unpaid monthly dues record.");
-    const uniqueBillIds = [...new Set(billIds)];
-    const bills = await prisma.bill.findMany({
-      where: { tenantId: user.tenantId, id: { in: uniqueBillIds }, homeownerId: user.homeownerProfile.id, balance: { gt: 0 }, archivedAt: null },
-      include: { paymentRequests: { where: { status: "PENDING_REVIEW" }, select: { id: true } } },
-      orderBy: [{ dueDate: "asc" }, { billingMonth: "asc" }],
-    });
-    if (bills.length !== uniqueBillIds.length) throw new Error("One or more selected dues records are no longer available.");
-    const pending = bills.find((bill) => bill.paymentRequests.length > 0);
-    if (pending) throw new Error("One selected bill already has a pending QR payment verification.");
-    const proof = await savePaymentProof(formData, user.tenant.slug);
-    await prisma.paymentRequest.createMany({
-      data: bills.map((bill) => ({
-        tenantId: user.tenantId,
-        type: PaymentRequestType.MONTHLY_DUES,
-        homeownerId: user.homeownerProfile!.id,
-        billId: bill.id,
-        amount: bill.balance,
-        paymentDate,
-        referenceNumber,
-        proofImageUrl: proof?.url || data.proofImageUrl || null,
-        proofFileName: proof?.fileName || null,
-        proofContentType: proof?.contentType || null,
-        proofFileSize: proof?.size || null,
-        payerNotes: data.payerNotes || null,
-      })),
-    });
+      const billIds = formData.getAll("billIds").map(String).filter(Boolean);
+      if (!billIds.length) throw new Error("Select at least one unpaid monthly dues record.");
+      const uniqueBillIds = [...new Set(billIds)];
+      const bills = await prisma.bill.findMany({
+        where: { tenantId: user.tenantId, id: { in: uniqueBillIds }, homeownerId: user.homeownerProfile.id, balance: { gt: 0 }, archivedAt: null },
+        include: { paymentRequests: { where: { status: "PENDING_REVIEW" }, select: { id: true } } },
+        orderBy: [{ dueDate: "asc" }, { billingMonth: "asc" }],
+      });
+      if (bills.length !== uniqueBillIds.length) throw new Error("One or more selected dues records are no longer available.");
+      const pending = bills.find((bill) => bill.paymentRequests.length > 0);
+      if (pending) throw new Error("One selected bill already has a pending QR payment verification.");
+      const proof = await savePaymentProof(formData, user.tenant.slug);
+      await prisma.paymentRequest.createMany({
+        data: bills.map((bill) => ({
+          tenantId: user.tenantId,
+          type: PaymentRequestType.MONTHLY_DUES,
+          homeownerId: user.homeownerProfile!.id,
+          billId: bill.id,
+          amount: bill.balance,
+          paymentDate,
+          referenceNumber,
+          proofImageUrl: proof?.url || data.proofImageUrl || null,
+          proofFileName: proof?.fileName || null,
+          proofContentType: proof?.contentType || null,
+          proofFileSize: proof?.size || null,
+          payerNotes: data.payerNotes || null,
+        })),
+      });
     } else if (data.transactionType === PaymentRequestType.DOCUMENT_FEE) {
       const documentRequestId = data.documentRequestId?.trim();
       if (!documentRequestId) throw new Error("Select a document request to pay.");
@@ -179,11 +181,17 @@ export async function submitPaymentRequestAction(formData: FormData) {
 }
 
 export async function approvePaymentRequestAction(formData: FormData) {
-  const admin = await requireUser(Role.ADMIN);
+  const admin = await requirePermissions([
+    Permission.PAYMENTS_RECORD,
+    Permission.RECEIPTS_ISSUE,
+  ]);
   const parsed = paymentReviewSchema.safeParse(Object.fromEntries(formData.entries()));
   if (!parsed.success) throw new Error(parsed.error.issues[0]?.message || "Invalid review details.");
   await approvePaymentRequest(parsed.data.id, admin.id, parsed.data.reviewRemarks, admin.tenantId);
-  const approved = await prisma.paymentRequest.findUnique({ where: { id: parsed.data.id }, include: { homeowner: { include: { user: true } }, payment: true, collection: true } });
+  const approved = await prisma.paymentRequest.findFirst({
+    where: { id: parsed.data.id, tenantId: admin.tenantId },
+    include: { homeowner: { include: { user: true } }, payment: true, collection: true },
+  });
   if (approved) await sendEmailNotification({ tenantId: admin.tenantId, recipientId: approved.homeowner.userId, email: approved.homeowner.user.email, subject: "HOA payment confirmed", heading: "Payment confirmation", message: `Hello ${approved.homeowner.user.name},\nYour payment of PHP ${Number(approved.amount).toFixed(2)} has been verified and approved.\nReference: ${approved.referenceNumber || "Not provided"}\nReceipt: ${approved.payment?.receiptNumber || approved.collection?.receiptNumber || "Available from the HOA office"}`, type: NotificationType.PAYMENT_CONFIRMATION, actionLabel: "View payment history", actionUrl: `${getAppUrl()}/portal/payments` }).catch(() => undefined);
   revalidatePaymentPages();
   if (approved?.documentRequestId) {
@@ -195,7 +203,7 @@ export async function approvePaymentRequestAction(formData: FormData) {
 }
 
 export async function rejectPaymentRequestAction(formData: FormData) {
-  const admin = await requireUser(Role.ADMIN);
+  const admin = await requirePermission(Permission.PAYMENTS_RECORD);
   const parsed = paymentReviewSchema.safeParse(Object.fromEntries(formData.entries()));
   if (!parsed.success) throw new Error(parsed.error.issues[0]?.message || "Invalid review details.");
   await rejectPaymentRequest(parsed.data.id, admin.id, parsed.data.reviewRemarks, admin.tenantId);

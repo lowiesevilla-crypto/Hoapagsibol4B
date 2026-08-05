@@ -7,6 +7,7 @@ import {
   DataMigrationTag,
   HomeownerActivationStatus,
   HomeownerEmailVerificationStatus,
+  Prisma,
   Role,
 } from "@prisma/client";
 import { hash } from "bcryptjs";
@@ -122,188 +123,192 @@ export async function applyOnboardingImport(input: {
     });
   }
 
-  const activationJobs = await runWithTenant(input.tenantId, () => prisma.$transaction(async (tx) => {
-    const currentStateSetting = await tx.systemSetting.findFirst({
-      where: { tenantId: input.tenantId, category: "ASSOCIATION", key: "TENANT_ONBOARDING_V1" },
-      select: { value: true },
-    });
-    if (currentStateSetting?.value) {
-      try {
-        const state = JSON.parse(currentStateSetting.value) as { import?: { appliedAt?: string; fileHash?: string } };
-        if (state.import?.appliedAt && state.import.fileHash === validation.fileHash) throw new Error("This onboarding file has already been applied.");
-      } catch (error) {
-        if (error instanceof Error && error.message.includes("already been applied")) throw error;
+  const activationJobs = await runWithTenant(
+    input.tenantId,
+    async () => await prisma.$transaction(async (tx) => {
+      const currentStateSetting = await tx.systemSetting.findFirst({
+        where: { tenantId: input.tenantId, category: "ASSOCIATION", key: "TENANT_ONBOARDING_V1" },
+        select: { value: true },
+      });
+      if (currentStateSetting?.value) {
+        try {
+          const state = JSON.parse(currentStateSetting.value) as { import?: { appliedAt?: string; fileHash?: string } };
+          if (state.import?.appliedAt && state.import.fileHash === validation.fileHash) throw new Error("This onboarding file has already been applied.");
+        } catch (error) {
+          if (error instanceof Error && error.message.includes("already been applied")) throw error;
+        }
       }
-    }
 
-    const jobs: Array<{
-      userId: string;
-      name: string;
-      email: string;
-      accountNumber: string;
-      temporaryPassword: string;
-      emailVerificationToken: string;
-      expiresAt: Date;
-    }> = [];
-    let openingBalancesPosted = 0;
+      const jobs: Array<{
+        userId: string;
+        name: string;
+        email: string;
+        accountNumber: string;
+        temporaryPassword: string;
+        emailVerificationToken: string;
+        expiresAt: Date;
+      }> = [];
+      let openingBalancesPosted = 0;
 
-    for (const item of prepared) {
-      const user = await tx.user.create({
-        data: {
-          tenantId: input.tenantId,
-          name: item.row.name,
-          email: item.row.email,
-          passwordHash: item.passwordHash,
-          role: Role.HOMEOWNER,
-          active: true,
-          homeownerProfile: {
-            create: {
-              tenantId: input.tenantId,
-              phone: item.row.phone,
-              address: item.row.address,
-              block: item.row.block,
-              lot: item.row.lot,
-              phase: item.row.phase,
-              propertyType: item.row.propertyType,
-              occupancyStatus: item.row.occupancyStatus,
-              accountNumber: item.accountNumber,
-              status: item.row.status,
-              activationStatus: HomeownerActivationStatus.INVITATION_SENT,
-              emailStatus: HomeownerEmailVerificationStatus.UNVERIFIED,
-              activationSentAt: new Date(),
-              monthlyDuesAmount: item.row.monthlyDuesAmount,
-            },
-          },
-          userRoleAssignments: {
-            create: {
-              tenantId: input.tenantId,
-              role: Role.HOMEOWNER,
-              assignedBy: input.actorId,
-              active: true,
-            },
-          },
-        },
-        include: { homeownerProfile: true },
-      });
-      const homeowner = user.homeownerProfile;
-      if (!homeowner) throw new Error(`Homeowner profile was not created for row ${item.row.rowNumber}.`);
-
-      await tx.homeownerAccountNumberReservation.create({
-        data: {
-          tenantId: input.tenantId,
-          homeownerId: homeowner.id,
-          accountNumber: item.accountNumber,
-          reason: "ONBOARDING_IMPORT",
-        },
-      });
-
-      const activation = await createHomeownerActivationCredential({
-        tenantId: input.tenantId,
-        userId: user.id,
-        createdById: input.actorId,
-        tx,
-      });
-
-      if (item.row.openingBalance > 0 && item.row.openingBalanceAsOf) {
-        const period = new Date(Date.UTC(item.row.openingBalanceAsOf.getUTCFullYear(), item.row.openingBalanceAsOf.getUTCMonth(), 1));
-        const dueDate = new Date(Date.UTC(period.getUTCFullYear(), period.getUTCMonth() + 1, 0));
-        const bill = await tx.bill.create({
+      for (const item of prepared) {
+        const user = await tx.user.create({
           data: {
             tenantId: input.tenantId,
-            homeowner: { connect: { id: homeowner.id } },
-            billingMonth: period,
-            coverageYear: period.getUTCFullYear(),
-            coverageMonth: period.getUTCMonth() + 1,
-            amount: item.row.openingBalance,
-            penalty: 0,
-            totalAmount: item.row.openingBalance,
-            amountPaid: 0,
-            balance: item.row.openingBalance,
-            dueDate,
-            status: dueDate < startOfTodayUtc() ? BillStatus.OVERDUE : BillStatus.UNPAID,
-            notes: `[MIGRATED][OPENING_BALANCE] Tenant onboarding import ${validation.fileHash.slice(0, 12)}`,
+            name: item.row.name,
+            email: item.row.email,
+            passwordHash: item.passwordHash,
+            role: Role.HOMEOWNER,
+            active: true,
+            homeownerProfile: {
+              create: {
+                tenantId: input.tenantId,
+                phone: item.row.phone,
+                address: item.row.address,
+                block: item.row.block,
+                lot: item.row.lot,
+                phase: item.row.phase,
+                propertyType: item.row.propertyType,
+                occupancyStatus: item.row.occupancyStatus,
+                accountNumber: item.accountNumber,
+                status: item.row.status,
+                activationStatus: HomeownerActivationStatus.INVITATION_SENT,
+                emailStatus: HomeownerEmailVerificationStatus.UNVERIFIED,
+                activationSentAt: new Date(),
+                monthlyDuesAmount: item.row.monthlyDuesAmount,
+              },
+            },
+            userRoleAssignments: {
+              create: {
+                tenantId: input.tenantId,
+                role: Role.HOMEOWNER,
+                assignedBy: input.actorId,
+                active: true,
+              },
+            },
           },
+          include: { homeownerProfile: true },
         });
-        const dedupeKey = `ONBOARDING|${validation.fileHash}|${item.row.rowNumber}|DUES_OPENING_BALANCE`;
-        const migration = await tx.dataMigration.create({
+        const homeowner = user.homeownerProfile;
+        if (!homeowner) throw new Error(`Homeowner profile was not created for row ${item.row.rowNumber}.`);
+
+        await tx.homeownerAccountNumberReservation.create({
           data: {
             tenantId: input.tenantId,
-            kind: DataMigrationKind.DUES_OPENING_BALANCE,
-            tag: DataMigrationTag.OPENING_BALANCE,
-            homeowner: { connect: { id: homeowner.id } },
-            period,
-            amount: item.row.openingBalance,
-            remarks: `Tenant onboarding opening balance from ${input.fileName}`,
-            postedRecordType: "Bill",
-            postedRecordId: bill.id,
-            dedupeKey,
-            createdBy: { connect: { id: input.actorId } },
+            homeownerId: homeowner.id,
+            accountNumber: item.accountNumber,
+            reason: "ONBOARDING_IMPORT",
           },
         });
+
+        const activation = await createHomeownerActivationCredential({
+          tenantId: input.tenantId,
+          userId: user.id,
+          createdById: input.actorId,
+          tx,
+        });
+
+        if (item.row.openingBalance > 0 && item.row.openingBalanceAsOf) {
+          const period = new Date(Date.UTC(item.row.openingBalanceAsOf.getUTCFullYear(), item.row.openingBalanceAsOf.getUTCMonth(), 1));
+          const dueDate = new Date(Date.UTC(period.getUTCFullYear(), period.getUTCMonth() + 1, 0));
+          const bill = await tx.bill.create({
+            data: {
+              tenantId: input.tenantId,
+              homeowner: { connect: { id: homeowner.id } },
+              billingMonth: period,
+              coverageYear: period.getUTCFullYear(),
+              coverageMonth: period.getUTCMonth() + 1,
+              amount: item.row.openingBalance,
+              penalty: 0,
+              totalAmount: item.row.openingBalance,
+              amountPaid: 0,
+              balance: item.row.openingBalance,
+              dueDate,
+              status: dueDate < startOfTodayUtc() ? BillStatus.OVERDUE : BillStatus.UNPAID,
+              notes: `[MIGRATED][OPENING_BALANCE] Tenant onboarding import ${validation.fileHash.slice(0, 12)}`,
+            },
+          });
+          const dedupeKey = `ONBOARDING|${validation.fileHash}|${item.row.rowNumber}|DUES_OPENING_BALANCE`;
+          const migration = await tx.dataMigration.create({
+            data: {
+              tenantId: input.tenantId,
+              kind: DataMigrationKind.DUES_OPENING_BALANCE,
+              tag: DataMigrationTag.OPENING_BALANCE,
+              homeowner: { connect: { id: homeowner.id } },
+              period,
+              amount: item.row.openingBalance,
+              remarks: `Tenant onboarding opening balance from ${input.fileName}`,
+              postedRecordType: "Bill",
+              postedRecordId: bill.id,
+              dedupeKey,
+              createdBy: { connect: { id: input.actorId } },
+            },
+          });
+          await tx.auditLog.create({
+            data: {
+              tenantId: input.tenantId,
+              actorId: input.actorId,
+              module: "DATA_MIGRATION",
+              action: "POST_DUES_OPENING_BALANCE",
+              entityType: "DataMigration",
+              entityId: migration.id,
+              metadata: { source: "TENANT_ONBOARDING", fileHash: validation.fileHash, rowNumber: item.row.rowNumber, amount: item.row.openingBalance, billId: bill.id },
+            },
+          });
+          openingBalancesPosted++;
+        }
+
         await tx.auditLog.create({
           data: {
             tenantId: input.tenantId,
             actorId: input.actorId,
-            module: "DATA_MIGRATION",
-            action: "POST_DUES_OPENING_BALANCE",
-            entityType: "DataMigration",
-            entityId: migration.id,
-            metadata: { source: "TENANT_ONBOARDING", fileHash: validation.fileHash, rowNumber: item.row.rowNumber, amount: item.row.openingBalance, billId: bill.id },
+            module: "ONBOARDING",
+            action: "HOMEOWNER_IMPORTED",
+            entityType: "HomeownerProfile",
+            entityId: homeowner.id,
+            metadata: { fileHash: validation.fileHash, rowNumber: item.row.rowNumber, openingBalance: item.row.openingBalance > 0, accountNumberProvided: Boolean(item.row.accountNumber) },
           },
         });
-        openingBalancesPosted++;
+
+        jobs.push({
+          userId: user.id,
+          name: user.name,
+          email: user.email,
+          accountNumber: item.accountNumber,
+          ...activation,
+        });
       }
+
+      await updateTenantOnboardingState(input.tenantId, input.actorId, (state) => ({
+        ...state,
+        import: {
+          templateVersion: validation.templateVersion,
+          fileHash: validation.fileHash,
+          fileName: input.fileName,
+          validatedAt: state.import?.validatedAt ?? new Date().toISOString(),
+          validRows: validation.rows.length,
+          errors: [],
+          appliedAt: new Date().toISOString(),
+          importedRows: validation.rows.length,
+          openingBalancesPosted,
+        },
+      }), tx);
 
       await tx.auditLog.create({
         data: {
           tenantId: input.tenantId,
           actorId: input.actorId,
           module: "ONBOARDING",
-          action: "HOMEOWNER_IMPORTED",
-          entityType: "HomeownerProfile",
-          entityId: homeowner.id,
-          metadata: { fileHash: validation.fileHash, rowNumber: item.row.rowNumber, openingBalance: item.row.openingBalance > 0, accountNumberProvided: Boolean(item.row.accountNumber) },
+          action: "HOMEOWNER_IMPORT_APPLIED",
+          entityType: "Tenant",
+          entityId: input.tenantId,
+          metadata: { fileHash: validation.fileHash, templateVersion: validation.templateVersion, importedRows: validation.rows.length, openingBalancesPosted },
         },
       });
 
-      jobs.push({
-        userId: user.id,
-        name: user.name,
-        email: user.email,
-        accountNumber: item.accountNumber,
-        ...activation,
-      });
-    }
-
-    await updateTenantOnboardingState(input.tenantId, input.actorId, (state) => ({
-      ...state,
-      import: {
-        templateVersion: validation.templateVersion,
-        fileHash: validation.fileHash,
-        fileName: input.fileName,
-        validatedAt: state.import?.validatedAt ?? new Date().toISOString(),
-        validRows: validation.rows.length,
-        errors: [],
-        appliedAt: new Date().toISOString(),
-        importedRows: validation.rows.length,
-        openingBalancesPosted,
-      },
-    }), tx);
-
-    await tx.auditLog.create({
-      data: {
-        tenantId: input.tenantId,
-        actorId: input.actorId,
-        module: "ONBOARDING",
-        action: "HOMEOWNER_IMPORT_APPLIED",
-        entityType: "Tenant",
-        entityId: input.tenantId,
-        metadata: { fileHash: validation.fileHash, templateVersion: validation.templateVersion, importedRows: validation.rows.length, openingBalancesPosted },
-      },
-    });
-
-    return { jobs, openingBalancesPosted };
-  }, { role: Role.HOA_ADMIN }));
+      return { jobs, openingBalancesPosted };
+    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable }),
+    { role: Role.HOA_ADMIN },
+  );
 
   for (const job of activationJobs.jobs) {
     await sendHomeownerActivationEmail({

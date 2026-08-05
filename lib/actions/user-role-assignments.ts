@@ -8,7 +8,10 @@ import {
   primaryRoleForRoles,
 } from "@/lib/authorization/effective-access";
 import { canAssignRole } from "@/lib/authorization/role-policy";
-import { Permission } from "@/lib/authorization/permissions";
+import {
+  Permission,
+  type Permission as PermissionValue,
+} from "@/lib/authorization/permissions";
 import { prisma } from "@/lib/db";
 import { tenantUserRoles } from "@/lib/tenant-roles";
 
@@ -16,13 +19,20 @@ function clean(value: FormDataEntryValue | null) {
   return String(value || "").trim();
 }
 
-async function requireRoleManager(tenantId: string) {
+async function requireTenantUserManager(
+  tenantId: string,
+  tenantPermission: PermissionValue,
+) {
   const actor = await requireUser();
   const platformManager = actor.permissions.includes(Permission.PLATFORM_USERS_MANAGE);
   const tenantManager = actor.tenantId === tenantId
-    && actor.permissions.includes(Permission.TENANT_SETTINGS_MANAGE);
-  if (!platformManager && !tenantManager) redirect("/admin/dashboard?error=You%20do%20not%20have%20permission%20to%20manage%20user%20roles.");
-  if (!platformManager && actor.tenantId !== tenantId) redirect("/admin/dashboard?error=Cross-tenant%20role%20management%20is%20not%20allowed.");
+    && actor.permissions.includes(tenantPermission);
+  if (!platformManager && !tenantManager) {
+    redirect("/admin/dashboard?error=You%20do%20not%20have%20permission%20to%20manage%20tenant%20users.");
+  }
+  if (!platformManager && actor.tenantId !== tenantId) {
+    redirect("/admin/dashboard?error=Cross-tenant%20user%20management%20is%20not%20allowed.");
+  }
   return actor;
 }
 
@@ -33,7 +43,7 @@ function roleCanBeGranted(actorRoles: readonly Role[], targetRole: Role) {
 export async function updateTenantUserProfileAction(formData: FormData) {
   const tenantId = clean(formData.get("tenantId"));
   const userId = clean(formData.get("userId"));
-  const actor = await requireRoleManager(tenantId);
+  const actor = await requireTenantUserManager(tenantId, Permission.USERS_MANAGE);
   const name = clean(formData.get("name"));
   const email = clean(formData.get("email")).toLowerCase();
   const username = clean(formData.get("username")) || null;
@@ -71,7 +81,7 @@ export async function updateTenantUserProfileAction(formData: FormData) {
 export async function replaceTenantUserRolesAction(formData: FormData) {
   const tenantId = clean(formData.get("tenantId"));
   const userId = clean(formData.get("userId"));
-  const actor = await requireRoleManager(tenantId);
+  const actor = await requireTenantUserManager(tenantId, Permission.ROLES_MANAGE);
   if (!tenantId || !userId) redirect("/platform/tenants?error=Tenant%20user%20not%20found.");
   if (actor.id === userId) redirect(`/platform/tenants/${tenantId}/users/${userId}?error=Use%20another%20authorized%20administrator%20to%20change%20your%20own%20roles.`);
 

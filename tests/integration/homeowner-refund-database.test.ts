@@ -31,8 +31,8 @@ const adminA = {
   tenantId: tenantAId,
 };
 
-function inTenant<T>(tenantId: string, callback: () => T) {
-  return runWithTenant(tenantId, callback, {
+async function inTenant<T>(tenantId: string, callback: () => T | Promise<T>) {
+  return runWithTenant(tenantId, async () => await callback(), {
     role: Role.ADMIN,
     enabledModules: [TenantModule.BILLING],
   });

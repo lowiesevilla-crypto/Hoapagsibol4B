@@ -1,7 +1,7 @@
 # HOAHub Testing Guide
 
 **Product:** HOAHub – Multi-Tenant Digital Community Management Platform  
-**Version:** 1.2  
+**Version:** 1.3  
 **Last Updated:** August 5, 2026  
 **Document Owner:** Lowie M. Sevilla
 
@@ -107,7 +107,13 @@ The critical browser suite currently validates:
 - homeowner mobile authentication and Statement of Account visibility;
 - homeowner and administrator visibility of a tenant-scoped document request;
 - announcement publication to the correct tenant;
-- denial of that announcement to a homeowner in a second tenant.
+- denial of that announcement to a homeowner in a second tenant;
+- homeowner creation through the administrator UI;
+- automatic allocation of the new homeowner account number;
+- invitation email verification through the real activation route;
+- temporary-credential validation and permanent-password creation;
+- automatic activated-homeowner session creation and a fresh password login;
+- database verification that the registered homeowner remains owned by the correct tenant.
 
 Commands:
 
@@ -124,6 +130,8 @@ HOAHUB_E2E_ALLOW_LOCAL=1
 ```
 
 The browser suite requires a running production build at `E2E_BASE_URL`, seeded administrator credentials, and a standard Chrome/Chromium executable. Set `PUPPETEER_EXECUTABLE_PATH` when the browser is installed outside the standard Linux paths.
+
+The registration scenario uses a reserved `.invalid` email identity. The administrator form creates the user and profile through production code. The CI-only test layer then replaces the random invitation secret with a known one-time test credential so the browser can exercise the real verification and activation routes without weakening production credential generation or logging sensitive invitation data.
 
 ### 3.6 User acceptance testing
 
@@ -184,7 +192,9 @@ Before running a script, inspect whether it:
 - depends on environment secrets;
 - assumes a clean Git working tree.
 
-Never point verification or browser-fixture scripts at production. Browser fixtures use reserved `E2E` identifiers, a future billing period, and two test-only homeowner identities, but they remain destructive test data and require a disposable database.
+Never point verification or browser-fixture scripts at production. Browser fixtures use reserved `E2E` identifiers, a future billing period, and test-only homeowner identities, but they remain destructive test data and require a disposable database.
+
+The registration fixture is deleted before and after the browser suite. The database safety guard rejects non-local hosts in CI and requires explicit `HOAHUB_E2E_ALLOW_LOCAL=1` authorization outside CI.
 
 ## 7. Mobile testing
 
@@ -198,7 +208,7 @@ Verify critical flows on approved desktop, tablet, and mobile viewports. Check:
 - receipts, statements, documents, and downloads;
 - authenticated data not being cached or exposed incorrectly.
 
-The automated browser suite uses a desktop administrator viewport and a 390 × 844 homeowner viewport.
+The automated browser suite uses a desktop administrator viewport and a 390 × 844 homeowner viewport, including the activation and fresh-login journey.
 
 ## 8. Release approval
 
@@ -214,7 +224,7 @@ A release is approved only when:
 
 ## 9. Issue #25 progression
 
-Issue #25 now includes CI-enforced unit, database integration, security/tenant-isolation, critical regression, production smoke, and critical browser layers. Remaining work should focus on expanding deterministic scenario coverage, including browser-driven homeowner registration and full document approval/generation where those workflows require additional stable test packages.
+Issue #25 now includes CI-enforced unit, database integration, security/tenant-isolation, critical regression, production smoke, critical browser, and browser-driven homeowner registration/activation layers. Remaining work should focus on the full document request → approval → generated-document workflow and any deterministic calculation or authorization scenarios still required by the issue acceptance criteria.
 
 ## Document history
 
@@ -223,3 +233,4 @@ Issue #25 now includes CI-enforced unit, database integration, security/tenant-i
 | 1.0 | July 11, 2026 | Initial testing guide |
 | 1.1 | August 5, 2026 | Added mandatory lint and `test:critical` CI gate; clarified CI-safe versus local-clone-only verification |
 | 1.2 | August 5, 2026 | Added disposable MySQL integration and production-build critical browser test processes |
+| 1.3 | August 5, 2026 | Added browser-driven homeowner registration, invitation verification, activation, fresh login, and tenant-ownership coverage |

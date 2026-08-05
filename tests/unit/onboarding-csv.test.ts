@@ -6,7 +6,7 @@ import {
   onboardingHomeownerTemplateCsv,
   parseOnboardingHomeownerCsv,
 } from "../../lib/onboarding/csv";
-import { onboardingPrerequisites, type TenantOnboardingState } from "../../lib/onboarding/state";
+import { onboardingPrerequisites, type TenantOnboardingState } from "../../lib/onboarding/policy";
 
 test("onboarding template is versioned and never contains a password column", () => {
   const template = onboardingHomeownerTemplateCsv();

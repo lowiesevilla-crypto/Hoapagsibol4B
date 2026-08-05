@@ -3,6 +3,7 @@ import {
   Prisma,
   RefundStatus,
 } from "@prisma/client";
+import { bondRefundReference } from "@/lib/bond-refund-reference";
 import { prisma } from "@/lib/db";
 import { currentTenantContext } from "@/lib/tenant-context";
 
@@ -130,10 +131,6 @@ export async function recordBondRefund({
     },
     { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
   );
-}
-
-export function bondRefundReference(refundId: string, refundDate: Date) {
-  return `RF-BR-${refundDate.getUTCFullYear()}-${refundId.slice(-8).toUpperCase()}`;
 }
 
 function roundCurrency(value: number) {

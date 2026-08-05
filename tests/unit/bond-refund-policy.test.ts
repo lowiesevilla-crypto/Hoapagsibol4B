@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { bondRefundReference } from "../../lib/services/bond-refund";
+import { bondRefundReference } from "../../lib/bond-refund-reference";
 
 test("bond refund references are stable and include the refund year", () => {
   const refundId = "cm1234567890abcdefghijk";

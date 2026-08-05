@@ -52,6 +52,8 @@ jobs:
       - run: pnpm exec prisma generate
       - run: pnpm exec prisma migrate deploy
       - run: pnpm db:seed
+      - name: Unit test suite
+        run: pnpm test
       - name: Critical verification suite
         run: pnpm test:critical
       - run: pnpm typecheck

@@ -1,9 +1,10 @@
 "use server";
 
-import { NotificationType, Prisma, Role } from "@prisma/client";
+import { NotificationType, Prisma } from "@prisma/client";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { requireUser } from "@/lib/auth";
+import { requirePermission, requirePermissions } from "@/lib/authorization/guards";
+import { Permission } from "@/lib/authorization/permissions";
 import { getAppUrl } from "@/lib/app-url";
 import { prisma } from "@/lib/db";
 import { paymentAmountUpdateSchema, paymentSchema, paymentVoidSchema } from "@/lib/validation";
@@ -12,7 +13,10 @@ import { buildPaymentConfirmation, recordMonthlyDuesPayment } from "@/lib/servic
 import { sendEmailNotification } from "@/lib/services/notifications";
 
 export async function recordPaymentAction(formData: FormData) {
-  const admin = await requireUser(Role.ADMIN);
+  const admin = await requirePermissions([
+    Permission.PAYMENTS_RECORD,
+    Permission.RECEIPTS_ISSUE,
+  ]);
   const parsed = paymentSchema.safeParse(Object.fromEntries(formData.entries()));
   if (!parsed.success) throw new Error(parsed.error.issues[0]?.message || "Invalid payment details.");
   const data = parsed.data;
@@ -61,7 +65,7 @@ export async function recordPaymentAction(formData: FormData) {
 }
 
 export async function updatePaymentAmountAction(formData: FormData) {
-  const admin = await requireUser(Role.ADMIN);
+  const admin = await requirePermission(Permission.PAYMENTS_ALLOCATE);
   const parsed = paymentAmountUpdateSchema.safeParse(Object.fromEntries(formData.entries()));
   if (!parsed.success) redirect(`/admin/payments/active?error=${encodeURIComponent(parsed.error.issues[0]?.message || "Enter a valid payment amount.")}`);
   const { id, amount, reason } = parsed.data;
@@ -83,7 +87,7 @@ export async function updatePaymentAmountAction(formData: FormData) {
 }
 
 export async function voidPaymentAction(formData: FormData) {
-  const admin = await requireUser(Role.ADMIN);
+  const admin = await requirePermission(Permission.PAYMENTS_VOID);
   const parsed = paymentVoidSchema.safeParse(Object.fromEntries(formData.entries()));
   if (!parsed.success) redirect(`/admin/payments/active?error=${encodeURIComponent(parsed.error.issues[0]?.message || "Payment could not be voided.")}`);
   const { id, reason } = parsed.data;

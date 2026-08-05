@@ -5,8 +5,9 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { requireUser } from "@/lib/auth";
 import { prisma } from "@/lib/db";
-import { bondRefundSchema, collectionSchema } from "@/lib/validation";
+import { recordBondRefund } from "@/lib/services/bond-refund";
 import { allocateReceiptNumber, collectionReceiptSeries } from "@/lib/services/receipt";
+import { bondRefundSchema, collectionSchema } from "@/lib/validation";
 
 const refundableTypes = new Set<CollectionType>([CollectionType.CONSTRUCTION_BOND, CollectionType.CONTRACTOR_BOND]);
 
@@ -68,30 +69,15 @@ export async function recordBondRefundAction(formData: FormData) {
   if (!parsed.success) throw new Error(parsed.error.issues[0]?.message || "Invalid refund details.");
   const data = parsed.data;
 
-  await prisma.$transaction(async (tx) => {
-    const collection = await tx.collection.findUnique({ where: { id: data.collectionId } });
-    if (!collection || !collection.refundable) throw new Error("Refundable bond not found.");
-    if (collection.refundStatus === RefundStatus.REFUNDED || collection.refundStatus === RefundStatus.FORFEITED) throw new Error("This bond is already closed.");
-    const available = Number(collection.amount) - Number(collection.amountRefunded) - Number(collection.amountForfeited);
-    if (data.amount > available) throw new Error("Refund cannot exceed the remaining bond balance.");
-    const amountRefunded = Number(collection.amountRefunded) + data.amount;
-    const remaining = Number(collection.amount) - amountRefunded - Number(collection.amountForfeited);
-    await tx.bondRefund.create({
-      data: {
-        collectionId: collection.id,
-        amount: data.amount,
-        refundDate: new Date(`${data.refundDate}T00:00:00.000Z`),
-        method: data.method,
-        referenceNumber: data.referenceNumber || null,
-        remarks: data.remarks || null,
-        processedById: admin.id,
-      },
-    });
-    await tx.collection.update({
-      where: { id: collection.id },
-      data: { amountRefunded, refundStatus: remaining === 0 ? RefundStatus.REFUNDED : RefundStatus.PARTIALLY_REFUNDED },
-    });
-  }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+  await recordBondRefund({
+    collectionId: data.collectionId,
+    amount: data.amount,
+    refundDate: new Date(`${data.refundDate}T00:00:00.000Z`),
+    method: data.method,
+    referenceNumber: data.referenceNumber,
+    remarks: data.remarks,
+    actor: { id: admin.id, tenantId: admin.tenantId },
+  });
 
   revalidateCollectionPages();
   redirect("/admin/collections?success=refunded");

@@ -15,7 +15,7 @@ replaceOnce(
   '    await login(page, adminEmail, adminPassword, "/admin/");\n    await page.goto(`${baseUrl}/admin/documents/${requestId}`, { waitUntil: "networkidle2", timeout });',
   `    await login(page, adminEmail, adminPassword, "/admin/");
 
-    await page.goto(\`${baseUrl}/admin/documents/operations\`, { waitUntil: "networkidle2", timeout });
+    await page.goto(\`\${baseUrl}/admin/documents/operations\`, { waitUntil: "networkidle2", timeout });
     await expectText(page, "Document Operations Command Center");
     await expectText(page, "Production readiness checklist");
     await expectText(page, "Operational CSV export");
@@ -35,11 +35,11 @@ replaceOnce(
     assert.ok(exportResult.body.includes(requestPurpose), "Expected the filtered export to contain the tenant request.");
     assert.ok(!exportResult.body.includes(secondaryTenantId), "The export must not contain another tenant identifier.");
 
-    await page.goto(\`${baseUrl}/admin/documents/guide\`, { waitUntil: "networkidle2", timeout });
+    await page.goto(\`\${baseUrl}/admin/documents/guide\`, { waitUntil: "networkidle2", timeout });
     await expectText(page, "Administrator Runbook");
     await expectText(page, "Daily operating checklist");
 
-    await page.goto(\`${baseUrl}/admin/documents/\${requestId}\`, { waitUntil: "networkidle2", timeout });`,
+    await page.goto(\`\${baseUrl}/admin/documents/\${requestId}\`, { waitUntil: "networkidle2", timeout });`,
   "administrator document detail navigation",
 );
 
@@ -47,20 +47,20 @@ replaceOnce(
   '    await expectText(page, "View Document");\n\n    await page.goto(`${baseUrl}/documents/${request.id}`, { waitUntil: "networkidle2", timeout });',
   `    await expectText(page, "View Document");
 
-    await page.goto(\`${baseUrl}/portal/documents/guide\`, { waitUntil: "networkidle2", timeout });
+    await page.goto(\`\${baseUrl}/portal/documents/guide\`, { waitUntil: "networkidle2", timeout });
     await expectText(page, "Document Request Guide");
     await expectText(page, "Viewing, downloading, printing, and verification");
 
-    await page.goto(\`${baseUrl}/documents/\${request.id}\`, { waitUntil: "networkidle2", timeout });`,
+    await page.goto(\`\${baseUrl}/documents/\${request.id}\`, { waitUntil: "networkidle2", timeout });`,
   "homeowner generated document navigation",
 );
 
 replaceOnce(
   '    await page.goto(`${baseUrl}/portal/dashboard`, { waitUntil: "networkidle2", timeout });\n    const denial = await page.evaluate(async (url) => {',
-  `    await page.goto(\`${baseUrl}/admin/documents/operations\`, { waitUntil: "networkidle2", timeout }).catch(() => undefined);
+  `    await page.goto(\`\${baseUrl}/admin/documents/operations\`, { waitUntil: "networkidle2", timeout }).catch(() => undefined);
     assert.ok(!(await pageText(page)).includes("Document Operations Command Center"), "A homeowner must not access administrator documentation operations.");
 
-    await page.goto(\`${baseUrl}/portal/dashboard\`, { waitUntil: "networkidle2", timeout });
+    await page.goto(\`\${baseUrl}/portal/dashboard\`, { waitUntil: "networkidle2", timeout });
     const exportDenial = await page.evaluate(async () => {
       const response = await fetch("/admin/documents/export", { credentials: "include", redirect: "manual" });
       return { status: response.status, type: response.headers.get("content-type") || "" };

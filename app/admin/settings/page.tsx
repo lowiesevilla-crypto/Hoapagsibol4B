@@ -1,12 +1,14 @@
+import { Permission } from "@/lib/authorization/permissions";
+import { requirePermission } from "@/lib/authorization/guards";
 import Link from "next/link";
-import { Role, SystemSettingCategory } from "@prisma/client";
+import { SystemSettingCategory } from "@prisma/client";
 import { Building2, Database, Facebook, KeyRound, Mail, MessageSquare, QrCode } from "lucide-react";
 import { GcashQrUpload } from "@/components/gcash-qr-upload";
 import { PageHeader } from "@/components/page-header";
 import { PasswordInput } from "@/components/password-input";
 import { SubmitButton } from "@/components/ui";
 import { saveSystemSettingsAction, sendTestEmailAction } from "@/lib/actions/settings";
-import { requireUser } from "@/lib/auth";
+
 import { getAppUrl } from "@/lib/app-url";
 import { allSettingFields, BOOTSTRAP_TENANT_ID, getSystemSettingMap, maskedSecret, settingSections } from "@/lib/system-settings";
 import { getMailConfiguration } from "@/lib/services/notifications";
@@ -22,7 +24,7 @@ const icons = {
 };
 
 export default async function SystemSettingsPage({ searchParams }: { searchParams: Promise<{ error?: string; success?: string; message?: string }> }) {
-  const user = await requireUser(Role.SYSTEM_ADMIN);
+  const user = await requirePermission(Permission.SETTINGS_MANAGE);
   const [settings, query, mail] = await Promise.all([getSystemSettingMap(user.tenantId), searchParams, getMailConfiguration(user.tenantId)]);
   const environmentAliases: Record<string, string[]> = {
     MAIL_HOST: ["SMTP_HOST"], MAIL_PORT: ["SMTP_PORT"], MAIL_ENCRYPTION: ["SMTP_ENCRYPTION"],

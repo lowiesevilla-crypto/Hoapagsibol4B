@@ -1,9 +1,11 @@
 "use server";
 
+import { Permission } from "@/lib/authorization/permissions";
+import { requirePermission } from "@/lib/authorization/guards";
 import { AttendanceStatus, ContractorStatus, EmployeeStatus, HomeownerStatus, Role, SalaryType, VehicleStatus } from "@prisma/client";
 import { hash } from "bcryptjs";
 import { revalidatePath } from "next/cache";
-import { requireUser } from "@/lib/auth";
+
 import { prisma } from "@/lib/db";
 import { masterDataTemplates, type MasterDataType } from "@/lib/master-data";
 
@@ -12,7 +14,7 @@ export type BulkImportState = { success: boolean; message: string; imported: num
 const emptyState: BulkImportState = { success: false, message: "", imported: 0, errors: [] };
 
 export async function importMasterDataAction(_state: BulkImportState = emptyState, formData: FormData): Promise<BulkImportState> {
-  await requireUser(Role.ADMIN);
+  await requirePermission(Permission.DATA_IMPORT);
   const type = String(formData.get("type") || "") as MasterDataType;
   const file = formData.get("file");
   if (!isMasterDataType(type)) return { ...emptyState, message: "Choose a valid master data type.", errors: ["Invalid master data type."] };

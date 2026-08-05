@@ -1,20 +1,22 @@
+import { Permission } from "@/lib/authorization/permissions";
+import { requirePermission } from "@/lib/authorization/guards";
 import Link from "next/link";
 import { Download, ExternalLink, Printer } from "lucide-react";
 import { notFound } from "next/navigation";
-import { PaymentRequestType, Role } from "@prisma/client";
+import { PaymentRequestType } from "@prisma/client";
 import { PageHeader } from "@/components/page-header";
 import { PaymentProofViewer } from "@/components/payment-proof-viewer";
 import { StatusBadge } from "@/components/status-badge";
 import { SubmitButton } from "@/components/ui";
 import { approvePaymentRequestAction, rejectPaymentRequestAction } from "@/lib/actions/payment-requests";
-import { requireUser } from "@/lib/auth";
+
 import { prisma } from "@/lib/db";
 import { documentRequestPublicReference } from "@/lib/services/document-fee-payments";
 import { documentTypeLabel } from "@/lib/services/documents";
 import { collectionLabel, money, monthLabel, shortDate } from "@/lib/utils";
 
 export default async function PaymentRequestDetailsPage({ params }: { params: Promise<{ id: string }> }) {
-  const admin = await requireUser(Role.ADMIN);
+  const admin = await requirePermission(Permission.PAYMENTS_READ);
   const { id } = await params;
   const request = await prisma.paymentRequest.findFirst({
     where: { id, tenantId: admin.tenantId },

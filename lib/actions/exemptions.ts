@@ -1,14 +1,16 @@
 "use server";
 
-import { RecurringChargeType, Role } from "@prisma/client";
+import { Permission } from "@/lib/authorization/permissions";
+import { requirePermission } from "@/lib/authorization/guards";
+import { RecurringChargeType } from "@prisma/client";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { requireUser } from "@/lib/auth";
+
 import { prisma } from "@/lib/db";
 import { duesExemptionSchema } from "@/lib/validation";
 
 export async function saveDuesExemptionAction(formData: FormData) {
-  const admin = await requireUser(Role.ADMIN);
+  const admin = await requirePermission(Permission.BILLING_CONFIGURE);
   const parsed = duesExemptionSchema.safeParse(Object.fromEntries(formData.entries()));
   if (!parsed.success) throw new Error(parsed.error.issues[0]?.message || "Invalid exemption details.");
   const data = parsed.data;
@@ -27,7 +29,7 @@ export async function saveDuesExemptionAction(formData: FormData) {
 }
 
 export async function deleteDuesExemptionAction(formData: FormData) {
-  const admin = await requireUser(Role.ADMIN);
+  const admin = await requirePermission(Permission.BILLING_CONFIGURE);
   const exemption = await prisma.duesExemption.findFirst({ where: { id: String(formData.get("id") || ""), tenantId: admin.tenantId, active: true }, select: { id: true } });
   if (!exemption) throw new Error("Exemption not found or access denied.");
   await prisma.duesExemption.update({ where: { id: exemption.id }, data: { active: false, updatedById: admin.id, deactivatedById: admin.id, deactivatedAt: new Date() } });

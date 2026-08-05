@@ -1,6 +1,7 @@
+import { Permission } from "@/lib/authorization/permissions";
+import { requirePermission } from "@/lib/authorization/guards";
 import { PDFDocument, StandardFonts, rgb, type PDFImage, type PDFPage, type PDFFont } from "pdf-lib";
-import { Role } from "@prisma/client";
-import { requireUser } from "@/lib/auth";
+
 import { getAssociationLogoAsset } from "@/lib/association-assets";
 import { getFinancialReport, type FinancialReport } from "@/lib/services/financial-report";
 import { getAssociationSettings } from "@/lib/system-settings";
@@ -12,7 +13,7 @@ const pale = rgb(0.95, 0.98, 0.99);
 const gray = rgb(0.35, 0.42, 0.47);
 
 export async function GET(request: Request) {
-  const user = await requireUser(Role.ADMIN);
+  const user = await requirePermission(Permission.REPORTS_FINANCIAL);
   const url = new URL(request.url);
   const [report, association] = await Promise.all([getFinancialReport(url.searchParams.get("from"), url.searchParams.get("to")), getAssociationSettings(user.tenantId)]);
   const document = await PDFDocument.create();

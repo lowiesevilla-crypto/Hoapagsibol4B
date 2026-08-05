@@ -1,15 +1,17 @@
-import { Role, TenantModule } from "@prisma/client";
+import { Permission } from "@/lib/authorization/permissions";
+import { requirePermission } from "@/lib/authorization/guards";
+import { TenantModule } from "@prisma/client";
 import { Bot, CarFront, FileText, HelpCircle, KeyRound, LockKeyhole, MessageSquare, ShieldCheck, UserRound, UsersRound } from "lucide-react";
 import { LogoutButton } from "@/components/auth-navigation-buttons";
 import { CommunityAreaNavigation, CommunityEmptyState } from "@/components/homeowner/community/community-cards";
 import { PortalPageContainer, PortalQuickActionTile, PortalSectionHeader } from "@/components/portal-mobile-shell";
 import { PwaInstallActionCard } from "@/components/pwa-install-provider";
-import { requireUser } from "@/lib/auth";
+
 import { resolveHomeownerNavigation } from "@/lib/homeowner-navigation";
 import { getEnabledTenantModules } from "@/lib/tenant";
 
 export default async function PortalMorePage() {
-  const user = await requireUser(Role.HOMEOWNER);
+  const user = await requirePermission(Permission.HOMEOWNER_PORTAL_ACCESS);
   const enabledModules = await getEnabledTenantModules(user.tenantId);
   const navigation = resolveHomeownerNavigation(enabledModules);
   const accountActions = [

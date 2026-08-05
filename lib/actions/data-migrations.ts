@@ -1,20 +1,12 @@
 "use server";
 
+import { Permission } from "@/lib/authorization/permissions";
+import { requirePermission } from "@/lib/authorization/guards";
 import { randomUUID } from "node:crypto";
-import {
-  BillStatus,
-  CollectionType,
-  DataMigrationKind,
-  DataMigrationTag,
-  PaymentMethod,
-  PayerType,
-  Prisma,
-  RefundStatus,
-  Role,
-} from "@prisma/client";
+import { BillStatus, CollectionType, DataMigrationKind, DataMigrationTag, PaymentMethod, PayerType, Prisma, RefundStatus } from "@prisma/client";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { requireUser } from "@/lib/auth";
+
 import { prisma } from "@/lib/db";
 import { buildPaymentCoverage, migratedPaymentCoverageDisplay } from "@/lib/payment-coverage";
 import { recalculateBillFromActivePayments } from "@/lib/services/payment-ledger";
@@ -58,7 +50,7 @@ const adjustmentKinds = new Set<DataMigrationKind>([
 ]);
 
 export async function postDataMigrationAction(formData: FormData) {
-  const admin = await requireUser(Role.ADMIN);
+  const admin = await requirePermission(Permission.DATA_MIGRATE);
   let input: MigrationInput;
   try {
     input = parseManualInput(formData);
@@ -71,7 +63,7 @@ export async function postDataMigrationAction(formData: FormData) {
 }
 
 export async function importDataMigrationsAction(_state: MigrationImportState, formData: FormData): Promise<MigrationImportState> {
-  const admin = await requireUser(Role.ADMIN);
+  const admin = await requirePermission(Permission.DATA_MIGRATE);
   const file = formData.get("file");
   if (!isUploadedFile(file) || !file.size) return failure("Upload a CSV file.", ["CSV file is required."]);
   if (file.size > 2 * 1024 * 1024) return failure("Upload is too large.", ["CSV files are limited to 2 MB."]);

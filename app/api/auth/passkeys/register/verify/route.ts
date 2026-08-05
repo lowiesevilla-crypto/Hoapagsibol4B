@@ -1,11 +1,13 @@
+import { Permission } from "@/lib/authorization/permissions";
+import { requirePermission } from "@/lib/authorization/guards";
 import type { RegistrationResponseJSON } from "@simplewebauthn/server";
-import { Role } from "@prisma/client";
+
 import { NextResponse } from "next/server";
-import { requireUser } from "@/lib/auth";
+
 import { PASSKEY_DOMAIN_CONFIGURATION_ERROR, verifyPasskeyRegistration } from "@/lib/services/passkeys";
 
 export async function POST(request: Request) {
-  const user = await requireUser(Role.HOMEOWNER);
+  const user = await requirePermission(Permission.HOMEOWNER_PORTAL_ACCESS);
   const body = await request.json().catch(() => null) as { response?: RegistrationResponseJSON; deviceName?: string } | null;
   if (!body?.response) return NextResponse.json({ error: "Passkey registration response is required." }, { status: 400 });
   try {

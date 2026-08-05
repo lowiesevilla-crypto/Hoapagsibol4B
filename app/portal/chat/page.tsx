@@ -1,10 +1,12 @@
-import { Role } from "@prisma/client";
+import { Permission } from "@/lib/authorization/permissions";
+import { requirePermission } from "@/lib/authorization/guards";
+
 import { ChatMessenger } from "@/components/chat-messenger";
-import { requireUser } from "@/lib/auth";
+
 import { getChatPayload } from "@/lib/services/chat";
 
 export default async function PortalChatPage({ searchParams }: { searchParams: Promise<{ conversation?: string }> }) {
-  const user = await requireUser(Role.HOMEOWNER);
+  const user = await requirePermission(Permission.CHAT_USE);
   const { conversation } = await searchParams;
   const data = await getChatPayload(user, conversation);
 

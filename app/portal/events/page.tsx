@@ -1,16 +1,18 @@
-import { Prisma, Role } from "@prisma/client";
+import { Permission } from "@/lib/authorization/permissions";
+import { requirePermission } from "@/lib/authorization/guards";
+import { Prisma } from "@prisma/client";
 import { CalendarDays, Megaphone, MessageSquare, UsersRound } from "lucide-react";
 import { CommunityAreaNavigation, CommunityEmptyState, CommunitySearchBar, EventMobileCard } from "@/components/homeowner/community/community-cards";
 import { PageHeader } from "@/components/page-header";
 import { PortalPageContainer, PortalSectionHeader } from "@/components/portal-mobile-shell";
 import { prisma } from "@/lib/db";
-import { requireUser } from "@/lib/auth";
+
 import { shortDate } from "@/lib/utils";
 
 const EVENT_LIMIT = 6;
 
 export default async function PortalEventsPage({ searchParams }: { searchParams: Promise<{ q?: string }> }) {
-  const user = await requireUser(Role.HOMEOWNER);
+  const user = await requirePermission(Permission.HOMEOWNER_PORTAL_ACCESS);
   const { q } = await searchParams;
   const query = q?.trim() ?? "";
   const today = new Date();

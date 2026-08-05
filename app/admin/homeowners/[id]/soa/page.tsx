@@ -1,4 +1,6 @@
-import { Role } from "@prisma/client";
+import { Permission } from "@/lib/authorization/permissions";
+import { requirePermission } from "@/lib/authorization/guards";
+
 import { ArrowLeft, Download } from "lucide-react";
 import Link from "next/link";
 import QRCode from "qrcode";
@@ -6,13 +8,13 @@ import type { ReactNode } from "react";
 import { AssociationLogo } from "@/components/association-logo";
 import { SoaPrintButton } from "@/components/soa-print-button";
 import { StatusBadge } from "@/components/status-badge";
-import { requireUser } from "@/lib/auth";
+
 import { getAppUrl } from "@/lib/app-url";
 import { getStatementOfAccount, type StatementLedgerEntry } from "@/lib/services/statement-of-account";
 import { money, shortDate } from "@/lib/utils";
 
 export default async function StatementOfAccountPage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams?: Promise<{ returnTo?: string }> }) {
-  const user = await requireUser(Role.ADMIN);
+  const user = await requirePermission(Permission.BILLING_READ);
   const { id } = await params;
   const returnTo = (await searchParams)?.returnTo;
   const backHref = returnTo && returnTo.startsWith("/admin/reports/dashboard") ? returnTo : `/admin/homeowners/${id}`;

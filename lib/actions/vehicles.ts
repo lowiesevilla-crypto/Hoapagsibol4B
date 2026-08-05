@@ -1,14 +1,16 @@
 "use server";
 
-import { CollectionType, PayerType, Role } from "@prisma/client";
+import { Permission } from "@/lib/authorization/permissions";
+import { requirePermission } from "@/lib/authorization/guards";
+import { CollectionType, PayerType } from "@prisma/client";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { requireUser } from "@/lib/auth";
+
 import { prisma } from "@/lib/db";
 import { vehicleSchema } from "@/lib/validation";
 
 export async function saveVehicleAction(formData: FormData) {
-  await requireUser(Role.ADMIN);
+  await requirePermission(Permission.PROPERTIES_MANAGE);
   const parsed = vehicleSchema.safeParse(Object.fromEntries(formData.entries()));
   if (!parsed.success) throw new Error(parsed.error.issues[0]?.message || "Invalid vehicle details.");
   const data = parsed.data;
@@ -41,7 +43,7 @@ export async function saveVehicleAction(formData: FormData) {
 }
 
 export async function deleteVehicleAction(formData: FormData) {
-  await requireUser(Role.ADMIN);
+  await requirePermission(Permission.PROPERTIES_MANAGE);
   await prisma.vehicle.delete({ where: { id: String(formData.get("id") || "") } });
   revalidatePath("/admin/vehicles");
   revalidatePath("/portal/vehicles");

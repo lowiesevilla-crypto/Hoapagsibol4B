@@ -1,11 +1,13 @@
-import { Role } from "@prisma/client";
+import { Permission } from "@/lib/authorization/permissions";
+import { requirePermission } from "@/lib/authorization/guards";
+
 import { NextResponse } from "next/server";
-import { requireUser } from "@/lib/auth";
+
 import { prisma } from "@/lib/db";
 import { homeownerAccountNumber } from "@/lib/homeowner-account";
 
 export async function GET(request: Request) {
-  const user = await requireUser(Role.ADMIN);
+  const user = await requirePermission(Permission.DOCUMENTS_MANAGE);
   const url = new URL(request.url);
   const q = (url.searchParams.get("q") || "").trim();
   const where = q

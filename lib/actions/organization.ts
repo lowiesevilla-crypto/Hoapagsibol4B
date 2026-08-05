@@ -1,15 +1,17 @@
 "use server";
 
-import { Role } from "@prisma/client";
+import { Permission } from "@/lib/authorization/permissions";
+import { requirePermission } from "@/lib/authorization/guards";
+
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { requireUser } from "@/lib/auth";
+
 import { prisma } from "@/lib/db";
 import { asJson } from "@/lib/organization";
 import { saveOrganizationImage } from "@/lib/organization-uploads";
 
 export async function saveOrganizationOfficerAction(formData: FormData) {
-  const actor = await requireUser(Role.SYSTEM_ADMIN);
+  const actor = await requirePermission(Permission.SETTINGS_MANAGE);
   const id = clean(formData.get("id"));
   const fullName = clean(formData.get("fullName"));
   const position = clean(formData.get("position"));
@@ -52,7 +54,7 @@ export async function saveOrganizationOfficerAction(formData: FormData) {
 }
 
 export async function changeOrganizationOfficerStatusAction(formData: FormData) {
-  const actor = await requireUser(Role.SYSTEM_ADMIN);
+  const actor = await requirePermission(Permission.SETTINGS_MANAGE);
   const id = String(formData.get("id") || "");
   const operation = String(formData.get("operation") || "");
   const existing = await prisma.organizationOfficer.findUnique({ where: { id } });

@@ -1,7 +1,9 @@
-import { Role } from "@prisma/client";
+import { Permission } from "@/lib/authorization/permissions";
+import { requirePermission } from "@/lib/authorization/guards";
+
 import { AlignmentType, BorderStyle, Document, Footer, Header, HeadingLevel, ImageRun, PageNumber, Packer, Paragraph, ShadingType, Table, TableCell, TableRow, TextRun, WidthType } from "docx";
 import { getAssociationLogoAsset } from "@/lib/association-assets";
-import { requireUser } from "@/lib/auth";
+
 import { assertFinanceDashboardAccess, FinanceDashboardAccessError } from "@/lib/finance-dashboard-access";
 import { FinanceDashboardInputError, getFinanceDashboard } from "@/lib/services/finance-dashboard";
 import { getAssociationSettings } from "@/lib/system-settings";
@@ -12,7 +14,7 @@ const green = "58B832";
 const pale = "EDF8FD";
 
 export async function GET(request: Request) {
-  const user = await requireUser(Role.ADMIN);
+  const user = await requirePermission(Permission.REPORTS_FINANCIAL);
   try {
     await assertFinanceDashboardAccess(user);
     const url = new URL(request.url);

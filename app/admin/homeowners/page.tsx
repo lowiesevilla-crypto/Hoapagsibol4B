@@ -1,12 +1,14 @@
+import { Permission } from "@/lib/authorization/permissions";
+import { requirePermission } from "@/lib/authorization/guards";
 import Link from "next/link";
 import type { ReactNode } from "react";
-import { HomeownerActivationStatus, HomeownerStatus, NotificationType, Prisma, Role } from "@prisma/client";
+import { HomeownerActivationStatus, HomeownerStatus, NotificationType, Prisma } from "@prisma/client";
 import { ChevronLeft, ChevronRight, Plus } from "lucide-react";
 import { PageHeader } from "@/components/page-header";
 import { StatusBadge } from "@/components/status-badge";
 import { ConfirmSubmitButton } from "@/components/ui";
 import { bulkSendHomeownerActivationInvitationsAction } from "@/lib/actions/homeowners";
-import { requireUser } from "@/lib/auth";
+
 import { prisma } from "@/lib/db";
 import { homeownerAccountNumber } from "@/lib/homeowner-account";
 import { activationInvitationExpiresAt, deliveryStatusLabel, digitalActivationLabel, homeownerDigitalActivationEligibility, maskAccountNumber, maskEmail } from "@/lib/services/homeowner-digital-activation";
@@ -38,7 +40,7 @@ const digitalFilters = [
 ] as const;
 
 export default async function HomeownersPage({ searchParams }: { searchParams: Promise<HomeownerQuery> }) {
-  const user = await requireUser(Role.ADMIN);
+  const user = await requirePermission(Permission.HOMEOWNERS_READ);
   const query = await searchParams;
   const pageSize = pageSizes.includes(Number(query.pageSize)) ? Number(query.pageSize) : 50;
   const page = Math.max(1, Number(query.page || 1) || 1);

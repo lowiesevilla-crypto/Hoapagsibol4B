@@ -1,10 +1,12 @@
+import { Permission } from "@/lib/authorization/permissions";
+import { requirePermission } from "@/lib/authorization/guards";
 import Link from "next/link";
-import { Role } from "@prisma/client";
+
 import { AlertTriangle, Banknote, CircleDollarSign, CreditCard, Eye, FileWarning, Gauge, HandCoins, Landmark, ListChecks, ReceiptText, Search, ShieldAlert, TrendingUp, UsersRound } from "lucide-react";
 import { FinanceDashboardControls } from "@/components/finance-dashboard-controls";
 import { PageHeader } from "@/components/page-header";
 import { PaginationFocusTarget } from "@/components/pagination-focus";
-import { requireUser } from "@/lib/auth";
+
 import { assertFinanceDashboardAccess, FinanceDashboardAccessError } from "@/lib/finance-dashboard-access";
 import { canAccessAdminPath } from "@/lib/role-access";
 import { FinanceDashboardInputError, getFinanceDashboard, parseFinanceDashboardDateRange, type FinanceDashboardData } from "@/lib/services/finance-dashboard";
@@ -24,7 +26,7 @@ type DashboardSearchParams = {
 };
 
 export default async function FinanceDashboardPage({ searchParams }: { searchParams: Promise<DashboardSearchParams> }) {
-  const user = await requireUser(Role.ADMIN);
+  const user = await requirePermission(Permission.REPORTS_FINANCIAL);
   try {
     await assertFinanceDashboardAccess(user);
   } catch (error) {

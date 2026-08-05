@@ -1,7 +1,9 @@
-import { Role } from "@prisma/client";
+import { Permission } from "@/lib/authorization/permissions";
+import { requirePermission } from "@/lib/authorization/guards";
+
 import { PDFDocument, StandardFonts, rgb, type PDFFont, type PDFImage, type PDFPage } from "pdf-lib";
 import { getAssociationLogoAsset } from "@/lib/association-assets";
-import { requireUser } from "@/lib/auth";
+
 import { assertFinanceDashboardAccess, FinanceDashboardAccessError } from "@/lib/finance-dashboard-access";
 import { FinanceDashboardInputError, getFinanceDashboard, type FinanceDashboardData } from "@/lib/services/finance-dashboard";
 import { getAssociationSettings } from "@/lib/system-settings";
@@ -14,7 +16,7 @@ const pale = rgb(0.94, 0.98, 0.99);
 const gray = rgb(0.35, 0.42, 0.47);
 
 export async function GET(request: Request) {
-  const user = await requireUser(Role.ADMIN);
+  const user = await requirePermission(Permission.REPORTS_FINANCIAL);
   try {
     await assertFinanceDashboardAccess(user);
     const url = new URL(request.url);

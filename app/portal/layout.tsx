@@ -1,13 +1,15 @@
+import { Permission } from "@/lib/authorization/permissions";
+import { requirePermission } from "@/lib/authorization/guards";
 import { Suspense } from "react";
 import type { Metadata } from "next";
-import { Role } from "@prisma/client";
+
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { PortalBottomNavigation, PortalMobileHeader } from "@/components/portal-mobile-shell";
 import { PwaInstallProvider } from "@/components/pwa-install-provider";
 import { Sidebar } from "@/components/sidebar";
 import { TransactionFeedback } from "@/components/transaction-feedback";
-import { requireUser } from "@/lib/auth";
+
 import { homeownerRouteTitle, resolveHomeownerNavigation } from "@/lib/homeowner-navigation";
 import { moduleForPath } from "@/lib/module-routing";
 import { tenantMetadata, tenantNameForMetadata } from "@/lib/metadata-title";
@@ -16,7 +18,7 @@ import { getAssociationSettings } from "@/lib/system-settings";
 import { getEnabledTenantModules } from "@/lib/tenant";
 
 export async function generateMetadata(): Promise<Metadata> {
-  const user = await requireUser(Role.HOMEOWNER);
+  const user = await requirePermission(Permission.HOMEOWNER_PORTAL_ACCESS);
   const pathname = (await headers()).get("x-hoa-pathname") || "/portal/dashboard";
   const association = await getAssociationSettings(user.tenantId);
   const tenantName = await tenantNameForMetadata(user.tenantId, association.name);
@@ -24,7 +26,7 @@ export async function generateMetadata(): Promise<Metadata> {
 }
 
 export default async function PortalLayout({ children }: { children: React.ReactNode }) {
-  const user = await requireUser(Role.HOMEOWNER);
+  const user = await requirePermission(Permission.HOMEOWNER_PORTAL_ACCESS);
   const enabledModules = await getEnabledTenantModules(user.tenantId);
   const pathname = (await headers()).get("x-hoa-pathname") || "/portal/dashboard";
   const requestedModule = moduleForPath(pathname);

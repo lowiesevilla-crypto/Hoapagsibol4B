@@ -1,12 +1,14 @@
-import { Role } from "@prisma/client";
+import { Permission } from "@/lib/authorization/permissions";
+import { requirePermission } from "@/lib/authorization/guards";
+
 import { Suspense } from "react";
-import { requireUser } from "@/lib/auth";
+
 import { Sidebar } from "@/components/sidebar";
 import { platformLinks } from "@/components/sidebar-links";
 import { TransactionFeedback } from "@/components/transaction-feedback";
 
 export default async function PlatformLayout({ children }: { children: React.ReactNode }) {
-  const user = await requireUser(Role.PLATFORM_ADMIN);
+  const user = await requirePermission(Permission.PLATFORM_ACCESS);
 
   return (
     <div className="min-h-screen overflow-x-hidden bg-slate-50">

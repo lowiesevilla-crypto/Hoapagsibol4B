@@ -1,7 +1,9 @@
+import { Permission } from "@/lib/authorization/permissions";
+import { requirePermission } from "@/lib/authorization/guards";
 import Link from "next/link";
-import { Role } from "@prisma/client";
+
 import { PageHeader } from "@/components/page-header";
-import { requireUser } from "@/lib/auth";
+
 import { prisma } from "@/lib/db";
 import { paymentAllocationCoverageDisplay } from "@/lib/payment-coverage";
 import { paymentAppliedAmount, paymentUnappliedCredit } from "@/lib/payment-credit";
@@ -9,7 +11,7 @@ import { paymentProcessorIdentity } from "@/lib/payment-processor";
 import { collectionLabel, money, shortDate } from "@/lib/utils";
 
 export default async function ReceiptRegisterPage({ searchParams }: { searchParams: Promise<{ q?: string; series?: string }> }) {
-  const admin = await requireUser(Role.ADMIN);
+  const admin = await requirePermission(Permission.PAYMENTS_READ);
   const query = await searchParams;
   const q = query.q?.trim() || "";
   const series = ["MD", "CB", "CTB", "OC"].includes(query.series || "") ? query.series! : "";

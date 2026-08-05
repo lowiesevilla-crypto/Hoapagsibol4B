@@ -1,14 +1,16 @@
 "use server";
 
-import { Role } from "@prisma/client";
+import { Permission } from "@/lib/authorization/permissions";
+import { requirePermission } from "@/lib/authorization/guards";
+
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { requireUser } from "@/lib/auth";
+
 import { prisma } from "@/lib/db";
 import { expenseCategorySchema, expenseSchema } from "@/lib/validation";
 
 export async function saveExpenseCategoryAction(formData: FormData) {
-  await requireUser(Role.ADMIN);
+  await requirePermission(Permission.EXPENSES_MANAGE);
   const parsed = expenseCategorySchema.safeParse({ ...Object.fromEntries(formData.entries()), active: formData.get("active") === "on" });
   if (!parsed.success) throw new Error(parsed.error.issues[0]?.message || "Invalid expense category.");
   const { id, description, ...data } = parsed.data;
@@ -20,7 +22,7 @@ export async function saveExpenseCategoryAction(formData: FormData) {
 }
 
 export async function deleteExpenseCategoryAction(formData: FormData) {
-  await requireUser(Role.ADMIN);
+  await requirePermission(Permission.EXPENSES_MANAGE);
   const id = String(formData.get("id") || "");
   const category = await prisma.expenseCategory.findUnique({ where: { id }, select: { _count: { select: { expenses: true } } } });
   if (!category) throw new Error("Expense category not found.");
@@ -31,7 +33,7 @@ export async function deleteExpenseCategoryAction(formData: FormData) {
 }
 
 export async function saveExpenseAction(formData: FormData) {
-  const admin = await requireUser(Role.ADMIN);
+  const admin = await requirePermission(Permission.EXPENSES_MANAGE);
   const parsed = expenseSchema.safeParse(Object.fromEntries(formData.entries()));
   if (!parsed.success) throw new Error(parsed.error.issues[0]?.message || "Invalid expense details.");
   const { id, expenseDate, referenceNumber, voucherNumber, remarks, ...data } = parsed.data;
@@ -43,7 +45,7 @@ export async function saveExpenseAction(formData: FormData) {
 }
 
 export async function deleteExpenseAction(formData: FormData) {
-  await requireUser(Role.ADMIN);
+  await requirePermission(Permission.EXPENSES_MANAGE);
   await prisma.expense.delete({ where: { id: String(formData.get("id") || "") } });
   revalidateExpensePages();
   redirect("/admin/expenses?success=deleted&message=Expense%20record%20deleted%20successfully.");

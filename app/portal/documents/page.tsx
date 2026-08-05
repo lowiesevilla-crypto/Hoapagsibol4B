@@ -1,13 +1,15 @@
+import { Permission } from "@/lib/authorization/permissions";
+import { requirePermission } from "@/lib/authorization/guards";
 import Image from "next/image";
 import Link from "next/link";
-import { DocumentRequestStatus, Prisma, Role } from "@prisma/client";
+import { DocumentRequestStatus, Prisma } from "@prisma/client";
 import { RequestAreaNavigation, RequestProgressTracker, requestTone, statusLabel } from "@/components/homeowner/requests/request-cards";
 import { PageHeader } from "@/components/page-header";
 import { PortalPageContainer } from "@/components/portal-mobile-shell";
 import { DocumentRequestForm } from "@/components/document-request-form";
 import { saveHouseholdMemberAction, toggleHouseholdMemberAction } from "@/lib/actions/documents";
 import { resubmitCertificateAction } from "@/lib/actions/certificate-of-residency";
-import { requireUser } from "@/lib/auth";
+
 import { prisma } from "@/lib/db";
 import { configuredDocumentSummary, normalizeDocumentFields } from "@/lib/services/document-workflow";
 import { getRequestableDocumentDefinitions } from "@/lib/services/document-definitions";
@@ -20,7 +22,7 @@ import { money, shortDate } from "@/lib/utils";
 import { CERTIFICATE_OF_RESIDENCY_CODE } from "@/lib/services/certificate-of-residency";
 
 export default async function PortalDocumentsPage({ searchParams }: { searchParams: Promise<{ error?: string; success?: string; message?: string; status?: string; type?: string; date?: string; page?: string; q?: string }> }) {
-  const user = await requireUser(Role.HOMEOWNER);
+  const user = await requirePermission(Permission.DOCUMENTS_READ);
   const homeownerId = user.homeownerProfile!.id;
   const query = await searchParams;
   const page = Math.max(1, Number(query.page) || 1);

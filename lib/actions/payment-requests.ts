@@ -1,9 +1,10 @@
 "use server";
 
-import { CollectionType, DocumentDefinitionStatus, DocumentRequestStatus, NotificationType, PaymentRequestStatus, PaymentRequestType, Role } from "@prisma/client";
+import { requirePermission } from "@/lib/authorization/guards";
+import { CollectionType, DocumentDefinitionStatus, DocumentRequestStatus, NotificationType, PaymentRequestStatus, PaymentRequestType } from "@prisma/client";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { requireUser } from "@/lib/auth";
+
 import { requirePermission, requirePermissions } from "@/lib/authorization/guards";
 import { Permission } from "@/lib/authorization/permissions";
 import { getAppUrl } from "@/lib/app-url";
@@ -23,7 +24,7 @@ const homeownerCollectionTypes = new Set<CollectionType>([
 ]);
 
 export async function submitPaymentRequestAction(formData: FormData) {
-  const user = await requireUser(Role.HOMEOWNER);
+  const user = await requirePermission(Permission.PAYMENTS_REQUEST);
   const rawDocumentRequestId = String(formData.get("documentRequestId") || "").trim();
   const rawTransactionType = String(formData.get("transactionType") || "").trim();
   try {

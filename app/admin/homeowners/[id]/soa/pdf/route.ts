@@ -1,8 +1,10 @@
-import { Role } from "@prisma/client";
+import { Permission } from "@/lib/authorization/permissions";
+import { requirePermission } from "@/lib/authorization/guards";
+
 import { NextRequest, NextResponse } from "next/server";
 import { PDFDocument, StandardFonts, rgb, type PDFFont, type PDFImage, type PDFPage } from "pdf-lib";
 import QRCode from "qrcode";
-import { requireUser } from "@/lib/auth";
+
 import { getAssociationLogoAsset } from "@/lib/association-assets";
 import { getStatementOfAccount, type StatementLedgerEntry } from "@/lib/services/statement-of-account";
 import { shortDate } from "@/lib/utils";
@@ -17,7 +19,7 @@ const tableHeaderHeight = 18;
 const tableGapAfter = 10;
 
 export async function GET(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const user = await requireUser(Role.ADMIN);
+  const user = await requirePermission(Permission.BILLING_READ);
   const { id } = await params;
   const baseUrl = request.nextUrl.origin;
   const soa = await getStatementOfAccount(id, user.tenantId, baseUrl);

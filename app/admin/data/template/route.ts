@@ -1,9 +1,10 @@
-import { Role } from "@prisma/client";
-import { requireUser } from "@/lib/auth";
+import { Permission } from "@/lib/authorization/permissions";
+import { requirePermission } from "@/lib/authorization/guards";
+
 import { buildCsv, masterDataTemplates, type MasterDataType } from "@/lib/master-data";
 
 export async function GET(request: Request) {
-  await requireUser(Role.ADMIN);
+  await requirePermission(Permission.DATA_IMPORT);
   const type = new URL(request.url).searchParams.get("type") as MasterDataType;
   if (!type || !(type in masterDataTemplates)) return new Response("Invalid template type.", { status: 400 });
   const headers = masterDataTemplates[type];

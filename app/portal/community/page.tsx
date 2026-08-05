@@ -1,16 +1,18 @@
-import { Role, TenantModule } from "@prisma/client";
+import { Permission } from "@/lib/authorization/permissions";
+import { requirePermission } from "@/lib/authorization/guards";
+import { TenantModule } from "@prisma/client";
 import { CalendarDays, Megaphone, MessageSquare, UsersRound } from "lucide-react";
 import { CommunityFeatureCard, CommunityAreaNavigation, CommunityEmptyState } from "@/components/homeowner/community/community-cards";
 import { PortalPageContainer, PortalSectionHeader, PortalSummaryCard } from "@/components/portal-mobile-shell";
 import { prisma } from "@/lib/db";
-import { requireUser } from "@/lib/auth";
+
 import { resolveHomeownerNavigation } from "@/lib/homeowner-navigation";
 import { getActiveOrganizationOfficers } from "@/lib/organization";
 import { getEnabledTenantModules } from "@/lib/tenant";
 import { shortDate } from "@/lib/utils";
 
 export default async function PortalCommunityPage() {
-  const user = await requireUser(Role.HOMEOWNER);
+  const user = await requirePermission(Permission.HOMEOWNER_PORTAL_ACCESS);
   const enabledModules = await getEnabledTenantModules(user.tenantId);
   const navigation = resolveHomeownerNavigation(enabledModules);
   const today = startOfToday();

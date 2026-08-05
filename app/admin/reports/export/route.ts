@@ -1,5 +1,6 @@
-import { Role } from "@prisma/client";
-import { requireUser } from "@/lib/auth";
+import { Permission } from "@/lib/authorization/permissions";
+import { requirePermission } from "@/lib/authorization/guards";
+
 import { prisma } from "@/lib/db";
 import { paymentAllocationCoverageDisplay } from "@/lib/payment-coverage";
 import { paymentAppliedAmount, paymentUnappliedCredit } from "@/lib/payment-credit";
@@ -8,7 +9,7 @@ import { collectionLabel } from "@/lib/utils";
 function cell(value: unknown) { return `"${String(value ?? "").replaceAll('"', '""')}"`; }
 
 export async function GET() {
-  await requireUser(Role.ADMIN);
+  await requirePermission(Permission.REPORTS_FINANCIAL);
   const [payments, collections, refunds, expenses, payrolls, employeeLoans, employeeLoanRepayments] = await Promise.all([
     prisma.payment.findMany({ where: { status: "ACTIVE" }, include: { homeowner: { include: { user: true } }, bill: true, allocations: { include: { bill: true }, orderBy: { bill: { billingMonth: "asc" } } } }, orderBy: { paymentDate: "desc" } }),
     prisma.collection.findMany({ include: { homeowner: { include: { user: true } }, contractor: true }, orderBy: { collectionDate: "desc" } }),

@@ -1,9 +1,11 @@
+import { Permission } from "@/lib/authorization/permissions";
+import { requirePermission } from "@/lib/authorization/guards";
 import Link from "next/link";
-import { ComplaintPrivacyMode, ComplaintStatus, DocumentRequestStatus, DocumentType, Prisma, Role, TenantModule } from "@prisma/client";
+import { ComplaintPrivacyMode, ComplaintStatus, DocumentRequestStatus, DocumentType, Prisma, TenantModule } from "@prisma/client";
 import { FileCheck2, FileQuestion, MessageSquarePlus, ShieldCheck } from "lucide-react";
 import { ComplaintRequestCard, DocumentRequestCard, RequestAreaNavigation, RequestEmptyState, RequestMetricCard, requestTone, statusLabel } from "@/components/homeowner/requests/request-cards";
 import { PortalPageContainer, PortalQuickActionTile, PortalSectionHeader } from "@/components/portal-mobile-shell";
-import { requireUser } from "@/lib/auth";
+
 import { prisma } from "@/lib/db";
 import { resolveHomeownerNavigation } from "@/lib/homeowner-navigation";
 import { resolveDocumentDownloadAccess } from "@/lib/services/document-balance-policy";
@@ -16,7 +18,7 @@ import { money, shortDate } from "@/lib/utils";
 const REQUEST_LIMIT = 8;
 
 export default async function PortalRequestsPage() {
-  const user = await requireUser(Role.HOMEOWNER);
+  const user = await requirePermission(Permission.DOCUMENTS_REQUEST);
   const profile = user.homeownerProfile;
   if (!profile) throw new Error("Homeowner profile not found.");
   const enabledModules = await getEnabledTenantModules(user.tenantId);

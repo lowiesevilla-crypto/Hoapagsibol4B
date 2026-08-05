@@ -1,15 +1,17 @@
-import { Role } from "@prisma/client";
+import { Permission } from "@/lib/authorization/permissions";
+import { requirePermission } from "@/lib/authorization/guards";
+
 import { OrganizationImage } from "@/components/organization-image";
 import { OrganizationImageUpload } from "@/components/organization-image-upload";
 import { PageHeader } from "@/components/page-header";
 import { ConfirmSubmitButton, SubmitButton } from "@/components/ui";
 import { changeOrganizationOfficerStatusAction, saveOrganizationOfficerAction } from "@/lib/actions/organization";
-import { requireUser } from "@/lib/auth";
+
 import { prisma } from "@/lib/db";
 import { shortDate } from "@/lib/utils";
 
 export default async function OrganizationSettingsPage({ searchParams }: { searchParams: Promise<{ edit?: string; error?: string; success?: string }> }) {
-  await requireUser(Role.SYSTEM_ADMIN);
+  await requirePermission(Permission.SETTINGS_MANAGE);
   const query = await searchParams;
   const [officers, editing] = await Promise.all([
     prisma.organizationOfficer.findMany({ include: { histories: { include: { actor: true }, orderBy: { createdAt: "desc" }, take: 8 } }, orderBy: [{ archivedAt: "asc" }, { displayOrder: "asc" }, { fullName: "asc" }] }),

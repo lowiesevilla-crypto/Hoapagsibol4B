@@ -1,12 +1,14 @@
 "use server";
 
+import { Permission } from "@/lib/authorization/permissions";
+import { requirePermission } from "@/lib/authorization/guards";
 import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { HomeownerActivationStatus, HomeownerEmailVerificationStatus, NotificationStatus, NotificationType, Prisma, Role, type HomeownerStatus } from "@prisma/client";
 import { hash } from "bcryptjs";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { getAppUrl } from "@/lib/app-url";
-import { requireUser } from "@/lib/auth";
+
 import { prisma } from "@/lib/db";
 import { homeownerAccountNumber } from "@/lib/homeowner-account";
 import { homeownerSchema } from "@/lib/validation";
@@ -22,7 +24,7 @@ const BULK_EMAIL_DELAY_MS = 100;
 const homeownerActivationAdminRoles = new Set<Role>([Role.SUPER_ADMIN, Role.SYSTEM_ADMIN, Role.HOA_ADMIN, Role.ADMIN]);
 
 export async function saveHomeownerAction(formData: FormData) {
-  const admin = await requireUser(Role.ADMIN);
+  const admin = await requirePermission(Permission.HOMEOWNERS_MANAGE);
   const parsed = homeownerSchema.safeParse(Object.fromEntries(formData.entries()));
   if (!parsed.success) throw new Error(parsed.error.issues[0]?.message || "Invalid homeowner details.");
   const data = parsed.data;
@@ -192,7 +194,7 @@ function isUniqueAccountNumberCollision(error: unknown) {
 }
 
 export async function deleteHomeownerAction(formData: FormData) {
-  const admin = await requireUser(Role.ADMIN);
+  const admin = await requirePermission(Permission.HOMEOWNERS_MANAGE);
   const id = String(formData.get("id") || "");
   const profile = await prisma.homeownerProfile.findFirst({ where: { id, tenantId: admin.tenantId }, select: { userId: true, _count: { select: { collections: true } } } });
   if (!profile) throw new Error("Homeowner not found.");
@@ -532,7 +534,7 @@ function delay(ms: number) {
 }
 
 async function requireHomeownerActivationAdmin() {
-  const admin = await requireUser(Role.ADMIN);
+  const admin = await requirePermission(Permission.HOMEOWNERS_MANAGE);
   if (!homeownerActivationAdminRoles.has(admin.role)) throw new Error("Your role is not authorized to manage homeowner activation.");
   return admin;
 }

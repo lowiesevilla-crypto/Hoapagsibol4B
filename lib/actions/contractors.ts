@@ -1,14 +1,16 @@
 "use server";
 
-import { Role } from "@prisma/client";
+import { Permission } from "@/lib/authorization/permissions";
+import { requirePermission } from "@/lib/authorization/guards";
+
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { requireUser } from "@/lib/auth";
+
 import { prisma } from "@/lib/db";
 import { contractorSchema } from "@/lib/validation";
 
 export async function saveContractorAction(formData: FormData) {
-  await requireUser(Role.ADMIN);
+  await requirePermission(Permission.PROPERTIES_MANAGE);
   const parsed = contractorSchema.safeParse(Object.fromEntries(formData.entries()));
   if (!parsed.success) throw new Error(parsed.error.issues[0]?.message || "Invalid contractor details.");
   const { id, email, licenseNumber, ...data } = parsed.data;
@@ -27,7 +29,7 @@ export async function saveContractorAction(formData: FormData) {
 }
 
 export async function deleteContractorAction(formData: FormData) {
-  await requireUser(Role.ADMIN);
+  await requirePermission(Permission.PROPERTIES_MANAGE);
   const id = String(formData.get("id") || "");
   const contractor = await prisma.contractorProfile.findUnique({ where: { id }, select: { _count: { select: { collections: true } } } });
   if (!contractor) throw new Error("Contractor not found.");

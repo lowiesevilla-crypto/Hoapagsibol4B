@@ -1,11 +1,13 @@
-import { Role } from "@prisma/client";
+import { Permission } from "@/lib/authorization/permissions";
+import { requirePermission } from "@/lib/authorization/guards";
+
 import { NextResponse } from "next/server";
-import { requireUser } from "@/lib/auth";
+
 import { prisma } from "@/lib/db";
 import { householdMemberEligibility } from "@/lib/services/household-member-eligibility";
 
 export async function GET(_request: Request, { params }: { params: Promise<{ id: string }> }) {
-  const user = await requireUser(Role.ADMIN);
+  const user = await requirePermission(Permission.DOCUMENTS_MANAGE);
   const { id } = await params;
   const homeowner = await prisma.homeownerProfile.findFirst({ where: { tenantId: user.tenantId, id }, select: { id: true } });
   if (!homeowner) return NextResponse.json({ members: [] }, { status: 404 });

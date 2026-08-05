@@ -1,5 +1,7 @@
+import { Permission } from "@/lib/authorization/permissions";
+import { requirePermission } from "@/lib/authorization/guards";
 import { notFound } from "next/navigation";
-import { NotificationType, Role } from "@prisma/client";
+import { NotificationType } from "@prisma/client";
 import { FileText } from "lucide-react";
 import Link from "next/link";
 import { ConfirmSubmitButton, DeleteButton } from "@/components/ui";
@@ -7,7 +9,7 @@ import { HomeownerForm } from "@/components/homeowner-form";
 import { PageHeader } from "@/components/page-header";
 import { saveAdminHouseholdMemberAction } from "@/lib/actions/documents";
 import { cancelHomeownerActivationAction, deleteHomeownerAction, disableHomeownerActivationAction, enableHomeownerDigitalAccessAction, regenerateHomeownerActivationAction, revokeHomeownerDigitalSessionsAction, sendHomeownerActivationInvitationAction, sendHomeownerPasswordResetEmailAction } from "@/lib/actions/homeowners";
-import { requireUser } from "@/lib/auth";
+
 import { prisma } from "@/lib/db";
 import { homeownerAccountNumber } from "@/lib/homeowner-account";
 import { activationInvitationExpiresAt, deliveryStatusLabel, digitalActivationLabel, homeownerDigitalActivationEligibility, homeownerHasCompletedDigitalActivation, maskAccountNumber, maskEmail, type HomeownerDeliveryStatus } from "@/lib/services/homeowner-digital-activation";
@@ -15,7 +17,7 @@ import { canValidateHouseholdMembers, householdMemberEligibility, householdMembe
 import { shortDate } from "@/lib/utils";
 
 export default async function EditHomeownerPage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ error?: string; success?: string; message?: string }> }) {
-  const user = await requireUser(Role.ADMIN);
+  const user = await requirePermission(Permission.HOMEOWNERS_MANAGE);
   const { id } = await params;
   const query = await searchParams;
   const homeowner = await prisma.homeownerProfile.findFirst({ where: { id, tenantId: user.tenantId }, include: { user: true, householdMembers: { orderBy: [{ active: "desc" }, { fullName: "asc" }] } } });

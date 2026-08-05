@@ -3,8 +3,9 @@
 import { FacebookPostStatus, NotificationType, Role } from "@prisma/client";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { requireUser } from "@/lib/auth";
 import { writeAuditLog } from "@/lib/audit";
+import { requirePermission } from "@/lib/authorization/guards";
+import { Permission } from "@/lib/authorization/permissions";
 import { resolveContentImage } from "@/lib/content-images";
 import { prisma } from "@/lib/db";
 import { announcementSchema, eventSchema } from "@/lib/validation";
@@ -13,7 +14,7 @@ import { announcementFacebookMessage, eventFacebookMessage, publishToFacebookPag
 import { getPaymentSettings } from "@/lib/system-settings";
 
 export async function saveAnnouncementAction(formData: FormData) {
-  const admin = await requireUser(Role.ADMIN);
+  const admin = await requirePermission(Permission.ANNOUNCEMENTS_PUBLISH);
   const parsed = announcementSchema.safeParse({ ...Object.fromEntries(formData.entries()), sendEmail: formData.get("sendEmail") === "on", postToFacebook: formData.get("postToFacebook") === "on", removeImage: formData.get("removeImage") === "on" });
   if (!parsed.success) redirect(contentErrorRedirect("/admin/announcements", parsed.error.issues[0]?.message || "Invalid announcement."));
   const data = parsed.data;
@@ -21,19 +22,19 @@ export async function saveAnnouncementAction(formData: FormData) {
   let uploadWarning = "";
   try {
     if (data.id) {
-      const existing = await prisma.announcement.findUnique({ where: { id: data.id }, select: { id: true } });
+      const existing = await prisma.announcement.findFirst({ where: { id: data.id, tenantId: admin.tenantId }, select: { id: true } });
       if (!existing) throw new Error("Announcement not found.");
     }
     const image = await resolveContentImage(formData, admin.tenant.slug, data.existingImageUrl, data.removeImage);
     uploadWarning = image.warning ?? "";
     const announcement = data.id
       ? await prisma.announcement.update({ where: { id: data.id }, data: { title: data.title, content: data.content, type: data.type, status: data.status, imageUrl: image.url, sendEmail: data.sendEmail, postToFacebook: data.postToFacebook, facebookStatus: data.postToFacebook ? undefined : FacebookPostStatus.NOT_REQUESTED } })
-      : await prisma.announcement.create({ data: { title: data.title, content: data.content, type: data.type, status: data.status, imageUrl: image.url, sendEmail: data.sendEmail, postToFacebook: data.postToFacebook, facebookStatus: data.postToFacebook && data.status === "PUBLISHED" ? FacebookPostStatus.QUEUED : FacebookPostStatus.NOT_REQUESTED, createdById: admin.id } });
+      : await prisma.announcement.create({ data: { tenantId: admin.tenantId, title: data.title, content: data.content, type: data.type, status: data.status, imageUrl: image.url, sendEmail: data.sendEmail, postToFacebook: data.postToFacebook, facebookStatus: data.postToFacebook && data.status === "PUBLISHED" ? FacebookPostStatus.QUEUED : FacebookPostStatus.NOT_REQUESTED, createdById: admin.id } });
     announcementId = announcement.id;
     await writeAuditLog({ actorId: admin.id, module: "CONTENT", action: data.id ? "UPDATE_ANNOUNCEMENT" : "CREATE_ANNOUNCEMENT", entityType: "Announcement", entityId: announcement.id, metadata: { status: announcement.status, imageUrl: announcement.imageUrl, uploadWarning: image.warning } });
 
     if (data.sendEmail && !data.id && data.status === "PUBLISHED") {
-      const recipients = await prisma.user.findMany({ where: { role: Role.HOMEOWNER, homeownerProfile: { status: "ACTIVE" } } });
+      const recipients = await prisma.user.findMany({ where: { tenantId: admin.tenantId, role: Role.HOMEOWNER, homeownerProfile: { status: "ACTIVE" } } });
       await Promise.all(recipients.map((recipient) => sendEmailNotification({ tenantId: admin.tenantId, recipientId: recipient.id, email: recipient.email, subject: announcement.title, message: announcement.content, type: NotificationType.ANNOUNCEMENT })));
     }
     if (data.postToFacebook && !data.id && data.status === "PUBLISHED") await updateAnnouncementFacebook(announcement.id, await announcementFacebookMessage(announcement.title, announcement.content, admin.tenantId), admin.tenantId);
@@ -47,10 +48,10 @@ export async function saveAnnouncementAction(formData: FormData) {
 }
 
 export async function deleteAnnouncementAction(formData: FormData) {
-  const admin = await requireUser(Role.ADMIN);
+  const admin = await requirePermission(Permission.ANNOUNCEMENTS_PUBLISH);
   const id = String(formData.get("id") || "");
   if (!id) redirect(contentErrorRedirect("/admin/announcements", "Announcement not found."));
-  const existing = await prisma.announcement.findUnique({ where: { id } });
+  const existing = await prisma.announcement.findFirst({ where: { id, tenantId: admin.tenantId } });
   if (!existing) redirect(contentErrorRedirect("/admin/announcements", "Announcement not found."));
   await prisma.announcement.delete({ where: { id } });
   await writeAuditLog({ actorId: admin.id, module: "CONTENT", action: "DELETE_ANNOUNCEMENT", entityType: "Announcement", entityId: id, metadata: existing });
@@ -60,7 +61,7 @@ export async function deleteAnnouncementAction(formData: FormData) {
 }
 
 export async function saveEventAction(formData: FormData) {
-  const admin = await requireUser(Role.ADMIN);
+  const admin = await requirePermission(Permission.COMMUNITY_MANAGE);
   const parsed = eventSchema.safeParse({ ...Object.fromEntries(formData.entries()), postToFacebook: formData.get("postToFacebook") === "on", removeImage: formData.get("removeImage") === "on" });
   if (!parsed.success) redirect(contentErrorRedirect("/admin/events", parsed.error.issues[0]?.message || "Invalid event."));
   const data = parsed.data;
@@ -68,14 +69,14 @@ export async function saveEventAction(formData: FormData) {
   let uploadWarning = "";
   try {
     if (data.id) {
-      const existing = await prisma.event.findUnique({ where: { id: data.id }, select: { id: true } });
+      const existing = await prisma.event.findFirst({ where: { id: data.id, tenantId: admin.tenantId }, select: { id: true } });
       if (!existing) throw new Error("Event not found.");
     }
     const image = await resolveContentImage(formData, admin.tenant.slug, data.existingImageUrl, data.removeImage);
     uploadWarning = image.warning ?? "";
     const eventTime = `${data.startTime} - ${data.endTime}`;
     const values = { title: data.title, description: data.description, type: data.type, status: data.status, eventDate: new Date(`${data.eventDate}T00:00:00.000Z`), eventTime, startTime: data.startTime, endTime: data.endTime, location: data.location, imageUrl: image.url, postToFacebook: data.postToFacebook };
-    const event = data.id ? await prisma.event.update({ where: { id: data.id }, data: values }) : await prisma.event.create({ data: { ...values, facebookStatus: data.postToFacebook && data.status === "PUBLISHED" ? FacebookPostStatus.QUEUED : FacebookPostStatus.NOT_REQUESTED, createdById: admin.id } });
+    const event = data.id ? await prisma.event.update({ where: { id: data.id }, data: values }) : await prisma.event.create({ data: { tenantId: admin.tenantId, ...values, facebookStatus: data.postToFacebook && data.status === "PUBLISHED" ? FacebookPostStatus.QUEUED : FacebookPostStatus.NOT_REQUESTED, createdById: admin.id } });
     eventId = event.id;
     await writeAuditLog({ actorId: admin.id, module: "CONTENT", action: data.id ? "UPDATE_EVENT" : "CREATE_EVENT", entityType: "Event", entityId: event.id, metadata: { status: event.status, imageUrl: event.imageUrl, uploadWarning: image.warning } });
     if (data.postToFacebook && !data.id && data.status === "PUBLISHED") await updateEventFacebook(event.id, await eventFacebookMessage(event, admin.tenantId), admin.tenantId);
@@ -89,9 +90,9 @@ export async function saveEventAction(formData: FormData) {
 }
 
 export async function deleteEventAction(formData: FormData) {
-  const admin = await requireUser(Role.ADMIN);
+  const admin = await requirePermission(Permission.COMMUNITY_MANAGE);
   const id = String(formData.get("id") || "");
-  const existing = await prisma.event.findUnique({ where: { id } });
+  const existing = await prisma.event.findFirst({ where: { id, tenantId: admin.tenantId } });
   if (!existing) redirect(contentErrorRedirect("/admin/events", "Event not found."));
   await prisma.event.delete({ where: { id } });
   await writeAuditLog({ actorId: admin.id, module: "CONTENT", action: "DELETE_EVENT", entityType: "Event", entityId: id, metadata: existing });
@@ -101,12 +102,12 @@ export async function deleteEventAction(formData: FormData) {
 }
 
 export async function setAnnouncementStatusAction(formData: FormData) {
-  const admin = await requireUser(Role.ADMIN);
+  const admin = await requirePermission(Permission.ANNOUNCEMENTS_PUBLISH);
   const id = String(formData.get("id") || "");
   const status = String(formData.get("status") || "");
   if (!["DRAFT", "PUBLISHED", "ARCHIVED"].includes(status)) redirect(contentErrorRedirect("/admin/announcements", "Invalid announcement status."));
   if (!id) redirect(contentErrorRedirect("/admin/announcements", "Announcement not found."));
-  const existing = await prisma.announcement.findUnique({ where: { id }, select: { id: true } });
+  const existing = await prisma.announcement.findFirst({ where: { id, tenantId: admin.tenantId }, select: { id: true } });
   if (!existing) redirect(contentErrorRedirect("/admin/announcements", "Announcement not found."));
   await prisma.announcement.update({ where: { id }, data: { status } });
   await writeAuditLog({ actorId: admin.id, module: "CONTENT", action: `${status}_ANNOUNCEMENT`, entityType: "Announcement", entityId: id });
@@ -117,10 +118,12 @@ export async function setAnnouncementStatusAction(formData: FormData) {
 }
 
 export async function setEventStatusAction(formData: FormData) {
-  const admin = await requireUser(Role.ADMIN);
+  const admin = await requirePermission(Permission.COMMUNITY_MANAGE);
   const id = String(formData.get("id") || "");
   const status = String(formData.get("status") || "");
   if (!["DRAFT", "PUBLISHED", "ARCHIVED"].includes(status)) throw new Error("Invalid event status.");
+  const existing = await prisma.event.findFirst({ where: { id, tenantId: admin.tenantId }, select: { id: true } });
+  if (!existing) throw new Error("Event not found.");
   await prisma.event.update({ where: { id }, data: { status } });
   await writeAuditLog({ actorId: admin.id, module: "CONTENT", action: `${status}_EVENT`, entityType: "Event", entityId: id });
   revalidatePath("/admin/events");
@@ -129,10 +132,10 @@ export async function setEventStatusAction(formData: FormData) {
 }
 
 export async function sendRemindersAction() {
-  const admin = await requireUser(Role.ADMIN);
+  const admin = await requirePermission(Permission.BILLING_MANAGE);
   const paymentSettings = await getPaymentSettings(admin.tenantId);
   const bills = await prisma.bill.findMany({
-    where: { archivedAt: null, balance: { gt: 0 }, status: { in: ["UNPAID", "PARTIAL", "OVERDUE"] }, homeowner: { status: "ACTIVE" } },
+    where: { tenantId: admin.tenantId, archivedAt: null, balance: { gt: 0 }, status: { in: ["UNPAID", "PARTIAL", "OVERDUE"] }, homeowner: { status: "ACTIVE" } },
     include: { homeowner: { include: { user: true } } },
   });
   await Promise.all(bills.flatMap((bill) => {
@@ -148,8 +151,8 @@ export async function sendRemindersAction() {
 }
 
 export async function publishAnnouncementToFacebookAction(formData: FormData) {
-  const admin = await requireUser(Role.ADMIN);
-  const announcement = await prisma.announcement.findUnique({ where: { id: String(formData.get("id") || "") } });
+  const admin = await requirePermission(Permission.ANNOUNCEMENTS_PUBLISH);
+  const announcement = await prisma.announcement.findFirst({ where: { id: String(formData.get("id") || ""), tenantId: admin.tenantId } });
   if (!announcement) redirect(contentErrorRedirect("/admin/announcements", "Announcement not found."));
   const result = await updateAnnouncementFacebook(announcement.id, await announcementFacebookMessage(announcement.title, announcement.content, admin.tenantId), admin.tenantId);
   revalidatePath("/admin/announcements");
@@ -157,8 +160,8 @@ export async function publishAnnouncementToFacebookAction(formData: FormData) {
 }
 
 export async function publishEventToFacebookAction(formData: FormData) {
-  const admin = await requireUser(Role.ADMIN);
-  const event = await prisma.event.findUnique({ where: { id: String(formData.get("id") || "") } });
+  const admin = await requirePermission(Permission.COMMUNITY_MANAGE);
+  const event = await prisma.event.findFirst({ where: { id: String(formData.get("id") || ""), tenantId: admin.tenantId } });
   if (!event) throw new Error("Event not found.");
   const result = await updateEventFacebook(event.id, await eventFacebookMessage(event, admin.tenantId), admin.tenantId);
   revalidatePath("/admin/events");
@@ -166,16 +169,18 @@ export async function publishEventToFacebookAction(formData: FormData) {
 }
 
 async function updateAnnouncementFacebook(id: string, message: string, tenantId: string) {
-  await prisma.announcement.update({ where: { id }, data: { postToFacebook: true, facebookStatus: FacebookPostStatus.QUEUED, facebookError: null } });
+  const queued = await prisma.announcement.updateMany({ where: { id, tenantId }, data: { postToFacebook: true, facebookStatus: FacebookPostStatus.QUEUED, facebookError: null } });
+  if (queued.count !== 1) throw new Error("Announcement not found.");
   const result = await publishToFacebookPage(message, tenantId);
-  await prisma.announcement.update({ where: { id }, data: { facebookStatus: result.status, facebookPostId: result.postId ?? null, facebookPublishedAt: result.publishedAt ?? null, facebookError: result.error ?? null } });
+  await prisma.announcement.updateMany({ where: { id, tenantId }, data: { facebookStatus: result.status, facebookPostId: result.postId ?? null, facebookPublishedAt: result.publishedAt ?? null, facebookError: result.error ?? null } });
   return result;
 }
 
 async function updateEventFacebook(id: string, message: string, tenantId: string) {
-  await prisma.event.update({ where: { id }, data: { postToFacebook: true, facebookStatus: FacebookPostStatus.QUEUED, facebookError: null } });
+  const queued = await prisma.event.updateMany({ where: { id, tenantId }, data: { postToFacebook: true, facebookStatus: FacebookPostStatus.QUEUED, facebookError: null } });
+  if (queued.count !== 1) throw new Error("Event not found.");
   const result = await publishToFacebookPage(message, tenantId);
-  await prisma.event.update({ where: { id }, data: { facebookStatus: result.status, facebookPostId: result.postId ?? null, facebookPublishedAt: result.publishedAt ?? null, facebookError: result.error ?? null } });
+  await prisma.event.updateMany({ where: { id, tenantId }, data: { facebookStatus: result.status, facebookPostId: result.postId ?? null, facebookPublishedAt: result.publishedAt ?? null, facebookError: result.error ?? null } });
   return result;
 }
 

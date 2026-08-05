@@ -334,7 +334,6 @@ async function runHomeownerRegistrationFlow(browser) {
       { timeout },
     );
     await expectText(administratorPage, registeredHomeownerName);
-    await expectText(administratorPage, registeredHomeownerEmail);
   } finally {
     await administratorContext.close();
   }

@@ -1,9 +1,12 @@
 import { AsyncLocalStorage } from "node:async_hooks";
 import type { Role, TenantModule } from "@prisma/client";
+import type { Permission } from "@/lib/authorization/permissions";
 
 export type TenantRequestContext = {
   tenantId: string;
   role?: Role;
+  roles?: readonly Role[];
+  permissions?: ReadonlySet<Permission>;
   platform: boolean;
   enabledModules?: ReadonlySet<TenantModule>;
 };
@@ -24,10 +27,12 @@ export function setTenantContext(context: TenantRequestContext) {
   return context;
 }
 
-export function runWithTenant<T>(tenantId: string, callback: () => T, options?: { role?: Role; enabledModules?: Iterable<TenantModule> }) {
+export function runWithTenant<T>(tenantId: string, callback: () => T, options?: { role?: Role; roles?: readonly Role[]; permissions?: ReadonlySet<Permission>; enabledModules?: Iterable<TenantModule> }) {
   return storage.run({
     tenantId,
     role: options?.role,
+    roles: options?.roles,
+    permissions: options?.permissions,
     platform: false,
     enabledModules: options?.enabledModules ? new Set(options.enabledModules) : undefined,
   }, callback);

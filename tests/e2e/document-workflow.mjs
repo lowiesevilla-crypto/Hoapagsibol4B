@@ -190,6 +190,31 @@ async function approveAndGenerate(browser, requestId) {
   const page = await createPage(context, { width: 1440, height: 1000 });
   try {
     await login(page, adminEmail, adminPassword, "/admin/");
+
+    await page.goto(`${baseUrl}/admin/documents/operations`, { waitUntil: "networkidle2", timeout });
+    await expectText(page, "Document Operations Command Center");
+    await expectText(page, "Production readiness checklist");
+    await expectText(page, "Operational CSV export");
+
+    const exportResult = await page.evaluate(async (purpose) => {
+      const response = await fetch(`/admin/documents/export?q=${encodeURIComponent(purpose)}`, { credentials: "include" });
+      return {
+        status: response.status,
+        contentType: response.headers.get("content-type") || "",
+        disposition: response.headers.get("content-disposition") || "",
+        body: await response.text(),
+      };
+    }, requestPurpose);
+    assert.equal(exportResult.status, 200);
+    assert.match(exportResult.contentType, /^text\/csv/i);
+    assert.match(exportResult.disposition, /attachment/i);
+    assert.ok(exportResult.body.includes(requestPurpose), "Expected the filtered export to contain the tenant request.");
+    assert.ok(!exportResult.body.includes(secondaryTenantId), "The export must not contain another tenant identifier.");
+
+    await page.goto(`${baseUrl}/admin/documents/guide`, { waitUntil: "networkidle2", timeout });
+    await expectText(page, "Administrator Runbook");
+    await expectText(page, "Daily operating checklist");
+
     await page.goto(`${baseUrl}/admin/documents/${requestId}`, { waitUntil: "networkidle2", timeout });
     await expectText(page, "E2E Clearance Certificate");
     await expectText(page, requestPurpose);
@@ -232,6 +257,10 @@ async function verifyAuthorizedAccess(browser, request) {
     await expectText(page, request.documentNumber, "generated document number in homeowner history");
     await expectText(page, "View Document");
 
+    await page.goto(`${baseUrl}/portal/documents/guide`, { waitUntil: "networkidle2", timeout });
+    await expectText(page, "Document Request Guide");
+    await expectText(page, "Viewing, downloading, printing, and verification");
+
     await page.goto(`${baseUrl}/documents/${request.id}`, { waitUntil: "networkidle2", timeout });
     await expectText(page, request.documentNumber, "authorized generated document view");
     await expectText(page, requestPurpose);
@@ -265,7 +294,16 @@ async function verifyCrossTenantDenial(browser, request) {
     assert.ok(!body.includes(request.documentNumber), "Another tenant must not see the generated document number.");
     assert.ok(!body.includes(requestPurpose), "Another tenant must not see generated document content.");
 
+    await page.goto(`${baseUrl}/admin/documents/operations`, { waitUntil: "networkidle2", timeout }).catch(() => undefined);
+    assert.ok(!(await pageText(page)).includes("Document Operations Command Center"), "A homeowner must not access administrator documentation operations.");
+
     await page.goto(`${baseUrl}/portal/dashboard`, { waitUntil: "networkidle2", timeout });
+    const exportDenial = await page.evaluate(async () => {
+      const response = await fetch("/admin/documents/export", { credentials: "include", redirect: "manual" });
+      return { status: response.status, type: response.headers.get("content-type") || "" };
+    });
+    assert.ok(exportDenial.status !== 200 || !exportDenial.type.startsWith("text/csv"), "A homeowner must not download the administrator CSV export.");
+
     const denial = await page.evaluate(async (url) => {
       const response = await fetch(url, { credentials: "include", redirect: "manual" });
       return {
@@ -318,10 +356,10 @@ try {
   await assertFinalDatabaseState(requestId);
   console.log("Document workflow browser suite passed:");
   console.log("- homeowner portal submission passed");
-  console.log("- tenant-scoped administrator review passed");
+  console.log("- tenant-scoped administrator readiness, runbook, and filtered export passed");
   console.log("- approval and official document generation passed");
-  console.log("- homeowner document view and PDF download passed");
-  console.log("- cross-tenant document access denial passed");
+  console.log("- homeowner guide, document view, and PDF download passed");
+  console.log("- cross-tenant document access and administrator-export denial passed");
   console.log("- request history, immutable version, and audit evidence passed");
 } catch (error) {
   console.error("Document workflow browser suite failed.");

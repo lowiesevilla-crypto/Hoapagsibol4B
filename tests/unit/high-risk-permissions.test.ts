@@ -65,6 +65,22 @@ test("unrelated role combinations do not acquire high-risk finance authority", (
   assert.equal(hasPermission(roles, Permission.RECEIPTS_ISSUE), false);
 });
 
+test("billing generation uses its operation permission directly", () => {
+  const source = readFileSync("lib/actions/billing.ts", "utf8");
+  assert.match(
+    source,
+    /generateMonthlyBillsAction[\s\S]*?requirePermission\(Permission\.BILLING_GENERATE\)/,
+  );
+  assert.match(
+    source,
+    /generateBillingFromPreviewAction[\s\S]*?requirePermission\(Permission\.BILLING_GENERATE\)/,
+  );
+  assert.doesNotMatch(
+    source,
+    /requireBillingSettingsAccess\(Permission\.BILLING_GENERATE\)/,
+  );
+});
+
 test("migrated sensitive actions no longer authorize through legacy administrator roles", () => {
   const migratedFiles = [
     "lib/actions/billing.ts",

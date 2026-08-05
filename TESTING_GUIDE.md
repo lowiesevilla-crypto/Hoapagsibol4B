@@ -1,7 +1,7 @@
 # HOAHub Testing Guide
 
 **Product:** HOAHub – Multi-Tenant Digital Community Management Platform  
-**Version:** 1.1  
+**Version:** 1.2  
 **Last Updated:** August 5, 2026  
 **Document Owner:** Lowie M. Sevilla
 
@@ -38,9 +38,15 @@ Priority examples:
 - duplicate prevention and idempotency;
 - validation and authorization helpers.
 
+Run:
+
+```bash
+pnpm test
+```
+
 ### 3.2 Integration testing
 
-Verify module and persistence boundaries.
+Verify module and persistence boundaries against a disposable MySQL database.
 
 Priority examples:
 
@@ -49,6 +55,12 @@ Priority examples:
 - payment void/refund → ledger and balance recalculation;
 - document request → fee payment → approval → generation;
 - tenant/user/role and homeowner/property relationships.
+
+Run after migrations and seed:
+
+```bash
+pnpm test:integration
+```
 
 ### 3.3 Security and tenant-isolation testing
 
@@ -60,6 +72,8 @@ Verify allowed and denied scenarios for:
 - session creation, expiry, revocation, and recovery;
 - client-supplied identifiers and retry behavior;
 - sensitive audit logging and safe error output.
+
+The integration suite uses at least two independent tenants and includes repeated, concurrent, allowed, and denied finance scenarios.
 
 ### 3.4 Regression verification
 
@@ -82,7 +96,34 @@ Verification scripts that explicitly require `127.0.0.1 / hoahub_prodclone_local
 
 ### 3.5 End-to-end and browser testing
 
-Critical user journeys should be automated with a supported browser framework as issue #25 progresses. Minimum target journeys are administrator registration, billing preview/generation, payment/receipt/SOA, homeowner mobile access, document request/approval, and announcement visibility.
+The supported browser layer uses `puppeteer-core` with Chrome or Chromium against the production Next.js build.
+
+The critical browser suite currently validates:
+
+- seeded system-administrator authentication;
+- billing preview and generation through the administrator UI;
+- payment recording through the administrator UI;
+- official receipt rendering and numbering;
+- homeowner mobile authentication and Statement of Account visibility;
+- homeowner and administrator visibility of a tenant-scoped document request;
+- announcement publication to the correct tenant;
+- denial of that announcement to a homeowner in a second tenant.
+
+Commands:
+
+```bash
+pnpm e2e:prepare
+pnpm test:e2e
+pnpm e2e:cleanup
+```
+
+`e2e:prepare` and `e2e:cleanup` are destructive test-data operations. They are restricted to GitHub Actions or an explicitly authorized disposable local database using:
+
+```bash
+HOAHUB_E2E_ALLOW_LOCAL=1
+```
+
+The browser suite requires a running production build at `E2E_BASE_URL`, seeded administrator credentials, and a standard Chrome/Chromium executable. Set `PUPPETEER_EXECUTABLE_PATH` when the browser is installed outside the standard Linux paths.
 
 ### 3.6 User acceptance testing
 
@@ -110,14 +151,19 @@ pnpm exec prisma validate
 pnpm exec prisma generate
 pnpm db:migrate:deploy
 pnpm db:seed
+pnpm test
+pnpm test:integration
 pnpm test:critical
 pnpm typecheck
 pnpm build
+pnpm e2e:prepare
+pnpm test:e2e
+pnpm e2e:cleanup
 ```
 
-The CI workflow also starts the production server and executes the production smoke check against `/api/health` and critical routes.
+The CI workflow starts the production server, validates `/api/health`, executes the production smoke check, and then executes the critical browser suite. A failure in any layer blocks merging.
 
-Additional domain-specific tests are required when the standard critical suite does not exercise the changed behavior.
+Additional domain-specific tests are required when the standard critical suites do not exercise the changed behavior.
 
 ## 5. Test selection rules
 
@@ -138,7 +184,7 @@ Before running a script, inspect whether it:
 - depends on environment secrets;
 - assumes a clean Git working tree.
 
-Never point verification scripts at production unless the script and operating procedure explicitly authorize a safe, read-only production check.
+Never point verification or browser-fixture scripts at production. Browser fixtures use reserved `E2E` identifiers, a future billing period, and two test-only homeowner identities, but they remain destructive test data and require a disposable database.
 
 ## 7. Mobile testing
 
@@ -151,6 +197,8 @@ Verify critical flows on approved desktop, tablet, and mobile viewports. Check:
 - offline/cache behavior;
 - receipts, statements, documents, and downloads;
 - authenticated data not being cached or exposed incorrectly.
+
+The automated browser suite uses a desktop administrator viewport and a 390 × 844 homeowner viewport.
 
 ## 8. Release approval
 
@@ -166,7 +214,7 @@ A release is approved only when:
 
 ## 9. Issue #25 progression
 
-This version establishes the first mandatory CI-safe critical verification gate. Issue #25 remains open until HOAHub also has the approved unit, integration, finance, authorization, tenant-isolation, and critical browser suites with repeatable isolated test data.
+Issue #25 now includes CI-enforced unit, database integration, security/tenant-isolation, critical regression, production smoke, and critical browser layers. Remaining work should focus on expanding deterministic scenario coverage, including browser-driven homeowner registration and full document approval/generation where those workflows require additional stable test packages.
 
 ## Document history
 
@@ -174,3 +222,4 @@ This version establishes the first mandatory CI-safe critical verification gate.
 |---|---|---|
 | 1.0 | July 11, 2026 | Initial testing guide |
 | 1.1 | August 5, 2026 | Added mandatory lint and `test:critical` CI gate; clarified CI-safe versus local-clone-only verification |
+| 1.2 | August 5, 2026 | Added disposable MySQL integration and production-build critical browser test processes |

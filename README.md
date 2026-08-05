@@ -5,9 +5,10 @@ Production-oriented HOA Digital Hub built with Next.js 15, TypeScript, Tailwind 
 ## Requirements
 
 - Node.js 22.13 or newer
-- pnpm 10.12.1
+- pnpm 11.9.0
 - MySQL 8.0 or newer
 - Docker Desktop for the included local MySQL service
+- Chrome or Chromium for local critical-path browser testing
 
 ## Local setup
 
@@ -45,9 +46,53 @@ pnpm db:import -- backups/manual.json
 
 `db:import` replaces the target database contents and verifies every model count. Use it only during an approved migration or restore window after taking a fresh backup.
 
+## Automated testing
+
+Run the deterministic unit suite:
+
+```bash
+pnpm test
+```
+
+Run the disposable-database finance and tenant-isolation integration suite after migrations and seed:
+
+```bash
+pnpm test:integration
+```
+
+Run the repository critical regression checks:
+
+```bash
+pnpm test:critical
+```
+
+The critical browser suite uses the production build, a disposable MySQL database, seeded administrator credentials, two isolated homeowner tenants, and Chrome/Chromium. It performs administrator login, billing preview/generation, payment recording, official receipt validation, homeowner mobile login and SOA access, document-request visibility, announcement publication, and cross-tenant announcement denial.
+
+The fixture command refuses non-CI databases unless local execution is explicitly authorized. Point it only at a disposable local database:
+
+```bash
+export HOAHUB_E2E_ALLOW_LOCAL=1
+export SEED_SYSTEM_ADMIN_EMAIL="local-e2e-admin@example.invalid"
+export SEED_SYSTEM_ADMIN_PASSWORD="replace-with-a-local-test-password"
+pnpm db:migrate:deploy
+pnpm db:seed
+pnpm build
+pnpm e2e:prepare
+pnpm start
+# In another terminal:
+pnpm test:e2e
+pnpm e2e:cleanup
+```
+
+Set `PUPPETEER_EXECUTABLE_PATH` when Chrome or Chromium is not installed at a standard Linux path. See [TESTING_GUIDE.md](TESTING_GUIDE.md) for test-selection and safety requirements.
+
 ## Verification
 
 ```bash
+pnpm lint
+pnpm test
+pnpm test:integration
+pnpm test:critical
 pnpm typecheck
 pnpm build
 curl http://localhost:3000/api/health
@@ -62,12 +107,13 @@ The health endpoint returns HTTP 200 only when the application can query MySQL.
 - `feature/*`, `release/*`, `hotfix/*`: short-lived work branches
 - `codex/*`: Codex-authored changes prepared for review
 
-Pull requests run MySQL migrations, configuration seed, type checking, a production build, and HTTP smoke checks. A successful push to `main` deploys an immutable release to Hostinger when the required repository secrets are configured.
+Pull requests run lint, MySQL migrations, configuration seed, unit and database integration suites, critical regression checks, type checking, a production build, HTTP smoke checks, and the critical browser suite. A successful push to `main` deploys an immutable release to Hostinger when the required repository secrets are configured.
 
 Read these guides before production work:
 
 - [HOAHub production deployment](DEPLOYMENT.md)
 - [Production checklist](PRODUCTION_CHECKLIST.md)
+- [Testing guide](TESTING_GUIDE.md)
 - [MySQL migration](docs/MYSQL_MIGRATION_GUIDE.md)
 - [Database operations](docs/DATABASE_OPERATIONS.md)
 - [GitHub workflow](docs/GITHUB_WORKFLOW.md)
@@ -97,4 +143,3 @@ The scheduled task `Pagsibol HOA Portal` runs `maintain-public-portal.cmd`, whic
 ## Release
 
 Current application release: `2.0.0` (MySQL and Hostinger CI/CD baseline). See [CHANGELOG.md](CHANGELOG.md) and [RELEASE_NOTES.md](RELEASE_NOTES.md).
-

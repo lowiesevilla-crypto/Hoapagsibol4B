@@ -36,6 +36,9 @@ jobs:
       STORAGE_ROOT: /tmp/hoahub-storage
       SEED_SYSTEM_ADMIN_EMAIL: ci-system@example.invalid
       SEED_SYSTEM_ADMIN_PASSWORD: CI-Temporary-Password-2026!
+      E2E_BASE_URL: http://127.0.0.1:3000
+      E2E_COVERAGE_YEAR: "2099"
+      E2E_COVERAGE_MONTH: "1"
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -60,11 +63,24 @@ jobs:
         run: pnpm test:critical
       - run: pnpm typecheck
       - run: pnpm build
-      - name: Application smoke check
+      - name: Production smoke and critical browser suite
         run: |
+          pnpm e2e:prepare
           pnpm start > /tmp/hoa-next.log 2>&1 &
-          for attempt in {1..30}; do
-            curl --fail --silent http://127.0.0.1:3000/api/health && break
+          APP_PID=$!
+          cleanup() {
+            kill "$APP_PID" 2>/dev/null || true
+            pnpm e2e:cleanup || true
+            echo "--- HOAHub server log ---"
+            cat /tmp/hoa-next.log || true
+          }
+          trap cleanup EXIT
+          for attempt in {1..45}; do
+            if curl --fail --silent http://127.0.0.1:3000/api/health > /dev/null; then
+              break
+            fi
             sleep 2
           done
+          curl --fail --silent http://127.0.0.1:3000/api/health
           pnpm smoke:production -- http://127.0.0.1:3000
+          pnpm test:e2e

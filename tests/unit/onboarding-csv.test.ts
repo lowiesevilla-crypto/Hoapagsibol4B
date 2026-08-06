@@ -7,6 +7,13 @@ import {
   parseOnboardingHomeownerCsv,
 } from "../../lib/onboarding/csv";
 import { onboardingPrerequisites, type TenantOnboardingState } from "../../lib/onboarding/policy";
+import {
+  hasHomeownerContactEmail,
+  homeownerContactEmail,
+  homeownerNoEmailAddress,
+  isHomeownerNoEmailAddress,
+  maskEmail,
+} from "../../lib/services/homeowner-digital-activation";
 
 test("onboarding template is versioned and never contains a password column", () => {
   const template = onboardingHomeownerTemplateCsv();
@@ -28,6 +35,26 @@ test("valid homeowner CSV parses quoted fields, cents, and optional opening bala
   assert.equal(parsed.rows[0].openingBalance, 1250.5);
   assert.equal(parsed.rows[0].openingBalanceAsOf?.toISOString().slice(0, 10), "2026-07-31");
   assert.match(parsed.fileHash, /^[a-f0-9]{64}$/);
+});
+
+test("blank homeowner email is accepted for later tenant-admin registration", () => {
+  const csv = [
+    ONBOARDING_HOMEOWNER_COLUMNS.join(","),
+    "No Email Homeowner,,09171234567,123 Main Street,4,13,Phase 1,HOUSE_AND_LOT,OWNER_OCCUPIED,ACTIVE,500.00,,,0.00,",
+  ].join("\n");
+  const parsed = parseOnboardingHomeownerCsv(csv);
+  assert.deepEqual(parsed.errors, []);
+  assert.equal(parsed.rows.length, 1);
+  assert.equal(parsed.rows[0].email, "");
+  assert.equal(parsed.rows[0].accountNumber, null);
+});
+
+test("internal no-email addresses are never treated or displayed as contact emails", () => {
+  const placeholder = homeownerNoEmailAddress("12345678901");
+  assert.equal(isHomeownerNoEmailAddress(placeholder), true);
+  assert.equal(hasHomeownerContactEmail(placeholder), false);
+  assert.equal(homeownerContactEmail(placeholder), "");
+  assert.equal(maskEmail(placeholder), "Not registered");
 });
 
 test("CSV dry run rejects missing fields, duplicate identities, invalid money, and insecure account numbers", () => {

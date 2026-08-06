@@ -87,7 +87,7 @@ export async function loginAction(_state: LoginState, formData: FormData): Promi
         action: "TENANT_LOGIN",
         entityType: "User",
         entityId: user.id,
-        metadata: { tenantSlug: tenant.slug, roles, selectedFromMultipleAccounts: Boolean(selectedUserId) },
+        metadata: { tenantSlug: tenant.slug, roles, selectedFromMultipleAccounts: Boolean(selectedUserId), identityKey: "verified_email" },
       },
     }),
   ]);
@@ -185,20 +185,25 @@ async function resolveLoginUser(input: {
       && candidate.homeownerProfile.activationStatus === HomeownerActivationStatus.ACTIVE
       && Boolean(candidate.homeownerProfile.activatedAt);
   });
-  const matches = [];
+  const passwordMatches = [];
   for (const candidate of authorized) {
-    if (await compare(input.password, candidate.passwordHash)) matches.push(candidate);
+    if (await compare(input.password, candidate.passwordHash)) passwordMatches.push(candidate);
   }
-  if (!matches.length) return null;
+  if (!passwordMatches.length) return null;
+
+  // A verified email is the cross-tenant identity key. A valid password for any
+  // linked active account proves the identity, then the user explicitly chooses
+  // which isolated tenant/account session to open.
+  const selectable = input.identifierType === "email" ? authorized : passwordMatches;
 
   if (input.selectedUserId) {
-    const selected = matches.find((candidate) => candidate.id === input.selectedUserId);
+    const selected = selectable.find((candidate) => candidate.id === input.selectedUserId);
     if (!selected) return { error: "The selected HOA account could not be verified. Choose an account again." } as const;
     return { user: selected, tenant: selected.tenant } as const;
   }
 
-  if (matches.length > 1) {
-    const choices: LoginChoice[] = matches.map((candidate) => {
+  if (selectable.length > 1) {
+    const choices: LoginChoice[] = selectable.map((candidate) => {
       const roles = effectiveRolesForUser(candidate.role, candidate.userRoleAssignments);
       return {
         userId: candidate.id,
@@ -214,7 +219,7 @@ async function resolveLoginUser(input: {
     return { choices } as const;
   }
 
-  const user = matches[0];
+  const user = selectable[0] || passwordMatches[0];
   return { user, tenant: user.tenant } as const;
 }
 

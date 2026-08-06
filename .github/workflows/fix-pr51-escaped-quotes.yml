@@ -1,0 +1,53 @@
+name: Normalize PR 51 generated TypeScript
+
+on:
+  push:
+    branches:
+      - enhancement/homeowner-multi-account-activation
+    paths:
+      - .github/workflows/fix-pr51-escaped-quotes.yml
+
+permissions:
+  contents: write
+
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: enhancement/homeowner-multi-account-activation
+          fetch-depth: 0
+
+      - name: Normalize escaped TypeScript quotes
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          targets = [
+              Path("scripts/prepare-critical-browser-e2e.ts"),
+              Path("work/create-functional-test-data.ts"),
+              Path("work/create-two-test-homeowners.ts"),
+          ]
+          changed = 0
+          for target in targets:
+              text = target.read_text(encoding="utf-8")
+              updated = text.replace('\\"', '"')
+              if updated != text:
+                  target.write_text(updated, encoding="utf-8")
+                  changed += 1
+          if changed != 3:
+              raise SystemExit(f"Expected escaped quotes in 3 files, changed {changed}")
+          Path(".github/workflows/fix-pr51-escaped-quotes.yml").unlink()
+          PY
+
+      - name: Commit normalization
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add scripts/prepare-critical-browser-e2e.ts work/create-functional-test-data.ts work/create-two-test-homeowners.ts .github/workflows/fix-pr51-escaped-quotes.yml
+          git diff --cached --check
+          git commit -m "fix: normalize generated TypeScript string literals"
+          git push origin HEAD:enhancement/homeowner-multi-account-activation

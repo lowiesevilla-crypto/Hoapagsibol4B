@@ -19,7 +19,7 @@ export async function GET(request: NextRequest) {
 
   const handoff = await createActivationHandoffFromVerifiedToken(token);
   if ("error" in handoff) {
-    url.searchParams.set("error", handoff.error);
+    url.searchParams.set("error", handoff.error || "This activation handoff is invalid or has expired.");
     return NextResponse.redirect(url);
   }
 

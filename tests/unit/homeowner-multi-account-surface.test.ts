@@ -63,8 +63,13 @@ test("dashboard only queries optional module data when entitled and degrades ind
   assert.match(dashboard, /Some dashboard sections are temporarily unavailable/);
 });
 
-test("database migration allows duplicate emails within a tenant without relaxing account-number identity", async () => {
-  const migration = await source("prisma/migrations/20260806203000_homeowner_multi_account_email/migration.sql");
+test("database schema and migration allow duplicate emails without relaxing account-number identity", async () => {
+  const [schema, migration] = await Promise.all([
+    source("prisma/schema.prisma"),
+    source("prisma/migrations/20260806203000_homeowner_multi_account_email/migration.sql"),
+  ]);
+  assert.match(schema, /@@index\(\[tenantId, email, active\]\)/);
+  assert.doesNotMatch(schema, /@@unique\(\[tenantId, email\]\)/);
   assert.match(migration, /DROP INDEX `User_tenantId_email_key`/);
   assert.match(migration, /CREATE INDEX `User_tenantId_email_active_idx`/);
   assert.doesNotMatch(migration, /HomeownerProfile_accountNumber_key/);

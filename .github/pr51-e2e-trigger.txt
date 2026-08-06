@@ -1,1 +1,0 @@
-PR 51 secure activation browser coverage is ready for validation.

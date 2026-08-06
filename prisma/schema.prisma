@@ -765,7 +765,7 @@ model User {
   tenantImportBatchesCommitted          TenantImportBatch[]                @relation("TenantImportBatchCommittedBy")
   tenant                                Tenant                            @relation(fields: [tenantId], references: [id], onDelete: Restrict)
 
-  @@unique([tenantId, email])
+  @@index([tenantId, email, active])
   @@unique([tenantId, username])
   @@unique([tenantId, id])
   @@index([role])

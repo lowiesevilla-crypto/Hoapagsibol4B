@@ -1,6 +1,6 @@
 import "server-only";
 
-import { SystemSettingCategory, type Prisma } from "@prisma/client";
+import { SystemSettingCategory } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import {
   emptyTenantOnboardingState,
@@ -10,6 +10,8 @@ import {
 } from "@/lib/onboarding/policy";
 
 export const TENANT_ONBOARDING_SETTING_KEY = "TENANT_ONBOARDING_V1";
+
+type OnboardingStateDb = Pick<typeof prisma, "systemSetting">;
 
 export {
   emptyTenantOnboardingState,
@@ -41,9 +43,9 @@ export async function updateTenantOnboardingState(
   tenantId: string,
   actorId: string,
   updater: (current: TenantOnboardingState) => TenantOnboardingState,
-  tx?: Prisma.TransactionClient,
+  tx?: OnboardingStateDb,
 ) {
-  const db = tx ?? prisma;
+  const db: OnboardingStateDb = tx ?? prisma;
   const setting = await db.systemSetting.findFirst({
     where: {
       tenantId,

@@ -1,18 +1,20 @@
-import { BadgeInfo, CalendarDays, Home, Mail, MessageCircle, Phone, ShieldCheck, UserRound } from "lucide-react";
+import { ArrowRightLeft, BadgeInfo, Building2, CalendarDays, Home, Mail, MessageCircle, Phone, ShieldCheck, UserRound } from "lucide-react";
 import { LogoutButton } from "@/components/auth-navigation-buttons";
 import { CommunityEmptyState, InfoTile } from "@/components/homeowner/community/community-cards";
 import { PageHeader } from "@/components/page-header";
 import { PasskeyEnrollmentPanel } from "@/components/passkey-enrollment-panel";
 import { PortalPageContainer, PortalSectionHeader } from "@/components/portal-mobile-shell";
 import { StatusBadge } from "@/components/status-badge";
+import { switchLinkedAccountAction } from "@/lib/actions/linked-accounts";
 import { homeownerAccountNumber } from "@/lib/homeowner-account";
 import { prisma } from "@/lib/db";
+import { displayRole, listLinkedAccounts } from "@/lib/linked-accounts";
 import { requireHomeownerProfile } from "@/lib/portal";
 import { money, shortDate } from "@/lib/utils";
 
 export default async function ProfilePage() {
   const profile = await requireHomeownerProfile();
-  const [passkeyCount, householdMembers] = await Promise.all([
+  const [passkeyCount, householdMembers, linkedAccounts] = await Promise.all([
     prisma.userPasskeyCredential.count({ where: { userId: profile.userId, tenantId: profile.tenantId } }),
     prisma.householdMember.findMany({
       where: { tenantId: profile.tenantId, homeownerId: profile.id, active: true, revokedAt: null },
@@ -20,6 +22,7 @@ export default async function ProfilePage() {
       orderBy: [{ fullName: "asc" }],
       take: 8,
     }),
+    listLinkedAccounts(profile.user.email, profile.userId),
   ]);
   const details = [
     { label: "Account Number", value: homeownerAccountNumber(profile), icon: BadgeInfo },
@@ -57,6 +60,46 @@ export default async function ProfilePage() {
         <div className="grid gap-4 py-6 sm:grid-cols-2">{details.map(({ label, value, icon }) => <InfoTile key={label} label={label} value={value} icon={icon} />)}</div>
         <div className="rounded-3xl bg-pine-900 p-5 text-white"><p className="text-xs font-bold uppercase tracking-[.14em] text-pine-100">Standard monthly dues</p><p className="mt-1 text-3xl font-black">{money(profile.monthlyDuesAmount)}</p></div>
       </section>
+
+      <section className="rounded-3xl border border-pine-100 bg-white p-5 shadow-soft">
+        <PortalSectionHeader eyebrow="Access" title="My HOA accounts" />
+        <p className="mb-4 text-sm leading-6 text-slate-600">
+          Accounts are linked by your verified email address. Each selection creates a new tenant-scoped session, so records from different associations are never combined.
+        </p>
+        <div className="grid gap-3 lg:grid-cols-2">
+          {linkedAccounts.map((account) => (
+            <article key={account.userId} className={`rounded-2xl border p-4 ${account.current ? "border-pine-300 bg-pine-50" : "border-slate-200 bg-white"}`}>
+              <div className="flex items-start gap-3">
+                <span className="grid size-11 shrink-0 place-items-center rounded-2xl bg-pine-900 text-white"><Building2 className="size-5" aria-hidden="true" /></span>
+                <div className="min-w-0 flex-1">
+                  <p className="break-words font-black text-ink">{account.tenantName}</p>
+                  <p className="mt-0.5 text-xs font-bold text-pine-700">{account.roles.map(displayRole).join(" / ")}</p>
+                  {(account.accountNumber || account.propertyLabel) && (
+                    <p className="mt-2 text-sm leading-6 text-slate-600">
+                      {account.accountNumber ? `Account ${account.accountNumber}` : ""}
+                      {account.accountNumber && account.propertyLabel ? " · " : ""}
+                      {account.propertyLabel || ""}
+                    </p>
+                  )}
+                </div>
+              </div>
+              <div className="mt-4">
+                {account.current ? (
+                  <span className="inline-flex min-h-10 items-center rounded-xl bg-pine-100 px-4 text-sm font-black text-pine-800">Current account</span>
+                ) : (
+                  <form action={switchLinkedAccountAction}>
+                    <input type="hidden" name="targetUserId" value={account.userId} />
+                    <button className="btn-secondary inline-flex min-h-10 items-center gap-2" type="submit">
+                      <ArrowRightLeft className="size-4" aria-hidden="true" /> Open this account
+                    </button>
+                  </form>
+                )}
+              </div>
+            </article>
+          ))}
+        </div>
+      </section>
+
       <section className="rounded-3xl border border-pine-100 bg-white p-5 shadow-soft">
         <PortalSectionHeader eyebrow="Property" title="Home and household" />
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">{property.map(({ label, value, icon }) => <InfoTile key={label} label={label} value={value} icon={icon} />)}</div>

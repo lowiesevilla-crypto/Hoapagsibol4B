@@ -16,6 +16,7 @@ export async function importMasterDataAction(_state: BulkImportState = emptyStat
   const type = String(formData.get("type") || "") as MasterDataType;
   const file = formData.get("file");
   if (!isMasterDataType(type)) return { ...emptyState, message: "Choose a valid master data type.", errors: ["Invalid master data type."] };
+  if (type === "homeowners") return { ...emptyState, message: "Legacy homeowner import is retired.", errors: ["Use Tenant onboarding. Homeowner CSV files no longer accept passwords and require dry-run validation plus explicit apply confirmation."] };
   if (!isUploadedCsvFile(file) || !file.size) return { ...emptyState, message: "Upload a CSV file.", errors: ["CSV file is required."] };
 
   const csv = await file.text();

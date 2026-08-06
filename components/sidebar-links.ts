@@ -31,6 +31,7 @@ export type LinkItem = { href: string; label: string; icon: IconName; section: s
 
 export const adminLinks: LinkItem[] = [
   { href: "/admin/dashboard", label: "Dashboard", icon: "dashboard", section: "Administration" },
+  { href: "/admin/onboarding", label: "Tenant onboarding", icon: "settings", section: "Administration" },
   { href: "/admin/homeowners", label: "Homeowners", icon: "homeowners", section: "Administration" },
   { href: "/admin/contractors", label: "Contractors", icon: "contractors", section: "Security" },
   { href: "/admin/vehicles", label: "Vehicles & stickers", icon: "vehicles", section: "Security" },

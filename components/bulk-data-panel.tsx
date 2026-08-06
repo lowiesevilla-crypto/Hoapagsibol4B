@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useActionState } from "react";
 import { Upload } from "lucide-react";
 import { importMasterDataAction, type BulkImportState } from "@/lib/actions/bulk-data";
@@ -7,8 +8,7 @@ import type { MasterDataType } from "@/lib/master-data";
 import { SubmitButton } from "@/components/ui";
 
 const initialState: BulkImportState = { success: false, message: "", imported: 0, errors: [] };
-const types: Array<{ value: MasterDataType; label: string; note: string }> = [
-  { value: "homeowners", label: "Homeowners", note: "Accounts, profile, property, and monthly dues." },
+const types: Array<{ value: Exclude<MasterDataType, "homeowners">; label: string; note: string }> = [
   { value: "contractors", label: "Contractors", note: "Company and contact master data." },
   { value: "vehicles", label: "Vehicles", note: "Vehicle and sticker monitoring linked by homeowner email." },
   { value: "employees", label: "Employees", note: "Employee master data for payroll." },
@@ -20,6 +20,11 @@ export function BulkDataPanel() {
   return <div className="grid gap-6 xl:grid-cols-[.9fr_1.1fr]">
     <form action={action} className="card">
       <div className="mb-5"><h2 className="text-lg font-black">Upload master data</h2><p className="text-sm text-slate-500">Use the matching CSV template. The system validates every row first and rejects the whole upload when errors are found.</p></div>
+      <div className="mb-5 rounded-2xl border border-blue-200 bg-blue-50 p-4 text-sm text-blue-900">
+        <p className="font-black">Homeowner imports moved to secure onboarding</p>
+        <p className="mt-1">Homeowner CSV files no longer accept passwords. Use the activation-only, dry-run onboarding importer.</p>
+        <Link className="btn-secondary mt-3 inline-flex" href="/admin/onboarding">Open tenant onboarding</Link>
+      </div>
       <div className="space-y-4">
         <div><label className="label">Record type</label><select className="field" name="type" required>{types.map((type) => <option key={type.value} value={type.value}>{type.label}</option>)}</select></div>
         <div><label className="label">CSV file</label><input className="field" name="file" type="file" accept=".csv,text/csv" required /></div>

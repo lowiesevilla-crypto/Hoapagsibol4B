@@ -1,0 +1,203 @@
+name: Patch PR 51 typecheck compatibility
+
+on:
+  push:
+    branches:
+      - enhancement/homeowner-multi-account-activation
+    paths:
+      - .github/workflows/patch-pr51-typecheck.yml
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: enhancement/homeowner-multi-account-activation
+          fetch-depth: 0
+
+      - name: Patch removed tenant-email unique selectors
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          def replace_once(path: str, old: str, new: str) -> None:
+              file = Path(path)
+              text = file.read_text(encoding="utf-8")
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f"Expected one match in {path}, found {count}")
+              file.write_text(text.replace(old, new, 1), encoding="utf-8")
+
+          replace_once(
+              "lib/actions/employees.ts",
+              '''  const user = await prisma.user.upsert({
+            where: { tenantId_email: { tenantId, email: loginEmail } },
+            update: {
+              name,
+              role: primaryRole,
+              passwordHash: await hash(password, 12),
+            },
+            create: {
+              tenantId,
+              name,
+              email: loginEmail,
+              role: primaryRole,
+              passwordHash: await hash(password, 12),
+            },
+          });''',
+              '''  const user = await prisma.user.create({
+            data: {
+              tenantId,
+              name,
+              email: loginEmail,
+              role: primaryRole,
+              passwordHash: await hash(password, 12),
+            },
+          });''',
+          )
+
+          replace_once(
+              "scripts/prepare-critical-browser-e2e.ts",
+              '''  const user = await prisma.user.findUnique({
+            where: { tenantId_email: { tenantId: primaryTenantId, email: registeredHomeownerEmail } },
+            include: { homeownerProfile: true },
+          });''',
+              '''  const user = await prisma.user.findFirst({
+            where: { tenantId: primaryTenantId, email: registeredHomeownerEmail },
+            include: { homeownerProfile: true },
+            orderBy: { createdAt: "desc" },
+          });''',
+          )
+          replace_once(
+              "scripts/prepare-critical-browser-e2e.ts",
+              '''    where: { tenantId_email: { tenantId: input.tenantId, email: input.email } },
+            update: {
+              id: input.userId,''',
+              '''    where: { id: input.userId },
+            update: {''',
+          )
+
+          replace_once(
+              "work/create-functional-test-data.ts",
+              '''async function ensureAdminUser() {
+            const passwordHash = await hash(TEST_PASSWORD, 12);
+            return prisma.user.upsert({
+              where: { tenantId_email: { tenantId: TENANT_ID, email: "admin@greenmeadows.test" } },
+              update: { role: Role.ADMIN },
+              create: {
+                tenantId: TENANT_ID,
+                name: "Maria Santos",
+                email: "admin@greenmeadows.test",
+                passwordHash,
+                role: Role.ADMIN,
+              },
+            });
+          }''',
+              '''async function ensureAdminUser() {
+            const passwordHash = await hash(TEST_PASSWORD, 12);
+            const existing = await prisma.user.findFirst({
+              where: { tenantId: TENANT_ID, email: "admin@greenmeadows.test", role: Role.ADMIN },
+              orderBy: { createdAt: "asc" },
+            });
+            return existing
+              ? prisma.user.update({ where: { id: existing.id }, data: { role: Role.ADMIN, passwordHash } })
+              : prisma.user.create({
+                  data: {
+                    tenantId: TENANT_ID,
+                    name: "Maria Santos",
+                    email: "admin@greenmeadows.test",
+                    passwordHash,
+                    role: Role.ADMIN,
+                  },
+                });
+          }''',
+          )
+          replace_once(
+              "work/create-functional-test-data.ts",
+              '''    const user = await prisma.user.upsert({
+                where: { tenantId_email: { tenantId: TENANT_ID, email: item.email } },
+                update: { name: item.name, role: Role.HOMEOWNER, passwordHash },
+                create: { tenantId: TENANT_ID, name: item.name, email: item.email, role: Role.HOMEOWNER, passwordHash },
+              });''',
+              '''    const existingUser = await prisma.user.findFirst({
+                where: { tenantId: TENANT_ID, email: item.email, name: item.name },
+                orderBy: { createdAt: "asc" },
+              });
+              const user = existingUser
+                ? await prisma.user.update({
+                    where: { id: existingUser.id },
+                    data: { name: item.name, role: Role.HOMEOWNER, passwordHash },
+                  })
+                : await prisma.user.create({
+                    data: { tenantId: TENANT_ID, name: item.name, email: item.email, role: Role.HOMEOWNER, passwordHash },
+                  });''',
+          )
+
+          replace_once(
+              "work/create-two-test-homeowners.ts",
+              '''    const user = await prisma.user.upsert({
+                where: { tenantId_email: { tenantId: TENANT_ID, email: testHomeowner.email } },
+                update: {
+                  tenantId: TENANT_ID,
+                  name: testHomeowner.name,
+                  role: Role.HOMEOWNER,
+                  passwordHash,
+                },
+                create: {
+                  name: testHomeowner.name,
+                  email: testHomeowner.email,
+                  role: Role.HOMEOWNER,
+                  passwordHash,
+                },
+              });''',
+              '''    const existingUser = await prisma.user.findFirst({
+                where: { tenantId: TENANT_ID, email: testHomeowner.email, name: testHomeowner.name },
+                orderBy: { createdAt: "asc" },
+              });
+              const user = existingUser
+                ? await prisma.user.update({
+                    where: { id: existingUser.id },
+                    data: {
+                      name: testHomeowner.name,
+                      role: Role.HOMEOWNER,
+                      passwordHash,
+                    },
+                  })
+                : await prisma.user.create({
+                    data: {
+                      tenantId: TENANT_ID,
+                      name: testHomeowner.name,
+                      email: testHomeowner.email,
+                      role: Role.HOMEOWNER,
+                      passwordHash,
+                    },
+                  });''',
+          )
+
+          targets = [
+              "lib/actions/employees.ts",
+              "scripts/prepare-critical-browser-e2e.ts",
+              "work/create-functional-test-data.ts",
+              "work/create-two-test-homeowners.ts",
+          ]
+          for target in targets:
+              if "tenantId_email" in Path(target).read_text(encoding="utf-8"):
+                  raise SystemExit(f"Legacy selector remains in {target}")
+
+          Path(".github/workflows/patch-pr51-typecheck.yml").unlink()
+          PY
+
+      - name: Commit fixes
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add lib/actions/employees.ts scripts/prepare-critical-browser-e2e.ts work/create-functional-test-data.ts work/create-two-test-homeowners.ts .github/workflows/patch-pr51-typecheck.yml
+          git diff --cached --check
+          git commit -m "fix: replace removed tenant email unique selectors"
+          git push origin HEAD:enhancement/homeowner-multi-account-activation

@@ -5,7 +5,6 @@ import {
   BillingGenerationMode,
   BillingPenaltyFrequency,
   BillingPenaltyType,
-  Prisma,
   RecurringChargeType,
   SystemSettingCategory,
 } from "@prisma/client";
@@ -323,7 +322,7 @@ export async function completeTenantOnboardingAction(formData: FormData) {
   finish("completed", "Tenant onboarding is complete. Billing generation remains a separate authorized action.");
 }
 
-async function saveSetting(tx: Prisma.TransactionClient, tenantId: string, actorId: string, key: string, label: string, value: string) {
+async function saveSetting(tx: Pick<typeof prisma, "systemSetting">, tenantId: string, actorId: string, key: string, label: string, value: string) {
   const existing = await tx.systemSetting.findFirst({ where: { tenantId, category: SystemSettingCategory.ASSOCIATION, key }, select: { id: true } });
   if (existing) await tx.systemSetting.update({ where: { id: existing.id }, data: { value, updatedById: actorId } });
   else await tx.systemSetting.create({ data: { tenantId, category: SystemSettingCategory.ASSOCIATION, key, label, value, updatedById: actorId } });

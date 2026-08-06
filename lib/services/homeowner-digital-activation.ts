@@ -19,6 +19,24 @@ export type HomeownerDeliveryStatus = {
 } | null;
 
 const LEGACY_PENDING: string = "PENDING_ACTIVATION";
+const HOMEOWNER_NO_EMAIL_DOMAIN = "no-email.hoahub.invalid";
+
+export function homeownerNoEmailAddress(accountNumber: string) {
+  if (!/^[1-9][0-9]{10}$/.test(accountNumber)) throw new Error("A valid homeowner account number is required for the internal no-email address.");
+  return `no-email+${accountNumber}@${HOMEOWNER_NO_EMAIL_DOMAIN}`;
+}
+
+export function isHomeownerNoEmailAddress(value?: string | null) {
+  return Boolean(value && value.toLowerCase().endsWith(`@${HOMEOWNER_NO_EMAIL_DOMAIN}`));
+}
+
+export function hasHomeownerContactEmail(value?: string | null) {
+  return Boolean(value?.trim()) && !isHomeownerNoEmailAddress(value);
+}
+
+export function homeownerContactEmail(value?: string | null) {
+  return hasHomeownerContactEmail(value) ? value!.trim() : "";
+}
 
 export function homeownerHasCompletedDigitalActivation(homeowner: HomeownerDigitalActivationProfile) {
   return homeowner.activationStatus === HomeownerActivationStatus.ACTIVE && Boolean(homeowner.activatedAt);
@@ -28,7 +46,7 @@ export function homeownerDigitalActivationEligibility(homeowner: HomeownerDigita
   if (homeowner.tenantId === "") return { eligible: false, reason: "Homeowner tenant is missing." };
   if (homeowner.status !== "ACTIVE") return { eligible: false, reason: "Operational homeowner record is not active." };
   if (!homeowner.user.active) return { eligible: false, reason: "Digital user access is disabled." };
-  if (!homeowner.user.email?.trim()) return { eligible: false, reason: "Registered email is missing." };
+  if (!hasHomeownerContactEmail(homeowner.user.email)) return { eligible: false, reason: "Registered email is missing." };
   if (!/^[1-9][0-9]{10}$/.test(homeowner.accountNumber || "")) return { eligible: false, reason: "Valid 11-digit account number is missing." };
   if (homeownerHasCompletedDigitalActivation(homeowner)) return { eligible: false, reason: "Digital account is already activated." };
   if (homeowner.activationStatus === HomeownerActivationStatus.DISABLED) return { eligible: false, reason: "Digital access is disabled." };
@@ -52,9 +70,9 @@ export function activationInvitationExpiresAt(homeowner: Pick<HomeownerDigitalAc
 }
 
 export function maskEmail(value?: string | null) {
-  if (!value) return "Not registered";
-  const [local, domain = ""] = value.split("@");
-  if (!domain) return `${value.slice(0, 1)}***`;
+  if (!hasHomeownerContactEmail(value)) return "Not registered";
+  const [local, domain = ""] = value!.split("@");
+  if (!domain) return `${value!.slice(0, 1)}***`;
   return `${local.slice(0, 1)}***${local.slice(-1)}@${domain.slice(0, 1)}***`;
 }
 

@@ -100,7 +100,7 @@ export function parseOnboardingHomeownerCsv(input: string): ParsedOnboardingCsv 
     const rowNumber = index + 2;
     const raw = Object.fromEntries(headers.map((header, cellIndex) => [header, String(cells[cellIndex] ?? "").trim()]));
     const rowErrors: OnboardingImportError[] = [];
-    const required = ["name", "email", "phone", "address", "block", "lot", "status", "monthlyDuesAmount"];
+    const required = ["name", "phone", "address", "block", "lot", "status", "monthlyDuesAmount"];
     for (const field of required) if (!raw[field]) rowErrors.push({ rowNumber, field, message: "Required." });
 
     const email = raw.email?.toLowerCase() ?? "";

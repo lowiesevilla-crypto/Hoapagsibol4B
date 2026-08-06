@@ -1,17 +1,19 @@
 import type { HomeownerProfile, User } from "@prisma/client";
 import Link from "next/link";
 import { saveHomeownerAction } from "@/lib/actions/homeowners";
+import { homeownerContactEmail } from "@/lib/services/homeowner-digital-activation";
 import { SubmitButton } from "@/components/ui";
 
 type Record = HomeownerProfile & { user: Pick<User, "name" | "email"> };
 
 export function HomeownerForm({ homeowner }: { homeowner?: Record }) {
+  const contactEmail = homeownerContactEmail(homeowner?.user.email);
   return <form action={saveHomeownerAction} className="card max-w-4xl space-y-6">
     {homeowner && <input type="hidden" name="id" value={homeowner.id} />}
-    <div><h2 className="text-lg font-black">Account information</h2><p className="text-sm text-slate-500">{homeowner ? "Primary contact details. Digital login access is managed through activation and password-reset email controls." : "A secure activation email will be sent to the registered email after creation."}</p></div>
+    <div><h2 className="text-lg font-black">Account information</h2><p className="text-sm text-slate-500">{homeowner ? contactEmail ? "Primary contact details. Digital login access is managed through activation and password-reset email controls." : "No email is registered yet. Add a valid email here before sending a digital activation invitation." : "A secure activation email will be sent to the registered email after creation."}</p></div>
     <div className="grid gap-4 sm:grid-cols-2">
       <Field label="Full name" name="name" defaultValue={homeowner?.user.name} required />
-      <Field label="Email" name="email" type="email" defaultValue={homeowner?.user.email} required />
+      <Field label="Email" name="email" type="email" defaultValue={contactEmail} required />
       <Field label="Phone" name="phone" type="tel" defaultValue={homeowner?.phone} required />
     </div>
     <div className="border-t border-slate-100 pt-6"><h2 className="text-lg font-black">Certificate information</h2><p className="text-sm text-slate-500">Used in the Personal Information and Property Information panels of official certificates.</p></div>

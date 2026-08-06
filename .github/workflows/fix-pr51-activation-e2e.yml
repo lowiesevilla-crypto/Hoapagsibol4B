@@ -1,0 +1,60 @@
+name: Update PR 51 activation browser coverage
+
+on:
+  push:
+    branches:
+      - enhancement/homeowner-multi-account-activation
+    paths:
+      - .github/workflows/fix-pr51-activation-e2e.yml
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: enhancement/homeowner-multi-account-activation
+          fetch-depth: 0
+
+      - name: Update secure activation browser flow
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path("tests/e2e/critical-path.mjs")
+          text = path.read_text(encoding="utf-8")
+          old = '''    await expectText(activationPage, "Registered email verified");
+    await clearAndType(activationPage, "#accountNumber", accountNumber);
+    await clearAndType(activationPage, "#email", registeredHomeownerEmail);
+    await clearAndType(activationPage, "#temporaryPassword", registeredTemporaryPassword);
+    await clearAndType(activationPage, "#password", registeredHomeownerPassword);
+    await clearAndType(activationPage, "#confirmPassword", registeredHomeownerPassword);
+    await clickByText(activationPage, "button[type='submit']", "Activate account");'''
+          new = '''    await expectText(activationPage, "Registered email verified");
+    assert.equal(await activationPage.$eval("#accountNumber", (element) => element.value), accountNumber);
+    assert.equal(await activationPage.$eval("#email", (element) => element.value), registeredHomeownerEmail);
+    assert.equal(await activationPage.$eval("#accountNumber", (element) => element.readOnly), true);
+    assert.equal(await activationPage.$eval("#email", (element) => element.readOnly), true);
+    assert.equal(await activationPage.$("#temporaryPassword"), null, "secure handoff must not expose the temporary password field");
+    await clearAndType(activationPage, "#password", registeredHomeownerPassword);
+    await clearAndType(activationPage, "#confirmPassword", registeredHomeownerPassword);
+    await clickByText(activationPage, "button[type='submit']", "Create permanent password");'''
+          if text.count(old) != 1:
+              raise SystemExit(f"Expected one activation-flow block, found {text.count(old)}")
+          path.write_text(text.replace(old, new, 1), encoding="utf-8")
+          Path(".github/workflows/fix-pr51-activation-e2e.yml").unlink()
+          PY
+
+      - name: Commit browser test fix
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add tests/e2e/critical-path.mjs .github/workflows/fix-pr51-activation-e2e.yml
+          git diff --cached --check
+          git commit -m "test: follow secure homeowner activation handoff"
+          git push origin HEAD:enhancement/homeowner-multi-account-activation

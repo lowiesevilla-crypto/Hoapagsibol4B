@@ -1,6 +1,6 @@
 import "server-only";
 
-import { HomeownerActivationStatus, Role } from "@prisma/client";
+import { HomeownerActivationStatus, Role, TenantModule } from "@prisma/client";
 import { effectiveRolesForUser, primaryRoleForRoles } from "@/lib/authorization/effective-access";
 import { platformPrisma } from "@/lib/db";
 import { normalizeActivationEmail } from "@/lib/services/homeowner-activation";
@@ -19,7 +19,7 @@ export type LinkedAccount = {
   accountNumber: string | null;
   propertyLabel: string | null;
   current: boolean;
-  enabledModules: string[];
+  enabledModules: TenantModule[];
 };
 
 export async function listLinkedAccounts(email: string, currentUserId?: string): Promise<LinkedAccount[]> {
@@ -42,7 +42,7 @@ export async function listLinkedAccounts(email: string, currentUserId?: string):
         },
       },
     },
-    orderBy: [{ tenant: { name: "asc" } }, { name: "asc" }],
+    orderBy: [{ tenantId: "asc" }, { name: "asc" }],
     take: 100,
   });
 
@@ -76,7 +76,7 @@ export async function listLinkedAccounts(email: string, currentUserId?: string):
       current: user.id === currentUserId,
       enabledModules: user.tenant.moduleEntitlements.map((item) => item.module),
     }];
-  });
+  }).sort((left, right) => left.tenantName.localeCompare(right.tenantName) || left.name.localeCompare(right.name));
 }
 
 export function displayRole(role: Role) {

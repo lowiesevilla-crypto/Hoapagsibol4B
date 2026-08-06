@@ -40,7 +40,7 @@ test("valid homeowner CSV parses quoted fields, cents, and optional opening bala
 test("blank homeowner email is accepted for later tenant-admin registration", () => {
   const csv = [
     ONBOARDING_HOMEOWNER_COLUMNS.join(","),
-    "No Email Homeowner,,09171234567,123 Main Street,4,13,Phase 1,HOUSE_AND_LOT,OWNER_OCCUPIED,ACTIVE,500.00,,,0.00,",
+    "No Email Homeowner,,09171234567,123 Main Street,4,13,Phase 1,HOUSE_AND_LOT,OWNER_OCCUPIED,ACTIVE,500.00,,0.00,",
   ].join("\n");
   const parsed = parseOnboardingHomeownerCsv(csv);
   assert.deepEqual(parsed.errors, []);

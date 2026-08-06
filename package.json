@@ -29,7 +29,7 @@
     "verify:approved-pass-web-installer": "tsx scripts/verify-approved-pass-template-web-installer.ts",
     "test": "pnpm test:unit",
     "test:unit": "tsx --test tests/unit/*.test.ts",
-    "test:integration": "tsx --test --test-concurrency=1 tests/integration/*.test.ts",
+    "test:integration": "tsx --conditions=react-server --test --test-concurrency=1 tests/integration/*.test.ts",
     "test:e2e": "node --import ./tests/e2e/safe-browser-context-cleanup.mjs tests/e2e/critical-path.mjs && node tests/e2e/onboarding-workflow.mjs && node tests/e2e/document-workflow.mjs && node tests/e2e/rbac-stale-session.mjs",
     "e2e:prepare": "tsx scripts/prepare-critical-browser-e2e.ts setup && tsx scripts/prepare-onboarding-e2e.ts setup && tsx scripts/prepare-document-workflow-e2e.ts setup && tsx scripts/prepare-rbac-session-e2e.ts setup",
     "e2e:cleanup": "tsx scripts/prepare-rbac-session-e2e.ts cleanup && tsx scripts/prepare-document-workflow-e2e.ts cleanup && tsx scripts/prepare-onboarding-e2e.ts cleanup && tsx scripts/prepare-critical-browser-e2e.ts cleanup",

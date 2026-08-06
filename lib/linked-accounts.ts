@@ -38,7 +38,7 @@ export async function listLinkedAccounts(email: string, currentUserId?: string):
       tenant: {
         include: {
           advisories: { where: { active: true }, orderBy: { createdAt: "desc" }, take: 1 },
-          moduleEntitlements: { where: { enabled: true }, select: { module: true } },
+          moduleEntitlements: { where: { enabled: true } },
         },
       },
     },

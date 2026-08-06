@@ -24,159 +24,48 @@ jobs:
         run: |
           python - <<'PY'
           from pathlib import Path
+          import re
 
-          def replace_once(path: str, old: str, new: str) -> None:
+          def sub_once(path: str, pattern: str, replacement: str) -> None:
               file = Path(path)
               text = file.read_text(encoding="utf-8")
-              count = text.count(old)
+              updated, count = re.subn(pattern, replacement, text, count=1, flags=re.MULTILINE)
               if count != 1:
-                  raise SystemExit(f"Expected one match in {path}, found {count}")
-              file.write_text(text.replace(old, new, 1), encoding="utf-8")
+                  raise SystemExit(f"Expected one match in {path}, found {count}: {pattern}")
+              file.write_text(updated, encoding="utf-8")
 
-          replace_once(
+          sub_once(
               "lib/actions/employees.ts",
-              '''  const user = await prisma.user.upsert({
-            where: { tenantId_email: { tenantId, email: loginEmail } },
-            update: {
-              name,
-              role: primaryRole,
-              passwordHash: await hash(password, 12),
-            },
-            create: {
-              tenantId,
-              name,
-              email: loginEmail,
-              role: primaryRole,
-              passwordHash: await hash(password, 12),
-            },
-          });''',
-              '''  const user = await prisma.user.create({
-            data: {
-              tenantId,
-              name,
-              email: loginEmail,
-              role: primaryRole,
-              passwordHash: await hash(password, 12),
-            },
-          });''',
+              r"  const user = await prisma\.user\.upsert\(\{\n    where: \{ tenantId_email: \{ tenantId, email: loginEmail \} \},\n    update: \{\n      name,\n      role: primaryRole,\n      passwordHash: await hash\(password, 12\),\n    \},\n    create: \{\n      tenantId,\n      name,\n      email: loginEmail,\n      role: primaryRole,\n      passwordHash: await hash\(password, 12\),\n    \},\n  \}\);",
+              "  const user = await prisma.user.create({\n    data: {\n      tenantId,\n      name,\n      email: loginEmail,\n      role: primaryRole,\n      passwordHash: await hash(password, 12),\n    },\n  });",
           )
 
-          replace_once(
+          sub_once(
               "scripts/prepare-critical-browser-e2e.ts",
-              '''  const user = await prisma.user.findUnique({
-            where: { tenantId_email: { tenantId: primaryTenantId, email: registeredHomeownerEmail } },
-            include: { homeownerProfile: true },
-          });''',
-              '''  const user = await prisma.user.findFirst({
-            where: { tenantId: primaryTenantId, email: registeredHomeownerEmail },
-            include: { homeownerProfile: true },
-            orderBy: { createdAt: "desc" },
-          });''',
+              r"  const user = await prisma\.user\.findUnique\(\{\n    where: \{ tenantId_email: \{ tenantId: primaryTenantId, email: registeredHomeownerEmail \} \},\n    include: \{ homeownerProfile: true \},\n  \}\);",
+              "  const user = await prisma.user.findFirst({\n    where: { tenantId: primaryTenantId, email: registeredHomeownerEmail },\n    include: { homeownerProfile: true },\n    orderBy: { createdAt: \\\"desc\\\" },\n  });",
           )
-          replace_once(
+          sub_once(
               "scripts/prepare-critical-browser-e2e.ts",
-              '''    where: { tenantId_email: { tenantId: input.tenantId, email: input.email } },
-            update: {
-              id: input.userId,''',
-              '''    where: { id: input.userId },
-            update: {''',
+              r"    where: \{ tenantId_email: \{ tenantId: input\.tenantId, email: input\.email \} \},\n    update: \{\n      id: input\.userId,",
+              "    where: { id: input.userId },\n    update: {",
           )
 
-          replace_once(
+          sub_once(
               "work/create-functional-test-data.ts",
-              '''async function ensureAdminUser() {
-            const passwordHash = await hash(TEST_PASSWORD, 12);
-            return prisma.user.upsert({
-              where: { tenantId_email: { tenantId: TENANT_ID, email: "admin@greenmeadows.test" } },
-              update: { role: Role.ADMIN },
-              create: {
-                tenantId: TENANT_ID,
-                name: "Maria Santos",
-                email: "admin@greenmeadows.test",
-                passwordHash,
-                role: Role.ADMIN,
-              },
-            });
-          }''',
-              '''async function ensureAdminUser() {
-            const passwordHash = await hash(TEST_PASSWORD, 12);
-            const existing = await prisma.user.findFirst({
-              where: { tenantId: TENANT_ID, email: "admin@greenmeadows.test", role: Role.ADMIN },
-              orderBy: { createdAt: "asc" },
-            });
-            return existing
-              ? prisma.user.update({ where: { id: existing.id }, data: { role: Role.ADMIN, passwordHash } })
-              : prisma.user.create({
-                  data: {
-                    tenantId: TENANT_ID,
-                    name: "Maria Santos",
-                    email: "admin@greenmeadows.test",
-                    passwordHash,
-                    role: Role.ADMIN,
-                  },
-                });
-          }''',
+              r"    where: \{ tenantId_email: \{ tenantId: TENANT_ID, email: \"admin@greenmeadows\.test\" \} \},",
+              "    where: {\n      id: (\n        await prisma.user.findFirst({\n          where: { tenantId: TENANT_ID, email: \\\"admin@greenmeadows.test\\\", role: Role.ADMIN },\n          select: { id: true },\n          orderBy: { createdAt: \\\"asc\\\" },\n        })\n      )?.id ?? \\\"fixture-admin-user-not-found\\\",\n    },",
           )
-          replace_once(
+          sub_once(
               "work/create-functional-test-data.ts",
-              '''    const user = await prisma.user.upsert({
-                where: { tenantId_email: { tenantId: TENANT_ID, email: item.email } },
-                update: { name: item.name, role: Role.HOMEOWNER, passwordHash },
-                create: { tenantId: TENANT_ID, name: item.name, email: item.email, role: Role.HOMEOWNER, passwordHash },
-              });''',
-              '''    const existingUser = await prisma.user.findFirst({
-                where: { tenantId: TENANT_ID, email: item.email, name: item.name },
-                orderBy: { createdAt: "asc" },
-              });
-              const user = existingUser
-                ? await prisma.user.update({
-                    where: { id: existingUser.id },
-                    data: { name: item.name, role: Role.HOMEOWNER, passwordHash },
-                  })
-                : await prisma.user.create({
-                    data: { tenantId: TENANT_ID, name: item.name, email: item.email, role: Role.HOMEOWNER, passwordHash },
-                  });''',
+              r"      where: \{ tenantId_email: \{ tenantId: TENANT_ID, email: item\.email \} \},",
+              "      where: {\n        id: (\n          await prisma.user.findFirst({\n            where: { tenantId: TENANT_ID, email: item.email, name: item.name },\n            select: { id: true },\n            orderBy: { createdAt: \\\"asc\\\" },\n          })\n        )?.id ?? `fixture-homeowner-${item.block}-${item.lot}`,\n      },",
           )
 
-          replace_once(
+          sub_once(
               "work/create-two-test-homeowners.ts",
-              '''    const user = await prisma.user.upsert({
-                where: { tenantId_email: { tenantId: TENANT_ID, email: testHomeowner.email } },
-                update: {
-                  tenantId: TENANT_ID,
-                  name: testHomeowner.name,
-                  role: Role.HOMEOWNER,
-                  passwordHash,
-                },
-                create: {
-                  name: testHomeowner.name,
-                  email: testHomeowner.email,
-                  role: Role.HOMEOWNER,
-                  passwordHash,
-                },
-              });''',
-              '''    const existingUser = await prisma.user.findFirst({
-                where: { tenantId: TENANT_ID, email: testHomeowner.email, name: testHomeowner.name },
-                orderBy: { createdAt: "asc" },
-              });
-              const user = existingUser
-                ? await prisma.user.update({
-                    where: { id: existingUser.id },
-                    data: {
-                      name: testHomeowner.name,
-                      role: Role.HOMEOWNER,
-                      passwordHash,
-                    },
-                  })
-                : await prisma.user.create({
-                    data: {
-                      tenantId: TENANT_ID,
-                      name: testHomeowner.name,
-                      email: testHomeowner.email,
-                      role: Role.HOMEOWNER,
-                      passwordHash,
-                    },
-                  });''',
+              r"      where: \{ tenantId_email: \{ tenantId: TENANT_ID, email: testHomeowner\.email \} \},",
+              "      where: {\n        id: (\n          await prisma.user.findFirst({\n            where: { tenantId: TENANT_ID, email: testHomeowner.email, name: testHomeowner.name },\n            select: { id: true },\n            orderBy: { createdAt: \\\"asc\\\" },\n          })\n        )?.id ?? `fixture-homeowner-${testHomeowner.block}-${testHomeowner.lot}`,\n      },",
           )
 
           targets = [

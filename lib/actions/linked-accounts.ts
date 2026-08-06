@@ -1,6 +1,5 @@
 "use server";
 
-import { Role, TenantModule } from "@prisma/client";
 import { redirect } from "next/navigation";
 import { createSession, defaultHomeForRoles, deleteSession, requireUser } from "@/lib/auth";
 import { isPlatformRoleSet } from "@/lib/authorization/effective-access";
@@ -26,7 +25,7 @@ export async function switchLinkedAccountAction(formData: FormData) {
     role: target.primaryRole,
     roles: target.roles,
     platform,
-    enabledModules: platform ? undefined : new Set(target.enabledModules as TenantModule[]),
+    enabledModules: platform ? undefined : new Set(target.enabledModules),
   });
 
   await prisma.auditLog.create({
@@ -47,7 +46,7 @@ export async function switchLinkedAccountAction(formData: FormData) {
 
   await createSession({
     userId: target.userId,
-    role: target.primaryRole as Role,
+    role: target.primaryRole,
     roles: target.roles,
     tenantId: target.tenantId,
     tenantSlug: target.tenantSlug,

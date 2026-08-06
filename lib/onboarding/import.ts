@@ -311,11 +311,15 @@ export async function applyOnboardingImport(input: {
   );
 
   for (const job of activationJobs.jobs) {
-    await sendHomeownerActivationEmail({
-      tenantId: input.tenantId,
-      actorId: input.actorId,
-      ...job,
-    });
+    await runWithTenant(
+      input.tenantId,
+      () => sendHomeownerActivationEmail({
+        tenantId: input.tenantId,
+        actorId: input.actorId,
+        ...job,
+      }),
+      { role: Role.HOA_ADMIN },
+    );
   }
 
   return {

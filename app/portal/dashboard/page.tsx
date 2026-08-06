@@ -219,7 +219,7 @@ export default async function PortalDashboard() {
   ]);
 
   const nextDue = openBills[0];
-  const balanceAmount = soa?.summary.currentOutstandingBalance ?? 0;
+  const balanceAmount = soa ? soa.summary.currentOutstandingBalance : 0;
   const billingStatus = !billingEnabled
     ? "Billing not enabled"
     : !soa

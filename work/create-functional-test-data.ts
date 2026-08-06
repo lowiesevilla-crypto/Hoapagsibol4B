@@ -32,7 +32,15 @@ function utcDate(year: number, month: number, day: number) {
 async function ensureAdminUser() {
   const passwordHash = await hash(TEST_PASSWORD, 12);
   return prisma.user.upsert({
-    where: { tenantId_email: { tenantId: TENANT_ID, email: "admin@greenmeadows.test" } },
+    where: {
+      id: (
+        await prisma.user.findFirst({
+          where: { tenantId: TENANT_ID, email: \"admin@greenmeadows.test\", role: Role.ADMIN },
+          select: { id: true },
+          orderBy: { createdAt: \"asc\" },
+        })
+      )?.id ?? \"fixture-admin-user-not-found\",
+    },
     update: { role: Role.ADMIN },
     create: {
       tenantId: TENANT_ID,
@@ -184,7 +192,15 @@ async function main() {
   const homeowners = [];
   for (const item of homeownerInputs) {
     const user = await prisma.user.upsert({
-      where: { tenantId_email: { tenantId: TENANT_ID, email: item.email } },
+      where: {
+        id: (
+          await prisma.user.findFirst({
+            where: { tenantId: TENANT_ID, email: item.email, name: item.name },
+            select: { id: true },
+            orderBy: { createdAt: \"asc\" },
+          })
+        )?.id ?? `fixture-homeowner-${item.block}-${item.lot}`,
+      },
       update: { name: item.name, role: Role.HOMEOWNER, passwordHash },
       create: { tenantId: TENANT_ID, name: item.name, email: item.email, role: Role.HOMEOWNER, passwordHash },
     });

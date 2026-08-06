@@ -53,9 +53,10 @@ function assertSafeDatabase() {
 }
 
 async function removeRegisteredHomeownerFixture() {
-  const user = await prisma.user.findUnique({
-    where: { tenantId_email: { tenantId: primaryTenantId, email: registeredHomeownerEmail } },
+  const user = await prisma.user.findFirst({
+    where: { tenantId: primaryTenantId, email: registeredHomeownerEmail },
     include: { homeownerProfile: true },
+    orderBy: { createdAt: \"desc\" },
   });
   if (!user) return;
 
@@ -124,9 +125,8 @@ async function ensureHomeowner(input: {
 }) {
   const passwordHash = await hash(homeownerPassword, 12);
   await prisma.user.upsert({
-    where: { tenantId_email: { tenantId: input.tenantId, email: input.email } },
+    where: { id: input.userId },
     update: {
-      id: input.userId,
       name: input.name,
       passwordHash,
       role: Role.HOMEOWNER,

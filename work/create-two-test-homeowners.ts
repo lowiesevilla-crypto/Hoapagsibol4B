@@ -64,7 +64,7 @@ async function main() {
           await prisma.user.findFirst({
             where: { tenantId: TENANT_ID, email: testHomeowner.email, name: testHomeowner.name },
             select: { id: true },
-            orderBy: { createdAt: \"asc\" },
+            orderBy: { createdAt: "asc" },
           })
         )?.id ?? `fixture-homeowner-${testHomeowner.block}-${testHomeowner.lot}`,
       },

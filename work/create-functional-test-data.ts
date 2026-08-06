@@ -35,11 +35,11 @@ async function ensureAdminUser() {
     where: {
       id: (
         await prisma.user.findFirst({
-          where: { tenantId: TENANT_ID, email: \"admin@greenmeadows.test\", role: Role.ADMIN },
+          where: { tenantId: TENANT_ID, email: "admin@greenmeadows.test", role: Role.ADMIN },
           select: { id: true },
-          orderBy: { createdAt: \"asc\" },
+          orderBy: { createdAt: "asc" },
         })
-      )?.id ?? \"fixture-admin-user-not-found\",
+      )?.id ?? "fixture-admin-user-not-found",
     },
     update: { role: Role.ADMIN },
     create: {
@@ -197,7 +197,7 @@ async function main() {
           await prisma.user.findFirst({
             where: { tenantId: TENANT_ID, email: item.email, name: item.name },
             select: { id: true },
-            orderBy: { createdAt: \"asc\" },
+            orderBy: { createdAt: "asc" },
           })
         )?.id ?? `fixture-homeowner-${item.block}-${item.lot}`,
       },

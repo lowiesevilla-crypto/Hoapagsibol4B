@@ -56,7 +56,7 @@ async function removeRegisteredHomeownerFixture() {
   const user = await prisma.user.findFirst({
     where: { tenantId: primaryTenantId, email: registeredHomeownerEmail },
     include: { homeownerProfile: true },
-    orderBy: { createdAt: \"desc\" },
+    orderBy: { createdAt: "desc" },
   });
   if (!user) return;
 

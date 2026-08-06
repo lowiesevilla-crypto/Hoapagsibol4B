@@ -4,9 +4,16 @@ import Link from "next/link";
 import { useActionState } from "react";
 import { activateHomeownerAction } from "@/lib/actions/homeowner-activation";
 import { PasswordInput } from "@/components/password-input";
-import type { ActivationHandoffDetails } from "@/lib/services/homeowner-activation-handoff";
 
-export function HomeownerActivationForm({ handoffDetails }: { handoffDetails?: ActivationHandoffDetails }) {
+type HandoffDetails = {
+  accountNumber: string;
+  email: string;
+  tenantName: string;
+  tenantSlug: string;
+  propertyLabel: string;
+};
+
+export function HomeownerActivationForm({ handoffDetails }: { handoffDetails?: HandoffDetails }) {
   const [state, action, pending] = useActionState(activateHomeownerAction, {});
   const secureHandoff = Boolean(handoffDetails);
 

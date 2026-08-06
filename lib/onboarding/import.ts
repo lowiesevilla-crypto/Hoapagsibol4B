@@ -19,6 +19,7 @@ import {
 } from "@/lib/onboarding/csv";
 import { updateTenantOnboardingState } from "@/lib/onboarding/state";
 import { generateUniqueHomeownerAccountNumber } from "@/lib/services/homeowner-account-number";
+import { homeownerNoEmailAddress } from "@/lib/services/homeowner-digital-activation";
 import { createHomeownerActivationCredential, sendHomeownerActivationEmail } from "@/lib/services/homeowner-activation";
 import { runWithTenant } from "@/lib/tenant-context";
 
@@ -49,14 +50,16 @@ export async function validateOnboardingImport(tenantId: string, csv: string): P
     };
   }
 
-  const emails = parsed.rows.map((row) => row.email);
+  const emails = parsed.rows.map((row) => row.email).filter(Boolean);
   const properties = parsed.rows.map((row) => ({ block: row.block, lot: row.lot }));
   const suppliedAccounts = parsed.rows.map((row) => row.accountNumber).filter((value): value is string => Boolean(value));
   const [users, profiles, accountProfiles, accountReservations] = await Promise.all([
-    platformPrisma.user.findMany({
-      where: { tenantId, email: { in: emails } },
-      select: { email: true },
-    }),
+    emails.length
+      ? platformPrisma.user.findMany({
+          where: { tenantId, email: { in: emails } },
+          select: { email: true },
+        })
+      : Promise.resolve([]),
     platformPrisma.homeownerProfile.findMany({
       where: { tenantId, OR: properties },
       select: { block: true, lot: true },
@@ -78,7 +81,7 @@ export async function validateOnboardingImport(tenantId: string, csv: string): P
   ]);
 
   for (const row of parsed.rows) {
-    if (existingEmails.has(row.email)) errors.push({ rowNumber: row.rowNumber, field: "email", message: "A homeowner with this email already exists in this tenant." });
+    if (row.email && existingEmails.has(row.email)) errors.push({ rowNumber: row.rowNumber, field: "email", message: "A homeowner with this email already exists in this tenant." });
     if (existingProperties.has(`${row.block.toLowerCase()}|${row.lot.toLowerCase()}`)) errors.push({ rowNumber: row.rowNumber, field: "block/lot", message: "This property already exists in this tenant." });
     if (row.accountNumber && existingAccounts.has(row.accountNumber)) errors.push({ rowNumber: row.rowNumber, field: "accountNumber", message: "This account number is already assigned or reserved." });
   }
@@ -151,11 +154,13 @@ export async function applyOnboardingImport(input: {
       let openingBalancesPosted = 0;
 
       for (const item of prepared) {
+        const emailProvided = Boolean(item.row.email);
+        const storedEmail = item.row.email || homeownerNoEmailAddress(item.accountNumber);
         const user = await tx.user.create({
           data: {
             tenantId: input.tenantId,
             name: item.row.name,
-            email: item.row.email,
+            email: storedEmail,
             passwordHash: item.passwordHash,
             role: Role.HOMEOWNER,
             active: true,
@@ -171,9 +176,9 @@ export async function applyOnboardingImport(input: {
                 occupancyStatus: item.row.occupancyStatus,
                 accountNumber: item.accountNumber,
                 status: item.row.status,
-                activationStatus: HomeownerActivationStatus.INVITATION_SENT,
+                activationStatus: emailProvided ? HomeownerActivationStatus.INVITATION_SENT : HomeownerActivationStatus.NOT_INVITED,
                 emailStatus: HomeownerEmailVerificationStatus.UNVERIFIED,
-                activationSentAt: new Date(),
+                activationSentAt: emailProvided ? new Date() : null,
                 monthlyDuesAmount: item.row.monthlyDuesAmount,
               },
             },
@@ -200,12 +205,14 @@ export async function applyOnboardingImport(input: {
           },
         });
 
-        const activation = await createHomeownerActivationCredential({
-          tenantId: input.tenantId,
-          userId: user.id,
-          createdById: input.actorId,
-          tx,
-        });
+        const activation = emailProvided
+          ? await createHomeownerActivationCredential({
+              tenantId: input.tenantId,
+              userId: user.id,
+              createdById: input.actorId,
+              tx,
+            })
+          : null;
 
         if (item.row.openingBalance > 0 && item.row.openingBalanceAsOf) {
           const period = new Date(Date.UTC(item.row.openingBalanceAsOf.getUTCFullYear(), item.row.openingBalanceAsOf.getUTCMonth(), 1));
@@ -265,17 +272,19 @@ export async function applyOnboardingImport(input: {
             action: "HOMEOWNER_IMPORTED",
             entityType: "HomeownerProfile",
             entityId: homeowner.id,
-            metadata: { fileHash: validation.fileHash, rowNumber: item.row.rowNumber, openingBalance: item.row.openingBalance > 0, accountNumberProvided: Boolean(item.row.accountNumber) },
+            metadata: { fileHash: validation.fileHash, rowNumber: item.row.rowNumber, openingBalance: item.row.openingBalance > 0, accountNumberProvided: Boolean(item.row.accountNumber), emailProvided },
           },
         });
 
-        jobs.push({
-          userId: user.id,
-          name: user.name,
-          email: user.email,
-          accountNumber: item.accountNumber,
-          ...activation,
-        });
+        if (activation) {
+          jobs.push({
+            userId: user.id,
+            name: user.name,
+            email: item.row.email,
+            accountNumber: item.accountNumber,
+            ...activation,
+          });
+        }
       }
 
       await updateTenantOnboardingState(input.tenantId, input.actorId, (state) => ({
@@ -301,7 +310,7 @@ export async function applyOnboardingImport(input: {
           action: "HOMEOWNER_IMPORT_APPLIED",
           entityType: "Tenant",
           entityId: input.tenantId,
-          metadata: { fileHash: validation.fileHash, templateVersion: validation.templateVersion, importedRows: validation.rows.length, openingBalancesPosted },
+          metadata: { fileHash: validation.fileHash, templateVersion: validation.templateVersion, importedRows: validation.rows.length, openingBalancesPosted, activationEmailsAttempted: jobs.length },
         },
       });
 

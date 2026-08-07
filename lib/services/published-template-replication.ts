@@ -34,7 +34,8 @@ type RequestedTemplate = (typeof publishedTemplateReplicationRequests)[number];
 export type PublishedTemplateReplicationAction =
   | "ALREADY_ASSIGNED"
   | "ASSIGN_EXISTING_PUBLISHED"
-  | "CREATE_PUBLISHED_AND_ASSIGN";
+  | "CREATE_PUBLISHED_AND_ASSIGN"
+  | "BOOTSTRAP_TARGET_SET_AND_ASSIGN";
 
 type InternalReplicationPlan = {
   type: DocumentType;
@@ -48,14 +49,16 @@ type InternalReplicationPlan = {
   sourceDefinitionJson: Prisma.JsonValue;
   targetDefinitionId: string;
   targetDefinitionName: string;
-  targetAssignedTemplateVersionId: string;
-  targetAssignedVersion: number;
-  targetAssignedContentHash: string;
-  targetTemplateSetId: string;
+  targetAssignedTemplateVersionId: string | null;
+  targetAssignedVersion: number | null;
+  targetAssignedContentHash: string | null;
+  targetTemplateSetId: string | null;
+  targetTemplateSetName: string;
   targetTemplateSetOwnership: DocumentTemplateOwnership;
   targetTemplateSetEditable: boolean;
   targetTemplateSetUpgradeCompatible: boolean;
   targetTemplateSetRestorable: boolean;
+  targetTemplateSetWillBeCreated: boolean;
   nextTargetVersion: number;
   matchingPublishedTargetVersionId: string | null;
   matchingPublishedTargetVersion: number | null;
@@ -92,7 +95,9 @@ export function canRunPublishedTemplateReplication(user: {
 }) {
   if (user.tenantId !== publishedTemplateReplicationTargetTenantId) return false;
   const roles = user.roles?.length ? user.roles : [user.role];
-  return roles.some((role) => replicationAdminRoles.includes(role as (typeof replicationAdminRoles)[number]));
+  return roles.some((role) =>
+    replicationAdminRoles.includes(role as (typeof replicationAdminRoles)[number]),
+  );
 }
 
 function asJson(value: unknown): Prisma.InputJsonValue {
@@ -232,6 +237,62 @@ function assertValidTemplateDefinition(definitionJson: Prisma.JsonValue, label: 
   }
 }
 
+async function resolveSourceVersion(
+  client: ReplicationClient,
+  sourceDefinition: {
+    id: string;
+    assignedTemplateVersion: { templateSetId: string } | null;
+    templateSets: Array<{ id: string }>;
+  },
+  spec: RequestedTemplate,
+) {
+  const sourceTemplateSetIds = sourceDefinition.templateSets.map((set) => set.id);
+  if (!sourceTemplateSetIds.length) {
+    throw new Error(`${spec.type} source definition has no template sets.`);
+  }
+
+  const candidates = await client.documentTemplateVersion.findMany({
+    where: {
+      tenantId: publishedTemplateReplicationSourceTenantId,
+      templateSetId: { in: sourceTemplateSetIds },
+      version: spec.sourceVersion,
+      status: DocumentTemplateVersionStatus.PUBLISHED,
+    },
+    select: {
+      id: true,
+      templateSetId: true,
+      schemaVersion: true,
+      definitionJson: true,
+      publishedAt: true,
+    },
+    orderBy: [{ publishedAt: "desc" }, { id: "asc" }],
+  });
+
+  if (!candidates.length) {
+    throw new Error(
+      `${spec.type} v${spec.sourceVersion} is not PUBLISHED in any template set belonging to the source definition.`,
+    );
+  }
+
+  const assignedTemplateSetId = sourceDefinition.assignedTemplateVersion?.templateSetId ?? null;
+  const assignedCandidate = assignedTemplateSetId
+    ? candidates.find((candidate) => candidate.templateSetId === assignedTemplateSetId)
+    : undefined;
+
+  if (!assignedCandidate && candidates.length > 1) {
+    throw new Error(
+      `${spec.type} v${spec.sourceVersion} has multiple PUBLISHED source candidates outside the assigned template set. ` +
+        "Replication is blocked until the source version is unambiguous.",
+    );
+  }
+
+  return assignedCandidate ?? candidates[0];
+}
+
+function plannedTargetSetName(targetDefinitionName: string) {
+  return `${targetDefinitionName} - Tenant Published Templates`;
+}
+
 async function buildPlan(
   client: ReplicationClient,
   spec: RequestedTemplate,
@@ -244,8 +305,8 @@ async function buildPlan(
     },
     select: {
       id: true,
-      assignedTemplateVersionId: true,
       assignedTemplateVersion: { select: { templateSetId: true } },
+      templateSets: { select: { id: true } },
     },
   });
 
@@ -254,33 +315,8 @@ async function buildPlan(
       `${spec.type} definition does not exist for source tenant ${publishedTemplateReplicationSourceTenantId}.`,
     );
   }
-  if (!sourceDefinition.assignedTemplateVersionId || !sourceDefinition.assignedTemplateVersion) {
-    throw new Error(
-      `${spec.type} source definition has no assigned template set to anchor version lookup.`,
-    );
-  }
 
-  const sourceVersion = await client.documentTemplateVersion.findFirst({
-    where: {
-      tenantId: publishedTemplateReplicationSourceTenantId,
-      templateSetId: sourceDefinition.assignedTemplateVersion.templateSetId,
-      version: spec.sourceVersion,
-      status: DocumentTemplateVersionStatus.PUBLISHED,
-    },
-    select: {
-      id: true,
-      templateSetId: true,
-      schemaVersion: true,
-      definitionJson: true,
-      publishedAt: true,
-    },
-  });
-
-  if (!sourceVersion) {
-    throw new Error(
-      `${spec.type} v${spec.sourceVersion} is not PUBLISHED in the source definition's assigned template set.`,
-    );
-  }
+  const sourceVersion = await resolveSourceVersion(client, sourceDefinition, spec);
   if (!sourceVersion.publishedAt) {
     throw new Error(
       `${spec.type} v${spec.sourceVersion} is marked PUBLISHED but has no publishedAt timestamp.`,
@@ -322,7 +358,9 @@ async function buildPlan(
       templateSets: {
         select: {
           id: true,
+          name: true,
           definitionId: true,
+          active: true,
           editable: true,
           ownershipType: true,
           upgradeCompatible: true,
@@ -333,6 +371,7 @@ async function buildPlan(
               version: true,
               status: true,
               definitionJson: true,
+              templateSetId: true,
             },
           },
         },
@@ -345,41 +384,23 @@ async function buildPlan(
       `${spec.type} definition does not exist for target tenant ${publishedTemplateReplicationTargetTenantId}.`,
     );
   }
-  if (!targetDefinition.assignedTemplateVersionId || !targetDefinition.assignedTemplateVersion) {
-    throw new Error(
-      `${spec.type} target definition has no assigned template version; refusing to guess a target template set.`,
-    );
-  }
 
   const targetAssigned = targetDefinition.assignedTemplateVersion;
-  if (targetAssigned.status !== DocumentTemplateVersionStatus.PUBLISHED) {
+  if (targetAssigned && targetAssigned.status !== DocumentTemplateVersionStatus.PUBLISHED) {
     throw new Error(`${spec.type} target assigned template is not PUBLISHED.`);
   }
-  if (targetAssigned.definitionJson == null) {
+  if (targetAssigned && targetAssigned.definitionJson == null) {
     throw new Error(`${spec.type} target assigned template has no definition payload.`);
   }
 
-  const targetSet = targetDefinition.templateSets.find(
-    (set) => set.id === targetAssigned.templateSetId,
-  );
-  if (!targetSet || targetSet.definitionId !== targetDefinition.id) {
-    throw new Error(
-      `${spec.type} target assigned template set does not belong to the target definition.`,
-    );
-  }
-
-  const targetAssignedContentHash = hashTemplateDefinition(targetAssigned.definitionJson);
-  const maxTargetVersion = targetSet.versions.reduce(
-    (max, version) => Math.max(max, version.version),
-    0,
-  );
-  const matchingPublished = targetSet.versions.find(
+  const allTargetVersions = targetDefinition.templateSets.flatMap((set) => set.versions);
+  const allMatchingPublished = allTargetVersions.filter(
     (version) =>
       version.status === DocumentTemplateVersionStatus.PUBLISHED &&
       version.definitionJson != null &&
       hashTemplateDefinition(version.definitionJson) === sourceContentHash,
   );
-  const matchingDraft = targetSet.versions.find(
+  const allMatchingDrafts = allTargetVersions.filter(
     (version) =>
       version.status === DocumentTemplateVersionStatus.DRAFT &&
       version.definitionJson != null &&
@@ -387,24 +408,112 @@ async function buildPlan(
   );
 
   let action: PublishedTemplateReplicationAction;
-  if (targetAssignedContentHash === sourceContentHash) {
-    action = "ALREADY_ASSIGNED";
-  } else if (matchingPublished) {
-    action = "ASSIGN_EXISTING_PUBLISHED";
-  } else {
-    if (matchingDraft) {
+  let targetSet: (typeof targetDefinition.templateSets)[number] | null = null;
+  let targetTemplateSetWillBeCreated = false;
+  let matchingPublishedTargetVersionId: string | null = null;
+  let matchingPublishedTargetVersion: number | null = null;
+  let targetAssignedContentHash: string | null = null;
+
+  if (targetAssigned) {
+    targetSet = targetDefinition.templateSets.find(
+      (set) => set.id === targetAssigned.templateSetId,
+    ) ?? null;
+    if (!targetSet || targetSet.definitionId !== targetDefinition.id) {
       throw new Error(
-        `${spec.type} already has an unreviewed target DRAFT (v${matchingDraft.version}) matching the requested source content. ` +
+        `${spec.type} target assigned template set does not belong to the target definition.`,
+      );
+    }
+
+    targetAssignedContentHash = hashTemplateDefinition(targetAssigned.definitionJson);
+    const matchingPublished = targetSet.versions.find(
+      (version) =>
+        version.status === DocumentTemplateVersionStatus.PUBLISHED &&
+        version.definitionJson != null &&
+        hashTemplateDefinition(version.definitionJson) === sourceContentHash,
+    );
+    const matchingDraft = targetSet.versions.find(
+      (version) =>
+        version.status === DocumentTemplateVersionStatus.DRAFT &&
+        version.definitionJson != null &&
+        hashTemplateDefinition(version.definitionJson) === sourceContentHash,
+    );
+
+    if (targetAssignedContentHash === sourceContentHash) {
+      action = "ALREADY_ASSIGNED";
+    } else if (matchingPublished) {
+      action = "ASSIGN_EXISTING_PUBLISHED";
+      matchingPublishedTargetVersionId = matchingPublished.id;
+      matchingPublishedTargetVersion = matchingPublished.version;
+    } else {
+      if (matchingDraft) {
+        throw new Error(
+          `${spec.type} already has an unreviewed target DRAFT (v${matchingDraft.version}) matching the requested source content. ` +
+            "Refusing to publish or bypass an existing Draft automatically.",
+        );
+      }
+      if (!targetSet.editable || targetSet.ownershipType === DocumentTemplateOwnership.CERTIFIED) {
+        throw new Error(
+          `${spec.type} target template set is read-only; clone it to a tenant-owned editable set before replication.`,
+        );
+      }
+      action = "CREATE_PUBLISHED_AND_ASSIGN";
+    }
+  } else if (allMatchingPublished.length === 1) {
+    const existing = allMatchingPublished[0];
+    targetSet = targetDefinition.templateSets.find((set) => set.id === existing.templateSetId) ?? null;
+    if (!targetSet) {
+      throw new Error(`${spec.type} matching published target version has no owning template set.`);
+    }
+    action = "ASSIGN_EXISTING_PUBLISHED";
+    matchingPublishedTargetVersionId = existing.id;
+    matchingPublishedTargetVersion = existing.version;
+  } else if (allMatchingPublished.length > 1) {
+    throw new Error(
+      `${spec.type} target has multiple unassigned PUBLISHED versions matching the source content. ` +
+        "Replication is blocked until the target history is unambiguous.",
+    );
+  } else {
+    if (allMatchingDrafts.length) {
+      throw new Error(
+        `${spec.type} already has an unreviewed target DRAFT matching the requested source content. ` +
           "Refusing to publish or bypass an existing Draft automatically.",
       );
     }
-    if (!targetSet.editable || targetSet.ownershipType === DocumentTemplateOwnership.CERTIFIED) {
+    if (allTargetVersions.length) {
       throw new Error(
-        `${spec.type} target template set is read-only; clone it to a tenant-owned editable set before replication.`,
+        `${spec.type} has template version history but no assigned published template. ` +
+          "Review the target history before bootstrapping a new published assignment.",
       );
     }
-    action = "CREATE_PUBLISHED_AND_ASSIGN";
+
+    const reusableEmptySets = targetDefinition.templateSets.filter(
+      (set) =>
+        set.active &&
+        set.editable &&
+        set.ownershipType === DocumentTemplateOwnership.TENANT &&
+        set.versions.length === 0,
+    );
+
+    if (reusableEmptySets.length === 1) {
+      targetSet = reusableEmptySets[0];
+      action = "CREATE_PUBLISHED_AND_ASSIGN";
+    } else {
+      action = "BOOTSTRAP_TARGET_SET_AND_ASSIGN";
+      targetTemplateSetWillBeCreated = true;
+    }
   }
+
+  const targetTemplateSetId = targetSet?.id ?? null;
+  const targetTemplateSetName =
+    targetSet?.name ?? plannedTargetSetName(targetDefinition.displayName);
+  const targetTemplateSetOwnership =
+    targetSet?.ownershipType ?? DocumentTemplateOwnership.TENANT;
+  const targetTemplateSetEditable = targetSet?.editable ?? true;
+  const targetTemplateSetUpgradeCompatible = targetSet?.upgradeCompatible ?? true;
+  const targetTemplateSetRestorable = targetSet?.restorable ?? true;
+  const nextTargetVersion = targetSet
+    ? targetSet.versions.reduce((max, version) => Math.max(max, version.version), 0) + 1
+    : 1;
 
   return {
     type: spec.type,
@@ -418,17 +527,19 @@ async function buildPlan(
     sourceDefinitionJson: sourceVersion.definitionJson,
     targetDefinitionId: targetDefinition.id,
     targetDefinitionName: targetDefinition.displayName,
-    targetAssignedTemplateVersionId: targetAssigned.id,
-    targetAssignedVersion: targetAssigned.version,
+    targetAssignedTemplateVersionId: targetDefinition.assignedTemplateVersionId,
+    targetAssignedVersion: targetAssigned?.version ?? null,
     targetAssignedContentHash,
-    targetTemplateSetId: targetSet.id,
-    targetTemplateSetOwnership: targetSet.ownershipType,
-    targetTemplateSetEditable: targetSet.editable,
-    targetTemplateSetUpgradeCompatible: targetSet.upgradeCompatible,
-    targetTemplateSetRestorable: targetSet.restorable,
-    nextTargetVersion: maxTargetVersion + 1,
-    matchingPublishedTargetVersionId: matchingPublished?.id ?? null,
-    matchingPublishedTargetVersion: matchingPublished?.version ?? null,
+    targetTemplateSetId,
+    targetTemplateSetName,
+    targetTemplateSetOwnership,
+    targetTemplateSetEditable,
+    targetTemplateSetUpgradeCompatible,
+    targetTemplateSetRestorable,
+    targetTemplateSetWillBeCreated,
+    nextTargetVersion,
+    matchingPublishedTargetVersionId,
+    matchingPublishedTargetVersion,
   };
 }
 
@@ -515,12 +626,39 @@ async function assignVersion(
   }
 }
 
+async function createTargetTemplateSet(
+  tx: Prisma.TransactionClient,
+  plan: InternalReplicationPlan,
+  actorUserId: string,
+) {
+  const created = await tx.documentTemplateSet.create({
+    data: {
+      tenantId: publishedTemplateReplicationTargetTenantId,
+      definitionId: plan.targetDefinitionId,
+      name: plan.targetTemplateSetName,
+      description: "Tenant-owned template set created by the guarded published-template replication operation.",
+      active: true,
+      ownershipType: DocumentTemplateOwnership.TENANT,
+      upgradeCompatible: true,
+      restorable: true,
+      editable: true,
+      createdById: actorUserId,
+      updatedById: actorUserId,
+    },
+    select: { id: true },
+  });
+  return created.id;
+}
+
 async function applyPlan(
   tx: Prisma.TransactionClient,
   plan: InternalReplicationPlan,
   actorUserId: string,
 ) {
   if (plan.action === "ALREADY_ASSIGNED") {
+    if (!plan.targetAssignedTemplateVersionId || plan.targetAssignedVersion == null) {
+      throw new Error(`${plan.type} already-assigned plan is missing its target assignment.`);
+    }
     return {
       type: plan.type,
       action: plan.action,
@@ -531,6 +669,7 @@ async function applyPlan(
 
   let assignedVersionId: string;
   let assignedVersion: number;
+  let appliedTargetTemplateSetId = plan.targetTemplateSetId;
 
   if (plan.action === "ASSIGN_EXISTING_PUBLISHED") {
     if (!plan.matchingPublishedTargetVersionId || plan.matchingPublishedTargetVersion == null) {
@@ -541,10 +680,20 @@ async function applyPlan(
     assignedVersionId = plan.matchingPublishedTargetVersionId;
     assignedVersion = plan.matchingPublishedTargetVersion;
   } else {
+    if (plan.action === "BOOTSTRAP_TARGET_SET_AND_ASSIGN") {
+      if (plan.targetTemplateSetId || !plan.targetTemplateSetWillBeCreated) {
+        throw new Error(`${plan.type} bootstrap plan contains inconsistent target-set state.`);
+      }
+      appliedTargetTemplateSetId = await createTargetTemplateSet(tx, plan, actorUserId);
+    }
+    if (!appliedTargetTemplateSetId) {
+      throw new Error(`${plan.type} plan has no target template set for version creation.`);
+    }
+
     const created = await tx.documentTemplateVersion.create({
       data: {
         tenantId: publishedTemplateReplicationTargetTenantId,
-        templateSetId: plan.targetTemplateSetId,
+        templateSetId: appliedTargetTemplateSetId,
         version: plan.nextTargetVersion,
         status: DocumentTemplateVersionStatus.PUBLISHED,
         ownershipType: plan.targetTemplateSetOwnership,
@@ -558,6 +707,8 @@ async function applyPlan(
             sourceVersionId: plan.sourceVersionId,
             sourceVersion: plan.requestedSourceVersion,
             sourceContentHash: plan.sourceContentHash,
+            targetTemplateSetBootstrapped:
+              plan.action === "BOOTSTRAP_TARGET_SET_AND_ASSIGN",
             replicatedBy: "lib/services/published-template-replication.ts",
           },
         }),
@@ -593,6 +744,8 @@ async function applyPlan(
         sourceContentHash: plan.sourceContentHash,
         previousAssignedVersionId: plan.targetAssignedTemplateVersionId,
         previousAssignedVersion: plan.targetAssignedVersion,
+        targetTemplateSetId: appliedTargetTemplateSetId,
+        targetTemplateSetCreated: plan.action === "BOOTSTRAP_TARGET_SET_AND_ASSIGN",
         assignedVersionId,
         assignedVersion,
         replicationAction: plan.action,

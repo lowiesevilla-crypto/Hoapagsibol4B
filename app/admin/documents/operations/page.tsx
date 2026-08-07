@@ -13,6 +13,7 @@ import {
   evaluateDocumentationReadiness,
   isStaleDocumentGenerationAttempt,
 } from "@/lib/services/document-operations";
+import { canRunPublishedTemplateReplication } from "@/lib/services/published-template-replication";
 import { documentTypeLabel } from "@/lib/services/documents";
 import { getPaymentSettings } from "@/lib/system-settings";
 import { shortDate } from "@/lib/utils";
@@ -46,6 +47,7 @@ function percent(numerator: number, denominator: number) {
 
 export default async function DocumentationOperationsPage() {
   const user = await requireDocumentTemplateAdmin();
+  const canReplicatePublishedTemplates = canRunPublishedTemplateReplication(user);
   const now = new Date();
   const yearAgo = new Date(now);
   yearAgo.setUTCFullYear(yearAgo.getUTCFullYear() - 1);
@@ -167,7 +169,7 @@ export default async function DocumentationOperationsPage() {
       eyebrow="Documentation operations"
       title="Document Operations Command Center"
       description="Monitor readiness, daily work queues, aging, generation recovery, and one-year operational performance for this tenant."
-      action={<div className="flex flex-wrap gap-2"><Link className="btn-secondary" href="/admin/documents/guide">Administrator runbook</Link><Link className="btn-secondary" href="/admin/documents/export">Export CSV</Link><Link className="btn-primary" href="/admin/documents?section=requests">Open request queue</Link></div>}
+      action={<div className="flex flex-wrap gap-2"><Link className="btn-secondary" href="/admin/documents/guide">Administrator runbook</Link><Link className="btn-secondary" href="/admin/documents/export">Export CSV</Link>{canReplicatePublishedTemplates && <Link className="btn-secondary" href="/admin/documents/operations/template-replication">Template replication</Link>}<Link className="btn-primary" href="/admin/documents?section=requests">Open request queue</Link></div>}
     />
 
     <DocumentationExportPanel />

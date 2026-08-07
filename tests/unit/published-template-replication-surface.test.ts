@@ -82,6 +82,23 @@ test("admin replication page and action keep tenant IDs server-controlled", asyn
   assert.match(service, /userRoleAssignments/);
 });
 
+test("source versions may resolve across source-owned template sets and blank targets bootstrap safely", async () => {
+  const [service, page] = await Promise.all([
+    source("lib/services/published-template-replication.ts"),
+    source("app/admin/documents/operations/template-replication/page.tsx"),
+  ]);
+
+  assert.match(service, /sourceTemplateSetIds/);
+  assert.match(service, /templateSetId: \{ in: sourceTemplateSetIds \}/);
+  assert.doesNotMatch(service, /source definition has no assigned template set to anchor version lookup/);
+  assert.match(service, /BOOTSTRAP_TARGET_SET_AND_ASSIGN/);
+  assert.match(service, /documentTemplateSet\.create/);
+  assert.match(service, /targetTemplateSetWillBeCreated/);
+  assert.match(service, /has template version history but no assigned published template/);
+  assert.match(page, /No published template assigned/);
+  assert.match(page, /Create tenant template set, publish, and assign/);
+});
+
 test("apply is digest-guarded, transactional, audited, and post-verified", async () => {
   const service = await source("lib/services/published-template-replication.ts");
 

@@ -23,6 +23,9 @@ type Query = {
 function actionLabel(action: PublishedTemplateReplicationAction) {
   if (action === "ALREADY_ASSIGNED") return "Already assigned";
   if (action === "ASSIGN_EXISTING_PUBLISHED") return "Assign existing published version";
+  if (action === "BOOTSTRAP_TARGET_SET_AND_ASSIGN") {
+    return "Create tenant template set, publish, and assign";
+  }
   return "Create published version and assign";
 }
 
@@ -40,7 +43,17 @@ function nextVersionLabel(
   if (action === "ASSIGN_EXISTING_PUBLISHED") {
     return `Assign target v${plan.matchingPublishedTargetVersion}`;
   }
+  if (action === "BOOTSTRAP_TARGET_SET_AND_ASSIGN") {
+    return `Create tenant set + target v${plan.nextTargetVersion}`;
+  }
   return `Create target v${plan.nextTargetVersion}`;
+}
+
+function currentTargetLabel(
+  plan: PublishedTemplateReplicationPreview["plans"][number],
+) {
+  if (plan.targetAssignedVersion == null) return "No published template assigned";
+  return `Published v${plan.targetAssignedVersion}`;
 }
 
 export default async function PublishedTemplateReplicationPage({
@@ -66,14 +79,15 @@ export default async function PublishedTemplateReplicationPage({
         : "The replication preview could not be prepared.";
   }
 
-  const requiresChange = preview?.plans.some((plan) => plan.action !== "ALREADY_ASSIGNED") ?? false;
+  const requiresChange =
+    preview?.plans.some((plan) => plan.action !== "ALREADY_ASSIGNED") ?? false;
 
   return (
     <div className="space-y-6">
       <PageHeader
         eyebrow="Document operations"
         title="Published Template Replication"
-        description="Preview and apply the approved published templates from the configured source tenant into this target tenant. The apply step is transactional, audit logged, and protected by the preview digest."
+        description="Preview and apply the approved published templates from the configured source tenant into this target tenant. Blank target template definitions can be bootstrapped with tenant-owned template sets. The apply step is transactional, audit logged, and protected by the preview digest."
         action={
           <div className="flex flex-wrap gap-2">
             <Link className="btn-secondary" href="/admin/documents/operations">
@@ -165,12 +179,17 @@ export default async function PublishedTemplateReplicationPage({
                         <code className="text-xs text-slate-500">{plan.type}</code>
                       </td>
                       <td className="font-bold">Published v{plan.requestedSourceVersion}</td>
-                      <td>Published v{plan.targetAssignedVersion}</td>
+                      <td>{currentTargetLabel(plan)}</td>
                       <td className="font-bold">{nextVersionLabel(plan.action, plan)}</td>
                       <td>
                         <span className={`badge ${actionTone(plan.action)}`}>
                           {actionLabel(plan.action)}
                         </span>
+                        {plan.targetTemplateSetWillBeCreated && (
+                          <p className="mt-1 text-xs text-slate-500">
+                            New tenant-owned editable template set
+                          </p>
+                        )}
                       </td>
                       <td>
                         <code className="text-xs text-slate-500">
@@ -184,7 +203,13 @@ export default async function PublishedTemplateReplicationPage({
             </div>
           </section>
 
-          <section className={`rounded-3xl border p-5 sm:p-7 ${requiresChange ? "border-amber-200 bg-amber-50" : "border-emerald-200 bg-emerald-50"}`}>
+          <section
+            className={`rounded-3xl border p-5 sm:p-7 ${
+              requiresChange
+                ? "border-amber-200 bg-amber-50"
+                : "border-emerald-200 bg-emerald-50"
+            }`}
+          >
             <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
               <div className="max-w-3xl">
                 <p className="text-xs font-black uppercase tracking-widest text-slate-500">
@@ -201,7 +226,10 @@ export default async function PublishedTemplateReplicationPage({
               </div>
 
               {requiresChange ? (
-                <form action={applyPublishedTemplateReplicationAction} className="w-full max-w-xl rounded-2xl border border-amber-200 bg-white p-4 shadow-sm">
+                <form
+                  action={applyPublishedTemplateReplicationAction}
+                  className="w-full max-w-xl rounded-2xl border border-amber-200 bg-white p-4 shadow-sm"
+                >
                   <input type="hidden" name="planDigest" value={preview.planDigest} />
                   <label className="flex items-start gap-3 text-sm font-bold text-slate-700">
                     <input
@@ -219,7 +247,7 @@ export default async function PublishedTemplateReplicationPage({
                     Confirm &amp; Replicate Published Templates
                   </button>
                   <p className="mt-3 text-xs text-slate-500">
-                    The operation creates target-local versions only when required, preserves historical versions, writes audit records, and verifies the final assignments before reporting completion.
+                    The operation can create tenant-owned template sets for blank definitions, creates target-local versions only when required, preserves existing history, writes audit records, and verifies final assignments before reporting completion.
                   </p>
                 </form>
               ) : (

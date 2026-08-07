@@ -9,6 +9,7 @@ import { PasswordInput } from "@/components/password-input";
 export function LoginForm({ tenantSlug }: { tenantSlug?: string }) {
   const [state, action, pending] = useActionState(loginAction, {});
   const formRef = useRef<HTMLFormElement>(null);
+  const hasChoices = Boolean(state.choices?.length);
 
   useEffect(() => {
     if (state.redirectTo) window.location.replace(state.redirectTo);
@@ -39,10 +40,37 @@ export function LoginForm({ tenantSlug }: { tenantSlug?: string }) {
           name="password"
           placeholder="Enter your password"
           autoComplete="current-password"
-          minLength={8}
+          minLength={6}
           required
         />
       </div>
+
+      {hasChoices && (
+        <fieldset className="space-y-2 rounded-2xl border border-pine-100 bg-pine-50/60 p-3" aria-describedby="account-choice-help">
+          <legend className="px-1 text-sm font-black text-[#10354c]">Choose the HOA account to open</legend>
+          <p id="account-choice-help" className="px-1 text-xs leading-5 text-slate-600">
+            Your verified email and password match more than one tenant or homeowner account. Only the selected tenant is loaded into the session.
+          </p>
+          <div className="space-y-2">
+            {state.choices?.map((choice, index) => (
+              <label key={choice.userId} className="flex cursor-pointer gap-3 rounded-xl border border-slate-200 bg-white p-3 hover:border-pine-300">
+                <input className="mt-1 size-4 accent-pine-700" type="radio" name="selectedUserId" value={choice.userId} defaultChecked={index === 0} required />
+                <span className="min-w-0">
+                  <span className="block break-words text-sm font-black text-[#10354c]">{choice.tenantName}</span>
+                  <span className="mt-0.5 block text-xs font-bold text-pine-700">{choice.roleLabel}</span>
+                  {(choice.accountNumber || choice.propertyLabel) && (
+                    <span className="mt-1 block text-xs leading-5 text-slate-500">
+                      {choice.accountNumber ? `Account ${choice.accountNumber}` : ""}
+                      {choice.accountNumber && choice.propertyLabel ? " · " : ""}
+                      {choice.propertyLabel || ""}
+                    </span>
+                  )}
+                </span>
+              </label>
+            ))}
+          </div>
+        </fieldset>
+      )}
 
       <div className="flex justify-end">
         <Link
@@ -60,9 +88,9 @@ export function LoginForm({ tenantSlug }: { tenantSlug?: string }) {
       )}
 
       <button className="btn-primary min-h-12 w-full text-base" disabled={pending}>
-        {pending ? "Signing in..." : "Sign in securely"}
+        {pending ? "Signing in..." : hasChoices ? "Open selected account" : "Sign in securely"}
       </button>
-      <PasskeyLoginButton formRef={formRef} />
+      {!hasChoices && <PasskeyLoginButton formRef={formRef} />}
     </form>
   );
 }

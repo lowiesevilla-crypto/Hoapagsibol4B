@@ -59,7 +59,15 @@ async function main() {
 
   for (const testHomeowner of testHomeowners) {
     const user = await prisma.user.upsert({
-      where: { tenantId_email: { tenantId: TENANT_ID, email: testHomeowner.email } },
+      where: {
+        id: (
+          await prisma.user.findFirst({
+            where: { tenantId: TENANT_ID, email: testHomeowner.email, name: testHomeowner.name },
+            select: { id: true },
+            orderBy: { createdAt: "asc" },
+          })
+        )?.id ?? `fixture-homeowner-${testHomeowner.block}-${testHomeowner.lot}`,
+      },
       update: {
         tenantId: TENANT_ID,
         name: testHomeowner.name,

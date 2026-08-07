@@ -351,12 +351,14 @@ async function runHomeownerRegistrationFlow(browser) {
       { timeout },
     );
     await expectText(activationPage, "Registered email verified");
-    await clearAndType(activationPage, "#accountNumber", accountNumber);
-    await clearAndType(activationPage, "#email", registeredHomeownerEmail);
-    await clearAndType(activationPage, "#temporaryPassword", registeredTemporaryPassword);
+    assert.equal(await activationPage.$eval("#accountNumber", (element) => element.value), accountNumber);
+    assert.equal(await activationPage.$eval("#email", (element) => element.value), registeredHomeownerEmail);
+    assert.equal(await activationPage.$eval("#accountNumber", (element) => element.readOnly), true);
+    assert.equal(await activationPage.$eval("#email", (element) => element.readOnly), true);
+    assert.equal(await activationPage.$("#temporaryPassword"), null, "secure handoff must not expose the temporary password field");
     await clearAndType(activationPage, "#password", registeredHomeownerPassword);
     await clearAndType(activationPage, "#confirmPassword", registeredHomeownerPassword);
-    await clickByText(activationPage, "button[type='submit']", "Activate account");
+    await clickByText(activationPage, "button[type='submit']", "Create permanent password");
     await activationPage.waitForFunction(() => window.location.pathname.startsWith("/portal/dashboard"), { timeout });
     await activationPage.reload({ waitUntil: "networkidle2", timeout });
     await expectText(activationPage, "Active Requests", "activated homeowner dashboard");

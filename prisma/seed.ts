@@ -16,17 +16,24 @@ async function seedBootstrapAdministrator() {
   if (!email || !password) return null;
   if (password.length < 12) throw new Error("SEED_SYSTEM_ADMIN_PASSWORD must contain at least 12 characters.");
 
-  const user = await prisma.user.upsert({
-    where: { tenantId_email: { tenantId, email } },
-    update: { role: Role.SYSTEM_ADMIN },
-    create: {
-      tenantId,
-      name: process.env.SEED_SYSTEM_ADMIN_NAME?.trim() || "System Administrator",
-      email,
-      passwordHash: await hash(password, 12),
-      role: Role.SYSTEM_ADMIN,
-    },
+  const existingAdministrator = await prisma.user.findFirst({
+    where: { tenantId, email, role: Role.SYSTEM_ADMIN },
+    orderBy: { createdAt: "asc" },
   });
+  const user = existingAdministrator
+    ? await prisma.user.update({
+        where: { id: existingAdministrator.id },
+        data: { role: Role.SYSTEM_ADMIN, active: true },
+      })
+    : await prisma.user.create({
+        data: {
+          tenantId,
+          name: process.env.SEED_SYSTEM_ADMIN_NAME?.trim() || "System Administrator",
+          email,
+          passwordHash: await hash(password, 12),
+          role: Role.SYSTEM_ADMIN,
+        },
+      });
   await prisma.userRoleAssignment.upsert({
     where: { tenantId_userId_role: { tenantId, userId: user.id, role: Role.SYSTEM_ADMIN } },
     update: { active: true, assignedBy: user.id },

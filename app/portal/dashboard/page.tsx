@@ -18,6 +18,7 @@ import { prisma } from "@/lib/db";
 import { requireHomeownerProfile } from "@/lib/portal";
 import { documentTypeLabel } from "@/lib/services/documents";
 import { getStatementOfAccount } from "@/lib/services/statement-of-account";
+import { getAssociationSettings } from "@/lib/system-settings";
 import { getEnabledTenantModules } from "@/lib/tenant";
 import { collectionLabel, money, monthLabel, shortDate } from "@/lib/utils";
 
@@ -91,6 +92,24 @@ async function traceDashboardOperation<T>(operation: string, task: () => Promise
   }
 }
 
+async function optionalDashboardOperation<T>(
+  operation: string,
+  task: () => Promise<T>,
+  fallback: T,
+  degradedOperations: string[],
+) {
+  try {
+    return await task();
+  } catch (error) {
+    console.error("[portal-dashboard] optional operation failed", {
+      operation,
+      errorName: error instanceof Error ? error.name : typeof error,
+    });
+    degradedOperations.push(operation);
+    return fallback;
+  }
+}
+
 const activeDocumentStatuses = [
   DocumentRequestStatus.SUBMITTED,
   DocumentRequestStatus.PENDING_PAYMENT,
@@ -118,77 +137,116 @@ const activeComplaintStatuses = [
 
 export default async function PortalDashboard() {
   const profile = await traceDashboardOperation("requireHomeownerProfile", () => requireHomeownerProfile());
+  const enabledModules = await traceDashboardOperation("enabledTenantModules", () => getEnabledTenantModules(profile.tenantId));
+  const association = await traceDashboardOperation("associationSettings", () => getAssociationSettings(profile.tenantId));
+  const degradedOperations: string[] = [];
 
   const now = new Date();
   const today = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
-  const [soa, openBills, latestPayment, recentPaymentRequests, documentRequests, complaints, announcement, events, enabledModules] = await Promise.all([
-    traceDashboardOperation("statementOfAccount", () => getStatementOfAccount(profile.id, profile.tenantId, getAppUrl())),
-    traceDashboardOperation("openBills", () => prisma.bill.findMany({
-      take: 4,
-      where: { tenantId: profile.tenantId, homeownerId: profile.id, balance: { gt: 0 }, archivedAt: null },
-      orderBy: [{ dueDate: "asc" }, { billingMonth: "asc" }],
-      select: { id: true, billingMonth: true, dueDate: true, balance: true, status: true },
-    })),
-    traceDashboardOperation("latestPayment", () => prisma.payment.findFirst({
-      where: { tenantId: profile.tenantId, homeownerId: profile.id, status: "ACTIVE" },
-      orderBy: [{ paymentDate: "desc" }, { createdAt: "desc" }],
-      select: { id: true, amount: true, paymentDate: true, receiptNumber: true, referenceNumber: true },
-    })),
-    traceDashboardOperation("paymentRequests", () => prisma.paymentRequest.findMany({
-      take: 3,
-      where: { tenantId: profile.tenantId, homeownerId: profile.id, status: PaymentRequestStatus.PENDING_REVIEW },
-      orderBy: { createdAt: "desc" },
-      select: { id: true, type: true, collectionType: true, description: true, amount: true, status: true, createdAt: true },
-    })),
-    traceDashboardOperation("documentRequests", () => prisma.documentRequest.findMany({
-      take: 4,
-      where: { tenantId: profile.tenantId, homeownerId: profile.id, archivedAt: null, status: { in: activeDocumentStatuses } },
-      include: { definition: { select: { displayName: true, code: true } }, configuration: { select: { displayName: true } }, histories: { orderBy: { createdAt: "desc" }, take: 1, select: { status: true, note: true, createdAt: true } } },
-      orderBy: { requestedAt: "desc" },
-    })),
-    traceDashboardOperation("complaints", () => prisma.complaint.findMany({
-      take: 3,
-      where: {
-        tenantId: profile.tenantId,
-        status: { in: activeComplaintStatuses },
-        OR: [
-          { privacyMode: ComplaintPrivacyMode.NAMED, submittedById: profile.userId },
-          { privacyMode: ComplaintPrivacyMode.NAMED, homeownerId: profile.id },
-          { privacyMode: ComplaintPrivacyMode.CONFIDENTIAL, confidentialIdentity: { is: { userId: profile.userId } } },
-          { privacyMode: ComplaintPrivacyMode.CONFIDENTIAL, confidentialIdentity: { is: { homeownerId: profile.id } } },
-        ],
-      },
-      orderBy: { submittedAt: "desc" },
-      select: { id: true, title: true, complaintNumber: true, status: true, submittedAt: true, updatedAt: true },
-    })),
-    traceDashboardOperation("latestAnnouncement", () => prisma.announcement.findFirst({
-      where: { tenantId: profile.tenantId, status: "PUBLISHED" },
-      orderBy: [{ createdAt: "desc" }],
-      select: { id: true, title: true, content: true, imageUrl: true, createdAt: true },
-    })),
-    traceDashboardOperation("upcomingEvents", () => prisma.event.findMany({
-      take: 3,
-      where: { tenantId: profile.tenantId, status: "PUBLISHED", eventDate: { gte: today } },
-      orderBy: [{ eventDate: "asc" }, { startTime: "asc" }],
-      select: { id: true, title: true, description: true, eventDate: true, eventTime: true, startTime: true, endTime: true, location: true, imageUrl: true },
-    })),
-    traceDashboardOperation("enabledTenantModules", () => getEnabledTenantModules(profile.tenantId)),
+  const billingEnabled = enabledModules.has(TenantModule.BILLING);
+  const documentsEnabled = enabledModules.has(TenantModule.DOCUMENTS);
+  const complaintsEnabled = enabledModules.has(TenantModule.COMPLAINTS);
+  const announcementsEnabled = enabledModules.has(TenantModule.ANNOUNCEMENTS);
+  const eventsEnabled = enabledModules.has(TenantModule.EVENTS);
+
+  const [soa, openBills, latestPayment, recentPaymentRequests, documentRequests, complaints, announcement, events] = await Promise.all([
+    billingEnabled
+      ? optionalDashboardOperation("statementOfAccount", () => getStatementOfAccount(profile.id, profile.tenantId, getAppUrl()), null, degradedOperations)
+      : Promise.resolve(null),
+    billingEnabled
+      ? optionalDashboardOperation("openBills", () => prisma.bill.findMany({
+          take: 4,
+          where: { tenantId: profile.tenantId, homeownerId: profile.id, balance: { gt: 0 }, archivedAt: null },
+          orderBy: [{ dueDate: "asc" }, { billingMonth: "asc" }],
+          select: { id: true, billingMonth: true, dueDate: true, balance: true, status: true },
+        }), [], degradedOperations)
+      : Promise.resolve([]),
+    billingEnabled
+      ? optionalDashboardOperation("latestPayment", () => prisma.payment.findFirst({
+          where: { tenantId: profile.tenantId, homeownerId: profile.id, status: "ACTIVE" },
+          orderBy: [{ paymentDate: "desc" }, { createdAt: "desc" }],
+          select: { id: true, amount: true, paymentDate: true, receiptNumber: true, referenceNumber: true },
+        }), null, degradedOperations)
+      : Promise.resolve(null),
+    billingEnabled
+      ? optionalDashboardOperation("paymentRequests", () => prisma.paymentRequest.findMany({
+          take: 3,
+          where: { tenantId: profile.tenantId, homeownerId: profile.id, status: PaymentRequestStatus.PENDING_REVIEW },
+          orderBy: { createdAt: "desc" },
+          select: { id: true, type: true, collectionType: true, description: true, amount: true, status: true, createdAt: true },
+        }), [], degradedOperations)
+      : Promise.resolve([]),
+    documentsEnabled
+      ? optionalDashboardOperation("documentRequests", () => prisma.documentRequest.findMany({
+          take: 4,
+          where: { tenantId: profile.tenantId, homeownerId: profile.id, archivedAt: null, status: { in: activeDocumentStatuses } },
+          include: { definition: { select: { displayName: true, code: true } }, configuration: { select: { displayName: true } }, histories: { orderBy: { createdAt: "desc" }, take: 1, select: { status: true, note: true, createdAt: true } } },
+          orderBy: { requestedAt: "desc" },
+        }), [], degradedOperations)
+      : Promise.resolve([]),
+    complaintsEnabled
+      ? optionalDashboardOperation("complaints", () => prisma.complaint.findMany({
+          take: 3,
+          where: {
+            tenantId: profile.tenantId,
+            status: { in: activeComplaintStatuses },
+            OR: [
+              { privacyMode: ComplaintPrivacyMode.NAMED, submittedById: profile.userId },
+              { privacyMode: ComplaintPrivacyMode.NAMED, homeownerId: profile.id },
+              { privacyMode: ComplaintPrivacyMode.CONFIDENTIAL, confidentialIdentity: { is: { userId: profile.userId } } },
+              { privacyMode: ComplaintPrivacyMode.CONFIDENTIAL, confidentialIdentity: { is: { homeownerId: profile.id } } },
+            ],
+          },
+          orderBy: { submittedAt: "desc" },
+          select: { id: true, title: true, complaintNumber: true, status: true, submittedAt: true, updatedAt: true },
+        }), [], degradedOperations)
+      : Promise.resolve([]),
+    announcementsEnabled
+      ? optionalDashboardOperation("latestAnnouncement", () => prisma.announcement.findFirst({
+          where: { tenantId: profile.tenantId, status: "PUBLISHED" },
+          orderBy: [{ createdAt: "desc" }],
+          select: { id: true, title: true, content: true, imageUrl: true, createdAt: true },
+        }), null, degradedOperations)
+      : Promise.resolve(null),
+    eventsEnabled
+      ? optionalDashboardOperation("upcomingEvents", () => prisma.event.findMany({
+          take: 3,
+          where: { tenantId: profile.tenantId, status: "PUBLISHED", eventDate: { gte: today } },
+          orderBy: [{ eventDate: "asc" }, { startTime: "asc" }],
+          select: { id: true, title: true, description: true, eventDate: true, eventTime: true, startTime: true, endTime: true, location: true, imageUrl: true },
+        }), [], degradedOperations)
+      : Promise.resolve([]),
   ]);
 
   const nextDue = openBills[0];
-  const balanceAmount = soa.summary.currentOutstandingBalance;
-  const billingStatus = soa.billingHistory.length === 0 ? "No Billing Record" : balanceAmount <= 0 ? "Paid" : soa.summary.collectionStatus === "Overdue" ? "Overdue" : "Amount Due";
+  const balanceAmount = soa ? soa.summary.currentOutstandingBalance : 0;
+  const billingStatus = !billingEnabled
+    ? "No Billing Record"
+    : !soa
+      ? "Safe Error"
+      : soa.billingHistory.length === 0
+        ? "No Billing Record"
+        : balanceAmount <= 0
+          ? "Paid"
+          : soa.summary.collectionStatus === "Overdue"
+            ? "Overdue"
+            : "Amount Due";
   const quickActions = priorityQuickActions(enabledModules);
   const requestItems = activeRequestItems({ documentRequests, complaints, paymentRequests: recentPaymentRequests });
   const activityItems = activityFeedItems({ latestPayment, documentRequests, paymentRequests: recentPaymentRequests, announcement, events });
-  const firstName = profile.user.name.split(" ")[0] || "Homeowner";
+  const firstName = profile.user.name?.split(" ")[0] || "Homeowner";
   const propertyLabel = profile.block || profile.lot ? `Block ${profile.block || "-"}, Lot ${profile.lot || "-"}` : undefined;
 
   return (
     <PortalPageContainer className="space-y-5 lg:space-y-7">
+      {degradedOperations.length > 0 && (
+        <section className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-semibold leading-6 text-amber-900">
+          Some dashboard sections are temporarily unavailable, but your tenant session and available records loaded safely. Retry later or contact the HOA office if this continues.
+        </section>
+      )}
       <div className="grid gap-5 xl:grid-cols-[minmax(0,1.25fr)_minmax(22rem,.75fr)]">
         <div className="space-y-5">
-          <HomeownerGreeting greeting={timeGreeting(now)} firstName={firstName} associationName={soa.association.name} propertyLabel={propertyLabel} />
+          <HomeownerGreeting greeting={timeGreeting(now)} firstName={firstName} associationName={association.name} propertyLabel={propertyLabel} />
           <BalanceSummaryCard amount={money(balanceAmount)} status={billingStatus} dueDateLabel={nextDue ? shortDate(nextDue.dueDate) : undefined} coverageLabel={nextDue ? monthLabel(nextDue.billingMonth) : undefined} />
           <DashboardQuickActions actions={quickActions} />
         </div>
@@ -204,8 +262,8 @@ export default async function PortalDashboard() {
       </div>
 
       <div className="grid gap-5 xl:grid-cols-[minmax(0,.9fr)_minmax(0,1.1fr)]">
-        <DashboardSection eyebrow="Announcement" title="Latest Announcement" actionHref={enabledModules.has(TenantModule.ANNOUNCEMENTS) ? "/portal/announcements" : undefined}>
-          <DashboardAnnouncementCard announcement={enabledModules.has(TenantModule.ANNOUNCEMENTS) && announcement ? {
+        <DashboardSection eyebrow="Announcement" title="Latest Announcement" actionHref={announcementsEnabled ? "/portal/announcements" : undefined}>
+          <DashboardAnnouncementCard announcement={announcementsEnabled && announcement ? {
             href: `/portal/announcements/${announcement.id}`,
             title: announcement.title,
             summary: announcement.content,
@@ -214,8 +272,8 @@ export default async function PortalDashboard() {
           } : null} />
         </DashboardSection>
 
-        <DashboardSection eyebrow="Events" title="Upcoming Events" actionHref={enabledModules.has(TenantModule.EVENTS) ? "/portal/events" : undefined}>
-          <UpcomingEvents events={enabledModules.has(TenantModule.EVENTS) ? events.map(eventToDashboardCard) : []} />
+        <DashboardSection eyebrow="Events" title="Upcoming Events" actionHref={eventsEnabled ? "/portal/events" : undefined}>
+          <UpcomingEvents events={eventsEnabled ? events.map(eventToDashboardCard) : []} />
         </DashboardSection>
       </div>
     </PortalPageContainer>

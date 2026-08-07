@@ -216,14 +216,8 @@ async function upsertEmployeeLogin(
     return;
   }
 
-  const user = await prisma.user.upsert({
-    where: { tenantId_email: { tenantId, email: loginEmail } },
-    update: {
-      name,
-      role: primaryRole,
-      passwordHash: await hash(password, 12),
-    },
-    create: {
+  const user = await prisma.user.create({
+    data: {
       tenantId,
       name,
       email: loginEmail,

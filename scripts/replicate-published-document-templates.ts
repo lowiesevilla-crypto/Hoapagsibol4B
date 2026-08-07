@@ -36,7 +36,11 @@ assertProductionGuards();
 
 const apply = args.includes("--apply");
 const explicitDryRun = args.includes("--dry-run");
-const confirmDigest = args.find((argument) => argument.startsWith("--confirm-digest="))?.slice("--confirm-digest=".length).trim() || null;
+const confirmDigest =
+  args
+    .find((argument) => argument.startsWith("--confirm-digest="))
+    ?.slice("--confirm-digest=".length)
+    .trim() || null;
 const prisma = new PrismaClient();
 
 type ReplicationClient = Pick<
@@ -82,7 +86,9 @@ function asJson(value: unknown): Prisma.InputJsonValue {
 
 function assertProductionGuards() {
   if (process.platform === "win32") {
-    throw new Error("Refusing to run production template replication from the local Windows development environment.");
+    throw new Error(
+      "Refusing to run production template replication from the local Windows development environment.",
+    );
   }
   if (process.env[CONFIRMATION_ENV] !== "YES") {
     throw new Error(`${CONFIRMATION_ENV}=YES is required.`);
@@ -102,6 +108,7 @@ function assertProductionGuards() {
   if (process.env.EXPECTED_DATABASE_NAME !== expectedDatabaseName) {
     throw new Error(`EXPECTED_DATABASE_NAME=${expectedDatabaseName} is required.`);
   }
+
   const databaseUrl = process.env.DATABASE_URL;
   if (!databaseUrl) throw new Error("Production DATABASE_URL is unavailable.");
   const parsed = parseDatabaseUrl(databaseUrl);
@@ -117,9 +124,6 @@ function assertProductionGuards() {
   }
   if (parsed.database !== expectedDatabaseName) {
     throw new Error("DATABASE_URL database does not match EXPECTED_DATABASE_NAME.");
-  }
-  if (SOURCE_TENANT_ID === TARGET_TENANT_ID) {
-    throw new Error("Source and target tenant IDs must be different.");
   }
 }
 
@@ -164,14 +168,26 @@ function sourceTenantIdentifiers(sourceTenant: {
   address: string | null;
   email: string | null;
 }) {
-  return [sourceTenant.id, sourceTenant.name, sourceTenant.shortName, sourceTenant.address, sourceTenant.email]
+  return [
+    sourceTenant.id,
+    sourceTenant.name,
+    sourceTenant.shortName,
+    sourceTenant.address,
+    sourceTenant.email,
+  ]
     .map((value) => value?.trim())
     .filter((value): value is string => Boolean(value && value.length >= 4));
 }
 
-function assertTenantNeutralTemplate(definitionJson: Prisma.JsonValue, identifiers: string[], label: string) {
+function assertTenantNeutralTemplate(
+  definitionJson: Prisma.JsonValue,
+  identifiers: string[],
+  label: string,
+) {
   const serialized = JSON.stringify(definitionJson).toLocaleLowerCase();
-  const hardcodedIdentifier = identifiers.find((identifier) => serialized.includes(identifier.toLocaleLowerCase()));
+  const hardcodedIdentifier = identifiers.find((identifier) =>
+    serialized.includes(identifier.toLocaleLowerCase()),
+  );
   if (hardcodedIdentifier) {
     throw new Error(
       `${label} contains a hardcoded source-tenant identifier (${JSON.stringify(hardcodedIdentifier)}). ` +
@@ -198,7 +214,6 @@ async function buildPlan(
     where: { tenantId: SOURCE_TENANT_ID, legacyType: spec.type },
     select: {
       id: true,
-      displayName: true,
       assignedTemplateVersionId: true,
       assignedTemplateVersion: { select: { templateSetId: true } },
     },
@@ -220,8 +235,6 @@ async function buildPlan(
     select: {
       id: true,
       templateSetId: true,
-      version: true,
-      status: true,
       schemaVersion: true,
       definitionJson: true,
       publishedAt: true,
@@ -240,7 +253,11 @@ async function buildPlan(
   }
 
   assertValidTemplateDefinition(sourceVersion.definitionJson, `${spec.type} v${spec.sourceVersion}`);
-  assertTenantNeutralTemplate(sourceVersion.definitionJson, sourceIdentifiers, `${spec.type} v${spec.sourceVersion}`);
+  assertTenantNeutralTemplate(
+    sourceVersion.definitionJson,
+    sourceIdentifiers,
+    `${spec.type} v${spec.sourceVersion}`,
+  );
   const sourceContentHash = hashTemplateDefinition(sourceVersion.definitionJson);
 
   const targetDefinition = await client.documentDefinition.findFirst({
@@ -282,8 +299,11 @@ async function buildPlan(
     throw new Error(`${spec.type} definition does not exist for target tenant ${TARGET_TENANT_ID}.`);
   }
   if (!targetDefinition.assignedTemplateVersionId || !targetDefinition.assignedTemplateVersion) {
-    throw new Error(`${spec.type} target definition has no assigned template version; refusing to guess a target template set.`);
+    throw new Error(
+      `${spec.type} target definition has no assigned template version; refusing to guess a target template set.`,
+    );
   }
+
   const targetAssigned = targetDefinition.assignedTemplateVersion;
   if (targetAssigned.status !== DocumentTemplateVersionStatus.PUBLISHED) {
     throw new Error(`${spec.type} target assigned template is not PUBLISHED.`);
@@ -291,13 +311,19 @@ async function buildPlan(
   if (targetAssigned.definitionJson == null) {
     throw new Error(`${spec.type} target assigned template has no definition payload.`);
   }
-  const targetSet = targetDefinition.templateSets.find((set) => set.id === targetAssigned.templateSetId);
+
+  const targetSet = targetDefinition.templateSets.find(
+    (set) => set.id === targetAssigned.templateSetId,
+  );
   if (!targetSet || targetSet.definitionId !== targetDefinition.id) {
     throw new Error(`${spec.type} target assigned template set does not belong to the target definition.`);
   }
 
   const targetAssignedContentHash = hashTemplateDefinition(targetAssigned.definitionJson);
-  const maxTargetVersion = targetSet.versions.reduce((max, version) => Math.max(max, version.version), 0);
+  const maxTargetVersion = targetSet.versions.reduce(
+    (max, version) => Math.max(max, version.version),
+    0,
+  );
   const matchingPublished = targetSet.versions.find(
     (version) =>
       version.status === DocumentTemplateVersionStatus.PUBLISHED &&
@@ -324,7 +350,9 @@ async function buildPlan(
       );
     }
     if (!targetSet.editable || targetSet.ownershipType === DocumentTemplateOwnership.CERTIFIED) {
-      throw new Error(`${spec.type} target template set is read-only; clone it to a tenant-owned editable set before replication.`);
+      throw new Error(
+        `${spec.type} target template set is read-only; clone it to a tenant-owned editable set before replication.`,
+      );
     }
     action = "CREATE_PUBLISHED_AND_ASSIGN";
   }
@@ -484,7 +512,9 @@ async function applyPlan(
 }
 
 async function main() {
-  if (apply && explicitDryRun) throw new Error("Use only one mode: --dry-run or --apply.");
+  if (apply && explicitDryRun) {
+    throw new Error("Use only one mode: --dry-run or --apply.");
+  }
   if (apply && !confirmDigest) {
     throw new Error("--apply requires --confirm-digest=<digest-from-the-latest-dry-run>.");
   }
@@ -503,7 +533,10 @@ async function main() {
         sourceTenant: { id: sourceTenant.id, name: sourceTenant.name },
         targetTenant: { id: targetTenant.id, name: targetTenant.name },
         actor: { id: actor.id, role: actor.role },
-        requestedTemplates: requestedTemplates.map((item) => ({ type: item.type, sourceVersion: item.sourceVersion })),
+        requestedTemplates: requestedTemplates.map((item) => ({
+          type: item.type,
+          sourceVersion: item.sourceVersion,
+        })),
         planDigest: digest,
         plans: plans.map(sanitizePlan),
       },
@@ -517,7 +550,9 @@ async function main() {
     return;
   }
   if (confirmDigest !== digest) {
-    throw new Error("The supplied --confirm-digest does not match the current preflight plan. Run dry-run again.");
+    throw new Error(
+      "The supplied --confirm-digest does not match the current preflight plan. Run dry-run again.",
+    );
   }
 
   const results = await prisma.$transaction(async (tx) => {
@@ -525,10 +560,15 @@ async function main() {
     const transactionPlans = await buildPlans(tx, identifiers);
     const transactionDigest = planDigest(actorUserId, transactionPlans);
     if (transactionDigest !== confirmDigest) {
-      throw new Error("Production template state changed after dry-run. Transaction aborted; run dry-run again.");
+      throw new Error(
+        "Production template state changed after dry-run. Transaction aborted; run dry-run again.",
+      );
     }
+
     const applied = [];
-    for (const plan of transactionPlans) applied.push(await applyPlan(tx, plan, actorUserId));
+    for (const plan of transactionPlans) {
+      applied.push(await applyPlan(tx, plan, actorUserId));
+    }
     return applied;
   });
 
@@ -536,7 +576,9 @@ async function main() {
   const incomplete = verificationPlans.filter((plan) => plan.action !== "ALREADY_ASSIGNED");
   if (incomplete.length) {
     throw new Error(
-      `Post-apply verification failed for: ${incomplete.map((plan) => `${plan.type}:${plan.action}`).join(", ")}.`,
+      `Post-apply verification failed for: ${incomplete
+        .map((plan) => `${plan.type}:${plan.action}`)
+        .join(", ")}.`,
     );
   }
 

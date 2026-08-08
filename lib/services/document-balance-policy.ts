@@ -49,6 +49,7 @@ export async function getQualifyingHomeownerBalance(
 
 export type DocumentAccessPolicyRequest = {
   status: DocumentRequestStatus | string;
+  origin?: string;
   paymentRequiredSnapshot: boolean;
   allowDownloadDespiteBalance: boolean;
   definition?: { outstandingBalancePolicy: DocumentOutstandingBalancePolicy } | null;
@@ -75,8 +76,9 @@ export function resolveDocumentDownloadAccess(input: {
   const { request, currentOutstandingBalance } = input;
   const policy = policyForDocumentRequest(request);
   const paymentLocked = request.paymentRequiredSnapshot && request.paymentRequest?.status !== PaymentRequestStatus.APPROVED;
+  const staffWalkIn = request.origin === "ADMIN";
   const hasBalance = currentOutstandingBalance > 0.009;
-  const balanceLocked = hasBalance && (
+  const balanceLocked = !staffWalkIn && hasBalance && (
     policy === DocumentOutstandingBalancePolicy.BLOCK_DOWNLOAD ||
     policy === DocumentOutstandingBalancePolicy.BLOCK_REQUEST ||
     (policy === DocumentOutstandingBalancePolicy.ALLOW_ADMIN_OVERRIDE && !request.allowDownloadDespiteBalance)

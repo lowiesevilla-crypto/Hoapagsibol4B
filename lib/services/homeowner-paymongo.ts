@@ -66,8 +66,8 @@ export async function createHomeownerPayMongoCheckout(requestId: string, tenantI
   const secretKey = requiredHomeownerPayMongoSecret(SECRET_KEY_ENV);
   const successUrl = new URL("/portal/pay", getAppUrl());
   successUrl.searchParams.set("online", "confirming");
-  const cancelUrl = new URL("/portal/pay", getAppUrl());
-  cancelUrl.searchParams.set("online", "cancelled");
+  const cancelUrl = new URL("/portal/pay/paymongo-cancel", getAppUrl());
+  cancelUrl.searchParams.set("requestId", request.id);
   const cents = Math.round(amount * 100);
   const purpose = paymentPurpose(request);
   const idempotencyKey = `hoahub-homeowner-${tenantId}-${request.id}`.slice(0, 255);
@@ -210,7 +210,7 @@ export async function processHomeownerPayMongoWebhook(rawBody: string, signature
   if (request.status === PaymentRequestStatus.APPROVED) {
     return { ok: true as const, duplicate: true, eventId: event.eventId, paymentRequestId: request.id };
   }
-  if (request.status !== PaymentRequestStatus.PENDING_REVIEW) {
+  if (![PaymentRequestStatus.PENDING_REVIEW, PaymentRequestStatus.REJECTED].includes(request.status)) {
     return { ok: true as const, ignored: true, eventId: event.eventId, paymentRequestId: request.id };
   }
 
@@ -246,7 +246,14 @@ export async function processHomeownerPayMongoWebhook(rawBody: string, signature
   try {
     await prisma.paymentRequest.update({
       where: { id: request.id },
-      data: { method: paymentMethodFromSource(paymentAttributes.source), paymentDate: paidAt },
+      data: {
+        status: PaymentRequestStatus.PENDING_REVIEW,
+        method: paymentMethodFromSource(paymentAttributes.source),
+        paymentDate: paidAt,
+        reviewRemarks: null,
+        reviewedAt: null,
+        reviewedById: null,
+      },
     });
     await prisma.auditLog.create({
       data: {

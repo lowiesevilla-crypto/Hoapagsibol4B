@@ -49,6 +49,7 @@
     "db:import": "tsx scripts/import-database.ts"
   },
   "prisma": {
+    "schema": "prisma",
     "seed": "tsx prisma/seed.ts"
   },
   "dependencies": {

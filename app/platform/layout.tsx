@@ -9,18 +9,18 @@ export default async function PlatformLayout({ children }: { children: React.Rea
   const user = await requireUser(Role.PLATFORM_ADMIN);
 
   return (
-    <div className="min-h-screen overflow-x-hidden bg-slate-50">
-      <Sidebar user={user} links={platformLinks} roleLabel={user.role.replaceAll("_", " ")} association={{ name: "HOAHub Platform", logoUrl: "/pagsibol-logo.png" }} />
+    <div className="min-h-screen overflow-x-hidden bg-slate-50 print:bg-white">
+      <div className="print:hidden"><Sidebar user={user} links={platformLinks} roleLabel={user.role.replaceAll("_", " ")} association={{ name: "HOAHub Platform", logoUrl: "/pagsibol-logo.png" }} /></div>
 
       <Suspense>
         <TransactionFeedback />
       </Suspense>
 
-      <main className="mx-auto min-w-0 max-w-[1800px] px-4 py-6 sm:px-7 lg:ml-72 lg:px-10 lg:py-9">
+      <main className="mx-auto min-w-0 max-w-[1800px] px-4 py-6 sm:px-7 lg:ml-72 lg:px-10 lg:py-9 print:ml-0 print:max-w-none print:p-0">
         {children}
       </main>
 
-      <footer className="mx-auto max-w-[1800px] px-4 pb-6 text-xs text-slate-400 sm:px-7 lg:ml-72 lg:px-10">
+      <footer className="mx-auto max-w-[1800px] px-4 pb-6 text-xs text-slate-400 sm:px-7 lg:ml-72 lg:px-10 print:hidden">
         HOAHub™ v1.1 • Community Operating System • © 2026 Lowie Sevilla
       </footer>
     </div>

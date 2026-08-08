@@ -111,10 +111,7 @@ export async function assignTenantSubscription(input: {
         currency: plan.currency,
       },
     });
-    await tx.tenant.update({
-      where: { id: input.tenantId },
-      data: { subscriptionPlan: plan.code, subscriptionStatus: status },
-    });
+    await tx.tenant.update({ where: { id: input.tenantId }, data: { subscriptionPlan: plan.code, subscriptionStatus: status } });
     await tx.auditLog.create({
       data: {
         tenantId: input.tenantId,
@@ -146,12 +143,9 @@ export async function saveTenantBillingProfile(input: {
   paymentMethodPreference?: string;
   actorId: string;
 }) {
-  const profile = await prisma.tenantBillingProfile.upsert({
-    where: { tenantId: input.tenantId },
-    create: { ...input, actorId: undefined } as never,
-    update: { ...input, actorId: undefined } as never,
-  });
-  await prisma.auditLog.create({ data: { tenantId: input.tenantId, actorId: input.actorId, module: "PLATFORM_BILLING", action: "BILLING_PROFILE_UPDATED", entityType: "TenantBillingProfile", entityId: input.tenantId } });
+  const { actorId, ...data } = input;
+  const profile = await prisma.tenantBillingProfile.upsert({ where: { tenantId: input.tenantId }, create: data, update: data });
+  await prisma.auditLog.create({ data: { tenantId: input.tenantId, actorId, module: "PLATFORM_BILLING", action: "BILLING_PROFILE_UPDATED", entityType: "TenantBillingProfile", entityId: input.tenantId } });
   return profile;
 }
 
@@ -199,9 +193,7 @@ export async function generatePlatformInvoice(input: { tenantId: string; actorId
       },
     });
     await tx.tenantSubscription.update({ where: { id: subscription.id }, data: { currentPeriodStart: periodStart, currentPeriodEnd: periodEnd, nextBillingDate: nextPeriodStart } });
-    await tx.auditLog.create({
-      data: { tenantId: input.tenantId, actorId: input.actorId, module: "PLATFORM_BILLING", action: "PLATFORM_INVOICE_GENERATED", entityType: "PlatformInvoice", entityId: invoice.id, metadata: { invoiceNumber: invoice.invoiceNumber, total, periodStart, periodEnd, dueDate } },
-    });
+    await tx.auditLog.create({ data: { tenantId: input.tenantId, actorId: input.actorId, module: "PLATFORM_BILLING", action: "PLATFORM_INVOICE_GENERATED", entityType: "PlatformInvoice", entityId: invoice.id, metadata: { invoiceNumber: invoice.invoiceNumber, total, periodStart, periodEnd, dueDate } } });
     return invoice;
   });
 }
@@ -218,19 +210,7 @@ export async function recordPlatformManualPayment(input: { tenantId: string; inv
   const fullyPaid = newBalance < 0.01;
 
   return prisma.$transaction(async (tx) => {
-    const payment = await tx.platformPayment.create({
-      data: {
-        tenantId: input.tenantId,
-        paymentReference: input.referenceNumber?.trim() || paymentReference(),
-        gateway: PlatformPaymentGateway.MANUAL,
-        amount: input.amount,
-        netAmount: input.amount,
-        method: input.method,
-        status: PlatformPaymentStatus.SUCCEEDED,
-        paidAt,
-        metadata: { recordedBy: input.actorId },
-      },
-    });
+    const payment = await tx.platformPayment.create({ data: { tenantId: input.tenantId, paymentReference: input.referenceNumber?.trim() || paymentReference(), gateway: PlatformPaymentGateway.MANUAL, amount: input.amount, netAmount: input.amount, method: input.method, status: PlatformPaymentStatus.SUCCEEDED, paidAt, metadata: { recordedBy: input.actorId } } });
     await tx.platformPaymentAllocation.create({ data: { tenantId: input.tenantId, paymentId: payment.id, invoiceId: invoice.id, amount: input.amount } });
     await tx.platformInvoice.update({ where: { id: invoice.id }, data: { amountPaid: newPaid, outstandingBalance: newBalance, status: fullyPaid ? PlatformInvoiceStatus.PAID : PlatformInvoiceStatus.PARTIALLY_PAID, paidAt: fullyPaid ? paidAt : null } });
     if (fullyPaid) {
@@ -259,9 +239,6 @@ export async function suspendTenantCommercially(input: { tenantId: string; reaso
 }
 
 export async function reinstateTenantCommercially(input: { tenantId: string; notes?: string; actorId: string }) {
-  const outstanding = await prisma.platformInvoice.aggregate({ where: { tenantId: input.tenantId, status: { in: [PlatformInvoiceStatus.OPEN, PlatformInvoiceStatus.PARTIALLY_PAID, PlatformInvoiceStatus.OVERDUE] } }, _sum: { outstandingBalance: true } });
-  const activeHold = await prisma.tenantSuspensionRecord.findFirst({ where: { tenantId: input.tenantId, reinstatedAt: null, reason: { not: TenantSuspensionReason.NON_PAYMENT } } });
-  if (activeHold && Number(outstanding._sum.outstandingBalance || 0) > 0) throw new Error("Resolve the outstanding balance and administrative hold before reinstatement.");
   const now = new Date();
   return prisma.$transaction(async (tx) => {
     await tx.tenantSuspensionRecord.updateMany({ where: { tenantId: input.tenantId, reinstatedAt: null }, data: { reinstatedAt: now, reinstatedById: input.actorId } });

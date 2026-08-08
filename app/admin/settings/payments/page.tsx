@@ -32,7 +32,7 @@ export default async function HomeownerPaymentSettingsPage({ searchParams }: { s
             <div className="flex items-start gap-4">
               <input className="mt-1 size-4 accent-pine-700" type="radio" name="flow" value="MANUAL_QR" defaultChecked={config.flow === "MANUAL_QR"} />
               <span className="grid size-11 shrink-0 place-items-center rounded-2xl bg-pine-100 text-pine-700"><QrCode className="size-5" /></span>
-              <span className="min-w-0"><span className="block text-lg font-black text-slate-950">Manual QR & proof verification</span><span className="mt-1 block text-sm leading-6 text-slate-600">Homeowners see the tenant's official GCash QR, enter the payment reference, upload proof, and wait for an authorized tenant finance user to approve the payment.</span><span className="mt-2 inline-flex rounded-full bg-emerald-100 px-2.5 py-1 text-xs font-black text-emerald-800">Existing production default</span></span>
+              <span className="min-w-0"><span className="block text-lg font-black text-slate-950">Manual QR & proof verification</span><span className="mt-1 block text-sm leading-6 text-slate-600">Homeowners see the tenant&apos;s official GCash QR, enter the payment reference, upload proof, and wait for an authorized tenant finance user to approve the payment.</span><span className="mt-2 inline-flex rounded-full bg-emerald-100 px-2.5 py-1 text-xs font-black text-emerald-800">Existing production default</span></span>
             </div>
           </label>
 
@@ -48,7 +48,7 @@ export default async function HomeownerPaymentSettingsPage({ searchParams }: { s
         <div className="mt-6">
           <label className="label" htmlFor="paymongoLinkedAccountId">PayMongo linked merchant account ID</label>
           <input id="paymongoLinkedAccountId" className="field font-mono" name="paymongoLinkedAccountId" defaultValue={config.paymongoLinkedAccountId} placeholder="org_..." autoComplete="off" />
-          <p className="mt-1 text-xs leading-5 text-slate-500">Tenant-specific PayMongo merchant/sub-account that receives this tenant's homeowner payment funds. Required before PayMongo Online can be activated.</p>
+          <p className="mt-1 text-xs leading-5 text-slate-500">Tenant-specific PayMongo merchant/sub-account that receives this tenant&apos;s homeowner payment funds. Required before PayMongo Online can be activated.</p>
         </div>
 
         <div className="mt-6"><SubmitButton>Save homeowner payment flow</SubmitButton></div>

@@ -148,7 +148,7 @@ export async function resolveActiveDocumentTemplate(context: DocumentExecutionCo
 }
 
 export async function resolveEffectiveDocumentTemplate(context: DocumentExecutionContext, input: { definitionId: string; mode: DocumentGenerationMode; requestId?: string | null; requestTemplateVersionId?: string | null; draftTemplateVersionId?: string | null }) {
-  await assertDefinition(context, input.definitionId);
+  const definition = await assertDefinition(context, input.definitionId);
   if (input.draftTemplateVersionId) {
     if (input.mode !== DocumentGenerationMode.PREVIEW) throw new Error("Draft templates may be used only for an explicit preview.");
     requireDocumentPermission(context, "MANAGE_TENANT_TEMPLATES");
@@ -161,7 +161,21 @@ export async function resolveEffectiveDocumentTemplate(context: DocumentExecutio
     if (captured) return captured;
     throw new DocumentRuntimeError("DOCUMENT_TEMPLATE_VERSION_NOT_AVAILABLE", "The captured template version is not valid for this tenant and document definition.");
   }
-  const active = await platformPrisma.documentTemplateVersion.findFirst({ where: { tenantId: context.tenantId, status: DocumentTemplateVersionStatus.PUBLISHED, templateSet: { tenantId: context.tenantId, definitionId: input.definitionId, active: true } }, include: { templateSet: true }, orderBy: { version: "desc" } });
+  let active = null;
+  if (definition.assignedTemplateVersionId) {
+    active = await platformPrisma.documentTemplateVersion.findFirst({
+      where: {
+        tenantId: context.tenantId,
+        id: definition.assignedTemplateVersionId,
+        status: DocumentTemplateVersionStatus.PUBLISHED,
+        templateSet: { tenantId: context.tenantId, definitionId: input.definitionId, active: true },
+      },
+      include: { templateSet: true },
+    });
+  }
+  if (!active) {
+    active = await platformPrisma.documentTemplateVersion.findFirst({ where: { tenantId: context.tenantId, status: DocumentTemplateVersionStatus.PUBLISHED, templateSet: { tenantId: context.tenantId, definitionId: input.definitionId, active: true } }, include: { templateSet: true }, orderBy: { version: "desc" } });
+  }
   if (!active) throw new DocumentRuntimeError("DOCUMENT_TEMPLATE_VERSION_NOT_AVAILABLE", "No approved and published template version is available for this document definition.");
   if (input.requestId) {
     await platformPrisma.documentRequest.updateMany({

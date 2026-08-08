@@ -1,12 +1,12 @@
 import "server-only";
 
 import { HomeownerActivationStatus, HomeownerEmailVerificationStatus, Prisma, Role } from "@prisma/client";
-import { hash } from "bcryptjs";
+import { compare, hash } from "bcryptjs";
 import { SignJWT } from "jose/jwt/sign";
 import { jwtVerify } from "jose/jwt/verify";
 import { prepareSession } from "@/lib/auth";
 import { platformPrisma, prisma } from "@/lib/db";
-import { hashOpaqueToken } from "@/lib/services/homeowner-activation";
+import { hashOpaqueToken, normalizeActivationEmail, temporaryActivationPasswordForVerificationToken } from "@/lib/services/homeowner-activation";
 import { tenantCanSignIn } from "@/lib/tenant";
 import { runWithTenant, setTenantContext } from "@/lib/tenant-context";
 
@@ -26,6 +26,7 @@ type ActivationHandoffPayload = {
   userId: string;
   profileId: string;
   credentialId: string;
+  temporaryPassword?: string;
 };
 
 export type ActivationHandoffDetails = {
@@ -34,6 +35,7 @@ export type ActivationHandoffDetails = {
   tenantName: string;
   tenantSlug: string;
   propertyLabel: string;
+  temporaryPassword: string;
 };
 
 export async function createActivationHandoffFromVerifiedToken(rawToken: string) {
@@ -64,12 +66,18 @@ export async function createActivationHandoffFromVerifiedToken(rawToken: string)
   });
   if (!credential) return { error: GENERIC_HANDOFF_ERROR } as const;
 
+  const candidateTemporaryPassword = temporaryActivationPasswordForVerificationToken(value);
+  const temporaryPassword = await compare(candidateTemporaryPassword, credential.credentialHash)
+    ? candidateTemporaryPassword
+    : "";
+
   const payload: ActivationHandoffPayload = {
     tenantId: record.tenantId,
     tenantSlug: record.user.tenant.slug,
     userId: record.userId,
     profileId: profile.id,
     credentialId: credential.id,
+    temporaryPassword,
   };
   const handoff = await new SignJWT(payload)
     .setProtectedHeader({ alg: "HS256" })
@@ -86,6 +94,7 @@ export async function createActivationHandoffFromVerifiedToken(rawToken: string)
       tenantName: record.user.tenant.name,
       tenantSlug: record.user.tenant.slug,
       propertyLabel: `Block ${profile.block}, Lot ${profile.lot}`,
+      temporaryPassword,
     } satisfies ActivationHandoffDetails,
   } as const;
 }
@@ -101,8 +110,9 @@ export async function readActivationHandoff(handoff: string | null | undefined):
       userId: typeof payload.userId === "string" ? payload.userId : "",
       profileId: typeof payload.profileId === "string" ? payload.profileId : "",
       credentialId: typeof payload.credentialId === "string" ? payload.credentialId : "",
+      temporaryPassword: typeof payload.temporaryPassword === "string" ? payload.temporaryPassword : "",
     };
-    return Object.values(parsed).every(Boolean) ? parsed : null;
+    return parsed.tenantId && parsed.tenantSlug && parsed.userId && parsed.profileId && parsed.credentialId ? parsed : null;
   } catch {
     return null;
   }
@@ -133,10 +143,11 @@ export async function getActivationHandoffDetails(handoff: string | null | undef
     tenantName: profile.user.tenant.name,
     tenantSlug: profile.user.tenant.slug,
     propertyLabel: `Block ${profile.block}, Lot ${profile.lot}`,
+    temporaryPassword: payload.temporaryPassword || "",
   } satisfies ActivationHandoffDetails;
 }
 
-export async function completeHomeownerActivationFromHandoff(input: { handoff: string; password: string }) {
+export async function completeHomeownerActivationFromHandoff(input: { handoff: string; email: string; password: string }) {
   const payload = await readActivationHandoff(input.handoff);
   if (!payload) return { error: GENERIC_HANDOFF_ERROR } as const;
 
@@ -152,6 +163,9 @@ export async function completeHomeownerActivationFromHandoff(input: { handoff: s
   });
   if (!profile || !profile.user.active || profile.user.role !== Role.HOMEOWNER || profile.user.tenant.slug !== payload.tenantSlug) {
     return { error: GENERIC_HANDOFF_ERROR } as const;
+  }
+  if (normalizeActivationEmail(input.email) !== normalizeActivationEmail(profile.user.email)) {
+    return { error: "Enter the same registered email address that received this activation invitation." } as const;
   }
   if (!tenantCanSignIn(profile.user.tenant)) return { error: profile.user.tenant.advisories[0]?.message || "This HOA portal is currently unavailable." } as const;
   if (profile.activationStatus === HomeownerActivationStatus.DISABLED) return { error: "This homeowner activation has been disabled. Contact the HOA office." } as const;
@@ -197,6 +211,9 @@ export async function completeHomeownerActivationFromHandoff(input: { handoff: s
       if (!currentProfile || currentProfile.activationStatus === HomeownerActivationStatus.ACTIVE || currentProfile.activatedAt) {
         throw new Error("This homeowner account is already activated. Use the login page to sign in.");
       }
+      if (normalizeActivationEmail(currentProfile.user.email) !== normalizeActivationEmail(input.email)) {
+        throw new Error("Enter the same registered email address that received this activation invitation.");
+      }
       const currentCredential = await tx.homeownerActivationCredential.findFirst({
         where: { id: credential.id, tenantId: profile.tenantId, userId: profile.userId, usedAt: null, revokedAt: null, expiresAt: { gt: now } },
       });
@@ -224,7 +241,7 @@ export async function completeHomeownerActivationFromHandoff(input: { handoff: s
           action: "HOMEOWNER_ACTIVATED",
           entityType: "User",
           entityId: profile.userId,
-          metadata: { sessionCreated: true, activationMode: "verified_email_handoff" },
+          metadata: { sessionCreated: true, activationMode: "verified_email_handoff", termsAccepted: true },
         },
       });
     }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable }), { role: Role.HOMEOWNER });

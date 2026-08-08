@@ -7,11 +7,15 @@ import {
   validateTemplateDefinition,
 } from "@/lib/services/document-template-builder";
 import {
+  certificateOfResidencyPublishedTemplateReplicationCompatibilityVersion,
+  moveInOutPublishedTemplateReplicationCompatibilityVersion,
   normalizePublishedTemplateReplicationSource,
-  publishedTemplateReplicationCompatibilityVersion,
 } from "@/lib/services/published-template-replication-compat";
 
-function legacyMovePassDefinition(binding = "passType"): Prisma.JsonValue {
+function legacyDefinition(options: {
+  binding: string;
+  content: string;
+}): Prisma.JsonValue {
   return {
     schemaVersion: 1,
     page: {
@@ -22,23 +26,58 @@ function legacyMovePassDefinition(binding = "passType"): Prisma.JsonValue {
     },
     blocks: [
       {
-        id: "legacy-pass-fields",
+        id: "legacy-fields",
         type: "text",
         section: "body",
-        binding,
+        binding: options.binding,
         order: 1,
         visible: true,
-        content:
-          "{{partyName}} {{block}} {{lot}} {{scheduledDate}} {{startTime}} {{endTime}} {{vehicleDetails}} {{purpose}}",
+        content: options.content,
       },
     ],
     meta: { editor: "professional-document-editor" },
   } as Prisma.JsonValue;
 }
 
+function legacyMovePassDefinition(binding = "passType") {
+  return legacyDefinition({
+    binding,
+    content:
+      "{{partyName}} {{block}} {{lot}} {{scheduledDate}} {{startTime}} {{endTime}} {{vehicleDetails}} {{purpose}}",
+  });
+}
+
+function legacyResidencyDefinition(binding = "homeowner_name") {
+  return legacyDefinition({
+    binding,
+    content:
+      "This certifies {{homeowner_name}} of {{association_name}}. Issued this {{issue_day_ordinal}} day of {{issue_month_year}} at {{office_location}}.",
+  });
+}
+
 function record(value: unknown): Record<string, unknown> {
   assert.ok(value && typeof value === "object" && !Array.isArray(value));
   return value as Record<string, unknown>;
+}
+
+function assertNormalMargins(definitionJson: Prisma.JsonValue) {
+  const definition = record(definitionJson);
+  const page = record(definition.page);
+  assert.deepEqual(page.margins, {
+    top: 25.4,
+    right: 25.4,
+    bottom: 25.4,
+    left: 25.4,
+  });
+  assert.ok(Array.isArray(definition.blocks));
+  return record(definition.blocks[0]);
+}
+
+function assertCurrentValidationPasses(definitionJson: Prisma.JsonValue) {
+  const validation = validateTemplateDefinition(definitionJson, {
+    allowedPlaceholders: new Set(allowedDocumentPlaceholders),
+  });
+  assert.equal(validation.valid, true, validation.errors.join("; "));
 }
 
 test("normalizes only the approved Move-In/Out v1 legacy aliases and adds normal margins", () => {
@@ -50,19 +89,9 @@ test("normalizes only the approved Move-In/Out v1 legacy aliases and adds normal
 
   assert.equal(
     result.compatibilityVersion,
-    publishedTemplateReplicationCompatibilityVersion,
+    moveInOutPublishedTemplateReplicationCompatibilityVersion,
   );
-  const definition = record(result.definitionJson);
-  const page = record(definition.page);
-  assert.deepEqual(page.margins, {
-    top: 25.4,
-    right: 25.4,
-    bottom: 25.4,
-    left: 25.4,
-  });
-
-  assert.ok(Array.isArray(definition.blocks));
-  const block = record(definition.blocks[0]);
+  const block = assertNormalMargins(result.definitionJson);
   assert.equal(block.binding, "request.passType");
   assert.equal(
     block.content,
@@ -70,47 +99,84 @@ test("normalizes only the approved Move-In/Out v1 legacy aliases and adds normal
   );
   assert.ok(result.changes.includes("placeholder:partyName->request.representativeName"));
   assert.ok(result.changes.includes("page.margins:normal-25.4mm"));
+  assertCurrentValidationPasses(result.definitionJson);
+});
 
-  const validation = validateTemplateDefinition(result.definitionJson, {
-    allowedPlaceholders: new Set(allowedDocumentPlaceholders),
+test("normalizes the approved Certificate of Residency v2 aliases without collapsing date fragments", () => {
+  const result = normalizePublishedTemplateReplicationSource({
+    type: DocumentType.CERTIFICATE_OF_RESIDENCY,
+    sourceVersion: 2,
+    definitionJson: legacyResidencyDefinition(),
   });
-  assert.equal(validation.valid, true, validation.errors.join("; "));
+
+  assert.equal(
+    result.compatibilityVersion,
+    certificateOfResidencyPublishedTemplateReplicationCompatibilityVersion,
+  );
+  const block = assertNormalMargins(result.definitionJson);
+  assert.equal(block.binding, "subject.fullName");
+  assert.equal(
+    block.content,
+    "This certifies {{subject.fullName}} of {{tenant.name}}. Issued this {{document.issueDayOrdinal}} day of {{document.issueMonthYear}} at {{document.issuePlace}}.",
+  );
+  assert.ok(result.changes.includes("placeholder:homeowner_name->subject.fullName"));
+  assert.ok(result.changes.includes("placeholder:association_name->tenant.name"));
+  assert.ok(result.changes.includes("placeholder:issue_day_ordinal->document.issueDayOrdinal"));
+  assert.ok(result.changes.includes("placeholder:issue_month_year->document.issueMonthYear"));
+  assert.ok(result.changes.includes("placeholder:office_location->document.issuePlace"));
+  assertCurrentValidationPasses(result.definitionJson);
 });
 
 test("leaves unknown legacy placeholders invalid instead of silently accepting them", () => {
-  const result = normalizePublishedTemplateReplicationSource({
+  const moveResult = normalizePublishedTemplateReplicationSource({
     type: DocumentType.MOVE_IN_OUT_PASS,
     sourceVersion: 1,
     definitionJson: legacyMovePassDefinition("legacyMystery"),
   });
-  const validation = validateTemplateDefinition(result.definitionJson, {
-    allowedPlaceholders: new Set(allowedDocumentPlaceholders),
+  const residencyResult = normalizePublishedTemplateReplicationSource({
+    type: DocumentType.CERTIFICATE_OF_RESIDENCY,
+    sourceVersion: 2,
+    definitionJson: legacyResidencyDefinition("legacyResidencyMystery"),
   });
 
-  assert.equal(validation.valid, false);
-  assert.ok(
-    validation.errors.includes("Unsupported placeholder: legacyMystery"),
-    validation.errors.join("; "),
-  );
+  for (const [result, expected] of [
+    [moveResult, "Unsupported placeholder: legacyMystery"],
+    [residencyResult, "Unsupported placeholder: legacyResidencyMystery"],
+  ] as const) {
+    const validation = validateTemplateDefinition(result.definitionJson, {
+      allowedPlaceholders: new Set(allowedDocumentPlaceholders),
+    });
+    assert.equal(validation.valid, false);
+    assert.ok(validation.errors.includes(expected), validation.errors.join("; "));
+  }
 });
 
-test("does not normalize other document types or Move-In/Out source versions", () => {
-  const definition = legacyMovePassDefinition();
-  const otherType = normalizePublishedTemplateReplicationSource({
-    type: DocumentType.GATE_PASS,
-    sourceVersion: 8,
-    definitionJson: definition,
-  });
-  const otherVersion = normalizePublishedTemplateReplicationSource({
-    type: DocumentType.MOVE_IN_OUT_PASS,
-    sourceVersion: 2,
-    definitionJson: definition,
-  });
+test("does not normalize unapproved document types or source versions", () => {
+  const moveDefinition = legacyMovePassDefinition();
+  const residencyDefinition = legacyResidencyDefinition();
+  const cases = [
+    normalizePublishedTemplateReplicationSource({
+      type: DocumentType.GATE_PASS,
+      sourceVersion: 8,
+      definitionJson: moveDefinition,
+    }),
+    normalizePublishedTemplateReplicationSource({
+      type: DocumentType.MOVE_IN_OUT_PASS,
+      sourceVersion: 2,
+      definitionJson: moveDefinition,
+    }),
+    normalizePublishedTemplateReplicationSource({
+      type: DocumentType.CERTIFICATE_OF_RESIDENCY,
+      sourceVersion: 1,
+      definitionJson: residencyDefinition,
+    }),
+  ];
 
-  assert.equal(otherType.compatibilityVersion, null);
-  assert.equal(otherVersion.compatibilityVersion, null);
-  assert.deepEqual(otherType.changes, []);
-  assert.deepEqual(otherVersion.changes, []);
-  assert.equal(otherType.definitionJson, definition);
-  assert.equal(otherVersion.definitionJson, definition);
+  for (const result of cases) {
+    assert.equal(result.compatibilityVersion, null);
+    assert.deepEqual(result.changes, []);
+  }
+  assert.equal(cases[0].definitionJson, moveDefinition);
+  assert.equal(cases[1].definitionJson, moveDefinition);
+  assert.equal(cases[2].definitionJson, residencyDefinition);
 });

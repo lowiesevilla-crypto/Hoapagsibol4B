@@ -49,7 +49,67 @@ enum TenantSubscriptionStatus {
   TRIAL
   ACTIVE
   PAST_DUE
+  GRACE
+  RESTRICTED
+  SUSPENDED
   CANCELLED
+  EXPIRED
+}
+
+enum PlatformInvoiceStatus {
+  DRAFT
+  OPEN
+  PARTIALLY_PAID
+  PAID
+  OVERDUE
+  VOID
+  CANCELLED
+}
+
+enum PlatformPaymentStatus {
+  PENDING
+  SUCCEEDED
+  FAILED
+  PARTIALLY_REFUNDED
+  REFUNDED
+  VOIDED
+}
+
+enum PlatformPaymentMethod {
+  PAYMONGO_CHECKOUT
+  PAYMONGO_GCASH
+  PAYMONGO_MAYA
+  PAYMONGO_QRPH
+  PAYMONGO_CARD
+  PAYMONGO_BANK
+  BANK_TRANSFER
+  CASH
+  CHECK
+  MANUAL
+  OTHER
+}
+
+enum PlatformPaymentGateway {
+  PAYMONGO
+  XENDIT
+  MANUAL
+}
+
+enum PlatformGatewayEventStatus {
+  RECEIVED
+  PROCESSED
+  IGNORED
+  FAILED
+}
+
+enum TenantSuspensionReason {
+  NON_PAYMENT
+  REQUESTED_BY_TENANT
+  SECURITY
+  TERMS_VIOLATION
+  COMPLIANCE
+  ADMINISTRATIVE
+  OTHER
 }
 
 enum ComplaintPrivacyMode {
@@ -632,6 +692,12 @@ model Tenant {
   importRows                 TenantImportRow[]
   billingRules               BillingRule[]
   paymentAllocations         PaymentAllocation[]
+  subscriptions              TenantSubscription[]
+  billingProfile             TenantBillingProfile?
+  platformInvoices           PlatformInvoice[]
+  platformPayments           PlatformPayment[]
+  platformGatewayEvents      PlatformGatewayEvent[]
+  suspensionRecords          TenantSuspensionRecord[]
   documentDefinitions        DocumentDefinition[]
   documentTemplateSets       DocumentTemplateSet[]
   documentTemplateVersions   DocumentTemplateVersion[]
@@ -659,6 +725,220 @@ model Tenant {
   @@index([name])
   @@index([status, subscriptionStatus])
   @@index([subscriptionPlan, subscriptionStatus])
+}
+
+model SubscriptionPlan {
+  id                String                   @id @default(cuid())
+  code              String                   @unique @db.VarChar(60)
+  name              String
+  description       String?                  @db.Text
+  active            Boolean                  @default(true)
+  currency          String                   @default("PHP") @db.VarChar(3)
+  monthlyPrice      Decimal?                 @db.Decimal(12, 2)
+  annualPrice       Decimal?                 @db.Decimal(12, 2)
+  setupFee          Decimal                  @default(0) @db.Decimal(12, 2)
+  trialDays         Int                      @default(14)
+  maximumUsers      Int?
+  maximumHomeowners Int?
+  maximumStorageMb  Int?
+  modules           SubscriptionPlanModule[]
+  subscriptions     TenantSubscription[]
+  createdAt         DateTime                 @default(now())
+  updatedAt         DateTime                 @updatedAt
+
+  @@index([active, name])
+}
+
+model SubscriptionPlanModule {
+  planId    String
+  module    TenantModule
+  enabled   Boolean          @default(true)
+  plan      SubscriptionPlan @relation(fields: [planId], references: [id], onDelete: Cascade)
+  createdAt DateTime         @default(now())
+  updatedAt DateTime         @updatedAt
+
+  @@id([planId, module])
+  @@index([module, enabled])
+}
+
+model TenantSubscription {
+  id                    String                   @id @default(cuid())
+  tenantId              String
+  planId                String
+  status                TenantSubscriptionStatus @default(TRIAL)
+  billingFrequency      BillingFrequency         @default(MONTHLY)
+  startedAt             DateTime                 @default(now())
+  trialEndsAt           DateTime?
+  currentPeriodStart    DateTime?                @db.Date
+  currentPeriodEnd      DateTime?                @db.Date
+  nextBillingDate       DateTime?                @db.Date
+  agreedPrice           Decimal?                 @db.Decimal(12, 2)
+  discount              Decimal                  @default(0) @db.Decimal(12, 2)
+  currency              String                   @default("PHP") @db.VarChar(3)
+  autoRenew             Boolean                  @default(true)
+  autoPayEnabled        Boolean                  @default(false)
+  gatewayCustomerId     String?
+  gatewaySubscriptionId String?
+  cancelledAt           DateTime?
+  cancellationReason    String?                  @db.Text
+  tenant                Tenant                   @relation(fields: [tenantId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  plan                  SubscriptionPlan         @relation(fields: [planId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  invoices              PlatformInvoice[]
+  createdAt             DateTime                 @default(now())
+  updatedAt             DateTime                 @updatedAt
+
+  @@unique([tenantId, id])
+  @@index([tenantId, status, nextBillingDate])
+  @@index([planId, status])
+  @@index([gatewaySubscriptionId])
+}
+
+model TenantBillingProfile {
+  tenantId                String   @id
+  legalBusinessName       String?
+  billingAddress          String?  @db.Text
+  billingEmail            String?
+  secondaryBillingEmail   String?
+  contactPerson           String?
+  contactNumber           String?
+  tinNumber               String?
+  vatStatus               String?
+  invoiceNotes            String?  @db.Text
+  paymentTermsDays        Int      @default(15)
+  purchaseOrderRequired   Boolean  @default(false)
+  paymentMethodPreference String?
+  tenant                  Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  createdAt               DateTime @default(now())
+  updatedAt               DateTime @updatedAt
+}
+
+model PlatformInvoice {
+  id                 String                @id @default(cuid())
+  tenantId           String
+  subscriptionId     String
+  invoiceNumber      String                @unique @db.VarChar(60)
+  status             PlatformInvoiceStatus @default(DRAFT)
+  billingPeriodStart DateTime              @db.Date
+  billingPeriodEnd   DateTime              @db.Date
+  issueDate          DateTime              @db.Date
+  dueDate            DateTime              @db.Date
+  currency           String                @default("PHP") @db.VarChar(3)
+  subtotal           Decimal               @db.Decimal(12, 2)
+  discount           Decimal               @default(0) @db.Decimal(12, 2)
+  tax                Decimal               @default(0) @db.Decimal(12, 2)
+  total              Decimal               @db.Decimal(12, 2)
+  amountPaid         Decimal               @default(0) @db.Decimal(12, 2)
+  outstandingBalance Decimal               @db.Decimal(12, 2)
+  notes              String?               @db.Text
+  finalizedAt        DateTime?
+  paidAt             DateTime?
+  voidedAt           DateTime?
+  tenant             Tenant                @relation(fields: [tenantId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  subscription       TenantSubscription    @relation(fields: [tenantId, subscriptionId], references: [tenantId, id], onDelete: Restrict, onUpdate: Cascade)
+  lines              PlatformInvoiceLine[]
+  allocations        PlatformPaymentAllocation[]
+  createdAt          DateTime              @default(now())
+  updatedAt          DateTime              @updatedAt
+
+  @@unique([tenantId, id])
+  @@unique([subscriptionId, billingPeriodStart, billingPeriodEnd])
+  @@index([tenantId, status, dueDate])
+  @@index([tenantId, issueDate])
+}
+
+model PlatformInvoiceLine {
+  id          String          @id @default(cuid())
+  invoiceId   String
+  description String
+  quantity    Int             @default(1)
+  unitAmount  Decimal         @db.Decimal(12, 2)
+  lineTotal   Decimal         @db.Decimal(12, 2)
+  metadata    Json?
+  invoice     PlatformInvoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  createdAt   DateTime        @default(now())
+
+  @@index([invoiceId])
+}
+
+model PlatformPayment {
+  id                String                 @id @default(cuid())
+  tenantId          String
+  paymentReference  String                 @unique @db.VarChar(80)
+  gateway           PlatformPaymentGateway
+  gatewayPaymentId  String?
+  gatewayCheckoutId String?
+  amount            Decimal                @db.Decimal(12, 2)
+  currency          String                 @default("PHP") @db.VarChar(3)
+  fee               Decimal                @default(0) @db.Decimal(12, 2)
+  netAmount         Decimal                @db.Decimal(12, 2)
+  method            PlatformPaymentMethod
+  status            PlatformPaymentStatus  @default(PENDING)
+  paidAt            DateTime?
+  receivedAt        DateTime               @default(now())
+  metadata          Json?
+  tenant            Tenant                 @relation(fields: [tenantId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  allocations       PlatformPaymentAllocation[]
+  createdAt         DateTime               @default(now())
+  updatedAt         DateTime               @updatedAt
+
+  @@unique([tenantId, id])
+  @@unique([gateway, gatewayPaymentId])
+  @@unique([gateway, gatewayCheckoutId])
+  @@index([tenantId, status, paidAt])
+}
+
+model PlatformPaymentAllocation {
+  id        String          @id @default(cuid())
+  tenantId  String
+  paymentId String
+  invoiceId String
+  amount    Decimal         @db.Decimal(12, 2)
+  payment   PlatformPayment @relation(fields: [tenantId, paymentId], references: [tenantId, id], onDelete: Restrict, onUpdate: Cascade)
+  invoice   PlatformInvoice @relation(fields: [tenantId, invoiceId], references: [tenantId, id], onDelete: Restrict, onUpdate: Cascade)
+  createdAt DateTime        @default(now())
+
+  @@unique([paymentId, invoiceId])
+  @@index([tenantId, paymentId])
+  @@index([tenantId, invoiceId])
+}
+
+model PlatformGatewayEvent {
+  id                String                     @id @default(cuid())
+  tenantId          String?
+  provider          PlatformPaymentGateway
+  providerEventId   String                     @db.VarChar(191)
+  eventType         String                     @db.VarChar(120)
+  livemode          Boolean                    @default(false)
+  signatureVerified Boolean                    @default(false)
+  rawPayload        Json
+  status            PlatformGatewayEventStatus @default(RECEIVED)
+  processingError   String?                    @db.Text
+  receivedAt        DateTime                   @default(now())
+  processedAt       DateTime?
+  tenant            Tenant?                    @relation(fields: [tenantId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+
+  @@unique([provider, providerEventId])
+  @@index([tenantId, receivedAt])
+  @@index([provider, status, receivedAt])
+}
+
+model TenantSuspensionRecord {
+  id             String                 @id @default(cuid())
+  tenantId       String
+  reason         TenantSuspensionReason
+  notes          String?                @db.Text
+  effectiveAt    DateTime               @default(now())
+  suspendedAt    DateTime?
+  suspendedById  String?
+  autoReinstate  Boolean                @default(false)
+  reinstatedAt   DateTime?
+  reinstatedById String?
+  tenant         Tenant                 @relation(fields: [tenantId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  createdAt      DateTime               @default(now())
+  updatedAt      DateTime               @updatedAt
+
+  @@index([tenantId, reinstatedAt, effectiveAt])
+  @@index([reason, effectiveAt])
 }
 
 model User {

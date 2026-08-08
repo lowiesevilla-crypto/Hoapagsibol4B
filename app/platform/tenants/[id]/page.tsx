@@ -1,4 +1,4 @@
-import { TenantModule, TenantStatus, TenantSubscriptionStatus } from "@prisma/client";
+import { TenantModule } from "@prisma/client";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { updateTenantAction } from "@/lib/actions/platform";
@@ -7,18 +7,151 @@ import { requireUser } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { PlatformTenantTabs } from "@/components/platform-tenant-tabs";
 import { AssociationLogo } from "@/components/association-logo";
-import { DEFAULT_TENANT_LOGO_URL, tenantLogoFileField, tenantLogoRemoveField } from "@/lib/tenant-logo";
+import {
+  DEFAULT_TENANT_LOGO_URL,
+  tenantLogoFileField,
+  tenantLogoRemoveField,
+} from "@/lib/tenant-logo";
 
-export default async function TenantDetailPage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ success?: string; error?: string; message?: string }> }) {
-  const { id } = await params; const query = await searchParams; const actor = await requireUser();
-  const tenant = await prisma.tenant.findUnique({ where: { id }, include: { moduleEntitlements: true, advisories: { where: { active: true }, take: 1 }, _count: { select: { users: true } } } }); if (!tenant) notFound();
-  await prisma.auditLog.create({ data: { tenantId: tenant.id, actorId: actor.id, module: "PLATFORM", action: "SUPER_ADMIN_TENANT_ACCESS", entityType: "Tenant", entityId: tenant.id } });
-  const enabled = new Set(tenant.moduleEntitlements.filter((item) => item.enabled).map((item) => item.module));
+export default async function TenantDetailPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ id: string }>;
+  searchParams: Promise<{ success?: string; error?: string; message?: string }>;
+}) {
+  const { id } = await params;
+  const query = await searchParams;
+  const actor = await requireUser();
+  const tenant = await prisma.tenant.findUnique({
+    where: { id },
+    include: {
+      moduleEntitlements: true,
+      advisories: { where: { active: true }, take: 1 },
+      _count: { select: { users: true } },
+    },
+  });
+  if (!tenant) notFound();
+
+  await prisma.auditLog.create({
+    data: {
+      tenantId: tenant.id,
+      actorId: actor.id,
+      module: "PLATFORM",
+      action: "SUPER_ADMIN_TENANT_ACCESS",
+      entityType: "Tenant",
+      entityId: tenant.id,
+    },
+  });
+  const enabled = new Set(
+    tenant.moduleEntitlements.filter((item) => item.enabled).map((item) => item.module),
+  );
   const logoUrl = tenant.logoUrl || DEFAULT_TENANT_LOGO_URL;
-  return <div><div className="flex flex-wrap items-start justify-between gap-5 rounded-3xl bg-gradient-to-r from-pine-900 to-pine-700 p-6 text-white sm:p-8"><div className="flex min-w-0 items-center gap-4"><AssociationLogo className="size-20 shrink-0" src={logoUrl} alt={`${tenant.name} logo`} /><div className="min-w-0"><p className="text-xs font-bold uppercase tracking-widest text-leaf-100">Tenant profile</p><h1 className="break-words text-2xl font-black sm:text-4xl">{tenant.name}</h1><Link target="_blank" href={`/${tenant.slug}/login`} className="mt-2 block break-all text-sm font-bold text-blue-100 underline">/{tenant.slug}/login</Link></div></div><span className="rounded-full bg-white/15 px-4 py-2 text-sm font-bold">{tenant.status}</span></div>
-  <PlatformTenantTabs tenantId={tenant.id} active="overview" />
-  {query.success && <p className="mt-4 rounded-xl bg-emerald-50 p-3 text-emerald-800">{query.message || "Tenant record updated successfully."}</p>}{query.error && <p className="mt-4 rounded-xl bg-rose-50 p-3 text-rose-800">{query.error}</p>}
-  <section className="mt-5 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">{[["Users", tenant._count.users], ["Subscription", tenant.subscriptionPlan], ["SEC number", tenant.secRegistrationNumber || "Not configured"], ["TIN number", tenant.tinNumber || "Not configured"], ["Contact", tenant.contactNumber || "Not configured"], ["Email", tenant.email || "Not configured"], ["Created", tenant.createdAt.toLocaleDateString()], ["Updated", tenant.updatedAt.toLocaleDateString()]].map(([label,value]) => <article key={String(label)} className="min-w-0 rounded-2xl border bg-white p-5"><p className="text-xs font-bold uppercase tracking-wider text-slate-500">{label}</p><p className="mt-2 break-words font-black text-slate-900">{value}</p></article>)}</section>
-  <form action={updateTenantLogoAction} className="mt-6 space-y-4 rounded-2xl border bg-white p-5 sm:p-7"><input type="hidden" name="tenantId" value={tenant.id} /><div><h2 className="text-xl font-black">Tenant branding</h2><p className="text-sm text-slate-500">SUPERADMIN can upload or reset the tenant logo shown on the login page and sidebar.</p></div><div className="flex flex-wrap items-center gap-4"><AssociationLogo className="size-20" src={logoUrl} alt={`${tenant.name} logo`} /><label className="min-w-0 flex-1"><span className="label">Upload tenant logo</span><input className="field" name={tenantLogoFileField} type="file" accept="image/png,image/jpeg,image/webp" /></label></div><label className="flex items-center gap-3 text-sm font-semibold text-slate-700"><input className="size-5" type="checkbox" name={tenantLogoRemoveField} />Reset to default HOAHub logo</label><button className="btn-primary min-h-12 w-full sm:w-auto">Save tenant logo</button></form>
-  <form id="settings" action={updateTenantAction} className="mt-6 space-y-6 rounded-2xl border bg-white p-5 sm:p-7"><input type="hidden" name="tenantId" value={tenant.id} /><div><h2 className="text-xl font-black">Tenant settings</h2><p className="text-sm text-slate-500">Changes to the slug immediately change the tenant login URL.</p></div><div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4"><label><span className="label">URL slug</span><input className="field" name="slug" defaultValue={tenant.slug} required pattern="[a-z0-9]+(?:-[a-z0-9]+)*" /></label><label><span className="label">Tenant status</span><select className="field" name="status" defaultValue={tenant.status}>{Object.values(TenantStatus).map((value) => <option key={value}>{value}</option>)}</select></label><label><span className="label">Subscription status</span><select className="field" name="subscriptionStatus" defaultValue={tenant.subscriptionStatus}>{Object.values(TenantSubscriptionStatus).map((value) => <option key={value}>{value}</option>)}</select></label><label><span className="label">Plan</span><input className="field" name="subscriptionPlan" defaultValue={tenant.subscriptionPlan} /></label></div><label id="advisory" className="block scroll-mt-28"><span className="label">Suspension/advisory message</span><textarea className="field min-h-28" name="advisory" defaultValue={tenant.advisories[0]?.message || ""} /></label><div id="modules" className="scroll-mt-28"><span className="label">Module access</span><div className="mt-2 grid gap-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">{Object.values(TenantModule).map((module) => <label key={module} className="flex min-h-12 items-center gap-3 rounded-xl border p-3 text-sm"><input className="size-5" type="checkbox" name="modules" value={module} defaultChecked={enabled.has(module)} />{module.replaceAll("_", " ")}</label>)}</div></div><button className="btn-primary min-h-12 w-full sm:w-auto">Save tenant settings</button></form></div>;
+
+  return (
+    <div>
+      <div className="flex flex-wrap items-start justify-between gap-5 rounded-3xl bg-gradient-to-r from-pine-900 to-pine-700 p-6 text-white sm:p-8">
+        <div className="flex min-w-0 items-center gap-4">
+          <AssociationLogo className="size-20 shrink-0" src={logoUrl} alt={`${tenant.name} logo`} />
+          <div className="min-w-0">
+            <p className="text-xs font-bold uppercase tracking-widest text-leaf-100">Tenant profile</p>
+            <h1 className="break-words text-2xl font-black sm:text-4xl">{tenant.name}</h1>
+            <Link target="_blank" href={`/${tenant.slug}/login`} className="mt-2 block break-all text-sm font-bold text-blue-100 underline">
+              /{tenant.slug}/login
+            </Link>
+          </div>
+        </div>
+        <div className="flex flex-col items-end gap-2">
+          <span className="rounded-full bg-white/15 px-4 py-2 text-sm font-bold">{tenant.status}</span>
+          <Link className="rounded-xl bg-white px-4 py-2 text-sm font-black text-pine-900" href={`/platform/tenants/${tenant.id}/billing`}>
+            Subscription &amp; Billing
+          </Link>
+        </div>
+      </div>
+
+      <PlatformTenantTabs tenantId={tenant.id} active="overview" />
+      {query.success && <p className="mt-4 rounded-xl bg-emerald-50 p-3 text-emerald-800">{query.message || "Tenant record updated successfully."}</p>}
+      {query.error && <p className="mt-4 rounded-xl bg-rose-50 p-3 text-rose-800">{query.error}</p>}
+
+      <section className="mt-5 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        {[
+          ["Users", tenant._count.users],
+          ["Plan", tenant.subscriptionPlan],
+          ["Subscription", tenant.subscriptionStatus.replaceAll("_", " ")],
+          ["Service status", tenant.status],
+          ["SEC number", tenant.secRegistrationNumber || "Not configured"],
+          ["TIN number", tenant.tinNumber || "Not configured"],
+          ["Contact", tenant.contactNumber || "Not configured"],
+          ["Email", tenant.email || "Not configured"],
+          ["Created", tenant.createdAt.toLocaleDateString()],
+          ["Updated", tenant.updatedAt.toLocaleDateString()],
+        ].map(([label, value]) => (
+          <article key={String(label)} className="min-w-0 rounded-2xl border bg-white p-5">
+            <p className="text-xs font-bold uppercase tracking-wider text-slate-500">{label}</p>
+            <p className="mt-2 break-words font-black text-slate-900">{value}</p>
+          </article>
+        ))}
+      </section>
+
+      <form action={updateTenantLogoAction} className="mt-6 space-y-4 rounded-2xl border bg-white p-5 sm:p-7">
+        <input type="hidden" name="tenantId" value={tenant.id} />
+        <div>
+          <h2 className="text-xl font-black">Tenant branding</h2>
+          <p className="text-sm text-slate-500">Platform administrators can upload or reset the tenant logo shown on the login page and sidebar.</p>
+        </div>
+        <div className="flex flex-wrap items-center gap-4">
+          <AssociationLogo className="size-20" src={logoUrl} alt={`${tenant.name} logo`} />
+          <label className="min-w-0 flex-1">
+            <span className="label">Upload tenant logo</span>
+            <input className="field" name={tenantLogoFileField} type="file" accept="image/png,image/jpeg,image/webp" />
+          </label>
+        </div>
+        <label className="flex items-center gap-3 text-sm font-semibold text-slate-700">
+          <input className="size-5" type="checkbox" name={tenantLogoRemoveField} />
+          Reset to default HOAHub logo
+        </label>
+        <button className="btn-primary min-h-12 w-full sm:w-auto">Save tenant logo</button>
+      </form>
+
+      <form id="settings" action={updateTenantAction} className="mt-6 space-y-6 rounded-2xl border bg-white p-5 sm:p-7">
+        <input type="hidden" name="tenantId" value={tenant.id} />
+        <input type="hidden" name="status" value={tenant.status} />
+        <input type="hidden" name="subscriptionStatus" value={tenant.subscriptionStatus} />
+        <input type="hidden" name="subscriptionPlan" value={tenant.subscriptionPlan} />
+        <div>
+          <h2 className="text-xl font-black">Tenant configuration</h2>
+          <p className="text-sm text-slate-500">Commercial plan, subscription status, suspension, and reinstatement are controlled through Subscription &amp; Billing so those changes remain fully auditable.</p>
+        </div>
+        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+          <label>
+            <span className="label">URL slug</span>
+            <input className="field" name="slug" defaultValue={tenant.slug} required pattern="[a-z0-9]+(?:-[a-z0-9]+)*" />
+          </label>
+          <div className="rounded-xl bg-slate-50 p-4 text-sm">
+            <p className="text-xs font-black uppercase tracking-wider text-slate-400">Commercial lifecycle</p>
+            <p className="mt-2 font-black text-slate-900">{tenant.subscriptionPlan} · {tenant.subscriptionStatus.replaceAll("_", " ")}</p>
+            <Link className="mt-2 inline-block font-black text-pine-700 hover:underline" href={`/platform/tenants/${tenant.id}/billing`}>Manage billing</Link>
+          </div>
+        </div>
+
+        <label id="advisory" className="block scroll-mt-28">
+          <span className="label">Tenant advisory message</span>
+          <textarea className="field min-h-28" name="advisory" defaultValue={tenant.advisories[0]?.message || ""} />
+        </label>
+
+        <div id="modules" className="scroll-mt-28">
+          <span className="label">Module access</span>
+          <div className="mt-2 grid gap-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+            {Object.values(TenantModule).map((module) => (
+              <label key={module} className="flex min-h-12 items-center gap-3 rounded-xl border p-3 text-sm">
+                <input className="size-5" type="checkbox" name="modules" value={module} defaultChecked={enabled.has(module)} />
+                {module.replaceAll("_", " ")}
+              </label>
+            ))}
+          </div>
+        </div>
+        <button className="btn-primary min-h-12 w-full sm:w-auto">Save tenant configuration</button>
+      </form>
+    </div>
+  );
 }

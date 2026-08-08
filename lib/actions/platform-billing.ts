@@ -19,6 +19,7 @@ import {
   saveTenantBillingProfile,
   suspendTenantCommercially,
 } from "@/lib/services/platform-billing";
+import { sendPlatformInvoiceEmail } from "@/lib/services/platform-invoice-email";
 
 function clean(value: FormDataEntryValue | null) {
   return String(value || "").trim();
@@ -134,15 +135,31 @@ export async function saveTenantBillingProfileAction(formData: FormData) {
 export async function generateTenantInvoiceAction(formData: FormData) {
   const actor = await requirePlatformBillingUser();
   const tenantId = clean(formData.get("tenantId"));
+  let invoice: Awaited<ReturnType<typeof generatePlatformInvoice>>;
   try {
-    await generatePlatformInvoice({ tenantId, actorId: actor.id });
+    invoice = await generatePlatformInvoice({ tenantId, actorId: actor.id });
   } catch (error) {
     redirect(`/platform/tenants/${tenantId}/billing?error=${encodeURIComponent(error instanceof Error ? error.message : "Invoice generation failed.")}`);
   }
+
+  let delivery: Awaited<ReturnType<typeof sendPlatformInvoiceEmail>>;
+  try {
+    delivery = await sendPlatformInvoiceEmail({ invoiceId: invoice.id, actorId: actor.id });
+  } catch (error) {
+    revalidatePath(`/platform/tenants/${tenantId}/billing`);
+    revalidatePath("/admin/subscription");
+    redirect(`/platform/tenants/${tenantId}/billing?error=${encodeURIComponent(`Invoice is ready, but email was not sent: ${error instanceof Error ? error.message : "Invoice email delivery failed."}`)}`);
+  }
+
   revalidatePath("/platform/tenants");
   revalidatePath("/platform/subscriptions");
   revalidatePath(`/platform/tenants/${tenantId}/billing`);
-  redirect(`/platform/tenants/${tenantId}/billing?success=Invoice%20generated.`);
+  revalidatePath("/admin/subscription");
+  if (delivery.status === "SENT") {
+    redirect(`/platform/tenants/${tenantId}/billing?success=${encodeURIComponent(`Invoice ready and emailed to ${delivery.recipients.join(", ")}.`)}`);
+  }
+  const warning = delivery.message || (delivery.status === "SKIPPED" ? "No billing email is configured." : "Invoice email delivery failed.");
+  redirect(`/platform/tenants/${tenantId}/billing?error=${encodeURIComponent(`Invoice is ready, but email was not sent: ${warning}`)}`);
 }
 
 export async function recordPlatformManualPaymentAction(formData: FormData) {
@@ -160,6 +177,7 @@ export async function recordPlatformManualPaymentAction(formData: FormData) {
   revalidatePath("/platform/subscriptions");
   revalidatePath(`/platform/tenants/${tenantId}`);
   revalidatePath(`/platform/tenants/${tenantId}/billing`);
+  revalidatePath("/admin/subscription");
   redirect(`/platform/tenants/${tenantId}/billing?success=Payment%20recorded.`);
 }
 
@@ -188,5 +206,6 @@ export async function reinstateTenantAction(formData: FormData) {
   revalidatePath("/platform/subscriptions");
   revalidatePath(`/platform/tenants/${tenantId}`);
   revalidatePath(`/platform/tenants/${tenantId}/billing`);
+  revalidatePath("/admin/subscription");
   redirect(`/platform/tenants/${tenantId}/billing?success=Tenant%20reinstated.`);
 }

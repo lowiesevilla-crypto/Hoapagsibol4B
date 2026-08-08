@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { getAppUrl } from "@/lib/app-url";
 import { authorizeCron } from "@/lib/cron-auth";
 import { platformPrisma, prisma } from "@/lib/db";
+import { runPlatformBillingCycle } from "@/lib/services/platform-billing";
 import { sendEmailNotification } from "@/lib/services/notifications";
 import { runWithTenant } from "@/lib/tenant-context";
 
@@ -10,6 +11,14 @@ export const runtime = "nodejs";
 
 export async function POST(request: Request) {
   if (!authorizeCron(request)) return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
+
+  let platformBilling: Awaited<ReturnType<typeof runPlatformBillingCycle>> | { error: string };
+  try {
+    platformBilling = await runPlatformBillingCycle();
+  } catch (error) {
+    platformBilling = { error: error instanceof Error ? error.message : "Platform billing cycle failed." };
+  }
+
   const tenants = await platformPrisma.tenant.findMany({
     where: { status: "ACTIVE", subscriptionStatus: { not: "CANCELLED" } },
     select: { id: true, slug: true, moduleEntitlements: { where: { enabled: true }, select: { module: true } } },
@@ -18,7 +27,11 @@ export async function POST(request: Request) {
   for (const tenant of tenants) {
     const modules = tenant.moduleEntitlements.map((item) => item.module);
     try {
-      const result = await runWithTenant(tenant.id, () => maintainTenant(tenant.id, tenant.slug, modules.includes(TenantModule.BILLING)), { enabledModules: modules });
+      const result = await runWithTenant(
+        tenant.id,
+        () => maintainTenant(tenant.id, tenant.slug, modules.includes(TenantModule.BILLING)),
+        { enabledModules: modules },
+      );
       results.push({ tenantId: tenant.id, slug: tenant.slug, ...result });
     } catch (error) {
       results.push({ tenantId: tenant.id, slug: tenant.slug, error: error instanceof Error ? error.message : "Tenant maintenance failed." });
@@ -26,7 +39,14 @@ export async function POST(request: Request) {
   }
   const cleanupBefore = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
   const rateLimits = await platformPrisma.rateLimitEvent.deleteMany({ where: { createdAt: { lt: cleanupBefore } } });
-  return NextResponse.json({ ok: results.every((item) => !("error" in item)), tenantsProcessed: results.length, globalRateLimitsDeleted: rateLimits.count, results });
+  const ok = !("error" in platformBilling) && results.every((item) => !("error" in item));
+  return NextResponse.json({
+    ok,
+    platformBilling,
+    tenantsProcessed: results.length,
+    globalRateLimitsDeleted: rateLimits.count,
+    results,
+  }, { status: ok ? 200 : 500 });
 }
 
 async function maintainTenant(tenantId: string, tenantSlug: string, billingEnabled: boolean) {
@@ -41,7 +61,8 @@ async function maintainTenant(tenantId: string, tenantSlug: string, billingEnabl
   }
   const now = new Date();
   const today = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
-  const reminderWindow = new Date(today); reminderWindow.setUTCDate(reminderWindow.getUTCDate() + 3);
+  const reminderWindow = new Date(today);
+  reminderWindow.setUTCDate(reminderWindow.getUTCDate() + 3);
   const logWindow = new Date(Date.now() - 24 * 60 * 60 * 1000);
   const overdue = await prisma.bill.updateMany({ where: { archivedAt: null, dueDate: { lt: today }, balance: { gt: 0 }, status: { in: [BillStatus.UNPAID, BillStatus.PARTIAL] } }, data: { status: BillStatus.OVERDUE } });
   const bills = await prisma.bill.findMany({ where: { archivedAt: null, balance: { gt: 0 }, dueDate: { lte: reminderWindow }, status: { in: [BillStatus.UNPAID, BillStatus.PARTIAL, BillStatus.OVERDUE] } }, include: { homeowner: { include: { user: true } } }, orderBy: { dueDate: "asc" }, take: 50 });

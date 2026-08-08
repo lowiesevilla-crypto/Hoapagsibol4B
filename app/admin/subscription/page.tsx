@@ -1,8 +1,12 @@
 import { PlatformInvoiceStatus, Role } from "@prisma/client";
-import { CreditCard, ExternalLink, ReceiptText, ShieldCheck } from "lucide-react";
+import { CreditCard, Download, ExternalLink, FileText, ReceiptText, ShieldCheck } from "lucide-react";
 import Link from "next/link";
 import { requireUser } from "@/lib/auth";
 import { prisma } from "@/lib/db";
+import {
+  platformInvoiceDocumentUrl,
+  platformInvoicePdfUrl,
+} from "@/lib/services/platform-invoice-document";
 import { platformInvoicePaymentUrl } from "@/lib/services/platform-paymongo";
 
 function money(value: number, currency = "PHP") {
@@ -90,9 +94,14 @@ export default async function TenantSubscriptionPage() {
                 {money(Number(nextInvoice.outstandingBalance), nextInvoice.currency)} due {nextInvoice.dueDate.toLocaleDateString("en-PH")}.
               </p>
             </div>
-            <Link className="btn-primary inline-flex items-center gap-2" href={platformInvoicePaymentUrl(nextInvoice.id)} target="_blank">
-              <CreditCard className="size-4" /> View &amp; Pay
-            </Link>
+            <div className="flex flex-wrap gap-2">
+              <Link className="btn-secondary inline-flex items-center gap-2" href={platformInvoiceDocumentUrl(nextInvoice.id)} target="_blank">
+                <FileText className="size-4" /> View invoice
+              </Link>
+              <Link className="btn-primary inline-flex items-center gap-2" href={platformInvoicePaymentUrl(nextInvoice.id)} target="_blank">
+                <CreditCard className="size-4" /> View &amp; Pay
+              </Link>
+            </div>
           </div>
         </section>
       )}
@@ -115,13 +124,13 @@ export default async function TenantSubscriptionPage() {
 
       <section className="mt-6 rounded-2xl border bg-white p-5 sm:p-6">
         <h2 className="text-xl font-black">Platform invoices</h2>
-        <p className="mt-1 text-sm text-slate-500">Only HOAHub subscription invoices for this tenant are shown here.</p>
+        <p className="mt-1 text-sm text-slate-500">Only HOAHub subscription invoices for this tenant are shown here. Every issued invoice can be printed or downloaded as PDF.</p>
         <div className="mt-5 overflow-auto">
-          <table className="min-w-[900px] w-full text-sm">
-            <thead className="bg-slate-50 text-left"><tr><th className="p-3">Invoice</th><th className="p-3">Billing period</th><th className="p-3">Due</th><th className="p-3">Total</th><th className="p-3">Paid</th><th className="p-3">Balance</th><th className="p-3">Status</th><th className="p-3">Action</th></tr></thead>
+          <table className="min-w-[1040px] w-full text-sm">
+            <thead className="bg-slate-50 text-left"><tr><th className="p-3">Invoice</th><th className="p-3">Billing period</th><th className="p-3">Due</th><th className="p-3">Total</th><th className="p-3">Paid</th><th className="p-3">Balance</th><th className="p-3">Status</th><th className="p-3">Actions</th></tr></thead>
             <tbody>{invoices.map((invoice) => {
               const payable = payableStatuses.includes(invoice.status) && Number(invoice.outstandingBalance) > 0;
-              return <tr key={invoice.id} className="border-t">
+              return <tr key={invoice.id} className="border-t align-top">
                 <td className="p-3 font-black">{invoice.invoiceNumber}</td>
                 <td className="p-3">{invoice.billingPeriodStart.toLocaleDateString("en-PH")} – {invoice.billingPeriodEnd.toLocaleDateString("en-PH")}</td>
                 <td className="p-3">{invoice.dueDate.toLocaleDateString("en-PH")}</td>
@@ -129,7 +138,13 @@ export default async function TenantSubscriptionPage() {
                 <td className="p-3">{money(Number(invoice.amountPaid), invoice.currency)}</td>
                 <td className="p-3 font-black">{money(Number(invoice.outstandingBalance), invoice.currency)}</td>
                 <td className="p-3"><span className={`rounded-full px-2.5 py-1 text-xs font-black ${invoice.status === PlatformInvoiceStatus.PAID ? "bg-emerald-100 text-emerald-800" : invoice.status === PlatformInvoiceStatus.OVERDUE ? "bg-rose-100 text-rose-800" : "bg-slate-100 text-slate-700"}`}>{invoice.status.replaceAll("_", " ")}</span></td>
-                <td className="p-3">{payable ? <Link className="inline-flex items-center gap-1 font-black text-blue-700 hover:underline" href={platformInvoicePaymentUrl(invoice.id)} target="_blank">View &amp; Pay <ExternalLink className="size-3" /></Link> : invoice.status === PlatformInvoiceStatus.PAID ? <Link className="inline-flex items-center gap-1 font-black text-emerald-700 hover:underline" href={platformInvoicePaymentUrl(invoice.id)} target="_blank">View paid invoice <ExternalLink className="size-3" /></Link> : <span className="text-slate-400">No action</span>}</td>
+                <td className="p-3">
+                  <div className="flex flex-col items-start gap-2">
+                    <Link className="inline-flex items-center gap-1 font-black text-blue-700 hover:underline" href={platformInvoiceDocumentUrl(invoice.id)} target="_blank">View / Print <ExternalLink className="size-3" /></Link>
+                    <a className="inline-flex items-center gap-1 font-black text-pine-700 hover:underline" href={platformInvoicePdfUrl(invoice.id)}><Download className="size-3" /> Download PDF</a>
+                    {payable && <Link className="inline-flex items-center gap-1 font-black text-amber-700 hover:underline" href={platformInvoicePaymentUrl(invoice.id)} target="_blank"><CreditCard className="size-3" /> View &amp; Pay</Link>}
+                  </div>
+                </td>
               </tr>;
             })}</tbody>
           </table>

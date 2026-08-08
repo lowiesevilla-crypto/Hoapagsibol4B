@@ -112,3 +112,34 @@ test("platform invoices email a signed view-and-pay link with HOAHub SMTP", asyn
   assert.match(cron, /platformBilling\.invoiceIds/);
   assert.match(cron, /sendPlatformInvoiceEmail/);
 });
+
+test("professional platform invoice documents are printable, downloadable, and preserve issued notes", async () => {
+  const [service, documentPage, pdfRoute, tenantPage, platformPage, links, billingService, env] = await Promise.all([
+    source("lib/services/platform-invoice-document.ts"),
+    source("app/subscription/invoice/[invoiceId]/page.tsx"),
+    source("app/api/platform/billing/invoices/[invoiceId]/pdf/route.ts"),
+    source("app/admin/subscription/page.tsx"),
+    source("app/platform/invoices/page.tsx"),
+    source("components/sidebar-links.ts"),
+    source("lib/services/platform-billing.ts"),
+    source(".env.example"),
+  ]);
+  assert.match(service, /hoahub-platform-invoice-document-v1/);
+  assert.match(service, /renderPlatformInvoicePdf/);
+  assert.match(service, /PDFDocument\.create/);
+  assert.match(documentPage, /Print invoice/);
+  assert.match(documentPage, /Download PDF/);
+  assert.match(documentPage, /Invoice note/);
+  assert.match(documentPage, /invoice\.notes/);
+  assert.match(pdfRoute, /Content-Disposition/);
+  assert.match(pdfRoute, /application\/pdf/);
+  assert.match(tenantPage, /platformInvoiceDocumentUrl/);
+  assert.match(tenantPage, /platformInvoicePdfUrl/);
+  assert.match(platformPage, /Platform Invoices/);
+  assert.match(platformPage, /View \/ Print/);
+  assert.match(platformPage, /Download PDF/);
+  assert.match(links, /\/platform\/invoices/);
+  assert.match(billingService, /notes: subscription\.tenant\.billingProfile\?\.invoiceNotes \|\| null/);
+  assert.match(env, /PLATFORM_BILLING_LEGAL_NAME/);
+  assert.match(env, /PLATFORM_BILLING_TIN/);
+});

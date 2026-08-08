@@ -19,6 +19,7 @@ import {
   saveTenantBillingProfile,
   suspendTenantCommercially,
 } from "@/lib/services/platform-billing";
+import { createTenantAgreementDraft } from "@/lib/services/platform-agreements";
 import { sendPlatformInvoiceEmail } from "@/lib/services/platform-invoice-email";
 
 function clean(value: FormDataEntryValue | null) {
@@ -101,11 +102,24 @@ export async function assignTenantSubscriptionAction(formData: FormData) {
   } catch (error) {
     redirect(`/platform/tenants/${tenantId}/billing?error=${encodeURIComponent(error instanceof Error ? error.message : "Subscription assignment failed.")}`);
   }
+
+  let agreementWarning = "";
+  try {
+    await createTenantAgreementDraft({ tenantId, actorId: actor.id });
+  } catch (error) {
+    agreementWarning = error instanceof Error ? error.message : "Agreement draft generation failed.";
+  }
+
   revalidatePath("/platform/tenants");
   revalidatePath("/platform/subscriptions");
+  revalidatePath("/platform/agreements");
+  revalidatePath("/admin/agreement");
   revalidatePath(`/platform/tenants/${tenantId}`);
   revalidatePath(`/platform/tenants/${tenantId}/billing`);
-  redirect(`/platform/tenants/${tenantId}/billing?success=Subscription%20assigned.`);
+  if (agreementWarning) {
+    redirect(`/platform/tenants/${tenantId}/billing?error=${encodeURIComponent(`Subscription assigned, but the agreement draft needs attention: ${agreementWarning}`)}`);
+  }
+  redirect(`/platform/tenants/${tenantId}/billing?success=${encodeURIComponent("Subscription assigned and HOAHub agreement draft generated.")}`);
 }
 
 export async function saveTenantBillingProfileAction(formData: FormData) {

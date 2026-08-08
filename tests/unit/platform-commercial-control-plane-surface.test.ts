@@ -69,3 +69,46 @@ test("commercial suspension revokes sessions and supports eligible automatic rei
   assert.match(service, /autoReinstate: true/);
   assert.match(service, /TENANT_REINSTATED/);
 });
+
+test("public platform payment page uses defined HOAHub brand contrast", async () => {
+  const paymentPage = await source("app/subscription/pay/[invoiceId]/page.tsx");
+  assert.match(paymentPage, /from-pine-900 to-pine-600/);
+  assert.match(paymentPage, /text-pine-900/);
+  assert.doesNotMatch(paymentPage, /pine-950/);
+  assert.match(paymentPage, /text-white sm:text-3xl/);
+});
+
+test("tenant administrators have a tenant-scoped HOAHub subscription center", async () => {
+  const [page, links, access, db] = await Promise.all([
+    source("app/admin/subscription/page.tsx"),
+    source("components/sidebar-links.ts"),
+    source("lib/role-access.ts"),
+    source("lib/db.ts"),
+  ]);
+  assert.match(page, /HOAHub Subscription/);
+  assert.match(page, /platformInvoice\.findMany/);
+  assert.match(page, /platformPayment\.findMany/);
+  assert.match(page, /platformInvoicePaymentUrl/);
+  assert.match(page, /separate from homeowner dues/);
+  assert.match(links, /\/admin\/subscription/);
+  assert.match(access, /\["\/admin\/subscription", Permission\.TENANT_SETTINGS_MANAGE\]/);
+  assert.match(db, /scoped\.where = scopeWhere\(scoped\.where, context\.tenantId\)/);
+});
+
+test("platform invoices email a signed view-and-pay link with HOAHub SMTP", async () => {
+  const [mailer, actions, cron] = await Promise.all([
+    source("lib/services/platform-invoice-email.ts"),
+    source("lib/actions/platform-billing.ts"),
+    source("app/api/cron/daily/route.ts"),
+  ]);
+  assert.match(mailer, /getMailConfiguration\(BOOTSTRAP_TENANT_ID\)/);
+  assert.match(mailer, /platformInvoicePaymentUrl\(invoice\.id\)/);
+  assert.match(mailer, /View &amp; Pay Invoice/);
+  assert.match(mailer, /PLATFORM_INVOICE_EMAIL_/);
+  assert.match(mailer, /billingProfile\?\.billingEmail/);
+  assert.match(mailer, /secondaryBillingEmail/);
+  assert.match(actions, /sendPlatformInvoiceEmail/);
+  assert.match(actions, /Invoice is ready, but email was not sent/);
+  assert.match(cron, /platformBilling\.invoiceIds/);
+  assert.match(cron, /sendPlatformInvoiceEmail/);
+});

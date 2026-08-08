@@ -1,0 +1,79 @@
+name: Temporary residency compatibility source patch
+
+on:
+  push:
+    branches:
+      - fix/normalize-legacy-residency-replication-20260808
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/normalize-legacy-residency-replication-20260808
+          fetch-depth: 0
+
+      - name: Patch current placeholder model and generation context
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          def replace_once(path: str, old: str, new: str):
+              file = Path(path)
+              text = file.read_text()
+              if new in text:
+                  return
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f"Expected exactly one match in {path}, found {count}: {old!r}")
+              file.write_text(text.replace(old, new, 1))
+
+          builder = "lib/services/document-template-builder.ts"
+          replace_once(
+              builder,
+              '  "document.issueDate",\n  "document.issuePlace",',
+              '  "document.issueDate",\n  "document.issueDayOrdinal",\n  "document.issueMonthYear",\n  "document.issuePlace",',
+          )
+          replace_once(
+              builder,
+              '    { key: "document.issueDate", label: "Issue date", sample: "July 18, 2026" },\n    { key: "document.issuePlace", label: "Issue place", sample: "Test HOA Office" },',
+              '    { key: "document.issueDate", label: "Issue date", sample: "July 18, 2026" },\n    { key: "document.issueDayOrdinal", label: "Issue day (ordinal)", sample: "18th" },\n    { key: "document.issueMonthYear", label: "Issue month and year", sample: "July 2026" },\n    { key: "document.issuePlace", label: "Issue place", sample: "Test HOA Office" },',
+          )
+
+          placeholders = "lib/services/document-placeholders.ts"
+          replace_once(
+              placeholders,
+              'issueDate?: string; issuePlace?: string;',
+              'issueDate?: string; issueDayOrdinal?: string; issueMonthYear?: string; issuePlace?: string;',
+          )
+
+          generation = "lib/services/document-generation.ts"
+          replace_once(
+              generation,
+              'import { buildDocumentRenderModel } from "@/lib/services/document-render-model";',
+              'import { buildDocumentRenderModel } from "@/lib/services/document-render-model";\nimport { documentIssueDayOrdinal, documentIssueMonthYear } from "@/lib/services/document-date-placeholders";',
+          )
+          replace_once(
+              generation,
+              'document: { number: documentNumber, title: request.definition?.displayName ?? "Official HOA Document", issueDate: shortDate(issueDate), issuePlace: association.address || association.name, status:',
+              'document: { number: documentNumber, title: request.definition?.displayName ?? "Official HOA Document", issueDate: shortDate(issueDate), issueDayOrdinal: documentIssueDayOrdinal(issueDate), issueMonthYear: documentIssueMonthYear(issueDate), issuePlace: association.address || association.name, status:',
+          )
+
+          workflow = Path(".github/workflows/temporary-residency-compat-patch.yml")
+          workflow.unlink()
+          PY
+
+      - name: Commit source patch and remove temporary workflow
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git diff --cached --check
+          git commit -m "fix: support residency issue date fragment placeholders"
+          git push origin HEAD:fix/normalize-legacy-residency-replication-20260808

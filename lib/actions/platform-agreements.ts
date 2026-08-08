@@ -79,21 +79,23 @@ export async function generateTenantAgreementAction(formData: FormData) {
 export async function sendTenantAgreementAction(formData: FormData) {
   const actor = await requirePlatformAgreementUser();
   const agreementId = clean(formData.get("agreementId"));
+  let sent;
   try {
-    const sent = await sendAgreementInvitation({ agreementId, actorId: actor.id });
-    revalidatePath("/platform/agreements");
-    revalidatePath(`/platform/agreements/${agreementId}`);
-    redirect(`/platform/agreements/${agreementId}?success=${encodeURIComponent(`Agreement sent to ${sent.recipients.join(", ")}.`)}`);
+    sent = await sendAgreementInvitation({ agreementId, actorId: actor.id });
   } catch (error) {
     redirect(`/platform/agreements/${agreementId}?error=${encodeURIComponent(error instanceof Error ? error.message : "Agreement delivery failed.")}`);
   }
+  revalidatePath("/platform/agreements");
+  revalidatePath(`/platform/agreements/${agreementId}`);
+  redirect(`/platform/agreements/${agreementId}?success=${encodeURIComponent(`Agreement sent to ${sent.recipients.join(", ")}.`)}`);
 }
 
 export async function requestAgreementOtpAction(formData: FormData) {
   const user = await requireTenantAgreementSigner();
   const agreementId = clean(formData.get("agreementId"));
+  let result;
   try {
-    const result = await issueAgreementOtp({
+    result = await issueAgreementOtp({
       agreementId,
       tenantId: user.tenantId,
       userId: user.id,
@@ -101,11 +103,11 @@ export async function requestAgreementOtpAction(formData: FormData) {
       email: user.email,
       metadata: await requestMetadata(),
     });
-    revalidatePath(`/admin/agreement/${agreementId}`);
-    redirect(`/admin/agreement/${agreementId}?success=${encodeURIComponent(`Verification code sent to ${user.email}. It expires at ${result.expiresAt.toLocaleTimeString("en-PH", { hour: "2-digit", minute: "2-digit", timeZone: "Asia/Manila" })}.`)}`);
   } catch (error) {
     redirect(`/admin/agreement/${agreementId}?error=${encodeURIComponent(error instanceof Error ? error.message : "Verification code could not be sent.")}`);
   }
+  revalidatePath(`/admin/agreement/${agreementId}`);
+  redirect(`/admin/agreement/${agreementId}?success=${encodeURIComponent(`Verification code sent to ${user.email}. It expires at ${result.expiresAt.toLocaleTimeString("en-PH", { hour: "2-digit", minute: "2-digit", timeZone: "Asia/Manila" })}.`)}`);
 }
 
 export async function signAgreementAction(formData: FormData) {

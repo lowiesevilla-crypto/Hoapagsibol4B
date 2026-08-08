@@ -44,6 +44,7 @@ export const adminLinks: LinkItem[] = [
   { href: "/admin/receipts", label: "Receipt register", icon: "collections", section: "Finance" },
   { href: "/admin/collections", label: "Other collections", icon: "collections", section: "Finance" },
   { href: "/admin/expenses", label: "Expenses", icon: "expenses", section: "Finance" },
+  { href: "/admin/settings/payments", label: "Homeowner payment setup", icon: "settings", section: "Payments" },
   { href: "/admin/payments/record", label: "Record payment", icon: "payments", section: "Payments" },
   { href: "/admin/payments/requests", label: "Payment requests", icon: "payments", section: "Payments" },
   { href: "/admin/payments/active", label: "Active payments", icon: "payments", section: "Payments" },

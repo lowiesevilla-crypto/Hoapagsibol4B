@@ -36,6 +36,11 @@ function legacyMovePassDefinition(binding = "passType"): Prisma.JsonValue {
   } as Prisma.JsonValue;
 }
 
+function record(value: unknown): Record<string, unknown> {
+  assert.ok(value && typeof value === "object" && !Array.isArray(value));
+  return value as Record<string, unknown>;
+}
+
 test("normalizes only the approved Move-In/Out v1 legacy aliases and adds normal margins", () => {
   const result = normalizePublishedTemplateReplicationSource({
     type: DocumentType.MOVE_IN_OUT_PASS,
@@ -47,12 +52,17 @@ test("normalizes only the approved Move-In/Out v1 legacy aliases and adds normal
     result.compatibilityVersion,
     publishedTemplateReplicationCompatibilityVersion,
   );
-  assert.deepEqual(
-    (result.definitionJson as Record<string, any>).page.margins,
-    { top: 25.4, right: 25.4, bottom: 25.4, left: 25.4 },
-  );
+  const definition = record(result.definitionJson);
+  const page = record(definition.page);
+  assert.deepEqual(page.margins, {
+    top: 25.4,
+    right: 25.4,
+    bottom: 25.4,
+    left: 25.4,
+  });
 
-  const block = (result.definitionJson as Record<string, any>).blocks[0];
+  assert.ok(Array.isArray(definition.blocks));
+  const block = record(definition.blocks[0]);
   assert.equal(block.binding, "request.passType");
   assert.equal(
     block.content,

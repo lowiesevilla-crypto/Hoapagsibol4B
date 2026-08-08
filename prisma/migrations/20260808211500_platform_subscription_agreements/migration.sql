@@ -143,4 +143,4 @@ ALTER TABLE `AgreementAuditEvent`
   ADD CONSTRAINT `AgreementAuditEvent_agreementId_fkey`
   FOREIGN KEY (`agreementId`) REFERENCES `TenantSubscriptionAgreement`(`id`) ON DELETE CASCADE ON UPDATE CASCADE,
   ADD CONSTRAINT `AgreementAuditEvent_actorUser_fkey`
-  FOREIGN KEY (`tenantId`, `actorUserId`) REFERENCES `User`(`tenantId`, `id`) ON DELETE SET NULL ON UPDATE CASCADE;
+  FOREIGN KEY (`tenantId`, `actorUserId`) REFERENCES `User`(`tenantId`, `id`) ON DELETE RESTRICT ON UPDATE CASCADE;

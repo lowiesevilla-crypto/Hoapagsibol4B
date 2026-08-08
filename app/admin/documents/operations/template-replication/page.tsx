@@ -87,7 +87,7 @@ export default async function PublishedTemplateReplicationPage({
       <PageHeader
         eyebrow="Document operations"
         title="Published Template Replication"
-        description="Preview and apply the approved published templates from the configured source tenant into this target tenant. Blank target template definitions can be bootstrapped with tenant-owned template sets. The apply step is transactional, audit logged, and protected by the preview digest."
+        description="Preview and apply the approved published templates from the configured source tenant into this target tenant. Blank target template definitions can be bootstrapped with tenant-owned template sets. Approved legacy source compatibility transforms are shown explicitly in the dry run. The apply step is transactional, audit logged, and protected by the preview digest."
         action={
           <div className="flex flex-wrap gap-2">
             <Link className="btn-secondary" href="/admin/documents/operations">
@@ -178,7 +178,18 @@ export default async function PublishedTemplateReplicationPage({
                         <p className="font-black">{plan.targetDefinitionName}</p>
                         <code className="text-xs text-slate-500">{plan.type}</code>
                       </td>
-                      <td className="font-bold">Published v{plan.requestedSourceVersion}</td>
+                      <td>
+                        <p className="font-bold">Published v{plan.requestedSourceVersion}</p>
+                        {plan.sourceCompatibilityVersion && (
+                          <div className="mt-2 max-w-sm rounded-xl border border-blue-200 bg-blue-50 p-2 text-xs text-blue-900">
+                            <p className="font-black">Compatibility normalized</p>
+                            <code className="break-all">{plan.sourceCompatibilityVersion}</code>
+                            <p className="mt-1 text-blue-800">
+                              {plan.sourceCompatibilityChanges.join(" · ")}
+                            </p>
+                          </div>
+                        )}
+                      </td>
                       <td>{currentTargetLabel(plan)}</td>
                       <td className="font-bold">{nextVersionLabel(plan.action, plan)}</td>
                       <td>
@@ -195,6 +206,11 @@ export default async function PublishedTemplateReplicationPage({
                         <code className="text-xs text-slate-500">
                           {plan.sourceContentHash.slice(0, 20)}…
                         </code>
+                        {plan.sourceOriginalContentHash !== plan.sourceContentHash && (
+                          <p className="mt-1 text-xs text-slate-500">
+                            Normalized from {plan.sourceOriginalContentHash.slice(0, 20)}…
+                          </p>
+                        )}
                       </td>
                     </tr>
                   ))}

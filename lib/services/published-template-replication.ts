@@ -12,6 +12,7 @@ import {
   allowedDocumentPlaceholders,
   validateTemplateDefinition,
 } from "@/lib/services/document-template-builder";
+import { normalizePublishedTemplateReplicationSource } from "@/lib/services/published-template-replication-compat";
 
 export const publishedTemplateReplicationSourceTenantId = "tenant_pagsibol4b_default";
 export const publishedTemplateReplicationTargetTenantId = "cmrpruwma00063lnps4g7c335";
@@ -45,7 +46,10 @@ type InternalReplicationPlan = {
   sourceTemplateSetId: string;
   sourceVersionId: string;
   sourceSchemaVersion: number;
+  sourceOriginalContentHash: string;
   sourceContentHash: string;
+  sourceCompatibilityVersion: string | null;
+  sourceCompatibilityChanges: string[];
   sourceDefinitionJson: Prisma.JsonValue;
   targetDefinitionId: string;
   targetDefinitionName: string;
@@ -326,16 +330,24 @@ async function buildPlan(
     throw new Error(`${spec.type} v${spec.sourceVersion} has no template definition payload.`);
   }
 
+  const sourceOriginalContentHash = hashTemplateDefinition(sourceVersion.definitionJson);
+  const normalization = normalizePublishedTemplateReplicationSource({
+    type: spec.type,
+    sourceVersion: spec.sourceVersion,
+    definitionJson: sourceVersion.definitionJson,
+  });
+  const sourceDefinitionJson = normalization.definitionJson;
+
   assertValidTemplateDefinition(
-    sourceVersion.definitionJson,
+    sourceDefinitionJson,
     `${spec.type} v${spec.sourceVersion}`,
   );
   assertTenantNeutralTemplate(
-    sourceVersion.definitionJson,
+    sourceDefinitionJson,
     sourceIdentifiers,
     `${spec.type} v${spec.sourceVersion}`,
   );
-  const sourceContentHash = hashTemplateDefinition(sourceVersion.definitionJson);
+  const sourceContentHash = hashTemplateDefinition(sourceDefinitionJson);
 
   const targetDefinition = await client.documentDefinition.findFirst({
     where: {
@@ -523,8 +535,11 @@ async function buildPlan(
     sourceTemplateSetId: sourceVersion.templateSetId,
     sourceVersionId: sourceVersion.id,
     sourceSchemaVersion: sourceVersion.schemaVersion,
+    sourceOriginalContentHash,
     sourceContentHash,
-    sourceDefinitionJson: sourceVersion.definitionJson,
+    sourceCompatibilityVersion: normalization.compatibilityVersion,
+    sourceCompatibilityChanges: normalization.changes,
+    sourceDefinitionJson,
     targetDefinitionId: targetDefinition.id,
     targetDefinitionName: targetDefinition.displayName,
     targetAssignedTemplateVersionId: targetDefinition.assignedTemplateVersionId,
@@ -706,7 +721,10 @@ async function applyPlan(
             sourceTemplateSetId: plan.sourceTemplateSetId,
             sourceVersionId: plan.sourceVersionId,
             sourceVersion: plan.requestedSourceVersion,
+            sourceOriginalContentHash: plan.sourceOriginalContentHash,
             sourceContentHash: plan.sourceContentHash,
+            sourceCompatibilityVersion: plan.sourceCompatibilityVersion,
+            sourceCompatibilityChanges: plan.sourceCompatibilityChanges,
             targetTemplateSetBootstrapped:
               plan.action === "BOOTSTRAP_TARGET_SET_AND_ASSIGN",
             replicatedBy: "lib/services/published-template-replication.ts",
@@ -741,7 +759,10 @@ async function applyPlan(
         documentType: plan.type,
         requestedSourceVersion: plan.requestedSourceVersion,
         sourceVersionId: plan.sourceVersionId,
+        sourceOriginalContentHash: plan.sourceOriginalContentHash,
         sourceContentHash: plan.sourceContentHash,
+        sourceCompatibilityVersion: plan.sourceCompatibilityVersion,
+        sourceCompatibilityChanges: plan.sourceCompatibilityChanges,
         previousAssignedVersionId: plan.targetAssignedTemplateVersionId,
         previousAssignedVersion: plan.targetAssignedVersion,
         targetTemplateSetId: appliedTargetTemplateSetId,

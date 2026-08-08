@@ -1,0 +1,151 @@
+enum AgreementTemplateVersionStatus {
+  DRAFT
+  PENDING_LEGAL_APPROVAL
+  APPROVED
+  ACTIVE
+  RETIRED
+}
+
+enum TenantAgreementStatus {
+  DRAFT
+  READY_FOR_SIGNATURE
+  SENT
+  VIEWED
+  SIGNED
+  DECLINED
+  EXPIRED
+  TERMINATED
+  SUPERSEDED
+}
+
+enum AgreementAuditEventType {
+  CREATED
+  READY_FOR_SIGNATURE
+  SENT
+  VIEWED
+  OTP_SENT
+  OTP_VERIFIED
+  SIGNED
+  DECLINED
+  DOWNLOADED
+  TERMINATED
+  SUPERSEDED
+}
+
+model PlatformAgreementTemplate {
+  id          String                             @id @default(cuid())
+  code        String                             @unique @db.VarChar(80)
+  name        String
+  description String?                            @db.Text
+  active      Boolean                            @default(true)
+  versions    PlatformAgreementTemplateVersion[]
+  createdAt   DateTime                           @default(now())
+  updatedAt   DateTime                           @updatedAt
+
+  @@index([active, name])
+}
+
+model PlatformAgreementTemplateVersion {
+  id                String                         @id @default(cuid())
+  templateId        String
+  versionNumber     Int
+  versionLabel      String                         @db.VarChar(30)
+  status            AgreementTemplateVersionStatus @default(DRAFT)
+  title             String
+  body               String                         @db.LongText
+  contentHash        String                         @db.VarChar(64)
+  legalReviewerName String?
+  legalReviewNotes  String?                        @db.Text
+  approvedById      String?
+  approvedAt        DateTime?
+  effectiveAt       DateTime?
+  createdById       String?
+  template          PlatformAgreementTemplate      @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  agreements        TenantSubscriptionAgreement[]
+  createdAt         DateTime                       @default(now())
+  updatedAt         DateTime                       @updatedAt
+
+  @@unique([templateId, versionNumber])
+  @@index([status, effectiveAt])
+  @@index([templateId, status])
+}
+
+model TenantSubscriptionAgreement {
+  id                   String                           @id @default(cuid())
+  tenantId             String
+  subscriptionId       String
+  templateVersionId    String
+  agreementNumber      String                           @unique @db.VarChar(80)
+  title                String
+  status               TenantAgreementStatus            @default(DRAFT)
+  renderedContent      String                           @db.LongText
+  termsSnapshot        Json
+  issuerSnapshot       Json
+  tenantSnapshot       Json
+  contentHash          String                           @db.VarChar(64)
+  effectiveDate        DateTime                         @db.Date
+  termEndsAt           DateTime?                        @db.Date
+  autoRenew            Boolean                          @default(true)
+  signerUserId         String?
+  signerName           String?
+  signerTitle          String?
+  signerEmail          String?
+  authorityDeclaration String?                          @db.Text
+  acceptanceText       String?                          @db.Text
+  signatureText        String?
+  signedAt             DateTime?
+  signerIpAddress      String?
+  signerUserAgent      String?                          @db.Text
+  signedContentHash    String?                          @db.VarChar(64)
+  sentAt               DateTime?
+  viewedAt             DateTime?
+  declinedAt           DateTime?
+  terminatedAt         DateTime?
+  terminationReason    String?                          @db.Text
+  createdById          String?
+  templateVersion      PlatformAgreementTemplateVersion @relation(fields: [templateVersionId], references: [id], onDelete: Restrict)
+  challenges           AgreementSignatureChallenge[]
+  auditEvents          AgreementAuditEvent[]
+  createdAt            DateTime                         @default(now())
+  updatedAt            DateTime                         @updatedAt
+
+  @@unique([tenantId, id])
+  @@index([tenantId, subscriptionId, status])
+  @@index([tenantId, signerEmail, status])
+  @@index([templateVersionId, status])
+  @@index([signedAt])
+}
+
+model AgreementSignatureChallenge {
+  id           String                      @id @default(cuid())
+  agreementId  String
+  tenantId     String
+  userId       String
+  email        String
+  codeHash     String                      @db.VarChar(64)
+  expiresAt    DateTime
+  usedAt       DateTime?
+  attemptCount Int                         @default(0)
+  agreement    TenantSubscriptionAgreement @relation(fields: [agreementId], references: [id], onDelete: Cascade)
+  createdAt    DateTime                    @default(now())
+
+  @@index([tenantId, agreementId, userId, expiresAt])
+  @@index([expiresAt, usedAt])
+}
+
+model AgreementAuditEvent {
+  id           String                      @id @default(cuid())
+  agreementId  String
+  tenantId     String
+  eventType    AgreementAuditEventType
+  actorUserId  String?
+  actorEmail   String?
+  ipAddress    String?
+  userAgent    String?                     @db.Text
+  metadata     Json?
+  agreement    TenantSubscriptionAgreement @relation(fields: [agreementId], references: [id], onDelete: Cascade)
+  createdAt    DateTime                    @default(now())
+
+  @@index([tenantId, agreementId, createdAt])
+  @@index([eventType, createdAt])
+}

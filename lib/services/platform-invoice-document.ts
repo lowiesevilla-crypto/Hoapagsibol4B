@@ -82,6 +82,16 @@ function pdfSafe(value: string) {
     .replace(/[^\x09\x0A\x0D\x20-\xFF]/g, "?");
 }
 
+function tinLine(value?: string | null) {
+  const normalized = String(value || "").trim().replace(/^TIN\s*:\s*/i, "");
+  return normalized ? `TIN: ${normalized}` : "";
+}
+
+function vatStatusLine(value?: string | null) {
+  const normalized = String(value || "").trim().replace(/^VAT(?:\s+status)?\s*:\s*/i, "");
+  return normalized ? `VAT status: ${normalized}` : "";
+}
+
 function money(value: number, currency = "PHP") {
   return `${currency} ${new Intl.NumberFormat("en-PH", {
     minimumFractionDigits: 2,
@@ -215,8 +225,8 @@ export async function renderPlatformInvoicePdf(invoice: PlatformInvoiceDocument)
   y -= 18;
   page.drawText(pdfSafe(issuer.name), { x: PAGE_MARGIN, y, size: 13, font: bold, color: ink });
   page.drawText(pdfSafe(billingName), { x: 310, y, size: 13, font: bold, color: ink });
-  const issuerDetails = [issuer.address, issuer.email, issuer.contactNumber, issuer.tinNumber ? `TIN: ${issuer.tinNumber}` : "", issuer.website].filter(Boolean).join("\n");
-  const billDetails = [billingAddress, billingEmail, invoice.tenant.billingProfile?.contactNumber || invoice.tenant.contactNumber || "", billingTin ? `TIN: ${billingTin}` : "", vatStatus].filter(Boolean).join("\n");
+  const issuerDetails = [issuer.address, issuer.email, issuer.contactNumber, tinLine(issuer.tinNumber), issuer.website].filter(Boolean).join("\n");
+  const billDetails = [billingAddress, billingEmail, invoice.tenant.billingProfile?.contactNumber || invoice.tenant.contactNumber || "", tinLine(billingTin), vatStatusLine(vatStatus)].filter(Boolean).join("\n");
   const leftY = drawWrapped(page, issuerDetails, { x: PAGE_MARGIN, y: y - 17, maxWidth: 220, font: regular, size: 8.7, lineHeight: 12, color: muted });
   const rightY = drawWrapped(page, billDetails, { x: 310, y: y - 17, maxWidth: 240, font: regular, size: 8.7, lineHeight: 12, color: muted });
   y = Math.min(leftY, rightY) - 18;

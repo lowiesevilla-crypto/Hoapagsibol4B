@@ -26,6 +26,16 @@ function date(value: Date) {
   });
 }
 
+function tinLine(value?: string | null) {
+  const normalized = String(value || "").trim().replace(/^TIN\s*:\s*/i, "");
+  return normalized ? `TIN: ${normalized}` : "";
+}
+
+function vatStatusLine(value?: string | null) {
+  const normalized = String(value || "").trim().replace(/^VAT(?:\s+status)?\s*:\s*/i, "");
+  return normalized ? `VAT status: ${normalized}` : "";
+}
+
 export default async function PlatformInvoiceDocumentPage({
   params,
   searchParams,
@@ -56,13 +66,33 @@ export default async function PlatformInvoiceDocumentPage({
 
   return (
     <main className="min-h-screen bg-slate-100 px-3 py-6 text-slate-900 sm:px-6 sm:py-10 print:bg-white print:p-0">
-      <style>{`@page { size: A4; margin: 12mm; } @media print { html, body { background: white !important; } * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; } }`}</style>
+      <style>{`
+        @page { size: A4; margin: 8mm; }
+        @media print {
+          html, body { background: white !important; margin: 0 !important; padding: 0 !important; }
+          * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+          .invoice-print-sheet { width: 100% !important; max-width: none !important; min-height: 0 !important; overflow: visible !important; box-shadow: none !important; }
+          .invoice-print-header { padding: 5mm 6mm !important; }
+          .invoice-print-body { padding: 4mm 6mm !important; }
+          .invoice-print-parties { gap: 4mm !important; padding-bottom: 4mm !important; grid-template-columns: repeat(2, minmax(0, 1fr)) !important; }
+          .invoice-print-meta { margin-top: 4mm !important; padding: 3mm !important; gap: 3mm !important; grid-template-columns: repeat(4, minmax(0, 1fr)) !important; }
+          .invoice-print-lines { margin-top: 4mm !important; }
+          .invoice-print-summary { margin-top: 4mm !important; gap: 4mm !important; grid-template-columns: minmax(0, 1fr) 64mm !important; }
+          .invoice-print-note { padding: 3mm !important; }
+          .invoice-print-note > p:last-child { margin-top: 1.5mm !important; font-size: 9pt !important; line-height: 1.3 !important; }
+          .invoice-print-totals { padding: 3mm !important; }
+          .invoice-print-payment { margin-top: 4mm !important; padding: 3mm !important; }
+          .invoice-print-payment p:last-child { margin-top: 1mm !important; font-size: 9pt !important; line-height: 1.3 !important; }
+          .invoice-print-footer { margin-top: 4mm !important; padding-top: 3mm !important; }
+          .invoice-print-avoid, table, thead, tbody, tr, td, th { break-inside: avoid !important; page-break-inside: avoid !important; }
+        }
+      `}</style>
       <div className="mx-auto mb-4 max-w-[210mm] print:hidden" aria-label="Print invoice and Download PDF controls">
         <PlatformInvoiceDocumentActions pdfUrl={platformInvoicePdfUrl(invoice.id)} />
       </div>
 
-      <article className="mx-auto min-h-[297mm] max-w-[210mm] overflow-hidden bg-white shadow-xl print:min-h-0 print:max-w-none print:shadow-none">
-        <header className="bg-pine-900 px-7 py-7 text-white sm:px-10 sm:py-9 print:px-0 print:py-6">
+      <article className="invoice-print-sheet mx-auto min-h-[297mm] max-w-[210mm] overflow-hidden bg-white shadow-xl print:min-h-0 print:max-w-none print:shadow-none">
+        <header className="invoice-print-header bg-pine-900 px-7 py-7 text-white sm:px-10 sm:py-9">
           <div className="flex flex-wrap items-start justify-between gap-6">
             <div>
               <p className="text-xs font-black uppercase tracking-[0.22em] text-leaf-100">HOAHub secure billing</p>
@@ -77,12 +107,12 @@ export default async function PlatformInvoiceDocumentPage({
           </div>
         </header>
 
-        <div className="px-7 py-7 sm:px-10 sm:py-9 print:px-0 print:py-6">
-          <section className="grid gap-7 border-b border-slate-200 pb-7 sm:grid-cols-2">
+        <div className="invoice-print-body px-7 py-7 sm:px-10 sm:py-9">
+          <section className="invoice-print-parties invoice-print-avoid grid gap-7 border-b border-slate-200 pb-7 sm:grid-cols-2">
             <PartyBlock
               label="From"
               name={issuer.name}
-              lines={[issuer.address, issuer.email, issuer.contactNumber, issuer.tinNumber ? `TIN: ${issuer.tinNumber}` : "", issuer.website]}
+              lines={[issuer.address, issuer.email, issuer.contactNumber, tinLine(issuer.tinNumber), issuer.website]}
             />
             <PartyBlock
               label="Bill to"
@@ -92,20 +122,20 @@ export default async function PlatformInvoiceDocumentPage({
                 billingEmail,
                 profile?.contactPerson ? `Contact: ${profile.contactPerson}` : "",
                 profile?.contactNumber || invoice.tenant.contactNumber || "",
-                billingTin ? `TIN: ${billingTin}` : "",
-                profile?.vatStatus || "",
+                tinLine(billingTin),
+                vatStatusLine(profile?.vatStatus),
               ]}
             />
           </section>
 
-          <section className="mt-7 grid gap-3 rounded-2xl border border-slate-200 bg-slate-50 p-5 sm:grid-cols-2 lg:grid-cols-4 print:bg-white">
+          <section className="invoice-print-meta invoice-print-avoid mt-7 grid gap-3 rounded-2xl border border-slate-200 bg-slate-50 p-5 sm:grid-cols-2 lg:grid-cols-4 print:bg-white">
             <Meta label="Invoice date" value={date(invoice.issueDate)} />
             <Meta label="Due date" value={date(invoice.dueDate)} />
             <Meta label="Billing period" value={`${date(invoice.billingPeriodStart)} – ${date(invoice.billingPeriodEnd)}`} />
             <Meta label="Plan" value={invoice.subscription.plan.name} />
           </section>
 
-          <section className="mt-8">
+          <section className="invoice-print-lines invoice-print-avoid mt-8">
             <div className="overflow-hidden rounded-2xl border border-slate-200">
               <table className="w-full text-sm">
                 <thead className="bg-pine-900 text-left text-white">
@@ -130,19 +160,19 @@ export default async function PlatformInvoiceDocumentPage({
             </div>
           </section>
 
-          <section className="mt-7 grid gap-7 lg:grid-cols-[1fr_310px]">
+          <section className="invoice-print-summary invoice-print-avoid mt-7 grid gap-7 lg:grid-cols-[1fr_310px]">
             <div>
               {invoice.notes?.trim() ? (
-                <div className="rounded-2xl border border-sky-100 bg-sky-50 p-5 print:bg-white">
+                <div className="invoice-print-note rounded-2xl border border-sky-100 bg-sky-50 p-5 print:bg-white">
                   <p className="text-xs font-black uppercase tracking-wider text-blue-700">Invoice note</p>
                   <p className="mt-2 whitespace-pre-line text-sm leading-6 text-slate-700">{invoice.notes}</p>
                 </div>
               ) : (
-                <div className="rounded-2xl border border-dashed border-slate-200 p-5 text-sm text-slate-500">No invoice note was recorded when this invoice was issued.</div>
+                <div className="invoice-print-note rounded-2xl border border-dashed border-slate-200 p-5 text-sm text-slate-500">No invoice note was recorded when this invoice was issued.</div>
               )}
             </div>
 
-            <div className="rounded-2xl border border-slate-200 p-5">
+            <div className="invoice-print-totals rounded-2xl border border-slate-200 p-5">
               <TotalRow label="Subtotal" value={money(Number(invoice.subtotal), invoice.currency)} />
               {Number(invoice.discount) > 0 && <TotalRow label="Discount" value={`− ${money(Number(invoice.discount), invoice.currency)}`} />}
               {Number(invoice.tax) > 0 && <TotalRow label="Tax" value={money(Number(invoice.tax), invoice.currency)} />}
@@ -154,7 +184,7 @@ export default async function PlatformInvoiceDocumentPage({
             </div>
           </section>
 
-          <section className={`mt-7 flex items-start gap-3 rounded-2xl p-5 ${paid ? "bg-emerald-50 text-emerald-900 print:bg-white print:border print:border-emerald-200" : "bg-blue-50 text-blue-950 print:bg-white print:border print:border-blue-200"}`}>
+          <section className={`invoice-print-payment invoice-print-avoid mt-7 flex items-start gap-3 rounded-2xl p-5 ${paid ? "bg-emerald-50 text-emerald-900 print:bg-white print:border print:border-emerald-200" : "bg-blue-50 text-blue-950 print:bg-white print:border print:border-blue-200"}`}>
             {paid ? <CheckCircle2 className="mt-0.5 size-5 shrink-0" /> : <CircleDollarSign className="mt-0.5 size-5 shrink-0" />}
             <div>
               <p className="font-black">{paid ? "Payment confirmed" : `Payment due ${date(invoice.dueDate)}`}</p>
@@ -166,7 +196,7 @@ export default async function PlatformInvoiceDocumentPage({
             </div>
           </section>
 
-          <footer className="mt-10 border-t border-slate-200 pt-5 text-xs leading-5 text-slate-500">
+          <footer className="invoice-print-footer invoice-print-avoid mt-10 border-t border-slate-200 pt-5 text-xs leading-5 text-slate-500">
             <div className="flex flex-wrap items-start justify-between gap-4">
               <div>
                 <p className="font-bold text-slate-700">{issuer.name}</p>

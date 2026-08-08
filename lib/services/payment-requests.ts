@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { CollectionType, DocumentRequestStatus, PaymentRequestStatus, PaymentRequestType, PayerType, Prisma, RefundStatus, Role } from "@prisma/client";
 import { platformPrisma } from "@/lib/db";
+import { isPayMongoPaymentRequest } from "@/lib/homeowner-payment-flow";
 import { buildPaymentCoverage } from "@/lib/payment-coverage";
 import { recalculateBillFromActivePayments } from "@/lib/services/payment-ledger";
 import { allocateReceiptNumber, collectionReceiptSeries } from "@/lib/services/receipt";
@@ -10,13 +11,20 @@ import { monthLabel } from "@/lib/utils";
 
 const refundableTypes = new Set<CollectionType>([CollectionType.CONSTRUCTION_BOND, CollectionType.CONTRACTOR_BOND]);
 
-export async function approvePaymentRequest(requestId: string, reviewerId?: string, reviewRemarks?: string, tenantId?: string) {
+type ApprovePaymentRequestOptions = {
+  allowGatewayConfirmation?: boolean;
+};
+
+export async function approvePaymentRequest(requestId: string, reviewerId?: string, reviewRemarks?: string, tenantId?: string, options?: ApprovePaymentRequestOptions) {
   const approved = await platformPrisma.$transaction(async (tx) => {
     const request = tenantId
       ? await tx.paymentRequest.findFirst({ where: { id: requestId, tenantId } })
       : await tx.paymentRequest.findUnique({ where: { id: requestId } });
     if (!request) throw new Error("Payment request not found.");
     if (request.status !== PaymentRequestStatus.PENDING_REVIEW) throw new Error("This payment request has already been reviewed.");
+    if (isPayMongoPaymentRequest(request) && !options?.allowGatewayConfirmation) {
+      throw new Error("This PayMongo payment is awaiting verified gateway confirmation and cannot be approved manually.");
+    }
 
     const paymentDate = request.paymentDate;
     if (request.type === PaymentRequestType.MONTHLY_DUES) {
@@ -60,12 +68,12 @@ export async function approvePaymentRequest(requestId: string, reviewerId?: stri
       const recalculated = await recalculateBillFromActivePayments(tx as unknown as Prisma.TransactionClient, bill);
       const reviewer = reviewerId ? await tx.user.findFirst({ where: { id: reviewerId, tenantId: request.tenantId }, select: { id: true, name: true, email: true, role: true } }) : null;
       const replacedVoidedPayments = request.referenceNumber ? await tx.payment.findMany({ where: { tenantId: request.tenantId, referenceNumber: request.referenceNumber, status: "VOIDED" }, select: { id: true, receiptNumber: true } }) : [];
-      await tx.auditLog.create({ data: { tenantId: request.tenantId, actorId: reviewerId ?? null, module: "PAYMENTS", action: "RECORD_PAYMENT_TRANSACTION", entityType: "Payment", entityId: payment.id, metadata: { receiptNumber, source: "PAYMENT_REQUEST", paymentType: "MONTHLY_DUES", totalAmount: amount, appliedAmount, unappliedCredit, allocations: [{ billId: bill.id, amount: appliedAmount, coverage: monthLabel(bill.billingMonth) }], coverageStart: coverage.coverageStart, coverageEnd: coverage.coverageEnd, coverageMonths: coverage.coverageMonths, paymentCoverageDisplay: coverage.paymentCoverageDisplay, homeownerId: bill.homeownerId, adminUser: reviewer, replacesVoidedPayments: replacedVoidedPayments, recalculated, timestamp: new Date().toISOString() } } });
+      await tx.auditLog.create({ data: { tenantId: request.tenantId, actorId: reviewerId ?? null, module: "PAYMENTS", action: "RECORD_PAYMENT_TRANSACTION", entityType: "Payment", entityId: payment.id, metadata: { receiptNumber, source: isPayMongoPaymentRequest(request) ? "PAYMONGO_HOMEOWNER" : "PAYMENT_REQUEST", paymentType: "MONTHLY_DUES", totalAmount: amount, appliedAmount, unappliedCredit, allocations: [{ billId: bill.id, amount: appliedAmount, coverage: monthLabel(bill.billingMonth) }], coverageStart: coverage.coverageStart, coverageEnd: coverage.coverageEnd, coverageMonths: coverage.coverageMonths, paymentCoverageDisplay: coverage.paymentCoverageDisplay, homeownerId: bill.homeownerId, adminUser: reviewer, replacesVoidedPayments: replacedVoidedPayments, recalculated, timestamp: new Date().toISOString() } } });
       const approved = await tx.paymentRequest.update({
         where: { id: request.id },
         data: { status: PaymentRequestStatus.APPROVED, reviewedById: reviewerId ?? null, reviewedAt: new Date(), reviewRemarks: reviewRemarks || null, paymentId: payment.id },
       });
-      await tx.auditLog.create({ data: { tenantId: request.tenantId, actorId: reviewerId ?? null, module: "PAYMENTS", action: "APPROVE_PAYMENT_REQUEST", entityType: "PaymentRequest", entityId: request.id, metadata: { oldValue: { status: request.status }, newValue: { status: "APPROVED", paymentId: payment.id, receiptNumber }, remarks: reviewRemarks } } });
+      await tx.auditLog.create({ data: { tenantId: request.tenantId, actorId: reviewerId ?? null, module: "PAYMENTS", action: "APPROVE_PAYMENT_REQUEST", entityType: "PaymentRequest", entityId: request.id, metadata: { oldValue: { status: request.status }, newValue: { status: "APPROVED", paymentId: payment.id, receiptNumber }, remarks: reviewRemarks, gatewayConfirmed: Boolean(options?.allowGatewayConfirmation) } } });
       return approved;
     }
 
@@ -100,20 +108,20 @@ export async function approvePaymentRequest(requestId: string, reviewerId?: stri
           createdById: adminId,
         },
       });
-      await tx.auditLog.create({ data: { tenantId: request.tenantId, actorId: adminId, module: "RECEIPTS", action: "GENERATE_OC_RECEIPT", entityType: "Collection", entityId: collection.id, metadata: { receiptNumber, source: "DOCUMENT_FEE_PAYMENT_REQUEST", documentRequestId: request.documentRequestId } } });
+      await tx.auditLog.create({ data: { tenantId: request.tenantId, actorId: adminId, module: "RECEIPTS", action: "GENERATE_OC_RECEIPT", entityType: "Collection", entityId: collection.id, metadata: { receiptNumber, source: isPayMongoPaymentRequest(request) ? "PAYMONGO_DOCUMENT_FEE" : "DOCUMENT_FEE_PAYMENT_REQUEST", documentRequestId: request.documentRequestId } } });
       const updatedDocument = await tx.documentRequest.update({ where: { id: documentRequest.id }, data: { status: DocumentRequestStatus.PAYMENT_CONFIRMED } });
       await tx.documentRequestHistory.create({ data: { tenantId: request.tenantId, requestId: documentRequest.id, status: DocumentRequestStatus.PAYMENT_CONFIRMED, actorId: adminId, note: `Document fee confirmed with receipt ${receiptNumber}.` } });
       const approved = await tx.paymentRequest.update({
         where: { id: request.id },
         data: { status: PaymentRequestStatus.APPROVED, reviewedById: reviewerId ?? null, reviewedAt: new Date(), reviewRemarks: reviewRemarks || null, collectionId: collection.id },
       });
-      await tx.auditLog.create({ data: { tenantId: request.tenantId, actorId: adminId, module: "PAYMENTS", action: "APPROVE_DOCUMENT_FEE_PAYMENT", entityType: "PaymentRequest", entityId: request.id, metadata: { oldValue: { status: request.status, documentStatus: documentRequest.status }, newValue: { status: "APPROVED", documentStatus: updatedDocument.status, collectionId: collection.id, receiptNumber }, documentRequestId: documentRequest.id, remarks: reviewRemarks } } });
+      await tx.auditLog.create({ data: { tenantId: request.tenantId, actorId: adminId, module: "PAYMENTS", action: "APPROVE_DOCUMENT_FEE_PAYMENT", entityType: "PaymentRequest", entityId: request.id, metadata: { oldValue: { status: request.status, documentStatus: documentRequest.status }, newValue: { status: "APPROVED", documentStatus: updatedDocument.status, collectionId: collection.id, receiptNumber }, documentRequestId: documentRequest.id, remarks: reviewRemarks, gatewayConfirmed: Boolean(options?.allowGatewayConfirmation) } } });
       return approved;
     }
 
     if (!request.collectionType) throw new Error("Payment request is missing a collection type.");
     if (request.collectionType === CollectionType.CONTRACTOR_BOND) throw new Error("Contractor bonds must be recorded from a contractor profile.");
-    const adminId = reviewerId ?? (await tx.user.findFirst({ where: { role: { in: [Role.SYSTEM_ADMIN, Role.ADMIN] } }, select: { id: true } }))?.id;
+    const adminId = reviewerId ?? (await tx.user.findFirst({ where: { tenantId: request.tenantId, role: { in: [Role.SYSTEM_ADMIN, Role.ADMIN, Role.HOA_ADMIN] } }, select: { id: true } }))?.id;
     if (!adminId) throw new Error("No administrator account is available to record this collection.");
     const refundable = refundableTypes.has(request.collectionType);
     const series = collectionReceiptSeries(request.collectionType);
@@ -136,12 +144,12 @@ export async function approvePaymentRequest(requestId: string, reviewerId?: stri
         createdById: adminId,
       },
     });
-    await tx.auditLog.create({ data: { tenantId: request.tenantId, actorId: adminId, module: "RECEIPTS", action: `GENERATE_${series}_RECEIPT`, entityType: "Collection", entityId: collection.id, metadata: { receiptNumber, source: "PAYMENT_REQUEST" } } });
+    await tx.auditLog.create({ data: { tenantId: request.tenantId, actorId: adminId, module: "RECEIPTS", action: `GENERATE_${series}_RECEIPT`, entityType: "Collection", entityId: collection.id, metadata: { receiptNumber, source: isPayMongoPaymentRequest(request) ? "PAYMONGO_HOMEOWNER" : "PAYMENT_REQUEST" } } });
     const approved = await tx.paymentRequest.update({
       where: { id: request.id },
       data: { status: PaymentRequestStatus.APPROVED, reviewedById: reviewerId ?? null, reviewedAt: new Date(), reviewRemarks: reviewRemarks || null, collectionId: collection.id },
     });
-    await tx.auditLog.create({ data: { tenantId: request.tenantId, actorId: adminId, module: "PAYMENTS", action: "APPROVE_PAYMENT_REQUEST", entityType: "PaymentRequest", entityId: request.id, metadata: { oldValue: { status: request.status }, newValue: { status: "APPROVED", collectionId: collection.id, receiptNumber }, remarks: reviewRemarks } } });
+    await tx.auditLog.create({ data: { tenantId: request.tenantId, actorId: adminId, module: "PAYMENTS", action: "APPROVE_PAYMENT_REQUEST", entityType: "PaymentRequest", entityId: request.id, metadata: { oldValue: { status: request.status }, newValue: { status: "APPROVED", collectionId: collection.id, receiptNumber }, remarks: reviewRemarks, gatewayConfirmed: Boolean(options?.allowGatewayConfirmation) } } });
     return approved;
   }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
   if (approved.type === PaymentRequestType.DOCUMENT_FEE && approved.documentRequestId) {
@@ -160,6 +168,7 @@ export async function rejectPaymentRequest(requestId: string, reviewerId: string
       : await tx.paymentRequest.findUnique({ where: { id: requestId } });
     if (!request) throw new Error("Payment request not found.");
     if (request.status !== PaymentRequestStatus.PENDING_REVIEW) throw new Error("This payment request has already been reviewed.");
+    if (isPayMongoPaymentRequest(request)) throw new Error("PayMongo payment requests are controlled by the payment gateway and cannot be manually rejected while awaiting confirmation.");
     const rejected = await tx.paymentRequest.update({
       where: { id: requestId },
       data: { status: PaymentRequestStatus.REJECTED, reviewedById: reviewerId, reviewedAt: new Date(), reviewRemarks: reviewRemarks || "Rejected by administrator." },

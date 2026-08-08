@@ -130,7 +130,7 @@ model AgreementSignatureChallenge {
   agreement    TenantSubscriptionAgreement @relation(fields: [agreementId], references: [id], onDelete: Cascade)
   createdAt    DateTime                    @default(now())
 
-  @@index([tenantId, agreementId, userId, expiresAt])
+  @@index([tenantId, agreementId, userId, expiresAt], map: "AgreementChallenge_scope_expiry_idx")
   @@index([expiresAt, usedAt])
 }
 

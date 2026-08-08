@@ -49,6 +49,7 @@
     "db:import": "tsx scripts/import-database.ts"
   },
   "prisma": {
+    "schema": "prisma",
     "seed": "tsx prisma/seed.ts"
   },
   "dependencies": {
@@ -75,11 +76,8 @@
     "@types/nodemailer": "^8.0.1",
     "@types/qrcode": "^1.5.6",
     "@types/react": "^19.1.8",
-    "@types/react-dom": "^19.1.6",
+    "@types/react-dom": "^19.1.8",
     "autoprefixer": "^10.4.21",
-    "eslint": "8.57.1",
-    "eslint-config-next": "15.5.19",
-    "postcss": "^8.5.4",
     "prisma": "^6.10.1",
     "tailwindcss": "^3.4.17",
     "tsx": "^4.20.3",

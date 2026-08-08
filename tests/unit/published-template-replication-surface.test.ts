@@ -100,9 +100,11 @@ test("source versions may resolve across source-owned template sets and blank ta
 });
 
 test("approved legacy source normalization remains narrow, visible, and provenance-preserving", async () => {
-  const [service, compatibility, page] = await Promise.all([
+  const [service, compatibility, builder, generation, page] = await Promise.all([
     source("lib/services/published-template-replication.ts"),
     source("lib/services/published-template-replication-compat.ts"),
+    source("lib/services/document-template-builder.ts"),
+    source("lib/services/document-generation.ts"),
     source("app/admin/documents/operations/template-replication/page.tsx"),
   ]);
 
@@ -110,10 +112,23 @@ test("approved legacy source normalization remains narrow, visible, and provenan
   assert.match(service, /sourceOriginalContentHash/);
   assert.match(service, /sourceCompatibilityVersion/);
   assert.match(service, /sourceCompatibilityChanges/);
+
   assert.match(compatibility, /DocumentType\.MOVE_IN_OUT_PASS/);
-  assert.match(compatibility, /sourceVersion !== 1/);
+  assert.match(compatibility, /options\.sourceVersion === 1/);
   assert.match(compatibility, /partyName: "request\.representativeName"/);
+  assert.match(compatibility, /DocumentType\.CERTIFICATE_OF_RESIDENCY/);
+  assert.match(compatibility, /options\.sourceVersion === 2/);
+  assert.match(compatibility, /homeowner_name: "subject\.fullName"/);
+  assert.match(compatibility, /association_name: "tenant\.name"/);
+  assert.match(compatibility, /issue_day_ordinal: "document\.issueDayOrdinal"/);
+  assert.match(compatibility, /issue_month_year: "document\.issueMonthYear"/);
+  assert.match(compatibility, /office_location: "document\.issuePlace"/);
   assert.match(compatibility, /page\.margins:normal-25\.4mm/);
+
+  assert.match(builder, /"document\.issueDayOrdinal"/);
+  assert.match(builder, /"document\.issueMonthYear"/);
+  assert.match(generation, /issueDayOrdinal: documentIssueDayOrdinal\(issueDate\)/);
+  assert.match(generation, /issueMonthYear: documentIssueMonthYear\(issueDate\)/);
   assert.match(page, /Compatibility normalized/);
   assert.match(page, /Normalized from/);
 });

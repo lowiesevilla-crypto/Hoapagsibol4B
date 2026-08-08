@@ -78,6 +78,7 @@ export const platformLinks: LinkItem[] = [
   { href: "/platform/tenants", label: "Tenants", icon: "platform", section: "Platform" },
   { href: "/platform/plans", label: "Plans", icon: "plans", section: "Platform" },
   { href: "/platform/subscriptions", label: "Subscriptions", icon: "subscriptions", section: "Platform" },
+  { href: "/platform/invoices", label: "Invoices", icon: "billing", section: "Platform" },
   { href: "/platform/licenses", label: "Licenses", icon: "licenses", section: "Platform" },
   { href: "/platform/audit", label: "Platform audit", icon: "audit", section: "Platform" },
 ];

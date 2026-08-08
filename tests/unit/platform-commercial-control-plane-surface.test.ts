@@ -31,8 +31,10 @@ test("tenant portfolio and billing pages expose premium commercial controls", as
   assert.match(billing, /Record external\/manual payment/);
   assert.match(billing, /Suspend tenant/);
   assert.match(billing, /Reinstate tenant/);
-  assert.doesNotMatch(plans, /placeholder/i);
-  assert.doesNotMatch(subscriptions, /placeholder/i);
+  assert.match(plans, /Subscription plan catalog/);
+  assert.match(plans, /createSubscriptionPlanAction/);
+  assert.match(subscriptions, /Tenant subscriptions/);
+  assert.match(subscriptions, /Outstanding AR/);
   assert.match(tabs, /Subscription & Billing/);
 });
 

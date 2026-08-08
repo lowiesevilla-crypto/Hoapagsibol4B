@@ -193,7 +193,7 @@ function buildPaymentHistoryWhere(tenantId: string, query: PaymentQuery, q: stri
     ...(query.method ? { method: query.method as never } : {}),
     ...(Object.keys(range).length ? { paymentDate: range } : {}),
     ...(query.status ? { status: query.status as never } : {}),
-    ...(q ? { OR: [{ referenceNumber: { contains: q } }, { receiptNumber: { contains: q } }, { paymentCoverageDisplay: { contains: q } }, { allocations: { some: { bill: { resolutionReference: { contains: q } } } }, ...homeownerSearch(q)] } : {}),
+    ...(q ? { OR: [{ referenceNumber: { contains: q } }, { receiptNumber: { contains: q } }, { paymentCoverageDisplay: { contains: q } }, { allocations: { some: { bill: { resolutionReference: { contains: q } } } } }, ...homeownerSearch(q)] } : {}),
   };
 }
 

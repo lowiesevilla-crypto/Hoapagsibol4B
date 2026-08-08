@@ -24,6 +24,7 @@ enum AgreementAuditEventType {
   SENT
   VIEWED
   OTP_SENT
+  OTP_FAILED
   OTP_VERIFIED
   SIGNED
   DECLINED

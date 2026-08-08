@@ -140,6 +140,7 @@ function dateRange(query: PaymentQuery) {
 }
 
 function buildOpenBillWhere(tenantId: string, q: string): Prisma.BillWhereInput {
+  const blockLot = parseBlockLotSearch(q);
   return {
     tenantId,
     balance: { gt: 0 },
@@ -153,6 +154,7 @@ function buildOpenBillWhere(tenantId: string, q: string): Prisma.BillWhereInput 
         { homeowner: { lot: { contains: q } } },
         { homeowner: { user: { name: { contains: q } } } },
         { homeowner: { user: { email: { contains: q } } } },
+        ...(blockLot ? [{ homeowner: blockLot }] : []),
       ],
     } : {}),
   };
@@ -191,18 +193,30 @@ function buildPaymentHistoryWhere(tenantId: string, query: PaymentQuery, q: stri
     ...(query.method ? { method: query.method as never } : {}),
     ...(Object.keys(range).length ? { paymentDate: range } : {}),
     ...(query.status ? { status: query.status as never } : {}),
-    ...(q ? { OR: [{ referenceNumber: { contains: q } }, { receiptNumber: { contains: q } }, { paymentCoverageDisplay: { contains: q } }, { allocations: { some: { bill: { resolutionReference: { contains: q } } } } }, ...homeownerSearch(q)] } : {}),
+    ...(q ? { OR: [{ referenceNumber: { contains: q } }, { receiptNumber: { contains: q } }, { paymentCoverageDisplay: { contains: q } }, { allocations: { some: { bill: { resolutionReference: { contains: q } } } }, ...homeownerSearch(q)] } : {}),
   };
 }
 
 function homeownerSearch(q: string) {
+  const blockLot = parseBlockLotSearch(q);
   return [
     { homeowner: { id: { contains: q } } },
     { homeowner: { block: { contains: q } } },
     { homeowner: { lot: { contains: q } } },
     { homeowner: { user: { name: { contains: q } } } },
     { homeowner: { user: { email: { contains: q } } } },
+    ...(blockLot ? [{ homeowner: blockLot }] : []),
   ];
+}
+
+function parseBlockLotSearch(q: string): Prisma.HomeownerProfileWhereInput | null {
+  const block = q.match(/\b(?:block|blk)\s*[:#-]?\s*([a-z0-9-]+)/i)?.[1]?.trim();
+  const lot = q.match(/\blot\s*[:#-]?\s*([a-z0-9-]+)/i)?.[1]?.trim();
+  if (!block && !lot) return null;
+  return {
+    ...(block ? { block: { contains: block } } : {}),
+    ...(lot ? { lot: { contains: lot } } : {}),
+  };
 }
 
 function homeownerFilterOptions(tenantId: string) {

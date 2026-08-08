@@ -1,12 +1,15 @@
 import { CalendarDays, Clock3, CreditCard, QrCode, ReceiptText, ShieldCheck } from "lucide-react";
 import Link from "next/link";
 import { PayByQrForm } from "@/components/pay-by-qr-form";
+import { PayMongoHomeownerForm } from "@/components/paymongo-homeowner-form";
 import { PaymentAreaNavigation, PaymentEmptyState, PaymentHeroCard, PaymentMetricCard, PaymentRequestStatusCard, UnpaidBillingCard, type PaymentTone } from "@/components/homeowner/payments/payment-cards";
 import { PortalPageContainer, PortalSectionHeader } from "@/components/portal-mobile-shell";
 import { prisma } from "@/lib/db";
 import { getAppUrl } from "@/lib/app-url";
+import { isPayMongoPaymentRequest } from "@/lib/homeowner-payment-flow";
 import { requireHomeownerProfile } from "@/lib/portal";
 import { getStatementOfAccount } from "@/lib/services/statement-of-account";
+import { getHomeownerPaymentConfig } from "@/lib/services/homeowner-payment-config";
 import { getAssociationSettings, getPaymentSettings } from "@/lib/system-settings";
 import { locateTenantUpload, locateUpload } from "@/lib/storage";
 import { canSubmitDocumentFeePayment, documentFeePaymentPurpose, documentFeePaymentStatusLabel, documentRequestPublicReference } from "@/lib/services/document-fee-payments";
@@ -16,14 +19,15 @@ import { collectionLabel, inputDate, money, monthLabel, shortDate } from "@/lib/
 const UNPAID_LIMIT = 8;
 const REQUEST_LIMIT = 6;
 
-export default async function PortalPayPage({ searchParams }: { searchParams: Promise<{ documentRequestId?: string; error?: string; success?: string; message?: string }> }) {
+export default async function PortalPayPage({ searchParams }: { searchParams: Promise<{ documentRequestId?: string; error?: string; success?: string; message?: string; online?: string }> }) {
   const profile = await requireHomeownerProfile();
   const query = await searchParams;
   const today = new Date();
-  const [soa, association, paymentSettings, openBills, paymentRequests, selectedDocumentRequest] = await Promise.all([
+  const [soa, association, paymentSettings, paymentConfig, openBills, paymentRequests, selectedDocumentRequest] = await Promise.all([
     getStatementOfAccount(profile.id, profile.tenantId, getAppUrl(), today),
     getAssociationSettings(profile.tenantId),
     getPaymentSettings(profile.tenantId),
+    getHomeownerPaymentConfig(profile.tenantId),
     prisma.bill.findMany({
       where: { tenantId: profile.tenantId, homeownerId: profile.id, balance: { gt: 0 }, archivedAt: null },
       include: { paymentRequests: { where: { tenantId: profile.tenantId, status: "PENDING_REVIEW" }, select: { id: true } } },
@@ -42,6 +46,7 @@ export default async function PortalPayPage({ searchParams }: { searchParams: Pr
     }) : Promise.resolve(null),
   ]);
 
+  const isPayMongoFlow = paymentConfig.flow === "PAYMONGO";
   const oldestUnpaid = openBills[0] ?? null;
   const pendingRequests = paymentRequests.filter((request) => request.status === "PENDING_REVIEW");
   const latestRejected = paymentRequests.find((request) => request.status === "REJECTED");
@@ -71,7 +76,7 @@ export default async function PortalPayPage({ searchParams }: { searchParams: Pr
     purpose: documentFeePaymentPurpose({ documentType: selectedDocumentType, requestReference: selectedRequestReference }),
     statusLabel: documentFeePaymentStatusLabel(selectedDocumentRequest),
   } : null;
-  const gcashQrImageUrl = await availableGcashQrImageUrl(paymentSettings.gcashQrImageUrl);
+  const gcashQrImageUrl = !isPayMongoFlow ? await availableGcashQrImageUrl(paymentSettings.gcashQrImageUrl) : null;
 
   return (
     <PortalPageContainer className="space-y-6">
@@ -79,6 +84,8 @@ export default async function PortalPayPage({ searchParams }: { searchParams: Pr
 
       {query.error && <div className="rounded-3xl border border-rose-200 bg-rose-50 p-4 text-sm font-bold text-rose-800" role="alert">{query.error}</div>}
       {query.success && <div className="rounded-3xl border border-emerald-200 bg-emerald-50 p-4 text-sm font-bold text-emerald-800" role="status">{query.message || "Payment request submitted."}</div>}
+      {query.online === "confirming" && <div className="rounded-3xl border border-blue-200 bg-blue-50 p-4 text-sm font-bold leading-6 text-blue-900" role="status">PayMongo checkout was completed or closed. HOAHub is waiting for the verified PayMongo confirmation before updating your balance or issuing an official receipt. Refresh this page if the status is still pending.</div>}
+      {query.online === "cancelled" && <div className="rounded-3xl border border-amber-200 bg-amber-50 p-4 text-sm font-bold leading-6 text-amber-900" role="status">PayMongo checkout was cancelled. No payment is marked as paid unless PayMongo confirms the transaction.</div>}
 
       <PaymentHeroCard
         amount={money(soa.summary.currentOutstandingBalance)}
@@ -96,7 +103,7 @@ export default async function PortalPayPage({ searchParams }: { searchParams: Pr
         <PaymentMetricCard label="Outstanding" value={money(soa.summary.currentOutstandingBalance)} note="From Statement of Account" icon={ReceiptText} tone={statusInfo.tone} />
         <PaymentMetricCard label="Available Credit" value={money(soa.summary.availableCredit)} note="Unapplied homeowner credit" icon={CreditCard} tone={soa.summary.availableCredit > 0 ? "success" : "default"} />
         <PaymentMetricCard label="Oldest Due" value={oldestUnpaid ? shortDate(oldestUnpaid.dueDate) : "None"} note={oldestUnpaid ? monthLabel(oldestUnpaid.billingMonth) : "No unpaid billing"} icon={CalendarDays} />
-        <PaymentMetricCard label="Verification" value={pendingRequests.length ? "Pending" : "Clear"} note={latestRejected ? "Latest rejected request needs review" : "HOA review status"} icon={Clock3} tone={pendingRequests.length ? "warning" : latestRejected ? "danger" : "success"} />
+        <PaymentMetricCard label={isPayMongoFlow ? "Online Payment" : "Verification"} value={pendingRequests.length ? "Pending" : "Clear"} note={isPayMongoFlow ? "PayMongo confirmation status" : latestRejected ? "Latest rejected request needs review" : "HOA review status"} icon={Clock3} tone={pendingRequests.length ? "warning" : latestRejected ? "danger" : "success"} />
       </section>
 
       <section className="grid gap-5 xl:grid-cols-[.95fr_1.05fr]">
@@ -105,21 +112,30 @@ export default async function PortalPayPage({ searchParams }: { searchParams: Pr
             <PortalSectionHeader eyebrow={`${openBills.length} shown`} title="Unpaid Billings" action={<Link href="/portal/billing" className="text-sm font-black text-pine-700">View billing</Link>} />
             <div className="space-y-3">
               {openBills.map((bill) => <UnpaidBillingCard key={bill.id} title="Monthly Dues" coverage={monthLabel(bill.billingMonth)} dueDate={shortDate(bill.dueDate)} originalAmount={money(bill.totalAmount)} paidAmount={money(bill.amountPaid)} balance={money(bill.balance)} status={bill.status.replaceAll("_", " ")} selectable pending={bill.paymentRequests.length > 0} />)}
-              {!openBills.length && <PaymentEmptyState title="No unpaid billing" description="Your current account has no unpaid monthly dues available for QR payment." />}
+              {!openBills.length && <PaymentEmptyState title="No unpaid billing" description={isPayMongoFlow ? "Your current account has no unpaid monthly dues available for online payment." : "Your current account has no unpaid monthly dues available for QR payment."} />}
             </div>
           </section>
 
           <section className="rounded-3xl border border-pine-100 bg-white p-4 shadow-soft sm:p-5">
-            <PortalSectionHeader eyebrow={`${paymentRequests.length} recent`} title="Payment Request Status" action={<Link href="/portal/payments" className="text-sm font-black text-pine-700">History</Link>} />
+            <PortalSectionHeader eyebrow={`${paymentRequests.length} recent`} title="Payment Status" action={<Link href="/portal/payments" className="text-sm font-black text-pine-700">History</Link>} />
             <div className="space-y-3">
-              {paymentRequests.map((request) => <PaymentRequestStatusCard key={request.id} title={paymentRequestPurpose(request)} amount={money(request.amount)} status={statusLabel(request.status)} statusTone={requestTone(request.status)} meta={`Submitted ${shortDate(request.createdAt)} · Updated ${shortDate(request.updatedAt)}`} reference={request.referenceNumber || "Not submitted"} method={request.method.replaceAll("_", " ")} remarks={homeownerSafeRemarks(request.reviewRemarks)} proofLabel={request.proofImageUrl ? "Attached" : "No attachment"} />)}
-              {!paymentRequests.length && <PaymentEmptyState title="No pending payment request" description="Submitted QR payments and HOA verification results will appear here." icon={ShieldCheck} />}
+              {paymentRequests.map((request) => {
+                const onlineRequest = isPayMongoPaymentRequest(request);
+                return <PaymentRequestStatusCard key={request.id} title={paymentRequestPurpose(request)} amount={money(request.amount)} status={onlineRequest && request.status === "PENDING_REVIEW" ? "Awaiting PayMongo" : statusLabel(request.status)} statusTone={requestTone(request.status)} meta={`Submitted ${shortDate(request.createdAt)} · Updated ${shortDate(request.updatedAt)}`} reference={request.referenceNumber || "Not submitted"} method={onlineRequest ? "PayMongo Online" : request.method.replaceAll("_", " ")} remarks={homeownerSafeRemarks(request.reviewRemarks)} proofLabel={onlineRequest ? "Gateway checkout" : request.proofImageUrl ? "Attached" : "No attachment"} />;
+              })}
+              {!paymentRequests.length && <PaymentEmptyState title="No payment activity" description={isPayMongoFlow ? "PayMongo checkout and confirmation activity will appear here." : "Submitted QR payments and HOA verification results will appear here."} icon={ShieldCheck} />}
             </div>
           </section>
         </div>
 
         <div className="space-y-5">
-          <section className="rounded-3xl border border-pine-100 bg-white p-4 shadow-soft sm:p-5">
+          {isPayMongoFlow ? <section className="rounded-3xl border border-blue-100 bg-white p-4 shadow-soft sm:p-5">
+            <div className="mb-4 flex items-center gap-3 rounded-2xl bg-blue-50 p-3">
+              {association.logoUrl ? <img src={association.logoUrl} alt={`${association.name} logo`} className="size-12 rounded-xl object-contain" /> : <span className="grid size-12 place-items-center rounded-xl bg-blue-100 text-sm font-black text-blue-800">HOA</span>}
+              <div className="min-w-0"><p className="text-xs font-bold uppercase tracking-wider text-slate-500">Tenant payment account</p><p className="break-words font-black text-slate-950">{association.name}</p></div>
+            </div>
+            <div className="flex items-start gap-3"><span className="grid size-11 shrink-0 place-items-center rounded-2xl bg-blue-50 text-blue-700"><CreditCard className="size-5" /></span><div><h2 className="text-lg font-black">PayMongo Online</h2><p className="mt-1 text-sm leading-6 text-slate-600">This HOA has enabled online checkout as its homeowner payment flow. Manual QR proof submission is not available while this mode is active.</p></div></div>
+          </section> : <section className="rounded-3xl border border-pine-100 bg-white p-4 shadow-soft sm:p-5">
             <div className="mb-4 flex items-center gap-3 rounded-2xl bg-slate-50 p-3">
               {association.logoUrl ? <img src={association.logoUrl} alt={`${association.name} logo`} className="size-12 rounded-xl object-contain" /> : <span className="grid size-12 place-items-center rounded-xl bg-pine-100 text-sm font-black text-pine-800">HOA</span>}
               <div className="min-w-0"><p className="text-xs font-bold uppercase tracking-wider text-slate-500">Tenant payment account</p><p className="break-words font-black text-slate-950">{association.name}</p></div>
@@ -131,9 +147,9 @@ export default async function PortalPayPage({ searchParams }: { searchParams: Pr
               <div><dt className="font-bold uppercase tracking-wide text-slate-500">Mobile number</dt><dd className="break-words text-lg font-black text-pine-900">{paymentSettings.gcashMobileNumber || "Not configured"}</dd></div>
             </dl>
             <div className="mt-4 rounded-2xl border border-blue-100 bg-blue-50 p-4 text-sm leading-6 text-blue-900"><p className="font-black">Payment instructions</p><p className="mt-1 whitespace-pre-wrap">{paymentSettings.paymentInstructions || "Pay the exact amount, save the GCash reference number, and submit it using the form below."}</p></div>
-          </section>
+          </section>}
 
-          {query.documentRequestId && !selectedDocumentRequest ? <DocumentPaymentNotice title="Document request unavailable" message="This document request was not found for your homeowner account." /> : selectedDocumentRequest && !selectedDocumentPayment ? <DocumentPaymentNotice title={documentFeePaymentStatusLabel(selectedDocumentRequest)} message={selectedDocumentRequest.paymentRequest?.status === "APPROVED" ? "This document fee has already been confirmed. Return to your document requests to view the next status." : "This document request is not currently eligible for a fee payment."} /> : <PayByQrForm openBills={billChoices} today={inputDate(today)} documentPayment={selectedDocumentPayment} />}
+          {query.documentRequestId && !selectedDocumentRequest ? <DocumentPaymentNotice title="Document request unavailable" message="This document request was not found for your homeowner account." /> : selectedDocumentRequest && !selectedDocumentPayment ? <DocumentPaymentNotice title={documentFeePaymentStatusLabel(selectedDocumentRequest)} message={selectedDocumentRequest.paymentRequest?.status === "APPROVED" ? "This document fee has already been confirmed. Return to your document requests to view the next status." : "This document request is not currently eligible for a fee payment."} /> : isPayMongoFlow ? <PayMongoHomeownerForm openBills={billChoices} documentPayment={selectedDocumentPayment} /> : <PayByQrForm openBills={billChoices} today={inputDate(today)} documentPayment={selectedDocumentPayment} />}
         </div>
       </section>
     </PortalPageContainer>
@@ -146,7 +162,7 @@ function DocumentPaymentNotice({ title, message }: { title: string; message: str
 
 function paymentStatus({ hasBills, balance, collectionStatus, hasPending, hasRejected }: { hasBills: boolean; balance: number; collectionStatus: string; hasPending: boolean; hasRejected: boolean }): { label: string; tone: PaymentTone } {
   if (!hasBills) return { label: "No Billing Record", tone: "default" };
-  if (hasPending) return { label: "Pending Payment Verification", tone: "warning" };
+  if (hasPending) return { label: "Payment Pending", tone: "warning" };
   if (hasRejected) return { label: "Payment Rejected", tone: "danger" };
   if (balance <= 0) return { label: "Fully Paid", tone: "success" };
   if (collectionStatus === "Overdue") return { label: "Overdue", tone: "danger" };

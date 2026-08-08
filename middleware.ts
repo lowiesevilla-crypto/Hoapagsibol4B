@@ -36,7 +36,7 @@ export async function middleware(request: NextRequest) {
 
   const origin = request.headers.get("origin");
   const mutation = ["POST", "PUT", "PATCH", "DELETE"].includes(request.method);
-  const webhook = path === "/api/payments/webhook/gcash";
+  const webhook = path === "/api/payments/webhook/gcash" || path === "/api/platform/billing/webhooks/paymongo";
   if (mutation && origin && !webhook && !allowedOrigins().has(origin)) {
     return NextResponse.json({ error: "Request origin is not allowed." }, { status: 403 });
   }
@@ -44,7 +44,7 @@ export async function middleware(request: NextRequest) {
     if (!origin || !allowedOrigins().has(origin)) return NextResponse.json({ error: "Request origin is not allowed." }, { status: 403 });
     const response = new NextResponse(null, { status: 204 });
     response.headers.set("Access-Control-Allow-Methods", "GET,POST,PUT,PATCH,DELETE,OPTIONS");
-    response.headers.set("Access-Control-Allow-Headers", "Content-Type, Authorization, X-HOA-Payment-Webhook-Secret");
+    response.headers.set("Access-Control-Allow-Headers", "Content-Type, Authorization, X-HOA-Payment-Webhook-Secret, Paymongo-Signature");
     return cors(response, request);
   }
 

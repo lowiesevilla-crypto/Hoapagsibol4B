@@ -35,21 +35,47 @@ test("homeowner profile exposes linked accounts through a tenant-isolated switch
   assert.match(resolver, /tenant: \{ status: "ACTIVE"/);
 });
 
-test("verified activation uses an httpOnly handoff and does not expose the one-time credential", async () => {
-  const [route, form, action, service] = await Promise.all([
+test("all authenticated role surfaces expose the tenant-isolated My Profile account switcher", async () => {
+  const [links, profileView, roleAccess] = await Promise.all([
+    source("components/sidebar-links.ts"),
+    source("components/my-profile-view.tsx"),
+    source("lib/role-access.ts"),
+  ]);
+  assert.match(links, /href: "\/admin\/profile", label: "My Profile"/);
+  assert.match(links, /href: "\/employee\/profile", label: "My Profile"/);
+  assert.match(links, /href: "\/platform\/profile", label: "My Profile"/);
+  assert.match(profileView, /listLinkedAccounts\(user\.email, user\.id\)/);
+  assert.match(profileView, /switchLinkedAccountAction/);
+  assert.match(roleAccess, /\["\/admin\/profile", Permission\.ADMIN_ACCESS\]/);
+});
+
+test("verified activation pre-fills account credentials through an httpOnly handoff without putting the temporary password in the URL", async () => {
+  const [route, form, action, handoffService, activationService] = await Promise.all([
     source("app/activate/verify/route.ts"),
     source("components/homeowner-activation-form.tsx"),
     source("lib/actions/homeowner-activation.ts"),
     source("lib/services/homeowner-activation-handoff.ts"),
+    source("lib/services/homeowner-activation.ts"),
   ]);
   assert.match(route, /ACTIVATION_HANDOFF_COOKIE/);
   assert.match(route, /httpOnly: true/);
   assert.match(route, /sameSite: "lax"/);
   assert.match(form, /activationMode/);
-  assert.match(form, /one-time temporary credential is attached to this verified link/);
-  assert.match(action, /completeHomeownerActivationFromHandoff/);
-  assert.match(service, /setAudience\("homeowner-activation"\)/);
-  assert.match(service, /expiresAt: \{ gt: new Date\(\) \}/);
+  assert.match(form, /handoffDetails\.accountNumber/);
+  assert.match(form, /handoffDetails\.temporaryPassword/);
+  assert.match(form, /name="email"/);
+  assert.match(form, /name="password"/);
+  assert.match(form, /name="acceptTerms"/);
+  assert.match(form, /!secureHandoff/);
+  assert.match(action, /acceptedTerms/);
+  assert.match(action, /completeHomeownerActivationFromHandoff\(\{ handoff, email, password \}\)/);
+  assert.match(handoffService, /setAudience\("homeowner-activation"\)/);
+  assert.match(handoffService, /compare\(candidateTemporaryPassword, credential\.credentialHash\)/);
+  assert.match(handoffService, /temporaryPassword/);
+  assert.match(handoffService, /expiresAt: \{ gt: new Date\(\) \}/);
+  assert.match(activationService, /createHmac\("sha256", secret\)/);
+  assert.match(activationService, /temporaryActivationPasswordForVerificationToken/);
+  assert.match(activationService, /One-Time Temporary Password/);
   assert.doesNotMatch(route, /temporaryPassword/);
 });
 

@@ -96,13 +96,11 @@ export async function renderAgreementPdf(agreement: AgreementDocument) {
   const border = rgb(0.84, 0.90, 0.93);
   const green = rgb(0.04, 0.43, 0.34);
 
-  let page: PDFPage;
+  let page = pdf.addPage([A4_WIDTH, A4_HEIGHT]);
   let y = 0;
-  const pages: PDFPage[] = [];
+  const pages: PDFPage[] = [page];
 
-  const addPage = () => {
-    page = pdf.addPage([A4_WIDTH, A4_HEIGHT]);
-    pages.push(page);
+  const decoratePage = () => {
     page.drawRectangle({ x: 0, y: A4_HEIGHT - 72, width: A4_WIDTH, height: 72, color: navy });
     page.drawText("HOAHub", { x: MARGIN, y: A4_HEIGHT - 42, size: 18, font: bold, color: rgb(1, 1, 1) });
     page.drawText(pdfSafe(agreement.agreementNumber), { x: A4_WIDTH - MARGIN - 160, y: A4_HEIGHT - 40, size: 9, font: bold, color: rgb(0.84, 0.95, 1) });
@@ -110,11 +108,17 @@ export async function renderAgreementPdf(agreement: AgreementDocument) {
     y = A4_HEIGHT - 100;
   };
 
+  const addPage = () => {
+    page = pdf.addPage([A4_WIDTH, A4_HEIGHT]);
+    pages.push(page);
+    decoratePage();
+  };
+
   const ensureSpace = (height: number) => {
     if (y - height < 58) addPage();
   };
 
-  addPage();
+  decoratePage();
   const bodyLines = agreement.renderedContent.split(/\r?\n/);
   for (const raw of bodyLines) {
     const line = raw.trim();
@@ -125,10 +129,10 @@ export async function renderAgreementPdf(agreement: AgreementDocument) {
     const cover = isCoverHeading(line);
     const heading = isMajorHeading(line);
     const labelLine = /^(Version|Agreement No\.|Plan|Billing Frequency|Subscription Fee|Discount Per Billing Cycle|Currency|Subscription Start|Initial Term|Initial Term End|Auto-Renewal|Payment Terms|Enabled Modules):/.test(line);
-    const size = cover ? 14 : heading ? 10.8 : labelLine ? 8.8 : 8.8;
+    const size = cover ? 14 : heading ? 10.8 : 8.8;
     const lineHeight = cover ? 19 : heading ? 15 : 12.2;
     const font = cover || heading || labelLine ? bold : regular;
-    const color = cover ? navy : heading ? blue : labelLine ? ink : ink;
+    const color = cover ? navy : heading ? blue : ink;
     const indent = /^\d+\.\d+\s/.test(line) ? 10 : 0;
     const wrapped = wrapText(line, font, size, BODY_WIDTH - indent);
     ensureSpace(wrapped.length * lineHeight + (cover || heading ? 8 : 2));

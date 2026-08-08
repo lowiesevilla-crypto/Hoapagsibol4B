@@ -130,7 +130,7 @@ export async function sendPlatformInvoiceEmail(input: { invoiceId: string; actor
   const text = [
     `Hello ${businessName},`,
     "",
-    `Your HOAHub subscription invoice ${invoice.invoiceNumber} is ready.",
+    `Your HOAHub subscription invoice ${invoice.invoiceNumber} is ready.`,
     `Plan: ${invoice.subscription.plan.name}`,
     `Billing period: ${coverage}`,
     `Invoice date: ${issueDate}`,

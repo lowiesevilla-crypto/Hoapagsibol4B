@@ -72,11 +72,12 @@ export function isDocumentReadyForDownload(status: DocumentRequestStatus | strin
 export function resolveDocumentDownloadAccess(input: {
   request: DocumentAccessPolicyRequest;
   currentOutstandingBalance: number;
+  viewerRole?: Role | string;
 }) {
-  const { request, currentOutstandingBalance } = input;
+  const { request, currentOutstandingBalance, viewerRole } = input;
   const policy = policyForDocumentRequest(request);
   const paymentLocked = request.paymentRequiredSnapshot && request.paymentRequest?.status !== PaymentRequestStatus.APPROVED;
-  const staffWalkIn = request.origin === "ADMIN";
+  const staffWalkIn = request.origin === "ADMIN" && Boolean(viewerRole) && viewerRole !== Role.HOMEOWNER;
   const hasBalance = currentOutstandingBalance > 0.009;
   const balanceLocked = !staffWalkIn && hasBalance && (
     policy === DocumentOutstandingBalancePolicy.BLOCK_DOWNLOAD ||

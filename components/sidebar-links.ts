@@ -31,6 +31,7 @@ export type LinkItem = { href: string; label: string; icon: IconName; section: s
 
 export const adminLinks: LinkItem[] = [
   { href: "/admin/dashboard", label: "Dashboard", icon: "dashboard", section: "Administration" },
+  { href: "/admin/profile", label: "My Profile", icon: "profile", section: "Account" },
   { href: "/admin/onboarding", label: "Tenant onboarding", icon: "settings", section: "Administration" },
   { href: "/admin/homeowners", label: "Homeowners", icon: "homeowners", section: "Administration" },
   { href: "/admin/contractors", label: "Contractors", icon: "contractors", section: "Security" },
@@ -72,6 +73,7 @@ export const systemAdminLinks: LinkItem[] = [
 ];
 
 export const platformLinks: LinkItem[] = [
+  { href: "/platform/profile", label: "My Profile", icon: "profile", section: "Account" },
   { href: "/platform/tenants", label: "Tenants", icon: "platform", section: "Platform" },
   { href: "/platform/plans", label: "Plans", icon: "plans", section: "Platform" },
   { href: "/platform/subscriptions", label: "Subscriptions", icon: "subscriptions", section: "Platform" },
@@ -82,6 +84,7 @@ export const platformLinks: LinkItem[] = [
 export const portalLinks: LinkItem[] = homeownerSidebarLinks;
 
 export const employeeLinks: LinkItem[] = [
+  { href: "/employee/profile", label: "My Profile", icon: "profile", section: "Account" },
   { href: "/employee/attendance", label: "Clock in / out", icon: "attendance", section: "Employee" },
   { href: "/employee/attendance/correction", label: "Attendance correction", icon: "attendance", section: "Employee" },
   { href: "/employee/attendance/history", label: "Attendance history", icon: "attendance", section: "Employee" },

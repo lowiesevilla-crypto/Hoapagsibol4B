@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { createHash } from "node:crypto";
+import { createHash, createHmac } from "node:crypto";
 import { access } from "node:fs/promises";
 import {
   HomeownerActivationStatus,
@@ -20,8 +20,8 @@ const otherHomeownerEmail = process.env.E2E_OTHER_HOMEOWNER_EMAIL || "ci-other-h
 const registeredHomeownerEmail = process.env.E2E_REGISTERED_HOMEOWNER_EMAIL || "ci-registered-homeowner@example.invalid";
 const homeownerPassword = process.env.E2E_HOMEOWNER_PASSWORD || "CI-Homeowner-Password-2026!";
 const registeredHomeownerPassword = process.env.E2E_REGISTERED_HOMEOWNER_PASSWORD || "CI-Registered-2026!";
-const registeredTemporaryPassword = process.env.E2E_REGISTERED_TEMPORARY_PASSWORD || "E2ETemporary2026";
 const registeredVerificationToken = process.env.E2E_REGISTERED_VERIFICATION_TOKEN || "e2e-browser-homeowner-registration-verification-token-2026";
+const registeredTemporaryPassword = activationTemporaryPasswordForToken(registeredVerificationToken);
 const announcementTitle = process.env.E2E_ANNOUNCEMENT_TITLE || "E2E Tenant Visibility Notice";
 const coverageYear = Number(process.env.E2E_COVERAGE_YEAR || 2099);
 const coverageMonth = Number(process.env.E2E_COVERAGE_MONTH || 1);
@@ -31,6 +31,17 @@ const homeownerName = "E2E Browser Homeowner";
 const registeredHomeownerName = "E2E Registered Homeowner";
 const documentPurpose = "E2E browser document request";
 const timeout = 45_000;
+
+function activationTemporaryPasswordForToken(token) {
+  const secret = process.env.AUTH_SECRET || "development-only-secret-change-me-now";
+  const digest = createHmac("sha256", secret).update(`hoahub-homeowner-activation-v1:${token}`).digest();
+  const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789";
+  const letters = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
+  const digits = "23456789";
+  let value = "";
+  for (let index = 0; index < 12; index += 1) value += alphabet[digest[index] % alphabet.length];
+  return `${value}${letters[digest[12] % letters.length]}${digits[digest[13] % digits.length]}`;
+}
 
 async function pathExists(path) {
   if (!path) return false;
@@ -351,13 +362,18 @@ async function runHomeownerRegistrationFlow(browser) {
       { timeout },
     );
     await expectText(activationPage, "Registered email verified");
+    assert.equal(new URL(activationPage.url()).searchParams.has("temporaryPassword"), false, "temporary password must never be exposed in the verification URL");
     assert.equal(await activationPage.$eval("#accountNumber", (element) => element.value), accountNumber);
-    assert.equal(await activationPage.$eval("#email", (element) => element.value), registeredHomeownerEmail);
     assert.equal(await activationPage.$eval("#accountNumber", (element) => element.readOnly), true);
-    assert.equal(await activationPage.$eval("#email", (element) => element.readOnly), true);
-    assert.equal(await activationPage.$("#temporaryPassword"), null, "secure handoff must not expose the temporary password field");
+    assert.equal(await activationPage.$eval("#temporaryPassword", (element) => element.value), registeredTemporaryPassword);
+    assert.equal(await activationPage.$eval("#temporaryPassword", (element) => element.readOnly), true);
+    assert.equal(await activationPage.$eval("#email", (element) => element.value), registeredHomeownerEmail);
+    assert.equal(await activationPage.$eval("#email", (element) => element.readOnly), false);
+    assert.equal(await activationPage.$("#confirmPassword"), null, "verified activation should require only one permanent-password input");
+    await clearAndType(activationPage, "#email", registeredHomeownerEmail);
     await clearAndType(activationPage, "#password", registeredHomeownerPassword);
-    await clearAndType(activationPage, "#confirmPassword", registeredHomeownerPassword);
+    await activationPage.click("input[name='acceptTerms']");
+    assert.equal(await activationPage.$eval("input[name='acceptTerms']", (element) => element.checked), true);
     await clickByText(activationPage, "button[type='submit']", "Create permanent password");
     await activationPage.waitForFunction(() => window.location.pathname.startsWith("/portal/dashboard"), { timeout });
     await activationPage.reload({ waitUntil: "networkidle2", timeout });
@@ -398,7 +414,7 @@ try {
   console.log("- document request visibility passed");
   console.log("- announcement publication and cross-tenant visibility passed");
   console.log("- administrator homeowner registration passed");
-  console.log("- homeowner email verification, activation, and fresh login passed");
+  console.log("- homeowner email verification, visible invitation credentials, terms acceptance, activation, and fresh login passed");
   console.log("- registered homeowner tenant ownership passed");
 } catch (error) {
   console.error("Critical browser end-to-end suite failed.");

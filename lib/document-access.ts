@@ -15,7 +15,7 @@ export async function getAccessibleGeneratedDocument(id: string, options?: { req
   if (user.role === Role.HOMEOWNER && request.archivedAt) redirect("/portal/documents?error=This%20document%20has%20been%20archived%20by%20the%20HOA%20office.");
   if (user.role !== Role.HOMEOWNER && !permissionsForRole(user.role).includes("VIEW_ISSUED_DOCUMENT")) redirect("/login");
   const currentOutstandingBalance = await getQualifyingHomeownerBalance(user.tenantId, request.homeownerId);
-  const access = resolveDocumentDownloadAccess({ request, currentOutstandingBalance });
+  const access = resolveDocumentDownloadAccess({ request, currentOutstandingBalance, viewerRole: user.role });
   const { downloadAllowed } = access;
   if (options?.requireDownload && !downloadAllowed) {
     await prisma.auditLog.create({ data: { tenantId: user.tenantId, actorId: user.id, module: "DOCUMENTS", action: access.paymentLocked ? "BLOCKED_DOWNLOAD_DOCUMENT_FEE" : "BLOCKED_DOWNLOAD_BALANCE", entityType: "DocumentRequest", entityId: request.id, metadata: { documentNumber: request.documentNumber, currentOutstandingBalance, paymentRequired: request.paymentRequiredSnapshot, outstandingBalancePolicy: access.policy } } });

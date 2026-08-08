@@ -1,6 +1,6 @@
 import "server-only";
 
-import { randomBytes, createHash } from "node:crypto";
+import { randomBytes, createHash, createHmac } from "node:crypto";
 import { compare, hash } from "bcryptjs";
 import { HomeownerActivationStatus, HomeownerEmailVerificationStatus, NotificationStatus, NotificationType, Prisma, Role } from "@prisma/client";
 import { getAppUrl } from "@/lib/app-url";
@@ -12,6 +12,7 @@ import { tenantCanSignIn } from "@/lib/tenant";
 import { runWithTenant, setTenantContext } from "@/lib/tenant-context";
 
 const ACTIVATION_TTL_DAYS = 7;
+const ACTIVATION_DERIVATION_LABEL = "hoahub-homeowner-activation-v1";
 const GENERIC_EMAIL_VERIFICATION_ERROR = "This email verification link is invalid or no longer active. Ask HOA staff to send a new activation invitation.";
 
 export type ActivationCredentialResult = {
@@ -42,6 +43,21 @@ export function generateTemporaryActivationPassword() {
   return value;
 }
 
+export function temporaryActivationPasswordForVerificationToken(token: string) {
+  const configuredSecret = process.env.AUTH_SECRET;
+  if (process.env.NODE_ENV === "production" && (!configuredSecret || configuredSecret.length < 32)) {
+    throw new Error("AUTH_SECRET must contain at least 32 characters in production.");
+  }
+  const secret = configuredSecret || "development-only-secret-change-me-now";
+  const digest = createHmac("sha256", secret).update(`${ACTIVATION_DERIVATION_LABEL}:${token}`).digest();
+  const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789";
+  const letters = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
+  const digits = "23456789";
+  let value = "";
+  for (let index = 0; index < 12; index += 1) value += alphabet[digest[index] % alphabet.length];
+  return `${value}${letters[digest[12] % letters.length]}${digits[digest[13] % digits.length]}`;
+}
+
 export function hashOpaqueToken(value: string) {
   return createHash("sha256").update(value).digest("hex");
 }
@@ -53,8 +69,8 @@ export async function createHomeownerActivationCredential(input: {
   tx?: Prisma.TransactionClient | unknown;
 }): Promise<ActivationCredentialResult> {
   const db = (input.tx ?? prisma) as Prisma.TransactionClient;
-  const temporaryPassword = generateTemporaryActivationPassword();
   const emailVerificationToken = randomBytes(32).toString("base64url");
+  const temporaryPassword = temporaryActivationPasswordForVerificationToken(emailVerificationToken);
   const expiresAt = new Date(Date.now() + ACTIVATION_TTL_DAYS * 24 * 60 * 60 * 1000);
   await db.homeownerActivationCredential.updateMany({
     where: { tenantId: input.tenantId, userId: input.userId, usedAt: null, revokedAt: null },
@@ -430,13 +446,13 @@ function activationEmailText(input: {
     `Verify Email and Continue Activation: ${input.emailVerificationUrl}`,
     "",
     "SECTION 5 - FIRST-TIME SETUP",
-    "1. Verify registered email.",
-    "2. Open the activation page.",
-    "3. Enter account number and temporary password.",
-    "4. Create permanent password.",
-    "5. Sign in to the correct tenant.",
-    "6. Optionally enable passkey.",
-    "7. Install the PWA.",
+    "1. Click Verify Email and Continue Activation.",
+    "2. Review the prefilled account number and temporary password.",
+    "3. Enter your registered email address.",
+    "4. Create your permanent password.",
+    "5. Accept the Terms and Conditions.",
+    "6. Complete activation and sign in to the correct tenant.",
+    "7. Optionally enable passkey and install the PWA.",
     "",
     "SECTION 6 - PASSWORD POLICY",
     "- 6 to 24 characters",
@@ -491,7 +507,7 @@ function activationEmailHtml(input: {
         ["Expiration", activationExpiryLabel(input.expiresAt), false],
       ]))}
       ${section("PRIMARY ACTION", `<a href="${escapeAttribute(input.emailVerificationUrl)}" style="display:block;background:#078bc9;color:#fff;text-decoration:none;text-align:center;font-weight:800;padding:15px 18px;border-radius:12px;font-size:16px">Verify Email and Continue Activation</a>`)}
-      ${section("FIRST-TIME SETUP", orderedList(["Verify registered email.", "Open the activation page.", "Enter account number and temporary password.", "Create permanent password.", "Sign in to the correct tenant.", "Optionally enable passkey.", "Install the PWA."]))}
+      ${section("FIRST-TIME SETUP", orderedList(["Click Verify Email and Continue Activation.", "Review the prefilled account number and temporary password.", "Enter your registered email address.", "Create your permanent password.", "Accept the Terms and Conditions.", "Complete activation and sign in to the correct tenant.", "Optionally enable passkey and install the PWA."]))}
       ${section("PASSWORD POLICY", bulletList(["6 to 24 characters", "at least one letter", "at least one number", "never reuse the temporary password"]))}
       ${section("INSTALLATION GUIDE", installGuide())}
       ${section("SECURITY WARNING", bulletList(["temporary password is single-use", "do not share the password or verification link", "HOA staff will never ask for the permanent password", "HOA staff cannot view the permanent password"]))}

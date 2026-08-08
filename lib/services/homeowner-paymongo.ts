@@ -48,7 +48,6 @@ export async function createHomeownerPayMongoCheckout(requestId: string, tenantI
     where: { id: requestId, tenantId },
     include: {
       homeowner: { include: { user: true } },
-      tenant: true,
       bill: true,
       documentRequest: { include: { definition: true } },
     },
@@ -57,6 +56,8 @@ export async function createHomeownerPayMongoCheckout(requestId: string, tenantI
   if (request.status !== PaymentRequestStatus.PENDING_REVIEW) throw new Error("This PayMongo payment request is no longer pending.");
   if (!request.referenceNumber) throw new Error("PayMongo payment request is missing its checkout reference.");
 
+  const tenant = await prisma.tenant.findUnique({ where: { id: tenantId }, select: { name: true } });
+  if (!tenant) throw new Error("Tenant was not found for PayMongo checkout.");
   const linkedAccountId = request.proofFileName?.trim();
   if (!linkedAccountId) throw new Error("This tenant does not have a PayMongo linked merchant account configured.");
   const amount = Number(request.amount);
@@ -83,7 +84,7 @@ export async function createHomeownerPayMongoCheckout(requestId: string, tenantI
         attributes: {
           line_items: [{
             name: purpose,
-            description: `${request.tenant.name} homeowner payment`,
+            description: `${tenant.name} homeowner payment`,
             amount: cents,
             currency: "PHP",
             quantity: 1,
@@ -222,6 +223,9 @@ export async function processHomeownerPayMongoWebhook(rawBody: string, signature
   const checkoutId = String(event.session.id || "").trim();
   const amount = Number(paymentAttributes.amount || 0) / 100;
   const currency = String(paymentAttributes.currency || "PHP").toUpperCase();
+  const paidAtSeconds = Number(paymentAttributes.paid_at || 0);
+  const paidAt = Number.isFinite(paidAtSeconds) && paidAtSeconds > 0 ? new Date(paidAtSeconds * 1000) : new Date();
+  paidAt.setUTCHours(0, 0, 0, 0);
   if (!gatewayPaymentId || !checkoutId) return { ok: false as const, status: 400, message: "PayMongo webhook is missing payment identifiers." };
   if (currency !== "PHP") return { ok: false as const, status: 400, message: "PayMongo currency does not match the HOA payment currency." };
   if (Math.abs(Number(request.amount) - amount) > 0.009) return { ok: false as const, status: 400, message: "PayMongo amount does not match the homeowner payment request." };
@@ -242,7 +246,7 @@ export async function processHomeownerPayMongoWebhook(rawBody: string, signature
   try {
     await prisma.paymentRequest.update({
       where: { id: request.id },
-      data: { method: paymentMethodFromSource(paymentAttributes.source) },
+      data: { method: paymentMethodFromSource(paymentAttributes.source), paymentDate: paidAt },
     });
     await prisma.auditLog.create({
       data: {
@@ -259,6 +263,7 @@ export async function processHomeownerPayMongoWebhook(rawBody: string, signature
           gatewayPaymentId,
           amount,
           currency,
+          paidAt: paidAt.toISOString(),
           linkedAccountId,
           linkedAccountChangedSinceCheckout: Boolean(currentLinkedAccountId && currentLinkedAccountId !== linkedAccountId),
         },

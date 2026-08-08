@@ -99,6 +99,25 @@ test("source versions may resolve across source-owned template sets and blank ta
   assert.match(page, /Create tenant template set, publish, and assign/);
 });
 
+test("approved legacy source normalization remains narrow, visible, and provenance-preserving", async () => {
+  const [service, compatibility, page] = await Promise.all([
+    source("lib/services/published-template-replication.ts"),
+    source("lib/services/published-template-replication-compat.ts"),
+    source("app/admin/documents/operations/template-replication/page.tsx"),
+  ]);
+
+  assert.match(service, /normalizePublishedTemplateReplicationSource/);
+  assert.match(service, /sourceOriginalContentHash/);
+  assert.match(service, /sourceCompatibilityVersion/);
+  assert.match(service, /sourceCompatibilityChanges/);
+  assert.match(compatibility, /DocumentType\.MOVE_IN_OUT_PASS/);
+  assert.match(compatibility, /sourceVersion !== 1/);
+  assert.match(compatibility, /partyName: "request\.representativeName"/);
+  assert.match(compatibility, /page\.margins:normal-25\.4mm/);
+  assert.match(page, /Compatibility normalized/);
+  assert.match(page, /Normalized from/);
+});
+
 test("apply is digest-guarded, transactional, audited, and post-verified", async () => {
   const service = await source("lib/services/published-template-replication.ts");
 

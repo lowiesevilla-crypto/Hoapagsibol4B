@@ -90,6 +90,14 @@ test("agreement draft is populated from subscription and legal party snapshots i
   assert.match(service, /contentHash: sha256\(renderedContent\)/);
 });
 
+test("subscription assignment automatically creates the tenant agreement draft without rolling back the subscription on document failure", async () => {
+  const action = await source("lib/actions/platform-billing.ts");
+  assert.match(action, /createTenantAgreementDraft/);
+  assert.match(action, /await createTenantAgreementDraft\(\{ tenantId, actorId: actor\.id \}\)/);
+  assert.match(action, /Subscription assigned and HOAHub agreement draft generated/);
+  assert.match(action, /Subscription assigned, but the agreement draft needs attention/);
+});
+
 test("platform and tenant navigation expose agreement centers under the existing authorization model", async () => {
   const [links, access] = await Promise.all([
     source("components/sidebar-links.ts"),

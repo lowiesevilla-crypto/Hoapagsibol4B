@@ -4,6 +4,7 @@ import { getAppUrl } from "@/lib/app-url";
 import { authorizeCron } from "@/lib/cron-auth";
 import { platformPrisma, prisma } from "@/lib/db";
 import { runPlatformBillingCycle } from "@/lib/services/platform-billing";
+import { sendPlatformInvoiceEmail } from "@/lib/services/platform-invoice-email";
 import { sendEmailNotification } from "@/lib/services/notifications";
 import { runWithTenant } from "@/lib/tenant-context";
 
@@ -13,8 +14,26 @@ export async function POST(request: Request) {
   if (!authorizeCron(request)) return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
 
   let platformBilling: Awaited<ReturnType<typeof runPlatformBillingCycle>> | { error: string };
+  const platformInvoiceEmails: Array<{ invoiceId: string; status: string; recipients?: string[]; message?: string }> = [];
   try {
     platformBilling = await runPlatformBillingCycle();
+    for (const invoiceId of platformBilling.invoiceIds) {
+      try {
+        const delivery = await sendPlatformInvoiceEmail({ invoiceId });
+        platformInvoiceEmails.push({
+          invoiceId,
+          status: delivery.status,
+          recipients: delivery.recipients,
+          message: delivery.message,
+        });
+      } catch (error) {
+        platformInvoiceEmails.push({
+          invoiceId,
+          status: "FAILED",
+          message: error instanceof Error ? error.message : "Platform invoice email failed.",
+        });
+      }
+    }
   } catch (error) {
     platformBilling = { error: error instanceof Error ? error.message : "Platform billing cycle failed." };
   }
@@ -43,6 +62,7 @@ export async function POST(request: Request) {
   return NextResponse.json({
     ok,
     platformBilling,
+    platformInvoiceEmails,
     tenantsProcessed: results.length,
     globalRateLimitsDeleted: rateLimits.count,
     results,

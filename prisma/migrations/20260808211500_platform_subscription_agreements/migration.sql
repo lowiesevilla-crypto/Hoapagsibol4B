@@ -1,6 +1,5 @@
 -- HOAHub platform subscription agreement lifecycle.
--- Existing tenant/subscription/user identifiers are retained as scalar references so the
--- agreement domain remains platform-scoped while preserving immutable historical snapshots.
+-- Agreement text and commercial/party snapshots are immutable business evidence.
 
 CREATE TABLE `PlatformAgreementTemplate` (
     `id` VARCHAR(191) NOT NULL,
@@ -82,6 +81,7 @@ CREATE TABLE `TenantSubscriptionAgreement` (
     INDEX `TenantSubscriptionAgreement_tenantId_signerEmail_status_idx`(`tenantId`, `signerEmail`, `status`),
     INDEX `TenantSubscriptionAgreement_templateVersionId_status_idx`(`templateVersionId`, `status`),
     INDEX `TenantSubscriptionAgreement_signedAt_idx`(`signedAt`),
+    INDEX `TenantSubscriptionAgreement_tenantId_signerUserId_idx`(`tenantId`, `signerUserId`),
     PRIMARY KEY (`id`)
 ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
@@ -99,6 +99,7 @@ CREATE TABLE `AgreementSignatureChallenge` (
 
     INDEX `AgreementSignatureChallenge_tenantId_agreementId_userId_expiresAt_idx`(`tenantId`, `agreementId`, `userId`, `expiresAt`),
     INDEX `AgreementSignatureChallenge_expiresAt_usedAt_idx`(`expiresAt`, `usedAt`),
+    INDEX `AgreementSignatureChallenge_tenantId_userId_idx`(`tenantId`, `userId`),
     PRIMARY KEY (`id`)
 ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
@@ -116,6 +117,7 @@ CREATE TABLE `AgreementAuditEvent` (
 
     INDEX `AgreementAuditEvent_tenantId_agreementId_createdAt_idx`(`tenantId`, `agreementId`, `createdAt`),
     INDEX `AgreementAuditEvent_eventType_createdAt_idx`(`eventType`, `createdAt`),
+    INDEX `AgreementAuditEvent_tenantId_actorUserId_idx`(`tenantId`, `actorUserId`),
     PRIMARY KEY (`id`)
 ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
@@ -125,12 +127,20 @@ ALTER TABLE `PlatformAgreementTemplateVersion`
 
 ALTER TABLE `TenantSubscriptionAgreement`
   ADD CONSTRAINT `TenantSubscriptionAgreement_templateVersionId_fkey`
-  FOREIGN KEY (`templateVersionId`) REFERENCES `PlatformAgreementTemplateVersion`(`id`) ON DELETE RESTRICT ON UPDATE CASCADE;
+  FOREIGN KEY (`templateVersionId`) REFERENCES `PlatformAgreementTemplateVersion`(`id`) ON DELETE RESTRICT ON UPDATE CASCADE,
+  ADD CONSTRAINT `TenantSubscriptionAgreement_subscription_fkey`
+  FOREIGN KEY (`tenantId`, `subscriptionId`) REFERENCES `TenantSubscription`(`tenantId`, `id`) ON DELETE RESTRICT ON UPDATE CASCADE,
+  ADD CONSTRAINT `TenantSubscriptionAgreement_signerUser_fkey`
+  FOREIGN KEY (`tenantId`, `signerUserId`) REFERENCES `User`(`tenantId`, `id`) ON DELETE RESTRICT ON UPDATE CASCADE;
 
 ALTER TABLE `AgreementSignatureChallenge`
   ADD CONSTRAINT `AgreementSignatureChallenge_agreementId_fkey`
-  FOREIGN KEY (`agreementId`) REFERENCES `TenantSubscriptionAgreement`(`id`) ON DELETE CASCADE ON UPDATE CASCADE;
+  FOREIGN KEY (`agreementId`) REFERENCES `TenantSubscriptionAgreement`(`id`) ON DELETE CASCADE ON UPDATE CASCADE,
+  ADD CONSTRAINT `AgreementSignatureChallenge_user_fkey`
+  FOREIGN KEY (`tenantId`, `userId`) REFERENCES `User`(`tenantId`, `id`) ON DELETE CASCADE ON UPDATE CASCADE;
 
 ALTER TABLE `AgreementAuditEvent`
   ADD CONSTRAINT `AgreementAuditEvent_agreementId_fkey`
-  FOREIGN KEY (`agreementId`) REFERENCES `TenantSubscriptionAgreement`(`id`) ON DELETE CASCADE ON UPDATE CASCADE;
+  FOREIGN KEY (`agreementId`) REFERENCES `TenantSubscriptionAgreement`(`id`) ON DELETE CASCADE ON UPDATE CASCADE,
+  ADD CONSTRAINT `AgreementAuditEvent_actorUser_fkey`
+  FOREIGN KEY (`tenantId`, `actorUserId`) REFERENCES `User`(`tenantId`, `id`) ON DELETE SET NULL ON UPDATE CASCADE;

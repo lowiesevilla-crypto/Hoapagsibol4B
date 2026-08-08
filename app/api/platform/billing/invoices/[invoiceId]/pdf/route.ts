@@ -20,7 +20,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ invo
 
   const pdf = await renderPlatformInvoicePdf(invoice);
   const safeNumber = invoice.invoiceNumber.replace(/[^A-Za-z0-9_-]/g, "-");
-  return new Response(pdf, {
+  return new Response(Buffer.from(pdf), {
     status: 200,
     headers: {
       "Content-Type": "application/pdf",

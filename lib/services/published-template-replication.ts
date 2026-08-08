@@ -17,7 +17,7 @@ export const publishedTemplateReplicationSourceTenantId = "tenant_pagsibol4b_def
 export const publishedTemplateReplicationTargetTenantId = "cmrpruwma00063lnps4g7c335";
 
 export const publishedTemplateReplicationRequests = [
-  { type: DocumentType.GATE_PASS, sourceVersion: 2 },
+  { type: DocumentType.GATE_PASS, sourceVersion: 8 },
   { type: DocumentType.MOVE_IN_OUT_PASS, sourceVersion: 1 },
   { type: DocumentType.CERTIFICATE_OF_RESIDENCY, sourceVersion: 2 },
 ] as const;

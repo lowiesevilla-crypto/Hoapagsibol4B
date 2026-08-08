@@ -25,7 +25,7 @@ test("published template replication is fixed to the approved tenants and source
       sourceVersion,
     })),
     [
-      { type: DocumentType.GATE_PASS, sourceVersion: 2 },
+      { type: DocumentType.GATE_PASS, sourceVersion: 8 },
       { type: DocumentType.MOVE_IN_OUT_PASS, sourceVersion: 1 },
       { type: DocumentType.CERTIFICATE_OF_RESIDENCY, sourceVersion: 2 },
     ],

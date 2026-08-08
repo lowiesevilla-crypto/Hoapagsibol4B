@@ -1,14 +1,21 @@
 import type {
+  AgreementTemplateVersionStatus,
   PlatformGatewayEventStatus,
   PlatformInvoiceStatus,
+  Role,
+  TenantAgreementStatus,
   TenantSubscriptionStatus,
 } from "@prisma/client";
 
-type HoaHubEnumIncludeSearch<T> =
-  T extends PlatformInvoiceStatus ? PlatformInvoiceStatus
-  : T extends TenantSubscriptionStatus ? TenantSubscriptionStatus
-  : T extends PlatformGatewayEventStatus ? PlatformGatewayEventStatus
-  : T;
+type HoaHubEnum =
+  | AgreementTemplateVersionStatus
+  | PlatformGatewayEventStatus
+  | PlatformInvoiceStatus
+  | Role
+  | TenantAgreementStatus
+  | TenantSubscriptionStatus;
+
+type HoaHubEnumIncludeSearch<T> = T extends HoaHubEnum ? HoaHubEnum : T;
 
 declare global {
   interface Array<T> {

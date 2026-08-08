@@ -97,7 +97,7 @@ CREATE TABLE `AgreementSignatureChallenge` (
     `attemptCount` INTEGER NOT NULL DEFAULT 0,
     `createdAt` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
 
-    INDEX `AgreementSignatureChallenge_tenantId_agreementId_userId_expiresAt_idx`(`tenantId`, `agreementId`, `userId`, `expiresAt`),
+    INDEX `AgreementChallenge_scope_expiry_idx`(`tenantId`, `agreementId`, `userId`, `expiresAt`),
     INDEX `AgreementSignatureChallenge_expiresAt_usedAt_idx`(`expiresAt`, `usedAt`),
     INDEX `AgreementSignatureChallenge_tenantId_userId_idx`(`tenantId`, `userId`),
     PRIMARY KEY (`id`)

@@ -31,15 +31,15 @@ export async function approvePaymentRequest(requestId: string, reviewerId?: stri
       if (!request.billId) throw new Error("Payment request is missing a bill.");
       const bill = await tx.bill.findUnique({ where: { id: request.billId } });
       if (!bill || bill.tenantId !== request.tenantId || bill.homeownerId !== request.homeownerId) throw new Error("The selected bill does not belong to this homeowner.");
-      if (bill.archivedAt) throw new Error("This billing record has been archived and can no longer accept payments.");
+      if (bill.archivedAt && !options?.allowGatewayConfirmation) throw new Error("This billing record has been archived and can no longer accept payments.");
       const amount = Number(request.amount);
       if (request.referenceNumber) {
         const activeDuplicate = await tx.payment.findFirst({ where: { tenantId: request.tenantId, referenceNumber: request.referenceNumber, status: "ACTIVE" }, select: { id: true } });
         if (activeDuplicate) throw new Error("This payment reference number has already been recorded.");
       }
       const balance = Number(bill.balance);
-      if (balance <= 0) throw new Error("This billing record no longer has an outstanding balance.");
-      const appliedAmount = Math.min(amount, balance);
+      if (balance <= 0 && !options?.allowGatewayConfirmation) throw new Error("This billing record no longer has an outstanding balance.");
+      const appliedAmount = Math.min(amount, Math.max(balance, 0));
       const unappliedCredit = amount - appliedAmount;
       const receiptNumber = await allocateReceiptNumber(tx as unknown as Prisma.TransactionClient, request.tenantId, paymentDate, "MD");
       const coverage = buildPaymentCoverage([bill.billingMonth]);
@@ -64,16 +64,20 @@ export async function approvePaymentRequest(requestId: string, reviewerId?: stri
           processedById: reviewerId ?? null,
         },
       });
-      await tx.paymentAllocation.create({ data: { tenantId: request.tenantId, paymentId: payment.id, billId: bill.id, amount: appliedAmount, coverageYear: bill.coverageYear, coverageMonth: bill.coverageMonth, coverageLabel: monthLabel(bill.billingMonth) } });
-      const recalculated = await recalculateBillFromActivePayments(tx as unknown as Prisma.TransactionClient, bill);
+      if (appliedAmount > 0) {
+        await tx.paymentAllocation.create({ data: { tenantId: request.tenantId, paymentId: payment.id, billId: bill.id, amount: appliedAmount, coverageYear: bill.coverageYear, coverageMonth: bill.coverageMonth, coverageLabel: monthLabel(bill.billingMonth) } });
+      }
+      const recalculated = appliedAmount > 0
+        ? await recalculateBillFromActivePayments(tx as unknown as Prisma.TransactionClient, bill)
+        : { skipped: true, reason: "NO_OUTSTANDING_BALANCE_AT_GATEWAY_CONFIRMATION" };
       const reviewer = reviewerId ? await tx.user.findFirst({ where: { id: reviewerId, tenantId: request.tenantId }, select: { id: true, name: true, email: true, role: true } }) : null;
       const replacedVoidedPayments = request.referenceNumber ? await tx.payment.findMany({ where: { tenantId: request.tenantId, referenceNumber: request.referenceNumber, status: "VOIDED" }, select: { id: true, receiptNumber: true } }) : [];
-      await tx.auditLog.create({ data: { tenantId: request.tenantId, actorId: reviewerId ?? null, module: "PAYMENTS", action: "RECORD_PAYMENT_TRANSACTION", entityType: "Payment", entityId: payment.id, metadata: { receiptNumber, source: isPayMongoPaymentRequest(request) ? "PAYMONGO_HOMEOWNER" : "PAYMENT_REQUEST", paymentType: "MONTHLY_DUES", totalAmount: amount, appliedAmount, unappliedCredit, allocations: [{ billId: bill.id, amount: appliedAmount, coverage: monthLabel(bill.billingMonth) }], coverageStart: coverage.coverageStart, coverageEnd: coverage.coverageEnd, coverageMonths: coverage.coverageMonths, paymentCoverageDisplay: coverage.paymentCoverageDisplay, homeownerId: bill.homeownerId, adminUser: reviewer, replacesVoidedPayments: replacedVoidedPayments, recalculated, timestamp: new Date().toISOString() } } });
+      await tx.auditLog.create({ data: { tenantId: request.tenantId, actorId: reviewerId ?? null, module: "PAYMENTS", action: "RECORD_PAYMENT_TRANSACTION", entityType: "Payment", entityId: payment.id, metadata: { receiptNumber, source: isPayMongoPaymentRequest(request) ? "PAYMONGO_HOMEOWNER" : "PAYMENT_REQUEST", paymentType: "MONTHLY_DUES", totalAmount: amount, appliedAmount, unappliedCredit, allocations: appliedAmount > 0 ? [{ billId: bill.id, amount: appliedAmount, coverage: monthLabel(bill.billingMonth) }] : [], coverageStart: coverage.coverageStart, coverageEnd: coverage.coverageEnd, coverageMonths: coverage.coverageMonths, paymentCoverageDisplay: coverage.paymentCoverageDisplay, homeownerId: bill.homeownerId, adminUser: reviewer, replacesVoidedPayments: replacedVoidedPayments, recalculated, timestamp: new Date().toISOString() } } });
       const approved = await tx.paymentRequest.update({
         where: { id: request.id },
         data: { status: PaymentRequestStatus.APPROVED, reviewedById: reviewerId ?? null, reviewedAt: new Date(), reviewRemarks: reviewRemarks || null, paymentId: payment.id },
       });
-      await tx.auditLog.create({ data: { tenantId: request.tenantId, actorId: reviewerId ?? null, module: "PAYMENTS", action: "APPROVE_PAYMENT_REQUEST", entityType: "PaymentRequest", entityId: request.id, metadata: { oldValue: { status: request.status }, newValue: { status: "APPROVED", paymentId: payment.id, receiptNumber }, remarks: reviewRemarks, gatewayConfirmed: Boolean(options?.allowGatewayConfirmation) } } });
+      await tx.auditLog.create({ data: { tenantId: request.tenantId, actorId: reviewerId ?? null, module: "PAYMENTS", action: "APPROVE_PAYMENT_REQUEST", entityType: "PaymentRequest", entityId: request.id, metadata: { oldValue: { status: request.status }, newValue: { status: "APPROVED", paymentId: payment.id, receiptNumber }, remarks: reviewRemarks, gatewayConfirmed: Boolean(options?.allowGatewayConfirmation), recordedAsUnappliedCredit: appliedAmount === 0 && options?.allowGatewayConfirmation === true } } });
       return approved;
     }
 

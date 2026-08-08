@@ -56,8 +56,8 @@ export default async function PlatformInvoiceDocumentPage({
 
   return (
     <main className="min-h-screen bg-slate-100 px-3 py-6 text-slate-900 sm:px-6 sm:py-10 print:bg-white print:p-0">
-      <style>{`@page { size: A4; margin: 12mm; } @media print { html, body { background: white !important; } }`}</style>
-      <div className="mx-auto mb-4 max-w-[210mm] print:hidden">
+      <style>{`@page { size: A4; margin: 12mm; } @media print { html, body { background: white !important; } * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; } }`}</style>
+      <div className="mx-auto mb-4 max-w-[210mm] print:hidden" aria-label="Print invoice and Download PDF controls">
         <PlatformInvoiceDocumentActions pdfUrl={platformInvoicePdfUrl(invoice.id)} />
       </div>
 

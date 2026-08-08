@@ -127,10 +127,17 @@ test("professional platform invoice documents are printable, downloadable, and p
   assert.match(service, /hoahub-platform-invoice-document-v1/);
   assert.match(service, /renderPlatformInvoicePdf/);
   assert.match(service, /PDFDocument\.create/);
+  assert.match(service, /function tinLine/);
+  assert.match(service, /VAT status:/);
   assert.match(documentPage, /Print invoice/);
   assert.match(documentPage, /Download PDF/);
   assert.match(documentPage, /Invoice note/);
   assert.match(documentPage, /invoice\.notes/);
+  assert.match(documentPage, /@page \{ size: A4; margin: 8mm; \}/);
+  assert.match(documentPage, /grid-template-columns: repeat\(4, minmax\(0, 1fr\)\)/);
+  assert.match(documentPage, /grid-template-columns: minmax\(0, 1fr\) 64mm/);
+  assert.match(documentPage, /page-break-inside: avoid/);
+  assert.match(documentPage, /vatStatusLine/);
   assert.match(pdfRoute, /Content-Disposition/);
   assert.match(pdfRoute, /application\/pdf/);
   assert.match(tenantPage, /platformInvoiceDocumentUrl/);

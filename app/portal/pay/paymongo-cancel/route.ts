@@ -1,9 +1,7 @@
 import { PaymentRequestStatus, Role } from "@prisma/client";
 import { requireUser } from "@/lib/auth";
 import { prisma } from "@/lib/db";
-import { PAYMONGO_PAYMENT_REQUEST_MARKER } from "@/lib/homeowner-payment-flow";
-
-export const PAYMONGO_CANCELLED_REMARK = "PayMongo checkout cancelled by homeowner.";
+import { PAYMONGO_CANCELLED_REMARK, PAYMONGO_PAYMENT_REQUEST_MARKER } from "@/lib/homeowner-payment-flow";
 
 export async function GET(request: Request) {
   const user = await requireUser(Role.HOMEOWNER);

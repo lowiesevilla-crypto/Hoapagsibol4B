@@ -5,6 +5,7 @@ import { headers } from "next/headers";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { requireUser } from "@/lib/auth";
+import { ensureAgreementOneTimeFeeSnapshot } from "@/lib/services/platform-agreement-commercial-terms";
 import {
   activateAgreementTemplateVersion,
   createTenantAgreementDraft,
@@ -68,12 +69,13 @@ export async function generateTenantAgreementAction(formData: FormData) {
   let agreement;
   try {
     agreement = await createTenantAgreementDraft({ tenantId, actorId: actor.id });
+    agreement = await ensureAgreementOneTimeFeeSnapshot({ agreementId: agreement.id, actorId: actor.id });
   } catch (error) {
     redirect(`/platform/agreements?error=${encodeURIComponent(error instanceof Error ? error.message : "Agreement generation failed.")}`);
   }
   revalidatePath("/platform/agreements");
   revalidatePath("/admin/agreement");
-  redirect(`/platform/agreements/${agreement.id}?success=Agreement%20generated.`);
+  redirect(`/platform/agreements/${agreement.id}?success=Agreement%20generated%20with%20commercial%20fee%20snapshot.`);
 }
 
 export async function sendTenantAgreementAction(formData: FormData) {
@@ -81,6 +83,7 @@ export async function sendTenantAgreementAction(formData: FormData) {
   const agreementId = clean(formData.get("agreementId"));
   let sent;
   try {
+    await ensureAgreementOneTimeFeeSnapshot({ agreementId, actorId: actor.id });
     sent = await sendAgreementInvitation({ agreementId, actorId: actor.id });
   } catch (error) {
     redirect(`/platform/agreements/${agreementId}?error=${encodeURIComponent(error instanceof Error ? error.message : "Agreement delivery failed.")}`);

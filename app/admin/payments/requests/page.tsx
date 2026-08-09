@@ -9,7 +9,7 @@ export default async function PaymentRequestsPage({ searchParams }: { searchPara
   const query = await searchParams;
   const data = await getPaymentRequestsData(admin, query);
   return <>
-    <PageHeader eyebrow="Payments" title="Payment requests" description="Review pending QR/GCash requests and keep official receipts connected to the payment workflow." />
+    <PageHeader eyebrow="Payments" title="Manual payment requests" description="Review Manual QR / proof submissions only. PayMongo Online payments are gateway-confirmed and post automatically without tenant approval." />
     <PaymentsNav />
     <PaymentRequestsView data={data} query={query} />
   </>;

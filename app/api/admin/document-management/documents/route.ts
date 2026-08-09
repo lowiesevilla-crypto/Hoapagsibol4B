@@ -1,15 +1,13 @@
 import { Role } from "@prisma/client";
 import { NextResponse } from "next/server";
 import { requireUser } from "@/lib/auth";
-import { Permission } from "@/lib/authorization/permissions";
-import { hasRepositoryPermission, requireRepositoryUpload } from "@/lib/document-repository/access";
-import { createRepositoryDocument } from "@/lib/document-repository/commands";
 import {
   repositoryDocumentStatus,
   repositoryDocumentVisibility,
   type RepositoryDocumentStatus,
   type RepositoryDocumentVisibility,
 } from "@/lib/document-repository/constants";
+import { createRepositoryDocument } from "@/lib/document-repository/upload";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -33,9 +31,7 @@ function redirectWithMessage(request: Request, path: string, type: "success" | "
 
 export async function POST(request: Request) {
   try {
-    const user = await requireUser(Role.ADMIN);
-    await requireRepositoryUpload();
-
+    await requireUser(Role.ADMIN);
     const formData = await request.formData();
     const file = formData.get("file");
     if (!(file instanceof File) || file.size <= 0) throw new Error("Select a document to upload.");
@@ -49,26 +45,18 @@ export async function POST(request: Request) {
       throw new Error("Select a valid document status.");
     }
 
-    const visibility = requestedVisibility as RepositoryDocumentVisibility;
-    const status = requestedStatus as RepositoryDocumentStatus;
-    if (visibility !== "INTERNAL" && !hasRepositoryPermission(Permission.DOCUMENT_REPOSITORY_MANAGE_VISIBILITY)) {
-      throw new Error("You do not have permission to change document visibility.");
-    }
-    if (status === "PUBLISHED" && !hasRepositoryPermission(Permission.DOCUMENT_REPOSITORY_PUBLISH)) {
-      throw new Error("You do not have permission to publish documents.");
-    }
-
-    const data = new Uint8Array(await file.arrayBuffer());
     const document = await createRepositoryDocument({
-      tenantId: user.tenantId,
-      tenantSlug: user.tenantSlug,
-      actorId: user.id,
+      file: {
+        originalFileName: file.name,
+        contentType: file.type || "application/octet-stream",
+        data: new Uint8Array(await file.arrayBuffer()),
+      },
       title: text(formData, "title"),
       description: text(formData, "description") || null,
       categoryId: text(formData, "categoryId"),
       documentReference: text(formData, "documentReference") || null,
-      visibility,
-      status,
+      visibility: requestedVisibility as RepositoryDocumentVisibility,
+      status: requestedStatus as RepositoryDocumentStatus,
       issuingBody: text(formData, "issuingBody") || null,
       effectiveAt: optionalDate(text(formData, "effectiveAt")),
       expiresAt: optionalDate(text(formData, "expiresAt")),
@@ -76,9 +64,6 @@ export async function POST(request: Request) {
       memoNumber: text(formData, "memoNumber") || null,
       policyOwner: text(formData, "policyOwner") || null,
       searchableKeywords: text(formData, "searchableKeywords") || null,
-      originalFileName: file.name,
-      contentType: file.type || "application/octet-stream",
-      data,
     });
 
     return redirectWithMessage(request, "/admin/document-management", "success", `Document “${document.title}” uploaded successfully.`);

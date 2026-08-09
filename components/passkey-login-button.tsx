@@ -17,6 +17,7 @@ export function PasskeyLoginButton({ formRef }: { formRef: RefObject<HTMLFormEle
       const data = new FormData(form ?? undefined);
       const identifier = String(data.get("identifier") || "").trim();
       const tenantSlug = String(data.get("tenantSlug") || "").trim();
+      const returnTo = String(data.get("returnTo") || "").trim();
       const optionsResponse = await fetch("/api/auth/passkeys/login/options", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -32,7 +33,7 @@ export function PasskeyLoginButton({ formRef }: { formRef: RefObject<HTMLFormEle
       });
       const result = await verifyResponse.json();
       if (!verifyResponse.ok) throw new Error(result.error || "Passkey login failed.");
-      window.location.replace(result.redirectTo || "/portal/dashboard");
+      window.location.replace(returnTo || result.redirectTo || "/portal/dashboard");
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Passkey login failed.");
     } finally {

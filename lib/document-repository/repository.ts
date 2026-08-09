@@ -3,7 +3,10 @@ import type {
   RepositoryDocumentStatus,
   RepositoryDocumentVisibility,
 } from "@prisma/client";
+import { Permission } from "@/lib/authorization/permissions";
 import { prisma } from "@/lib/db";
+import { hasRepositoryPermission } from "@/lib/document-repository/access";
+import { ensureRepositoryDefaultCategories as initializeRepositoryDefaultCategories } from "@/lib/document-repository/categories";
 import { evaluateRepositoryQuota } from "@/lib/document-repository/quota";
 
 export type RepositoryListFilters = {
@@ -14,6 +17,18 @@ export type RepositoryListFilters = {
   page?: number;
   pageSize?: number;
 };
+
+/**
+ * Read surfaces may request taxonomy initialization, but only an actor who
+ * actually has category-management permission is allowed to create defaults.
+ * Read-only staff never gain an implicit write capability by opening the page.
+ */
+export async function ensureRepositoryDefaultCategories(_input?: { tenantId?: string; actorId?: string | null }) {
+  if (!hasRepositoryPermission(Permission.DOCUMENT_REPOSITORY_MANAGE_CATEGORIES)) {
+    return { created: 0, existing: 0 };
+  }
+  return initializeRepositoryDefaultCategories();
+}
 
 export async function repositoryUsageBytes(tenantId: string) {
   const [documents, revisions] = await Promise.all([

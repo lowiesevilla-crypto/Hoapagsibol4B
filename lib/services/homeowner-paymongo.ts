@@ -4,10 +4,17 @@ import { createHash } from "node:crypto";
 import { PaymentMethod, PaymentRequestStatus, PaymentRequestType, SystemSettingCategory } from "@prisma/client";
 import { getAppUrl } from "@/lib/app-url";
 import { platformPrisma as prisma } from "@/lib/db";
+import {
+  HOMEOWNER_PLATFORM_FEE_LABEL,
+  PAYMONGO_HOMEOWNER_PARENT_ACCOUNT_ENV,
+  buildPlatformFeeSplitPayment,
+  checkoutAmounts,
+  validatePaidCheckoutAmounts,
+} from "@/lib/homeowner-convenience-fee";
 import { isPayMongoPaymentRequest } from "@/lib/homeowner-payment-flow";
 import { approvePaymentRequest } from "@/lib/services/payment-requests";
 import { verifyPayMongoWebhookSignature } from "@/lib/services/platform-paymongo";
-import { paymongoWebhookSecretSettingKey } from "@/lib/services/homeowner-payment-config";
+import { getHomeownerPaymentConfig, paymongoWebhookSecretSettingKey } from "@/lib/services/homeowner-payment-config";
 
 const CHECKOUT_ENDPOINT = "https://api.paymongo.com/v2/checkout_sessions";
 const WEBHOOK_ENDPOINT = "https://api.paymongo.com/v1/webhooks";
@@ -199,16 +206,42 @@ export async function createHomeownerPayMongoCheckout(requestId: string, tenantI
   const linkedAccountId = request.proofFileName?.trim();
   if (!linkedAccountId || !linkedAccountId.startsWith("org_")) throw new Error("This tenant does not have a valid PayMongo linked merchant account configured.");
   await requireTenantWebhookSecret(request.tenantId, linkedAccountId);
-  const amount = Number(request.amount);
-  if (!Number.isFinite(amount) || amount <= 0) throw new Error("Payment amount is invalid.");
+  const principalAmount = Number(request.amount);
+  if (!Number.isFinite(principalAmount) || principalAmount <= 0) throw new Error("Payment amount is invalid.");
+
+  const config = await getHomeownerPaymentConfig(tenantId);
+  const configuredFeeCentavos = config.platformFeeEnabled ? config.platformFeeAmountCentavos : 0;
+  const amounts = checkoutAmounts(principalAmount, configuredFeeCentavos);
+  const parentAccountId = process.env[PAYMONGO_HOMEOWNER_PARENT_ACCOUNT_ENV]?.trim() || "";
+  const splitPayment = buildPlatformFeeSplitPayment({
+    childAccountId: linkedAccountId,
+    parentAccountId,
+    platformFeeCentavos: amounts.platformFeeCentavos,
+  });
+  const passOnProcessingFees = amounts.platformFeeCentavos > 0;
 
   const successUrl = new URL("/portal/pay", getAppUrl());
   successUrl.searchParams.set("online", "confirming");
   const cancelUrl = new URL("/portal/pay/paymongo-cancel", getAppUrl());
   cancelUrl.searchParams.set("requestId", request.id);
-  const cents = Math.round(amount * 100);
   const purpose = paymentPurpose(request);
-  const idempotencyKey = `hoahub-homeowner-${tenantId}-${request.id}`.slice(0, 255);
+  const idempotencyKey = `hoahub-homeowner-${tenantId}-${request.id}-fee${amounts.platformFeeCentavos}-pof${passOnProcessingFees ? 1 : 0}`.slice(0, 255);
+  const lineItems = [
+    {
+      name: purpose,
+      description: `${tenant.name} homeowner payment`,
+      amount: amounts.principalCentavos,
+      currency: "PHP",
+      quantity: 1,
+    },
+    ...(amounts.platformFeeCentavos > 0 ? [{
+      name: HOMEOWNER_PLATFORM_FEE_LABEL,
+      description: "HOAHub online payment service fee",
+      amount: amounts.platformFeeCentavos,
+      currency: "PHP",
+      quantity: 1,
+    }] : []),
+  ];
 
   const response = await fetch(CHECKOUT_ENDPOINT, {
     method: "POST",
@@ -219,13 +252,7 @@ export async function createHomeownerPayMongoCheckout(requestId: string, tenantI
     body: JSON.stringify({
       data: {
         attributes: {
-          line_items: [{
-            name: purpose,
-            description: `${tenant.name} homeowner payment`,
-            amount: cents,
-            currency: "PHP",
-            quantity: 1,
-          }],
+          line_items: lineItems,
           payment_method_types: configuredMethods(),
           success_url: successUrl.toString(),
           cancel_url: cancelUrl.toString(),
@@ -233,6 +260,8 @@ export async function createHomeownerPayMongoCheckout(requestId: string, tenantI
           send_email_receipt: true,
           show_description: true,
           show_line_items: true,
+          ...(splitPayment ? { split_payment: splitPayment } : {}),
+          ...(passOnProcessingFees ? { pass_on_fees: true } : {}),
           billing: {
             name: request.homeowner.user.name,
             email: request.homeowner.user.email,
@@ -241,6 +270,12 @@ export async function createHomeownerPayMongoCheckout(requestId: string, tenantI
             tenantId: request.tenantId,
             homeownerId: request.homeownerId,
             paymentRequestId: request.id,
+            principalAmountCentavos: String(amounts.principalCentavos),
+            platformFeeCentavos: String(amounts.platformFeeCentavos),
+            baseChargeCentavos: String(amounts.baseChargeCentavos),
+            passOnProcessingFees: String(passOnProcessingFees),
+            platformFeeRecipientAccountId: splitPayment ? parentAccountId : "",
+            tenantTransferAccountId: linkedAccountId,
           },
         },
       },
@@ -267,7 +302,11 @@ export async function createHomeownerPayMongoCheckout(requestId: string, tenantI
       metadata: {
         checkoutId,
         referenceNumber: request.referenceNumber,
-        amount,
+        hoaPrincipalAmount: principalAmount,
+        platformConvenienceFeeAmount: amounts.platformFeeCentavos / 100,
+        checkoutBaseAmount: amounts.baseChargeCentavos / 100,
+        passOnProcessingFees,
+        platformFeeRecipientAccountId: splitPayment ? parentAccountId : null,
         linkedAccountId,
         linkedTransaction: true,
       },
@@ -360,14 +399,25 @@ export async function processHomeownerPayMongoWebhook(rawBody: string, signature
   const paymentAttributes = (paidPayment?.attributes || {}) as Record<string, unknown>;
   const gatewayPaymentId = String(paidPayment?.id || "").trim();
   const checkoutId = String(event.session.id || "").trim();
-  const amount = Number(paymentAttributes.amount || 0) / 100;
+  const paidCentavos = Number(paymentAttributes.amount || 0);
+  const requestPrincipalCentavos = Math.round(Number(request.amount) * 100);
   const currency = String(paymentAttributes.currency || "PHP").toUpperCase();
   const paidAtSeconds = Number(paymentAttributes.paid_at || 0);
   const paidAt = Number.isFinite(paidAtSeconds) && paidAtSeconds > 0 ? new Date(paidAtSeconds * 1000) : new Date();
   paidAt.setUTCHours(0, 0, 0, 0);
   if (!gatewayPaymentId || !checkoutId) return { ok: false as const, status: 400, message: "PayMongo webhook is missing payment identifiers." };
   if (currency !== "PHP") return { ok: false as const, status: 400, message: "PayMongo currency does not match the HOA payment currency." };
-  if (Math.abs(Number(request.amount) - amount) > 0.009) return { ok: false as const, status: 400, message: "PayMongo amount does not match the homeowner payment request." };
+
+  let confirmedAmounts: ReturnType<typeof validatePaidCheckoutAmounts>;
+  try {
+    confirmedAmounts = validatePaidCheckoutAmounts({
+      requestPrincipalCentavos,
+      paidCentavos,
+      metadata: event.sessionAttributes.metadata,
+    });
+  } catch (error) {
+    return { ok: false as const, status: 400, message: error instanceof Error ? error.message : "PayMongo amount validation failed." };
+  }
 
   try {
     await prisma.paymentRequest.update({
@@ -394,7 +444,13 @@ export async function processHomeownerPayMongoWebhook(rawBody: string, signature
           eventId: event.eventId,
           checkoutId,
           gatewayPaymentId,
-          amount,
+          hoaPrincipalAmount: confirmedAmounts.principalCentavos / 100,
+          platformConvenienceFeeAmount: confirmedAmounts.platformFeeCentavos / 100,
+          paymongoProcessingFeeAmount: confirmedAmounts.providerFeeCentavos / 100,
+          checkoutBaseAmount: confirmedAmounts.baseChargeCentavos / 100,
+          totalCustomerPaid: confirmedAmounts.totalPaidCentavos / 100,
+          passOnProcessingFees: confirmedAmounts.passOnFees,
+          legacyCheckout: confirmedAmounts.legacyCheckout,
           currency,
           paidAt: paidAt.toISOString(),
           linkedAccountId,
@@ -424,7 +480,16 @@ export async function processHomeownerPayMongoWebhook(rawBody: string, signature
         entityType: "PaymentRequest",
         entityId: request.id,
         correlationId: event.eventId,
-        metadata: { eventId: event.eventId, checkoutId, gatewayPaymentId, linkedAccountId },
+        metadata: {
+          eventId: event.eventId,
+          checkoutId,
+          gatewayPaymentId,
+          linkedAccountId,
+          hoaPrincipalAmount: confirmedAmounts.principalCentavos / 100,
+          platformConvenienceFeeAmount: confirmedAmounts.platformFeeCentavos / 100,
+          paymongoProcessingFeeAmount: confirmedAmounts.providerFeeCentavos / 100,
+          totalCustomerPaid: confirmedAmounts.totalPaidCentavos / 100,
+        },
         reason: error instanceof Error ? error.message.slice(0, 1000) : "Unknown PayMongo posting error.",
       },
     }).catch(() => undefined);

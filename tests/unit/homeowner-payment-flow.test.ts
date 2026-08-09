@@ -28,15 +28,32 @@ test("manual and PayMongo submission paths both enforce the tenant-selected flow
   assert.match(paymongoAction, /config\.flow !== "PAYMONGO"/);
 });
 
-test("homeowner checkout is created on behalf of the tenant child account", () => {
+test("homeowner checkout is created on behalf of the tenant child account with a bounded platform fee split", () => {
   const paymongoService = source("lib/services/homeowner-paymongo.ts");
+  const feePolicy = source("lib/homeowner-convenience-fee.ts");
   assert.match(paymongoService, /PAYMONGO_HOMEOWNER_SECRET_KEY/);
   assert.match(paymongoService, /"Account-ID": accountId/);
   assert.match(paymongoService, /paymongoHeaders\(linkedAccountId\)/);
   assert.match(paymongoService, /linkedTransaction: true/);
-  assert.doesNotMatch(paymongoService, /split_payment/);
+  assert.match(paymongoService, /split_payment: splitPayment/);
+  assert.match(paymongoService, /pass_on_fees: true/);
+  assert.match(paymongoService, /platformFeeRecipientAccountId/);
+  assert.match(feePolicy, /transfer_to: childAccountId/);
+  assert.match(feePolicy, /merchant_id: parentAccountId/);
+  assert.match(feePolicy, /split_type: "fixed"/);
+  assert.match(feePolicy, /if \(!feeCentavos\) return undefined/);
+  assert.match(feePolicy, /if \(!parentAccountId\.startsWith\("org_"\)\)/);
+  assert.match(feePolicy, /if \(childAccountId === parentAccountId\)/);
   assert.doesNotMatch(paymongoService, /PAYMONGO_HOMEOWNER_WEBHOOK_SECRET/);
   assert.doesNotMatch(paymongoService, /requiredHomeownerPayMongoSecret\("PAYMONGO_SECRET_KEY"/);
+});
+
+test("only HOAHub platform roles can change a tenant convenience fee", () => {
+  const feeAction = source("lib/actions/platform-homeowner-fee.ts");
+  assert.match(feeAction, /actor\.roles\.includes\(Role\.SUPER_ADMIN\)/);
+  assert.match(feeAction, /actor\.roles\.includes\(Role\.PLATFORM_ADMIN\)/);
+  assert.match(feeAction, /redirect\("\/admin\/dashboard"\)/);
+  assert.match(feeAction, /UPDATE_HOMEOWNER_CONVENIENCE_FEE/);
 });
 
 test("PayMongo Online activation provisions a child-scoped checkout webhook", () => {

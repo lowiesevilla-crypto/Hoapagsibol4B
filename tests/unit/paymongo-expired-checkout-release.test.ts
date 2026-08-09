@@ -8,7 +8,7 @@ function source(path: string) {
 
 test("expired PayMongo checkout releases pending billing items only when no paid payment exists", () => {
   const expiry = source("lib/services/homeowner-paymongo-expiry.ts");
-  assert.match(expiry, /attributes\?\.status \|\| ""/);
+  assert.match(expiry, /String\(attributes\.status \|\| ""\)/);
   assert.match(expiry, /=== "paid"/);
   assert.match(expiry, /if \(hasPaidPayment\)/);
   assert.match(expiry, /checkoutStatus !== "expired"/);
@@ -21,9 +21,10 @@ test("expired PayMongo checkout releases pending billing items only when no paid
 
 test("expired checkout validation preserves tenant, homeowner and merchant isolation", () => {
   const expiry = source("lib/services/homeowner-paymongo-expiry.ts");
-  assert.match(expiry, /tenantId: input\.tenantId/);
-  assert.match(expiry, /homeownerId: input\.homeownerId/);
+  assert.match(expiry, /loadLeader\(input\.requestId, input\.tenantId, input\.homeownerId\)/);
   assert.match(expiry, /linkedAccountId\.startsWith\("org_"\)/);
+  assert.match(expiry, /item\.tenantId !== leader\.tenantId/);
+  assert.match(expiry, /item\.homeownerId !== leader\.homeownerId/);
   assert.match(expiry, /metadata\.tenantId/);
   assert.match(expiry, /metadata\.homeownerId/);
   assert.match(expiry, /metadata\.paymentRequestId/);

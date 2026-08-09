@@ -107,8 +107,9 @@ export async function replaceRepositoryDocument(input: ReplaceRepositoryDocument
     await requireRepositoryPermission(Permission.DOCUMENT_REPOSITORY_PUBLISH);
   }
 
+  const keepHistory = document.category.governanceControlled || document.revisionPolicy === "KEEP_HISTORY";
   const reason = optional(input.reason, 1000);
-  if ((document.category.governanceControlled || document.revisionPolicy === "KEEP_HISTORY") && !reason) {
+  if (keepHistory && !reason) {
     throw new Error("A revision reason is required for governed documents.");
   }
   const revisionLabel = optional(input.revisionLabel, 60);
@@ -125,7 +126,7 @@ export async function replaceRepositoryDocument(input: ReplaceRepositoryDocument
     throw new Error("The replacement file is identical to the current document.");
   }
 
-  const retainOldBinary = document.revisionPolicy === "KEEP_HISTORY" && entitlement.retainRevisionBinaries;
+  const retainOldBinary = keepHistory && entitlement.retainRevisionBinaries;
   const usage = await repositoryUsageForWriteGuard();
   const baseUsedBytes = retainOldBinary
     ? usage.totalBytes
@@ -172,6 +173,7 @@ export async function replaceRepositoryDocument(input: ReplaceRepositoryDocument
         where: { tenantId_id: { tenantId: context.tenantId, id: document.id } },
         data: {
           currentRevision: nextRevision,
+          revisionPolicy: keepHistory ? "KEEP_HISTORY" : document.revisionPolicy,
           originalFileName: input.file.originalFileName.trim(),
           storageKey: stored.storageKey,
           contentType: validation.normalizedContentType,

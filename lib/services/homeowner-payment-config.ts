@@ -2,6 +2,13 @@ import "server-only";
 
 import { SystemSettingCategory } from "@prisma/client";
 import { prisma } from "@/lib/db";
+import {
+  HOMEOWNER_PLATFORM_FEE_AMOUNT_CENTAVOS_KEY,
+  HOMEOWNER_PLATFORM_FEE_ENABLED_KEY,
+  PAYMONGO_HOMEOWNER_PARENT_ACCOUNT_ENV,
+  normalizePlatformFeeCentavos,
+  settingEnabled,
+} from "@/lib/homeowner-convenience-fee";
 import { normalizeHomeownerPaymentFlow } from "@/lib/homeowner-payment-flow";
 import { withTenantContext } from "@/lib/tenant-context";
 
@@ -34,6 +41,11 @@ export async function getHomeownerPaymentConfig(tenantId: string) {
     && values.get(paymongoWebhookSecretSettingKey(paymongoLinkedAccountId)),
   );
   const paymongoServerConfigured = Boolean(process.env.PAYMONGO_HOMEOWNER_SECRET_KEY?.trim());
+  const paymongoParentAccountId = process.env[PAYMONGO_HOMEOWNER_PARENT_ACCOUNT_ENV]?.trim() || "";
+  const platformFeeConfigured = settingEnabled(values.get(HOMEOWNER_PLATFORM_FEE_ENABLED_KEY));
+  const platformFeeAmountCentavos = normalizePlatformFeeCentavos(values.get(HOMEOWNER_PLATFORM_FEE_AMOUNT_CENTAVOS_KEY));
+  const platformFeeEnabled = platformFeeConfigured && platformFeeAmountCentavos > 0;
+  const platformFeeRoutingReady = Boolean(!platformFeeEnabled || paymongoParentAccountId.startsWith("org_"));
 
   return {
     flow: normalizeHomeownerPaymentFlow(values.get(HOMEOWNER_PAYMENT_FLOW_KEY)),
@@ -41,11 +53,17 @@ export async function getHomeownerPaymentConfig(tenantId: string) {
     paymongoWebhookId,
     paymongoWebhookSecretConfigured,
     paymongoServerConfigured,
+    paymongoParentAccountIdConfigured: paymongoParentAccountId.startsWith("org_"),
+    platformFeeEnabled,
+    platformFeeAmountCentavos,
+    platformFeeAmountPesos: platformFeeAmountCentavos / 100,
+    platformFeeRoutingReady,
     paymongoReady: Boolean(
       paymongoLinkedAccountId
       && paymongoServerConfigured
       && paymongoWebhookId
-      && paymongoWebhookSecretConfigured,
+      && paymongoWebhookSecretConfigured
+      && platformFeeRoutingReady,
     ),
   };
 }

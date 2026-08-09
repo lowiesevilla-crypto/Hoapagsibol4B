@@ -21,6 +21,7 @@ test("governed replacement is tenant-scoped, permissioned, quota-aware and revis
   assert.match(replace, /RepositoryAuditAction\.REPLACED/);
   assert.match(replace, /RepositoryAuditAction\.REVISION_BINARY_PURGED/);
   assert.match(replace, /repositoryStorage\.delete/);
+  assert.match(replace, /Keep the database pointer intact so cleanup remains retryable/);
 });
 
 test("category management cannot cross tenants or delete protected/in-use taxonomy", async () => {
@@ -54,4 +55,15 @@ test("professional phase 2 UI exposes revision workflow and protected taxonomy c
   assert.match(categoryPage, /Type DELETE to confirm/);
   assert.match(replaceRoute, /replaceRepositoryDocument/);
   assert.doesNotMatch(replaceRoute, /tenantId\s*=/);
+});
+
+test("category navigation is permission-gated and hidden with a disabled repository entitlement", async () => {
+  const [roleAccess, sidebar, adminLayout] = await Promise.all([
+    source("lib/role-access.ts"),
+    source("components/sidebar-links.ts"),
+    source("app/admin/layout.tsx"),
+  ]);
+  assert.match(roleAccess, /"\/admin\/document-management\/categories", Permission\.DOCUMENT_REPOSITORY_MANAGE_CATEGORIES/);
+  assert.match(sidebar, /href: "\/admin\/document-management\/categories", label: "Document Categories"/);
+  assert.match(adminLayout, /!item\.href\.startsWith\("\/admin\/document-management"\)/);
 });

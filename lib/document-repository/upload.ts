@@ -4,7 +4,7 @@ import { Permission } from "@/lib/authorization/permissions";
 import { requireUser } from "@/lib/auth";
 import {
   RepositoryAuditAction,
-  type RepositoryDocumentRevisionPolicy,
+  type RepositoryRevisionPolicy,
   type RepositoryDocumentStatus,
   type RepositoryDocumentVisibility,
 } from "@/lib/document-repository/constants";
@@ -29,7 +29,7 @@ export type CreateRepositoryDocumentInput = {
   documentReference?: string | null;
   visibility?: RepositoryDocumentVisibility;
   status?: RepositoryDocumentStatus;
-  revisionPolicy?: RepositoryDocumentRevisionPolicy;
+  revisionPolicy?: RepositoryRevisionPolicy;
   issuingBody?: string | null;
   approvalDate?: Date | null;
   effectiveAt?: Date | null;
@@ -97,7 +97,7 @@ export async function createRepositoryDocument(input: CreateRepositoryDocumentIn
   // Governance records can never opt into silent replace-current behavior.
   // They always retain a controlled revision lineage even if a caller submits
   // a weaker policy. Non-governed categories may explicitly request history.
-  const revisionPolicy: RepositoryDocumentRevisionPolicy = category.governanceControlled
+  const revisionPolicy: RepositoryRevisionPolicy = category.governanceControlled
     ? "KEEP_HISTORY"
     : input.revisionPolicy ?? "REPLACE_CURRENT";
 

@@ -6,7 +6,7 @@ import { loginAction } from "@/lib/actions/auth";
 import { PasskeyLoginButton } from "@/components/passkey-login-button";
 import { PasswordInput } from "@/components/password-input";
 
-export function LoginForm({ tenantSlug }: { tenantSlug?: string }) {
+export function LoginForm({ tenantSlug, returnTo }: { tenantSlug?: string; returnTo?: string }) {
   const [state, action, pending] = useActionState(loginAction, {});
   const formRef = useRef<HTMLFormElement>(null);
   const hasChoices = Boolean(state.choices?.length);
@@ -18,6 +18,7 @@ export function LoginForm({ tenantSlug }: { tenantSlug?: string }) {
   return (
     <form ref={formRef} action={action} className="space-y-3 sm:space-y-4">
       {tenantSlug && <input type="hidden" name="tenantSlug" value={tenantSlug} />}
+      {returnTo && <input type="hidden" name="returnTo" value={returnTo} />}
 
       <div>
         <label className="label text-slate-700" htmlFor="identifier">Email address or 11-digit account number</label>

@@ -1,6 +1,6 @@
-import type { Role, TenantModule } from "@prisma/client";
+import type { Role } from "@prisma/client";
 import { Permission, hasPermission } from "@/lib/authorization/permissions";
-import { DOCUMENT_MANAGEMENT_FEATURE_CODE } from "@/lib/document-repository/constants";
+import { resolveDocumentManagementEntitlement } from "@/lib/document-repository/entitlement";
 import { currentTenantContext } from "@/lib/tenant-context";
 
 function effectiveRoles(context: NonNullable<ReturnType<typeof currentTenantContext>>) {
@@ -8,27 +8,14 @@ function effectiveRoles(context: NonNullable<ReturnType<typeof currentTenantCont
   return roles as readonly Role[];
 }
 
-export function documentManagementModuleValue() {
-  // Kept as a string-backed cast until the Prisma enum extension in Phase 1 schema integration
-  // adds DOCUMENT_MANAGEMENT to TenantModule. This avoids reusing the generated-document
-  // DOCUMENTS entitlement and preserves a distinct commercial capability boundary.
-  return DOCUMENT_MANAGEMENT_FEATURE_CODE as TenantModule;
-}
-
-export function hasDocumentManagementEntitlement() {
-  const context = currentTenantContext();
-  if (!context) return false;
-  if (!context.enabledModules) return false;
-  return context.enabledModules.has(documentManagementModuleValue());
-}
-
-export function requireDocumentManagementEntitlement() {
+export async function requireDocumentManagementEntitlement() {
   const context = currentTenantContext();
   if (!context) throw new Error("Tenant context is required for Document Management.");
-  if (!hasDocumentManagementEntitlement()) {
+  const entitlement = await resolveDocumentManagementEntitlement(context.tenantId);
+  if (!entitlement.enabled) {
     throw new Error("Document Management is not included in this tenant subscription.");
   }
-  return context;
+  return { context, entitlement };
 }
 
 export function hasRepositoryPermission(permission: Permission) {
@@ -39,10 +26,10 @@ export function hasRepositoryPermission(permission: Permission) {
   return roles.length > 0 && hasPermission(roles, permission);
 }
 
-export function requireRepositoryPermission(permission: Permission) {
-  const context = requireDocumentManagementEntitlement();
+export async function requireRepositoryPermission(permission: Permission) {
+  const resolved = await requireDocumentManagementEntitlement();
   if (!hasRepositoryPermission(permission)) throw new Error("You do not have permission to perform this Document Management action.");
-  return context;
+  return resolved;
 }
 
 export function requireRepositoryRead() {

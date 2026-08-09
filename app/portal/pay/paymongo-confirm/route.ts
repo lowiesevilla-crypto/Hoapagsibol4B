@@ -23,12 +23,16 @@ export async function GET(request: Request) {
   } else {
     let releasedExpired = false;
     for (const result of results.filter((item) => item.state === "awaiting_payment")) {
-      const expiry = await releaseExpiredHomeownerPayMongoCheckout({
-        requestId: result.requestId,
-        tenantId: user.tenantId,
-        homeownerId: user.homeownerProfile.id,
-      });
-      if (expiry.state === "expired") releasedExpired = true;
+      try {
+        const expiry = await releaseExpiredHomeownerPayMongoCheckout({
+          requestId: result.requestId,
+          tenantId: user.tenantId,
+          homeownerId: user.homeownerProfile.id,
+        });
+        if (expiry.state === "expired") releasedExpired = true;
+      } catch {
+        // Reconciliation already verified this request safely. Keep it awaiting rather than failing the customer return path on a transient second retrieval error.
+      }
     }
 
     if (releasedExpired) {

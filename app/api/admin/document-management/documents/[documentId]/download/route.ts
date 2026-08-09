@@ -1,8 +1,6 @@
 import { Readable } from "node:stream";
 import { Role } from "@prisma/client";
 import { requireUser } from "@/lib/auth";
-import { writeRepositoryAudit } from "@/lib/document-repository/audit";
-import { RepositoryAuditAction } from "@/lib/document-repository/constants";
 import { openRepositoryDocumentForStaff } from "@/lib/document-repository/delivery";
 
 export const runtime = "nodejs";
@@ -20,7 +18,7 @@ function contentDisposition(fileName: string) {
 }
 
 export async function GET(_request: Request, context: { params: Promise<{ documentId: string }> }) {
-  const user = await requireUser(Role.ADMIN);
+  await requireUser(Role.ADMIN);
   const { documentId } = await context.params;
 
   let delivery;
@@ -32,18 +30,6 @@ export async function GET(_request: Request, context: { params: Promise<{ docume
     if (/safe|malware|blocked/i.test(message)) return new Response("Document download is blocked by its file safety status.", { status: 409 });
     return new Response("Document file is unavailable.", { status: 404 });
   }
-
-  await writeRepositoryAudit({
-    action: RepositoryAuditAction.DOWNLOADED,
-    actorId: user.id,
-    documentId: delivery.documentId,
-    metadata: {
-      title: delivery.title,
-      fileName: delivery.fileName,
-      fileSizeBytes: delivery.fileSizeBytes.toString(),
-      checksumSha256: delivery.checksumSha256,
-    },
-  });
 
   return new Response(Readable.toWeb(delivery.stream) as unknown as ReadableStream, {
     status: 200,

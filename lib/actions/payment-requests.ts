@@ -10,6 +10,7 @@ import { getAppUrl } from "@/lib/app-url";
 import { prisma } from "@/lib/db";
 import { savePaymentProof } from "@/lib/payment-proofs";
 import { documentFeePaymentPurpose, documentRequestPublicReference } from "@/lib/services/document-fee-payments";
+import { getHomeownerPaymentConfig } from "@/lib/services/homeowner-payment-config";
 import { approvePaymentRequest, rejectPaymentRequest } from "@/lib/services/payment-requests";
 import { paymentRequestSchema, paymentReviewSchema } from "@/lib/validation";
 import { sendEmailNotification } from "@/lib/services/notifications";
@@ -28,6 +29,10 @@ export async function submitPaymentRequestAction(formData: FormData) {
   const rawTransactionType = String(formData.get("transactionType") || "").trim();
   try {
     if (!user.homeownerProfile) throw new Error("Homeowner profile not found.");
+    const paymentConfig = await getHomeownerPaymentConfig(user.tenantId);
+    if (paymentConfig.flow !== "MANUAL_QR") {
+      throw new Error("This HOA currently accepts new homeowner payments through PayMongo. Manual QR submissions are disabled.");
+    }
     const parsed = paymentRequestSchema.safeParse(Object.fromEntries(formData.entries()));
     if (!parsed.success) throw new Error(parsed.error.issues[0]?.message || "Invalid payment request.");
     const data = parsed.data;

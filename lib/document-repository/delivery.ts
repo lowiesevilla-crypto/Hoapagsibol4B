@@ -13,6 +13,7 @@ import { prisma } from "@/lib/db";
 
 export type RepositoryDelivery = {
   documentId: string;
+  title: string;
   fileName: string;
   contentType: string;
   fileSizeBytes: bigint;
@@ -20,12 +21,12 @@ export type RepositoryDelivery = {
   stream: Readable;
 };
 
-async function findActiveTenantDocument(documentId: string) {
+async function findActiveTenantDocument(tenantId: string, documentId: string) {
   const id = documentId.trim();
   if (!id) throw new Error("Document ID is required.");
 
   const document = await prisma.repositoryDocument.findFirst({
-    where: { id },
+    where: { tenantId, id },
     select: {
       id: true,
       tenantId: true,
@@ -56,6 +57,7 @@ async function openDelivery(input: {
   });
   return {
     documentId: input.document.id,
+    title: input.document.title,
     fileName: input.document.originalFileName,
     contentType: input.document.contentType,
     fileSizeBytes: input.document.fileSizeBytes,
@@ -67,8 +69,8 @@ async function openDelivery(input: {
 /** Authorized tenant staff delivery. Lifecycle may be Draft/Internal, but unsafe malware states are never delivered. */
 export async function openRepositoryDocumentForStaff(documentId: string): Promise<RepositoryDelivery> {
   const actor = await requireUser();
-  await requireRepositoryPermission(Permission.DOCUMENT_REPOSITORY_DOWNLOAD_INTERNAL);
-  const document = await findActiveTenantDocument(documentId);
+  const { context } = await requireRepositoryPermission(Permission.DOCUMENT_REPOSITORY_DOWNLOAD_INTERNAL);
+  const document = await findActiveTenantDocument(context.tenantId, documentId);
   if (!isRepositoryDocumentSafeForDelivery({
     tenantId: document.tenantId,
     status: document.status,
@@ -86,7 +88,7 @@ export async function openRepositoryDocumentForStaff(documentId: string): Promis
 export async function openRepositoryDocumentForHomeowner(documentId: string): Promise<RepositoryDelivery> {
   const actor = await requireUser();
   const { context } = await requireRepositoryPermission(Permission.DOCUMENT_REPOSITORY_READ_PUBLIC);
-  const document = await findActiveTenantDocument(documentId);
+  const document = await findActiveTenantDocument(context.tenantId, documentId);
 
   assertHomeownerRepositoryDocumentAccess({
     activeTenantId: context.tenantId,

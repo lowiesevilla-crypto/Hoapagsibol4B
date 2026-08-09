@@ -9,7 +9,8 @@ import { prisma } from "@/lib/db";
 import { homeownerAccountNumber, homeownerPropertyLabel } from "@/lib/homeowner-account";
 import { getPaymentReceiptData } from "@/lib/services/payment-receipt";
 import { getAssociationSettings } from "@/lib/system-settings";
-import { amountInWords, collectionLabel, money, shortDate } from "@/lib/utils";
+import { roleLabel } from "@/lib/tenant-roles";
+import { amountInWords, collectionLabel, money, receiptDateTime, shortDate } from "@/lib/utils";
 
 type ReceiptView = {
   association: Awaited<ReturnType<typeof getAssociationSettings>>;
@@ -27,6 +28,11 @@ type ReceiptView = {
   remarks: string | null;
   processorName: string;
   processorRole: string;
+  processedAt: Date;
+  processorTimestampLabel: string;
+  payerAcknowledgedAt: Date;
+  payerAcknowledgementLabel: string;
+  onlinePayment: boolean;
   status: string;
   allocations: Array<{ key: string; coverage: string; billType: string; amount: number; remainingBalance: number | null }>;
   appliedAmount: number;
@@ -60,11 +66,16 @@ export default async function ReceiptPage({ params }: { params: Promise<{ kind: 
         account: item.homeowner ? homeownerAccountNumber(item.homeowner) : item.contractor?.companyName ?? "Not applicable",
         purpose,
         amount: Number(item.amount),
-        method: item.method,
+        method: item.method.replaceAll("_", " "),
         reference: item.referenceNumber,
         remarks: item.remarks,
         processorName: item.createdBy.name || "Authorized HOA Processor",
-        processorRole: "Authorized HOA Processor",
+        processorRole: roleLabel(item.createdBy.role),
+        processedAt: item.createdAt,
+        processorTimestampLabel: "Recorded on",
+        payerAcknowledgedAt: item.createdAt,
+        payerAcknowledgementLabel: "Payment acknowledged on",
+        onlinePayment: false,
         status: "ACTIVE",
         allocations: [{ key: item.id, coverage: purpose, billType: purpose, amount: Number(item.amount), remainingBalance: null }],
         appliedAmount: Number(item.amount),
@@ -154,13 +165,23 @@ export default async function ReceiptPage({ params }: { params: Promise<{ kind: 
         </div>
 
         {(receipt.remarks || receipt.reference) && <div className="mt-4 rounded border border-slate-300 p-3 text-sm">{receipt.remarks && <p><b>Remarks:</b> {receipt.remarks}</p>}{receipt.reference && <p><b>Reference:</b> {receipt.reference}</p>}</div>}
-        <div className="mt-6 grid gap-6 sm:grid-cols-2">
-          <div><p className="text-xs font-bold uppercase tracking-wider text-slate-500">Payment method</p><p className="mt-2 font-bold">{receipt.method.replaceAll("_", " ")}</p>{receipt.remainingBalance !== null && <p className="mt-3 text-sm"><b>Remaining account balance:</b> {money(receipt.remainingBalance)}</p>}</div>
-          <div className="text-right"><p className="mb-10 text-xs text-slate-500">Received and acknowledged by:</p><div className="border-t border-ink pt-2 text-center text-xs"><b>{receipt.processorName}</b><br />{receipt.processorRole}</div></div>
+        <div className="mt-6">
+          <p className="text-xs font-bold uppercase tracking-wider text-slate-500">Payment method</p>
+          <p className="mt-2 font-bold">{receipt.method}</p>
+          {receipt.remainingBalance !== null && <p className="mt-3 text-sm"><b>Remaining account balance:</b> {money(receipt.remainingBalance)}</p>}
         </div>
+
         <div className="mt-10 grid gap-10 text-center text-xs sm:grid-cols-2">
-          <div className="border-t border-ink pt-2"><b>{receipt.payer}</b><br />Payer&apos;s signature / printed name</div>
-          <div className="border-t border-ink pt-2"><b>{receipt.processorName}</b><br />{receipt.processorRole}</div>
+          <div className="border-t border-ink pt-2">
+            <b>{receipt.payer}</b><br />
+            {receipt.onlinePayment ? "Payer / online payment acknowledgement" : "Payer's signature / printed name"}<br />
+            <span className="text-slate-500">{receipt.payerAcknowledgementLabel}: {receiptDateTime(receipt.payerAcknowledgedAt)}</span>
+          </div>
+          <div className="border-t border-ink pt-2">
+            <b>{receipt.processorName}</b><br />
+            {receipt.processorRole}<br />
+            <span className="text-slate-500">{receipt.processorTimestampLabel}: {receiptDateTime(receipt.processedAt)}</span>
+          </div>
         </div>
       </section>
     </main>

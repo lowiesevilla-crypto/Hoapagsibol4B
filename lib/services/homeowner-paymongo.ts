@@ -7,16 +7,26 @@ import { platformPrisma as prisma } from "@/lib/db";
 import { isPayMongoPaymentRequest } from "@/lib/homeowner-payment-flow";
 import { approvePaymentRequest } from "@/lib/services/payment-requests";
 import { verifyPayMongoWebhookSignature } from "@/lib/services/platform-paymongo";
-import { PAYMONGO_LINKED_ACCOUNT_ID_KEY } from "@/lib/services/homeowner-payment-config";
+import { paymongoWebhookSecretSettingKey } from "@/lib/services/homeowner-payment-config";
 
 const CHECKOUT_ENDPOINT = "https://api.paymongo.com/v2/checkout_sessions";
-const WEBHOOK_SECRET_ENV = "PAYMONGO_HOMEOWNER_WEBHOOK_SECRET";
+const WEBHOOK_ENDPOINT = "https://api.paymongo.com/v1/webhooks";
 const SECRET_KEY_ENV = "PAYMONGO_HOMEOWNER_SECRET_KEY";
+const HOMEOWNER_WEBHOOK_EVENT = "checkout_session.payment.paid";
 
-function requiredHomeownerPayMongoSecret(name: typeof WEBHOOK_SECRET_ENV | typeof SECRET_KEY_ENV) {
-  const value = process.env[name]?.trim();
-  if (!value) throw new Error(`${name} is not configured.`);
+function requiredHomeownerPayMongoSecret() {
+  const value = process.env[SECRET_KEY_ENV]?.trim();
+  if (!value) throw new Error(`${SECRET_KEY_ENV} is not configured.`);
   return value;
+}
+
+function paymongoHeaders(accountId?: string) {
+  const secretKey = requiredHomeownerPayMongoSecret();
+  return {
+    Authorization: `Basic ${Buffer.from(`${secretKey}:`).toString("base64")}`,
+    "Content-Type": "application/json",
+    ...(accountId ? { "Account-ID": accountId } : {}),
+  };
 }
 
 function configuredMethods() {
@@ -43,6 +53,102 @@ function paymentPurpose(request: {
   return request.description?.trim() || "HOA homeowner payment";
 }
 
+type PayMongoWebhookResource = {
+  id?: string;
+  attributes?: {
+    events?: string[];
+    livemode?: boolean;
+    secret_key?: string;
+    status?: string;
+    url?: string;
+  };
+};
+
+async function parsePayMongoResponse(response: Response) {
+  return response.json().catch(() => null) as Promise<{
+    data?: PayMongoWebhookResource | PayMongoWebhookResource[] | { id?: string; attributes?: { checkout_url?: string } };
+    errors?: Array<{ detail?: string }>;
+  } | null>;
+}
+
+function paymongoError(payload: Awaited<ReturnType<typeof parsePayMongoResponse>>, fallback: string) {
+  return payload?.errors?.[0]?.detail || fallback;
+}
+
+export async function ensureHomeownerPayMongoWebhook(accountId: string) {
+  if (!accountId.startsWith("org_")) throw new Error("PayMongo linked merchant account ID must start with org_.");
+  const webhookUrl = new URL("/api/homeowner-payments/webhooks/paymongo", getAppUrl()).toString();
+  const listUrl = new URL(WEBHOOK_ENDPOINT);
+  listUrl.searchParams.set("url", webhookUrl);
+  listUrl.searchParams.set("limit", "100");
+
+  const listResponse = await fetch(listUrl, {
+    headers: paymongoHeaders(accountId),
+    cache: "no-store",
+  });
+  const listPayload = await parsePayMongoResponse(listResponse);
+  if (!listResponse.ok) throw new Error(paymongoError(listPayload, "Unable to inspect the tenant PayMongo webhooks."));
+  const hooks = Array.isArray(listPayload?.data) ? listPayload.data : [];
+  let hook = hooks.find((candidate) =>
+    candidate.attributes?.url === webhookUrl
+    && candidate.attributes.events?.includes(HOMEOWNER_WEBHOOK_EVENT),
+  );
+
+  if (!hook) {
+    const createResponse = await fetch(WEBHOOK_ENDPOINT, {
+      method: "POST",
+      headers: paymongoHeaders(accountId),
+      body: JSON.stringify({
+        data: {
+          attributes: {
+            url: webhookUrl,
+            events: [HOMEOWNER_WEBHOOK_EVENT],
+          },
+        },
+      }),
+    });
+    const createPayload = await parsePayMongoResponse(createResponse);
+    if (!createResponse.ok || Array.isArray(createPayload?.data)) {
+      throw new Error(paymongoError(createPayload, "Unable to create the tenant PayMongo webhook."));
+    }
+    hook = createPayload?.data as PayMongoWebhookResource | undefined;
+  } else if (hook.attributes?.status !== "enabled" && hook.id) {
+    const enableResponse = await fetch(`${WEBHOOK_ENDPOINT}/${encodeURIComponent(hook.id)}/enable`, {
+      method: "POST",
+      headers: paymongoHeaders(accountId),
+    });
+    const enablePayload = await parsePayMongoResponse(enableResponse);
+    if (!enableResponse.ok || Array.isArray(enablePayload?.data)) {
+      throw new Error(paymongoError(enablePayload, "Unable to enable the tenant PayMongo webhook."));
+    }
+    hook = enablePayload?.data as PayMongoWebhookResource | undefined;
+  }
+
+  if (hook?.id && !hook.attributes?.secret_key) {
+    const retrieveResponse = await fetch(`${WEBHOOK_ENDPOINT}/${encodeURIComponent(hook.id)}`, {
+      headers: paymongoHeaders(accountId),
+      cache: "no-store",
+    });
+    const retrievePayload = await parsePayMongoResponse(retrieveResponse);
+    if (!retrieveResponse.ok || Array.isArray(retrievePayload?.data)) {
+      throw new Error(paymongoError(retrievePayload, "Unable to retrieve the tenant PayMongo webhook."));
+    }
+    hook = retrievePayload?.data as PayMongoWebhookResource | undefined;
+  }
+
+  const webhookId = hook?.id?.trim() || "";
+  const webhookSecret = hook?.attributes?.secret_key?.trim() || "";
+  if (!webhookId || !webhookSecret) {
+    throw new Error("PayMongo did not return the tenant webhook ID and signing secret.");
+  }
+  return {
+    webhookId,
+    webhookSecret,
+    livemode: Boolean(hook?.attributes?.livemode),
+    webhookUrl,
+  };
+}
+
 export async function createHomeownerPayMongoCheckout(requestId: string, tenantId: string) {
   const request = await prisma.paymentRequest.findFirst({
     where: { id: requestId, tenantId },
@@ -59,11 +165,10 @@ export async function createHomeownerPayMongoCheckout(requestId: string, tenantI
   const tenant = await prisma.tenant.findUnique({ where: { id: tenantId }, select: { name: true } });
   if (!tenant) throw new Error("Tenant was not found for PayMongo checkout.");
   const linkedAccountId = request.proofFileName?.trim();
-  if (!linkedAccountId) throw new Error("This tenant does not have a PayMongo linked merchant account configured.");
+  if (!linkedAccountId || !linkedAccountId.startsWith("org_")) throw new Error("This tenant does not have a valid PayMongo linked merchant account configured.");
   const amount = Number(request.amount);
   if (!Number.isFinite(amount) || amount <= 0) throw new Error("Payment amount is invalid.");
 
-  const secretKey = requiredHomeownerPayMongoSecret(SECRET_KEY_ENV);
   const successUrl = new URL("/portal/pay", getAppUrl());
   successUrl.searchParams.set("online", "confirming");
   const cancelUrl = new URL("/portal/pay/paymongo-cancel", getAppUrl());
@@ -75,8 +180,7 @@ export async function createHomeownerPayMongoCheckout(requestId: string, tenantI
   const response = await fetch(CHECKOUT_ENDPOINT, {
     method: "POST",
     headers: {
-      Authorization: `Basic ${Buffer.from(`${secretKey}:`).toString("base64")}`,
-      "Content-Type": "application/json",
+      ...paymongoHeaders(linkedAccountId),
       "Idempotency-Key": idempotencyKey,
     },
     body: JSON.stringify({
@@ -100,9 +204,6 @@ export async function createHomeownerPayMongoCheckout(requestId: string, tenantI
             name: request.homeowner.user.name,
             email: request.homeowner.user.email,
           },
-          split_payment: {
-            transfer_to: linkedAccountId,
-          },
           metadata: {
             tenantId: request.tenantId,
             homeownerId: request.homeownerId,
@@ -113,14 +214,12 @@ export async function createHomeownerPayMongoCheckout(requestId: string, tenantI
     }),
   });
 
-  const payload = await response.json().catch(() => null) as {
-    data?: { id?: string; attributes?: { checkout_url?: string } };
-    errors?: Array<{ detail?: string }>;
-  } | null;
-  const checkoutId = payload?.data?.id;
-  const checkoutUrl = payload?.data?.attributes?.checkout_url;
+  const payload = await parsePayMongoResponse(response);
+  const checkout = !Array.isArray(payload?.data) ? payload?.data as { id?: string; attributes?: { checkout_url?: string } } | undefined : undefined;
+  const checkoutId = checkout?.id;
+  const checkoutUrl = checkout?.attributes?.checkout_url;
   if (!response.ok || !checkoutId || !checkoutUrl) {
-    throw new Error(payload?.errors?.[0]?.detail || "PayMongo checkout could not be created.");
+    throw new Error(paymongoError(payload, "PayMongo checkout could not be created."));
   }
 
   await prisma.auditLog.create({
@@ -137,6 +236,7 @@ export async function createHomeownerPayMongoCheckout(requestId: string, tenantI
         referenceNumber: request.referenceNumber,
         amount,
         linkedAccountId,
+        linkedTransaction: true,
       },
     },
   });
@@ -147,6 +247,7 @@ export async function createHomeownerPayMongoCheckout(requestId: string, tenantI
 type NormalizedCheckoutEvent = {
   eventType: string;
   eventId: string;
+  organizationId: string;
   session: Record<string, unknown>;
   sessionAttributes: Record<string, unknown>;
 };
@@ -160,10 +261,12 @@ function normalizeCheckoutEvent(payload: unknown, rawBody: string): NormalizedCh
   const eventType = modernType || legacyType || "unknown";
   const session = ((modernType ? data.data : attributes.data) || {}) as Record<string, unknown>;
   const sessionAttributes = (session.attributes || {}) as Record<string, unknown>;
+  const organizationId = String(data.organization_id || attributes.organization_id || "").trim();
   const explicitEventId = typeof data.id === "string" && data.id.startsWith("evt_") ? data.id : "";
   return {
     eventType,
     eventId: explicitEventId || `evt_hash_${createHash("sha256").update(rawBody).digest("hex")}`,
+    organizationId,
     session,
     sessionAttributes,
   };
@@ -175,15 +278,6 @@ function paymentMethodFromSource(source: unknown) {
 }
 
 export async function processHomeownerPayMongoWebhook(rawBody: string, signatureHeader: string | null) {
-  let webhookSecret: string;
-  try {
-    webhookSecret = requiredHomeownerPayMongoSecret(WEBHOOK_SECRET_ENV);
-  } catch (error) {
-    return { ok: false as const, status: 503, message: error instanceof Error ? error.message : "PayMongo webhook is not configured." };
-  }
-  const verification = verifyPayMongoWebhookSignature(rawBody, signatureHeader, webhookSecret);
-  if (!verification.valid) return { ok: false as const, status: 401, message: "Invalid PayMongo signature." };
-
   let payload: unknown;
   try {
     payload = JSON.parse(rawBody);
@@ -191,8 +285,8 @@ export async function processHomeownerPayMongoWebhook(rawBody: string, signature
     return { ok: false as const, status: 400, message: "Invalid JSON payload." };
   }
   const event = normalizeCheckoutEvent(payload, rawBody);
-  if (event.eventType !== "checkout_session.payment.paid") {
-    return { ok: true as const, ignored: true, eventId: event.eventId };
+  if (!event.organizationId.startsWith("org_")) {
+    return { ok: false as const, status: 400, message: "PayMongo child account context is missing." };
   }
 
   const referenceNumber = String(event.sessionAttributes.reference_number || "").trim();
@@ -206,6 +300,29 @@ export async function processHomeownerPayMongoWebhook(rawBody: string, signature
   });
   if (!request || request.referenceNumber !== referenceNumber || !isPayMongoPaymentRequest(request)) {
     return { ok: false as const, status: 404, message: "Homeowner PayMongo payment request was not found." };
+  }
+  const linkedAccountId = request.proofFileName?.trim() || "";
+  if (linkedAccountId !== event.organizationId) {
+    return { ok: false as const, status: 400, message: "PayMongo child account does not match the tenant payment request." };
+  }
+
+  const webhookSecretSetting = await prisma.systemSetting.findUnique({
+    where: {
+      tenantId_category_key: {
+        tenantId: request.tenantId,
+        category: SystemSettingCategory.PAYMENT,
+        key: paymongoWebhookSecretSettingKey(linkedAccountId),
+      },
+    },
+    select: { value: true },
+  });
+  const webhookSecret = webhookSecretSetting?.value?.trim() || "";
+  if (!webhookSecret) return { ok: false as const, status: 503, message: "Tenant PayMongo webhook signing secret is not configured." };
+  const verification = verifyPayMongoWebhookSignature(rawBody, signatureHeader, webhookSecret);
+  if (!verification.valid) return { ok: false as const, status: 401, message: "Invalid PayMongo signature." };
+
+  if (event.eventType !== HOMEOWNER_WEBHOOK_EVENT) {
+    return { ok: true as const, ignored: true, eventId: event.eventId };
   }
   if (request.status === PaymentRequestStatus.APPROVED) {
     return { ok: true as const, duplicate: true, eventId: event.eventId, paymentRequestId: request.id };
@@ -229,19 +346,6 @@ export async function processHomeownerPayMongoWebhook(rawBody: string, signature
   if (!gatewayPaymentId || !checkoutId) return { ok: false as const, status: 400, message: "PayMongo webhook is missing payment identifiers." };
   if (currency !== "PHP") return { ok: false as const, status: 400, message: "PayMongo currency does not match the HOA payment currency." };
   if (Math.abs(Number(request.amount) - amount) > 0.009) return { ok: false as const, status: 400, message: "PayMongo amount does not match the homeowner payment request." };
-
-  const linkedAccountId = request.proofFileName?.trim() || "";
-  const configuredLinkedAccount = await prisma.systemSetting.findUnique({
-    where: {
-      tenantId_category_key: {
-        tenantId: request.tenantId,
-        category: SystemSettingCategory.PAYMENT,
-        key: PAYMONGO_LINKED_ACCOUNT_ID_KEY,
-      },
-    },
-    select: { value: true },
-  });
-  const currentLinkedAccountId = configuredLinkedAccount?.value?.trim() || "";
 
   try {
     await prisma.paymentRequest.update({
@@ -272,7 +376,7 @@ export async function processHomeownerPayMongoWebhook(rawBody: string, signature
           currency,
           paidAt: paidAt.toISOString(),
           linkedAccountId,
-          linkedAccountChangedSinceCheckout: Boolean(currentLinkedAccountId && currentLinkedAccountId !== linkedAccountId),
+          linkedTransaction: true,
         },
       },
     });
@@ -298,7 +402,7 @@ export async function processHomeownerPayMongoWebhook(rawBody: string, signature
         entityType: "PaymentRequest",
         entityId: request.id,
         correlationId: event.eventId,
-        metadata: { eventId: event.eventId, checkoutId, gatewayPaymentId },
+        metadata: { eventId: event.eventId, checkoutId, gatewayPaymentId, linkedAccountId },
         reason: error instanceof Error ? error.message.slice(0, 1000) : "Unknown PayMongo posting error.",
       },
     }).catch(() => undefined);

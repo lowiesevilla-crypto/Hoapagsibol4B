@@ -40,15 +40,19 @@ export default async function HomeownerPaymentSettingsPage({ searchParams }: { s
             <div className="flex items-start gap-4">
               <input className="mt-1 size-4 accent-blue-700" type="radio" name="flow" value="PAYMONGO" defaultChecked={config.flow === "PAYMONGO"} />
               <span className="grid size-11 shrink-0 place-items-center rounded-2xl bg-blue-100 text-blue-700"><CreditCard className="size-5" /></span>
-              <span className="min-w-0"><span className="block text-lg font-black text-slate-950">PayMongo Online</span><span className="mt-1 block text-sm leading-6 text-slate-600">Homeowners are sent to PayMongo checkout. A verified PayMongo webhook confirms the payment, then HOAHub creates the official tenant payment or collection record automatically.</span><span className="mt-2 inline-flex rounded-full bg-blue-100 px-2.5 py-1 text-xs font-black text-blue-800">Requires PayMongo Platforms setup</span></span>
+              <span className="min-w-0"><span className="block text-lg font-black text-slate-950">PayMongo Online</span><span className="mt-1 block text-sm leading-6 text-slate-600">HOAHub creates checkout on behalf of this tenant&apos;s linked PayMongo child account. The payment belongs to the tenant merchant ledger, and a child-scoped verified webhook confirms it before HOAHub posts the official receipt.</span><span className="mt-2 inline-flex rounded-full bg-blue-100 px-2.5 py-1 text-xs font-black text-blue-800">Requires PayMongo Linked Accounts</span></span>
             </div>
           </label>
         </div>
 
         <div className="mt-6">
-          <label className="label" htmlFor="paymongoLinkedAccountId">PayMongo linked merchant account ID</label>
+          <label className="label" htmlFor="paymongoLinkedAccountId">PayMongo linked child account ID</label>
           <input id="paymongoLinkedAccountId" className="field font-mono" name="paymongoLinkedAccountId" defaultValue={config.paymongoLinkedAccountId} placeholder="org_..." autoComplete="off" />
-          <p className="mt-1 text-xs leading-5 text-slate-500">Tenant-specific PayMongo merchant/sub-account that receives this tenant&apos;s homeowner payment funds. Required before PayMongo Online can be activated.</p>
+          <p className="mt-1 text-xs leading-5 text-slate-500">Use the tenant&apos;s transactional PayMongo organization ID (`org_...`). HOAHub sends this value in the PayMongo Account-ID header; it is not supplied by the homeowner browser.</p>
+        </div>
+
+        <div className="mt-4 rounded-2xl border border-blue-200 bg-blue-50 p-4 text-sm leading-6 text-blue-950">
+          When you select PayMongo Online and save, HOAHub verifies access to this linked child account and creates or enables its tenant-scoped webhook automatically. PayMongo must have already activated the child merchant and provisioned its payment products.
         </div>
 
         <div className="mt-6"><SubmitButton>Save homeowner payment flow</SubmitButton></div>
@@ -56,13 +60,14 @@ export default async function HomeownerPaymentSettingsPage({ searchParams }: { s
 
       <aside className="space-y-5">
         <section className="card">
-          <div className="flex items-start gap-3"><span className="grid size-10 shrink-0 place-items-center rounded-2xl bg-slate-100 text-slate-700"><ShieldCheck className="size-5" /></span><div><h2 className="font-black">Activation readiness</h2><p className="mt-1 text-sm leading-6 text-slate-600">PayMongo server credentials: <b>{config.paymongoServerConfigured ? "Configured" : "Not configured"}</b></p><p className="text-sm leading-6 text-slate-600">Linked tenant merchant: <b>{config.paymongoLinkedAccountId ? "Configured" : "Not configured"}</b></p></div></div>
-          {!config.paymongoServerConfigured && <div className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 p-3 text-sm font-semibold leading-6 text-amber-900">PayMongo Online cannot be activated until the deployment has separate homeowner PayMongo secret and webhook credentials.</div>}
+          <div className="flex items-start gap-3"><span className="grid size-10 shrink-0 place-items-center rounded-2xl bg-slate-100 text-slate-700"><ShieldCheck className="size-5" /></span><div><h2 className="font-black">Activation readiness</h2><p className="mt-1 text-sm leading-6 text-slate-600">HOAHub parent API credential: <b>{config.paymongoServerConfigured ? "Configured" : "Not configured"}</b></p><p className="text-sm leading-6 text-slate-600">Linked tenant child account: <b>{config.paymongoLinkedAccountId ? "Configured" : "Not configured"}</b></p><p className="text-sm leading-6 text-slate-600">Child payment webhook: <b>{config.paymongoWebhookSecretConfigured ? "Provisioned" : "Not provisioned"}</b></p>{config.paymongoWebhookId && <p className="mt-1 break-all font-mono text-xs text-slate-500">{config.paymongoWebhookId}</p>}</div></div>
+          {!config.paymongoServerConfigured && <div className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 p-3 text-sm font-semibold leading-6 text-amber-900">PayMongo Online cannot be activated until the deployment has the separate homeowner parent secret key.</div>}
+          {config.flow === "PAYMONGO" && !config.paymongoReady && <div className="mt-4 rounded-2xl border border-rose-200 bg-rose-50 p-3 text-sm font-semibold leading-6 text-rose-900">PayMongo Online is not fully ready. Save the configuration again after confirming the tenant child account is activated in PayMongo.</div>}
         </section>
 
         <section className="card border-blue-100 bg-blue-50/50">
           <h2 className="font-black text-blue-950">Tenant isolation</h2>
-          <p className="mt-2 text-sm leading-6 text-blue-900">This setting is saved only for the tenant in your authenticated admin session. The homeowner portal resolves the same tenant before exposing a payment flow or accepting a payment request.</p>
+          <p className="mt-2 text-sm leading-6 text-blue-900">The authenticated tenant selects the `org_...` child account. HOAHub creates the checkout with that Account-ID and verifies the callback using that child account&apos;s webhook signing secret before posting any money to the HOA ledger.</p>
         </section>
       </aside>
     </form>

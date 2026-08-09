@@ -52,20 +52,23 @@ async function enforceHistoricalBinaryLimit(input: {
   const excess = retained.slice(input.maximum);
   for (const revision of excess) {
     if (!revision.storageKey) continue;
-    await prisma.repositoryDocumentRevision.update({
-      where: { tenantId_id: { tenantId: input.tenantId, id: revision.id } },
-      data: { storageKey: null },
-    });
     try {
       await repositoryStorage.delete({ tenantSlug: input.tenantSlug, storageKey: revision.storageKey });
     } catch (error) {
+      // Keep the database pointer intact so cleanup remains retryable and the
+      // repository usage calculation continues counting the retained binary.
       console.error("[document-repository] Failed to purge excess retained revision binary.", {
         tenantId: input.tenantId,
         documentId: input.documentId,
         revision: revision.revision,
         error,
       });
+      continue;
     }
+    await prisma.repositoryDocumentRevision.update({
+      where: { tenantId_id: { tenantId: input.tenantId, id: revision.id } },
+      data: { storageKey: null },
+    });
     await prisma.auditLog.create({
       data: {
         tenantId: input.tenantId,

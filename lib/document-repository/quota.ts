@@ -1,6 +1,7 @@
 import { REPOSITORY_QUOTA_WARNING_THRESHOLDS } from "@/lib/document-repository/constants";
 
 const BYTES_PER_MB = 1024 * 1024;
+const ZERO_BYTES = BigInt(0);
 
 export type RepositoryQuotaState = "UNLIMITED" | "HEALTHY" | "WARNING" | "CRITICAL" | "AT_LIMIT" | "OVER_LIMIT";
 
@@ -50,23 +51,23 @@ export function evaluateRepositoryQuota(input: {
     };
   }
 
-  if (limitBytes === 0n) {
+  if (limitBytes === ZERO_BYTES) {
     return {
       usedBytes,
       limitBytes,
       requestedBytes,
       projectedBytes,
-      remainingBytes: 0n,
-      utilization: usedBytes > 0n ? Number.POSITIVE_INFINITY : 1,
-      state: usedBytes > 0n ? "OVER_LIMIT" : "AT_LIMIT",
+      remainingBytes: ZERO_BYTES,
+      utilization: usedBytes > ZERO_BYTES ? Number.POSITIVE_INFINITY : 1,
+      state: usedBytes > ZERO_BYTES ? "OVER_LIMIT" : "AT_LIMIT",
       canWrite: false,
     };
   }
 
   const utilization = Number(usedBytes) / Number(limitBytes);
   const projectedUtilization = Number(projectedBytes) / Number(limitBytes);
-  const remainingBytes = usedBytes >= limitBytes ? 0n : limitBytes - usedBytes;
-  const canWrite = requestedBytes === 0n ? usedBytes <= limitBytes : projectedBytes <= limitBytes;
+  const remainingBytes = usedBytes >= limitBytes ? ZERO_BYTES : limitBytes - usedBytes;
+  const canWrite = requestedBytes === ZERO_BYTES ? usedBytes <= limitBytes : projectedBytes <= limitBytes;
 
   let state: RepositoryQuotaState = "HEALTHY";
   if (usedBytes > limitBytes) state = "OVER_LIMIT";
@@ -74,7 +75,7 @@ export function evaluateRepositoryQuota(input: {
   else if (utilization >= REPOSITORY_QUOTA_WARNING_THRESHOLDS[1]) state = "CRITICAL";
   else if (utilization >= REPOSITORY_QUOTA_WARNING_THRESHOLDS[0]) state = "WARNING";
 
-  if (requestedBytes > 0n && projectedUtilization > 1) {
+  if (requestedBytes > ZERO_BYTES && projectedUtilization > 1) {
     return { usedBytes, limitBytes, requestedBytes, projectedBytes, remainingBytes, utilization, state, canWrite: false };
   }
 

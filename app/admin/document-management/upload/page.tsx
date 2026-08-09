@@ -17,10 +17,10 @@ export default async function UploadDocumentPage({
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
-  const user = await requireUser(Role.ADMIN);
+  await requireUser(Role.ADMIN);
   const { entitlement } = await requireRepositoryUpload();
-  await ensureRepositoryDefaultCategories({ tenantId: user.tenantId, actorId: user.id });
-  const categories = await listRepositoryCategories(user.tenantId);
+  await ensureRepositoryDefaultCategories();
+  const categories = await listRepositoryCategories();
   const canManageVisibility = hasRepositoryPermission(Permission.DOCUMENT_REPOSITORY_MANAGE_VISIBILITY);
   const canPublish = hasRepositoryPermission(Permission.DOCUMENT_REPOSITORY_PUBLISH);
   const query = await searchParams;
@@ -67,6 +67,7 @@ export default async function UploadDocumentPage({
             <label><span className="label">Policy owner</span><input className="field" name="policyOwner" maxLength={191} placeholder="Security Committee" /></label>
             <label><span className="label">Resolution number</span><input className="field" name="resolutionNumber" maxLength={120} placeholder="Resolution 2026-014" /></label>
             <label><span className="label">Memorandum number</span><input className="field" name="memoNumber" maxLength={120} placeholder="MEMO-2026-08" /></label>
+            <label><span className="label">Approval / adoption date</span><input className="field" name="approvalDate" type="date" /></label>
             <label><span className="label">Effective date</span><input className="field" name="effectiveAt" type="date" /></label>
             <label><span className="label">Expiration / review date</span><input className="field" name="expiresAt" type="date" /></label>
             <label className="sm:col-span-2"><span className="label">Search keywords</span><input className="field" name="searchableKeywords" maxLength={4000} placeholder="parking, vehicle, sticker, gate access" /></label>

@@ -57,6 +57,7 @@ test("PayMongo Online uses gateway verification and canonical auto-posting inste
   const resumeRoute = source("app/portal/pay/paymongo-resume/route.ts");
   const adminPage = source("app/admin/payments/requests/[id]/page.tsx");
   const adminReconcile = source("lib/actions/homeowner-paymongo-reconciliation.ts");
+  const adminData = source("lib/services/admin-payments.ts");
 
   assert.match(reconcile, /https:\/\/api\.paymongo\.com\/v1\/checkout_sessions/);
   assert.match(reconcile, /"Account-ID": accountId/);
@@ -75,20 +76,24 @@ test("PayMongo Online uses gateway verification and canonical auto-posting inste
   assert.match(adminPage, /No manual approval required/);
   assert.match(adminPage, /Refresh PayMongo status/);
   assert.match(adminPage, /isPaymongoCheckoutSessionRemark/);
-  assert.match(adminPage, /online \? <div/);
+  assert.match(adminPage, /request\.status === "APPROVED" \? "PAID"/);
   assert.match(adminPage, /request\.status === "PENDING_REVIEW" && online/);
-  assert.match(adminPage, /request\.status === "PENDING_REVIEW" \? <div/);
   assert.match(adminReconcile, /reconcileHomeownerPayMongoCheckout/);
   assert.doesNotMatch(adminReconcile, /approvePaymentRequestAction/);
+  assert.match(adminData, /PAYMONGO_PAYMENT_REQUEST_MARKER/);
+  assert.match(adminData, /proofContentType: \{ not: PAYMONGO_PAYMENT_REQUEST_MARKER \}/);
 });
 
 test("manual QR review workflow remains unchanged and still exposes approval and rejection", () => {
   const page = source("app/admin/payments/requests/[id]/page.tsx");
+  const queuePage = source("app/admin/payments/requests/page.tsx");
   const manualActions = source("lib/actions/payment-requests.ts");
   assert.match(page, /approvePaymentRequestAction/);
   assert.match(page, /rejectPaymentRequestAction/);
   assert.match(page, /Approve as paid/);
   assert.match(page, /Reject request/);
+  assert.match(queuePage, /Manual payment requests/);
+  assert.match(queuePage, /Manual QR \/ proof submissions only/);
   assert.match(manualActions, /paymentConfig\.flow !== "MANUAL_QR"/);
 });
 

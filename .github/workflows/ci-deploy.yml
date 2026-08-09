@@ -84,3 +84,84 @@ jobs:
           curl --fail --silent http://127.0.0.1:3000/api/health
           pnpm smoke:production -- http://127.0.0.1:3000
           pnpm test:e2e
+
+  deploy-production:
+    name: Deploy to Hostinger production
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: verify
+    runs-on: ubuntu-latest
+    environment: production
+    env:
+      HOSTINGER_HOST: ${{ secrets.HOSTINGER_HOST }}
+      HOSTINGER_PORT: ${{ secrets.HOSTINGER_PORT }}
+      HOSTINGER_USER: ${{ secrets.HOSTINGER_USER }}
+      HOSTINGER_SSH_PRIVATE_KEY: ${{ secrets.HOSTINGER_SSH_PRIVATE_KEY }}
+      HOSTINGER_APP_PATH: ${{ secrets.HOSTINGER_APP_PATH }}
+      HOSTINGER_APP_URL: ${{ secrets.HOSTINGER_APP_URL }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate production deployment configuration
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          missing=0
+          for name in HOSTINGER_HOST HOSTINGER_PORT HOSTINGER_USER HOSTINGER_SSH_PRIVATE_KEY HOSTINGER_APP_PATH HOSTINGER_APP_URL; do
+            if [ -z "${!name:-}" ]; then
+              echo "::error::$name is not configured for the production environment."
+              missing=1
+            fi
+          done
+          exit "$missing"
+
+      - name: Configure deployment SSH
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          install -d -m 700 "$HOME/.ssh"
+          printf '%s\n' "$HOSTINGER_SSH_PRIVATE_KEY" > "$HOME/.ssh/hoahub_hostinger"
+          chmod 600 "$HOME/.ssh/hoahub_hostinger"
+          ssh-keyscan -p "$HOSTINGER_PORT" -H "$HOSTINGER_HOST" >> "$HOME/.ssh/known_hosts"
+          chmod 600 "$HOME/.ssh/known_hosts"
+
+      - name: Upload immutable release
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          SSH_TARGET="${HOSTINGER_USER}@${HOSTINGER_HOST}"
+          RELEASE_DIR="${HOSTINGER_APP_PATH}/releases/${GITHUB_SHA}"
+          ssh -i "$HOME/.ssh/hoahub_hostinger" -p "$HOSTINGER_PORT" "$SSH_TARGET" "mkdir -p '$RELEASE_DIR'"
+          rsync -az --delete \
+            --exclude '.git/' \
+            --exclude '.github/' \
+            --exclude '.next/' \
+            --exclude 'node_modules/' \
+            --exclude '.env' \
+            --exclude 'storage/' \
+            --exclude 'public/uploads/' \
+            -e "ssh -i $HOME/.ssh/hoahub_hostinger -p $HOSTINGER_PORT" \
+            ./ "$SSH_TARGET:$RELEASE_DIR/"
+
+      - name: Activate release on Hostinger
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          SSH_TARGET="${HOSTINGER_USER}@${HOSTINGER_HOST}"
+          RELEASE_DIR="${HOSTINGER_APP_PATH}/releases/${GITHUB_SHA}"
+          ssh -i "$HOME/.ssh/hoahub_hostinger" -p "$HOSTINGER_PORT" "$SSH_TARGET" \
+            "APP_ROOT='$HOSTINGER_APP_PATH' RELEASE_ID='$GITHUB_SHA' bash '$RELEASE_DIR/scripts/deploy-hostinger.sh'"
+
+      - name: Verify public production health
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          HEALTH_URL="${HOSTINGER_APP_URL%/}/api/health"
+          for attempt in {1..30}; do
+            if curl --fail --silent --show-error "$HEALTH_URL" > /dev/null; then
+              echo "Production health check passed: $HEALTH_URL"
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "::error::Production health check failed: $HEALTH_URL"
+          exit 1

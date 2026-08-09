@@ -7,13 +7,14 @@ import { RepositoryStatusBadge, RepositoryVisibilityBadge } from "@/components/d
 import { requireUser } from "@/lib/auth";
 import { Permission } from "@/lib/authorization/permissions";
 import { permanentlyDeleteRepositoryDocumentAction, updateRepositoryDocumentAction } from "@/lib/actions/document-management";
-import { hasRepositoryPermission, requireRepositoryRead } from "@/lib/document-repository/access";
+import { hasRepositoryPermission } from "@/lib/document-repository/access";
 import {
   repositoryDocumentStatus,
   repositoryDocumentVisibility,
+  type RepositoryDocumentStatus,
 } from "@/lib/document-repository/constants";
 import { formatRepositoryStorage } from "@/lib/document-repository/quota";
-import { ensureRepositoryDefaultCategories, getRepositoryDocumentForTenant, listRepositoryCategories } from "@/lib/document-repository/repository";
+import { ensureRepositoryDefaultCategories, getRepositoryDocumentForAdmin, listRepositoryCategories } from "@/lib/document-repository/repository";
 
 function one(value: string | string[] | undefined) {
   return Array.isArray(value) ? value[0] || "" : value || "";
@@ -27,6 +28,26 @@ function dateLabel(value: Date | null) {
   return value ? value.toLocaleDateString("en-PH", { year: "numeric", month: "long", day: "numeric" }) : "Not set";
 }
 
+function optionLabel(value: string) {
+  return value
+    .toLowerCase()
+    .replaceAll("_", " ")
+    .replace(/(^|\s)\S/g, (character) => character.toUpperCase());
+}
+
+function statusOptionDisabled(input: {
+  option: RepositoryDocumentStatus;
+  current: RepositoryDocumentStatus;
+  canPublish: boolean;
+  canArchive: boolean;
+}) {
+  if (input.option === input.current) return false;
+  if (!input.canPublish && (input.option === "PUBLISHED" || input.current === "PUBLISHED")) return true;
+  const controlledArchiveStates: readonly RepositoryDocumentStatus[] = ["ARCHIVED", "INACTIVE"];
+  if (!input.canArchive && (controlledArchiveStates.includes(input.option) || controlledArchiveStates.includes(input.current))) return true;
+  return false;
+}
+
 export default async function RepositoryDocumentDetailPage({
   params,
   searchParams,
@@ -34,14 +55,13 @@ export default async function RepositoryDocumentDetailPage({
   params: Promise<{ documentId: string }>;
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
-  const user = await requireUser(Role.ADMIN);
-  await requireRepositoryRead();
-  await ensureRepositoryDefaultCategories({ tenantId: user.tenantId, actorId: user.id });
+  await requireUser(Role.ADMIN);
+  await ensureRepositoryDefaultCategories();
   const { documentId } = await params;
   const query = await searchParams;
   const [document, categories] = await Promise.all([
-    getRepositoryDocumentForTenant(user.tenantId, documentId),
-    listRepositoryCategories(user.tenantId),
+    getRepositoryDocumentForAdmin(documentId),
+    listRepositoryCategories(),
   ]);
   if (!document) notFound();
 
@@ -56,7 +76,7 @@ export default async function RepositoryDocumentDetailPage({
 
   return <>
     <PageHeader
-      eyebrow={document.category.categoryGroup.replaceAll("_", " ")}
+      eyebrow={optionLabel(document.category.categoryGroup)}
       title={document.title}
       description="Review the official repository record, publication controls, governance metadata, and file evidence for this tenant."
       action={<div className="flex flex-wrap gap-2"><Link className="btn-secondary" href="/admin/document-management">Back to repository</Link>{canDownload && <a className="btn-primary inline-flex items-center gap-2" href={`/api/admin/document-management/documents/${document.id}/download`}><Download className="size-4" /> Download</a>}</div>}
@@ -69,7 +89,7 @@ export default async function RepositoryDocumentDetailPage({
       <article className="card"><p className="text-xs font-extrabold uppercase tracking-wider text-slate-500">Status</p><div className="mt-3"><RepositoryStatusBadge status={document.status} /></div><p className="mt-3 text-sm text-slate-500">{document.publishedAt ? `Published ${dateLabel(document.publishedAt)}` : "Not currently published."}</p></article>
       <article className="card"><p className="text-xs font-extrabold uppercase tracking-wider text-slate-500">Visibility</p><div className="mt-3"><RepositoryVisibilityBadge visibility={document.visibility} /></div><p className="mt-3 text-sm text-slate-500">Tenant public is still limited to authenticated homeowners in this tenant.</p></article>
       <article className="card"><p className="text-xs font-extrabold uppercase tracking-wider text-slate-500">Revision</p><p className="mt-2 text-2xl font-black text-ink">Rev {document.currentRevision}</p><p className="mt-2 text-sm text-slate-500">{document.revisionPolicy === "KEEP_HISTORY" ? "Controlled revision lineage" : "Replace-current policy"}</p></article>
-      <article className="card"><p className="text-xs font-extrabold uppercase tracking-wider text-slate-500">File</p><p className="mt-2 text-lg font-black uppercase text-ink">{document.fileExtension.replace(".", "")}</p><p className="mt-1 text-sm text-slate-500">{formatRepositoryStorage(document.fileSizeBytes)} · {document.malwareScanStatus.replaceAll("_", " ")}</p></article>
+      <article className="card"><p className="text-xs font-extrabold uppercase tracking-wider text-slate-500">File</p><p className="mt-2 text-lg font-black uppercase text-ink">{document.fileExtension.replace(".", "")}</p><p className="mt-1 text-sm text-slate-500">{formatRepositoryStorage(document.fileSizeBytes)} · {optionLabel(document.malwareScanStatus)}</p></article>
     </section>
 
     <div className="mt-5 grid gap-5 xl:grid-cols-[minmax(0,1fr)_360px]">
@@ -83,12 +103,13 @@ export default async function RepositoryDocumentDetailPage({
             <label><span className="label">Category</span><select className="field" name="categoryId" defaultValue={document.categoryId} required>{categories.map((category) => <option key={category.id} value={category.id}>{category.name}{category.governanceControlled ? " · governed" : ""}</option>)}</select></label>
             <label><span className="label">Document / reference number</span><input className="field" name="documentReference" defaultValue={document.documentReference ?? ""} maxLength={120} /></label>
             <label className="sm:col-span-2"><span className="label">Description</span><textarea className="field min-h-24" name="description" defaultValue={document.description ?? ""} maxLength={4000} /></label>
-            <label><span className="label">Visibility</span><select className="field" name="visibility" defaultValue={document.visibility}>{repositoryDocumentVisibility.map((visibility) => <option key={visibility} value={visibility} disabled={!canManageVisibility && visibility !== document.visibility}>{visibility.replaceAll("_", " ")}</option>)}</select></label>
-            <label><span className="label">Status</span><select className="field" name="status" defaultValue={document.status}>{repositoryDocumentStatus.map((status) => <option key={status} value={status} disabled={(status === "PUBLISHED" && !canPublish && status !== document.status) || ((status === "ARCHIVED" || status === "INACTIVE") && !canArchive && status !== document.status)}>{status.replaceAll("_", " ")}</option>)}</select></label>
+            <label><span className="label">Visibility</span><select className="field" name="visibility" defaultValue={document.visibility}>{repositoryDocumentVisibility.map((visibility) => <option key={visibility} value={visibility} disabled={!canManageVisibility && visibility !== document.visibility}>{optionLabel(visibility)}</option>)}</select></label>
+            <label><span className="label">Status</span><select className="field" name="status" defaultValue={document.status}>{repositoryDocumentStatus.map((status) => <option key={status} value={status} disabled={statusOptionDisabled({ option: status, current: document.status, canPublish, canArchive })}>{optionLabel(status)}</option>)}</select></label>
             <label><span className="label">Issuing body / committee</span><input className="field" name="issuingBody" defaultValue={document.issuingBody ?? ""} maxLength={191} /></label>
             <label><span className="label">Policy owner</span><input className="field" name="policyOwner" defaultValue={document.policyOwner ?? ""} maxLength={191} /></label>
             <label><span className="label">Resolution number</span><input className="field" name="resolutionNumber" defaultValue={document.resolutionNumber ?? ""} maxLength={120} /></label>
             <label><span className="label">Memorandum number</span><input className="field" name="memoNumber" defaultValue={document.memoNumber ?? ""} maxLength={120} /></label>
+            <label><span className="label">Approval / adoption date</span><input className="field" name="approvalDate" type="date" defaultValue={dateInput(document.approvalDate)} /></label>
             <label><span className="label">Effective date</span><input className="field" name="effectiveAt" type="date" defaultValue={dateInput(document.effectiveAt)} /></label>
             <label><span className="label">Expiration / review date</span><input className="field" name="expiresAt" type="date" defaultValue={dateInput(document.expiresAt)} /></label>
             <label className="sm:col-span-2"><span className="label">Search keywords</span><input className="field" name="searchableKeywords" defaultValue={document.searchableKeywords ?? ""} maxLength={4000} /></label>
@@ -99,6 +120,7 @@ export default async function RepositoryDocumentDetailPage({
         </form> : <dl className="mt-6 grid gap-4 sm:grid-cols-2">
           <div><dt className="label">Category</dt><dd className="mt-1 font-bold text-slate-800">{document.category.name}</dd></div>
           <div><dt className="label">Reference</dt><dd className="mt-1 font-bold text-slate-800">{document.documentReference || "Not set"}</dd></div>
+          <div><dt className="label">Approval / adoption</dt><dd className="mt-1 font-bold text-slate-800">{dateLabel(document.approvalDate)}</dd></div>
           <div><dt className="label">Effective</dt><dd className="mt-1 font-bold text-slate-800">{dateLabel(document.effectiveAt)}</dd></div>
           <div><dt className="label">Expires / review</dt><dd className="mt-1 font-bold text-slate-800">{dateLabel(document.expiresAt)}</dd></div>
         </dl>}

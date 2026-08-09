@@ -57,6 +57,7 @@ export async function POST(request: Request) {
       documentReference: text(formData, "documentReference") || null,
       visibility: requestedVisibility as RepositoryDocumentVisibility,
       status: requestedStatus as RepositoryDocumentStatus,
+      revisionLabel: text(formData, "revisionLabel") || null,
       issuingBody: text(formData, "issuingBody") || null,
       approvalDate: optionalDate(text(formData, "approvalDate")),
       effectiveAt: optionalDate(text(formData, "effectiveAt")),

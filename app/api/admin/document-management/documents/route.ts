@@ -58,6 +58,7 @@ export async function POST(request: Request) {
       visibility: requestedVisibility as RepositoryDocumentVisibility,
       status: requestedStatus as RepositoryDocumentStatus,
       issuingBody: text(formData, "issuingBody") || null,
+      approvalDate: optionalDate(text(formData, "approvalDate")),
       effectiveAt: optionalDate(text(formData, "effectiveAt")),
       expiresAt: optionalDate(text(formData, "expiresAt")),
       resolutionNumber: text(formData, "resolutionNumber") || null,

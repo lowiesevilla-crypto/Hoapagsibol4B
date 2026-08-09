@@ -48,6 +48,7 @@ export async function updateRepositoryDocumentAction(formData: FormData) {
       visibility: visibilityValue as RepositoryDocumentVisibility,
       status: statusValue as RepositoryDocumentStatus,
       issuingBody: clean(formData.get("issuingBody")) || null,
+      approvalDate: optionalDate(formData.get("approvalDate")),
       effectiveAt: optionalDate(formData.get("effectiveAt")),
       expiresAt: optionalDate(formData.get("expiresAt")),
       resolutionNumber: clean(formData.get("resolutionNumber")) || null,

@@ -1,5 +1,6 @@
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
+import { PAYMONGO_PAYMENT_REQUEST_MARKER } from "@/lib/homeowner-payment-flow";
 import { money, monthLabel } from "@/lib/utils";
 
 export type PaymentQuery = {
@@ -162,14 +163,33 @@ function buildOpenBillWhere(tenantId: string, q: string): Prisma.BillWhereInput 
 
 function buildPaymentRequestWhere(tenantId: string, query: PaymentQuery, q: string): Prisma.PaymentRequestWhereInput {
   const range = dateRange(query);
+  const searchFilter: Prisma.PaymentRequestWhereInput | null = q ? {
+    OR: [
+      { id: { contains: q } },
+      { referenceNumber: { contains: q } },
+      { documentRequestId: { contains: q } },
+      { documentRequest: { documentNumber: { contains: q } } },
+      { documentRequest: { definition: { displayName: { contains: q } } } },
+      { bill: { resolutionReference: { contains: q } } },
+      ...homeownerSearch(q),
+    ],
+  } : null;
   return {
     tenantId,
+    AND: [
+      {
+        OR: [
+          { proofContentType: null },
+          { proofContentType: { not: PAYMONGO_PAYMENT_REQUEST_MARKER } },
+        ],
+      },
+      ...(searchFilter ? [searchFilter] : []),
+    ],
     ...(query.homeownerId ? { homeownerId: query.homeownerId } : {}),
     ...(query.status ? { status: query.status as never } : {}),
     ...(query.paymentType ? { type: query.paymentType as never } : {}),
     ...(query.collectionType ? { collectionType: query.collectionType as never } : {}),
     ...(Object.keys(range).length ? { createdAt: range } : {}),
-    ...(q ? { OR: [{ id: { contains: q } }, { referenceNumber: { contains: q } }, { documentRequestId: { contains: q } }, { documentRequest: { documentNumber: { contains: q } } }, { documentRequest: { definition: { displayName: { contains: q } } } }, { bill: { resolutionReference: { contains: q } } }, ...homeownerSearch(q)] } : {}),
   };
 }
 

@@ -51,7 +51,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
   const baseLinks = isSystemAdmin ? systemAdminLinks : adminLinks;
   const linksWithPlatform = user.roles.includes(Role.SUPER_ADMIN) ? [...baseLinks, ...platformLinks] : baseLinks;
   const links = filterAdminLinksByRole(filterLinksByModules(linksWithPlatform, enabledModules), user.roles)
-    .filter((item) => documentManagementEntitlement.enabled || item.href !== "/admin/document-management")
+    .filter((item) => documentManagementEntitlement.enabled || !item.href.startsWith("/admin/document-management"))
     .filter((item) => canAccessPayroll || !["/admin/employees", "/admin/attendance", "/admin/payroll"].includes(item.href));
   const requestBadgeHref = "/admin/documents?section=requests";
   const showDocumentRequestBadge = links.some((item) => item.href === requestBadgeHref);

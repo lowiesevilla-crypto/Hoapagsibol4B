@@ -4,6 +4,8 @@ import type { Readable } from "node:stream";
 import { Permission } from "@/lib/authorization/permissions";
 import { requireUser } from "@/lib/auth";
 import { requireRepositoryPermission } from "@/lib/document-repository/access";
+import { writeRepositoryAudit } from "@/lib/document-repository/audit";
+import { RepositoryAuditAction } from "@/lib/document-repository/constants";
 import {
   assertHomeownerRepositoryDocumentAccess,
   isRepositoryDocumentSafeForDelivery,
@@ -41,6 +43,7 @@ async function findActiveTenantDocument(tenantId: string, documentId: string) {
       contentType: true,
       fileSizeBytes: true,
       checksumSha256: true,
+      currentRevision: true,
     },
   });
   if (!document) throw new Error("Repository document not found in the active tenant.");
@@ -66,6 +69,20 @@ async function openDelivery(input: {
   };
 }
 
+async function auditDelivery(actorId: string, document: Awaited<ReturnType<typeof findActiveTenantDocument>>) {
+  await writeRepositoryAudit({
+    action: RepositoryAuditAction.DOWNLOADED,
+    actorId,
+    documentId: document.id,
+    metadata: {
+      title: document.title,
+      fileName: document.originalFileName,
+      fileSizeBytes: document.fileSizeBytes.toString(),
+      revision: document.currentRevision,
+    },
+  });
+}
+
 /** Authorized tenant staff delivery. Lifecycle may be Draft/Internal, but unsafe malware states are never delivered. */
 export async function openRepositoryDocumentForStaff(documentId: string): Promise<RepositoryDelivery> {
   const actor = await requireUser();
@@ -81,7 +98,9 @@ export async function openRepositoryDocumentForStaff(documentId: string): Promis
   })) {
     throw new Error("This repository file is not safe for delivery.");
   }
-  return openDelivery({ tenantSlug: actor.tenant.slug, document });
+  const delivery = await openDelivery({ tenantSlug: actor.tenant.slug, document });
+  await auditDelivery(actor.id, document);
+  return delivery;
 }
 
 /** Homeowner delivery is restricted to same-tenant, published tenant-public documents that are currently effective and safe. */
@@ -102,5 +121,7 @@ export async function openRepositoryDocumentForHomeowner(documentId: string): Pr
     },
   });
 
-  return openDelivery({ tenantSlug: actor.tenant.slug, document });
+  const delivery = await openDelivery({ tenantSlug: actor.tenant.slug, document });
+  await auditDelivery(actor.id, document);
+  return delivery;
 }

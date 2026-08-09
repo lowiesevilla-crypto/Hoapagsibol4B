@@ -3,6 +3,7 @@ import { requireUser } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { PAYMONGO_PAYMENT_REQUEST_MARKER } from "@/lib/homeowner-payment-flow";
 import { resumeHomeownerPayMongoCheckout } from "@/lib/services/homeowner-paymongo";
+import { reconcileHomeownerPayMongoCheckout } from "@/lib/services/homeowner-paymongo-reconciliation";
 
 export async function GET(request: Request) {
   const user = await requireUser(Role.HOMEOWNER);
@@ -33,6 +34,17 @@ export async function GET(request: Request) {
   }
 
   try {
+    const reconciled = await reconcileHomeownerPayMongoCheckout({
+      requestId: ownedRequest.id,
+      tenantId: user.tenantId,
+      homeownerId: user.homeownerProfile.id,
+    });
+    if (reconciled.state === "paid") {
+      destination.searchParams.set("online", "paid");
+      destination.searchParams.set("message", "Online payment confirmed. Your receipt and account balances were updated automatically.");
+      destination.hash = "payment-status";
+      return Response.redirect(destination, 303);
+    }
     const checkout = await resumeHomeownerPayMongoCheckout(ownedRequest.id, user.tenantId);
     return Response.redirect(checkout.checkoutUrl, 303);
   } catch (error) {

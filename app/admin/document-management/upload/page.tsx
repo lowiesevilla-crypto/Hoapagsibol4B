@@ -63,6 +63,7 @@ export default async function UploadDocumentPage({
           <h3 className="font-black text-ink">Governance metadata</h3>
           <p className="mt-1 text-sm text-slate-500">Complete what applies. These fields make bylaws, policies, memoranda, resolutions, permits, and other official records easier to govern and find.</p>
           <div className="mt-4 grid gap-4 sm:grid-cols-2">
+            <label><span className="label">Initial revision label</span><input className="field" name="revisionLabel" maxLength={60} placeholder="e.g. 2026 Adoption, Rev A" /></label>
             <label><span className="label">Issuing body / committee</span><input className="field" name="issuingBody" maxLength={191} placeholder="Board of Directors" /></label>
             <label><span className="label">Policy owner</span><input className="field" name="policyOwner" maxLength={191} placeholder="Security Committee" /></label>
             <label><span className="label">Resolution number</span><input className="field" name="resolutionNumber" maxLength={120} placeholder="Resolution 2026-014" /></label>

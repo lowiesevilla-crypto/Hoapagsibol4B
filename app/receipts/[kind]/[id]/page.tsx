@@ -15,6 +15,7 @@ type ReceiptView = {
   association: Awaited<ReturnType<typeof getAssociationSettings>>;
   number: string;
   date: Date;
+  transactionDateTime: Date;
   payer: string;
   homeownerId: string | null;
   address: string;
@@ -53,6 +54,7 @@ export default async function ReceiptPage({ params }: { params: Promise<{ kind: 
         association: await getAssociationSettings(item.tenantId),
         number: item.receiptNumber || `AR-${item.id.slice(-8).toUpperCase()}`,
         date: item.collectionDate,
+        transactionDateTime: item.createdAt,
         payer: item.homeowner?.user.name ?? item.contractor?.companyName ?? "Unknown payer",
         homeownerId: item.homeownerId,
         address: item.homeowner?.address ?? item.contractor?.address ?? "",
@@ -83,6 +85,7 @@ export default async function ReceiptPage({ params }: { params: Promise<{ kind: 
   const association = receipt.association;
   const contactLine = [association.contactNumber && `Contact: ${association.contactNumber}`, association.email && `Email: ${association.email}`].filter(Boolean).join(" | ");
   const registrationLine = [association.tinNumber && `TIN: ${association.tinNumber}`, association.secRegistrationNumber && `SEC Reg. No.: ${association.secRegistrationNumber}`].filter(Boolean).join(" | ");
+  const transactionDateTime = formatReceiptDateTime(receipt.transactionDateTime);
 
   return (
     <main className="print-document mx-auto min-h-screen max-w-4xl bg-white p-4 sm:p-8">
@@ -156,11 +159,11 @@ export default async function ReceiptPage({ params }: { params: Promise<{ kind: 
         {(receipt.remarks || receipt.reference) && <div className="mt-4 rounded border border-slate-300 p-3 text-sm">{receipt.remarks && <p><b>Remarks:</b> {receipt.remarks}</p>}{receipt.reference && <p><b>Reference:</b> {receipt.reference}</p>}</div>}
         <div className="mt-6 grid gap-6 sm:grid-cols-2">
           <div><p className="text-xs font-bold uppercase tracking-wider text-slate-500">Payment method</p><p className="mt-2 font-bold">{receipt.method.replaceAll("_", " ")}</p>{receipt.remainingBalance !== null && <p className="mt-3 text-sm"><b>Remaining account balance:</b> {money(receipt.remainingBalance)}</p>}</div>
-          <div className="text-right"><p className="mb-10 text-xs text-slate-500">Received and acknowledged by:</p><div className="border-t border-ink pt-2 text-center text-xs"><b>{receipt.processorName}</b><br />{receipt.processorRole}</div></div>
+          <div className="sm:text-right"><p className="text-xs font-bold uppercase tracking-wider text-slate-500">Transaction date &amp; time</p><p className="mt-2 font-bold">{transactionDateTime}</p></div>
         </div>
-        <div className="mt-10 grid gap-10 text-center text-xs sm:grid-cols-2">
-          <div className="border-t border-ink pt-2"><b>{receipt.payer}</b><br />Payer&apos;s signature / printed name</div>
-          <div className="border-t border-ink pt-2"><b>{receipt.processorName}</b><br />{receipt.processorRole}</div>
+        <div className="mt-12 grid gap-12 text-center text-xs sm:grid-cols-2">
+          <div className="border-t border-ink pt-2"><b>{receipt.payer}</b><br />Payer&apos;s signature / printed name<br /><span className="text-slate-500">Date &amp; Time: {transactionDateTime}</span></div>
+          <div className="border-t border-ink pt-2"><b>{receipt.processorName}</b><br />{receipt.processorRole}<br /><span className="text-slate-500">Processed: {transactionDateTime}</span></div>
         </div>
       </section>
     </main>
@@ -169,4 +172,12 @@ export default async function ReceiptPage({ params }: { params: Promise<{ kind: 
 
 function Field({ label, value }: { label: string; value: string }) {
   return <div className="grid gap-1 sm:grid-cols-[150px_1fr]"><span className="font-bold">{label}:</span><span className="min-h-6 border-b border-ink font-semibold">{value}</span></div>;
+}
+
+function formatReceiptDateTime(value: Date) {
+  return new Intl.DateTimeFormat("en-PH", {
+    dateStyle: "medium",
+    timeStyle: "short",
+    timeZone: "Asia/Manila",
+  }).format(value);
 }

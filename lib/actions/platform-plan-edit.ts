@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { requireUser } from "@/lib/auth";
 import { prisma } from "@/lib/db";
+import { DOCUMENT_MANAGEMENT_FEATURE_CODE } from "@/lib/document-repository/constants";
 
 function clean(value: FormDataEntryValue | null) {
   return String(value || "").trim();
@@ -40,10 +41,20 @@ export async function updateSubscriptionPlanAction(formData: FormData) {
   if (!planId || !code || !name) redirect(`/platform/plans/${encodeURIComponent(planId)}?error=Plan%20code%20and%20name%20are%20required.`);
 
   try {
-    const existing = await prisma.subscriptionPlan.findUnique({
-      where: { id: planId },
-      include: { modules: true },
-    });
+    const [existing, existingDocumentFeature] = await Promise.all([
+      prisma.subscriptionPlan.findUnique({
+        where: { id: planId },
+        include: { modules: true },
+      }),
+      prisma.subscriptionPlanFeatureEntitlement.findUnique({
+        where: {
+          planId_featureCode: {
+            planId,
+            featureCode: DOCUMENT_MANAGEMENT_FEATURE_CODE,
+          },
+        },
+      }),
+    ]);
     if (!existing) throw new Error("Subscription plan not found.");
 
     const trialDays = Number(clean(formData.get("trialDays")) || "0");
@@ -51,6 +62,11 @@ export async function updateSubscriptionPlanAction(formData: FormData) {
     const setupFee = optionalMoney(formData.get("setupFee")) ?? 0;
     const modules = new Set(formData.getAll("modules").map(String));
     const enabledModules = Object.values(TenantModule).filter((module) => modules.has(module));
+    const documentManagementEnabled = formData.get("documentManagementEnabled") === "on";
+    const documentStorageLimitMb = optionalPositiveInt(formData.get("documentStorageLimitMb"));
+    const documentMaxFileSizeMb = optionalPositiveInt(formData.get("documentMaxFileSizeMb"));
+    const retainRevisionBinaries = formData.get("retainRevisionBinaries") === "on";
+    const maxRevisionBinaries = optionalPositiveInt(formData.get("maxRevisionBinaries"));
 
     await prisma.$transaction(async (tx) => {
       await tx.subscriptionPlan.update({
@@ -75,6 +91,30 @@ export async function updateSubscriptionPlanAction(formData: FormData) {
           data: enabledModules.map((module) => ({ planId: existing.id, module, enabled: true })),
         });
       }
+      await tx.subscriptionPlanFeatureEntitlement.upsert({
+        where: {
+          planId_featureCode: {
+            planId: existing.id,
+            featureCode: DOCUMENT_MANAGEMENT_FEATURE_CODE,
+          },
+        },
+        update: {
+          enabled: documentManagementEnabled,
+          storageLimitMb: documentStorageLimitMb,
+          maxFileSizeMb: documentMaxFileSizeMb,
+          retainRevisionBinaries,
+          maxRevisionBinaries,
+        },
+        create: {
+          planId: existing.id,
+          featureCode: DOCUMENT_MANAGEMENT_FEATURE_CODE,
+          enabled: documentManagementEnabled,
+          storageLimitMb: documentStorageLimitMb,
+          maxFileSizeMb: documentMaxFileSizeMb,
+          retainRevisionBinaries,
+          maxRevisionBinaries,
+        },
+      });
       await tx.auditLog.create({
         data: {
           tenantId: actor.tenantId,
@@ -92,6 +132,13 @@ export async function updateSubscriptionPlanAction(formData: FormData) {
               setupFee: existing.setupFee.toString(),
               trialDays: existing.trialDays,
               modules: existing.modules.filter((item) => item.enabled).map((item) => item.module),
+              documentManagement: existingDocumentFeature ? {
+                enabled: existingDocumentFeature.enabled,
+                storageLimitMb: existingDocumentFeature.storageLimitMb,
+                maxFileSizeMb: existingDocumentFeature.maxFileSizeMb,
+                retainRevisionBinaries: existingDocumentFeature.retainRevisionBinaries,
+                maxRevisionBinaries: existingDocumentFeature.maxRevisionBinaries,
+              } : null,
             },
             updated: {
               code,
@@ -101,6 +148,13 @@ export async function updateSubscriptionPlanAction(formData: FormData) {
               setupFee,
               trialDays,
               modules: enabledModules,
+              documentManagement: {
+                enabled: documentManagementEnabled,
+                storageLimitMb: documentStorageLimitMb,
+                maxFileSizeMb: documentMaxFileSizeMb,
+                retainRevisionBinaries,
+                maxRevisionBinaries,
+              },
             },
             historicalAgreementTermsUnaffected: true,
           },
@@ -113,5 +167,6 @@ export async function updateSubscriptionPlanAction(formData: FormData) {
 
   revalidatePath("/platform/plans");
   revalidatePath(`/platform/plans/${planId}`);
+  revalidatePath("/admin/document-management");
   redirect(`/platform/plans/${planId}?success=Subscription%20plan%20updated.`);
 }

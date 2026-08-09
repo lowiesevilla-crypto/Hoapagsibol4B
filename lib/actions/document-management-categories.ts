@@ -25,6 +25,7 @@ function categoriesUrl(type: "success" | "error", message: string) {
 }
 
 export async function createRepositoryCategoryAction(formData: FormData) {
+  let categoryName = "Category";
   try {
     const category = await createRepositoryCategory({
       name: clean(formData.get("name")),
@@ -35,16 +36,18 @@ export async function createRepositoryCategoryAction(formData: FormData) {
       active: true,
       sortOrder: intValue(formData.get("sortOrder"), 500),
     });
-    revalidatePath("/admin/document-management");
-    revalidatePath("/admin/document-management/categories");
-    redirect(categoriesUrl("success", `Category “${category.name}” created.`));
+    categoryName = category.name;
   } catch (error) {
     redirect(categoriesUrl("error", error instanceof Error ? error.message : "Category creation failed."));
   }
+  revalidatePath("/admin/document-management");
+  revalidatePath("/admin/document-management/categories");
+  redirect(categoriesUrl("success", `Category “${categoryName}” created.`));
 }
 
 export async function updateRepositoryCategoryAction(formData: FormData) {
   const categoryId = clean(formData.get("categoryId"));
+  let categoryName = "Category";
   try {
     const category = await updateRepositoryCategory(categoryId, {
       name: clean(formData.get("name")),
@@ -54,24 +57,27 @@ export async function updateRepositoryCategoryAction(formData: FormData) {
       active: formData.get("active") === "on",
       sortOrder: intValue(formData.get("sortOrder"), 500),
     });
-    revalidatePath("/admin/document-management");
-    revalidatePath("/admin/document-management/categories");
-    redirect(categoriesUrl("success", `Category “${category.name}” updated.`));
+    categoryName = category.name;
   } catch (error) {
     redirect(categoriesUrl("error", error instanceof Error ? error.message : "Category update failed."));
   }
+  revalidatePath("/admin/document-management");
+  revalidatePath("/admin/document-management/categories");
+  redirect(categoriesUrl("success", `Category “${categoryName}” updated.`));
 }
 
 export async function deleteRepositoryCategoryAction(formData: FormData) {
   const categoryId = clean(formData.get("categoryId"));
   const confirmation = clean(formData.get("confirmation"));
   if (confirmation !== "DELETE") redirect(categoriesUrl("error", "Type DELETE to confirm category deletion."));
+  let categoryName = "Category";
   try {
     const category = await deleteRepositoryCategory(categoryId);
-    revalidatePath("/admin/document-management");
-    revalidatePath("/admin/document-management/categories");
-    redirect(categoriesUrl("success", `Category “${category.name}” permanently deleted.`));
+    categoryName = category.name;
   } catch (error) {
     redirect(categoriesUrl("error", error instanceof Error ? error.message : "Category deletion failed."));
   }
+  revalidatePath("/admin/document-management");
+  revalidatePath("/admin/document-management/categories");
+  redirect(categoriesUrl("success", `Category “${categoryName}” permanently deleted.`));
 }

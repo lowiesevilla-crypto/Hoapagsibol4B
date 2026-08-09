@@ -2,11 +2,13 @@ import { TenantModule } from "@prisma/client";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { updateTenantAction } from "@/lib/actions/platform";
+import { updateTenantHomeownerConvenienceFeeAction } from "@/lib/actions/platform-homeowner-fee";
 import { updateTenantLogoAction } from "@/lib/actions/tenant-branding";
 import { requireUser } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { PlatformTenantTabs } from "@/components/platform-tenant-tabs";
 import { AssociationLogo } from "@/components/association-logo";
+import { getHomeownerPaymentConfig } from "@/lib/services/homeowner-payment-config";
 import {
   DEFAULT_TENANT_LOGO_URL,
   tenantLogoFileField,
@@ -32,6 +34,7 @@ export default async function TenantDetailPage({
     },
   });
   if (!tenant) notFound();
+  const homeownerPaymentConfig = await getHomeownerPaymentConfig(tenant.id);
 
   await prisma.auditLog.create({
     data: {
@@ -92,6 +95,57 @@ export default async function TenantDetailPage({
           </article>
         ))}
       </section>
+
+      <form id="homeowner-convenience-fee" action={updateTenantHomeownerConvenienceFeeAction} className="mt-6 scroll-mt-28 space-y-5 rounded-2xl border border-blue-200 bg-blue-50/40 p-5 sm:p-7">
+        <input type="hidden" name="tenantId" value={tenant.id} />
+        <div>
+          <p className="text-xs font-black uppercase tracking-[.16em] text-blue-700">HOAHub platform revenue</p>
+          <h2 className="mt-1 text-xl font-black text-slate-950">Homeowner online convenience fee</h2>
+          <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-600">
+            This is a platform-owned fee charged only when homeowners use PayMongo Online. The HOA principal remains the tenant&apos;s money; HOAHub&apos;s fee is routed separately to the platform PayMongo account. Tenant administrators can see this policy but cannot change it.
+          </p>
+        </div>
+
+        <label className="flex items-start gap-3 rounded-2xl border border-blue-100 bg-white p-4">
+          <input className="mt-1 size-5 accent-blue-700" type="checkbox" name="enabled" defaultChecked={homeownerPaymentConfig.platformFeeEnabled} />
+          <span>
+            <span className="block font-black text-slate-950">Charge an HOAHub convenience fee for this tenant</span>
+            <span className="mt-1 block text-sm leading-6 text-slate-600">Disabled means HOAHub adds no platform convenience fee to new homeowner PayMongo checkouts.</span>
+          </span>
+        </label>
+
+        <div className="grid gap-4 md:grid-cols-2">
+          <label>
+            <span className="label">Convenience fee per online payment (PHP)</span>
+            <input
+              className="field"
+              name="amountPesos"
+              type="number"
+              inputMode="decimal"
+              min="0.01"
+              max="10000"
+              step="0.01"
+              defaultValue={homeownerPaymentConfig.platformFeeAmountCentavos > 0 ? homeownerPaymentConfig.platformFeeAmountPesos.toFixed(2) : ""}
+              placeholder="20.00"
+            />
+            <span className="mt-1 block text-xs leading-5 text-slate-500">Fixed amount per successful PayMongo checkout. The amount is stored in centavos to avoid floating-point billing errors.</span>
+          </label>
+          <div className="rounded-2xl border bg-white p-4 text-sm leading-6">
+            <p className="text-xs font-black uppercase tracking-wider text-slate-400">PayMongo split readiness</p>
+            <p className="mt-2 text-slate-700">HOAHub parent organization ID: <b>{homeownerPaymentConfig.paymongoParentAccountIdConfigured ? "Configured" : "Not configured"}</b></p>
+            <p className="text-slate-700">Tenant child organization ID: <b>{homeownerPaymentConfig.paymongoLinkedAccountId ? "Configured" : "Not configured"}</b></p>
+            {homeownerPaymentConfig.platformFeeEnabled && !homeownerPaymentConfig.platformFeeRoutingReady && (
+              <p className="mt-2 rounded-xl bg-amber-50 p-3 font-semibold text-amber-900">The fee policy is saved, but HOAHub will fail closed and refuse fee-bearing checkout creation until the platform parent `org_...` ID is configured on the server.</p>
+            )}
+          </div>
+        </div>
+
+        <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm leading-6 text-amber-950">
+          PayMongo&apos;s own processing fee is separate from the HOAHub convenience fee. When this policy is enabled, HOAHub requests PayMongo to pass the provider processing fee to the payer and keeps it separate from both the tenant HOA principal and HOAHub platform revenue.
+        </div>
+
+        <button className="btn-primary min-h-12 w-full sm:w-auto">Save homeowner convenience fee</button>
+      </form>
 
       <form action={updateTenantLogoAction} className="mt-6 space-y-4 rounded-2xl border bg-white p-5 sm:p-7">
         <input type="hidden" name="tenantId" value={tenant.id} />

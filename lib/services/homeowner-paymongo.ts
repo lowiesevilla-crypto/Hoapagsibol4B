@@ -11,12 +11,19 @@ import {
   checkoutAmounts,
   validatePaidCheckoutAmounts,
 } from "@/lib/homeowner-convenience-fee";
-import { isPayMongoPaymentRequest } from "@/lib/homeowner-payment-flow";
+import {
+  paymongoBatchDescription,
+  paymongoBatchId,
+  paymongoCheckoutSessionId,
+  paymongoCheckoutSessionRemark,
+} from "@/lib/homeowner-paymongo-batch";
+import { isPayMongoPaymentRequest, PAYMONGO_PAYMENT_REQUEST_MARKER } from "@/lib/homeowner-payment-flow";
 import { approvePaymentRequest } from "@/lib/services/payment-requests";
 import { verifyPayMongoWebhookSignature } from "@/lib/services/platform-paymongo";
 import { getHomeownerPaymentConfig, paymongoWebhookSecretSettingKey } from "@/lib/services/homeowner-payment-config";
 
 const CHECKOUT_ENDPOINT = "https://api.paymongo.com/v2/checkout_sessions";
+const CHECKOUT_RESOURCE_ENDPOINT = "https://api.paymongo.com/v1/checkout_sessions";
 const WEBHOOK_ENDPOINT = "https://api.paymongo.com/v1/webhooks";
 const SECRET_KEY_ENV = "PAYMONGO_HOMEOWNER_SECRET_KEY";
 const HOMEOWNER_WEBHOOK_EVENT = "checkout_session.payment.paid";
@@ -78,8 +85,13 @@ type PayMongoWebhookResource = {
 
 type PayMongoCheckoutResource = {
   id?: string;
-  attributes?: { checkout_url?: string };
+  attributes?: {
+    checkout_url?: string;
+    status?: string;
+  };
 };
+
+type CheckoutPaymentRequest = Awaited<ReturnType<typeof loadCheckoutRequest>>;
 
 async function parsePayMongoResponse(response: Response): Promise<PayMongoResponse | null> {
   return response.json().catch(() => null) as Promise<PayMongoResponse | null>;
@@ -87,6 +99,98 @@ async function parsePayMongoResponse(response: Response): Promise<PayMongoRespon
 
 function paymongoError(payload: PayMongoResponse | null, fallback: string) {
   return payload?.errors?.[0]?.detail || fallback;
+}
+
+async function loadCheckoutRequest(requestId: string, tenantId: string) {
+  return prisma.paymentRequest.findFirst({
+    where: { id: requestId, tenantId },
+    include: {
+      homeowner: { include: { user: true } },
+      bill: true,
+      documentRequest: { include: { definition: true } },
+      payment: true,
+      collection: true,
+    },
+  });
+}
+
+function isMonthlyBatchLeader(request: NonNullable<CheckoutPaymentRequest>) {
+  return request.type === PaymentRequestType.MONTHLY_DUES
+    && request.description === paymongoBatchDescription(request.id);
+}
+
+async function resolveBatchLeader(request: NonNullable<CheckoutPaymentRequest>) {
+  const batchId = paymongoBatchId(request.description, request.id);
+  if (batchId === request.id) return request;
+  const leader = await loadCheckoutRequest(batchId, request.tenantId);
+  if (!leader || leader.homeownerId !== request.homeownerId || !isPayMongoPaymentRequest(leader)) {
+    throw new Error("The online payment batch leader could not be resolved.");
+  }
+  return leader;
+}
+
+async function loadPaymentBatch(leader: NonNullable<CheckoutPaymentRequest>) {
+  if (!isMonthlyBatchLeader(leader)) return [leader];
+  const requests = await prisma.paymentRequest.findMany({
+    where: {
+      tenantId: leader.tenantId,
+      homeownerId: leader.homeownerId,
+      type: PaymentRequestType.MONTHLY_DUES,
+      proofContentType: PAYMONGO_PAYMENT_REQUEST_MARKER,
+      description: paymongoBatchDescription(leader.id),
+    },
+    include: {
+      homeowner: { include: { user: true } },
+      bill: true,
+      documentRequest: { include: { definition: true } },
+      payment: true,
+      collection: true,
+    },
+    orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+  });
+  if (!requests.length || !requests.some((request) => request.id === leader.id)) {
+    throw new Error("The online payment batch is incomplete.");
+  }
+  return requests;
+}
+
+function batchPrincipalAmount(requests: Array<NonNullable<CheckoutPaymentRequest>>) {
+  const centavos = requests.reduce((sum, request) => sum + Math.round(Number(request.amount) * 100), 0);
+  if (!Number.isSafeInteger(centavos) || centavos <= 0) throw new Error("Payment amount is invalid.");
+  return centavos / 100;
+}
+
+async function checkoutSessionIdForRequest(request: NonNullable<CheckoutPaymentRequest>) {
+  const direct = paymongoCheckoutSessionId(request.reviewRemarks);
+  if (direct) return direct;
+  const audit = await prisma.auditLog.findFirst({
+    where: {
+      tenantId: request.tenantId,
+      entityType: "PaymentRequest",
+      entityId: request.id,
+      action: "CREATE_PAYMONGO_HOMEOWNER_CHECKOUT",
+      correlationId: { not: null },
+    },
+    orderBy: { createdAt: "desc" },
+    select: { correlationId: true },
+  });
+  const recovered = audit?.correlationId?.trim() || "";
+  return recovered.startsWith("cs_") ? recovered : "";
+}
+
+async function retrieveCheckoutSession(checkoutId: string, accountId: string) {
+  const response = await fetch(`${CHECKOUT_RESOURCE_ENDPOINT}/${encodeURIComponent(checkoutId)}`, {
+    headers: paymongoHeaders(accountId),
+    cache: "no-store",
+  });
+  const payload = await parsePayMongoResponse(response);
+  const checkout = payload?.data as PayMongoCheckoutResource | undefined;
+  if (!response.ok || !checkout?.id) throw new Error(paymongoError(payload, "Unable to retrieve the existing online checkout."));
+  return {
+    checkoutId: checkout.id,
+    checkoutUrl: checkout.attributes?.checkout_url?.trim() || "",
+    status: checkout.attributes?.status?.trim().toLowerCase() || "",
+  };
 }
 
 export async function ensureHomeownerPayMongoWebhook(accountId: string) {
@@ -189,25 +293,37 @@ async function resolveWebhookTenant(accountId: string) {
 }
 
 export async function createHomeownerPayMongoCheckout(requestId: string, tenantId: string) {
-  const request = await prisma.paymentRequest.findFirst({
-    where: { id: requestId, tenantId },
-    include: {
-      homeowner: { include: { user: true } },
-      bill: true,
-      documentRequest: { include: { definition: true } },
-    },
-  });
-  if (!request || !isPayMongoPaymentRequest(request)) throw new Error("PayMongo payment request was not found.");
-  if (request.status !== PaymentRequestStatus.PENDING_REVIEW) throw new Error("This PayMongo payment request is no longer pending.");
-  if (!request.referenceNumber) throw new Error("PayMongo payment request is missing its checkout reference.");
+  const initialRequest = await loadCheckoutRequest(requestId, tenantId);
+  if (!initialRequest || !isPayMongoPaymentRequest(initialRequest)) throw new Error("PayMongo payment request was not found.");
+  const request = await resolveBatchLeader(initialRequest);
+  if (request.status !== PaymentRequestStatus.PENDING_REVIEW) throw new Error("This online payment request is no longer awaiting payment.");
+  if (!request.referenceNumber) throw new Error("Online payment request is missing its checkout reference.");
 
   const tenant = await prisma.tenant.findUnique({ where: { id: tenantId }, select: { name: true } });
-  if (!tenant) throw new Error("Tenant was not found for PayMongo checkout.");
+  if (!tenant) throw new Error("Tenant was not found for online checkout.");
   const linkedAccountId = request.proofFileName?.trim();
   if (!linkedAccountId || !linkedAccountId.startsWith("org_")) throw new Error("This tenant does not have a valid PayMongo linked merchant account configured.");
   await requireTenantWebhookSecret(request.tenantId, linkedAccountId);
-  const principalAmount = Number(request.amount);
-  if (!Number.isFinite(principalAmount) || principalAmount <= 0) throw new Error("Payment amount is invalid.");
+
+  const existingCheckoutId = await checkoutSessionIdForRequest(request);
+  if (existingCheckoutId) {
+    const existing = await retrieveCheckoutSession(existingCheckoutId, linkedAccountId);
+    if (existing.status === "active" && existing.checkoutUrl) {
+      if (!paymongoCheckoutSessionId(request.reviewRemarks)) {
+        await prisma.paymentRequest.update({ where: { id: request.id }, data: { reviewRemarks: paymongoCheckoutSessionRemark(existing.checkoutId) } });
+      }
+      return { checkoutId: existing.checkoutId, checkoutUrl: existing.checkoutUrl, resumed: true as const };
+    }
+    if (existing.status && existing.status !== "expired") {
+      throw new Error("The existing online checkout is not available for continuation.");
+    }
+    await prisma.paymentRequest.update({ where: { id: request.id }, data: { reviewRemarks: null } });
+  }
+
+  const batch = await loadPaymentBatch(request);
+  const payableBatch = batch.filter((item) => item.status === PaymentRequestStatus.PENDING_REVIEW);
+  if (payableBatch.length !== batch.length) throw new Error("One or more billing items in this checkout are no longer awaiting payment.");
+  const principalAmount = batchPrincipalAmount(payableBatch);
 
   const config = await getHomeownerPaymentConfig(tenantId);
   const configuredFeeCentavos = config.platformFeeEnabled ? config.platformFeeAmountCentavos : 0;
@@ -224,16 +340,16 @@ export async function createHomeownerPayMongoCheckout(requestId: string, tenantI
   successUrl.searchParams.set("online", "confirming");
   const cancelUrl = new URL("/portal/pay/paymongo-cancel", getAppUrl());
   cancelUrl.searchParams.set("requestId", request.id);
-  const purpose = paymentPurpose(request);
   const idempotencyKey = `hoahub-homeowner-${tenantId}-${request.id}-fee${amounts.platformFeeCentavos}-pof${passOnProcessingFees ? 1 : 0}`.slice(0, 255);
+  const principalLineItems = payableBatch.map((item) => ({
+    name: paymentPurpose(item),
+    description: `${tenant.name} homeowner payment`,
+    amount: Math.round(Number(item.amount) * 100),
+    currency: "PHP",
+    quantity: 1,
+  }));
   const lineItems = [
-    {
-      name: purpose,
-      description: `${tenant.name} homeowner payment`,
-      amount: amounts.principalCentavos,
-      currency: "PHP",
-      quantity: 1,
-    },
+    ...principalLineItems,
     ...(amounts.platformFeeCentavos > 0 ? [{
       name: HOMEOWNER_PLATFORM_FEE_LABEL,
       description: "HOAHub online payment service fee",
@@ -270,6 +386,7 @@ export async function createHomeownerPayMongoCheckout(requestId: string, tenantI
             tenantId: request.tenantId,
             homeownerId: request.homeownerId,
             paymentRequestId: request.id,
+            paymentRequestCount: String(payableBatch.length),
             principalAmountCentavos: String(amounts.principalCentavos),
             platformFeeCentavos: String(amounts.platformFeeCentavos),
             baseChargeCentavos: String(amounts.baseChargeCentavos),
@@ -290,6 +407,10 @@ export async function createHomeownerPayMongoCheckout(requestId: string, tenantI
     throw new Error(paymongoError(payload, "PayMongo checkout could not be created."));
   }
 
+  await prisma.paymentRequest.update({
+    where: { id: request.id },
+    data: { reviewRemarks: paymongoCheckoutSessionRemark(checkoutId) },
+  });
   await prisma.auditLog.create({
     data: {
       tenantId: request.tenantId,
@@ -302,6 +423,8 @@ export async function createHomeownerPayMongoCheckout(requestId: string, tenantI
       metadata: {
         checkoutId,
         referenceNumber: request.referenceNumber,
+        paymentRequestIds: payableBatch.map((item) => item.id),
+        paymentRequestCount: payableBatch.length,
         hoaPrincipalAmount: principalAmount,
         platformConvenienceFeeAmount: amounts.platformFeeCentavos / 100,
         checkoutBaseAmount: amounts.baseChargeCentavos / 100,
@@ -313,7 +436,36 @@ export async function createHomeownerPayMongoCheckout(requestId: string, tenantI
     },
   });
 
-  return { checkoutId, checkoutUrl };
+  return { checkoutId, checkoutUrl, resumed: false as const };
+}
+
+export async function resumeHomeownerPayMongoCheckout(requestId: string, tenantId: string) {
+  return createHomeownerPayMongoCheckout(requestId, tenantId);
+}
+
+export async function expireHomeownerPayMongoCheckout(requestId: string, tenantId: string) {
+  const initialRequest = await loadCheckoutRequest(requestId, tenantId);
+  if (!initialRequest || !isPayMongoPaymentRequest(initialRequest)) throw new Error("Online payment request was not found.");
+  const request = await resolveBatchLeader(initialRequest);
+  if (request.status !== PaymentRequestStatus.PENDING_REVIEW) throw new Error("This online payment is no longer awaiting payment.");
+  const linkedAccountId = request.proofFileName?.trim() || "";
+  if (!linkedAccountId.startsWith("org_")) throw new Error("The tenant payment account is invalid.");
+  const checkoutId = await checkoutSessionIdForRequest(request);
+  if (!checkoutId) throw new Error("The active online checkout could not be identified safely.");
+  const existing = await retrieveCheckoutSession(checkoutId, linkedAccountId);
+  if (existing.status !== "expired") {
+    const response = await fetch(`${CHECKOUT_RESOURCE_ENDPOINT}/${encodeURIComponent(checkoutId)}/expire`, {
+      method: "POST",
+      headers: paymongoHeaders(linkedAccountId),
+    });
+    const payload = await parsePayMongoResponse(response);
+    if (!response.ok) throw new Error(paymongoError(payload, "Unable to cancel the active online checkout safely."));
+  }
+  return {
+    leaderRequestId: request.id,
+    batchDescription: isMonthlyBatchLeader(request) ? paymongoBatchDescription(request.id) : null,
+    checkoutId,
+  };
 }
 
 type NormalizedCheckoutEvent = {
@@ -374,21 +526,23 @@ export async function processHomeownerPayMongoWebhook(rawBody: string, signature
     return { ok: true as const, ignored: true, eventId: event.eventId };
   }
   const requestId = referenceNumber.slice(4);
-  const request = await prisma.paymentRequest.findUnique({
-    where: { id: requestId },
-    include: { payment: true, collection: true },
-  });
-  if (!request || request.referenceNumber !== referenceNumber || !isPayMongoPaymentRequest(request)) {
+  const initialRequest = await loadCheckoutRequest(requestId, webhookContext.tenantId);
+  if (!initialRequest || initialRequest.referenceNumber !== referenceNumber || !isPayMongoPaymentRequest(initialRequest)) {
     return { ok: false as const, status: 404, message: "Homeowner PayMongo payment request was not found." };
   }
+  const request = await resolveBatchLeader(initialRequest);
+  const batch = await loadPaymentBatch(request);
   const linkedAccountId = request.proofFileName?.trim() || "";
   if (request.tenantId !== webhookContext.tenantId || linkedAccountId !== event.organizationId) {
     return { ok: false as const, status: 400, message: "PayMongo child account does not match the tenant payment request." };
   }
-  if (request.status === PaymentRequestStatus.APPROVED) {
+  if (batch.some((item) => item.tenantId !== request.tenantId || item.homeownerId !== request.homeownerId || item.proofFileName?.trim() !== linkedAccountId)) {
+    return { ok: false as const, status: 400, message: "Online payment batch tenant or merchant context is inconsistent." };
+  }
+  if (batch.every((item) => item.status === PaymentRequestStatus.APPROVED)) {
     return { ok: true as const, duplicate: true, eventId: event.eventId, paymentRequestId: request.id };
   }
-  if (![PaymentRequestStatus.PENDING_REVIEW, PaymentRequestStatus.REJECTED].includes(request.status)) {
+  if (batch.some((item) => ![PaymentRequestStatus.PENDING_REVIEW, PaymentRequestStatus.REJECTED, PaymentRequestStatus.APPROVED].includes(item.status))) {
     return { ok: true as const, ignored: true, eventId: event.eventId, paymentRequestId: request.id };
   }
 
@@ -399,13 +553,15 @@ export async function processHomeownerPayMongoWebhook(rawBody: string, signature
   const paymentAttributes = (paidPayment?.attributes || {}) as Record<string, unknown>;
   const gatewayPaymentId = String(paidPayment?.id || "").trim();
   const checkoutId = String(event.session.id || "").trim();
+  const storedCheckoutId = await checkoutSessionIdForRequest(request);
   const paidCentavos = Number(paymentAttributes.amount || 0);
-  const requestPrincipalCentavos = Math.round(Number(request.amount) * 100);
+  const requestPrincipalCentavos = Math.round(batchPrincipalAmount(batch) * 100);
   const currency = String(paymentAttributes.currency || "PHP").toUpperCase();
   const paidAtSeconds = Number(paymentAttributes.paid_at || 0);
   const paidAt = Number.isFinite(paidAtSeconds) && paidAtSeconds > 0 ? new Date(paidAtSeconds * 1000) : new Date();
   paidAt.setUTCHours(0, 0, 0, 0);
   if (!gatewayPaymentId || !checkoutId) return { ok: false as const, status: 400, message: "PayMongo webhook is missing payment identifiers." };
+  if (storedCheckoutId && storedCheckoutId !== checkoutId) return { ok: false as const, status: 400, message: "PayMongo checkout session does not match the homeowner payment batch." };
   if (currency !== "PHP") return { ok: false as const, status: 400, message: "PayMongo currency does not match the HOA payment currency." };
 
   let confirmedAmounts: ReturnType<typeof validatePaidCheckoutAmounts>;
@@ -420,17 +576,20 @@ export async function processHomeownerPayMongoWebhook(rawBody: string, signature
   }
 
   try {
-    await prisma.paymentRequest.update({
-      where: { id: request.id },
-      data: {
-        status: PaymentRequestStatus.PENDING_REVIEW,
-        method: paymentMethodFromSource(paymentAttributes.source),
-        paymentDate: paidAt,
-        reviewRemarks: null,
-        reviewedAt: null,
-        reviewedById: null,
-      },
-    });
+    const pendingBatch = batch.filter((item) => item.status !== PaymentRequestStatus.APPROVED);
+    for (const item of pendingBatch) {
+      await prisma.paymentRequest.update({
+        where: { id: item.id },
+        data: {
+          status: PaymentRequestStatus.PENDING_REVIEW,
+          method: paymentMethodFromSource(paymentAttributes.source),
+          paymentDate: paidAt,
+          reviewRemarks: null,
+          reviewedAt: null,
+          reviewedById: null,
+        },
+      });
+    }
     await prisma.auditLog.create({
       data: {
         tenantId: request.tenantId,
@@ -444,6 +603,8 @@ export async function processHomeownerPayMongoWebhook(rawBody: string, signature
           eventId: event.eventId,
           checkoutId,
           gatewayPaymentId,
+          paymentRequestIds: batch.map((item) => item.id),
+          paymentRequestCount: batch.length,
           hoaPrincipalAmount: confirmedAmounts.principalCentavos / 100,
           platformConvenienceFeeAmount: confirmedAmounts.platformFeeCentavos / 100,
           paymongoProcessingFeeAmount: confirmedAmounts.providerFeeCentavos / 100,
@@ -458,17 +619,22 @@ export async function processHomeownerPayMongoWebhook(rawBody: string, signature
         },
       },
     });
-    await approvePaymentRequest(
-      request.id,
-      undefined,
-      "Automatically confirmed by PayMongo.",
-      request.tenantId,
-      { allowGatewayConfirmation: true },
-    );
-    return { ok: true as const, eventId: event.eventId, paymentRequestId: request.id };
+    for (const item of pendingBatch) {
+      await approvePaymentRequest(
+        item.id,
+        undefined,
+        "Automatically confirmed by PayMongo.",
+        item.tenantId,
+        { allowGatewayConfirmation: true },
+      );
+    }
+    return { ok: true as const, eventId: event.eventId, paymentRequestId: request.id, paymentRequestCount: batch.length };
   } catch (error) {
-    const latest = await prisma.paymentRequest.findUnique({ where: { id: request.id }, select: { status: true } });
-    if (latest?.status === PaymentRequestStatus.APPROVED) {
+    const latest = await prisma.paymentRequest.findMany({
+      where: { id: { in: batch.map((item) => item.id) }, tenantId: request.tenantId },
+      select: { id: true, status: true },
+    });
+    if (latest.length === batch.length && latest.every((item) => item.status === PaymentRequestStatus.APPROVED)) {
       return { ok: true as const, duplicate: true, eventId: event.eventId, paymentRequestId: request.id };
     }
     await prisma.auditLog.create({
@@ -485,6 +651,7 @@ export async function processHomeownerPayMongoWebhook(rawBody: string, signature
           checkoutId,
           gatewayPaymentId,
           linkedAccountId,
+          paymentRequestIds: batch.map((item) => item.id),
           hoaPrincipalAmount: confirmedAmounts.principalCentavos / 100,
           platformConvenienceFeeAmount: confirmedAmounts.platformFeeCentavos / 100,
           paymongoProcessingFeeAmount: confirmedAmounts.providerFeeCentavos / 100,

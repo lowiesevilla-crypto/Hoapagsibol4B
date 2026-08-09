@@ -3,9 +3,11 @@ import "server-only";
 import type { PaymentStatus } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { homeownerAccountNumber, homeownerPropertyLabel } from "@/lib/homeowner-account";
+import { isPayMongoPaymentRequest } from "@/lib/homeowner-payment-flow";
 import { paymentCoverageDisplay } from "@/lib/payment-coverage";
 import { paymentAppliedAmount, paymentUnappliedCredit, totalUnappliedCredit } from "@/lib/payment-credit";
 import { paymentProcessorIdentity } from "@/lib/payment-processor";
+import { PAYMONGO_RECEIPT_DETAILS_ACTION } from "@/lib/paymongo-receipt-details";
 import { getAssociationSettings } from "@/lib/system-settings";
 import { monthLabel } from "@/lib/utils";
 
@@ -15,6 +17,7 @@ export type PaymentReceiptViewModel = {
   homeownerId: string;
   number: string;
   date: Date;
+  transactionDateTime: Date;
   payer: string;
   address: string;
   property: string;
@@ -42,6 +45,7 @@ export async function getPaymentReceiptData(id: string, authorizedTenantId: stri
       bill: { include: { homeowner: true } },
       allocations: { include: { bill: { include: { homeowner: true } } }, orderBy: { bill: { billingMonth: "asc" } } },
       processedBy: { include: { employeeProfile: true } },
+      paymentRequest: true,
     },
   });
   if (!payment) return null;
@@ -77,8 +81,9 @@ export async function getPaymentReceiptData(id: string, authorizedTenantId: stri
     return [`${property.block}\u0000${property.lot}\u0000${property.address}`, property] as const;
   })).values()];
   const properties = coveredProperties.length ? coveredProperties : [payment.homeowner];
+  const payMongoRequestId = payment.paymentRequest && isPayMongoPaymentRequest(payment.paymentRequest) ? payment.paymentRequest.id : null;
 
-  const [outstanding, activePayments, association, audit] = await Promise.all([
+  const [outstanding, activePayments, association, audit, payMongoAudit] = await Promise.all([
     prisma.bill.aggregate({
       where: { tenantId: payment.tenantId, homeownerId: payment.homeownerId, archivedAt: null, balance: { gt: 0 } },
       _sum: { balance: true },
@@ -91,10 +96,34 @@ export async function getPaymentReceiptData(id: string, authorizedTenantId: stri
     prisma.auditLog.findFirst({
       where: { tenantId: payment.tenantId, entityId: payment.id, action: "RECORD_PAYMENT_TRANSACTION" },
       orderBy: { createdAt: "asc" },
-      select: { metadata: true },
+      select: { metadata: true, createdAt: true },
     }),
+    payMongoRequestId
+      ? prisma.auditLog.findFirst({
+          where: {
+            tenantId: payment.tenantId,
+            entityType: "PaymentRequest",
+            entityId: payMongoRequestId,
+            action: PAYMONGO_RECEIPT_DETAILS_ACTION,
+          },
+          orderBy: { createdAt: "desc" },
+          select: { metadata: true, createdAt: true },
+        })
+      : Promise.resolve(null),
   ]);
-  const processor = paymentProcessorIdentity(payment.processedBy, audit?.metadata);
+
+  const payMongoMetadata = objectValue(payMongoAudit?.metadata);
+  const payMongoChannel = stringValue(payMongoMetadata?.paymentChannel);
+  const isPayMongo = Boolean(payMongoRequestId);
+  const processor = isPayMongo
+    ? {
+        name: payMongoChannel || (payment.method === "GCASH" ? "GCash" : "PayMongo"),
+        role: "Online Payment Processor",
+      }
+    : paymentProcessorIdentity(payment.processedBy, audit?.metadata);
+  const transactionDateTime = isPayMongo
+    ? dateValue(payMongoMetadata?.paidAt) || payment.createdAt
+    : dateValue(objectValue(audit?.metadata)?.timestamp) || audit?.createdAt || payment.createdAt;
 
   return {
     association,
@@ -102,6 +131,7 @@ export async function getPaymentReceiptData(id: string, authorizedTenantId: stri
     homeownerId: payment.homeownerId,
     number: payment.receiptNumber || "Legacy receipt",
     date: payment.paymentDate,
+    transactionDateTime,
     payer: payment.homeowner.user.name,
     address: properties.map((property) => property.address).filter((value, index, values) => values.indexOf(value) === index).join("; "),
     property: properties.length === 1
@@ -122,4 +152,18 @@ export async function getPaymentReceiptData(id: string, authorizedTenantId: stri
     homeownerCreditBalance: totalUnappliedCredit(activePayments),
     remainingBalance: Number(outstanding._sum.balance ?? 0),
   };
+}
+
+function objectValue(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : null;
+}
+
+function stringValue(value: unknown) {
+  return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
+function dateValue(value: unknown) {
+  if (typeof value !== "string" || !value.trim()) return null;
+  const parsed = new Date(value);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
 }

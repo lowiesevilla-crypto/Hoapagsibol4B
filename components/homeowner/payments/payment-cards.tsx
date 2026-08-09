@@ -33,8 +33,9 @@ export function PaymentAreaNavigation({ active }: { active: "pay" | "billing" | 
       <div className="grid grid-cols-3 gap-2 sm:grid-cols-5">
         {items.map(({ id, href, label, icon: Icon }) => {
           const selected = active === id;
+          const destination = id === "pay" && selected ? "#qr-payment" : href;
           return (
-            <Link key={id} href={href} aria-current={selected ? "page" : undefined} className={`inline-flex min-h-12 min-w-0 items-center justify-center gap-1 rounded-2xl border px-2 text-xs font-black transition focus-visible:outline focus-visible:outline-4 focus-visible:outline-pine-500/20 sm:gap-2 sm:px-4 sm:text-sm ${selected ? "border-pine-700 bg-pine-700 text-white shadow-brand" : "border-pine-100 bg-white text-slate-600 hover:bg-pine-50 hover:text-pine-700"}`}>
+            <Link key={id} href={destination} aria-current={selected ? "page" : undefined} className={`inline-flex min-h-12 min-w-0 items-center justify-center gap-1 rounded-2xl border px-2 text-xs font-black transition focus-visible:outline focus-visible:outline-4 focus-visible:outline-pine-500/20 sm:gap-2 sm:px-4 sm:text-sm ${selected ? "border-pine-700 bg-pine-700 text-white shadow-brand" : "border-pine-100 bg-white text-slate-600 hover:bg-pine-50 hover:text-pine-700"}`}>
               <Icon className="size-4" aria-hidden="true" />
               <span className="truncate">{label}</span>
             </Link>
@@ -86,7 +87,7 @@ export function PaymentHeroCard({
         <PaymentMiniStat label="Oldest unpaid coverage" value={oldestCoverage || "None"} />
         <PaymentMiniStat label="Due date" value={dueDate || "Not due"} />
         <PaymentMiniStat label="Available credit" value={availableCredit} />
-        <PaymentMiniStat label="Pending verification" value={pendingSummary} />
+        <PaymentMiniStat label="Payments in progress" value={pendingSummary} />
       </dl>
       <div className="mt-4 rounded-2xl bg-white/70 p-3 text-sm font-semibold text-slate-700">
         Recent successful payment: <span className="font-black text-ink">{recentPayment}</span>
@@ -149,7 +150,7 @@ export function UnpaidBillingCard({
               <h3 className="break-words font-black text-ink">{title}</h3>
               <p className="mt-1 text-sm font-semibold text-slate-500">{coverage}</p>
             </div>
-            <StatusPill label={pending ? "Pending Verification" : status} tone={pending ? "warning" : "info"} />
+            <StatusPill label={pending ? "Payment In Progress" : status} tone={pending ? "warning" : "info"} />
           </div>
           <dl className="mt-4 grid grid-cols-2 gap-3 text-sm">
             <CompactField label="Due date" value={dueDate} />
@@ -157,7 +158,7 @@ export function UnpaidBillingCard({
             <CompactField label="Paid / applied" value={paidAmount} />
             <CompactField label="Remaining" value={balance} strong />
           </dl>
-          {selectable && <p className="mt-3 text-xs font-bold text-pine-700">{pending ? "Selection disabled while verification is pending." : "Selectable in the QR payment form below."}</p>}
+          {selectable && <p className="mt-3 text-xs font-bold text-pine-700">{pending ? "Selection disabled while a payment is in progress. Continue it from Payment Status." : "Selectable in the payment form below."}</p>}
         </div>
       </div>
     </article>
@@ -185,6 +186,18 @@ export function PaymentRequestStatusCard({
   remarks?: string | null;
   proofLabel?: string;
 }) {
+  const online = method === "PayMongo Online";
+  const awaitingPayment = online && (status === "Awaiting PayMongo" || status === "Awaiting Payment");
+  const rejectedOnline = online && status === "REJECTED";
+  const cancelledOnline = rejectedOnline && /cancel/i.test(remarks || "");
+  const displayStatus = awaitingPayment
+    ? "Awaiting Payment"
+    : rejectedOnline
+      ? cancelledOnline ? "Payment Cancelled" : "Payment Unsuccessful"
+      : status;
+  const requestId = reference.startsWith("HOP-") ? reference.slice(4) : "";
+  const safeRemarks = remarks?.startsWith("PAYMONGO_CHECKOUT_SESSION:") ? null : remarks;
+
   return (
     <article className="rounded-3xl border border-pine-100 bg-white p-4 shadow-sm">
       <div className="flex items-start gap-3">
@@ -195,15 +208,17 @@ export function PaymentRequestStatusCard({
               <h3 className="break-words font-black text-ink">{title}</h3>
               <p className="mt-1 text-xs font-bold text-slate-500">{meta}</p>
             </div>
-            <StatusPill label={status} tone={statusTone} />
+            <StatusPill label={displayStatus} tone={statusTone} />
           </div>
           <dl className="mt-4 grid grid-cols-2 gap-3 text-sm">
             <CompactField label="Amount" value={amount} strong />
-            <CompactField label="Method" value={method} />
+            <CompactField label="Method" value={online ? "Online Payment" : method} />
             <CompactField label="Reference" value={reference} />
             <CompactField label="Proof" value={proofLabel || "No attachment"} />
           </dl>
-          {remarks && <p className="mt-3 rounded-2xl bg-slate-50 p-3 text-sm font-semibold text-slate-600">{remarks}</p>}
+          {safeRemarks && <p className="mt-3 rounded-2xl bg-slate-50 p-3 text-sm font-semibold text-slate-600">{safeRemarks}</p>}
+          {awaitingPayment && requestId && <Link href={`/portal/pay/paymongo-resume?requestId=${encodeURIComponent(requestId)}`} className="mt-3 inline-flex min-h-11 w-full items-center justify-center rounded-2xl bg-blue-700 px-4 text-sm font-black text-white shadow-sm sm:w-auto">Continue Payment</Link>}
+          {rejectedOnline && <Link href="/portal/pay#qr-payment" className="mt-3 inline-flex min-h-11 w-full items-center justify-center rounded-2xl bg-pine-700 px-4 text-sm font-black text-white shadow-sm sm:w-auto">Start New Payment</Link>}
         </div>
       </div>
     </article>

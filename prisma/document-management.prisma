@@ -29,15 +29,15 @@ enum RepositoryMalwareScanStatus {
 /// Feature codes are strings so future capabilities (for example AI_ASSISTANCE)
 /// can use the same entitlement mechanism without enum/schema churn.
 model SubscriptionPlanFeatureEntitlement {
-  planId                  String
-  featureCode             String   @db.VarChar(80)
-  enabled                 Boolean  @default(false)
-  storageLimitMb          Int?
-  maxFileSizeMb           Int?     @default(25)
-  retainRevisionBinaries  Boolean  @default(false)
-  maxRevisionBinaries     Int?
-  createdAt               DateTime @default(now())
-  updatedAt               DateTime @updatedAt
+  planId                 String
+  featureCode            String   @db.VarChar(80)
+  enabled                Boolean  @default(false)
+  storageLimitMb         Int?
+  maxFileSizeMb          Int?     @default(25)
+  retainRevisionBinaries Boolean  @default(false)
+  maxRevisionBinaries    Int?
+  createdAt              DateTime @default(now())
+  updatedAt              DateTime @updatedAt
 
   @@id([planId, featureCode])
   @@index([featureCode, enabled])
@@ -47,16 +47,16 @@ model SubscriptionPlanFeatureEntitlement {
 /// active subscription plan. Nullable override fields intentionally preserve
 /// plan inheritance.
 model TenantFeatureEntitlement {
-  tenantId                       String
-  featureCode                    String   @db.VarChar(80)
-  enabledOverride                Boolean?
-  storageLimitMbOverride         Int?
-  maxFileSizeMbOverride          Int?
-  retainRevisionBinariesOverride Boolean?
-  maxRevisionBinariesOverride    Int?
-  updatedById                    String?
-  createdAt                      DateTime @default(now())
-  updatedAt                      DateTime @updatedAt
+  tenantId                        String
+  featureCode                     String   @db.VarChar(80)
+  enabledOverride                 Boolean?
+  storageLimitMbOverride          Int?
+  maxFileSizeMbOverride           Int?
+  retainRevisionBinariesOverride  Boolean?
+  maxRevisionBinariesOverride     Int?
+  updatedById                     String?
+  createdAt                       DateTime @default(now())
+  updatedAt                       DateTime @updatedAt
 
   @@id([tenantId, featureCode])
   @@index([tenantId, updatedAt])
@@ -68,6 +68,7 @@ model RepositoryDocumentCategory {
   tenantId             String
   code                 String               @db.VarChar(100)
   name                 String
+  categoryGroup        String               @db.VarChar(60)
   description          String?              @db.Text
   active               Boolean              @default(true)
   sortOrder            Int                  @default(0)
@@ -81,44 +82,44 @@ model RepositoryDocumentCategory {
   @@unique([tenantId, id])
   @@unique([tenantId, code])
   @@index([tenantId, active, sortOrder])
-  @@index([tenantId, governanceControlled, active])
+  @@index([tenantId, governanceControlled, active], map: "RepositoryCategory_governance_idx")
 }
 
 model RepositoryDocument {
-  id                String                           @id @default(cuid())
-  tenantId          String
-  categoryId        String
-  title             String
-  description       String?                          @db.Text
-  documentReference String?                          @db.VarChar(120)
-  visibility        RepositoryDocumentVisibility     @default(INTERNAL)
-  status            RepositoryDocumentStatus         @default(DRAFT)
-  currentRevision   Int                              @default(1)
-  revisionPolicy    RepositoryDocumentRevisionPolicy @default(REPLACE_CURRENT)
-  originalFileName  String
-  storageKey        String                           @db.VarChar(500)
-  contentType       String                           @db.VarChar(160)
-  fileExtension     String                           @db.VarChar(20)
-  fileSizeBytes     BigInt
-  checksumSha256    String                           @db.VarChar(64)
-  malwareScanStatus RepositoryMalwareScanStatus      @default(NOT_CONFIGURED)
-  issuingBody       String?
-  approvalDate      DateTime?                        @db.Date
-  effectiveAt       DateTime?
-  expiresAt         DateTime?
-  publishedAt       DateTime?
-  resolutionNumber  String?                          @db.VarChar(120)
-  memoNumber        String?                          @db.VarChar(120)
-  policyOwner       String?
-  remarks           String?                          @db.Text
-  searchableKeywords String?                         @db.Text
-  uploadedById      String
-  updatedById       String?
-  category          RepositoryDocumentCategory       @relation(fields: [tenantId, categoryId], references: [tenantId, id], onDelete: Restrict, onUpdate: Cascade)
-  revisions         RepositoryDocumentRevision[]
-  tagAssignments    RepositoryDocumentTagAssignment[]
-  createdAt         DateTime                         @default(now())
-  updatedAt         DateTime                         @updatedAt
+  id                 String                           @id @default(cuid())
+  tenantId           String
+  categoryId         String
+  title              String
+  description        String?                          @db.Text
+  documentReference  String?                          @db.VarChar(120)
+  visibility         RepositoryDocumentVisibility     @default(INTERNAL)
+  status             RepositoryDocumentStatus         @default(DRAFT)
+  currentRevision    Int                              @default(1)
+  revisionPolicy     RepositoryDocumentRevisionPolicy @default(REPLACE_CURRENT)
+  originalFileName   String
+  storageKey         String                           @db.VarChar(500)
+  contentType        String                           @db.VarChar(160)
+  fileExtension      String                           @db.VarChar(20)
+  fileSizeBytes      BigInt
+  checksumSha256     String                           @db.VarChar(64)
+  malwareScanStatus  RepositoryMalwareScanStatus      @default(NOT_CONFIGURED)
+  issuingBody        String?
+  approvalDate       DateTime?                        @db.Date
+  effectiveAt        DateTime?
+  expiresAt          DateTime?
+  publishedAt        DateTime?
+  resolutionNumber   String?                          @db.VarChar(120)
+  memoNumber         String?                          @db.VarChar(120)
+  policyOwner        String?
+  remarks            String?                          @db.Text
+  searchableKeywords String?                          @db.Text
+  uploadedById       String
+  updatedById        String?
+  category           RepositoryDocumentCategory       @relation(fields: [tenantId, categoryId], references: [tenantId, id], onDelete: Restrict, onUpdate: Cascade)
+  revisions          RepositoryDocumentRevision[]
+  tagAssignments     RepositoryDocumentTagAssignment[]
+  createdAt          DateTime                         @default(now())
+  updatedAt          DateTime                         @updatedAt
 
   @@unique([tenantId, id])
   @@unique([tenantId, storageKey])
@@ -134,21 +135,22 @@ model RepositoryDocument {
 /// until the repository document itself is permanently deleted. AuditLog keeps
 /// the deletion/replacement evidence after permanent document deletion.
 model RepositoryDocumentRevision {
-  id               String             @id @default(cuid())
-  tenantId         String
-  documentId       String
-  revision         Int
-  revisionLabel    String?            @db.VarChar(60)
-  originalFileName String
-  storageKey       String?            @db.VarChar(500)
-  contentType      String             @db.VarChar(160)
-  fileExtension    String             @db.VarChar(20)
-  fileSizeBytes    BigInt
-  checksumSha256   String             @db.VarChar(64)
-  reason           String?            @db.Text
-  createdById      String
-  document         RepositoryDocument @relation(fields: [tenantId, documentId], references: [tenantId, id], onDelete: Cascade, onUpdate: Cascade)
-  createdAt        DateTime           @default(now())
+  id                String                      @id @default(cuid())
+  tenantId          String
+  documentId        String
+  revision          Int
+  revisionLabel     String?                     @db.VarChar(60)
+  originalFileName  String
+  storageKey        String?                     @db.VarChar(500)
+  contentType       String                      @db.VarChar(160)
+  fileExtension     String                      @db.VarChar(20)
+  fileSizeBytes     BigInt
+  checksumSha256    String                      @db.VarChar(64)
+  malwareScanStatus RepositoryMalwareScanStatus @default(NOT_CONFIGURED)
+  reason            String?                     @db.Text
+  createdById       String
+  document          RepositoryDocument          @relation(fields: [tenantId, documentId], references: [tenantId, id], onDelete: Cascade, onUpdate: Cascade)
+  createdAt         DateTime                    @default(now())
 
   @@unique([tenantId, id])
   @@unique([tenantId, documentId, revision])

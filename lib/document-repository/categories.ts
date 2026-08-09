@@ -36,6 +36,7 @@ export async function ensureRepositoryDefaultCategories(): Promise<RepositoryCat
         tenantId: context.tenantId,
         code: category.code,
         name: category.name,
+        categoryGroup: category.group,
         active: true,
         sortOrder: category.sortOrder,
         systemDefault: true,

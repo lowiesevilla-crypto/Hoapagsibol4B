@@ -76,7 +76,6 @@ export async function createRepositoryDocument(input: CreateRepositoryDocumentIn
   const categoryId = requiredLabel(input.categoryId, "Document category", 191);
   const visibility = input.visibility ?? "INTERNAL";
   const status = input.status ?? "DRAFT";
-  const revisionPolicy = input.revisionPolicy ?? "REPLACE_CURRENT";
 
   if (status !== "DRAFT" && status !== "PUBLISHED") {
     throw new Error("New repository documents must start as Draft or Published.");
@@ -94,6 +93,13 @@ export async function createRepositoryDocument(input: CreateRepositoryDocumentIn
     select: { id: true, code: true, governanceControlled: true },
   });
   if (!category) throw new Error("The selected document category is not available in the active tenant.");
+
+  // Governance records can never opt into silent replace-current behavior.
+  // They always retain a controlled revision lineage even if a caller submits
+  // a weaker policy. Non-governed categories may explicitly request history.
+  const revisionPolicy: RepositoryDocumentRevisionPolicy = category.governanceControlled
+    ? "KEEP_HISTORY"
+    : input.revisionPolicy ?? "REPLACE_CURRENT";
 
   const validation = validateRepositoryUpload({
     originalFileName: input.file.originalFileName,
@@ -156,6 +162,7 @@ export async function createRepositoryDocument(input: CreateRepositoryDocumentIn
         visibility: true,
         categoryId: true,
         currentRevision: true,
+        revisionPolicy: true,
         originalFileName: true,
         contentType: true,
         fileSizeBytes: true,
@@ -176,6 +183,7 @@ export async function createRepositoryDocument(input: CreateRepositoryDocumentIn
         status: document.status,
         visibility: document.visibility,
         revision: document.currentRevision,
+        revisionPolicy: document.revisionPolicy,
         originalFileName: document.originalFileName,
         contentType: document.contentType,
         fileSizeBytes: Number(document.fileSizeBytes),

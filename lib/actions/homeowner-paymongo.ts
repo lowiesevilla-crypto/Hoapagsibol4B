@@ -5,6 +5,7 @@ import { CollectionType, PaymentMethod, PaymentRequestStatus, PaymentRequestType
 import { redirect } from "next/navigation";
 import { requireUser } from "@/lib/auth";
 import { prisma } from "@/lib/db";
+import { paymongoBatchDescription } from "@/lib/homeowner-paymongo-batch";
 import { PAYMONGO_PAYMENT_REQUEST_MARKER } from "@/lib/homeowner-payment-flow";
 import { canSubmitDocumentFeePayment, documentFeePaymentPurpose, documentRequestPublicReference } from "@/lib/services/document-fee-payments";
 import { getHomeownerPaymentConfig } from "@/lib/services/homeowner-payment-config";
@@ -29,51 +30,60 @@ export async function createHomeownerPayMongoCheckoutAction(formData: FormData) 
   try {
     if (!user.homeownerProfile) throw new Error("Homeowner profile not found.");
     const config = await getHomeownerPaymentConfig(user.tenantId);
-    if (config.flow !== "PAYMONGO") throw new Error("This HOA is currently using manual QR payment verification. PayMongo checkout is disabled.");
-    if (!config.paymongoServerConfigured) throw new Error("PayMongo Online is temporarily unavailable. Please contact the HOA administrator.");
-    if (!config.paymongoLinkedAccountId) throw new Error("This HOA does not have a PayMongo linked merchant account configured.");
+    if (config.flow !== "PAYMONGO") throw new Error("This HOA is currently using manual QR payment verification. Online checkout is disabled.");
+    if (!config.paymongoServerConfigured) throw new Error("Online payment is temporarily unavailable. Please contact the HOA administrator.");
+    if (!config.paymongoLinkedAccountId) throw new Error("This HOA does not have a linked online payment merchant account configured.");
 
     const transactionType = String(formData.get("transactionType") || "").trim();
     const paymentDate = new Date();
     paymentDate.setUTCHours(0, 0, 0, 0);
-    requestId = randomUUID();
-    const referenceNumber = checkoutReference(requestId);
-    const gatewayFields = {
-      id: requestId,
+    const gatewayFields = (id: string) => ({
+      id,
       tenantId: user.tenantId,
-      homeownerId: user.homeownerProfile.id,
+      homeownerId: user.homeownerProfile!.id,
       paymentDate,
       method: PaymentMethod.OTHER,
-      referenceNumber,
+      referenceNumber: checkoutReference(id),
       proofImageUrl: null,
       proofFileName: config.paymongoLinkedAccountId,
       proofContentType: PAYMONGO_PAYMENT_REQUEST_MARKER,
       proofFileSize: null,
-    } as const;
+    } as const);
 
     if (transactionType === PaymentRequestType.MONTHLY_DUES) {
-      const billId = String(formData.get("billId") || "").trim();
-      if (!billId) throw new Error("Select one unpaid monthly dues record.");
-      const bill = await prisma.bill.findFirst({
+      const billIds = formData.getAll("billIds").map(String).map((value) => value.trim()).filter(Boolean);
+      if (!billIds.length) throw new Error("Select at least one unpaid monthly dues record.");
+      const uniqueBillIds = [...new Set(billIds)];
+      const bills = await prisma.bill.findMany({
         where: {
           tenantId: user.tenantId,
-          id: billId,
+          id: { in: uniqueBillIds },
           homeownerId: user.homeownerProfile.id,
           balance: { gt: 0 },
           archivedAt: null,
         },
         include: { paymentRequests: { where: { status: PaymentRequestStatus.PENDING_REVIEW }, select: { id: true } } },
+        orderBy: [{ dueDate: "asc" }, { billingMonth: "asc" }],
       });
-      if (!bill) throw new Error("The selected billing record is no longer available.");
-      if (bill.paymentRequests.length) throw new Error("This billing record already has a payment awaiting confirmation.");
-      await prisma.paymentRequest.create({
-        data: {
-          ...gatewayFields,
-          type: PaymentRequestType.MONTHLY_DUES,
-          billId: bill.id,
-          amount: bill.balance,
-          payerNotes: "PayMongo Online checkout",
-        },
+      if (bills.length !== uniqueBillIds.length) throw new Error("One or more selected billing records are no longer available.");
+      const pending = bills.find((bill) => bill.paymentRequests.length > 0);
+      if (pending) throw new Error("One selected billing record already has a payment in progress. Continue that payment from Payment Status or choose another bill.");
+
+      const batchId = randomUUID();
+      requestId = batchId;
+      const batchDescription = paymongoBatchDescription(batchId);
+      await prisma.paymentRequest.createMany({
+        data: bills.map((bill, index) => {
+          const id = index === 0 ? batchId : randomUUID();
+          return {
+            ...gatewayFields(id),
+            type: PaymentRequestType.MONTHLY_DUES,
+            billId: bill.id,
+            description: batchDescription,
+            amount: bill.balance,
+            payerNotes: "PayMongo Online checkout",
+          };
+        }),
       });
     } else if (transactionType === PaymentRequestType.DOCUMENT_FEE) {
       if (!rawDocumentRequestId) throw new Error("Select a document request to pay.");
@@ -114,9 +124,10 @@ export async function createHomeownerPayMongoCheckoutAction(formData: FormData) 
           },
         });
       } else {
+        requestId = randomUUID();
         await prisma.paymentRequest.create({
           data: {
-            ...gatewayFields,
+            ...gatewayFields(requestId),
             type: PaymentRequestType.DOCUMENT_FEE,
             documentRequestId: documentRequest.id,
             collectionType: CollectionType.OTHER,
@@ -133,9 +144,10 @@ export async function createHomeownerPayMongoCheckoutAction(formData: FormData) 
       if (!Number.isFinite(amount) || amount <= 0) throw new Error("Enter a valid payment amount.");
       const description = String(formData.get("description") || "").trim();
       if (collectionType === CollectionType.OTHER && !description) throw new Error("Describe the payment purpose.");
+      requestId = randomUUID();
       await prisma.paymentRequest.create({
         data: {
-          ...gatewayFields,
+          ...gatewayFields(requestId),
           type: PaymentRequestType.OTHER_COLLECTION,
           collectionType,
           description: description || null,
@@ -150,21 +162,22 @@ export async function createHomeownerPayMongoCheckoutAction(formData: FormData) 
   } catch (error) {
     if (error && typeof error === "object" && "digest" in error && String((error as { digest?: unknown }).digest || "").startsWith("NEXT_REDIRECT")) throw error;
     if (requestId) {
+      const batchDescription = paymongoBatchDescription(requestId);
       await prisma.paymentRequest.updateMany({
         where: {
-          id: requestId,
           tenantId: user.tenantId,
           status: PaymentRequestStatus.PENDING_REVIEW,
           proofContentType: PAYMONGO_PAYMENT_REQUEST_MARKER,
+          OR: [{ id: requestId }, { description: batchDescription }],
         },
         data: {
           status: PaymentRequestStatus.REJECTED,
-          reviewRemarks: "PayMongo checkout could not be created. No payment was recorded.",
+          reviewRemarks: "Online checkout could not be created. No payment was recorded.",
           reviewedAt: new Date(),
         },
       }).catch(() => undefined);
     }
-    const params = new URLSearchParams({ error: error instanceof Error ? error.message : "PayMongo checkout could not be created." });
+    const params = new URLSearchParams({ error: error instanceof Error ? error.message : "Online checkout could not be created." });
     if (rawDocumentRequestId) params.set("documentRequestId", rawDocumentRequestId);
     redirect(`/portal/pay?${params.toString()}`);
   }

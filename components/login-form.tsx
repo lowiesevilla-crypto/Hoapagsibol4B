@@ -12,8 +12,8 @@ export function LoginForm({ tenantSlug, returnTo }: { tenantSlug?: string; retur
   const hasChoices = Boolean(state.choices?.length);
 
   useEffect(() => {
-    if (state.redirectTo) window.location.replace(state.redirectTo);
-  }, [state.redirectTo]);
+    if (state.redirectTo) window.location.replace(returnTo || state.redirectTo);
+  }, [returnTo, state.redirectTo]);
 
   return (
     <form ref={formRef} action={action} className="space-y-3 sm:space-y-4">

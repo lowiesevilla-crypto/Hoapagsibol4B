@@ -40,7 +40,7 @@ export default async function HomeownerPaymentSettingsPage({ searchParams }: { s
             <div className="flex items-start gap-4">
               <input className="mt-1 size-4 accent-blue-700" type="radio" name="flow" value="PAYMONGO" defaultChecked={config.flow === "PAYMONGO"} />
               <span className="grid size-11 shrink-0 place-items-center rounded-2xl bg-blue-100 text-blue-700"><CreditCard className="size-5" /></span>
-              <span className="min-w-0"><span className="block text-lg font-black text-slate-950">PayMongo Online</span><span className="mt-1 block text-sm leading-6 text-slate-600">HOAHub creates checkout on behalf of this tenant&apos;s linked PayMongo child account. The payment belongs to the tenant merchant ledger, and a child-scoped verified webhook confirms it before HOAHub posts the official receipt.</span><span className="mt-2 inline-flex rounded-full bg-blue-100 px-2.5 py-1 text-xs font-black text-blue-800">Requires PayMongo Linked Accounts</span></span>
+              <span className="min-w-0"><span className="block text-lg font-black text-slate-950">PayMongo Online</span><span className="mt-1 block text-sm leading-6 text-slate-600">HOAHub creates checkout on behalf of this tenant&apos;s linked PayMongo child account. The HOA payment principal belongs to the tenant merchant ledger, while any HOAHub platform convenience fee is handled as a separate split.</span><span className="mt-2 inline-flex rounded-full bg-blue-100 px-2.5 py-1 text-xs font-black text-blue-800">Requires PayMongo Linked Accounts</span></span>
             </div>
           </label>
         </div>
@@ -62,7 +62,16 @@ export default async function HomeownerPaymentSettingsPage({ searchParams }: { s
         <section className="card">
           <div className="flex items-start gap-3"><span className="grid size-10 shrink-0 place-items-center rounded-2xl bg-slate-100 text-slate-700"><ShieldCheck className="size-5" /></span><div><h2 className="font-black">Activation readiness</h2><p className="mt-1 text-sm leading-6 text-slate-600">HOAHub parent API credential: <b>{config.paymongoServerConfigured ? "Configured" : "Not configured"}</b></p><p className="text-sm leading-6 text-slate-600">Linked tenant child account: <b>{config.paymongoLinkedAccountId ? "Configured" : "Not configured"}</b></p><p className="text-sm leading-6 text-slate-600">Child payment webhook: <b>{config.paymongoWebhookSecretConfigured ? "Provisioned" : "Not provisioned"}</b></p>{config.paymongoWebhookId && <p className="mt-1 break-all font-mono text-xs text-slate-500">{config.paymongoWebhookId}</p>}</div></div>
           {!config.paymongoServerConfigured && <div className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 p-3 text-sm font-semibold leading-6 text-amber-900">PayMongo Online cannot be activated until the deployment has the separate homeowner parent secret key.</div>}
-          {config.flow === "PAYMONGO" && !config.paymongoReady && <div className="mt-4 rounded-2xl border border-rose-200 bg-rose-50 p-3 text-sm font-semibold leading-6 text-rose-900">PayMongo Online is not fully ready. Save the configuration again after confirming the tenant child account is activated in PayMongo.</div>}
+          {config.flow === "PAYMONGO" && !config.paymongoReady && <div className="mt-4 rounded-2xl border border-rose-200 bg-rose-50 p-3 text-sm font-semibold leading-6 text-rose-900">PayMongo Online is not fully ready. Save the configuration again after confirming the tenant child account and HOAHub split-routing requirements are ready.</div>}
+        </section>
+
+        <section className="card border-blue-100 bg-blue-50/50">
+          <p className="text-xs font-black uppercase tracking-[.16em] text-blue-700">Platform-controlled</p>
+          <h2 className="mt-1 font-black text-blue-950">HOAHub convenience fee</h2>
+          <p className="mt-2 text-2xl font-black text-blue-950">{config.platformFeeEnabled ? `PHP ${config.platformFeeAmountPesos.toFixed(2)}` : "Disabled"}</p>
+          <p className="mt-2 text-sm leading-6 text-blue-900">This fee is set by the HOAHub Platform Owner per tenant and cannot be edited by tenant administrators. When enabled, the homeowner sees it separately from the HOA charge during PayMongo checkout.</p>
+          {config.platformFeeEnabled && <p className="mt-3 rounded-xl bg-white p-3 text-sm leading-6 text-blue-950">The tenant&apos;s HOA principal remains separate from HOAHub&apos;s platform fee. PayMongo&apos;s processing fee is also separate and is requested as a payer-paid provider fee for new fee-bearing checkouts.</p>}
+          {config.platformFeeEnabled && !config.paymongoParentAccountIdConfigured && <p className="mt-3 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm font-semibold leading-6 text-amber-900">HOAHub split routing is not fully configured. Fee-bearing online checkout will be blocked until the platform parent organization ID is configured server-side.</p>}
         </section>
 
         <section className="card border-blue-100 bg-blue-50/50">

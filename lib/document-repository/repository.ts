@@ -1,9 +1,9 @@
 import type {
+  Prisma,
   RepositoryDocumentStatus,
   RepositoryDocumentVisibility,
 } from "@prisma/client";
 import { prisma } from "@/lib/db";
-import { repositoryDefaultCategories } from "@/lib/document-repository/constants";
 import { evaluateRepositoryQuota } from "@/lib/document-repository/quota";
 
 export type RepositoryListFilters = {
@@ -14,35 +14,6 @@ export type RepositoryListFilters = {
   page?: number;
   pageSize?: number;
 };
-
-export async function ensureRepositoryDefaultCategories(input: {
-  tenantId: string;
-  actorId?: string | null;
-}) {
-  for (const category of repositoryDefaultCategories) {
-    await prisma.repositoryDocumentCategory.upsert({
-      where: {
-        tenantId_code: {
-          tenantId: input.tenantId,
-          code: category.code,
-        },
-      },
-      update: {},
-      create: {
-        tenantId: input.tenantId,
-        code: category.code,
-        name: category.name,
-        categoryGroup: category.group,
-        description: null,
-        active: true,
-        sortOrder: category.sortOrder,
-        systemDefault: true,
-        governanceControlled: category.governed,
-        createdById: input.actorId ?? null,
-      },
-    });
-  }
-}
 
 export async function repositoryUsageBytes(tenantId: string) {
   const [documents, revisions] = await Promise.all([
@@ -56,7 +27,7 @@ export async function repositoryUsageBytes(tenantId: string) {
     }),
   ]);
 
-  return (documents._sum.fileSizeBytes ?? 0n) + (revisions._sum.fileSizeBytes ?? 0n);
+  return (documents._sum.fileSizeBytes ?? BigInt(0)) + (revisions._sum.fileSizeBytes ?? BigInt(0));
 }
 
 export async function getRepositoryDashboard(input: {
@@ -109,7 +80,7 @@ export async function listRepositoryDocuments(tenantId: string, filters: Reposit
   const pageSize = Math.min(100, Math.max(10, Math.floor(filters.pageSize ?? 25)));
   const search = filters.search?.trim();
 
-  const where = {
+  const where: Prisma.RepositoryDocumentWhereInput = {
     tenantId,
     ...(filters.categoryId ? { categoryId: filters.categoryId } : {}),
     ...(filters.status ? { status: filters.status } : {}),
@@ -125,7 +96,7 @@ export async function listRepositoryDocuments(tenantId: string, filters: Reposit
           ],
         }
       : {}),
-  } satisfies Parameters<typeof prisma.repositoryDocument.findMany>[0]["where"];
+  };
 
   const [total, documents] = await Promise.all([
     prisma.repositoryDocument.count({ where }),

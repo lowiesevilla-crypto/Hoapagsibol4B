@@ -30,6 +30,7 @@ export type CreateRepositoryDocumentInput = {
   visibility?: RepositoryDocumentVisibility;
   status?: RepositoryDocumentStatus;
   revisionPolicy?: RepositoryRevisionPolicy;
+  revisionLabel?: string | null;
   issuingBody?: string | null;
   approvalDate?: Date | null;
   effectiveAt?: Date | null;
@@ -100,6 +101,7 @@ export async function createRepositoryDocument(input: CreateRepositoryDocumentIn
   const revisionPolicy: RepositoryRevisionPolicy = category.governanceControlled
     ? "KEEP_HISTORY"
     : input.revisionPolicy ?? "REPLACE_CURRENT";
+  const revisionLabel = optionalLabel(input.revisionLabel, 60);
 
   const validation = validateRepositoryUpload({
     originalFileName: input.file.originalFileName,
@@ -134,6 +136,7 @@ export async function createRepositoryDocument(input: CreateRepositoryDocumentIn
         visibility,
         status,
         currentRevision: 1,
+        currentRevisionLabel: revisionLabel,
         revisionPolicy,
         originalFileName: input.file.originalFileName.trim(),
         storageKey: stored.storageKey,
@@ -162,6 +165,7 @@ export async function createRepositoryDocument(input: CreateRepositoryDocumentIn
         visibility: true,
         categoryId: true,
         currentRevision: true,
+        currentRevisionLabel: true,
         revisionPolicy: true,
         originalFileName: true,
         contentType: true,
@@ -183,6 +187,7 @@ export async function createRepositoryDocument(input: CreateRepositoryDocumentIn
         status: document.status,
         visibility: document.visibility,
         revision: document.currentRevision,
+        revisionLabel: document.currentRevisionLabel,
         revisionPolicy: document.revisionPolicy,
         originalFileName: document.originalFileName,
         contentType: document.contentType,

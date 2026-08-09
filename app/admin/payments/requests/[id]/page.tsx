@@ -32,7 +32,9 @@ export default async function PaymentRequestDetailsPage({ params, searchParams }
       ? `Document Request Fee - ${request.documentRequest?.definition?.displayName || request.documentRequest?.configuration?.displayName || (request.documentRequest?.type ? documentTypeLabel(request.documentRequest.type) : "Official HOA document")}`
     : collectionLabel(String(request.collectionType), request.description);
   const publicReviewRemarks = request.reviewRemarks && !isPaymongoCheckoutSessionRemark(request.reviewRemarks) ? request.reviewRemarks : null;
-  const displayStatus = online && request.status === "PENDING_REVIEW" ? "AWAITING PAYMONGO CONFIRMATION" : request.status.replaceAll("_", " ");
+  const displayStatus = online
+    ? request.status === "APPROVED" ? "PAID" : request.status === "PENDING_REVIEW" ? "AWAITING PAYMONGO CONFIRMATION" : "PAYMENT UNSUCCESSFUL"
+    : request.status.replaceAll("_", " ");
 
   return <>
     <PageHeader eyebrow={online ? "Online payment" : "QR / GCash review"} title="Payment request details" description={online ? "PayMongo Online is gateway-confirmed and posts automatically. Tenant administrators do not approve or reject online payments." : "Review the homeowner payment proof, status, and submission details before approval."} action={<Link className="btn-secondary" href="/admin/payments/requests">Back to payment requests</Link>} />
@@ -42,7 +44,7 @@ export default async function PaymentRequestDetailsPage({ params, searchParams }
       <div className="card">
         <div className="mb-4 flex items-start justify-between gap-3">
           <div><h2 className="text-lg font-black">{request.homeowner.user.name}</h2><p className="text-sm text-slate-500">Block {request.homeowner.block}, Lot {request.homeowner.lot}</p></div>
-          <StatusBadge status={request.status} />
+          <StatusBadge status={displayStatus} />
         </div>
         <div className="grid gap-3 text-sm">
           <Info label="Purpose" value={purpose} />

@@ -38,6 +38,13 @@ function parseVisibility(value: string): RepositoryDocumentVisibility | undefine
     : undefined;
 }
 
+function optionLabel(value: string) {
+  return value
+    .toLowerCase()
+    .replaceAll("_", " ")
+    .replace(/(^|\s)\S/g, (character) => character.toUpperCase());
+}
+
 function dateLabel(value: Date) {
   return value.toLocaleDateString("en-PH", { year: "numeric", month: "short", day: "numeric" });
 }
@@ -65,9 +72,9 @@ export default async function DocumentManagementPage({
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
-  const user = await requireUser(Role.ADMIN);
+  await requireUser(Role.ADMIN);
   const { entitlement } = await requireRepositoryRead();
-  await ensureRepositoryDefaultCategories({ tenantId: user.tenantId, actorId: user.id });
+  await ensureRepositoryDefaultCategories();
 
   const query = await searchParams;
   const search = one(query.search).trim();
@@ -78,9 +85,9 @@ export default async function DocumentManagementPage({
   const canUpload = hasRepositoryPermission(Permission.DOCUMENT_REPOSITORY_UPLOAD);
 
   const [dashboard, categories, result] = await Promise.all([
-    getRepositoryDashboard({ tenantId: user.tenantId, maximumStorageMb: entitlement.storageLimitMb }),
-    listRepositoryCategories(user.tenantId),
-    listRepositoryDocuments(user.tenantId, { search, categoryId, status, visibility, page, pageSize: 25 }),
+    getRepositoryDashboard(),
+    listRepositoryCategories(),
+    listRepositoryDocuments({ search, categoryId, status, visibility, page, pageSize: 25 }),
   ]);
 
   const filters = {
@@ -119,8 +126,8 @@ export default async function DocumentManagementPage({
           <input className="field pl-10" name="search" defaultValue={search} placeholder="Search title, reference, filename or keywords" />
         </label>
         <label><span className="sr-only">Category</span><select className="field" name="categoryId" defaultValue={categoryId}><option value="">All categories</option>{categories.map((category) => <option key={category.id} value={category.id}>{category.name}</option>)}</select></label>
-        <label><span className="sr-only">Status</span><select className="field" name="status" defaultValue={status || ""}><option value="">All statuses</option>{repositoryDocumentStatus.map((item) => <option key={item} value={item}>{item.replaceAll("_", " ")}</option>)}</select></label>
-        <label><span className="sr-only">Visibility</span><select className="field" name="visibility" defaultValue={visibility || ""}><option value="">All visibility</option>{repositoryDocumentVisibility.map((item) => <option key={item} value={item}>{item.replaceAll("_", " ")}</option>)}</select></label>
+        <label><span className="sr-only">Status</span><select className="field" name="status" defaultValue={status || ""}><option value="">All statuses</option>{repositoryDocumentStatus.map((item) => <option key={item} value={item}>{optionLabel(item)}</option>)}</select></label>
+        <label><span className="sr-only">Visibility</span><select className="field" name="visibility" defaultValue={visibility || ""}><option value="">All visibility</option>{repositoryDocumentVisibility.map((item) => <option key={item} value={item}>{optionLabel(item)}</option>)}</select></label>
         <div className="flex gap-2"><button className="btn-primary flex-1 lg:flex-none">Apply</button><Link className="btn-secondary grid place-items-center" href="/admin/document-management">Clear</Link></div>
       </form>
     </section>

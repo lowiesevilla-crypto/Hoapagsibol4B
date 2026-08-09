@@ -25,8 +25,8 @@ function optionalDate(value: string) {
   return date;
 }
 
-function redirectWithMessage(request: Request, type: "success" | "error", message: string) {
-  const url = new URL("/admin/document-management", request.url);
+function redirectWithMessage(request: Request, path: string, type: "success" | "error", message: string) {
+  const url = new URL(path, request.url);
   url.searchParams.set(type, message);
   return NextResponse.redirect(url, 303);
 }
@@ -81,9 +81,9 @@ export async function POST(request: Request) {
       data,
     });
 
-    return redirectWithMessage(request, "success", `Document “${document.title}” uploaded successfully.`);
+    return redirectWithMessage(request, "/admin/document-management", "success", `Document “${document.title}” uploaded successfully.`);
   } catch (error) {
     const message = error instanceof Error ? error.message : "The document could not be uploaded.";
-    return redirectWithMessage(request, "error", message);
+    return redirectWithMessage(request, "/admin/document-management/upload", "error", message);
   }
 }

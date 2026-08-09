@@ -3,6 +3,7 @@ import { requireUser } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { PAYMONGO_PAYMENT_REQUEST_MARKER } from "@/lib/homeowner-payment-flow";
 import { resumeHomeownerPayMongoCheckout } from "@/lib/services/homeowner-paymongo";
+import { releaseExpiredHomeownerPayMongoCheckout } from "@/lib/services/homeowner-paymongo-expiry";
 import { reconcileHomeownerPayMongoCheckout } from "@/lib/services/homeowner-paymongo-reconciliation";
 
 export async function GET(request: Request) {
@@ -34,6 +35,18 @@ export async function GET(request: Request) {
   }
 
   try {
+    const expiry = await releaseExpiredHomeownerPayMongoCheckout({
+      requestId: ownedRequest.id,
+      tenantId: user.tenantId,
+      homeownerId: user.homeownerProfile.id,
+    });
+    if (expiry.state === "expired") {
+      destination.searchParams.set("online", "expired");
+      destination.searchParams.set("message", "The previous PayMongo checkout expired. Its billing items were released and can be selected for a new payment.");
+      destination.hash = "qr-payment";
+      return Response.redirect(destination, 303);
+    }
+
     const reconciled = await reconcileHomeownerPayMongoCheckout({
       requestId: ownedRequest.id,
       tenantId: user.tenantId,

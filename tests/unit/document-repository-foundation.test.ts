@@ -19,7 +19,7 @@ test("repository quota blocks writes that exceed a tenant plan limit", () => {
 
   const blocked = evaluateRepositoryQuota({ usedBytes: 1000 * 1024 * 1024, maximumStorageMb: 1024, requestedBytes: 30 * 1024 * 1024 });
   assert.equal(blocked.canWrite, false);
-  assert.equal(blocked.projectedBytes > (blocked.limitBytes ?? 0n), true);
+  assert.equal(blocked.projectedBytes > (blocked.limitBytes ?? BigInt(0)), true);
 });
 
 test("repository quota does not infer deletion when a tenant is already over quota", () => {

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { jwtVerify } from "jose/jwt/verify";
 import { allowedOrigins, getAppUrl } from "@/lib/app-url";
+import { safeReturnTo } from "@/lib/auth-return-to";
 import {
   isProtectedApplicationPath,
   protectedPathRedirect,
@@ -23,6 +24,13 @@ function cors(response: NextResponse, request: NextRequest) {
   return response;
 }
 
+function loginWithReturnTo(request: NextRequest) {
+  const loginUrl = new URL("/login", request.url);
+  const returnTo = safeReturnTo(`${request.nextUrl.pathname}${request.nextUrl.search}`);
+  if (returnTo) loginUrl.searchParams.set("returnTo", returnTo);
+  return loginUrl;
+}
+
 export async function middleware(request: NextRequest) {
   const path = request.nextUrl.pathname;
   const appUrl = new URL(getAppUrl());
@@ -36,7 +44,9 @@ export async function middleware(request: NextRequest) {
 
   const origin = request.headers.get("origin");
   const mutation = ["POST", "PUT", "PATCH", "DELETE"].includes(request.method);
-  const webhook = path === "/api/payments/webhook/gcash" || path === "/api/platform/billing/webhooks/paymongo";
+  const webhook = path === "/api/payments/webhook/gcash"
+    || path === "/api/platform/billing/webhooks/paymongo"
+    || path === "/api/homeowner-payments/webhooks/paymongo";
   if (mutation && origin && !webhook && !allowedOrigins().has(origin)) {
     return NextResponse.json({ error: "Request origin is not allowed." }, { status: 403 });
   }
@@ -51,7 +61,7 @@ export async function middleware(request: NextRequest) {
   if (!isProtectedApplicationPath(path)) return cors(NextResponse.next(), request);
 
   const token = request.cookies.get("hoa_session")?.value;
-  const loginUrl = new URL("/login", request.url);
+  const loginUrl = loginWithReturnTo(request);
   if (!token) return NextResponse.redirect(loginUrl);
   try {
     const { payload } = await jwtVerify(token, secret);
@@ -61,6 +71,9 @@ export async function middleware(request: NextRequest) {
       : [primaryRole];
     const redirectPath = protectedPathRedirect(roles.length ? roles : primaryRole, path);
     if (redirectPath) return NextResponse.redirect(new URL(redirectPath, request.url));
+    if (path === "/portal/pay" && request.nextUrl.searchParams.get("online") === "confirming") {
+      return NextResponse.redirect(new URL("/portal/pay/paymongo-confirm", request.url));
+    }
     const requestHeaders = new Headers(request.headers);
     requestHeaders.set("x-hoa-pathname", path);
     return NextResponse.next({ request: { headers: requestHeaders } });

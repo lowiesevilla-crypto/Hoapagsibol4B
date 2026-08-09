@@ -5,7 +5,7 @@ import type {
 } from "@prisma/client";
 import { Permission } from "@/lib/authorization/permissions";
 import { prisma } from "@/lib/db";
-import { hasRepositoryPermission } from "@/lib/document-repository/access";
+import { hasRepositoryPermission, requireRepositoryRead } from "@/lib/document-repository/access";
 import { ensureRepositoryDefaultCategories as initializeRepositoryDefaultCategories } from "@/lib/document-repository/categories";
 import { evaluateRepositoryQuota } from "@/lib/document-repository/quota";
 
@@ -23,14 +23,14 @@ export type RepositoryListFilters = {
  * actually has category-management permission is allowed to create defaults.
  * Read-only staff never gain an implicit write capability by opening the page.
  */
-export async function ensureRepositoryDefaultCategories(_input?: { tenantId?: string; actorId?: string | null }) {
+export async function ensureRepositoryDefaultCategories() {
   if (!hasRepositoryPermission(Permission.DOCUMENT_REPOSITORY_MANAGE_CATEGORIES)) {
     return { created: 0, existing: 0 };
   }
   return initializeRepositoryDefaultCategories();
 }
 
-export async function repositoryUsageBytes(tenantId: string) {
+async function repositoryUsageBytesForTenant(tenantId: string) {
   const [documents, revisions] = await Promise.all([
     prisma.repositoryDocument.aggregate({
       where: { tenantId },
@@ -45,29 +45,28 @@ export async function repositoryUsageBytes(tenantId: string) {
   return (documents._sum.fileSizeBytes ?? BigInt(0)) + (revisions._sum.fileSizeBytes ?? BigInt(0));
 }
 
-export async function getRepositoryDashboard(input: {
-  tenantId: string;
-  maximumStorageMb: number | null;
-}) {
+export async function getRepositoryDashboard() {
+  const { context, entitlement } = await requireRepositoryRead();
+  const tenantId = context.tenantId;
   const [total, publishedPublic, drafts, protectedCount, usedBytes] = await Promise.all([
-    prisma.repositoryDocument.count({ where: { tenantId: input.tenantId } }),
+    prisma.repositoryDocument.count({ where: { tenantId } }),
     prisma.repositoryDocument.count({
       where: {
-        tenantId: input.tenantId,
+        tenantId,
         status: "PUBLISHED",
         visibility: "TENANT_PUBLIC",
       },
     }),
     prisma.repositoryDocument.count({
-      where: { tenantId: input.tenantId, status: "DRAFT" },
+      where: { tenantId, status: "DRAFT" },
     }),
     prisma.repositoryDocument.count({
       where: {
-        tenantId: input.tenantId,
+        tenantId,
         visibility: { in: ["INTERNAL", "RESTRICTED"] },
       },
     }),
-    repositoryUsageBytes(input.tenantId),
+    repositoryUsageBytesForTenant(tenantId),
   ]);
 
   return {
@@ -77,26 +76,28 @@ export async function getRepositoryDashboard(input: {
     protectedCount,
     quota: evaluateRepositoryQuota({
       usedBytes,
-      maximumStorageMb: input.maximumStorageMb,
+      maximumStorageMb: entitlement.storageLimitMb,
       requestedBytes: 0,
     }),
   };
 }
 
-export async function listRepositoryCategories(tenantId: string) {
+export async function listRepositoryCategories() {
+  const { context } = await requireRepositoryRead();
   return prisma.repositoryDocumentCategory.findMany({
-    where: { tenantId, active: true },
+    where: { tenantId: context.tenantId, active: true },
     orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
   });
 }
 
-export async function listRepositoryDocuments(tenantId: string, filters: RepositoryListFilters = {}) {
+export async function listRepositoryDocuments(filters: RepositoryListFilters = {}) {
+  const { context } = await requireRepositoryRead();
   const page = Math.max(1, Math.floor(filters.page ?? 1));
   const pageSize = Math.min(100, Math.max(10, Math.floor(filters.pageSize ?? 25)));
   const search = filters.search?.trim();
 
   const where: Prisma.RepositoryDocumentWhereInput = {
-    tenantId,
+    tenantId: context.tenantId,
     ...(filters.categoryId ? { categoryId: filters.categoryId } : {}),
     ...(filters.status ? { status: filters.status } : {}),
     ...(filters.visibility ? { visibility: filters.visibility } : {}),
@@ -133,9 +134,10 @@ export async function listRepositoryDocuments(tenantId: string, filters: Reposit
   };
 }
 
-export async function getRepositoryDocumentForTenant(tenantId: string, documentId: string) {
+export async function getRepositoryDocumentForAdmin(documentId: string) {
+  const { context } = await requireRepositoryRead();
   return prisma.repositoryDocument.findFirst({
-    where: { tenantId, id: documentId },
+    where: { tenantId: context.tenantId, id: documentId },
     include: {
       category: true,
       revisions: { orderBy: { revision: "desc" } },

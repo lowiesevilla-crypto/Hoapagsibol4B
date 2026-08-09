@@ -18,7 +18,7 @@ export function RepositoryStorageMeter({
   limitBytes: bigint | null;
   state: RepositoryQuotaState;
 }) {
-  const percentage = limitBytes && limitBytes > 0n
+  const percentage = limitBytes && limitBytes > BigInt(0)
     ? Math.min(100, Math.max(0, Math.round((Number(usedBytes) / Number(limitBytes)) * 100)))
     : null;
   const warning = state === "WARNING" || state === "CRITICAL" || state === "AT_LIMIT" || state === "OVER_LIMIT";

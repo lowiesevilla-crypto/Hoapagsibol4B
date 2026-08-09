@@ -20,6 +20,7 @@ export type UpdateRepositoryDocumentInput = {
   visibility: RepositoryDocumentVisibility;
   status: RepositoryDocumentStatus;
   issuingBody?: string | null;
+  approvalDate?: Date | null;
   effectiveAt?: Date | null;
   expiresAt?: Date | null;
   resolutionNumber?: string | null;
@@ -66,6 +67,7 @@ export async function updateRepositoryDocument(input: UpdateRepositoryDocumentIn
         visibility: true,
         status: true,
         revisionPolicy: true,
+        approvalDate: true,
         effectiveAt: true,
         expiresAt: true,
       },
@@ -84,7 +86,8 @@ export async function updateRepositoryDocument(input: UpdateRepositoryDocumentIn
   if (statusChanged && (existing.status === "PUBLISHED" || input.status === "PUBLISHED")) {
     await requireRepositoryPermission(Permission.DOCUMENT_REPOSITORY_PUBLISH);
   }
-  if (statusChanged && (input.status === "ARCHIVED" || input.status === "INACTIVE")) {
+  const archiveStates: readonly RepositoryDocumentStatus[] = ["ARCHIVED", "INACTIVE"];
+  if (statusChanged && (archiveStates.includes(existing.status) || archiveStates.includes(input.status))) {
     await requireRepositoryPermission(Permission.DOCUMENT_REPOSITORY_ARCHIVE);
   }
 
@@ -99,6 +102,7 @@ export async function updateRepositoryDocument(input: UpdateRepositoryDocumentIn
       status: input.status,
       revisionPolicy: category.governanceControlled ? "KEEP_HISTORY" : existing.revisionPolicy,
       issuingBody: optionalLabel(input.issuingBody, 191),
+      approvalDate: input.approvalDate ?? null,
       effectiveAt: input.effectiveAt ?? null,
       expiresAt: input.expiresAt ?? null,
       publishedAt: input.status === "PUBLISHED"
@@ -125,6 +129,7 @@ export async function updateRepositoryDocument(input: UpdateRepositoryDocumentIn
         documentReference: existing.documentReference,
         visibility: existing.visibility,
         status: existing.status,
+        approvalDate: existing.approvalDate?.toISOString() ?? null,
         effectiveAt: existing.effectiveAt?.toISOString() ?? null,
         expiresAt: existing.expiresAt?.toISOString() ?? null,
       },
@@ -135,6 +140,7 @@ export async function updateRepositoryDocument(input: UpdateRepositoryDocumentIn
         documentReference: updated.documentReference,
         visibility: updated.visibility,
         status: updated.status,
+        approvalDate: updated.approvalDate?.toISOString() ?? null,
         effectiveAt: updated.effectiveAt?.toISOString() ?? null,
         expiresAt: updated.expiresAt?.toISOString() ?? null,
       },

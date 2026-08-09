@@ -28,12 +28,41 @@ test("manual and PayMongo submission paths both enforce the tenant-selected flow
   assert.match(paymongoAction, /config\.flow !== "PAYMONGO"/);
 });
 
-test("homeowner PayMongo checkout routes funds to the tenant linked account and uses separate credentials", () => {
+test("homeowner checkout is created on behalf of the tenant child account", () => {
   const paymongoService = source("lib/services/homeowner-paymongo.ts");
   assert.match(paymongoService, /PAYMONGO_HOMEOWNER_SECRET_KEY/);
-  assert.match(paymongoService, /PAYMONGO_HOMEOWNER_WEBHOOK_SECRET/);
-  assert.match(paymongoService, /split_payment:\s*\{\s*transfer_to: linkedAccountId/);
+  assert.match(paymongoService, /"Account-ID": accountId/);
+  assert.match(paymongoService, /paymongoHeaders\(linkedAccountId\)/);
+  assert.match(paymongoService, /linkedTransaction: true/);
+  assert.doesNotMatch(paymongoService, /split_payment/);
+  assert.doesNotMatch(paymongoService, /PAYMONGO_HOMEOWNER_WEBHOOK_SECRET/);
   assert.doesNotMatch(paymongoService, /requiredHomeownerPayMongoSecret\("PAYMONGO_SECRET_KEY"/);
+});
+
+test("PayMongo Online activation provisions a child-scoped checkout webhook", () => {
+  const settingsAction = source("lib/actions/homeowner-payment-settings.ts");
+  const paymongoService = source("lib/services/homeowner-paymongo.ts");
+  assert.match(settingsAction, /ensureHomeownerPayMongoWebhook\(paymongoLinkedAccountId\)/);
+  assert.match(settingsAction, /paymongoWebhookSecretSettingKey\(paymongoLinkedAccountId\)/);
+  assert.match(settingsAction, /isSecret: true/);
+  assert.match(paymongoService, /https:\/\/api\.paymongo\.com\/v1\/webhooks/);
+  assert.match(paymongoService, /events: \[HOMEOWNER_WEBHOOK_EVENT\]/);
+  assert.match(paymongoService, /headers: paymongoHeaders\(accountId\)/);
+});
+
+test("child webhook verification is tenant scoped and fails closed", () => {
+  const paymongoService = source("lib/services/homeowner-paymongo.ts");
+  assert.match(paymongoService, /organizationId/);
+  assert.match(paymongoService, /resolveWebhookTenant\(event\.organizationId\)/);
+  assert.match(paymongoService, /verifyPayMongoWebhookSignature\(rawBody, signatureHeader, webhookContext\.webhookSecret\)/);
+  assert.match(paymongoService, /request\.tenantId !== webhookContext\.tenantId \|\| linkedAccountId !== event\.organizationId/);
+  assert.match(paymongoService, /PayMongo child account is mapped to more than one tenant/);
+});
+
+test("PayMongo checkouts require a provisioned webhook for the snapshotted child account", () => {
+  const paymongoService = source("lib/services/homeowner-paymongo.ts");
+  assert.match(paymongoService, /requireTenantWebhookSecret\(request\.tenantId, linkedAccountId\)/);
+  assert.match(paymongoService, /paymongoWebhookSecretSettingKey\(accountId\)/);
 });
 
 test("PayMongo-origin requests cannot be manually approved or rejected", () => {

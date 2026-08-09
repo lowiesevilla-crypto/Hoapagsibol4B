@@ -4,6 +4,7 @@ import { startAuthentication } from "@simplewebauthn/browser";
 import { Fingerprint } from "lucide-react";
 import type { RefObject } from "react";
 import { useState } from "react";
+import { safeReturnTo } from "@/lib/auth-return-to";
 
 export function PasskeyLoginButton({ formRef }: { formRef: RefObject<HTMLFormElement | null> }) {
   const [message, setMessage] = useState("");
@@ -17,7 +18,7 @@ export function PasskeyLoginButton({ formRef }: { formRef: RefObject<HTMLFormEle
       const data = new FormData(form ?? undefined);
       const identifier = String(data.get("identifier") || "").trim();
       const tenantSlug = String(data.get("tenantSlug") || "").trim();
-      const returnTo = String(data.get("returnTo") || "").trim();
+      const returnTo = safeReturnTo(String(data.get("returnTo") || ""));
       const optionsResponse = await fetch("/api/auth/passkeys/login/options", {
         method: "POST",
         headers: { "Content-Type": "application/json" },

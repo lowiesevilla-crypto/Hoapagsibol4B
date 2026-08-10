@@ -4,7 +4,7 @@ import Link from "next/link";
 import { PageHeader } from "@/components/page-header";
 import { requireUser } from "@/lib/auth";
 import { Permission } from "@/lib/authorization/permissions";
-import { hasRepositoryPermission, requireRepositoryUpload } from "@/lib/document-repository/access";
+import { canRepositoryPermission, requireRepositoryUpload } from "@/lib/document-repository/access";
 import { ensureRepositoryDefaultCategories, listRepositoryCategories } from "@/lib/document-repository/repository";
 import { repositoryAllowedFileExtensions } from "@/lib/document-repository/validation";
 
@@ -20,9 +20,11 @@ export default async function UploadDocumentPage({
   await requireUser(Role.ADMIN);
   const { entitlement } = await requireRepositoryUpload();
   await ensureRepositoryDefaultCategories();
-  const categories = await listRepositoryCategories();
-  const canManageVisibility = hasRepositoryPermission(Permission.DOCUMENT_REPOSITORY_MANAGE_VISIBILITY);
-  const canPublish = hasRepositoryPermission(Permission.DOCUMENT_REPOSITORY_PUBLISH);
+  const [categories, canManageVisibility, canPublish] = await Promise.all([
+    listRepositoryCategories(),
+    canRepositoryPermission(Permission.DOCUMENT_REPOSITORY_MANAGE_VISIBILITY),
+    canRepositoryPermission(Permission.DOCUMENT_REPOSITORY_PUBLISH),
+  ]);
   const query = await searchParams;
   const error = one(query.error);
 

@@ -3,7 +3,7 @@ import { ArrowLeft, Bot, FolderLock, Save } from "lucide-react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { AI_ASSISTANCE_FEATURE_CODE, parseAiCommercialConfiguration } from "@/lib/ai-assistance/commercial";
-import { updateCommercialSubscriptionPlanAction } from "@/lib/actions/platform-commercial-plans";
+import { updateSubscriptionPlanAction } from "@/lib/actions/platform-commercial-plans";
 import { prisma } from "@/lib/db";
 import { DOCUMENT_MANAGEMENT_FEATURE_CODE } from "@/lib/document-repository/constants";
 
@@ -18,9 +18,7 @@ export default async function EditSubscriptionPlanPage({
   const query = await searchParams;
   const [plan, featureRows] = await Promise.all([
     prisma.subscriptionPlan.findUnique({ where: { id }, include: { modules: true } }),
-    prisma.subscriptionPlanFeatureEntitlement.findMany({
-      where: { planId: id, featureCode: { in: [DOCUMENT_MANAGEMENT_FEATURE_CODE, AI_ASSISTANCE_FEATURE_CODE] } },
-    }),
+    prisma.subscriptionPlanFeatureEntitlement.findMany({ where: { planId: id, featureCode: { in: [DOCUMENT_MANAGEMENT_FEATURE_CODE, AI_ASSISTANCE_FEATURE_CODE] } } }),
   ]);
   if (!plan) notFound();
   const documentManagement = featureRows.find((item) => item.featureCode === DOCUMENT_MANAGEMENT_FEATURE_CODE);
@@ -36,7 +34,7 @@ export default async function EditSubscriptionPlanPage({
     {query.success && <p className="mb-4 rounded-xl bg-emerald-50 p-3 text-sm font-semibold text-emerald-800">{query.success}</p>}
     {query.error && <p className="mb-4 rounded-xl bg-rose-50 p-3 text-sm font-semibold text-rose-800">{query.error}</p>}
 
-    <form action={updateCommercialSubscriptionPlanAction} className="rounded-3xl border bg-white p-5 shadow-sm sm:p-7">
+    <form action={updateSubscriptionPlanAction} className="rounded-3xl border bg-white p-5 shadow-sm sm:p-7">
       <input type="hidden" name="planId" value={plan.id} />
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <label><span className="label">Plan code</span><input className="field" name="code" defaultValue={plan.code} required /></label>

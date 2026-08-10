@@ -180,7 +180,7 @@ export function ResidentAiAssistant({
             {loading ? <Loader2 className="size-5 animate-spin" /> : <Send className="size-5" />}
           </button>
         </div>
-        <p className="mt-2 text-xs leading-5 text-slate-500"><span className="font-semibold text-slate-600">Enter to send.</span> Don't share passwords, IDs, or payment proofs.</p>
+        <p className="mt-2 text-xs leading-5 text-slate-500"><span className="font-semibold text-slate-600">Enter to send.</span> Don&apos;t share passwords, IDs, or payment proofs.</p>
       </form>
     </section>
 

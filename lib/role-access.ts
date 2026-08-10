@@ -31,6 +31,7 @@ const adminRoutePermissions: readonly [string, PermissionValue][] = [
   ["/admin/collections", Permission.COLLECTIONS_MANAGE],
   ["/admin/expenses", Permission.EXPENSES_MANAGE],
   ["/admin/reports", Permission.REPORTS_VIEW],
+  ["/admin/document-management", Permission.DOCUMENT_REPOSITORY_READ],
   ["/admin/documents", Permission.DOCUMENTS_MANAGE],
   ["/admin/document-templates", Permission.DOCUMENTS_MANAGE],
   ["/admin/complaints", Permission.COMPLAINTS_MANAGE],

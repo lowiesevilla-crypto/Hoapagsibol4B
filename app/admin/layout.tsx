@@ -8,6 +8,7 @@ import { adminLinks, platformLinks, systemAdminLinks } from "@/components/sideba
 import { TransactionFeedback } from "@/components/transaction-feedback";
 import { requireUser } from "@/lib/auth";
 import { Permission } from "@/lib/authorization/permissions";
+import { resolveDocumentManagementEntitlement } from "@/lib/document-repository/entitlement";
 import { filterLinksByModules, moduleForPath } from "@/lib/module-routing";
 import { routeTitle, tenantMetadata, tenantNameForMetadata } from "@/lib/metadata-title";
 import { userCanAccessPayroll } from "@/lib/payroll-access";
@@ -35,17 +36,22 @@ export default async function AdminLayout({ children }: { children: React.ReactN
     : await getEnabledTenantModules(user.tenantId);
   const requestedModule = moduleForPath(pathname);
   if (requestedModule && !enabledModules.has(requestedModule)) redirect("/admin/dashboard?error=This%20module%20is%20not%20included%20in%20your%20subscription%20plan.");
-  const [association, initialChatUnreadCount, actionableDocumentRequests] = await Promise.all([
+  const [association, initialChatUnreadCount, actionableDocumentRequests, documentManagementEntitlement] = await Promise.all([
     getAssociationSettings(user.tenantId),
     getUnreadChatCount(user.id),
     getActionableDocumentRequestCount(user.tenantId),
+    resolveDocumentManagementEntitlement(user.tenantId),
   ]);
+  if (pathname.startsWith("/admin/document-management") && !documentManagementEntitlement.enabled) {
+    redirect("/admin/dashboard?error=Document%20Management%20is%20not%20included%20in%20your%20subscription%20plan.");
+  }
   const isSystemAdmin = user.roles.includes(Role.SYSTEM_ADMIN) || user.roles.includes(Role.SUPER_ADMIN);
   const canAccessPayroll = user.permissions.includes(Permission.PAYROLL_MANAGE)
     || await userCanAccessPayroll(user.id, user.role);
   const baseLinks = isSystemAdmin ? systemAdminLinks : adminLinks;
   const linksWithPlatform = user.roles.includes(Role.SUPER_ADMIN) ? [...baseLinks, ...platformLinks] : baseLinks;
   const links = filterAdminLinksByRole(filterLinksByModules(linksWithPlatform, enabledModules), user.roles)
+    .filter((item) => documentManagementEntitlement.enabled || item.href !== "/admin/document-management")
     .filter((item) => canAccessPayroll || !["/admin/employees", "/admin/attendance", "/admin/payroll"].includes(item.href));
   const requestBadgeHref = "/admin/documents?section=requests";
   const showDocumentRequestBadge = links.some((item) => item.href === requestBadgeHref);

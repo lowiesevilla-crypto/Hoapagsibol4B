@@ -72,6 +72,8 @@ async function primaryTenantFlow(browser) {
     await login(page, primaryEmail);
     const floatingShortcut = await page.waitForSelector('a[aria-label="Open Association Assistant"]', { timeout });
     assert.ok(floatingShortcut, "Operational AI tenant should receive the governed floating AI shortcut.");
+    const floatingBox = await floatingShortcut.boundingBox();
+    assert.ok(floatingBox && floatingBox.width >= 56 && floatingBox.height >= 56, "Floating AI shortcut must be visible as a mobile touch target.");
     const floatingHref = await floatingShortcut.evaluate((element) => element.getAttribute("href"));
     assert.equal(floatingHref, "/portal/ai", "Floating AI shortcut must route only to the authorized resident assistant.");
     await Promise.all([
@@ -85,10 +87,19 @@ async function primaryTenantFlow(browser) {
     await page.waitForNetworkIdle({ idleTime: 400, timeout }).catch(() => undefined);
     assert.equal(await page.$('a[aria-label="Open Association Assistant"]'), null, "Floating shortcut should not obscure the assistant while already on the AI page.");
     await expectText(page, "Association Assistant");
-    await expectText(page, "Tenant-scoped by design");
+    await expectText(page, "Assistant rules and privacy");
     await expectText(page, "Enter to send", "keyboard composer guidance");
 
     const composerSelector = 'textarea[aria-label="Question for HOAHub AI"]';
+    const greeting = await askApi(page, { question: "Hi" });
+    assert.equal(greeting.status, 200, JSON.stringify(greeting.body));
+    assert.match(greeting.body.answer || "", /help with your HOA account basics/i);
+
+    const currentBalance = await askApi(page, { question: "What is my current balance?" });
+    assert.equal(currentBalance.status, 200, JSON.stringify(currentBalance.body));
+    assert.match(currentBalance.body.answer || "", /current outstanding balance/i);
+    assert.equal(currentBalance.body.sources?.[0]?.title, "HOAHub Statement of Account", "Own-balance answer must be grounded in the authenticated homeowner account source.");
+
     await page.type(composerSelector, "What does our approved community policy say?");
     await page.keyboard.press("Enter");
     await expectText(page, primarySourceTitle, "authorized source after Enter-submitted chat question");

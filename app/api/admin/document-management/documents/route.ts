@@ -23,8 +23,21 @@ function optionalDate(value: string) {
   return date;
 }
 
+function trustedRedirectOrigin(request: Request) {
+  const configured = process.env.APP_URL?.trim();
+  if (configured) {
+    try {
+      const url = new URL(configured);
+      if (url.protocol === "https:" || url.protocol === "http:") return url.origin;
+    } catch {
+      // Fall through to the server-derived request origin when APP_URL is invalid.
+    }
+  }
+  return new URL(request.url).origin;
+}
+
 function redirectWithMessage(request: Request, path: string, type: "success" | "error", message: string) {
-  const url = new URL(path, request.url);
+  const url = new URL(path, `${trustedRedirectOrigin(request)}/`);
   url.searchParams.set(type, message);
   return NextResponse.redirect(url, 303);
 }

@@ -1,0 +1,174 @@
+enum AiPrivacyClassification {
+  PUBLIC
+  INTERNAL
+  PERSONAL
+  SENSITIVE
+  RESTRICTED
+}
+
+enum AiKnowledgeIndexStatus {
+  NOT_INDEXED
+  PENDING
+  INDEXED
+  FAILED
+  PURGED
+}
+
+enum AiConversationStatus {
+  ACTIVE
+  CLOSED
+}
+
+enum AiMessageRole {
+  USER
+  ASSISTANT
+  SYSTEM
+}
+
+enum AiRequestOutcome {
+  SUCCEEDED
+  DENIED
+  REFUSED
+  RATE_LIMITED
+  QUOTA_BLOCKED
+  PROVIDER_ERROR
+}
+
+/// Tenant governance is deliberately separate from commercial entitlement.
+/// A paid AI feature cannot invoke the provider until the tenant has passed
+/// the required privacy, governance and provider-review gates.
+model TenantAiConfiguration {
+  tenantId                       String   @id
+  runtimeEnabled                 Boolean  @default(false)
+  residentAssistantEnabled       Boolean  @default(false)
+  staffCopilotEnabled            Boolean  @default(false)
+  documentRequestActionsEnabled  Boolean  @default(false)
+  boardApprovedAt                DateTime?
+  piaApprovedAt                  DateTime?
+  dpoApprovedAt                  DateTime?
+  providerApprovedAt             DateTime?
+  crossBorderReviewApprovedAt    DateTime?
+  privacyNoticeVersion           String?  @db.VarChar(80)
+  privacyNoticePublishedAt       DateTime?
+  lawfulBasis                    String?  @db.VarChar(120)
+  retentionDays                  Int      @default(30)
+  dataSubjectRightsContact       String?  @db.VarChar(190)
+  killSwitchReason               String?  @db.Text
+  approvedById                   String?
+  updatedById                    String?
+  createdAt                      DateTime @default(now())
+  updatedAt                      DateTime @updatedAt
+
+  @@index([runtimeEnabled, updatedAt])
+}
+
+/// Exactly one provider retrieval namespace is bound to a tenant. A vector
+/// store identifier can never be reused by another tenant in HOAHub.
+model TenantAiProviderIndex {
+  tenantId       String   @id
+  provider       String   @default("OPENAI") @db.VarChar(40)
+  vectorStoreId  String   @unique @db.VarChar(190)
+  status         String   @default("ACTIVE") @db.VarChar(40)
+  createdById    String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+}
+
+model AiKnowledgeBinding {
+  id                    String                 @id @default(cuid())
+  tenantId              String
+  documentId            String
+  revision              Int
+  provider              String                 @default("OPENAI") @db.VarChar(40)
+  providerFileId        String?                @db.VarChar(190)
+  vectorStoreId         String?                @db.VarChar(190)
+  indexStatus           AiKnowledgeIndexStatus @default(NOT_INDEXED)
+  indexedChecksumSha256 String?                @db.VarChar(64)
+  indexedAt             DateTime?
+  lastError             String?                @db.Text
+  createdById           String?
+  updatedById           String?
+  createdAt             DateTime               @default(now())
+  updatedAt             DateTime               @updatedAt
+
+  @@unique([tenantId, id])
+  @@unique([tenantId, documentId])
+  @@index([tenantId, indexStatus, updatedAt])
+  @@index([tenantId, vectorStoreId])
+}
+
+model AiConversation {
+  id          String               @id @default(cuid())
+  tenantId    String
+  actorId     String
+  actorRole   String               @db.VarChar(60)
+  status      AiConversationStatus @default(ACTIVE)
+  expiresAt   DateTime
+  messages    AiMessage[]
+  createdAt   DateTime             @default(now())
+  updatedAt   DateTime             @updatedAt
+
+  @@unique([tenantId, id])
+  @@index([tenantId, actorId, updatedAt])
+  @@index([tenantId, expiresAt])
+}
+
+/// Stored conversation text is explicitly redacted/minimized before write and
+/// expires under the tenant retention schedule. Raw provider credentials are
+/// never stored here.
+model AiMessage {
+  id                    String                  @id @default(cuid())
+  tenantId              String
+  conversationId        String
+  role                  AiMessageRole
+  contentRedacted       String                  @db.Text
+  privacyClassification AiPrivacyClassification @default(INTERNAL)
+  sourceDocumentIds     Json?
+  providerRequestId     String?                 @db.VarChar(190)
+  createdAt             DateTime                @default(now())
+  conversation          AiConversation          @relation(fields: [tenantId, conversationId], references: [tenantId, id], onDelete: Cascade, onUpdate: Cascade)
+
+  @@unique([tenantId, id])
+  @@index([tenantId, conversationId, createdAt])
+}
+
+model AiUsageLedger {
+  id                    String           @id @default(cuid())
+  tenantId              String
+  actorId               String
+  requestId             String           @db.VarChar(190)
+  provider              String           @default("OPENAI") @db.VarChar(40)
+  model                  String?          @db.VarChar(120)
+  inputTokens            Int              @default(0)
+  outputTokens           Int              @default(0)
+  estimatedCostCentavos  Int              @default(0)
+  latencyMs              Int?
+  outcome                AiRequestOutcome
+  denialReason           String?          @db.VarChar(255)
+  createdAt              DateTime         @default(now())
+
+  @@unique([tenantId, id])
+  @@unique([tenantId, requestId])
+  @@index([tenantId, createdAt])
+  @@index([tenantId, actorId, createdAt])
+}
+
+model AiFeedback {
+  id              String   @id @default(cuid())
+  tenantId        String
+  actorId         String
+  conversationId  String?
+  messageId       String?
+  rating          Int?
+  flagged         Boolean  @default(false)
+  reason          String?  @db.Text
+  resolution      String?  @db.Text
+  resolvedById    String?
+  resolvedAt      DateTime?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@unique([tenantId, id])
+  @@index([tenantId, flagged, resolvedAt])
+  @@index([tenantId, createdAt])
+}

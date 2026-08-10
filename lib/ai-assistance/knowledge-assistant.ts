@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { AiRequestOutcome, RepositoryDocumentVisibility } from "@prisma/client";
+import { roleSnapshotForRoles } from "@/lib/authorization/effective-access";
 import { aiKnowledgeProvider } from "@/lib/ai-assistance/provider";
 import { assertKnowledgeQuestionIsMinimized, normalizeAiQuestion, redactAiContentForAudit } from "@/lib/ai-assistance/privacy";
 import { estimateAiCostCentavos, recordAiDeniedRequest, requireAiRuntimeAccess, type AiExperience } from "@/lib/ai-assistance/runtime-policy";
@@ -9,10 +10,6 @@ const NO_SOURCE_RESPONSE = "I could not find enough information in this tenant's
 
 function effectiveFilter(now: Date) {
   return { AND: [{ OR: [{ effectiveAt: null }, { effectiveAt: { lte: now } }] }, { OR: [{ expiresAt: null }, { expiresAt: { gt: now } }] }] };
-}
-
-function effectiveRoleSnapshot(roles: readonly string[]) {
-  return [...new Set(roles)].sort().join(",");
 }
 
 async function authorizedSources(input: { tenantId: string; experience: AiExperience; vectorStoreId: string; providerFileIds: string[]; now: Date }) {
@@ -90,7 +87,7 @@ export async function answerTenantKnowledgeQuestion(input: { experience: AiExper
   const conversation = await conversationFor({
     tenantId,
     actorId,
-    actorRoleSnapshot: effectiveRoleSnapshot(access.user.roles),
+    actorRoleSnapshot: roleSnapshotForRoles(access.user.roles),
     retentionDays: access.governance.retentionDays,
     conversationId: input.conversationId,
   });

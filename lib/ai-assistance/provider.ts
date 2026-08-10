@@ -15,6 +15,7 @@ export type AiKnowledgeProviderInput = {
   question: string;
   vectorStoreId: string;
   modelTier: AiModelTier;
+  allowedAudiences: Array<"RESIDENT" | "STAFF">;
 };
 
 export interface AiKnowledgeProvider {
@@ -38,9 +39,7 @@ function textAndCitations(body: unknown) {
     }
     const record = value as Record<string, unknown>;
     if (record.type === "output_text" && typeof record.text === "string") texts.push(record.text);
-    if (record.type === "file_citation" && typeof record.file_id === "string") {
-      citations.set(record.file_id, { fileId: record.file_id, filename: typeof record.filename === "string" ? record.filename : undefined });
-    }
+    if (record.type === "file_citation" && typeof record.file_id === "string") citations.set(record.file_id, { fileId: record.file_id, filename: typeof record.filename === "string" ? record.filename : undefined });
     for (const item of Object.values(record)) visit(item);
   };
   visit(body);
@@ -54,10 +53,7 @@ class OpenAiKnowledgeProvider implements AiKnowledgeProvider {
     const model = modelForTier(input.modelTier);
     const response = await fetch("https://api.openai.com/v1/responses", {
       method: "POST",
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        "Content-Type": "application/json",
-      },
+      headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
       body: JSON.stringify({
         model,
         store: false,
@@ -71,7 +67,12 @@ class OpenAiKnowledgeProvider implements AiKnowledgeProvider {
           "Keep the answer concise and factual. HOAHub will render the authoritative source citations separately.",
         ].join("\n"),
         input: input.question,
-        tools: [{ type: "file_search", vector_store_ids: [input.vectorStoreId], max_num_results: 8 }],
+        tools: [{
+          type: "file_search",
+          vector_store_ids: [input.vectorStoreId],
+          max_num_results: 8,
+          filters: { type: "in", key: "audience", value: input.allowedAudiences },
+        }],
         include: ["file_search_call.results"],
       }),
       signal: AbortSignal.timeout(30_000),
@@ -98,6 +99,7 @@ class OpenAiKnowledgeProvider implements AiKnowledgeProvider {
 class MockAiKnowledgeProvider implements AiKnowledgeProvider {
   async answer(input: AiKnowledgeProviderInput): Promise<AiProviderResponse> {
     if (process.env.NODE_ENV === "production") throw new Error("Mock AI provider is forbidden in production.");
+    if (!input.allowedAudiences.includes("RESIDENT") && !input.allowedAudiences.includes("STAFF")) throw new Error("Mock provider received no authorized audience.");
     return {
       requestId: `mock-${Date.now()}`,
       model: "hoahub-ci-mock",

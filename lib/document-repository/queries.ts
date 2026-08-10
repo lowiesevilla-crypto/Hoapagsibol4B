@@ -113,24 +113,39 @@ export type RepositoryHomeownerListInput = {
   now?: Date;
 };
 
+function homeownerWhere(input: {
+  tenantId: string;
+  now: Date;
+  search?: string;
+  categoryId?: string;
+}): Prisma.RepositoryDocumentWhereInput {
+  const search = searchWhere(input.search);
+  return {
+    tenantId: input.tenantId,
+    status: "PUBLISHED",
+    visibility: "TENANT_PUBLIC",
+    malwareScanStatus: { notIn: ["PENDING", "FAILED", "BLOCKED"] },
+    AND: [
+      { OR: [{ effectiveAt: null }, { effectiveAt: { lte: input.now } }] },
+      { OR: [{ expiresAt: null }, { expiresAt: { gt: input.now } }] },
+      ...(input.categoryId ? [{ categoryId: input.categoryId }] : []),
+      ...(search ? [search] : []),
+    ],
+  };
+}
+
 export async function listRepositoryDocumentsForHomeowner(input: RepositoryHomeownerListInput = {}) {
   await requireUser();
   const { context } = await requireRepositoryPermission(Permission.DOCUMENT_REPOSITORY_READ_PUBLIC);
   const take = pageSize(input.pageSize);
   const page = pageNumber(input.page);
   const now = input.now ?? new Date();
-  const where: Prisma.RepositoryDocumentWhereInput = {
+  const where = homeownerWhere({
     tenantId: context.tenantId,
-    status: "PUBLISHED",
-    visibility: "TENANT_PUBLIC",
-    malwareScanStatus: { notIn: ["PENDING", "FAILED", "BLOCKED"] },
-    AND: [
-      { OR: [{ effectiveAt: null }, { effectiveAt: { lte: now } }] },
-      { OR: [{ expiresAt: null }, { expiresAt: { gt: now } }] },
-      ...(input.categoryId ? [{ categoryId: input.categoryId }] : []),
-      ...(searchWhere(input.search) ? [searchWhere(input.search) as Prisma.RepositoryDocumentWhereInput] : []),
-    ],
-  };
+    now,
+    search: input.search,
+    categoryId: input.categoryId,
+  });
 
   const [documents, total] = await Promise.all([
     prisma.repositoryDocument.findMany({
@@ -166,4 +181,21 @@ export async function listRepositoryDocumentsForHomeowner(input: RepositoryHomeo
       totalPages: Math.max(1, Math.ceil(total / take)),
     },
   };
+}
+
+export async function listRepositoryCategoriesForHomeowner(input?: { now?: Date }) {
+  await requireUser();
+  const { context } = await requireRepositoryPermission(Permission.DOCUMENT_REPOSITORY_READ_PUBLIC);
+  const now = input?.now ?? new Date();
+  return prisma.repositoryDocumentCategory.findMany({
+    where: {
+      tenantId: context.tenantId,
+      active: true,
+      documents: {
+        some: homeownerWhere({ tenantId: context.tenantId, now }),
+      },
+    },
+    select: { id: true, code: true, name: true, categoryGroup: true },
+    orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
+  });
 }

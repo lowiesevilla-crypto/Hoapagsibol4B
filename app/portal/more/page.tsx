@@ -5,17 +5,22 @@ import { CommunityAreaNavigation, CommunityEmptyState } from "@/components/homeo
 import { PortalPageContainer, PortalQuickActionTile, PortalSectionHeader } from "@/components/portal-mobile-shell";
 import { PwaInstallActionCard } from "@/components/pwa-install-provider";
 import { requireUser } from "@/lib/auth";
+import { resolveDocumentManagementEntitlement } from "@/lib/document-repository/entitlement";
 import { resolveHomeownerNavigation } from "@/lib/homeowner-navigation";
 import { getEnabledTenantModules } from "@/lib/tenant";
 
 export default async function PortalMorePage() {
   const user = await requireUser(Role.HOMEOWNER);
-  const enabledModules = await getEnabledTenantModules(user.tenantId);
+  const [enabledModules, documentManagementEntitlement] = await Promise.all([
+    getEnabledTenantModules(user.tenantId),
+    resolveDocumentManagementEntitlement(user.tenantId),
+  ]);
   const navigation = resolveHomeownerNavigation(enabledModules);
   const accountActions = [
     { href: "/portal/profile", label: "Profile", description: "Homeowner, property, household, password, and passkey details.", icon: UserRound },
     enabledModules.has(TenantModule.VEHICLES) && { href: "/portal/vehicles", label: "Vehicles", description: "Registered vehicles and sticker information.", icon: CarFront },
     enabledModules.has(TenantModule.DOCUMENTS) && { href: "/portal/documents", label: "Documents", description: "Document requests and generated files.", icon: FileText },
+    documentManagementEntitlement.enabled && { href: "/portal/document-library", label: "Document Library", description: "Official association documents published for homeowners.", icon: FileText },
   ].filter(Boolean);
   const supportActions = [
     { href: "/portal/organization", label: "HOA Information", description: "Official contacts and officer roster.", icon: UsersRound },

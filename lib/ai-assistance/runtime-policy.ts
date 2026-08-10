@@ -77,19 +77,34 @@ export async function recordAiDeniedRequest(input: { tenantId: string; actorId: 
       action: "AI_ACCESS_DENIED",
       entityType: "AiRequest",
       entityId: input.requestId,
-      metadata: { reason: input.reason },
+      metadata: { reason: input.reason.slice(0, 255) },
     },
   }).catch(() => undefined);
 }
 
-export async function requireAiRuntimeAccess(experience: AiExperience) {
-  const user = await requireUser();
-  const permissionSet = new Set(user.permissions);
-  if (!permissionSet.has(Permission.AI_ASSISTANCE_USE)) throw new Error("AI Assistance permission is required.");
-  if (experience === "RESIDENT" && !user.roles.includes(Role.HOMEOWNER)) throw new Error("Resident AI is available only to an authenticated homeowner role.");
-  if (experience === "STAFF" && user.roles.includes(Role.HOMEOWNER) && user.roles.length === 1) throw new Error("Staff AI requires an authorized staff or administrator role.");
+function quotaOutcome(message: string) {
+  return /rate limit/i.test(message) ? AiRequestOutcome.RATE_LIMITED : AiRequestOutcome.QUOTA_BLOCKED;
+}
 
-  const entitlement = await requireAiAssistanceEntitlement(user.tenantId);
+export async function requireAiRuntimeAccess(experience: AiExperience, requestId?: string) {
+  const user = await requireUser();
+  const deny = async (reason: string, outcome: AiRequestOutcome = AiRequestOutcome.DENIED): Promise<never> => {
+    if (requestId) await recordAiDeniedRequest({ tenantId: user.tenantId, actorId: user.id, requestId, reason, outcome });
+    throw new Error(reason);
+  };
+
+  const permissionSet = new Set(user.permissions);
+  if (!permissionSet.has(Permission.AI_ASSISTANCE_USE)) return deny("AI Assistance permission is required.");
+  if (experience === "RESIDENT" && !user.roles.includes(Role.HOMEOWNER)) return deny("Resident AI is available only to an authenticated homeowner role.");
+  if (experience === "STAFF" && user.roles.includes(Role.HOMEOWNER) && user.roles.length === 1) return deny("Staff AI requires an authorized staff or administrator role.");
+
+  let entitlement: Awaited<ReturnType<typeof requireAiAssistanceEntitlement>>;
+  try {
+    entitlement = await requireAiAssistanceEntitlement(user.tenantId);
+  } catch (error) {
+    return deny(error instanceof Error ? error.message : "AI Assistance is not included in this tenant subscription.");
+  }
+
   const governance = await prisma.tenantAiConfiguration.findUnique({ where: { tenantId: user.tenantId } });
   const decision = evaluateAiGovernance({
     globalRuntimeEnabled: process.env.AI_RUNTIME_ENABLED === "true",
@@ -97,8 +112,16 @@ export async function requireAiRuntimeAccess(experience: AiExperience) {
     experience,
     governance,
   });
-  if (!decision.allowed) throw new Error(`AI Assistance is unavailable: ${decision.reason}.`);
-  await assertAiCommercialUsageAvailable(user.tenantId, entitlement.configuration);
+  if (!decision.allowed) return deny(`AI Assistance is unavailable: ${decision.reason}.`);
+  // evaluateAiGovernance can only return allowed=true when governance exists.
+  if (!governance) return deny("AI Assistance is unavailable: TENANT_AI_DISABLED.");
+
+  try {
+    await assertAiCommercialUsageAvailable(user.tenantId, entitlement.configuration);
+  } catch (error) {
+    const reason = error instanceof Error ? error.message : "AI usage limit reached for this tenant.";
+    return deny(reason, quotaOutcome(reason));
+  }
 
   return { user, entitlement, governance };
 }

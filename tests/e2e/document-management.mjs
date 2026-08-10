@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
-import { access, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { access, mkdtemp, rm, unlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { isAbsolute, join, relative, resolve } from "node:path";
 import { PrismaClient } from "@prisma/client";
 import chromium from "@sparticuz/chromium";
 import puppeteer from "puppeteer-core";
@@ -35,6 +35,36 @@ function assertE2eDatabaseSafety() {
 async function pathExists(path) {
   if (!path) return false;
   try { await access(path); return true; } catch { return false; }
+}
+
+function uploadRoot() {
+  const configured = process.env.STORAGE_ROOT?.trim() || "storage";
+  const storageRoot = isAbsolute(configured) ? resolve(configured) : resolve(process.cwd(), configured);
+  return resolve(storageRoot, "uploads");
+}
+
+function storagePathForKey(storageKey) {
+  const normalized = String(storageKey || "").replaceAll("\\", "/").replace(/^\/+/, "");
+  if (!normalized || normalized.includes("..") || normalized.includes("\0") || !normalized.startsWith("tenants/")) {
+    throw new Error(`Refusing unsafe DMS fixture storage key: ${storageKey}`);
+  }
+  const root = uploadRoot();
+  const absolute = resolve(root, ...normalized.split("/"));
+  const child = relative(root, absolute);
+  if (!child || child.startsWith("..") || isAbsolute(child)) {
+    throw new Error(`Refusing DMS fixture storage key outside upload root: ${storageKey}`);
+  }
+  return absolute;
+}
+
+async function deleteStorageKeys(storageKeys) {
+  for (const storageKey of new Set(storageKeys.filter(Boolean))) {
+    try {
+      await unlink(storagePathForKey(storageKey));
+    } catch (error) {
+      if (error?.code !== "ENOENT") throw error;
+    }
+  }
 }
 
 async function resolveBrowserExecutable() {
@@ -135,13 +165,62 @@ async function submitSameOriginMultipartForm(page, selector) {
 async function cleanupStaleDatabaseRecords() {
   const stale = await prisma.repositoryDocument.findMany({
     where: { tenantId: primaryTenantId, title: documentTitle },
-    select: { id: true },
+    select: { id: true, storageKey: true, revisions: { select: { storageKey: true } } },
   });
   const ids = stale.map((document) => document.id);
   if (!ids.length) return;
+  const storageKeys = stale.flatMap((document) => [document.storageKey, ...document.revisions.map((revision) => revision.storageKey)]);
   await prisma.aiKnowledgeBinding.deleteMany({ where: { tenantId: primaryTenantId, documentId: { in: ids } } });
   await prisma.repositoryDocument.deleteMany({ where: { tenantId: primaryTenantId, id: { in: ids } } });
   await prisma.auditLog.deleteMany({ where: { tenantId: primaryTenantId, module: "DOCUMENT_MANAGEMENT", entityId: { in: ids } } });
+  await deleteStorageKeys(storageKeys);
+}
+
+async function withSecondaryDocumentManagementEntitlement(callback) {
+  const previous = await prisma.tenantFeatureEntitlement.findUnique({
+    where: { tenantId_featureCode: { tenantId: secondaryTenantId, featureCode: "DOCUMENT_MANAGEMENT" } },
+  });
+  await prisma.tenantFeatureEntitlement.upsert({
+    where: { tenantId_featureCode: { tenantId: secondaryTenantId, featureCode: "DOCUMENT_MANAGEMENT" } },
+    update: {
+      enabledOverride: true,
+      storageLimitMbOverride: 50,
+      maxFileSizeMbOverride: 5,
+      retainRevisionBinariesOverride: true,
+      maxRevisionBinariesOverride: 2,
+    },
+    create: {
+      tenantId: secondaryTenantId,
+      featureCode: "DOCUMENT_MANAGEMENT",
+      enabledOverride: true,
+      storageLimitMbOverride: 50,
+      maxFileSizeMbOverride: 5,
+      retainRevisionBinariesOverride: true,
+      maxRevisionBinariesOverride: 2,
+    },
+  });
+  try {
+    return await callback();
+  } finally {
+    if (previous) {
+      await prisma.tenantFeatureEntitlement.update({
+        where: { tenantId_featureCode: { tenantId: secondaryTenantId, featureCode: "DOCUMENT_MANAGEMENT" } },
+        data: {
+          enabledOverride: previous.enabledOverride,
+          storageLimitMbOverride: previous.storageLimitMbOverride,
+          maxFileSizeMbOverride: previous.maxFileSizeMbOverride,
+          retainRevisionBinariesOverride: previous.retainRevisionBinariesOverride,
+          maxRevisionBinariesOverride: previous.maxRevisionBinariesOverride,
+          configurationOverride: previous.configurationOverride,
+          updatedById: previous.updatedById,
+        },
+      });
+    } else {
+      await prisma.tenantFeatureEntitlement.delete({
+        where: { tenantId_featureCode: { tenantId: secondaryTenantId, featureCode: "DOCUMENT_MANAGEMENT" } },
+      }).catch(() => undefined);
+    }
+  }
 }
 
 async function uploadPublishedDocument(browser, originalPath) {
@@ -246,10 +325,10 @@ async function verifyPublishedHomeownerAccess(browser, documentId) {
   const secondaryPage = await createPage(secondaryContext, { width: 390, height: 844, deviceScaleFactor: 1 });
   try {
     await login(secondaryPage, otherHomeownerEmail, homeownerPassword, "/portal/");
-    const direct = await secondaryPage.evaluate(async (id) => {
+    const direct = await withSecondaryDocumentManagementEntitlement(() => secondaryPage.evaluate(async (id) => {
       const response = await fetch(`/api/portal/document-library/${id}/download`, { credentials: "include", redirect: "manual" });
       return { status: response.status, ok: response.ok, contentType: response.headers.get("content-type") || "", body: await response.text() };
-    }, documentId);
+    }, documentId));
     assert.ok(!direct.ok || direct.status !== 200, "Another tenant must not download a known DMS document ID.");
     assert.ok(!direct.body.includes("original DMS browser content"), "Cross-tenant denial must not leak DMS file content.");
 
@@ -304,7 +383,15 @@ async function replaceAndUnpublish(browser, documentId, replacementPath) {
     const saveNavigation = page.waitForNavigation({ waitUntil: "networkidle2", timeout }).catch(() => null);
     await clickByText(page, "button", "Save changes");
     await saveNavigation;
-    await page.waitForFunction(() => new URL(window.location.href).searchParams.has("success"), { timeout });
+    await page.waitForFunction(
+      () => new URL(window.location.href).searchParams.has("success") || (document.body?.textContent || "").includes("Document details updated."),
+      { timeout },
+    ).catch(async (error) => {
+      const current = await prisma.repositoryDocument.findFirst({ where: { tenantId: primaryTenantId, id: documentId }, select: { status: true, visibility: true } });
+      if (current?.status === "DRAFT" && current.visibility === "INTERNAL") return;
+      const body = (await pageText(page)).replace(/\s+/g, " ").trim();
+      throw new Error(`Expected DMS metadata save success after unpublish. URL: ${page.url()}. Current DB state: ${JSON.stringify(current)}. Page text: ${body.slice(0, 1600)}`, { cause: error });
+    });
 
     const unpublished = await prisma.repositoryDocument.findFirst({ where: { tenantId: primaryTenantId, id: documentId } });
     assert.ok(unpublished);

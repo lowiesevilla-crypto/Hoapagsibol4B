@@ -25,6 +25,7 @@ function assertSafeDatabase() {
 }
 
 async function cleanup() {
+  assertSafeDatabase();
   await prisma.aiFeedback.deleteMany({ where: { tenantId: { in: [primaryTenantId, secondaryTenantId] } } });
   await prisma.aiMessage.deleteMany({ where: { tenantId: { in: [primaryTenantId, secondaryTenantId] } } });
   await prisma.aiConversation.deleteMany({ where: { tenantId: { in: [primaryTenantId, secondaryTenantId] } } });

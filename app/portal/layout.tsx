@@ -67,7 +67,7 @@ export default async function PortalLayout({ children }: { children: React.React
       <PortalMobileHeader association={association} user={user} unreadCount={initialChatUnreadCount} showChat={navigation.hasChat} title={title} isDashboard={pathname === "/portal/dashboard"} />
       <Suspense><TransactionFeedback /></Suspense>
       <main className="mx-auto min-w-0 max-w-[1800px] px-4 pb-[calc(6rem+env(safe-area-inset-bottom))] pt-5 sm:px-7 lg:ml-72 lg:px-10 lg:py-9">{children}</main>
-      {aiAvailable && !pathname.startsWith("/portal/ai") && <AiFloatingShortcut />}
+      {aiAvailable && <AiFloatingShortcut />}
       <PortalBottomNavigation destinations={navigation.primaryDestinations} pathname={pathname} />
     </div>
   </PwaInstallProvider>;

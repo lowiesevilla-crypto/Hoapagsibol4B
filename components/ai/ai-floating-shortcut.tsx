@@ -1,7 +1,13 @@
+"use client";
+
 import { MessageCircleMore, Sparkles } from "lucide-react";
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 
 export function AiFloatingShortcut() {
+  const pathname = usePathname();
+  if (pathname === "/portal/ai" || pathname.startsWith("/portal/ai/") || pathname === "/portal/pay" || pathname.startsWith("/portal/pay/")) return null;
+
   return <Link
     href="/portal/ai"
     aria-label="Open Association Assistant"

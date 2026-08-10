@@ -98,13 +98,15 @@ class OpenAiKnowledgeProvider implements AiKnowledgeProvider {
 
 class MockAiKnowledgeProvider implements AiKnowledgeProvider {
   async answer(input: AiKnowledgeProviderInput): Promise<AiProviderResponse> {
-    if (process.env.NODE_ENV === "production") throw new Error("Mock AI provider is forbidden in production.");
+    if (process.env.NODE_ENV === "production" && process.env.CI !== "true") throw new Error("Mock AI provider is forbidden in production.");
     if (!input.allowedAudiences.includes("RESIDENT") && !input.allowedAudiences.includes("STAFF")) throw new Error("Mock provider received no authorized audience.");
+    if (input.question.includes("[PROVIDER_ERROR]")) throw new Error("Deterministic CI provider outage.");
+    const noSource = input.question.includes("[NO_SOURCE]");
     return {
       requestId: `mock-${Date.now()}`,
       model: "hoahub-ci-mock",
-      text: `Based on the tenant's approved HOA policy, this is a grounded test response to: ${input.question}`,
-      citations: [{ fileId: "file_hoahub_ci_policy", filename: "approved-policy.txt" }],
+      text: noSource ? "The model attempted an unsupported response." : `Based on the tenant's approved HOA policy, this is a grounded test response to: ${input.question}`,
+      citations: noSource ? [] : [{ fileId: "file_hoahub_ci_policy", filename: "approved-policy.txt" }],
       inputTokens: 24,
       outputTokens: 32,
     };

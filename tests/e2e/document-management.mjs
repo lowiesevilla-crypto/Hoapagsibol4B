@@ -106,6 +106,32 @@ async function createPage(context, viewport) {
   return page;
 }
 
+async function submitSameOriginMultipartForm(page, selector) {
+  const result = await page.$eval(selector, async (form) => {
+    if (!(form instanceof HTMLFormElement)) throw new Error("Expected an HTML form.");
+    const action = new URL(form.action || location.href, location.href);
+    if (action.origin !== location.origin) throw new Error(`Refusing cross-origin DMS form action: ${action.origin}`);
+    const method = (form.method || "POST").toUpperCase();
+    if (method !== "POST") throw new Error(`Unexpected DMS multipart method: ${method}`);
+    const response = await fetch(action.toString(), {
+      method,
+      body: new FormData(form),
+      credentials: "include",
+      redirect: "follow",
+    });
+    return {
+      ok: response.ok,
+      status: response.status,
+      url: response.url,
+      text: await response.text(),
+    };
+  });
+  assert.ok(result.ok, `DMS multipart submission failed with HTTP ${result.status}: ${result.text.slice(0, 500)}`);
+  const finalUrl = new URL(result.url);
+  assert.equal(finalUrl.origin, new URL(baseUrl).origin, "DMS multipart redirect must remain on the application origin.");
+  return result;
+}
+
 async function cleanupStaleDatabaseRecords() {
   const stale = await prisma.repositoryDocument.findMany({
     where: { tenantId: primaryTenantId, title: documentTitle },
@@ -153,10 +179,11 @@ async function uploadPublishedDocument(browser, originalPath) {
     assert.ok(fileInput, "Expected DMS upload file input.");
     await fileInput.uploadFile(originalPath);
 
-    const navigation = page.waitForNavigation({ waitUntil: "networkidle2", timeout }).catch(() => null);
-    await clickByText(page, "button", "Upload document");
-    await navigation;
-    await page.waitForFunction(() => window.location.pathname === "/admin/document-management" && new URL(window.location.href).searchParams.has("success"), { timeout });
+    const upload = await submitSameOriginMultipartForm(page, 'form[action="/api/admin/document-management/documents"]');
+    const uploadUrl = new URL(upload.url);
+    assert.equal(uploadUrl.pathname, "/admin/document-management");
+    assert.ok(uploadUrl.searchParams.has("success"), `Expected successful DMS upload redirect, got ${upload.url}`);
+    await page.goto(upload.url, { waitUntil: "networkidle2", timeout });
     await expectText(page, documentTitle, "uploaded DMS document in repository list");
 
     const document = await prisma.repositoryDocument.findFirst({
@@ -240,19 +267,19 @@ async function replaceAndUnpublish(browser, documentId, replacementPath) {
     await login(page, adminEmail, adminPassword, "/admin/");
     await page.goto(`${baseUrl}/admin/document-management/${documentId}`, { waitUntil: "networkidle2", timeout });
 
-    const replaceForm = await page.$(`form[action="/api/admin/document-management/documents/${documentId}/replace"]`);
+    const replaceSelector = `form[action="/api/admin/document-management/documents/${documentId}/replace"]`;
+    const replaceForm = await page.$(replaceSelector);
     assert.ok(replaceForm, "Expected authorized governed-record replacement form.");
     const replacementInput = await replaceForm.$('input[name="file"]');
     const replacementReason = await replaceForm.$('textarea[name="reason"]');
     assert.ok(replacementInput && replacementReason);
     await replacementInput.uploadFile(replacementPath);
     await replacementReason.type("E2E controlled revision replacement");
-    const replaceButton = await replaceForm.$("button");
-    assert.ok(replaceButton);
-    const replaceNavigation = page.waitForNavigation({ waitUntil: "networkidle2", timeout }).catch(() => null);
-    await replaceButton.click();
-    await replaceNavigation;
-    await page.waitForFunction(() => new URL(window.location.href).searchParams.has("success"), { timeout });
+    const replacement = await submitSameOriginMultipartForm(page, replaceSelector);
+    const replacementUrl = new URL(replacement.url);
+    assert.equal(replacementUrl.pathname, `/admin/document-management/${documentId}`);
+    assert.ok(replacementUrl.searchParams.has("success"), `Expected successful DMS replacement redirect, got ${replacement.url}`);
+    await page.goto(replacement.url, { waitUntil: "networkidle2", timeout });
     await expectText(page, "Rev 2", "updated DMS revision number");
     await expectText(page, "E2E controlled revision replacement", "DMS revision ledger reason");
 

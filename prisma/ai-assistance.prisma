@@ -88,6 +88,7 @@ model AiKnowledgeBinding {
   lastError             String?                @db.Text
   createdById           String?
   updatedById           String?
+  document              RepositoryDocument     @relation(fields: [tenantId, documentId], references: [tenantId, id], onDelete: Cascade, onUpdate: Cascade)
   createdAt             DateTime               @default(now())
   updatedAt             DateTime               @updatedAt
 

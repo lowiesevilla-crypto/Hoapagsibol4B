@@ -64,7 +64,10 @@ CREATE TABLE `AiKnowledgeBinding` (
   UNIQUE INDEX `AiKnowledgeBinding_tenantId_id_key`(`tenantId`, `id`),
   UNIQUE INDEX `AiKnowledgeBinding_tenantId_documentId_key`(`tenantId`, `documentId`),
   INDEX `AiKnowledgeBinding_tenantId_indexStatus_updatedAt_idx`(`tenantId`, `indexStatus`, `updatedAt`),
-  INDEX `AiKnowledgeBinding_tenantId_vectorStoreId_idx`(`tenantId`, `vectorStoreId`)
+  INDEX `AiKnowledgeBinding_tenantId_vectorStoreId_idx`(`tenantId`, `vectorStoreId`),
+  CONSTRAINT `AiKnowledgeBinding_tenantId_documentId_fkey`
+    FOREIGN KEY (`tenantId`, `documentId`) REFERENCES `RepositoryDocument`(`tenantId`, `id`)
+    ON DELETE CASCADE ON UPDATE CASCADE
 ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
 CREATE TABLE `AiConversation` (

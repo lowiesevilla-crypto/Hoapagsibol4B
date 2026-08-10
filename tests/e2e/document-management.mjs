@@ -410,8 +410,10 @@ async function verifyUnpublishedHomeownerDenial(browser, documentId) {
     const url = new URL("/portal/document-library", baseUrl);
     url.searchParams.set("search", documentTitle);
     await page.goto(url.toString(), { waitUntil: "networkidle2", timeout });
-    const body = await pageText(page);
-    assert.ok(!body.includes(documentTitle), "Draft/internal DMS record must disappear from homeowner retrieval immediately.");
+    const homeownerLinks = await page.$$(`a[href="/api/portal/document-library/${documentId}/download"]`);
+    assert.equal(homeownerLinks.length, 0, "Draft/internal DMS record must disappear from homeowner retrieval immediately.");
+    const visibleCards = await page.$$eval("article", (cards, title) => cards.filter((card) => (card.textContent || "").includes(title)).length, documentTitle);
+    assert.equal(visibleCards, 0, "Draft/internal DMS record must not render as a homeowner library card.");
 
     const direct = await page.evaluate(async (id) => {
       const response = await fetch(`/api/portal/document-library/${id}/download`, { credentials: "include", redirect: "manual" });

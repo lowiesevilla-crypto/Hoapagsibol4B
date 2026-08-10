@@ -8,6 +8,8 @@ import {
   listRepositoryDocumentsForHomeowner,
 } from "@/lib/document-repository/queries";
 
+export const dynamic = "force-dynamic";
+
 function one(value: string | string[] | undefined) {
   return Array.isArray(value) ? value[0] || "" : value || "";
 }

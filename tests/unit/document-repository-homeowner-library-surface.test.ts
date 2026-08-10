@@ -38,6 +38,7 @@ test("homeowner portal navigation is entitlement-aware and mobile discoverable",
   assert.match(layout, /pathname\.startsWith\("\/portal\/document-library"\)/);
   assert.match(layout, /Document Library/);
   assert.match(more, /href: "\/portal\/document-library"/);
+  assert.match(page, /export const dynamic = "force-dynamic"/);
   assert.match(page, /Official documents your association has published for homeowners/);
   assert.match(page, /listRepositoryDocumentsForHomeowner/);
 });

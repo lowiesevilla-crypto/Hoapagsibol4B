@@ -89,7 +89,7 @@ jobs:
 
   deploy-production:
     name: Deploy to Hostinger production
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && vars.HOSTINGER_SSH_DEPLOY_ENABLED == 'true'
     needs: verify
     runs-on: ubuntu-latest
     environment: production

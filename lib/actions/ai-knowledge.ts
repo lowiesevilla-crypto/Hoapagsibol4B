@@ -9,6 +9,12 @@ import { requireUser } from "@/lib/auth";
 import { Permission } from "@/lib/authorization/permissions";
 import { prisma } from "@/lib/db";
 
+const GENERAL_AI_BLOCKED_CLASSIFICATIONS = new Set<AiPrivacyClassification>([
+  AiPrivacyClassification.PERSONAL,
+  AiPrivacyClassification.SENSITIVE,
+  AiPrivacyClassification.RESTRICTED,
+]);
+
 function clean(value: FormDataEntryValue | null) {
   return String(value || "").trim();
 }
@@ -28,7 +34,7 @@ export async function updateDocumentAiEligibilityAction(formData: FormData) {
     const classification = clean(formData.get("privacyClassification")) as AiPrivacyClassification;
     if (!Object.values(AiPrivacyClassification).includes(classification)) throw new Error("Select a valid document privacy classification.");
     const aiEnabled = formData.get("aiEnabled") === "on";
-    if (aiEnabled && [AiPrivacyClassification.PERSONAL, AiPrivacyClassification.SENSITIVE, AiPrivacyClassification.RESTRICTED].includes(classification)) {
+    if (aiEnabled && GENERAL_AI_BLOCKED_CLASSIFICATIONS.has(classification)) {
       throw new Error("Personal, sensitive, and restricted documents cannot be enabled for the general HOAHub AI knowledge index.");
     }
     const document = await prisma.repositoryDocument.findFirst({ where: { tenantId: user.tenantId, id: documentId }, select: { id: true, aiEnabled: true, privacyClassification: true } });

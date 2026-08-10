@@ -93,7 +93,7 @@ function documentFeature(formData: FormData) {
   };
 }
 
-export async function createCommercialSubscriptionPlanAction(formData: FormData) {
+export async function createSubscriptionPlanAction(formData: FormData) {
   const actor = await requirePlatformPlanOperator();
   let createdPlanId = "";
   let errorMessage = "";
@@ -124,10 +124,7 @@ export async function createCommercialSubscriptionPlanAction(formData: FormData)
             code: created.code,
             name: created.name,
             modules,
-            sellableFeatures: {
-              documentManagement,
-              aiAssistance,
-            },
+            sellableFeatures: { documentManagement, aiAssistance },
           },
         },
       });
@@ -142,7 +139,7 @@ export async function createCommercialSubscriptionPlanAction(formData: FormData)
   redirect(`/platform/plans/${createdPlanId}?success=${encodeURIComponent("Plan created with sellable feature configuration.")}`);
 }
 
-export async function updateCommercialSubscriptionPlanAction(formData: FormData) {
+export async function updateSubscriptionPlanAction(formData: FormData) {
   const actor = await requirePlatformPlanOperator();
   const planId = clean(formData.get("planId"));
   if (!planId) redirect("/platform/plans?error=Plan%20not%20found.");
@@ -152,14 +149,9 @@ export async function updateCommercialSubscriptionPlanAction(formData: FormData)
     const modules = selectedModules(formData);
     const documentManagement = documentFeature(formData);
     const aiAssistance = { enabled: formData.get("aiAssistanceEnabled") === "on", configuration: aiConfiguration(formData) };
-    const existing = await prisma.subscriptionPlan.findUnique({
-      where: { id: planId },
-      include: { modules: true },
-    });
+    const existing = await prisma.subscriptionPlan.findUnique({ where: { id: planId }, include: { modules: true } });
     if (!existing) throw new Error("Subscription plan not found.");
-    const existingFeatures = await prisma.subscriptionPlanFeatureEntitlement.findMany({
-      where: { planId, featureCode: { in: [DOCUMENT_MANAGEMENT_FEATURE_CODE, AI_ASSISTANCE_FEATURE_CODE] } },
-    });
+    const existingFeatures = await prisma.subscriptionPlanFeatureEntitlement.findMany({ where: { planId, featureCode: { in: [DOCUMENT_MANAGEMENT_FEATURE_CODE, AI_ASSISTANCE_FEATURE_CODE] } } });
 
     await prisma.$transaction(async (tx) => {
       await tx.subscriptionPlan.update({ where: { id: planId }, data: planFields });

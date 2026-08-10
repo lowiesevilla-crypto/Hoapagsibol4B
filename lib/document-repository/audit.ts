@@ -7,6 +7,7 @@ import { prisma } from "@/lib/db";
 import { currentTenantContext } from "@/lib/tenant-context";
 
 export type RepositoryAuditInput = {
+  tenantId?: string;
   action: RepositoryAuditAction;
   actorId?: string | null;
   documentId?: string | null;
@@ -20,11 +21,22 @@ export type RepositoryAuditInput = {
 
 export async function writeRepositoryAudit(input: RepositoryAuditInput) {
   const context = currentTenantContext();
-  if (!context) throw new Error("Tenant context is required before writing a Document Management audit event.");
+  const explicitTenantId = input.tenantId?.trim() || null;
+
+  if (context && explicitTenantId && context.tenantId !== explicitTenantId) {
+    throw new Error("Cross-tenant Document Management audit event blocked.");
+  }
+
+  // Server actions and route handlers may cross asynchronous boundaries after
+  // authentication. Callers that already resolved the authenticated repository
+  // context pass that tenant explicitly so audit persistence does not depend on
+  // AsyncLocalStorage still being available at the final write boundary.
+  const tenantId = explicitTenantId ?? context?.tenantId;
+  if (!tenantId) throw new Error("Tenant context is required before writing a Document Management audit event.");
 
   return prisma.auditLog.create({
     data: {
-      tenantId: context.tenantId,
+      tenantId,
       actorId: input.actorId ?? null,
       module: REPOSITORY_AUDIT_MODULE,
       action: input.action,

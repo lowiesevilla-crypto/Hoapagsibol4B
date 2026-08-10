@@ -69,16 +69,24 @@ async function openDelivery(input: {
   };
 }
 
-async function auditDelivery(actorId: string, document: Awaited<ReturnType<typeof findActiveTenantDocument>>) {
+async function auditDelivery(input: {
+  tenantId: string;
+  actorId: string;
+  document: Awaited<ReturnType<typeof findActiveTenantDocument>>;
+  homeownerLibrary?: boolean;
+}) {
   await writeRepositoryAudit({
+    tenantId: input.tenantId,
     action: RepositoryAuditAction.DOWNLOADED,
-    actorId,
-    documentId: document.id,
+    actorId: input.actorId,
+    documentId: input.document.id,
     metadata: {
-      title: document.title,
-      fileName: document.originalFileName,
-      fileSizeBytes: document.fileSizeBytes.toString(),
-      revision: document.currentRevision,
+      title: input.document.title,
+      fileName: input.document.originalFileName,
+      fileSizeBytes: input.document.fileSizeBytes.toString(),
+      checksumSha256: input.document.checksumSha256,
+      revision: input.document.currentRevision,
+      ...(input.homeownerLibrary ? { homeownerLibrary: true } : {}),
     },
   });
 }
@@ -99,7 +107,7 @@ export async function openRepositoryDocumentForStaff(documentId: string): Promis
     throw new Error("This repository file is not safe for delivery.");
   }
   const delivery = await openDelivery({ tenantSlug: actor.tenant.slug, document });
-  await auditDelivery(actor.id, document);
+  await auditDelivery({ tenantId: context.tenantId, actorId: actor.id, document });
   return delivery;
 }
 
@@ -122,6 +130,11 @@ export async function openRepositoryDocumentForHomeowner(documentId: string): Pr
   });
 
   const delivery = await openDelivery({ tenantSlug: actor.tenant.slug, document });
-  await auditDelivery(actor.id, document);
+  await auditDelivery({
+    tenantId: context.tenantId,
+    actorId: actor.id,
+    document,
+    homeownerLibrary: true,
+  });
   return delivery;
 }

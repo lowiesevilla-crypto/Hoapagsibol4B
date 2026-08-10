@@ -64,6 +64,7 @@ export async function updateRepositoryDocumentAction(formData: FormData) {
 
   revalidatePath("/admin/document-management");
   revalidatePath(`/admin/document-management/${documentId}`);
+  revalidatePath("/portal/document-library");
   redirect(detailUrl(documentId, "success", "Document details updated."));
 }
 

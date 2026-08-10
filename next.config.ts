@@ -11,6 +11,7 @@ const nextConfig: NextConfig = {
   },
   async headers() {
     const isDevelopment = process.env.NODE_ENV !== "production";
+    const isHttpsDeployment = process.env.APP_URL?.startsWith("https://") === true;
     const contentSecurityPolicy = [
       "default-src 'self'",
       "base-uri 'self'",
@@ -23,7 +24,7 @@ const nextConfig: NextConfig = {
       "font-src 'self' data:",
       `connect-src 'self'${isDevelopment ? " ws: http://localhost:* http://127.0.0.1:*" : ""}`,
       "frame-src 'self'",
-      !isDevelopment ? "upgrade-insecure-requests" : "",
+      !isDevelopment && isHttpsDeployment ? "upgrade-insecure-requests" : "",
     ].filter(Boolean).join("; ");
     const securityHeaders = [
       { key: "Content-Security-Policy", value: contentSecurityPolicy },
@@ -31,7 +32,7 @@ const nextConfig: NextConfig = {
       { key: "X-Content-Type-Options", value: "nosniff" },
       { key: "X-Frame-Options", value: "SAMEORIGIN" },
       { key: "Permissions-Policy", value: "camera=(), microphone=(), geolocation=(), payment=(), publickey-credentials-create=(self), publickey-credentials-get=(self)" },
-      ...(process.env.APP_URL?.startsWith("https://") ? [{ key: "Strict-Transport-Security", value: "max-age=31536000; includeSubDomains" }] : []),
+      ...(isHttpsDeployment ? [{ key: "Strict-Transport-Security", value: "max-age=31536000; includeSubDomains" }] : []),
     ];
     const noStoreHeaders = [
       { key: "Cache-Control", value: "no-store, max-age=0" },

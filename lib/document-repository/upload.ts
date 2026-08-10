@@ -172,6 +172,7 @@ export async function createRepositoryDocument(input: CreateRepositoryDocumentIn
     documentId = document.id;
 
     await writeRepositoryAudit({
+      tenantId: context.tenantId,
       action: RepositoryAuditAction.UPLOADED,
       actorId: actor.id,
       documentId: document.id,

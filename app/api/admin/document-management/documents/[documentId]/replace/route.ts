@@ -10,8 +10,21 @@ function text(formData: FormData, key: string) {
   return String(formData.get(key) || "").trim();
 }
 
+function trustedRedirectOrigin(request: Request) {
+  const configured = process.env.APP_URL?.trim();
+  if (configured) {
+    try {
+      const url = new URL(configured);
+      if (url.protocol === "https:" || url.protocol === "http:") return url.origin;
+    } catch {
+      // Fall through to the server-derived request origin when APP_URL is invalid.
+    }
+  }
+  return new URL(request.url).origin;
+}
+
 function detailRedirect(request: Request, documentId: string, type: "success" | "error", message: string) {
-  const url = new URL(`/admin/document-management/${encodeURIComponent(documentId)}`, request.url);
+  const url = new URL(`/admin/document-management/${encodeURIComponent(documentId)}`, `${trustedRedirectOrigin(request)}/`);
   url.searchParams.set(type, message);
   return NextResponse.redirect(url, 303);
 }

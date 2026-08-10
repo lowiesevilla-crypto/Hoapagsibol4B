@@ -7,7 +7,7 @@ import { RepositoryStatusBadge, RepositoryVisibilityBadge } from "@/components/d
 import { requireUser } from "@/lib/auth";
 import { Permission } from "@/lib/authorization/permissions";
 import { permanentlyDeleteRepositoryDocumentAction, updateRepositoryDocumentAction } from "@/lib/actions/document-management";
-import { hasRepositoryPermission } from "@/lib/document-repository/access";
+import { canRepositoryPermission } from "@/lib/document-repository/access";
 import {
   repositoryDocumentStatus,
   repositoryDocumentVisibility,
@@ -66,14 +66,16 @@ export default async function RepositoryDocumentDetailPage({
   ]);
   if (!document) notFound();
 
-  const canEdit = hasRepositoryPermission(Permission.DOCUMENT_REPOSITORY_UPDATE_METADATA);
-  const canManageVisibility = hasRepositoryPermission(Permission.DOCUMENT_REPOSITORY_MANAGE_VISIBILITY);
-  const canPublish = hasRepositoryPermission(Permission.DOCUMENT_REPOSITORY_PUBLISH);
-  const canArchive = hasRepositoryPermission(Permission.DOCUMENT_REPOSITORY_ARCHIVE);
-  const canDelete = hasRepositoryPermission(Permission.DOCUMENT_REPOSITORY_DELETE);
-  const canDownload = hasRepositoryPermission(Permission.DOCUMENT_REPOSITORY_DOWNLOAD_INTERNAL);
-  const canReplace = hasRepositoryPermission(Permission.DOCUMENT_REPOSITORY_REPLACE)
-    && (document.status !== "PUBLISHED" || canPublish);
+  const [canEdit, canManageVisibility, canPublish, canArchive, canDelete, canDownload, canReplacePermission] = await Promise.all([
+    canRepositoryPermission(Permission.DOCUMENT_REPOSITORY_UPDATE_METADATA),
+    canRepositoryPermission(Permission.DOCUMENT_REPOSITORY_MANAGE_VISIBILITY),
+    canRepositoryPermission(Permission.DOCUMENT_REPOSITORY_PUBLISH),
+    canRepositoryPermission(Permission.DOCUMENT_REPOSITORY_ARCHIVE),
+    canRepositoryPermission(Permission.DOCUMENT_REPOSITORY_DELETE),
+    canRepositoryPermission(Permission.DOCUMENT_REPOSITORY_DOWNLOAD_INTERNAL),
+    canRepositoryPermission(Permission.DOCUMENT_REPOSITORY_REPLACE),
+  ]);
+  const canReplace = canReplacePermission && (document.status !== "PUBLISHED" || canPublish);
   const success = one(query.success);
   const error = one(query.error);
 

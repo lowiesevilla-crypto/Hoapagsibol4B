@@ -67,7 +67,16 @@ for (const relativePath of [
   record(`${relativePath} exists`, existsSync(path.join(root, relativePath)));
 }
 
-record("community routes require authenticated homeowner access", [communityPage, announcementsPage, eventsPage, chatPage, morePage, aiPage].every((source) => source.includes("requireUser(Role.HOMEOWNER)") || source.includes("requireHomeownerProfile")));
+const residentAiHasExplicitHomeownerGuard = hasAll(aiPage, [
+  "const user = await requireUser()",
+  "user.roles.includes(Role.HOMEOWNER)",
+  "redirect(defaultHomeForRoles",
+]);
+record(
+  "community routes require authenticated homeowner access",
+  [communityPage, announcementsPage, eventsPage, chatPage, morePage].every((source) => source.includes("requireUser(Role.HOMEOWNER)") || source.includes("requireHomeownerProfile"))
+    && (aiPage.includes("requireUser(Role.HOMEOWNER)") || aiPage.includes("requireHomeownerProfile") || residentAiHasExplicitHomeownerGuard),
+);
 record("announcements are tenant-scoped and published-only", hasAll(announcementsPage + announcementDetail, ["tenantId: user.tenantId", "status: \"PUBLISHED\"", "tenantId: profile.tenantId", "notFound()"]));
 record("events are tenant-scoped and published-only", hasAll(eventsPage + eventDetail, ["tenantId: user.tenantId", "status: \"PUBLISHED\"", "tenantId: profile.tenantId", "notFound()"]));
 record("unpublished content is not exposed", [announcementsPage, announcementDetail, eventsPage, eventDetail].every((source) => source.includes("status: \"PUBLISHED\"")));

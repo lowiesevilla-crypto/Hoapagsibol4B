@@ -1,5 +1,5 @@
 import { Role } from "@prisma/client";
-import { Download, FileLock2, Save, ShieldAlert, Trash2 } from "lucide-react";
+import { Download, FileLock2, History, RefreshCw, Save, ShieldAlert, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { PageHeader } from "@/components/page-header";
@@ -15,6 +15,7 @@ import {
 } from "@/lib/document-repository/constants";
 import { formatRepositoryStorage } from "@/lib/document-repository/quota";
 import { ensureRepositoryDefaultCategories, getRepositoryDocumentForAdmin, listRepositoryCategories } from "@/lib/document-repository/repository";
+import { repositoryAllowedFileExtensions } from "@/lib/document-repository/validation";
 
 function one(value: string | string[] | undefined) {
   return Array.isArray(value) ? value[0] || "" : value || "";
@@ -71,6 +72,8 @@ export default async function RepositoryDocumentDetailPage({
   const canArchive = hasRepositoryPermission(Permission.DOCUMENT_REPOSITORY_ARCHIVE);
   const canDelete = hasRepositoryPermission(Permission.DOCUMENT_REPOSITORY_DELETE);
   const canDownload = hasRepositoryPermission(Permission.DOCUMENT_REPOSITORY_DOWNLOAD_INTERNAL);
+  const canReplace = hasRepositoryPermission(Permission.DOCUMENT_REPOSITORY_REPLACE)
+    && (document.status !== "PUBLISHED" || canPublish);
   const success = one(query.success);
   const error = one(query.error);
 
@@ -78,7 +81,7 @@ export default async function RepositoryDocumentDetailPage({
     <PageHeader
       eyebrow={optionLabel(document.category.categoryGroup)}
       title={document.title}
-      description="Review the official repository record, publication controls, governance metadata, and file evidence for this tenant."
+      description="Review the official repository record, publication controls, governance metadata, revision lineage, and file evidence for this tenant."
       action={<div className="flex flex-wrap gap-2"><Link className="btn-secondary" href="/admin/document-management">Back to repository</Link>{canDownload && <a className="btn-primary inline-flex items-center gap-2" href={`/api/admin/document-management/documents/${document.id}/download`}><Download className="size-4" /> Download</a>}</div>}
     />
 
@@ -88,7 +91,7 @@ export default async function RepositoryDocumentDetailPage({
     <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
       <article className="card"><p className="text-xs font-extrabold uppercase tracking-wider text-slate-500">Status</p><div className="mt-3"><RepositoryStatusBadge status={document.status} /></div><p className="mt-3 text-sm text-slate-500">{document.publishedAt ? `Published ${dateLabel(document.publishedAt)}` : "Not currently published."}</p></article>
       <article className="card"><p className="text-xs font-extrabold uppercase tracking-wider text-slate-500">Visibility</p><div className="mt-3"><RepositoryVisibilityBadge visibility={document.visibility} /></div><p className="mt-3 text-sm text-slate-500">Tenant public is still limited to authenticated homeowners in this tenant.</p></article>
-      <article className="card"><p className="text-xs font-extrabold uppercase tracking-wider text-slate-500">Revision</p><p className="mt-2 text-2xl font-black text-ink">Rev {document.currentRevision}</p><p className="mt-2 text-sm text-slate-500">{document.revisionPolicy === "KEEP_HISTORY" ? "Controlled revision lineage" : "Replace-current policy"}</p></article>
+      <article className="card"><p className="text-xs font-extrabold uppercase tracking-wider text-slate-500">Revision</p><p className="mt-2 text-2xl font-black text-ink">Rev {document.currentRevision}</p><p className="mt-2 text-sm text-slate-500">{document.revisionPolicy === "KEEP_HISTORY" ? "Controlled revision lineage" : "Replace-current policy with audit metadata"}</p></article>
       <article className="card"><p className="text-xs font-extrabold uppercase tracking-wider text-slate-500">File</p><p className="mt-2 text-lg font-black uppercase text-ink">{document.fileExtension.replace(".", "")}</p><p className="mt-1 text-sm text-slate-500">{formatRepositoryStorage(document.fileSizeBytes)} · {optionLabel(document.malwareScanStatus)}</p></article>
     </section>
 
@@ -138,7 +141,18 @@ export default async function RepositoryDocumentDetailPage({
           <p className="mt-4 rounded-xl bg-slate-50 p-3 text-xs leading-5 text-slate-500">Internal storage keys and physical paths are intentionally not exposed in the Tenant Admin UI.</p>
         </section>
 
-        {document.category.governanceControlled && <section className="card border-pine-100 bg-pine-50/40"><h2 className="font-black text-pine-900">Governed record</h2><p className="mt-2 text-sm leading-6 text-pine-900/70">This category enforces controlled revision lineage. A future file replacement must create a revision event rather than silently overwriting the official record.</p></section>}
+        {document.category.governanceControlled && <section className="card border-pine-100 bg-pine-50/40"><h2 className="font-black text-pine-900">Governed record</h2><p className="mt-2 text-sm leading-6 text-pine-900/70">This category enforces controlled revision lineage. File replacement creates a revision event with the previous checksum, filename, file size, actor, reason, and revision metadata rather than silently overwriting the official record.</p></section>}
+
+        {canReplace && <section className="rounded-3xl border bg-white p-5 shadow-sm">
+          <div className="flex items-start gap-3"><span className="grid size-10 shrink-0 place-items-center rounded-2xl bg-blue-50 text-blue-700"><RefreshCw className="size-5" /></span><div><h2 className="font-black text-ink">Replace file / new revision</h2><p className="mt-1 text-sm leading-6 text-slate-500">Replace the current binary while preserving this document’s identity. Current revision: <strong>Rev {document.currentRevision}</strong>; successful replacement becomes <strong>Rev {document.currentRevision + 1}</strong>.</p></div></div>
+          <form action={`/api/admin/document-management/documents/${document.id}/replace`} method="post" encType="multipart/form-data" className="mt-4 space-y-3">
+            <label><span className="label">Replacement file</span><input className="block w-full text-sm" name="file" type="file" accept={repositoryAllowedFileExtensions.join(",")} required /></label>
+            <label><span className="label">Archived revision label</span><input className="field" name="revisionLabel" maxLength={60} placeholder={`Rev ${document.currentRevision}`} /></label>
+            <label><span className="label">Revision reason</span><textarea className="field min-h-20" name="reason" maxLength={1000} placeholder="Describe what changed and why this file supersedes the current revision." required /></label>
+            <p className="rounded-xl bg-slate-50 p-3 text-xs leading-5 text-slate-500">Historical binary retention follows the tenant’s subscribed Document Management plan. Even when an older binary is purged, its immutable revision metadata and audit evidence remain.</p>
+            <button className="btn-primary inline-flex min-h-11 w-full items-center justify-center gap-2"><RefreshCw className="size-4" /> Create next revision</button>
+          </form>
+        </section>}
 
         {canDelete && <section className="rounded-3xl border border-rose-200 bg-rose-50/60 p-5 shadow-sm">
           <div className="flex items-start gap-3"><span className="grid size-10 shrink-0 place-items-center rounded-2xl bg-white text-rose-700"><ShieldAlert className="size-5" /></span><div><h2 className="font-black text-rose-950">Permanent deletion</h2><p className="mt-1 text-sm leading-6 text-rose-800">Deletes the repository record, current file, and retained revision files. HOAHub keeps an audit tombstone, but the application has no recycle bin or restore action.</p></div></div>
@@ -151,5 +165,10 @@ export default async function RepositoryDocumentDetailPage({
         </section>}
       </aside>
     </div>
+
+    <section className="mt-5 rounded-3xl border bg-white p-5 shadow-sm sm:p-7">
+      <div className="flex items-start gap-3 border-b pb-5"><span className="grid size-11 shrink-0 place-items-center rounded-2xl bg-slate-100 text-slate-700"><History className="size-5" /></span><div><h2 className="text-xl font-black text-ink">Revision ledger</h2><p className="mt-1 text-sm leading-6 text-slate-500">Historical entries are tenant-scoped evidence. Retained binary availability depends on plan retention policy; internal storage locations are never displayed.</p></div></div>
+      {document.revisions.length ? <div className="mt-5 overflow-x-auto"><table className="w-full min-w-[760px] text-sm"><thead className="bg-slate-50 text-left text-xs font-extrabold uppercase tracking-wider text-slate-500"><tr><th className="px-4 py-3">Revision</th><th className="px-4 py-3">File</th><th className="px-4 py-3">Size</th><th className="px-4 py-3">Created</th><th className="px-4 py-3">Binary</th><th className="px-4 py-3">Reason</th></tr></thead><tbody>{document.revisions.map((revision) => <tr key={revision.id} className="border-t align-top"><td className="px-4 py-4"><p className="font-black text-slate-800">Rev {revision.revision}</p>{revision.revisionLabel && <p className="mt-1 text-xs text-slate-500">{revision.revisionLabel}</p>}</td><td className="px-4 py-4"><p className="font-semibold text-slate-700">{revision.originalFileName}</p><p className="mt-1 break-all font-mono text-[11px] text-slate-400">{revision.checksumSha256}</p></td><td className="px-4 py-4 text-slate-600">{formatRepositoryStorage(revision.fileSizeBytes)}</td><td className="px-4 py-4 text-slate-600">{dateLabel(revision.createdAt)}</td><td className="px-4 py-4"><span className={`rounded-full px-2.5 py-1 text-[11px] font-black uppercase tracking-wide ${revision.storageKey ? "bg-emerald-50 text-emerald-700" : "bg-slate-100 text-slate-600"}`}>{revision.storageKey ? "Retained" : "Metadata only"}</span></td><td className="max-w-sm px-4 py-4 text-slate-600">{revision.reason || "—"}</td></tr>)}</tbody></table></div> : <div className="mt-5 rounded-2xl border border-dashed bg-slate-50 px-5 py-8 text-center"><p className="font-bold text-slate-700">No prior revisions yet</p><p className="mt-1 text-sm text-slate-500">The first controlled replacement will archive the current file as revision evidence.</p></div>}
+    </section>
   </>;
 }

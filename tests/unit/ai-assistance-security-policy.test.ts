@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
+import { evaluateAiGovernance } from "@/lib/ai-assistance/governance-policy";
 import { assertKnowledgeQuestionIsMinimized, normalizeAiQuestion, redactAiContentForAudit } from "@/lib/ai-assistance/privacy";
-import { evaluateAiGovernance } from "@/lib/ai-assistance/runtime-policy";
 
 const approved = new Date("2026-08-10T00:00:00.000Z");
 const readyGovernance = {

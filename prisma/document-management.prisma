@@ -36,6 +36,7 @@ model SubscriptionPlanFeatureEntitlement {
   maxFileSizeMb          Int?     @default(25)
   retainRevisionBinaries Boolean  @default(false)
   maxRevisionBinaries    Int?
+  configuration          Json?
   createdAt              DateTime @default(now())
   updatedAt              DateTime @updatedAt
 
@@ -45,7 +46,8 @@ model SubscriptionPlanFeatureEntitlement {
 
 /// Tenant-specific commercial overrides. Absence of a row means inherit the
 /// active subscription plan. Nullable override fields intentionally preserve
-/// plan inheritance.
+/// plan inheritance. configurationOverride is a feature-specific partial
+/// configuration object merged by the corresponding feature service.
 model TenantFeatureEntitlement {
   tenantId                        String
   featureCode                     String   @db.VarChar(80)
@@ -54,6 +56,7 @@ model TenantFeatureEntitlement {
   maxFileSizeMbOverride           Int?
   retainRevisionBinariesOverride  Boolean?
   maxRevisionBinariesOverride     Int?
+  configurationOverride           Json?
   updatedById                     String?
   createdAt                       DateTime @default(now())
   updatedAt                       DateTime @updatedAt

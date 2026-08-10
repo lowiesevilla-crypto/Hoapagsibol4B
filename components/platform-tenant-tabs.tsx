@@ -4,6 +4,7 @@ export function PlatformTenantTabs({ tenantId, active }: { tenantId: string; act
   const tabs = [
     { key: "overview", label: "Overview", href: `/platform/tenants/${tenantId}` },
     { key: "billing", label: "Subscription & Billing", href: `/platform/tenants/${tenantId}/billing` },
+    { key: "features", label: "Sellable Features", href: `/platform/tenants/${tenantId}/features` },
     { key: "users", label: "Users", href: `/platform/tenants/${tenantId}/users` },
     { key: "settings", label: "Settings", href: `/platform/tenants/${tenantId}#settings` },
     { key: "modules", label: "Module Access", href: `/platform/tenants/${tenantId}#modules` },

@@ -3,7 +3,7 @@ import { Bot, FolderLock, ShieldCheck } from "lucide-react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { PlatformTenantTabs } from "@/components/platform-tenant-tabs";
-import { AI_ASSISTANCE_FEATURE_CODE, mergeAiCommercialConfiguration, parseAiCommercialConfiguration } from "@/lib/ai-assistance/commercial";
+import { AI_ASSISTANCE_FEATURE_CODE, mergeAiCommercialConfiguration } from "@/lib/ai-assistance/commercial";
 import { updateTenantFeatureEntitlementsAction } from "@/lib/actions/platform-feature-entitlements";
 import { prisma } from "@/lib/db";
 import { DOCUMENT_MANAGEMENT_FEATURE_CODE } from "@/lib/document-repository/constants";
@@ -18,27 +18,14 @@ function jsonRecord(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
 }
 
-export default async function PlatformTenantFeaturesPage({
-  params,
-  searchParams,
-}: {
-  params: Promise<{ id: string }>;
-  searchParams: Promise<{ success?: string; error?: string }>;
-}) {
+export default async function PlatformTenantFeaturesPage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ success?: string; error?: string }> }) {
   const { id } = await params;
   const query = await searchParams;
   const tenant = await prisma.tenant.findUnique({
     where: { id },
     select: {
-      id: true,
-      name: true,
-      subscriptionPlan: true,
-      subscriptionStatus: true,
-      subscriptions: {
-        orderBy: [{ startedAt: "desc" }, { createdAt: "desc" }],
-        take: 1,
-        select: { planId: true, status: true, plan: { select: { id: true, code: true, name: true, active: true, maximumStorageMb: true } } },
-      },
+      id: true, name: true, subscriptionPlan: true, subscriptionStatus: true,
+      subscriptions: { orderBy: [{ startedAt: "desc" }, { createdAt: "desc" }], take: 1, select: { planId: true, status: true, plan: { select: { id: true, code: true, name: true, active: true, maximumStorageMb: true } } } },
     },
   });
   if (!tenant) notFound();
@@ -47,12 +34,8 @@ export default async function PlatformTenantFeaturesPage({
   const fallbackPlan = latest ? null : await prisma.subscriptionPlan.findFirst({ where: { code: tenant.subscriptionPlan } });
   const plan = latest?.plan ?? fallbackPlan;
   const [planFeatures, overrides] = await Promise.all([
-    plan ? prisma.subscriptionPlanFeatureEntitlement.findMany({
-      where: { planId: plan.id, featureCode: { in: [DOCUMENT_MANAGEMENT_FEATURE_CODE, AI_ASSISTANCE_FEATURE_CODE] } },
-    }) : Promise.resolve([]),
-    prisma.tenantFeatureEntitlement.findMany({
-      where: { tenantId: tenant.id, featureCode: { in: [DOCUMENT_MANAGEMENT_FEATURE_CODE, AI_ASSISTANCE_FEATURE_CODE] } },
-    }),
+    plan ? prisma.subscriptionPlanFeatureEntitlement.findMany({ where: { planId: plan.id, featureCode: { in: [DOCUMENT_MANAGEMENT_FEATURE_CODE, AI_ASSISTANCE_FEATURE_CODE] } } }) : Promise.resolve([]),
+    prisma.tenantFeatureEntitlement.findMany({ where: { tenantId: tenant.id, featureCode: { in: [DOCUMENT_MANAGEMENT_FEATURE_CODE, AI_ASSISTANCE_FEATURE_CODE] } } }),
   ]);
   const documentPlan = planFeatures.find((item) => item.featureCode === DOCUMENT_MANAGEMENT_FEATURE_CODE);
   const aiPlan = planFeatures.find((item) => item.featureCode === AI_ASSISTANCE_FEATURE_CODE);
@@ -66,10 +49,7 @@ export default async function PlatformTenantFeaturesPage({
   const aiOverrideConfig = jsonRecord(aiOverride?.configurationOverride);
 
   return <div>
-    <div className="flex flex-wrap items-start justify-between gap-4">
-      <div><p className="text-xs font-black uppercase tracking-[.16em] text-pine-700">Platform commercial controls</p><h1 className="mt-1 text-2xl font-black text-slate-950 sm:text-3xl">{tenant.name} · Sellable features</h1><p className="mt-2 max-w-3xl text-sm leading-6 text-slate-600">Set tenant-specific exceptions to the subscribed plan. Overrides are server-authoritative and audited; they never delete tenant documents when a feature is disabled.</p></div>
-      <Link className="btn-secondary" href="/platform/plans">Manage plan catalog</Link>
-    </div>
+    <div className="flex flex-wrap items-start justify-between gap-4"><div><p className="text-xs font-black uppercase tracking-[.16em] text-pine-700">Platform commercial controls</p><h1 className="mt-1 text-2xl font-black text-slate-950 sm:text-3xl">{tenant.name} · Sellable features</h1><p className="mt-2 max-w-3xl text-sm leading-6 text-slate-600">Set tenant-specific exceptions to the subscribed plan. Overrides are server-authoritative and audited; they never delete tenant documents when a feature is disabled.</p></div><Link className="btn-secondary" href="/platform/plans">Manage plan catalog</Link></div>
     <PlatformTenantTabs tenantId={tenant.id} active="features" />
     {query.success && <p className="mt-4 rounded-xl bg-emerald-50 p-3 text-sm font-semibold text-emerald-800">{query.success}</p>}
     {query.error && <p className="mt-4 rounded-xl bg-rose-50 p-3 text-sm font-semibold text-rose-800">{query.error}</p>}

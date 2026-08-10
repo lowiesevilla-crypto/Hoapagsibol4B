@@ -1,14 +1,13 @@
 "use client";
 
 import { MessageCircleMore, Sparkles } from "lucide-react";
-import Link from "next/link";
 import { usePathname } from "next/navigation";
 
 export function AiFloatingShortcut() {
   const pathname = usePathname();
   if (pathname === "/portal/ai" || pathname.startsWith("/portal/ai/") || pathname === "/portal/pay" || pathname.startsWith("/portal/pay/")) return null;
 
-  return <Link
+  return <a
     href="/portal/ai"
     aria-label="Open Association Assistant"
     title="Open Association Assistant"
@@ -19,5 +18,5 @@ export function AiFloatingShortcut() {
       <Sparkles className="absolute -right-1 -top-1 size-3.5 fill-white" />
     </span>
     <span className="max-w-0 overflow-hidden whitespace-nowrap text-sm font-black opacity-0 transition-all duration-200 group-hover:max-w-32 group-hover:opacity-100 group-focus-visible:max-w-32 group-focus-visible:opacity-100 sm:max-w-32 sm:opacity-100">Ask HOAHub AI</span>
-  </Link>;
+  </a>;
 }

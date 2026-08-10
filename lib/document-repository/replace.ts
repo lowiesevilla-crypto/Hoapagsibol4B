@@ -1,5 +1,6 @@
 import "server-only";
 
+import { purgeAiKnowledgeBindingForTenant } from "@/lib/ai-assistance/provider-index";
 import { Permission } from "@/lib/authorization/permissions";
 import { requireUser } from "@/lib/auth";
 import { requireRepositoryPermission } from "@/lib/document-repository/access";
@@ -55,8 +56,6 @@ async function enforceHistoricalBinaryLimit(input: {
     try {
       await repositoryStorage.delete({ tenantSlug: input.tenantSlug, storageKey: revision.storageKey });
     } catch (error) {
-      // Keep the database pointer intact so cleanup remains retryable and the
-      // repository usage calculation continues counting the retained binary.
       console.error("[document-repository] Failed to purge excess retained revision binary.", {
         tenantId: input.tenantId,
         documentId: input.documentId,
@@ -90,8 +89,8 @@ async function enforceHistoricalBinaryLimit(input: {
 
 /**
  * Replaces the current binary while preserving document identity and controlled
- * revision lineage. The authenticated tenant is authoritative; documentId is
- * reloaded inside that tenant before any storage operation.
+ * revision lineage. Any provider-side AI binding is purged before the checksum
+ * and revision change so stale text can never remain searchable after replacement.
  */
 export async function replaceRepositoryDocument(input: ReplaceRepositoryDocumentInput) {
   const actor = await requireUser();
@@ -103,15 +102,11 @@ export async function replaceRepositoryDocument(input: ReplaceRepositoryDocument
     include: { category: { select: { code: true, name: true, governanceControlled: true } } },
   });
   if (!document) throw new Error("Repository document not found in the active tenant.");
-  if (document.status === "PUBLISHED") {
-    await requireRepositoryPermission(Permission.DOCUMENT_REPOSITORY_PUBLISH);
-  }
+  if (document.status === "PUBLISHED") await requireRepositoryPermission(Permission.DOCUMENT_REPOSITORY_PUBLISH);
 
   const keepHistory = document.category.governanceControlled || document.revisionPolicy === "KEEP_HISTORY";
   const reason = optional(input.reason, 1000);
-  if (keepHistory && !reason) {
-    throw new Error("A revision reason is required for governed documents.");
-  }
+  if (keepHistory && !reason) throw new Error("A revision reason is required for governed documents.");
   const revisionLabel = optional(input.revisionLabel, 60);
 
   const validation = validateRepositoryUpload({
@@ -122,9 +117,7 @@ export async function replaceRepositoryDocument(input: ReplaceRepositoryDocument
     maxFileBytes: entitlementMaxFileBytes(entitlement),
   });
   if (!validation.checksumSha256) throw new Error("Document checksum could not be generated.");
-  if (validation.checksumSha256 === document.checksumSha256) {
-    throw new Error("The replacement file is identical to the current document.");
-  }
+  if (validation.checksumSha256 === document.checksumSha256) throw new Error("The replacement file is identical to the current document.");
 
   const retainOldBinary = keepHistory && entitlement.retainRevisionBinaries;
   const usage = await repositoryUsageForWriteGuard();
@@ -133,11 +126,12 @@ export async function replaceRepositoryDocument(input: ReplaceRepositoryDocument
     : usage.totalBytes > document.fileSizeBytes
       ? usage.totalBytes - document.fileSizeBytes
       : BigInt(0);
-  assertRepositoryQuota({
-    usedBytes: baseUsedBytes,
-    maximumStorageMb: entitlement.storageLimitMb,
-    requestedBytes: input.file.data.byteLength,
-  });
+  assertRepositoryQuota({ usedBytes: baseUsedBytes, maximumStorageMb: entitlement.storageLimitMb, requestedBytes: input.file.data.byteLength });
+
+  // Fail closed before changing the revision: if provider deletion cannot be
+  // confirmed, keep the current document unchanged rather than leaving stale
+  // tenant knowledge searchable after a successful replacement.
+  await purgeAiKnowledgeBindingForTenant({ tenantId: context.tenantId, documentId: document.id, actorId: actor.id });
 
   const stored = await repositoryStorage.put({
     tenantSlug: actor.tenant.slug,
@@ -202,6 +196,7 @@ export async function replaceRepositoryDocument(input: ReplaceRepositoryDocument
             historicalBinaryRetained: retainOldBinary,
             previousFileName: document.originalFileName,
             previousChecksumSha256: document.checksumSha256,
+            aiKnowledgePurgedBeforeReplacement: true,
           },
           aiAction: false,
         },
@@ -226,6 +221,7 @@ export async function replaceRepositoryDocument(input: ReplaceRepositoryDocument
             previousChecksumSha256: document.checksumSha256,
             newChecksumSha256: current.checksumSha256,
             historicalBinaryRetained: retainOldBinary,
+            aiReindexRequired: document.aiEnabled,
           },
           aiAction: false,
         },
@@ -238,23 +234,12 @@ export async function replaceRepositoryDocument(input: ReplaceRepositoryDocument
       try {
         await repositoryStorage.delete({ tenantSlug: actor.tenant.slug, storageKey: previousStorageKey });
       } catch (error) {
-        console.error("[document-repository] Failed to remove superseded repository binary.", {
-          tenantId: context.tenantId,
-          documentId: document.id,
-          previousRevision,
-          error,
-        });
+        console.error("[document-repository] Failed to remove superseded repository binary.", { tenantId: context.tenantId, documentId: document.id, previousRevision, error });
       }
     }
 
     if (retainOldBinary) {
-      await enforceHistoricalBinaryLimit({
-        tenantId: context.tenantId,
-        tenantSlug: actor.tenant.slug,
-        documentId: document.id,
-        maximum: entitlement.maxRevisionBinaries,
-        actorId: actor.id,
-      });
+      await enforceHistoricalBinaryLimit({ tenantId: context.tenantId, tenantSlug: actor.tenant.slug, documentId: document.id, maximum: entitlement.maxRevisionBinaries, actorId: actor.id });
     }
 
     return updated;

@@ -7,7 +7,17 @@ RELEASE_DIR="$APP_ROOT/releases/$RELEASE_ID"
 SHARED_DIR="$APP_ROOT/shared"
 
 test -d "$RELEASE_DIR" || { echo "Release directory does not exist: $RELEASE_DIR" >&2; exit 1; }
-test -f "$SHARED_DIR/.env" || { echo "Create $SHARED_DIR/.env before the first deployment." >&2; exit 1; }
+if [ ! -f "$SHARED_DIR/.env" ]; then
+  echo "Create $SHARED_DIR/.env before the first deployment." >&2
+  echo "Deployment path diagnostics:" >&2
+  echo "APP_ROOT exists: $(test -d "$APP_ROOT" && echo yes || echo no)" >&2
+  echo "shared exists: $(test -d "$SHARED_DIR" && echo yes || echo no)" >&2
+  echo "APP_ROOT entries:" >&2
+  find "$APP_ROOT" -mindepth 1 -maxdepth 1 -printf '%f\n' 2>/dev/null | sort >&2 || true
+  echo "shared entries:" >&2
+  find "$SHARED_DIR" -mindepth 1 -maxdepth 1 -printf '%f\n' 2>/dev/null | sort >&2 || true
+  exit 1
+fi
 mkdir -p "$SHARED_DIR/storage" "$SHARED_DIR/public-uploads" "$APP_ROOT/backups"
 ln -sfn "$SHARED_DIR/.env" "$RELEASE_DIR/.env"
 rm -rf "$RELEASE_DIR/storage" "$RELEASE_DIR/public/uploads"

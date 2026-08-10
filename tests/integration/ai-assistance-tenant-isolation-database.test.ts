@@ -101,3 +101,20 @@ test("provider retrieval namespace cannot be reused across tenants", async () =>
     /unique|constraint/i,
   );
 });
+
+test("expired AI conversation retention purge remains tenant-scoped", async () => {
+  const expiredAId = `${runId}-expired-a`;
+  const expiredBId = `${runId}-expired-b`;
+  const expiredAt = new Date(Date.now() - 60_000);
+  await platformPrisma.aiConversation.createMany({ data: [
+    { id: expiredAId, tenantId: tenantAId, actorId: actorAId, actorRole: "HOMEOWNER", expiresAt: expiredAt },
+    { id: expiredBId, tenantId: tenantBId, actorId: actorBId, actorRole: "HOMEOWNER", expiresAt: expiredAt },
+  ] });
+
+  await inTenant(tenantAId, async () => {
+    const purged = await prisma.aiConversation.deleteMany({ where: { expiresAt: { lt: new Date() } } });
+    assert.equal(purged.count, 1);
+  });
+  assert.equal(await platformPrisma.aiConversation.count({ where: { tenantId: tenantAId, id: expiredAId } }), 0);
+  assert.equal(await platformPrisma.aiConversation.count({ where: { tenantId: tenantBId, id: expiredBId } }), 1);
+});

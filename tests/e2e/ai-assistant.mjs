@@ -70,7 +70,14 @@ async function primaryTenantFlow(browser) {
   await page.setViewport({ width: 390, height: 844, deviceScaleFactor: 1 });
   try {
     await login(page, primaryEmail);
-    await page.goto(`${baseUrl}/portal/ai`, { waitUntil: "networkidle2", timeout });
+    const floatingShortcut = await page.waitForSelector('a[aria-label="Open Association Assistant"]', { timeout });
+    assert.ok(floatingShortcut, "Operational AI tenant should receive the governed floating AI shortcut.");
+    const floatingHref = await floatingShortcut.evaluate((element) => element.getAttribute("href"));
+    assert.equal(floatingHref, "/portal/ai", "Floating AI shortcut must route only to the authorized resident assistant.");
+    await floatingShortcut.click();
+    await page.waitForFunction(() => window.location.pathname === "/portal/ai", { timeout });
+    await page.waitForNetworkIdle({ idleTime: 400, timeout }).catch(() => undefined);
+    assert.equal(await page.$('a[aria-label="Open Association Assistant"]'), null, "Floating shortcut should not obscure the assistant while already on the AI page.");
     await expectText(page, "Association Assistant");
     await expectText(page, "Tenant-scoped by design");
     await expectText(page, "Enter to send", "keyboard composer guidance");
@@ -139,6 +146,7 @@ async function primaryTenantFlow(browser) {
     assert.equal(new URL(page.url()).pathname, "/portal/dashboard", "AI provider outage must not redirect or disable the core homeowner portal.");
     await expectText(page, "Current Balance", "core homeowner balance dashboard after AI outage");
     await expectText(page, "Pay Now", "core homeowner payment action after AI outage");
+    assert.ok(await page.$('a[aria-label="Open Association Assistant"]'), "Floating AI access must remain available after an isolated provider failure.");
 
     const currentPrimaryUsage = await prisma.aiUsageLedger.count({ where: { tenantId: primaryTenantId, outcome: { in: ["SUCCEEDED", "PROVIDER_ERROR"] } } });
     const remaining = Math.max(0, 20 - currentPrimaryUsage);
@@ -164,10 +172,12 @@ async function secondaryTenantDeniedFlow(browser) {
   await page.setViewport({ width: 390, height: 844, deviceScaleFactor: 1 });
   try {
     await login(page, secondaryEmail);
+    assert.equal(await page.$('a[aria-label="Open Association Assistant"]'), null, "Tenant without operational AI must not receive the floating AI shortcut.");
     await page.goto(`${baseUrl}/portal/ai`, { waitUntil: "networkidle2", timeout });
     await page.waitForFunction(() => window.location.pathname === "/portal/dashboard", { timeout });
     const body = await pageText(page);
     assert.ok(!body.includes("Ask your association"), "Tenant without operational AI must not receive the assistant UI.");
+    assert.equal(await page.$('a[aria-label="Open Association Assistant"]'), null, "Governance/entitlement denial must also hide the floating AI shortcut.");
     const direct = await askApi(page, { question: "Can I bypass the disabled tenant AI route?", tenantId: primaryTenantId });
     assert.equal(direct.ok, false, "Direct API access must be blocked when AI is not entitled/configured for the active tenant.");
     assert.ok([400, 403].includes(direct.status));
@@ -185,7 +195,7 @@ async function main() {
   try {
     await primaryTenantFlow(browser);
     await secondaryTenantDeniedFlow(browser);
-    console.log("AI assistant browser UAT passed: Enter submission, Shift+Enter multiline input, entitlement, tenant isolation, prompt tenant-switch resistance, conversation isolation, privacy minimization, no-source fallback, quota isolation, provider outage, and disabled-tenant direct API denial.");
+    console.log("AI assistant browser UAT passed: governed floating access, Enter submission, Shift+Enter multiline input, entitlement, tenant isolation, prompt tenant-switch resistance, conversation isolation, privacy minimization, no-source fallback, quota isolation, provider outage, and disabled-tenant direct API denial.");
   } finally {
     await browser.close();
     await prisma.$disconnect();

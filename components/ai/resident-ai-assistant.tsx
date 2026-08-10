@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useState } from "react";
+import { FormEvent, KeyboardEvent, useState } from "react";
 import { Bot, FileText, Loader2, Send, ShieldCheck } from "lucide-react";
 
 type Source = {
@@ -50,6 +50,12 @@ export function ResidentAiAssistant() {
     }
   }
 
+  function handleComposerKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
+    if (event.key !== "Enter" || event.shiftKey || event.nativeEvent.isComposing) return;
+    event.preventDefault();
+    if (!loading && question.trim()) event.currentTarget.form?.requestSubmit();
+  }
+
   return <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_340px]">
     <section className="min-w-0 rounded-3xl border bg-white shadow-sm">
       <div className="border-b p-5 sm:p-6"><div className="flex items-start gap-3"><span className="grid size-11 shrink-0 place-items-center rounded-2xl bg-indigo-50 text-indigo-700"><Bot className="size-5" /></span><div><h2 className="text-xl font-black text-slate-950">Ask your association</h2><p className="mt-1 text-sm leading-6 text-slate-500">Answers are limited to this HOA’s approved, current, resident-visible AI knowledge sources.</p></div></div></div>
@@ -65,8 +71,8 @@ export function ResidentAiAssistant() {
       </div>
       <form onSubmit={submit} className="border-t p-4 sm:p-5">
         {error && <p className="mb-3 rounded-xl bg-rose-50 px-4 py-3 text-sm font-semibold text-rose-800">{error}</p>}
-        <div className="flex gap-2"><textarea className="field min-h-12 flex-1 resize-none" value={question} onChange={(event) => setQuestion(event.target.value)} maxLength={4000} rows={2} placeholder="Ask about an approved HOA policy, bylaw, document requirement, or community service..." aria-label="Question for HOAHub AI" /><button className="btn-primary min-h-12 self-end px-4" disabled={loading || !question.trim()} aria-label="Send question">{loading ? <Loader2 className="size-5 animate-spin" /> : <Send className="size-5" />}</button></div>
-        <p className="mt-2 text-xs leading-5 text-slate-500">Do not enter passwords, API keys, account numbers, contact details, IDs, payment proofs, medical information, or other sensitive personal data in this knowledge assistant.</p>
+        <div className="flex gap-2"><textarea className="field min-h-12 flex-1 resize-none" value={question} onChange={(event) => setQuestion(event.target.value)} onKeyDown={handleComposerKeyDown} maxLength={4000} rows={2} placeholder="Ask about an approved HOA policy, bylaw, document requirement, or community service..." aria-label="Question for HOAHub AI" /><button className="btn-primary min-h-12 self-end px-4" disabled={loading || !question.trim()} aria-label="Send question">{loading ? <Loader2 className="size-5 animate-spin" /> : <Send className="size-5" />}</button></div>
+        <p className="mt-2 text-xs leading-5 text-slate-500"><span className="font-semibold text-slate-600">Enter to send · Shift+Enter for a new line.</span> Do not enter passwords, API keys, account numbers, contact details, IDs, payment proofs, medical information, or other sensitive personal data in this knowledge assistant.</p>
       </form>
     </section>
 

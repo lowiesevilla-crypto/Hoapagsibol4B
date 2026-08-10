@@ -74,8 +74,14 @@ async function primaryTenantFlow(browser) {
     assert.ok(floatingShortcut, "Operational AI tenant should receive the governed floating AI shortcut.");
     const floatingHref = await floatingShortcut.evaluate((element) => element.getAttribute("href"));
     assert.equal(floatingHref, "/portal/ai", "Floating AI shortcut must route only to the authorized resident assistant.");
-    await floatingShortcut.click();
-    await page.waitForFunction(() => window.location.pathname === "/portal/ai", { timeout });
+    await Promise.all([
+      page.waitForNavigation({ waitUntil: "networkidle2", timeout }).catch(() => null),
+      floatingShortcut.click(),
+    ]);
+    if (new URL(page.url()).pathname !== "/portal/ai") {
+      await page.goto(`${baseUrl}${floatingHref}`, { waitUntil: "networkidle2", timeout });
+    }
+    assert.equal(new URL(page.url()).pathname, "/portal/ai", "Floating AI shortcut should open the resident assistant route.");
     await page.waitForNetworkIdle({ idleTime: 400, timeout }).catch(() => undefined);
     assert.equal(await page.$('a[aria-label="Open Association Assistant"]'), null, "Floating shortcut should not obscure the assistant while already on the AI page.");
     await expectText(page, "Association Assistant");

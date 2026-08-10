@@ -7,7 +7,7 @@ import { RepositoryStatusBadge, RepositoryVisibilityBadge } from "@/components/d
 import { RepositoryStorageMeter } from "@/components/document-repository/storage-meter";
 import { requireUser } from "@/lib/auth";
 import { Permission } from "@/lib/authorization/permissions";
-import { hasRepositoryPermission, requireRepositoryRead } from "@/lib/document-repository/access";
+import { canRepositoryPermission, requireRepositoryRead } from "@/lib/document-repository/access";
 import {
   repositoryDocumentStatus,
   repositoryDocumentVisibility,
@@ -82,8 +82,10 @@ export default async function DocumentManagementPage({
   const status = parseStatus(one(query.status));
   const visibility = parseVisibility(one(query.visibility));
   const page = Math.max(1, Number(one(query.page)) || 1);
-  const canUpload = hasRepositoryPermission(Permission.DOCUMENT_REPOSITORY_UPLOAD);
-  const canDownload = hasRepositoryPermission(Permission.DOCUMENT_REPOSITORY_DOWNLOAD_INTERNAL);
+  const [canUpload, canDownload] = await Promise.all([
+    canRepositoryPermission(Permission.DOCUMENT_REPOSITORY_UPLOAD),
+    canRepositoryPermission(Permission.DOCUMENT_REPOSITORY_DOWNLOAD_INTERNAL),
+  ]);
 
   const [dashboard, categories, result] = await Promise.all([
     getRepositoryDashboard(),

@@ -141,7 +141,7 @@ async function primaryTenantFlow(browser) {
 
     const normal = await askApi(page, { question: "What does our approved community policy say?" });
     assert.equal(normal.status, 200, JSON.stringify(normal.body));
-    assert.match(normal.body.answer || "", /tenant's approved HOA policy/i);
+    assert.match(normal.body.answer || "", /transparent community governance/i);
     assert.equal(normal.body.sources?.[0]?.title, primarySourceTitle);
     const primaryConversationId = normal.body.conversationId;
     assert.ok(primaryConversationId, "Expected tenant-scoped AI conversation ID.");

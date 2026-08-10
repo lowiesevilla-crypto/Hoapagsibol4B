@@ -24,6 +24,10 @@
 - [ ] `CRON_SECRET` is different from `AUTH_SECRET`.
 - [ ] Session duration is approved.
 - [ ] Facebook/payment secrets are present only when those integrations are enabled.
+- [ ] `OPENAI_API_KEY` is configured as a server-side Hostinger secret when AI Assistance is enabled.
+- [ ] `AI_RUNTIME_ENABLED=true` and `AI_PROVIDER_MODE=openai` are configured only after tenant AI governance is approved.
+- [ ] OpenAI model variables are reviewed: `OPENAI_MODEL_ECONOMY`, `OPENAI_MODEL_STANDARD`, and `OPENAI_MODEL_PREMIUM`.
+- [ ] No OpenAI key or AI provider secret is exposed with a `NEXT_PUBLIC_` prefix.
 
 ## MySQL
 
@@ -98,6 +102,8 @@
 - [ ] Vehicle/sticker and contractor/bond records work.
 - [ ] Document requests and generated documents work.
 - [ ] Chat messages, presence, unread counts, and attachments work.
+- [ ] AI Assistance resident and staff ask flows answer from indexed tenant-approved knowledge and show source citations.
+- [ ] AI Assistance denies disabled tenants, missing governance, cross-tenant prompts, no-source questions, and unauthorized personal-record requests.
 - [ ] Financial PDF/DOCX reports generate.
 - [ ] No frontend console, API, Prisma, or database constraint errors.
 

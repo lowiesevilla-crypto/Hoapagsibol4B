@@ -222,6 +222,14 @@ Payment Gateway Keys (Future)
 
 API Keys
 
+AI runtime, if enabled:
+
+- `AI_RUNTIME_ENABLED=true`
+- `AI_PROVIDER_MODE=openai`
+- `OPENAI_API_KEY` stored only as a server-side Hostinger secret
+- `OPENAI_MODEL_ECONOMY`, `OPENAI_MODEL_STANDARD`, and `OPENAI_MODEL_PREMIUM` reviewed for the tenant plan tiers
+- optional `OPENAI_ESTIMATED_INPUT_CENTAVOS_PER_1K_TOKENS` and `OPENAI_ESTIMATED_OUTPUT_CENTAVOS_PER_1K_TOKENS` configured before enabling spend-capped plans
+
 Never commit secrets into Git.
 
 ---
@@ -286,7 +294,7 @@ Documents
 
 Mobile
 
-AI (Future)
+AI Assistance
 
 ---
 

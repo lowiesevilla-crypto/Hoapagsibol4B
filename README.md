@@ -32,7 +32,27 @@ The production database URL format is:
 DATABASE_URL="mysql://USER:PASSWORD@HOST:3306/DATABASE"
 ```
 
-Keep SMTP passwords, Meta tokens, webhook secrets, and `AUTH_SECRET` in Hostinger or GitHub secret storage. System Settings may show non-secret configuration, but a server restart is required after changing runtime environment values.
+Keep SMTP passwords, Meta tokens, webhook secrets, OpenAI keys, and `AUTH_SECRET` in Hostinger or GitHub secret storage. System Settings may show non-secret configuration, but a server restart is required after changing runtime environment values.
+
+### AI assistance
+
+The live HOAHub assistant is implemented in the product through the resident and staff ask APIs:
+
+- `POST /api/portal/ai/ask` for authenticated homeowner questions.
+- `POST /api/admin/ai/ask` for authorized staff/admin questions.
+
+To enable live OpenAI-backed answers in production, configure these server-side environment variables in Hostinger:
+
+```env
+AI_RUNTIME_ENABLED="true"
+AI_PROVIDER_MODE="openai"
+OPENAI_API_KEY="<server-side OpenAI project key>"
+OPENAI_MODEL_ECONOMY="gpt-5-nano"
+OPENAI_MODEL_STANDARD="gpt-5-mini"
+OPENAI_MODEL_PREMIUM="gpt-5"
+```
+
+Do not expose the key with a `NEXT_PUBLIC_` prefix. Tenant admins must still enable the AI Assistance entitlement, complete the tenant AI governance approvals, and index approved knowledge documents before the assistant can answer from community sources.
 
 ## Database operations
 

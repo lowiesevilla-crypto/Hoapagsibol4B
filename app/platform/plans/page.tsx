@@ -2,7 +2,7 @@ import { TenantModule } from "@prisma/client";
 import Link from "next/link";
 import { Bot, FolderLock, Layers3, Pencil, Plus, UsersRound } from "lucide-react";
 import { PageHeader } from "@/components/page-header";
-import { createCommercialSubscriptionPlanAction } from "@/lib/actions/platform-commercial-plans";
+import { createSubscriptionPlanAction } from "@/lib/actions/platform-commercial-plans";
 import { toggleSubscriptionPlanAction } from "@/lib/actions/platform-billing";
 import { listPlatformPlans } from "@/lib/services/platform-billing";
 
@@ -44,7 +44,7 @@ export default async function PlatformPlansPage({ searchParams }: { searchParams
       {!plans.length && <article className="card md:col-span-2 xl:col-span-3"><div className="flex items-center gap-3"><span className="grid size-11 place-items-center rounded-2xl bg-slate-100 text-slate-500"><UsersRound className="size-5" /></span><div><h2 className="font-black">No commercial plans yet</h2><p className="text-sm text-slate-500">Create the first plan below. Existing tenants remain unaffected until a plan is explicitly assigned.</p></div></div></article>}
     </section>
 
-    <form action={createCommercialSubscriptionPlanAction} className="mt-6 rounded-3xl border bg-white p-5 shadow-sm sm:p-7">
+    <form action={createSubscriptionPlanAction} className="mt-6 rounded-3xl border bg-white p-5 shadow-sm sm:p-7">
       <div className="flex items-start gap-3"><span className="grid size-11 place-items-center rounded-2xl bg-pine-50 text-pine-700"><Plus className="size-5" /></span><div><h2 className="text-xl font-black">Create subscription plan</h2><p className="mt-1 text-sm text-slate-500">Define pricing, modules, and independent sellable capabilities before assigning the plan to a tenant.</p></div></div>
       <div className="mt-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <label><span className="label">Plan code</span><input className="field" name="code" placeholder="PROFESSIONAL" required /></label>

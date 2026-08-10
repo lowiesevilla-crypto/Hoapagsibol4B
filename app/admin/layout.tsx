@@ -50,6 +50,11 @@ export default async function AdminLayout({ children }: { children: React.ReactN
     if (!aiAssistanceEntitlement.enabled) redirect("/admin/dashboard?error=AI%20Assistance%20is%20not%20included%20in%20your%20subscription%20plan.");
     if (!canManageAi) redirect("/admin/dashboard?error=You%20do%20not%20have%20permission%20to%20manage%20AI%20Assistance.");
   }
+  const canUseAi = user.permissions.includes(Permission.AI_ASSISTANCE_USE);
+  if (pathname.startsWith("/admin/ai-copilot")) {
+    if (!aiAssistanceEntitlement.enabled) redirect("/admin/dashboard?error=AI%20Assistance%20is%20not%20included%20in%20your%20subscription%20plan.");
+    if (!canUseAi) redirect("/admin/dashboard?error=You%20do%20not%20have%20permission%20to%20use%20AI%20Assistance.");
+  }
 
   const isSystemAdmin = user.roles.includes(Role.SYSTEM_ADMIN) || user.roles.includes(Role.SUPER_ADMIN);
   const canAccessPayroll = user.permissions.includes(Permission.PAYROLL_MANAGE) || await userCanAccessPayroll(user.id, user.role);
@@ -58,6 +63,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
   const links = filterAdminLinksByRole(filterLinksByModules(linksWithPlatform, enabledModules), user.roles)
     .filter((item) => documentManagementEntitlement.enabled || !item.href.startsWith("/admin/document-management"))
     .filter((item) => aiAssistanceEntitlement.enabled && canManageAi || !item.href.startsWith("/admin/ai-assistance"))
+    .filter((item) => aiAssistanceEntitlement.enabled && canUseAi || !item.href.startsWith("/admin/ai-copilot"))
     .filter((item) => canAccessPayroll || !["/admin/employees", "/admin/attendance", "/admin/payroll"].includes(item.href));
   const requestBadgeHref = "/admin/documents?section=requests";
   const showDocumentRequestBadge = links.some((item) => item.href === requestBadgeHref);

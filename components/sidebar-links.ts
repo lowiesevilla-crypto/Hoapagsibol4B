@@ -57,6 +57,7 @@ export const adminLinks: LinkItem[] = [
   { href: "/admin/documents?section=issued", label: "Issued Documents", icon: "documents", section: "Resident Services" },
   { href: "/admin/document-management", label: "Document Management", icon: "documents", section: "Resident Services" },
   { href: "/admin/document-management/categories", label: "Document Categories", icon: "documents", section: "Resident Services" },
+  { href: "/admin/ai-copilot", label: "AI Staff Copilot", icon: "chat", section: "AI & Knowledge" },
   { href: "/admin/ai-assistance", label: "AI Assistance", icon: "chat", section: "AI & Knowledge" },
   { href: "/admin/complaints", label: "Complaints", icon: "complaints", section: "Resident Services" },
   { href: "/admin/complaints/settings", label: "Complaint Settings", icon: "complaints", section: "Resident Services" },

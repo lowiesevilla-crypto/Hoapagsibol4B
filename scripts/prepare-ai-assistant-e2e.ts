@@ -1,4 +1,8 @@
 import { AiRequestOutcome, PrismaClient } from "@prisma/client";
+import { createHash } from "node:crypto";
+import { mkdir, rm, writeFile } from "node:fs/promises";
+import path from "node:path";
+import { uploadDirectory } from "@/lib/storage";
 
 const prisma = new PrismaClient();
 const primaryTenantId = "tenant_pagsibol4b_default";
@@ -14,6 +18,22 @@ const secondaryVectorStoreId = "vs_mock_e2e_secondary_tenant";
 const aiPlanId = "e2e_ai_subscription_plan";
 const aiPlanCode = "E2E_AI_BROWSER_PLAN";
 const aiSubscriptionId = "e2e_ai_primary_subscription";
+const officerId = "e2e_ai_current_president";
+const repositoryStorageKey = "tenants/pagsibol-village-east-4b/documents/repository/e2e/e2e-primary-ai-policy.txt";
+const repositoryText = [
+  "MAGNA CARTA OF HOMEOWNERS",
+  "",
+  "SEC. 1. Short Title. This document is used only by the HOAHub AI browser suite.",
+  "",
+  "SEC. 2. Declaration of Policy. The association recognizes the rights of homeowners to transparent community governance, fair access to resident services, and responsible participation in association affairs.",
+  "",
+  "SEC. 3. Resident Services. Homeowners may use the resident portal to review approved records and request available documents.",
+].join("\n");
+const repositoryChecksum = createHash("sha256").update(repositoryText).digest("hex");
+
+function repositoryPath() {
+  return path.join(uploadDirectory(), ...repositoryStorageKey.split("/"));
+}
 
 function assertSafeDatabase() {
   const allowLocal = process.env.HOAHUB_E2E_ALLOW_LOCAL === "1";
@@ -26,6 +46,7 @@ function assertSafeDatabase() {
 
 async function cleanup() {
   assertSafeDatabase();
+  await rm(repositoryPath(), { force: true }).catch(() => undefined);
   await prisma.aiFeedback.deleteMany({ where: { tenantId: { in: [primaryTenantId, secondaryTenantId] } } });
   await prisma.aiMessage.deleteMany({ where: { tenantId: { in: [primaryTenantId, secondaryTenantId] } } });
   await prisma.aiConversation.deleteMany({ where: { tenantId: { in: [primaryTenantId, secondaryTenantId] } } });
@@ -35,6 +56,7 @@ async function cleanup() {
   await prisma.tenantAiConfiguration.deleteMany({ where: { tenantId: { in: [primaryTenantId, secondaryTenantId] } } });
   await prisma.repositoryDocument.deleteMany({ where: { tenantId: primaryTenantId, id: documentId } });
   await prisma.repositoryDocumentCategory.deleteMany({ where: { tenantId: primaryTenantId, id: categoryId } });
+  await prisma.organizationOfficer.deleteMany({ where: { tenantId: primaryTenantId, id: officerId } });
   await prisma.tenantFeatureEntitlement.deleteMany({
     where: {
       tenantId: { in: [primaryTenantId, secondaryTenantId] },
@@ -161,6 +183,8 @@ async function setup() {
   await prisma.repositoryDocumentCategory.create({
     data: { id: categoryId, tenantId: primaryTenantId, code: "E2E_AI_POLICY", name: "E2E AI Policy", categoryGroup: "POLICIES", description: "Disposable approved AI browser source.", active: true, governanceControlled: true, createdById: admin.id },
   });
+  await mkdir(path.dirname(repositoryPath()), { recursive: true });
+  await writeFile(repositoryPath(), repositoryText, "utf8");
   await prisma.repositoryDocument.create({
     data: {
       id: documentId,
@@ -173,11 +197,11 @@ async function setup() {
       status: "PUBLISHED",
       revisionPolicy: "KEEP_HISTORY",
       originalFileName: "e2e-primary-ai-policy.txt",
-      storageKey: "tenants/pagsibol-village-east-4b/documents/repository/e2e/e2e-primary-ai-policy.txt",
+      storageKey: repositoryStorageKey,
       contentType: "text/plain",
       fileExtension: "txt",
-      fileSizeBytes: BigInt(128),
-      checksumSha256: "a".repeat(64),
+      fileSizeBytes: BigInt(Buffer.byteLength(repositoryText, "utf8")),
+      checksumSha256: repositoryChecksum,
       malwareScanStatus: "NOT_CONFIGURED",
       aiEnabled: true,
       privacyClassification: "PUBLIC",
@@ -190,7 +214,20 @@ async function setup() {
     },
   });
   await prisma.aiKnowledgeBinding.create({
-    data: { tenantId: primaryTenantId, documentId, revision: 1, providerFileId, vectorStoreId: primaryVectorStoreId, indexStatus: "INDEXED", indexedChecksumSha256: "a".repeat(64), indexedAt: approval, createdById: admin.id, updatedById: admin.id },
+    data: { tenantId: primaryTenantId, documentId, revision: 1, providerFileId, vectorStoreId: primaryVectorStoreId, indexStatus: "INDEXED", indexedChecksumSha256: repositoryChecksum, indexedAt: approval, createdById: admin.id, updatedById: admin.id },
+  });
+  await prisma.organizationOfficer.create({
+    data: {
+      tenantId: primaryTenantId,
+      id: officerId,
+      fullName: "E2E Maria President",
+      position: "President",
+      committee: "Board of Directors",
+      displayOrder: 1,
+      active: true,
+      effectiveDate: approval,
+      updatedById: admin.id,
+    },
   });
 
   await prisma.aiConversation.create({

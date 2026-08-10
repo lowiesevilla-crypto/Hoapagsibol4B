@@ -3,12 +3,19 @@ import { redirect } from "next/navigation";
 import { ResidentAiAssistant } from "@/components/ai/resident-ai-assistant";
 import { defaultHomeForRoles, requireUser } from "@/lib/auth";
 
+function greetingFor(name: string | null | undefined) {
+  const hour = Number(new Intl.DateTimeFormat("en-US", { timeZone: "Asia/Manila", hour: "numeric", hour12: false }).format(new Date()));
+  const period = hour < 12 ? "Good morning" : hour < 18 ? "Good afternoon" : "Good evening";
+  const firstName = name?.trim().split(/\s+/)[0];
+  return `${period}${firstName ? `, ${firstName}` : ""}. How can I help you today?`;
+}
+
 export default async function PortalAiPage() {
   const user = await requireUser();
   if (!user.roles.includes(Role.HOMEOWNER)) redirect(defaultHomeForRoles(user.roles, user.role));
 
   return <div className="space-y-5">
     <div><p className="text-xs font-black uppercase tracking-[.16em] text-indigo-700">HOAHub Community AI</p><h1 className="mt-1 text-3xl font-black text-slate-950">Association Assistant</h1><p className="mt-2 max-w-3xl text-sm leading-6 text-slate-600">Ask about approved HOA knowledge, document requirements, community services, and your own authorized account records.</p></div>
-    <ResidentAiAssistant />
+    <ResidentAiAssistant initialGreeting={greetingFor(user.name)} />
   </div>;
 }

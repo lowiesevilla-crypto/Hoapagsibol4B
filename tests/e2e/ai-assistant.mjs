@@ -93,12 +93,35 @@ async function primaryTenantFlow(browser) {
     const composerSelector = 'textarea[aria-label="Question for HOAHub AI"]';
     const greeting = await askApi(page, { question: "Hi" });
     assert.equal(greeting.status, 200, JSON.stringify(greeting.body));
-    assert.match(greeting.body.answer || "", /help with your HOA account basics/i);
+    assert.match(greeting.body.answer || "", /HOAHub Association Assistant/i);
+
+    const thanks = await askApi(page, { question: "Thank you" });
+    assert.equal(thanks.status, 200, JSON.stringify(thanks.body));
+    assert.match(thanks.body.answer || "", /You're welcome/i);
+
+    const identity = await askApi(page, { question: "What is your name?" });
+    assert.equal(identity.status, 200, JSON.stringify(identity.body));
+    assert.match(identity.body.answer || "", /HOAHub Association Assistant/i);
 
     const currentBalance = await askApi(page, { question: "What is my current balance?" });
     assert.equal(currentBalance.status, 200, JSON.stringify(currentBalance.body));
     assert.match(currentBalance.body.answer || "", /current outstanding balance/i);
     assert.equal(currentBalance.body.sources?.[0]?.title, "HOAHub Statement of Account", "Own-balance answer must be grounded in the authenticated homeowner account source.");
+
+    const accountNumber = await askApi(page, { question: "What is my account number?" });
+    assert.equal(accountNumber.status, 200, JSON.stringify(accountNumber.body));
+    assert.match(accountNumber.body.answer || "", /homeowner account number/i);
+    assert.equal(accountNumber.body.sources?.[0]?.title, "HOAHub Homeowner Profile");
+
+    const president = await askApi(page, { question: "Who is the current president of this association?" });
+    assert.equal(president.status, 200, JSON.stringify(president.body));
+    assert.match(president.body.answer || "", /E2E Maria President/i);
+    assert.equal(president.body.sources?.[0]?.title, "HOAHub Association Organization");
+
+    const publicDocumentSection = await askApi(page, { question: "What is SEC. 2. Declaration of Policy in Magna Carta?" });
+    assert.equal(publicDocumentSection.status, 200, JSON.stringify(publicDocumentSection.body));
+    assert.match(publicDocumentSection.body.answer || "", /transparent community governance/i);
+    assert.equal(publicDocumentSection.body.sources?.[0]?.title, primarySourceTitle);
 
     await page.type(composerSelector, "What does our approved community policy say?");
     await page.keyboard.press("Enter");

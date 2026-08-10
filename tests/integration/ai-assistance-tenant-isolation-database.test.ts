@@ -86,6 +86,23 @@ test("AI knowledge binding and source-document reads cannot cross tenant context
   });
 });
 
+test("database composite relation rejects a tenant A AI binding to tenant B document", async () => {
+  await assert.rejects(
+    () => platformPrisma.aiKnowledgeBinding.create({
+      data: {
+        tenantId: tenantAId,
+        documentId: documentBId,
+        revision: 1,
+        providerFileId: `${runId}-cross-file`,
+        vectorStoreId: `${runId}-vs-a`,
+        indexStatus: "INDEXED",
+        indexedChecksumSha256: "b".repeat(64),
+      },
+    }),
+    /foreign key|constraint/i,
+  );
+});
+
 test("tenant B usage cannot be aggregated into tenant A commercial quota", async () => {
   await inTenant(tenantAId, async () => {
     const usage = await prisma.aiUsageLedger.aggregate({ where: { tenantId: tenantAId }, _sum: { inputTokens: true, outputTokens: true }, _count: { _all: true } });

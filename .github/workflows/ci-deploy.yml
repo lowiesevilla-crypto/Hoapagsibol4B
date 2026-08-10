@@ -121,7 +121,16 @@ jobs:
         run: |
           set -Eeuo pipefail
           install -d -m 700 "$HOME/.ssh"
-          printf '%s\n' "$HOSTINGER_SSH_PRIVATE_KEY" > "$HOME/.ssh/hoahub_hostinger"
+          python3 - <<'PY'
+          import os
+          from pathlib import Path
+
+          key = os.environ["HOSTINGER_SSH_PRIVATE_KEY"].strip()
+          if "\\n" in key and "\n" not in key:
+              key = key.replace("\\n", "\n")
+          key = key.replace("\r\n", "\n").replace("\r", "\n")
+          Path(os.environ["HOME"], ".ssh", "hoahub_hostinger").write_text(key + "\n", encoding="utf-8")
+          PY
           chmod 600 "$HOME/.ssh/hoahub_hostinger"
           ssh-keyscan -p "$HOSTINGER_PORT" -H "$HOSTINGER_HOST" >> "$HOME/.ssh/known_hosts"
           chmod 600 "$HOME/.ssh/known_hosts"

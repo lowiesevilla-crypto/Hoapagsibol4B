@@ -123,6 +123,7 @@ model RepositoryDocument {
   category              RepositoryDocumentCategory       @relation(fields: [tenantId, categoryId], references: [tenantId, id], onDelete: Restrict, onUpdate: Cascade)
   revisions             RepositoryDocumentRevision[]
   tagAssignments        RepositoryDocumentTagAssignment[]
+  aiKnowledgeBinding    AiKnowledgeBinding?
   createdAt             DateTime                         @default(now())
   updatedAt             DateTime                         @updatedAt
 

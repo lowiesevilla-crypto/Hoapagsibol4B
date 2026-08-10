@@ -10,7 +10,8 @@ test("homeowner repository delivery and lifecycle stay explicitly tenant-scoped"
 
   assert.match(delivery, /where:\s*\{\s*tenantId,\s*id\s*\}/);
   assert.match(delivery, /findActiveTenantDocument\(context\.tenantId, documentId\)/);
-  assert.match(lifecycle, /document\.tenantId !== input\.activeTenantId/);
+  assert.match(lifecycle, /const \{ document, activeTenantId \} = input/);
+  assert.match(lifecycle, /document\.tenantId !== activeTenantId/);
   assert.match(lifecycle, /document\.visibility !== "TENANT_PUBLIC"/);
   assert.match(lifecycle, /document\.status !== "PUBLISHED"/);
   assert.match(lifecycle, /BLOCKED|FAILED|PENDING/);

@@ -2,7 +2,7 @@ import { AiRequestOutcome, PrismaClient } from "@prisma/client";
 import { createHash } from "node:crypto";
 import { mkdir, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { uploadDirectory } from "@/lib/storage";
+import { safeTenantSlug, uploadDirectory } from "@/lib/storage";
 
 const prisma = new PrismaClient();
 const primaryTenantId = "tenant_pagsibol4b_default";
@@ -19,7 +19,7 @@ const aiPlanId = "e2e_ai_subscription_plan";
 const aiPlanCode = "E2E_AI_BROWSER_PLAN";
 const aiSubscriptionId = "e2e_ai_primary_subscription";
 const officerId = "e2e_ai_current_president";
-const repositoryStorageKey = "tenants/pagsibol-village-east-4b/documents/repository/e2e/e2e-primary-ai-policy.txt";
+const repositoryRelativePath = "documents/repository/e2e/e2e-primary-ai-policy.txt";
 const repositoryText = [
   "MAGNA CARTA OF HOMEOWNERS",
   "",
@@ -31,8 +31,12 @@ const repositoryText = [
 ].join("\n");
 const repositoryChecksum = createHash("sha256").update(repositoryText).digest("hex");
 
-function repositoryPath() {
-  return path.join(uploadDirectory(), ...repositoryStorageKey.split("/"));
+function repositoryStorageKey(tenantSlug: string) {
+  return `tenants/${safeTenantSlug(tenantSlug)}/${repositoryRelativePath}`;
+}
+
+function repositoryPath(tenantSlug: string) {
+  return path.join(uploadDirectory(), ...repositoryStorageKey(tenantSlug).split("/"));
 }
 
 function assertSafeDatabase() {
@@ -46,7 +50,8 @@ function assertSafeDatabase() {
 
 async function cleanup() {
   assertSafeDatabase();
-  await rm(repositoryPath(), { force: true }).catch(() => undefined);
+  const primaryTenant = await prisma.tenant.findUnique({ where: { id: primaryTenantId }, select: { slug: true } });
+  if (primaryTenant?.slug) await rm(repositoryPath(primaryTenant.slug), { force: true }).catch(() => undefined);
   await prisma.aiFeedback.deleteMany({ where: { tenantId: { in: [primaryTenantId, secondaryTenantId] } } });
   await prisma.aiMessage.deleteMany({ where: { tenantId: { in: [primaryTenantId, secondaryTenantId] } } });
   await prisma.aiConversation.deleteMany({ where: { tenantId: { in: [primaryTenantId, secondaryTenantId] } } });
@@ -73,13 +78,15 @@ async function setup() {
   assertSafeDatabase();
   await cleanup();
   const [primaryTenant, secondaryTenant, admin, primaryHomeowner, secondaryHomeowner] = await Promise.all([
-    prisma.tenant.findUnique({ where: { id: primaryTenantId }, select: { id: true } }),
+    prisma.tenant.findUnique({ where: { id: primaryTenantId }, select: { id: true, slug: true } }),
     prisma.tenant.findUnique({ where: { id: secondaryTenantId }, select: { id: true } }),
     prisma.user.findFirst({ where: { tenantId: primaryTenantId, role: "SYSTEM_ADMIN", active: true }, select: { id: true } }),
     prisma.user.findUnique({ where: { id: primaryHomeownerUserId }, select: { id: true } }),
     prisma.user.findUnique({ where: { id: secondaryHomeownerUserId }, select: { id: true } }),
   ]);
   if (!primaryTenant || !secondaryTenant || !admin || !primaryHomeowner || !secondaryHomeowner) throw new Error("Critical browser fixtures must be prepared before AI browser fixtures.");
+  const storageKey = repositoryStorageKey(primaryTenant.slug);
+  const storagePath = repositoryPath(primaryTenant.slug);
 
   // Exercise the real commercial-entitlement path without relying on seed-plan
   // state. This plan/subscription exists only inside the disposable E2E database
@@ -183,8 +190,8 @@ async function setup() {
   await prisma.repositoryDocumentCategory.create({
     data: { id: categoryId, tenantId: primaryTenantId, code: "E2E_AI_POLICY", name: "E2E AI Policy", categoryGroup: "POLICIES", description: "Disposable approved AI browser source.", active: true, governanceControlled: true, createdById: admin.id },
   });
-  await mkdir(path.dirname(repositoryPath()), { recursive: true });
-  await writeFile(repositoryPath(), repositoryText, "utf8");
+  await mkdir(path.dirname(storagePath), { recursive: true });
+  await writeFile(storagePath, repositoryText, "utf8");
   await prisma.repositoryDocument.create({
     data: {
       id: documentId,
@@ -197,7 +204,7 @@ async function setup() {
       status: "PUBLISHED",
       revisionPolicy: "KEEP_HISTORY",
       originalFileName: "e2e-primary-ai-policy.txt",
-      storageKey: repositoryStorageKey,
+      storageKey,
       contentType: "text/plain",
       fileExtension: "txt",
       fileSizeBytes: BigInt(Buffer.byteLength(repositoryText, "utf8")),

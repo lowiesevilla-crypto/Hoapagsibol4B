@@ -1,5 +1,6 @@
 import "server-only";
 
+import { purgeAiKnowledgeBindingForTenant } from "@/lib/ai-assistance/provider-index";
 import { Permission } from "@/lib/authorization/permissions";
 import { requireUser } from "@/lib/auth";
 import { requireRepositoryPermission } from "@/lib/document-repository/access";
@@ -45,6 +46,10 @@ function optionalLabel(value: string | null | undefined, maxLength: number) {
   return normalized;
 }
 
+function sameDate(left: Date | null, right: Date | null | undefined) {
+  return (left?.getTime() ?? null) === (right?.getTime() ?? null);
+}
+
 export async function updateRepositoryDocument(input: UpdateRepositoryDocumentInput) {
   const actor = await requireUser();
   const { context } = await requireRepositoryPermission(Permission.DOCUMENT_REPOSITORY_UPDATE_METADATA);
@@ -52,30 +57,14 @@ export async function updateRepositoryDocument(input: UpdateRepositoryDocumentIn
   const title = requiredLabel(input.title, "Document title", 191);
   const categoryId = requiredLabel(input.categoryId, "Document category", 191);
 
-  if (input.effectiveAt && input.expiresAt && input.expiresAt.getTime() <= input.effectiveAt.getTime()) {
-    throw new Error("Document expiry must be later than its effective date.");
-  }
+  if (input.effectiveAt && input.expiresAt && input.expiresAt.getTime() <= input.effectiveAt.getTime()) throw new Error("Document expiry must be later than its effective date.");
 
   const [existing, category] = await Promise.all([
     prisma.repositoryDocument.findFirst({
       where: { tenantId: context.tenantId, id: documentId },
-      select: {
-        id: true,
-        title: true,
-        categoryId: true,
-        documentReference: true,
-        visibility: true,
-        status: true,
-        revisionPolicy: true,
-        approvalDate: true,
-        effectiveAt: true,
-        expiresAt: true,
-      },
+      select: { id: true, title: true, categoryId: true, documentReference: true, visibility: true, status: true, revisionPolicy: true, approvalDate: true, effectiveAt: true, expiresAt: true },
     }),
-    prisma.repositoryDocumentCategory.findFirst({
-      where: { tenantId: context.tenantId, id: categoryId, active: true },
-      select: { id: true, code: true, governanceControlled: true },
-    }),
+    prisma.repositoryDocumentCategory.findFirst({ where: { tenantId: context.tenantId, id: categoryId, active: true }, select: { id: true, code: true, governanceControlled: true } }),
   ]);
   if (!existing) throw new Error("Repository document not found in the active tenant.");
   if (!category) throw new Error("The selected document category is not available in the active tenant.");
@@ -83,12 +72,16 @@ export async function updateRepositoryDocument(input: UpdateRepositoryDocumentIn
   const visibilityChanged = existing.visibility !== input.visibility;
   const statusChanged = existing.status !== input.status;
   if (visibilityChanged) await requireRepositoryPermission(Permission.DOCUMENT_REPOSITORY_MANAGE_VISIBILITY);
-  if (statusChanged && (existing.status === "PUBLISHED" || input.status === "PUBLISHED")) {
-    await requireRepositoryPermission(Permission.DOCUMENT_REPOSITORY_PUBLISH);
-  }
+  if (statusChanged && (existing.status === "PUBLISHED" || input.status === "PUBLISHED")) await requireRepositoryPermission(Permission.DOCUMENT_REPOSITORY_PUBLISH);
   const archiveStates: readonly RepositoryDocumentStatus[] = ["ARCHIVED", "INACTIVE"];
-  if (statusChanged && (archiveStates.includes(existing.status) || archiveStates.includes(input.status))) {
-    await requireRepositoryPermission(Permission.DOCUMENT_REPOSITORY_ARCHIVE);
+  if (statusChanged && (archiveStates.includes(existing.status) || archiveStates.includes(input.status))) await requireRepositoryPermission(Permission.DOCUMENT_REPOSITORY_ARCHIVE);
+
+  const retrievalBoundaryChanged = visibilityChanged
+    || statusChanged
+    || !sameDate(existing.effectiveAt, input.effectiveAt)
+    || !sameDate(existing.expiresAt, input.expiresAt);
+  if (retrievalBoundaryChanged) {
+    await purgeAiKnowledgeBindingForTenant({ tenantId: context.tenantId, documentId: existing.id, actorId: actor.id });
   }
 
   const updated = await prisma.repositoryDocument.update({
@@ -105,9 +98,7 @@ export async function updateRepositoryDocument(input: UpdateRepositoryDocumentIn
       approvalDate: input.approvalDate ?? null,
       effectiveAt: input.effectiveAt ?? null,
       expiresAt: input.expiresAt ?? null,
-      publishedAt: input.status === "PUBLISHED"
-        ? existing.status === "PUBLISHED" ? undefined : new Date()
-        : null,
+      publishedAt: input.status === "PUBLISHED" ? existing.status === "PUBLISHED" ? undefined : new Date() : null,
       resolutionNumber: optionalLabel(input.resolutionNumber, 120),
       memoNumber: optionalLabel(input.memoNumber, 120),
       policyOwner: optionalLabel(input.policyOwner, 191),
@@ -123,54 +114,15 @@ export async function updateRepositoryDocument(input: UpdateRepositoryDocumentIn
     documentId: updated.id,
     reason: input.reason?.trim() || null,
     metadata: {
-      previous: {
-        title: existing.title,
-        categoryId: existing.categoryId,
-        documentReference: existing.documentReference,
-        visibility: existing.visibility,
-        status: existing.status,
-        approvalDate: existing.approvalDate?.toISOString() ?? null,
-        effectiveAt: existing.effectiveAt?.toISOString() ?? null,
-        expiresAt: existing.expiresAt?.toISOString() ?? null,
-      },
-      updated: {
-        title: updated.title,
-        categoryId: updated.categoryId,
-        categoryCode: category.code,
-        documentReference: updated.documentReference,
-        visibility: updated.visibility,
-        status: updated.status,
-        approvalDate: updated.approvalDate?.toISOString() ?? null,
-        effectiveAt: updated.effectiveAt?.toISOString() ?? null,
-        expiresAt: updated.expiresAt?.toISOString() ?? null,
-      },
+      previous: { title: existing.title, categoryId: existing.categoryId, documentReference: existing.documentReference, visibility: existing.visibility, status: existing.status, approvalDate: existing.approvalDate?.toISOString() ?? null, effectiveAt: existing.effectiveAt?.toISOString() ?? null, expiresAt: existing.expiresAt?.toISOString() ?? null },
+      updated: { title: updated.title, categoryId: updated.categoryId, categoryCode: category.code, documentReference: updated.documentReference, visibility: updated.visibility, status: updated.status, approvalDate: updated.approvalDate?.toISOString() ?? null, effectiveAt: updated.effectiveAt?.toISOString() ?? null, expiresAt: updated.expiresAt?.toISOString() ?? null, aiKnowledgePurgedForBoundaryChange: retrievalBoundaryChanged },
     },
   });
 
-  if (visibilityChanged) {
-    await writeRepositoryAudit({
-      action: RepositoryAuditAction.VISIBILITY_CHANGED,
-      actorId: actor.id,
-      documentId: updated.id,
-      reason: input.reason?.trim() || null,
-      metadata: { from: existing.visibility, to: updated.visibility },
-    });
-  }
+  if (visibilityChanged) await writeRepositoryAudit({ action: RepositoryAuditAction.VISIBILITY_CHANGED, actorId: actor.id, documentId: updated.id, reason: input.reason?.trim() || null, metadata: { from: existing.visibility, to: updated.visibility } });
   if (statusChanged) {
-    const action = updated.status === "PUBLISHED"
-      ? RepositoryAuditAction.PUBLISHED
-      : existing.status === "PUBLISHED"
-        ? RepositoryAuditAction.UNPUBLISHED
-        : updated.status === "ARCHIVED"
-          ? RepositoryAuditAction.ARCHIVED
-          : RepositoryAuditAction.STATUS_CHANGED;
-    await writeRepositoryAudit({
-      action,
-      actorId: actor.id,
-      documentId: updated.id,
-      reason: input.reason?.trim() || null,
-      metadata: { from: existing.status, to: updated.status },
-    });
+    const action = updated.status === "PUBLISHED" ? RepositoryAuditAction.PUBLISHED : existing.status === "PUBLISHED" ? RepositoryAuditAction.UNPUBLISHED : updated.status === "ARCHIVED" ? RepositoryAuditAction.ARCHIVED : RepositoryAuditAction.STATUS_CHANGED;
+    await writeRepositoryAudit({ action, actorId: actor.id, documentId: updated.id, reason: input.reason?.trim() || null, metadata: { from: existing.status, to: updated.status } });
   }
 
   return updated;

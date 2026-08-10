@@ -6,6 +6,7 @@ import { redirect } from "next/navigation";
 import { Sidebar } from "@/components/sidebar";
 import { adminLinks, platformLinks, systemAdminLinks } from "@/components/sidebar-links";
 import { TransactionFeedback } from "@/components/transaction-feedback";
+import { resolveAiAssistanceEntitlement } from "@/lib/ai-assistance/entitlement";
 import { requireUser } from "@/lib/auth";
 import { Permission } from "@/lib/authorization/permissions";
 import { resolveDocumentManagementEntitlement } from "@/lib/document-repository/entitlement";
@@ -31,27 +32,32 @@ export default async function AdminLayout({ children }: { children: React.ReactN
   const pathname = (await headers()).get("x-hoa-pathname") || "/admin/dashboard";
   if (!canAccessAdminPath(user.roles, pathname)) redirect(`${adminHomeForRole(user.roles)}?error=You%20do%20not%20have%20access%20to%20this%20module.`);
   const platform = user.roles.includes(Role.SUPER_ADMIN) || user.roles.includes(Role.PLATFORM_ADMIN);
-  const enabledModules = platform
-    ? new Set(Object.values(TenantModule))
-    : await getEnabledTenantModules(user.tenantId);
+  const enabledModules = platform ? new Set(Object.values(TenantModule)) : await getEnabledTenantModules(user.tenantId);
   const requestedModule = moduleForPath(pathname);
   if (requestedModule && !enabledModules.has(requestedModule)) redirect("/admin/dashboard?error=This%20module%20is%20not%20included%20in%20your%20subscription%20plan.");
-  const [association, initialChatUnreadCount, actionableDocumentRequests, documentManagementEntitlement] = await Promise.all([
+
+  const [association, initialChatUnreadCount, actionableDocumentRequests, documentManagementEntitlement, aiAssistanceEntitlement] = await Promise.all([
     getAssociationSettings(user.tenantId),
     getUnreadChatCount(user.id),
     getActionableDocumentRequestCount(user.tenantId),
     resolveDocumentManagementEntitlement(user.tenantId),
+    resolveAiAssistanceEntitlement(user.tenantId),
   ]);
-  if (pathname.startsWith("/admin/document-management") && !documentManagementEntitlement.enabled) {
-    redirect("/admin/dashboard?error=Document%20Management%20is%20not%20included%20in%20your%20subscription%20plan.");
+  if (pathname.startsWith("/admin/document-management") && !documentManagementEntitlement.enabled) redirect("/admin/dashboard?error=Document%20Management%20is%20not%20included%20in%20your%20subscription%20plan.");
+
+  const canManageAi = user.permissions.includes(Permission.AI_ASSISTANCE_MANAGE);
+  if (pathname.startsWith("/admin/ai-assistance")) {
+    if (!aiAssistanceEntitlement.enabled) redirect("/admin/dashboard?error=AI%20Assistance%20is%20not%20included%20in%20your%20subscription%20plan.");
+    if (!canManageAi) redirect("/admin/dashboard?error=You%20do%20not%20have%20permission%20to%20manage%20AI%20Assistance.");
   }
+
   const isSystemAdmin = user.roles.includes(Role.SYSTEM_ADMIN) || user.roles.includes(Role.SUPER_ADMIN);
-  const canAccessPayroll = user.permissions.includes(Permission.PAYROLL_MANAGE)
-    || await userCanAccessPayroll(user.id, user.role);
+  const canAccessPayroll = user.permissions.includes(Permission.PAYROLL_MANAGE) || await userCanAccessPayroll(user.id, user.role);
   const baseLinks = isSystemAdmin ? systemAdminLinks : adminLinks;
   const linksWithPlatform = user.roles.includes(Role.SUPER_ADMIN) ? [...baseLinks, ...platformLinks] : baseLinks;
   const links = filterAdminLinksByRole(filterLinksByModules(linksWithPlatform, enabledModules), user.roles)
     .filter((item) => documentManagementEntitlement.enabled || !item.href.startsWith("/admin/document-management"))
+    .filter((item) => aiAssistanceEntitlement.enabled && canManageAi || !item.href.startsWith("/admin/ai-assistance"))
     .filter((item) => canAccessPayroll || !["/admin/employees", "/admin/attendance", "/admin/payroll"].includes(item.href));
   const requestBadgeHref = "/admin/documents?section=requests";
   const showDocumentRequestBadge = links.some((item) => item.href === requestBadgeHref);

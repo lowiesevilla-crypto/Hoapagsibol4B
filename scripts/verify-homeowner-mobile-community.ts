@@ -41,6 +41,10 @@ const morePage = readProjectFile("app/portal/more/page.tsx");
 const profilePage = readProjectFile("app/portal/profile/page.tsx");
 const vehiclesPage = readProjectFile("app/portal/vehicles/page.tsx");
 const communityCards = readProjectFile("components/homeowner/community/community-cards.tsx");
+const portalLayout = readProjectFile("app/portal/layout.tsx");
+const aiPage = readProjectFile("app/portal/ai/page.tsx");
+const aiAskRoute = readProjectFile("app/api/portal/ai/ask/route.ts");
+const aiGovernancePolicy = readProjectFile("lib/ai-assistance/governance-policy.ts");
 const serviceWorker = readProjectFile("public/sw.js");
 const packageJson = readProjectFile("package.json");
 const files = changedFiles();
@@ -57,11 +61,13 @@ for (const relativePath of [
   "app/portal/profile/page.tsx",
   "app/portal/vehicles/page.tsx",
   "components/homeowner/community/community-cards.tsx",
+  "app/portal/ai/page.tsx",
+  "app/api/portal/ai/ask/route.ts",
 ]) {
   record(`${relativePath} exists`, existsSync(path.join(root, relativePath)));
 }
 
-record("community routes require authenticated homeowner access", [communityPage, announcementsPage, eventsPage, chatPage, morePage].every((source) => source.includes("requireUser(Role.HOMEOWNER)") || source.includes("requireHomeownerProfile")));
+record("community routes require authenticated homeowner access", [communityPage, announcementsPage, eventsPage, chatPage, morePage, aiPage].every((source) => source.includes("requireUser(Role.HOMEOWNER)") || source.includes("requireHomeownerProfile")));
 record("announcements are tenant-scoped and published-only", hasAll(announcementsPage + announcementDetail, ["tenantId: user.tenantId", "status: \"PUBLISHED\"", "tenantId: profile.tenantId", "notFound()"]));
 record("events are tenant-scoped and published-only", hasAll(eventsPage + eventDetail, ["tenantId: user.tenantId", "status: \"PUBLISHED\"", "tenantId: profile.tenantId", "notFound()"]));
 record("unpublished content is not exposed", [announcementsPage, announcementDetail, eventsPage, eventDetail].every((source) => source.includes("status: \"PUBLISHED\"")));
@@ -76,7 +82,21 @@ record("offline chat mutations are not queued", !/syncManager|background sync|qu
 record("profile data belongs to authenticated homeowner", hasAll(profilePage, ["requireHomeownerProfile", "profile.tenantId", "profile.id", "PasskeyEnrollmentPanel"]));
 record("vehicle data belongs to authenticated homeowner", hasAll(vehiclesPage, ["requireHomeownerProfile", "tenantId: profile.tenantId", "homeownerId: profile.id", "take: 30"]));
 record("logout uses stable named Server Actions", hasAll(morePage + profilePage, ["LogoutButton", "allSessions"]));
-record("AI remains explicit and not newly implemented", morePage.includes("No homeowner AI assistant route is currently enabled") && !files.some((file) => /ai|assistant/i.test(file) && file !== "app/portal/more/page.tsx"));
+record(
+  "resident AI is explicit, server-authorized, and hidden unless entitlement and governance gates pass",
+  hasAll(portalLayout, [
+    "resolveAiAssistanceEntitlement(user.tenantId)",
+    "evaluateAiGovernance",
+    "AI_ASSISTANCE_USE",
+    "pathname.startsWith(\"/portal/ai\")",
+    "aiAvailable",
+  ])
+    && hasAll(aiGovernancePolicy, ["GLOBAL_AI_KILL_SWITCH", "AI_NOT_ENTITLED", "PIA_APPROVAL_REQUIRED", "DPO_APPROVAL_REQUIRED", "CROSS_BORDER_REVIEW_REQUIRED", "PRIVACY_NOTICE_REQUIRED", "LAWFUL_BASIS_REQUIRED"])
+    && hasAll(aiAskRoute, ["answerTenantKnowledgeQuestion", "private, no-store", "X-Content-Type-Options"])
+    && !aiAskRoute.includes("body.tenantId")
+    && morePage.includes("aiAvailable")
+    && morePage.includes("/portal/ai"),
+);
 record("mobile cards replace compressed desktop tables", hasAll(communityCards + announcementsPage + eventsPage + vehiclesPage, ["grid gap-4", "rounded-3xl", "AnnouncementMobileCard", "EventMobileCard", "VehicleMobileCard"]) && ![announcementsPage, eventsPage, vehiclesPage, organizationPage].some((source) => source.includes("<table")));
 record("loading and error states exist", ["community", "announcements", "events", "organization", "chat", "more", "profile", "vehicles"].every((route) => existsSync(path.join(root, `app/portal/${route}/loading.tsx`)) && existsSync(path.join(root, `app/portal/${route}/error.tsx`))));
 record("minimum touch targets are preserved", hasAll(communityCards + morePage + profilePage + chatMessenger, ["min-h-12", "size-11"]));
@@ -86,9 +106,9 @@ record("Phase 3 dashboard verifier remains registered", packageJson.includes("\"
 record("Phase 4 payments verifier remains registered", packageJson.includes("\"verify:homeowner-mobile-payments\""));
 record("Phase 5 requests verifier remains registered", packageJson.includes("\"verify:homeowner-mobile-requests\""));
 record("Phase 6 verifier is registered", packageJson.includes("\"verify:homeowner-mobile-community\""));
-record("no Prisma schema or migration change", !files.some((file) => file === "prisma/schema.prisma" || file.startsWith("prisma/migrations/")));
-record("no template change", !files.some((file) => /document-template|template-replication|install-approved-pass|pass-template/i.test(file)));
-record("no admin employee payroll platform page changes", !files.some((file) => /^(app\/admin|app\/employee|app\/payroll|app\/platform)/.test(file)));
+record("no uncommitted Prisma schema or migration change", !files.some((file) => file === "prisma/schema.prisma" || file.startsWith("prisma/migrations/")));
+record("no uncommitted template change", !files.some((file) => /document-template|template-replication|install-approved-pass|pass-template/i.test(file)));
+record("no uncommitted admin employee payroll platform page changes", !files.some((file) => /^(app\/admin|app\/employee|app\/payroll|app\/platform)/.test(file)));
 
 const failed = checks.filter((check) => !check.passed);
 for (const check of checks) {

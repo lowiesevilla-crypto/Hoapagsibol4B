@@ -1,5 +1,6 @@
 import "server-only";
 
+import { purgeAiKnowledgeBindingForTenant } from "@/lib/ai-assistance/provider-index";
 import { Permission } from "@/lib/authorization/permissions";
 import { requireUser } from "@/lib/auth";
 import { requireRepositoryPermission } from "@/lib/document-repository/access";
@@ -15,11 +16,9 @@ export type DeleteRepositoryDocumentResult = {
 
 /**
  * Permanently removes one managed repository document for the active tenant.
- *
- * Database deletion and its immutable audit tombstone commit together first.
- * Binary cleanup happens immediately afterwards. A storage cleanup error never
- * recreates database visibility; it is logged as an operational orphan for
- * retry/maintenance rather than exposing an inaccessible file back to users.
+ * Provider-side AI knowledge is purged before the database record so a local
+ * delete can never leave an intentionally retained searchable AI copy behind.
+ * If provider purge fails, deletion fails closed and can be retried.
  */
 export async function permanentlyDeleteRepositoryDocument(input: { documentId: string; reason?: string | null }): Promise<DeleteRepositoryDocumentResult> {
   const actor = await requireUser();
@@ -47,6 +46,8 @@ export async function permanentlyDeleteRepositoryDocument(input: { documentId: s
   });
   if (!document) throw new Error("Repository document not found in the active tenant.");
 
+  await purgeAiKnowledgeBindingForTenant({ tenantId: context.tenantId, documentId: document.id, actorId: actor.id });
+
   const retainedRevisionBytes = document.revisions.reduce((sum, revision) => sum + revision.fileSizeBytes, BigInt(0));
   const binaryCount = 1 + document.revisions.filter((revision) => Boolean(revision.storageKey)).length;
 
@@ -69,21 +70,18 @@ export async function permanentlyDeleteRepositoryDocument(input: { documentId: s
           currentFileSizeBytes: Number(document.fileSizeBytes),
           retainedRevisionBytes: Number(retainedRevisionBytes),
           binaryCount,
+          aiKnowledgePurgedBeforeDelete: true,
         },
         reason: input.reason?.trim() || null,
         aiAction: false,
       },
     });
 
-    await tx.repositoryDocument.delete({
-      where: { tenantId_id: { tenantId: context.tenantId, id: document.id } },
-    });
+    await tx.repositoryDocument.delete({ where: { tenantId_id: { tenantId: context.tenantId, id: document.id } } });
   });
 
   const storageKeys = new Set<string>([document.storageKey]);
-  for (const revision of document.revisions) {
-    if (revision.storageKey) storageKeys.add(revision.storageKey);
-  }
+  for (const revision of document.revisions) if (revision.storageKey) storageKeys.add(revision.storageKey);
 
   let deletedFileCount = 0;
   let storageCleanupFailures = 0;
@@ -93,11 +91,7 @@ export async function permanentlyDeleteRepositoryDocument(input: { documentId: s
       deletedFileCount += 1;
     } catch (error) {
       storageCleanupFailures += 1;
-      console.error("[document-repository] Permanent delete left an inaccessible storage orphan for maintenance cleanup.", {
-        tenantId: context.tenantId,
-        documentId: document.id,
-        error,
-      });
+      console.error("[document-repository] Permanent delete left an inaccessible storage orphan for maintenance cleanup.", { tenantId: context.tenantId, documentId: document.id, error });
     }
   }
 

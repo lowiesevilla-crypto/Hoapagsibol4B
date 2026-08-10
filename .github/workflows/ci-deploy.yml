@@ -39,6 +39,8 @@ jobs:
       E2E_BASE_URL: http://127.0.0.1:3000
       E2E_COVERAGE_YEAR: "2099"
       E2E_COVERAGE_MONTH: "1"
+      AI_RUNTIME_ENABLED: "true"
+      AI_PROVIDER_MODE: mock
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4

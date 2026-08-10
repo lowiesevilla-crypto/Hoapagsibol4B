@@ -20,23 +20,21 @@ export async function POST(request: Request) {
     for (const invoiceId of platformBilling.invoiceIds) {
       try {
         const delivery = await sendPlatformInvoiceEmail({ invoiceId });
-        platformInvoiceEmails.push({
-          invoiceId,
-          status: delivery.status,
-          recipients: delivery.recipients,
-          message: delivery.message,
-        });
+        platformInvoiceEmails.push({ invoiceId, status: delivery.status, recipients: delivery.recipients, message: delivery.message });
       } catch (error) {
-        platformInvoiceEmails.push({
-          invoiceId,
-          status: "FAILED",
-          message: error instanceof Error ? error.message : "Platform invoice email failed.",
-        });
+        platformInvoiceEmails.push({ invoiceId, status: "FAILED", message: error instanceof Error ? error.message : "Platform invoice email failed." });
       }
     }
   } catch (error) {
     platformBilling = { error: error instanceof Error ? error.message : "Platform billing cycle failed." };
   }
+
+  // Privacy retention is independent of subscription status. Expired AI
+  // conversations are removed even for suspended, inactive, or cancelled tenants;
+  // AiMessage rows cascade with their parent conversation.
+  const expiredAiConversations = await platformPrisma.aiConversation.deleteMany({
+    where: { expiresAt: { lt: new Date() } },
+  });
 
   const tenants = await platformPrisma.tenant.findMany({
     where: { status: "ACTIVE", subscriptionStatus: { not: "CANCELLED" } },
@@ -65,12 +63,14 @@ export async function POST(request: Request) {
     platformInvoiceEmails,
     tenantsProcessed: results.length,
     globalRateLimitsDeleted: rateLimits.count,
+    expiredAiConversationsDeleted: expiredAiConversations.count,
     results,
   }, { status: ok ? 200 : 500 });
 }
 
 async function maintainTenant(tenantId: string, tenantSlug: string, billingEnabled: boolean) {
-  const cleanupBefore = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+  const now = new Date();
+  const cleanupBefore = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
   const [attempts, tokens] = await prisma.$transaction([
     prisma.passwordResetAttempt.deleteMany({ where: { createdAt: { lt: cleanupBefore } } }),
     prisma.passwordResetToken.deleteMany({ where: { expiresAt: { lt: cleanupBefore } } }),
@@ -79,11 +79,10 @@ async function maintainTenant(tenantId: string, tenantSlug: string, billingEnabl
     await prisma.auditLog.create({ data: { tenantId, module: "CRON", action: "DAILY_MAINTENANCE", entityType: "System", metadata: { billingSkipped: true, resetAttemptsDeleted: attempts.count, resetTokensDeleted: tokens.count } } });
     return { billingSkipped: true, resetAttemptsDeleted: attempts.count, resetTokensDeleted: tokens.count };
   }
-  const now = new Date();
   const today = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
   const reminderWindow = new Date(today);
   reminderWindow.setUTCDate(reminderWindow.getUTCDate() + 3);
-  const logWindow = new Date(Date.now() - 24 * 60 * 60 * 1000);
+  const logWindow = new Date(now.getTime() - 24 * 60 * 60 * 1000);
   const overdue = await prisma.bill.updateMany({ where: { archivedAt: null, dueDate: { lt: today }, balance: { gt: 0 }, status: { in: [BillStatus.UNPAID, BillStatus.PARTIAL] } }, data: { status: BillStatus.OVERDUE } });
   const bills = await prisma.bill.findMany({ where: { archivedAt: null, balance: { gt: 0 }, dueDate: { lte: reminderWindow }, status: { in: [BillStatus.UNPAID, BillStatus.PARTIAL, BillStatus.OVERDUE] } }, include: { homeowner: { include: { user: true } } }, orderBy: { dueDate: "asc" }, take: 50 });
   const recipients = [...new Set(bills.map((bill) => bill.homeowner.userId))];

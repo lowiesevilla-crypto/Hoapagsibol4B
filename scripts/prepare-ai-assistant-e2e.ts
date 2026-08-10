@@ -34,7 +34,12 @@ async function cleanup() {
   await prisma.tenantAiConfiguration.deleteMany({ where: { tenantId: { in: [primaryTenantId, secondaryTenantId] } } });
   await prisma.repositoryDocument.deleteMany({ where: { tenantId: primaryTenantId, id: documentId } });
   await prisma.repositoryDocumentCategory.deleteMany({ where: { tenantId: primaryTenantId, id: categoryId } });
-  await prisma.tenantFeatureEntitlement.deleteMany({ where: { tenantId: { in: [primaryTenantId, secondaryTenantId] }, featureCode: "AI_ASSISTANCE" } });
+  await prisma.tenantFeatureEntitlement.deleteMany({
+    where: {
+      tenantId: { in: [primaryTenantId, secondaryTenantId] },
+      featureCode: { in: ["AI_ASSISTANCE", "DOCUMENT_MANAGEMENT"] },
+    },
+  });
   await prisma.tenantSubscription.deleteMany({ where: { id: aiSubscriptionId } });
   await prisma.subscriptionPlanFeatureEntitlement.deleteMany({ where: { planId: aiPlanId } });
   await prisma.subscriptionPlanModule.deleteMany({ where: { planId: aiPlanId } });
@@ -111,6 +116,18 @@ async function setup() {
         modelTier: "STANDARD",
         overagePolicy: "HARD_STOP",
       },
+      updatedById: admin.id,
+    },
+  });
+  await prisma.tenantFeatureEntitlement.create({
+    data: {
+      tenantId: primaryTenantId,
+      featureCode: "DOCUMENT_MANAGEMENT",
+      enabledOverride: true,
+      storageLimitMbOverride: 50,
+      maxFileSizeMbOverride: 5,
+      retainRevisionBinariesOverride: true,
+      maxRevisionBinariesOverride: 2,
       updatedById: admin.id,
     },
   });

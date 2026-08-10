@@ -5,7 +5,7 @@ import type {
 } from "@prisma/client";
 import { Permission } from "@/lib/authorization/permissions";
 import { prisma } from "@/lib/db";
-import { hasRepositoryPermission, requireRepositoryRead } from "@/lib/document-repository/access";
+import { canRepositoryPermission, requireRepositoryRead } from "@/lib/document-repository/access";
 import { ensureRepositoryDefaultCategories as initializeRepositoryDefaultCategories } from "@/lib/document-repository/categories";
 import { evaluateRepositoryQuota } from "@/lib/document-repository/quota";
 
@@ -24,7 +24,7 @@ export type RepositoryListFilters = {
  * Read-only staff never gain an implicit write capability by opening the page.
  */
 export async function ensureRepositoryDefaultCategories() {
-  if (!hasRepositoryPermission(Permission.DOCUMENT_REPOSITORY_MANAGE_CATEGORIES)) {
+  if (!await canRepositoryPermission(Permission.DOCUMENT_REPOSITORY_MANAGE_CATEGORIES)) {
     return { created: 0, existing: 0 };
   }
   return initializeRepositoryDefaultCategories();

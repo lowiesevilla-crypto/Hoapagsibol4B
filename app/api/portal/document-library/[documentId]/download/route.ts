@@ -1,8 +1,6 @@
 import { Readable } from "node:stream";
 import { Role } from "@prisma/client";
 import { requireUser } from "@/lib/auth";
-import { writeRepositoryAudit } from "@/lib/document-repository/audit";
-import { RepositoryAuditAction } from "@/lib/document-repository/constants";
 import { openRepositoryDocumentForHomeowner } from "@/lib/document-repository/delivery";
 
 export const runtime = "nodejs";
@@ -20,7 +18,7 @@ function contentDisposition(fileName: string) {
 }
 
 export async function GET(_request: Request, context: { params: Promise<{ documentId: string }> }) {
-  const user = await requireUser(Role.HOMEOWNER);
+  await requireUser(Role.HOMEOWNER);
   const { documentId } = await context.params;
   let delivery;
   try {
@@ -30,19 +28,6 @@ export async function GET(_request: Request, context: { params: Promise<{ docume
     if (/not found|not available|not eligible|access/i.test(message)) return new Response("Document not found.", { status: 404 });
     return new Response("Document file is unavailable.", { status: 404 });
   }
-
-  await writeRepositoryAudit({
-    action: RepositoryAuditAction.DOWNLOADED,
-    actorId: user.id,
-    documentId: delivery.documentId,
-    metadata: {
-      homeownerLibrary: true,
-      title: delivery.title,
-      fileName: delivery.fileName,
-      fileSizeBytes: delivery.fileSizeBytes.toString(),
-      checksumSha256: delivery.checksumSha256,
-    },
-  });
 
   return new Response(Readable.toWeb(delivery.stream) as unknown as ReadableStream, {
     headers: {

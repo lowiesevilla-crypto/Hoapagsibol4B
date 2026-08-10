@@ -11,6 +11,9 @@ const secondaryConversationId = "e2e_ai_secondary_conversation";
 const providerFileId = "file_hoahub_ci_policy";
 const primaryVectorStoreId = "vs_mock_e2e_primary_tenant";
 const secondaryVectorStoreId = "vs_mock_e2e_secondary_tenant";
+const aiPlanId = "e2e_ai_subscription_plan";
+const aiPlanCode = "E2E_AI_BROWSER_PLAN";
+const aiSubscriptionId = "e2e_ai_primary_subscription";
 
 function assertSafeDatabase() {
   const allowLocal = process.env.HOAHUB_E2E_ALLOW_LOCAL === "1";
@@ -32,13 +35,17 @@ async function cleanup() {
   await prisma.repositoryDocument.deleteMany({ where: { tenantId: primaryTenantId, id: documentId } });
   await prisma.repositoryDocumentCategory.deleteMany({ where: { tenantId: primaryTenantId, id: categoryId } });
   await prisma.tenantFeatureEntitlement.deleteMany({ where: { tenantId: { in: [primaryTenantId, secondaryTenantId] }, featureCode: "AI_ASSISTANCE" } });
+  await prisma.tenantSubscription.deleteMany({ where: { id: aiSubscriptionId } });
+  await prisma.subscriptionPlanFeatureEntitlement.deleteMany({ where: { planId: aiPlanId } });
+  await prisma.subscriptionPlanModule.deleteMany({ where: { planId: aiPlanId } });
+  await prisma.subscriptionPlan.deleteMany({ where: { id: aiPlanId } });
 }
 
 async function setup() {
   assertSafeDatabase();
   await cleanup();
   const [primaryTenant, secondaryTenant, admin, primaryHomeowner, secondaryHomeowner] = await Promise.all([
-    prisma.tenant.findUnique({ where: { id: primaryTenantId }, select: { id: true, subscriptionPlan: true } }),
+    prisma.tenant.findUnique({ where: { id: primaryTenantId }, select: { id: true } }),
     prisma.tenant.findUnique({ where: { id: secondaryTenantId }, select: { id: true } }),
     prisma.user.findFirst({ where: { tenantId: primaryTenantId, role: "SYSTEM_ADMIN", active: true }, select: { id: true } }),
     prisma.user.findUnique({ where: { id: primaryHomeownerUserId }, select: { id: true } }),
@@ -46,10 +53,50 @@ async function setup() {
   ]);
   if (!primaryTenant || !secondaryTenant || !admin || !primaryHomeowner || !secondaryHomeowner) throw new Error("Critical browser fixtures must be prepared before AI browser fixtures.");
 
-  const latestSubscription = await prisma.tenantSubscription.findFirst({ where: { tenantId: primaryTenantId }, orderBy: [{ startedAt: "desc" }, { createdAt: "desc" }], select: { planId: true, plan: { select: { active: true } } } });
-  const fallbackPlan = latestSubscription ? null : await prisma.subscriptionPlan.findFirst({ where: { code: primaryTenant.subscriptionPlan }, select: { id: true, active: true } });
-  const plan = latestSubscription ? { id: latestSubscription.planId, active: latestSubscription.plan.active } : fallbackPlan;
-  if (!plan?.active) throw new Error("Primary E2E tenant requires an active subscription plan for AI entitlement tests.");
+  // Exercise the real commercial-entitlement path without relying on seed-plan
+  // state. This plan/subscription exists only inside the disposable E2E database
+  // and is removed by cleanup. Existing tenant module entitlements remain the
+  // source of normal portal navigation, so non-AI browser scenarios are unchanged.
+  await prisma.subscriptionPlan.create({
+    data: {
+      id: aiPlanId,
+      code: aiPlanCode,
+      name: "Disposable AI Browser UAT Plan",
+      description: "CI-only plan for authenticated AI commercial entitlement tests.",
+      active: true,
+      currency: "PHP",
+      monthlyPrice: 0,
+      trialDays: 0,
+    },
+  });
+  await prisma.subscriptionPlanFeatureEntitlement.create({
+    data: {
+      planId: aiPlanId,
+      featureCode: "AI_ASSISTANCE",
+      enabled: true,
+      configuration: {
+        monthlyRequestLimit: 20,
+        monthlyInputTokenLimit: 100000,
+        monthlyOutputTokenLimit: 100000,
+        requestsPerMinute: 50,
+        modelTier: "STANDARD",
+        overagePolicy: "HARD_STOP",
+      },
+    },
+  });
+  await prisma.tenantSubscription.create({
+    data: {
+      id: aiSubscriptionId,
+      tenantId: primaryTenantId,
+      planId: aiPlanId,
+      status: "ACTIVE",
+      billingFrequency: "MONTHLY",
+      startedAt: new Date("2099-01-01T00:00:00.000Z"),
+      agreedPrice: 0,
+      currency: "PHP",
+      autoRenew: false,
+    },
+  });
 
   await prisma.tenantFeatureEntitlement.create({
     data: {

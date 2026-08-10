@@ -87,7 +87,9 @@ async function primaryTenantFlow(browser) {
     await page.keyboard.up("Shift");
     const multilineValue = await page.$eval(composerSelector, (element) => element.value);
     assert.equal(multilineValue, "Line one\n", "Shift+Enter must insert a new line instead of submitting.");
-    await page.keyboard.press("Control+A");
+    await page.keyboard.down("Control");
+    await page.keyboard.press("A");
+    await page.keyboard.up("Control");
     await page.keyboard.press("Backspace");
 
     const normal = await askApi(page, { question: "What does our approved community policy say?" });

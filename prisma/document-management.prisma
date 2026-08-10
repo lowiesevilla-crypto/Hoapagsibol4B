@@ -89,44 +89,48 @@ model RepositoryDocumentCategory {
 }
 
 model RepositoryDocument {
-  id                 String                           @id @default(cuid())
-  tenantId           String
-  categoryId         String
-  title              String
-  description        String?                          @db.Text
-  documentReference  String?                          @db.VarChar(120)
-  visibility         RepositoryDocumentVisibility     @default(INTERNAL)
-  status             RepositoryDocumentStatus         @default(DRAFT)
-  currentRevision    Int                              @default(1)
-  revisionPolicy     RepositoryDocumentRevisionPolicy @default(REPLACE_CURRENT)
-  originalFileName   String
-  storageKey         String                           @db.VarChar(500)
-  contentType        String                           @db.VarChar(160)
-  fileExtension      String                           @db.VarChar(20)
-  fileSizeBytes      BigInt
-  checksumSha256     String                           @db.VarChar(64)
-  malwareScanStatus  RepositoryMalwareScanStatus      @default(NOT_CONFIGURED)
-  issuingBody        String?
-  approvalDate       DateTime?                        @db.Date
-  effectiveAt        DateTime?
-  expiresAt          DateTime?
-  publishedAt        DateTime?
-  resolutionNumber   String?                          @db.VarChar(120)
-  memoNumber         String?                          @db.VarChar(120)
-  policyOwner        String?
-  remarks            String?                          @db.Text
-  searchableKeywords String?                          @db.Text
-  uploadedById       String
-  updatedById        String?
-  category           RepositoryDocumentCategory       @relation(fields: [tenantId, categoryId], references: [tenantId, id], onDelete: Restrict, onUpdate: Cascade)
-  revisions          RepositoryDocumentRevision[]
-  tagAssignments     RepositoryDocumentTagAssignment[]
-  createdAt          DateTime                         @default(now())
-  updatedAt          DateTime                         @updatedAt
+  id                    String                           @id @default(cuid())
+  tenantId              String
+  categoryId            String
+  title                 String
+  description           String?                          @db.Text
+  documentReference     String?                          @db.VarChar(120)
+  visibility            RepositoryDocumentVisibility     @default(INTERNAL)
+  status                RepositoryDocumentStatus         @default(DRAFT)
+  currentRevision       Int                              @default(1)
+  revisionPolicy        RepositoryDocumentRevisionPolicy @default(REPLACE_CURRENT)
+  originalFileName      String
+  storageKey            String                           @db.VarChar(500)
+  contentType           String                           @db.VarChar(160)
+  fileExtension         String                           @db.VarChar(20)
+  fileSizeBytes         BigInt
+  checksumSha256        String                           @db.VarChar(64)
+  malwareScanStatus     RepositoryMalwareScanStatus      @default(NOT_CONFIGURED)
+  aiEnabled             Boolean                          @default(false)
+  privacyClassification AiPrivacyClassification          @default(INTERNAL)
+  issuingBody           String?
+  approvalDate          DateTime?                        @db.Date
+  effectiveAt           DateTime?
+  expiresAt             DateTime?
+  publishedAt           DateTime?
+  resolutionNumber      String?                          @db.VarChar(120)
+  memoNumber            String?                          @db.VarChar(120)
+  policyOwner           String?
+  remarks               String?                          @db.Text
+  searchableKeywords    String?                          @db.Text
+  uploadedById          String
+  updatedById           String?
+  category              RepositoryDocumentCategory       @relation(fields: [tenantId, categoryId], references: [tenantId, id], onDelete: Restrict, onUpdate: Cascade)
+  revisions             RepositoryDocumentRevision[]
+  tagAssignments        RepositoryDocumentTagAssignment[]
+  createdAt             DateTime                         @default(now())
+  updatedAt             DateTime                         @updatedAt
 
   @@unique([tenantId, id])
   @@unique([tenantId, storageKey])
   @@index([tenantId, status, visibility, updatedAt])
+  @@index([tenantId, aiEnabled, status, visibility], map: "RepositoryDocument_ai_eligibility_idx")
+  @@index([tenantId, privacyClassification, aiEnabled], map: "RepositoryDocument_privacy_ai_idx")
   @@index([tenantId, categoryId, status])
   @@index([tenantId, documentReference])
   @@index([tenantId, effectiveAt, expiresAt])

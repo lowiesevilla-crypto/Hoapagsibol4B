@@ -82,7 +82,9 @@ async function primaryTenantFlow(browser) {
     await page.waitForFunction((selector) => document.querySelector(selector)?.value === "", { timeout }, composerSelector);
 
     await page.type(composerSelector, "Line one");
-    await page.keyboard.press("Shift+Enter");
+    await page.keyboard.down("Shift");
+    await page.keyboard.press("Enter");
+    await page.keyboard.up("Shift");
     const multilineValue = await page.$eval(composerSelector, (element) => element.value);
     assert.equal(multilineValue, "Line one\n", "Shift+Enter must insert a new line instead of submitting.");
     await page.keyboard.press("Control+A");

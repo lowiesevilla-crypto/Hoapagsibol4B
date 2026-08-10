@@ -73,6 +73,20 @@ async function primaryTenantFlow(browser) {
     await page.goto(`${baseUrl}/portal/ai`, { waitUntil: "networkidle2", timeout });
     await expectText(page, "Association Assistant");
     await expectText(page, "Tenant-scoped by design");
+    await expectText(page, "Enter to send", "keyboard composer guidance");
+
+    const composerSelector = 'textarea[aria-label="Question for HOAHub AI"]';
+    await page.type(composerSelector, "What does our approved community policy say?");
+    await page.keyboard.press("Enter");
+    await expectText(page, primarySourceTitle, "authorized source after Enter-submitted chat question");
+    await page.waitForFunction((selector) => document.querySelector(selector)?.value === "", { timeout }, composerSelector);
+
+    await page.type(composerSelector, "Line one");
+    await page.keyboard.press("Shift+Enter");
+    const multilineValue = await page.$eval(composerSelector, (element) => element.value);
+    assert.equal(multilineValue, "Line one\n", "Shift+Enter must insert a new line instead of submitting.");
+    await page.keyboard.press("Control+A");
+    await page.keyboard.press("Backspace");
 
     const normal = await askApi(page, { question: "What does our approved community policy say?" });
     assert.equal(normal.status, 200, JSON.stringify(normal.body));
@@ -167,7 +181,7 @@ async function main() {
   try {
     await primaryTenantFlow(browser);
     await secondaryTenantDeniedFlow(browser);
-    console.log("AI assistant browser UAT passed: entitlement, tenant isolation, prompt tenant-switch resistance, conversation isolation, privacy minimization, no-source fallback, quota isolation, provider outage, and disabled-tenant direct API denial.");
+    console.log("AI assistant browser UAT passed: Enter submission, Shift+Enter multiline input, entitlement, tenant isolation, prompt tenant-switch resistance, conversation isolation, privacy minimization, no-source fallback, quota isolation, provider outage, and disabled-tenant direct API denial.");
   } finally {
     await browser.close();
     await prisma.$disconnect();

@@ -11,6 +11,10 @@ function effectiveFilter(now: Date) {
   return { AND: [{ OR: [{ effectiveAt: null }, { effectiveAt: { lte: now } }] }, { OR: [{ expiresAt: null }, { expiresAt: { gt: now } }] }] };
 }
 
+function effectiveRoleSnapshot(roles: readonly string[]) {
+  return [...new Set(roles)].sort().join(",");
+}
+
 async function authorizedSources(input: { tenantId: string; experience: AiExperience; vectorStoreId: string; providerFileIds: string[]; now: Date }) {
   if (!input.providerFileIds.length) return [];
   const bindings = await prisma.aiKnowledgeBinding.findMany({
@@ -39,18 +43,34 @@ async function authorizedSources(input: { tenantId: string; experience: AiExperi
   }).map((document) => ({ documentId: document.id, title: document.title, category: document.category.name, reference: document.documentReference, revision: document.currentRevision, effectiveAt: document.effectiveAt }));
 }
 
-async function conversationFor(input: { tenantId: string; actorId: string; actorRole: string; retentionDays: number; conversationId?: string | null }) {
+async function conversationFor(input: { tenantId: string; actorId: string; actorRoleSnapshot: string; retentionDays: number; conversationId?: string | null }) {
   if (input.conversationId) {
-    const existing = await prisma.aiConversation.findFirst({ where: { tenantId: input.tenantId, id: input.conversationId, actorId: input.actorId, status: "ACTIVE", expiresAt: { gt: new Date() } } });
-    if (!existing) throw new Error("AI conversation is unavailable in the active tenant session.");
+    const existing = await prisma.aiConversation.findFirst({
+      where: {
+        tenantId: input.tenantId,
+        id: input.conversationId,
+        actorId: input.actorId,
+        actorRole: input.actorRoleSnapshot,
+        status: "ACTIVE",
+        expiresAt: { gt: new Date() },
+      },
+    });
+    if (!existing) throw new Error("AI conversation is unavailable in the active tenant, user, or role session.");
     return existing;
   }
-  return prisma.aiConversation.create({ data: { tenantId: input.tenantId, actorId: input.actorId, actorRole: input.actorRole, expiresAt: new Date(Date.now() + input.retentionDays * 86_400_000) } });
+  return prisma.aiConversation.create({
+    data: {
+      tenantId: input.tenantId,
+      actorId: input.actorId,
+      actorRole: input.actorRoleSnapshot,
+      expiresAt: new Date(Date.now() + input.retentionDays * 86_400_000),
+    },
+  });
 }
 
 export async function answerTenantKnowledgeQuestion(input: { experience: AiExperience; question: unknown; conversationId?: string | null }) {
   const requestId = randomUUID();
-  const access = await requireAiRuntimeAccess(input.experience);
+  const access = await requireAiRuntimeAccess(input.experience, requestId);
   const tenantId = access.user.tenantId;
   const actorId = access.user.id;
   let question: string;
@@ -67,7 +87,13 @@ export async function answerTenantKnowledgeQuestion(input: { experience: AiExper
     return { conversationId: null, answer: NO_SOURCE_RESPONSE, sources: [], requestId };
   }
 
-  const conversation = await conversationFor({ tenantId, actorId, actorRole: access.user.role, retentionDays: access.governance.retentionDays, conversationId: input.conversationId });
+  const conversation = await conversationFor({
+    tenantId,
+    actorId,
+    actorRoleSnapshot: effectiveRoleSnapshot(access.user.roles),
+    retentionDays: access.governance.retentionDays,
+    conversationId: input.conversationId,
+  });
   await prisma.aiMessage.create({ data: { tenantId, conversationId: conversation.id, role: "USER", contentRedacted: redactAiContentForAudit(question), privacyClassification: "INTERNAL" } });
 
   const started = Date.now();

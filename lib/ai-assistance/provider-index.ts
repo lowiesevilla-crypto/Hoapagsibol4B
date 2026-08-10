@@ -37,9 +37,13 @@ function providerNamespaceName(tenantId: string) {
   return `HOAHub tenant ${createHash("sha256").update(tenantId).digest("hex").slice(0, 16)}`;
 }
 
-async function requireKnowledgeManager() {
+function hasKnowledgePermission(user: Awaited<ReturnType<typeof requireUser>>) {
+  return new Set(user.permissions).has(Permission.AI_KNOWLEDGE_MANAGE);
+}
+
+async function requireKnowledgeManagerForIndex() {
   const user = await requireUser();
-  if (!new Set(user.permissions).has(Permission.AI_KNOWLEDGE_MANAGE)) throw new Error("AI knowledge-management permission is required.");
+  if (!hasKnowledgePermission(user)) throw new Error("AI knowledge-management permission is required.");
   await requireAiAssistanceEntitlement(user.tenantId);
   const governance = await prisma.tenantAiConfiguration.findUnique({ where: { tenantId: user.tenantId } });
   if (!governance?.boardApprovedAt || !governance.piaApprovedAt || !governance.dpoApprovedAt || !governance.providerApprovedAt || !governance.crossBorderReviewApprovedAt || !governance.privacyNoticePublishedAt || !governance.privacyNoticeVersion || !governance.lawfulBasis) {
@@ -48,9 +52,18 @@ async function requireKnowledgeManager() {
   return { user, governance };
 }
 
+async function requireKnowledgeManagerForCleanup() {
+  const user = await requireUser();
+  if (!hasKnowledgePermission(user)) throw new Error("AI knowledge-management permission is required.");
+  return user;
+}
+
 async function ensureTenantProviderIndex(tenantId: string, actorId: string) {
   const existing = await prisma.tenantAiProviderIndex.findUnique({ where: { tenantId } });
-  if (existing) return existing;
+  if (existing) {
+    if (existing.status !== "ACTIVE") throw new Error("The tenant AI provider index is not active.");
+    return existing;
+  }
   const vectorStoreId = process.env.AI_PROVIDER_MODE === "mock"
     ? `vs_mock_${createHash("sha256").update(tenantId).digest("hex").slice(0, 20)}`
     : String((await providerJson("/vector_stores", { method: "POST", headers: providerHeaders(), body: JSON.stringify({ name: providerNamespaceName(tenantId) }) })).id || "");
@@ -67,8 +80,9 @@ async function ensureTenantProviderIndex(tenantId: string, actorId: string) {
 async function uploadProviderFile(input: { bytes: Buffer; fileName: string; contentType: string }) {
   if (process.env.AI_PROVIDER_MODE === "mock") return "file_hoahub_ci_policy";
   const form = new FormData();
+  const arrayBuffer = input.bytes.buffer.slice(input.bytes.byteOffset, input.bytes.byteOffset + input.bytes.byteLength) as ArrayBuffer;
   form.append("purpose", "user_data");
-  form.append("file", new Blob([input.bytes], { type: input.contentType }), input.fileName);
+  form.append("file", new Blob([arrayBuffer], { type: input.contentType }), input.fileName);
   const response = await fetch("https://api.openai.com/v1/files", {
     method: "POST",
     headers: { Authorization: `Bearer ${providerKey()}` },
@@ -86,10 +100,7 @@ async function attachProviderFile(input: { vectorStoreId: string; providerFileId
   const attached = await providerJson(`/vector_stores/${encodeURIComponent(input.vectorStoreId)}/files`, {
     method: "POST",
     headers: providerHeaders(),
-    body: JSON.stringify({
-      file_id: input.providerFileId,
-      attributes: { audience: input.audience, revision: input.revision, privacy_classification: input.classification },
-    }),
+    body: JSON.stringify({ file_id: input.providerFileId, attributes: { audience: input.audience, revision: input.revision, privacy_classification: input.classification } }),
   });
   if (attached.status === "completed") return;
   for (let attempt = 0; attempt < 20; attempt += 1) {
@@ -103,11 +114,11 @@ async function attachProviderFile(input: { vectorStoreId: string; providerFileId
 
 async function deleteProviderFile(providerFileId: string) {
   if (process.env.AI_PROVIDER_MODE === "mock") return;
-  await providerJson(`/files/${encodeURIComponent(providerFileId)}`, { method: "DELETE", headers: providerHeaders() }).catch(() => undefined);
+  await providerJson(`/files/${encodeURIComponent(providerFileId)}`, { method: "DELETE", headers: providerHeaders() });
 }
 
 export async function indexRepositoryDocumentForAi(documentId: string) {
-  const { user } = await requireKnowledgeManager();
+  const { user } = await requireKnowledgeManagerForIndex();
   const now = new Date();
   const document = await prisma.repositoryDocument.findFirst({
     where: { tenantId: user.tenantId, id: documentId },
@@ -141,22 +152,31 @@ export async function indexRepositoryDocumentForAi(documentId: string) {
       where: { tenantId_documentId: { tenantId: user.tenantId, documentId } },
       data: { providerFileId, vectorStoreId: namespace.vectorStoreId, indexStatus: "INDEXED", indexedChecksumSha256: document.checksumSha256, indexedAt: new Date(), lastError: null, updatedById: user.id },
     });
-    if (existing?.providerFileId && existing.providerFileId !== providerFileId) await deleteProviderFile(existing.providerFileId);
+    if (existing?.providerFileId && existing.providerFileId !== providerFileId) {
+      await deleteProviderFile(existing.providerFileId).catch((error) => console.error("[ai-assistance] Old provider file cleanup requires retry.", { tenantId: user.tenantId, documentId, error }));
+    }
     await prisma.auditLog.create({ data: { tenantId: user.tenantId, actorId: user.id, module: "AI_ASSISTANCE", action: "AI_KNOWLEDGE_INDEXED", entityType: "RepositoryDocument", entityId: document.id, metadata: { audience, revision: document.currentRevision, classification: document.privacyClassification, vectorNamespaceTenantScoped: true } } });
     return binding;
   } catch (error) {
-    if (providerFileId) await deleteProviderFile(providerFileId);
+    if (providerFileId) await deleteProviderFile(providerFileId).catch(() => undefined);
     await prisma.aiKnowledgeBinding.update({ where: { tenantId_documentId: { tenantId: user.tenantId, documentId } }, data: { indexStatus: "FAILED", lastError: error instanceof Error ? error.message.slice(0, 1000) : "Indexing failed", updatedById: user.id } }).catch(() => undefined);
     throw error;
   }
 }
 
-export async function purgeRepositoryDocumentFromAi(documentId: string) {
-  const { user } = await requireKnowledgeManager();
-  const binding = await prisma.aiKnowledgeBinding.findUnique({ where: { tenantId_documentId: { tenantId: user.tenantId, documentId } } });
+export async function purgeAiKnowledgeBindingForTenant(input: { tenantId: string; documentId: string; actorId: string }) {
+  const binding = await prisma.aiKnowledgeBinding.findUnique({ where: { tenantId_documentId: { tenantId: input.tenantId, documentId: input.documentId } } });
   if (!binding) return null;
   if (binding.providerFileId) await deleteProviderFile(binding.providerFileId);
-  const purged = await prisma.aiKnowledgeBinding.update({ where: { tenantId_documentId: { tenantId: user.tenantId, documentId } }, data: { providerFileId: null, vectorStoreId: null, indexStatus: "PURGED", indexedChecksumSha256: null, indexedAt: null, lastError: null, updatedById: user.id } });
-  await prisma.auditLog.create({ data: { tenantId: user.tenantId, actorId: user.id, module: "AI_ASSISTANCE", action: "AI_KNOWLEDGE_PURGED", entityType: "RepositoryDocument", entityId: documentId } });
+  const purged = await prisma.aiKnowledgeBinding.update({
+    where: { tenantId_documentId: { tenantId: input.tenantId, documentId: input.documentId } },
+    data: { providerFileId: null, vectorStoreId: null, indexStatus: "PURGED", indexedChecksumSha256: null, indexedAt: null, lastError: null, updatedById: input.actorId },
+  });
+  await prisma.auditLog.create({ data: { tenantId: input.tenantId, actorId: input.actorId, module: "AI_ASSISTANCE", action: "AI_KNOWLEDGE_PURGED", entityType: "RepositoryDocument", entityId: input.documentId } });
   return purged;
+}
+
+export async function purgeRepositoryDocumentFromAi(documentId: string) {
+  const user = await requireKnowledgeManagerForCleanup();
+  return purgeAiKnowledgeBindingForTenant({ tenantId: user.tenantId, documentId, actorId: user.id });
 }

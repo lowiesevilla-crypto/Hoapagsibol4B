@@ -381,7 +381,15 @@ async function answerFromRepositoryDocumentText(input: { tenantId: string; tenan
     let text = "";
     try {
       text = await extractRepositoryDocumentText({ tenantSlug: input.tenantSlug, document });
-    } catch {
+    } catch (error) {
+      console.error("[ai-assistance] Repository document text extraction failed.", {
+        tenantId: input.tenantId,
+        documentId: document.id,
+        title: document.title,
+        contentType: document.contentType,
+        fileExtension: document.fileExtension,
+        error: error instanceof Error ? error.message : String(error),
+      });
       continue;
     }
     if (!text) continue;
@@ -1295,9 +1303,17 @@ export async function answerTenantKnowledgeQuestion(input: { experience: AiExper
       prisma.auditLog.create({ data: { tenantId, actorId, module: "AI_ASSISTANCE", action: sources.length ? "AI_RESPONSE_GENERATED" : "AI_NO_SOURCE_FALLBACK", entityType: "AiConversation", entityId: conversation.id, metadata: { requestId, providerRequestId: providerResponse.requestId, model: providerResponse.model, sourceDocumentIds: sources.map((source) => source.documentId), inputTokens: providerResponse.inputTokens, outputTokens: providerResponse.outputTokens } } }),
     ]);
     return { conversationId: conversation.id, answer, sources, requestId };
-  } catch {
+  } catch (error) {
+    console.error("[ai-assistance] Provider answer failed.", {
+      tenantId,
+      actorId,
+      conversationId: conversation.id,
+      requestId,
+      provider: "OPENAI",
+      error: error instanceof Error ? error.message : String(error),
+    });
     await prisma.aiUsageLedger.create({ data: { tenantId, actorId, requestId, outcome: AiRequestOutcome.PROVIDER_ERROR, latencyMs: Date.now() - started, denialReason: "PROVIDER_ERROR" } }).catch(() => undefined);
-    await prisma.auditLog.create({ data: { tenantId, actorId, module: "AI_ASSISTANCE", action: "AI_PROVIDER_ERROR", entityType: "AiConversation", entityId: conversation.id, metadata: { requestId } } }).catch(() => undefined);
+    await prisma.auditLog.create({ data: { tenantId, actorId, module: "AI_ASSISTANCE", action: "AI_PROVIDER_ERROR", entityType: "AiConversation", entityId: conversation.id, metadata: { requestId, provider: "OPENAI" } } }).catch(() => undefined);
     throw new Error("HOAHub AI is temporarily unavailable. Core HOAHub services remain available.");
   }
 }

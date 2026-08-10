@@ -3,6 +3,13 @@ import { answerTenantKnowledgeQuestion } from "@/lib/ai-assistance/knowledge-ass
 
 export const runtime = "nodejs";
 
+function statusForAiError(message: string) {
+  if (/temporarily unavailable|provider error/i.test(message)) return 503;
+  if (/not included|permission|authenticated|unavailable:|active tenant/i.test(message)) return 403;
+  if (/rate limit|allowance|budget/i.test(message)) return 429;
+  return 400;
+}
+
 export async function POST(request: Request) {
   try {
     const body = await request.json() as { question?: unknown; conversationId?: unknown };
@@ -16,7 +23,7 @@ export async function POST(request: Request) {
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : "HOAHub AI could not process this request.";
-    const status = /not included|permission|authenticated|unavailable:|active tenant/i.test(message) ? 403 : /rate limit|allowance|budget/i.test(message) ? 429 : 400;
+    const status = statusForAiError(message);
     return NextResponse.json({ error: message }, {
       status,
       headers: {

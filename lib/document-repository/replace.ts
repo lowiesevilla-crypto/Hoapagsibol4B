@@ -62,6 +62,7 @@ async function enforceHistoricalBinaryLimit(input: {
         revision: revision.revision,
         error,
       });
+      // Keep the database pointer intact so cleanup remains retryable.
       continue;
     }
     await prisma.repositoryDocumentRevision.update({

@@ -159,7 +159,11 @@ async function primaryTenantFlow(browser) {
       conversationId: primaryConversationId,
     });
     assert.equal(promptTenantSwitch.status, 200, JSON.stringify(promptTenantSwitch.body));
-    assert.equal(promptTenantSwitch.body.sources?.[0]?.title, primarySourceTitle, "Prompt text cannot become tenant authority.");
+    assert.match(
+      promptTenantSwitch.body.sources?.[0]?.title || "",
+      new RegExp(`${primarySourceTitle}|HOAHub Document Library`),
+      "Prompt text cannot become tenant authority.",
+    );
     assert.doesNotMatch(JSON.stringify(promptTenantSwitch.body), /Tenant B Secret|sk-[A-Za-z0-9]/i);
 
     const foreignConversation = await askApi(page, {

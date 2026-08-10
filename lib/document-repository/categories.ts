@@ -24,7 +24,6 @@ export async function ensureRepositoryDefaultCategories(): Promise<RepositoryCat
   });
   const existingCodes = new Set(existingRows.map((category) => category.code));
   let created = 0;
-  let existing = existingCodes.size;
 
   for (const category of repositoryDefaultCategories) {
     if (existingCodes.has(category.code)) continue;
@@ -45,7 +44,6 @@ export async function ensureRepositoryDefaultCategories(): Promise<RepositoryCat
       existingCodes.add(category.code);
     } catch (error) {
       if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
-        existing += 1;
         existingCodes.add(category.code);
         continue;
       }
@@ -55,6 +53,6 @@ export async function ensureRepositoryDefaultCategories(): Promise<RepositoryCat
 
   return {
     created,
-    existing: Math.max(existing, repositoryDefaultCategories.length - created),
+    existing: repositoryDefaultCategories.length - created,
   };
 }

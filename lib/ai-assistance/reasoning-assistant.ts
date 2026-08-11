@@ -8,16 +8,18 @@ import { estimateAiCostCentavos, recordAiDeniedRequest, requireAiRuntimeAccess, 
 import { searchTenantReasoningEvidence, synthesizeTenantReasoningAnswer, type AiGroundedEvidence, type AiReasoningSearchCandidate } from "@/lib/ai-assistance/reasoning-provider";
 import { prisma } from "@/lib/db";
 
+const KNOWLEDGE_QUESTION_PATTERN = /\b(policy|policies|rule|rules|bylaw|bylaws|resolution|section|sec\.?|manual|guideline|procedure|ordinance|magna carta|declaration|governance)\b/i;
+const DRAFT_RESOLUTION_PATTERN = /\bdraft\s+(a\s+)?(board\s+)?resolution\b/i;
 const OPERATIONAL_QUESTION_PATTERNS = [
   /^\s*(hi|hello|hey|good\s+(morning|afternoon|evening)|thank(s| you)|salamat)\b/i,
   /\b(who are you|what is your name|your name|what can you do|help me|tell me a joke|joke)\b/i,
   /\b(current|outstanding)?\s*balance\b|\bstatement of account\b|\bsoa\b/i,
-  /\b(payment history|recent payments?|receipt|paid|collection|bond|refund)\b/i,
+  /\b(payment history|recent payments?|my receipt|my payment|my collection|my bond|my refund|refund status)\b/i,
   /\b(account number|my profile|profile details|my address|my contact)\b/i,
   /\b(request status|document request status|complaint status|file (a )?complaint|create (a )?complaint)\b/i,
   /\b(announcements?|upcoming events?|current president|association president|officers?|organization)\b/i,
   /\b(total collection today|today'?s collections?|finance summary|active homeowners?|homeowner directory)\b/i,
-  /\bdraft\s+(a\s+)?(board\s+)?resolution\b/i,
+  DRAFT_RESOLUTION_PATTERN,
   /\b(request|get|apply for|download)\b.{0,50}\b(residency certificate|certificate of residency|good standing|clearance|gate pass|move[- ]?in|move[- ]?out)\b/i,
   /\b(requirements?)\b.{0,50}\b(residency certificate|certificate of residency|good standing|clearance|gate pass|move[- ]?in|move[- ]?out)\b/i,
 ];
@@ -27,6 +29,8 @@ export function shouldUseGroundedDocumentReasoning(question: unknown) {
   const value = question.trim();
   if (!value) return false;
   if (/\[(NO_SOURCE|PROVIDER_ERROR)\]/.test(value)) return true;
+  if (DRAFT_RESOLUTION_PATTERN.test(value)) return false;
+  if (KNOWLEDGE_QUESTION_PATTERN.test(value)) return true;
   return !OPERATIONAL_QUESTION_PATTERNS.some((pattern) => pattern.test(value));
 }
 

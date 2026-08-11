@@ -5,12 +5,11 @@ import { resolveAiAssistanceEntitlement } from "@/lib/ai-assistance/entitlement"
 import { evaluateAiGovernance } from "@/lib/ai-assistance/runtime-policy";
 import { requireUser } from "@/lib/auth";
 import { prisma } from "@/lib/db";
+import { manilaDayPeriod } from "@/lib/utils";
 
 function greetingFor(name: string | null | undefined) {
-  const hour = Number(new Intl.DateTimeFormat("en-US", { timeZone: "Asia/Manila", hour: "numeric", hour12: false }).format(new Date()));
-  const period = hour < 12 ? "Good morning" : hour < 18 ? "Good afternoon" : "Good evening";
   const firstName = name?.trim().split(/\s+/)[0];
-  return `${period}${firstName ? `, ${firstName}` : ""}. How can I help with HOA operations today?`;
+  return `Good ${manilaDayPeriod().toLowerCase()}${firstName ? `, ${firstName}` : ""}. How can I help with HOA operations today?`;
 }
 
 export default async function AdminAiCopilotPage() {

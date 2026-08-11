@@ -3,8 +3,9 @@ import type { Metadata } from "next";
 import { Role, TenantModule } from "@prisma/client";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
+import { AdminTopbar } from "@/components/admin-topbar";
 import { Sidebar } from "@/components/sidebar";
-import { adminLinks, platformLinks, systemAdminLinks } from "@/components/sidebar-links";
+import { adminLinks, adminShellLinks, platformLinks, systemAdminLinks, systemAdminShellLinks } from "@/components/sidebar-links";
 import { TransactionFeedback } from "@/components/transaction-feedback";
 import { resolveAiAssistanceEntitlement } from "@/lib/ai-assistance/entitlement";
 import { requireUser } from "@/lib/auth";
@@ -31,6 +32,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
   const user = await requireUser(Role.ADMIN);
   const pathname = (await headers()).get("x-hoa-pathname") || "/admin/dashboard";
   if (!canAccessAdminPath(user.roles, pathname)) redirect(`${adminHomeForRole(user.roles)}?error=You%20do%20not%20have%20access%20to%20this%20module.`);
+
   const platform = user.roles.includes(Role.SUPER_ADMIN) || user.roles.includes(Role.PLATFORM_ADMIN);
   const enabledModules = platform ? new Set(Object.values(TenantModule)) : await getEnabledTenantModules(user.tenantId);
   const requestedModule = moduleForPath(pathname);
@@ -43,6 +45,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
     resolveDocumentManagementEntitlement(user.tenantId),
     resolveAiAssistanceEntitlement(user.tenantId),
   ]);
+
   if (pathname.startsWith("/admin/document-management") && !documentManagementEntitlement.enabled) redirect("/admin/dashboard?error=Document%20Management%20is%20not%20included%20in%20your%20subscription%20plan.");
 
   const canManageAi = user.permissions.includes(Permission.AI_ASSISTANCE_MANAGE);
@@ -50,6 +53,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
     if (!aiAssistanceEntitlement.enabled) redirect("/admin/dashboard?error=AI%20Assistance%20is%20not%20included%20in%20your%20subscription%20plan.");
     if (!canManageAi) redirect("/admin/dashboard?error=You%20do%20not%20have%20permission%20to%20manage%20AI%20Assistance.");
   }
+
   const canUseAi = user.permissions.includes(Permission.AI_ASSISTANCE_USE);
   if (pathname.startsWith("/admin/ai-copilot")) {
     if (!aiAssistanceEntitlement.enabled) redirect("/admin/dashboard?error=AI%20Assistance%20is%20not%20included%20in%20your%20subscription%20plan.");
@@ -57,17 +61,41 @@ export default async function AdminLayout({ children }: { children: React.ReactN
   }
 
   const isSystemAdmin = user.roles.includes(Role.SYSTEM_ADMIN) || user.roles.includes(Role.SUPER_ADMIN);
+  const roleLabel = isSystemAdmin ? "System Administrator" : "Administrator";
   const canAccessPayroll = user.permissions.includes(Permission.PAYROLL_MANAGE) || await userCanAccessPayroll(user.id, user.role);
-  const baseLinks = isSystemAdmin ? systemAdminLinks : adminLinks;
+  const baseLinks = isSystemAdmin ? systemAdminShellLinks : adminShellLinks;
   const linksWithPlatform = user.roles.includes(Role.SUPER_ADMIN) ? [...baseLinks, ...platformLinks] : baseLinks;
   const links = filterAdminLinksByRole(filterLinksByModules(linksWithPlatform, enabledModules), user.roles)
     .filter((item) => documentManagementEntitlement.enabled || !item.href.startsWith("/admin/document-management"))
     .filter((item) => aiAssistanceEntitlement.enabled && canManageAi || !item.href.startsWith("/admin/ai-assistance"))
     .filter((item) => aiAssistanceEntitlement.enabled && canUseAi || !item.href.startsWith("/admin/ai-copilot"))
     .filter((item) => canAccessPayroll || !["/admin/employees", "/admin/attendance", "/admin/payroll"].includes(item.href));
-  const requestBadgeHref = "/admin/documents?section=requests";
+
+  const requestBadgeHref = "/admin/documents";
   const showDocumentRequestBadge = links.some((item) => item.href === requestBadgeHref);
   const linkBadges: Record<string, number> = showDocumentRequestBadge ? { [requestBadgeHref]: actionableDocumentRequests } : {};
   const sectionBadges: Record<string, number> = showDocumentRequestBadge ? { "Resident Services": actionableDocumentRequests } : {};
-  return <div className="min-h-screen print:bg-white"><div className="print:hidden"><Sidebar user={user} links={links} roleLabel={isSystemAdmin ? "System Administrator" : "Administrator"} association={association} initialChatUnreadCount={initialChatUnreadCount} linkBadges={linkBadges} sectionBadges={sectionBadges} /></div><Suspense><TransactionFeedback /></Suspense><main className="mx-auto min-w-0 max-w-[1800px] px-4 py-6 sm:px-7 lg:ml-72 lg:px-10 lg:py-9 print:ml-0 print:max-w-none print:p-0">{children}</main></div>;
+
+  return <div className="min-h-screen bg-[#f7fbfd] print:bg-white">
+    <div className="print:hidden">
+      <Sidebar
+        user={user}
+        links={links}
+        roleLabel={roleLabel}
+        association={association}
+        initialChatUnreadCount={initialChatUnreadCount}
+        linkBadges={linkBadges}
+        sectionBadges={sectionBadges}
+      />
+    </div>
+    <Suspense><TransactionFeedback /></Suspense>
+    <div className="min-w-0 lg:ml-72 print:ml-0">
+      <div className="print:hidden">
+        <AdminTopbar associationName={association.name} roleLabel={roleLabel} userName={user.name} />
+      </div>
+      <main className="mx-auto min-w-0 max-w-[1680px] px-4 py-5 sm:px-7 lg:px-8 lg:py-7 print:max-w-none print:p-0">
+        {children}
+      </main>
+    </div>
+  </div>;
 }

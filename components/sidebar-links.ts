@@ -29,6 +29,10 @@ export type IconName =
 
 export type LinkItem = { href: string; label: string; icon: IconName; section: string };
 
+/**
+ * Complete route catalogue used by metadata, role filtering, and route-level policy.
+ * Keep leaf routes here even when they are intentionally omitted from the primary shell.
+ */
 export const adminLinks: LinkItem[] = [
   { href: "/admin/dashboard", label: "Dashboard", icon: "dashboard", section: "Administration" },
   { href: "/admin/profile", label: "My Profile", icon: "profile", section: "Account" },
@@ -73,10 +77,51 @@ export const adminLinks: LinkItem[] = [
   { href: "/admin/data/migrations", label: "Balance migration", icon: "data", section: "Reports" },
 ];
 
+/**
+ * Primary premium shell navigation. Secondary configuration, direct-create actions,
+ * and tab destinations remain available inside their parent workspaces instead of
+ * competing for permanent sidebar space.
+ */
+export const adminShellLinks: LinkItem[] = [
+  { href: "/admin/dashboard", label: "Dashboard", icon: "dashboard", section: "Overview" },
+
+  { href: "/admin/homeowners", label: "Homeowners", icon: "homeowners", section: "Residents" },
+  { href: "/admin/contractors", label: "Contractors", icon: "contractors", section: "Residents" },
+  { href: "/admin/vehicles", label: "Vehicles", icon: "vehicles", section: "Residents" },
+
+  { href: "/admin/billing", label: "Billing", icon: "billing", section: "Finance" },
+  { href: "/admin/payments/requests", label: "Payments", icon: "payments", section: "Finance" },
+  { href: "/admin/collections", label: "Collections", icon: "collections", section: "Finance" },
+  { href: "/admin/expenses", label: "Expenses", icon: "expenses", section: "Finance" },
+
+  { href: "/admin/documents", label: "Documents", icon: "documents", section: "Resident Services" },
+  { href: "/admin/document-management", label: "Document Repository", icon: "documents", section: "Resident Services" },
+  { href: "/admin/complaints", label: "Complaints", icon: "complaints", section: "Resident Services" },
+
+  { href: "/admin/announcements", label: "Announcements", icon: "announcements", section: "Community" },
+  { href: "/admin/events", label: "Events", icon: "events", section: "Community" },
+  { href: "/admin/chat", label: "Chat", icon: "chat", section: "Community" },
+
+  { href: "/admin/employees", label: "Employees", icon: "employees", section: "Workforce" },
+  { href: "/admin/attendance", label: "Attendance", icon: "attendance", section: "Workforce" },
+  { href: "/admin/payroll", label: "Payroll", icon: "payroll", section: "Workforce" },
+
+  { href: "/admin/reports", label: "Reports", icon: "reports", section: "Insights & Data" },
+  { href: "/admin/data", label: "Data & Imports", icon: "data", section: "Insights & Data" },
+
+  { href: "/admin/ai-copilot", label: "AI Staff Copilot", icon: "chat", section: "AI & Knowledge" },
+  { href: "/admin/profile", label: "My Profile", icon: "profile", section: "Account" },
+];
+
 export const systemAdminLinks: LinkItem[] = [
   { href: "/admin/settings", label: "System settings", icon: "settings", section: "Settings" },
   { href: "/admin/settings/organization", label: "Organization", icon: "homeowners", section: "Settings" },
   ...adminLinks,
+];
+
+export const systemAdminShellLinks: LinkItem[] = [
+  ...adminShellLinks,
+  { href: "/admin/settings", label: "Settings", icon: "settings", section: "Account" },
 ];
 
 export const platformLinks: LinkItem[] = [

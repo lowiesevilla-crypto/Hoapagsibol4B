@@ -7,6 +7,8 @@ import { Permission } from "@/lib/authorization/permissions";
 import { repositoryStorage } from "@/lib/document-repository/storage";
 import { prisma } from "@/lib/db";
 
+const INDEX_METADATA_VERSION = 2;
+
 function providerKey() {
   const key = process.env.OPENAI_API_KEY;
   if (!key) throw new Error("HOAHub AI provider credential is not configured.");
@@ -95,12 +97,57 @@ async function uploadProviderFile(input: { bytes: Buffer; fileName: string; cont
   return body.id;
 }
 
-async function attachProviderFile(input: { vectorStoreId: string; providerFileId: string; audience: "RESIDENT" | "STAFF"; revision: number; classification: string }) {
+function normalizeMetadataText(value: string | null | undefined) {
+  return (value || "").trim().slice(0, 500);
+}
+
+function authorityPriority(title: string, category: string) {
+  const text = `${title} ${category}`.toLowerCase();
+  if (/magna carta|republic act|\blaw\b|ordinance/.test(text)) return 60;
+  if (/bylaws|by-laws|master deed|declaration/.test(text)) return 55;
+  if (/board resolution|resolution/.test(text)) return 45;
+  if (/policy|policies/.test(text)) return 35;
+  if (/house rules|\brules\b|regulation/.test(text)) return 30;
+  if (/procedure|guideline|manual|memo/.test(text)) return 20;
+  return 10;
+}
+
+type ProviderDocumentMetadata = {
+  documentId: string;
+  title: string;
+  reference: string | null;
+  category: string;
+  issuingBody: string | null;
+  revision: number;
+  classification: string;
+  audience: "RESIDENT" | "STAFF";
+  effectiveAt: Date | null;
+  approvalDate: Date | null;
+};
+
+function providerFileAttributes(input: ProviderDocumentMetadata) {
+  return {
+    audience: input.audience,
+    revision: input.revision,
+    privacy_classification: input.classification,
+    document_id: input.documentId,
+    document_title: normalizeMetadataText(input.title),
+    document_reference: normalizeMetadataText(input.reference),
+    category: normalizeMetadataText(input.category),
+    issuing_body: normalizeMetadataText(input.issuingBody),
+    effective_at: input.effectiveAt ? Math.floor(input.effectiveAt.getTime() / 1000) : 0,
+    approval_at: input.approvalDate ? Math.floor(input.approvalDate.getTime() / 1000) : 0,
+    authority_priority: authorityPriority(input.title, input.category),
+    index_metadata_version: INDEX_METADATA_VERSION,
+  };
+}
+
+async function attachProviderFile(input: { vectorStoreId: string; providerFileId: string; metadata: ProviderDocumentMetadata }) {
   if (process.env.AI_PROVIDER_MODE === "mock") return;
   const attached = await providerJson(`/vector_stores/${encodeURIComponent(input.vectorStoreId)}/files`, {
     method: "POST",
     headers: providerHeaders(),
-    body: JSON.stringify({ file_id: input.providerFileId, attributes: { audience: input.audience, revision: input.revision, privacy_classification: input.classification } }),
+    body: JSON.stringify({ file_id: input.providerFileId, attributes: providerFileAttributes(input.metadata) }),
   });
   if (attached.status === "completed") return;
   for (let attempt = 0; attempt < 20; attempt += 1) {
@@ -110,6 +157,15 @@ async function attachProviderFile(input: { vectorStoreId: string; providerFileId
     if (state.status === "failed" || state.status === "cancelled") throw new Error("AI provider could not index the approved document.");
   }
   throw new Error("AI provider indexing did not complete within the HOAHub request window.");
+}
+
+async function updateProviderFileAttributes(input: { vectorStoreId: string; providerFileId: string; metadata: ProviderDocumentMetadata }) {
+  if (process.env.AI_PROVIDER_MODE === "mock") return;
+  await providerJson(`/vector_stores/${encodeURIComponent(input.vectorStoreId)}/files/${encodeURIComponent(input.providerFileId)}`, {
+    method: "POST",
+    headers: providerHeaders(),
+    body: JSON.stringify({ attributes: providerFileAttributes(input.metadata) }),
+  });
 }
 
 async function deleteProviderFile(providerFileId: string) {
@@ -122,7 +178,27 @@ export async function indexRepositoryDocumentForAi(documentId: string) {
   const now = new Date();
   const document = await prisma.repositoryDocument.findFirst({
     where: { tenantId: user.tenantId, id: documentId },
-    select: { id: true, tenantId: true, title: true, visibility: true, status: true, aiEnabled: true, privacyClassification: true, malwareScanStatus: true, effectiveAt: true, expiresAt: true, currentRevision: true, originalFileName: true, storageKey: true, contentType: true, checksumSha256: true },
+    select: {
+      id: true,
+      tenantId: true,
+      title: true,
+      documentReference: true,
+      visibility: true,
+      status: true,
+      aiEnabled: true,
+      privacyClassification: true,
+      malwareScanStatus: true,
+      effectiveAt: true,
+      expiresAt: true,
+      approvalDate: true,
+      issuingBody: true,
+      currentRevision: true,
+      originalFileName: true,
+      storageKey: true,
+      contentType: true,
+      checksumSha256: true,
+      category: { select: { name: true } },
+    },
   });
   if (!document) throw new Error("Document not found in the active tenant.");
   if (!document.aiEnabled || document.status !== "PUBLISHED") throw new Error("Only published documents explicitly enabled for AI can be indexed.");
@@ -133,9 +209,24 @@ export async function indexRepositoryDocumentForAi(documentId: string) {
   if (document.expiresAt && document.expiresAt <= now) throw new Error("An expired document cannot be indexed for active AI retrieval.");
 
   const audience: "RESIDENT" | "STAFF" = document.visibility === "TENANT_PUBLIC" && document.privacyClassification === "PUBLIC" ? "RESIDENT" : "STAFF";
+  const metadata: ProviderDocumentMetadata = {
+    documentId: document.id,
+    title: document.title,
+    reference: document.documentReference,
+    category: document.category.name,
+    issuingBody: document.issuingBody,
+    revision: document.currentRevision,
+    classification: document.privacyClassification,
+    audience,
+    effectiveAt: document.effectiveAt,
+    approvalDate: document.approvalDate,
+  };
   const namespace = await ensureTenantProviderIndex(user.tenantId, user.id);
   const existing = await prisma.aiKnowledgeBinding.findUnique({ where: { tenantId_documentId: { tenantId: user.tenantId, documentId } } });
-  if (existing?.indexStatus === "INDEXED" && existing.indexedChecksumSha256 === document.checksumSha256 && existing.vectorStoreId === namespace.vectorStoreId) return existing;
+  if (existing?.indexStatus === "INDEXED" && existing.indexedChecksumSha256 === document.checksumSha256 && existing.vectorStoreId === namespace.vectorStoreId) {
+    if (existing.providerFileId) await updateProviderFileAttributes({ vectorStoreId: namespace.vectorStoreId, providerFileId: existing.providerFileId, metadata });
+    return existing;
+  }
 
   await prisma.aiKnowledgeBinding.upsert({
     where: { tenantId_documentId: { tenantId: user.tenantId, documentId } },
@@ -147,7 +238,7 @@ export async function indexRepositoryDocumentForAi(documentId: string) {
   try {
     const stream = await repositoryStorage.openReadStream({ tenantSlug: user.tenant.slug, storageKey: document.storageKey });
     providerFileId = await uploadProviderFile({ bytes: await bytesFromStream(stream), fileName: document.originalFileName, contentType: document.contentType });
-    await attachProviderFile({ vectorStoreId: namespace.vectorStoreId, providerFileId, audience, revision: document.currentRevision, classification: document.privacyClassification });
+    await attachProviderFile({ vectorStoreId: namespace.vectorStoreId, providerFileId, metadata });
     const binding = await prisma.aiKnowledgeBinding.update({
       where: { tenantId_documentId: { tenantId: user.tenantId, documentId } },
       data: { providerFileId, vectorStoreId: namespace.vectorStoreId, indexStatus: "INDEXED", indexedChecksumSha256: document.checksumSha256, indexedAt: new Date(), lastError: null, updatedById: user.id },
@@ -155,7 +246,7 @@ export async function indexRepositoryDocumentForAi(documentId: string) {
     if (existing?.providerFileId && existing.providerFileId !== providerFileId) {
       await deleteProviderFile(existing.providerFileId).catch((error) => console.error("[ai-assistance] Old provider file cleanup requires retry.", { tenantId: user.tenantId, documentId, error }));
     }
-    await prisma.auditLog.create({ data: { tenantId: user.tenantId, actorId: user.id, module: "AI_ASSISTANCE", action: "AI_KNOWLEDGE_INDEXED", entityType: "RepositoryDocument", entityId: document.id, metadata: { audience, revision: document.currentRevision, classification: document.privacyClassification, vectorNamespaceTenantScoped: true } } });
+    await prisma.auditLog.create({ data: { tenantId: user.tenantId, actorId: user.id, module: "AI_ASSISTANCE", action: "AI_KNOWLEDGE_INDEXED", entityType: "RepositoryDocument", entityId: document.id, metadata: { audience, revision: document.currentRevision, classification: document.privacyClassification, category: document.category.name, authorityPriority: authorityPriority(document.title, document.category.name), indexMetadataVersion: INDEX_METADATA_VERSION, vectorNamespaceTenantScoped: true } } });
     return binding;
   } catch (error) {
     if (providerFileId) await deleteProviderFile(providerFileId).catch(() => undefined);

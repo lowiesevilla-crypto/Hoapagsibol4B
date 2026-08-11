@@ -10,6 +10,9 @@ type Source = {
   reference: string | null;
   revision?: number;
   effectiveAt: string | Date | null;
+  locator?: string | null;
+  excerpt?: string | null;
+  confidence?: number;
 };
 
 type Turn = {
@@ -155,7 +158,8 @@ export function ResidentAiAssistant({
               <div className="flex items-center gap-2 text-xs font-black uppercase tracking-wider text-slate-500"><FileText className="size-3.5" /><span>Sources used</span></div>
               <div className="mt-2 space-y-2">{turn.sources.map((source) => <div key={source.documentId} className="rounded-xl border border-slate-200 bg-white p-3">
                 <p className="font-bold text-slate-800">{source.title}</p>
-                <p className="mt-0.5 text-xs leading-5 text-slate-500">{source.category}{source.reference ? ` · ${source.reference}` : ""}{source.revision ? ` · Revision ${source.revision}` : ""}{source.effectiveAt ? ` · Effective ${new Date(source.effectiveAt).toLocaleDateString("en-PH")}` : ""}</p>
+                <p className="mt-0.5 text-xs leading-5 text-slate-500">{source.category}{source.reference ? ` · ${source.reference}` : ""}{source.revision ? ` · Revision ${source.revision}` : ""}{source.effectiveAt ? ` · Effective ${new Date(source.effectiveAt).toLocaleDateString("en-PH")}` : ""}{source.locator ? ` · ${source.locator}` : ""}</p>
+                {source.excerpt && <p className="mt-2 line-clamp-3 text-xs leading-5 text-slate-600"><span className="font-bold text-slate-700">Relevant passage:</span> {source.excerpt}</p>}
               </div>)}</div>
             </div>}
           </div>

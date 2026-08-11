@@ -1,5 +1,21 @@
 import { BillStatus } from "@prisma/client";
 
+export const MANILA_TIME_ZONE = "Asia/Manila";
+
+export function manilaDayPeriod(value: Date | string = new Date()) {
+  const hourPart = new Intl.DateTimeFormat("en-US", {
+    timeZone: MANILA_TIME_ZONE,
+    hour: "2-digit",
+    hourCycle: "h23",
+  }).formatToParts(new Date(value)).find((part) => part.type === "hour")?.value;
+  const hour = Number(hourPart);
+
+  if (!Number.isInteger(hour)) return "Morning";
+  if (hour >= 5 && hour < 12) return "Morning";
+  if (hour >= 12 && hour < 18) return "Afternoon";
+  return "Evening";
+}
+
 export function money(value: number | string | { toString(): string }) {
   return new Intl.NumberFormat("en-PH", { style: "currency", currency: "PHP" }).format(Number(value));
 }

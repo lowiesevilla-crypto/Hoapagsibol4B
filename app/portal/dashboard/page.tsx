@@ -20,7 +20,7 @@ import { documentTypeLabel } from "@/lib/services/documents";
 import { getStatementOfAccount } from "@/lib/services/statement-of-account";
 import { getAssociationSettings } from "@/lib/system-settings";
 import { getEnabledTenantModules } from "@/lib/tenant";
-import { collectionLabel, money, monthLabel, shortDate } from "@/lib/utils";
+import { collectionLabel, manilaDayPeriod, money, monthLabel, shortDate } from "@/lib/utils";
 
 type DashboardDocumentRequest = {
   id: string;
@@ -246,7 +246,7 @@ export default async function PortalDashboard() {
       )}
       <div className="grid gap-5 xl:grid-cols-[minmax(0,1.25fr)_minmax(22rem,.75fr)]">
         <div className="space-y-5">
-          <HomeownerGreeting greeting={timeGreeting(now)} firstName={firstName} associationName={association.name} propertyLabel={propertyLabel} />
+          <HomeownerGreeting greeting={manilaDayPeriod(now)} firstName={firstName} associationName={association.name} propertyLabel={propertyLabel} />
           <BalanceSummaryCard amount={money(balanceAmount)} status={billingStatus} dueDateLabel={nextDue ? shortDate(nextDue.dueDate) : undefined} coverageLabel={nextDue ? monthLabel(nextDue.billingMonth) : undefined} />
           <DashboardQuickActions actions={quickActions} />
         </div>
@@ -409,11 +409,4 @@ function documentIcon(value: string | null) {
 
 function labelStatus(status: string) {
   return status.replaceAll("_", " ").toLowerCase().replace(/\b\w/g, (letter) => letter.toUpperCase());
-}
-
-function timeGreeting(now: Date) {
-  const hour = now.getHours();
-  if (hour < 12) return "Morning";
-  if (hour < 18) return "Afternoon";
-  return "Evening";
 }

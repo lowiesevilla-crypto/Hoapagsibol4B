@@ -28,6 +28,8 @@ test("homeowner profile exposes linked accounts through a tenant-isolated switch
   ]);
   assert.match(profile, /My HOA accounts/);
   assert.match(profile, /switchLinkedAccountAction/);
+  assert.match(profile, />Homeowner<\/p>/);
+  assert.doesNotMatch(profile, /account\.roles\.map\(displayRole\)/);
   assert.match(action, /listLinkedAccounts\(currentUser\.email/);
   assert.match(action, /setTenantContext\(/);
   assert.match(action, /createSession\(/);

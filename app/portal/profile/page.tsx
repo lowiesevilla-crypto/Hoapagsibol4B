@@ -8,7 +8,7 @@ import { StatusBadge } from "@/components/status-badge";
 import { switchLinkedAccountAction } from "@/lib/actions/linked-accounts";
 import { homeownerAccountNumber } from "@/lib/homeowner-account";
 import { prisma } from "@/lib/db";
-import { displayRole, listLinkedAccounts } from "@/lib/linked-accounts";
+import { listLinkedAccounts } from "@/lib/linked-accounts";
 import { requireHomeownerProfile } from "@/lib/portal";
 import { money, shortDate } from "@/lib/utils";
 
@@ -73,7 +73,7 @@ export default async function ProfilePage() {
                 <span className="grid size-11 shrink-0 place-items-center rounded-2xl bg-pine-900 text-white"><Building2 className="size-5" aria-hidden="true" /></span>
                 <div className="min-w-0 flex-1">
                   <p className="break-words font-black text-ink">{account.tenantName}</p>
-                  <p className="mt-0.5 text-xs font-bold text-pine-700">{account.roles.map(displayRole).join(" / ")}</p>
+                  <p className="mt-0.5 text-xs font-bold text-pine-700">Homeowner</p>
                   {(account.accountNumber || account.propertyLabel) && (
                     <p className="mt-2 text-sm leading-6 text-slate-600">
                       {account.accountNumber ? `Account ${account.accountNumber}` : ""}

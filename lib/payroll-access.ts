@@ -35,14 +35,16 @@ export async function userCanAccessPayroll(userId: string, role: Role) {
 
 export async function requirePayrollAccess(allowedRoles?: readonly PayrollAccessRole[]) {
   const user = await requireUser();
-  if (user.role === Role.SYSTEM_ADMIN || user.role === Role.SUPER_ADMIN || user.role === Role.PLATFORM_ADMIN || user.role === Role.HOA_ADMIN) return { user, roles: [PayrollAccessRole.SYSTEM_ADMINISTRATOR] };
-  if (user.role === Role.PAYROLL_MANAGER) return { user, roles: [PayrollAccessRole.PAYROLL_MANAGER] };
-  if (user.role !== Role.ADMIN && user.role !== Role.EMPLOYEE) redirect(user.role === Role.HOMEOWNER ? "/portal/dashboard" : "/login");
+  if (user.roles.some((role) => role === Role.SYSTEM_ADMIN || role === Role.SUPER_ADMIN || role === Role.PLATFORM_ADMIN || role === Role.HOA_ADMIN)) return { user, roles: [PayrollAccessRole.SYSTEM_ADMINISTRATOR] };
+  if (user.roles.includes(Role.PAYROLL_MANAGER)) return { user, roles: [PayrollAccessRole.PAYROLL_MANAGER] };
+  const isAdminCandidate = user.roles.includes(Role.ADMIN);
+  const isEmployeeCandidate = user.roles.includes(Role.EMPLOYEE);
+  if (!isAdminCandidate && !isEmployeeCandidate) redirect(user.roles.includes(Role.HOMEOWNER) ? "/portal/dashboard" : "/login");
   const access = await getPayrollAccessForUser(user.id);
-  if (!access.length) redirect(user.role === Role.EMPLOYEE ? "/employee/attendance" : "/admin/dashboard");
+  if (!access.length) redirect(isEmployeeCandidate && !isAdminCandidate ? "/employee/attendance" : "/admin/dashboard");
   const roles = access.map((item) => item.role);
   if (allowedRoles?.length && !roles.some((role) => allowedRoles.includes(role))) {
-    redirect(user.role === Role.EMPLOYEE ? "/employee/attendance" : "/admin/dashboard");
+    redirect(isEmployeeCandidate && !isAdminCandidate ? "/employee/attendance" : "/admin/dashboard");
   }
   return { user, roles };
 }

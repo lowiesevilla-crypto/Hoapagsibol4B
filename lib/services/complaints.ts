@@ -77,10 +77,11 @@ export function normalizeComplaintText(value: FormDataEntryValue | null, max = 2
 
 export async function requireComplaintAdmin() {
   const user = await requireUser(Role.ADMIN);
-  if (platformRoles.has(user.role)) throw new Error("Platform roles cannot access tenant complaint content by default.");
-  if (!complaintAdminRoles.has(user.role)) throw new Error("You do not have access to complaint management.");
+  const complaintRole = user.roles.find((role) => complaintAdminRoles.has(role));
+  if (!complaintRole && user.roles.some((role) => platformRoles.has(role))) throw new Error("Platform roles cannot access tenant complaint content by default.");
+  if (!complaintRole) throw new Error("You do not have access to complaint management.");
   await requireTenantModule(user.tenantId, TenantModule.COMPLAINTS);
-  return user;
+  return { ...user, role: complaintRole };
 }
 
 export async function requireComplaintHomeowner() {

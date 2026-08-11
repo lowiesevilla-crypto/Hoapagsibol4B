@@ -2,12 +2,11 @@ import { Role } from "@prisma/client";
 import { redirect } from "next/navigation";
 import { ResidentAiAssistant } from "@/components/ai/resident-ai-assistant";
 import { defaultHomeForRoles, requireUser } from "@/lib/auth";
+import { manilaDayPeriod } from "@/lib/utils";
 
 function greetingFor(name: string | null | undefined) {
-  const hour = Number(new Intl.DateTimeFormat("en-US", { timeZone: "Asia/Manila", hour: "numeric", hour12: false }).format(new Date()));
-  const period = hour < 12 ? "Good morning" : hour < 18 ? "Good afternoon" : "Good evening";
   const firstName = name?.trim().split(/\s+/)[0];
-  return `${period}${firstName ? `, ${firstName}` : ""}. How can I help you today?`;
+  return `Good ${manilaDayPeriod().toLowerCase()}${firstName ? `, ${firstName}` : ""}. How can I help you today?`;
 }
 
 export default async function PortalAiPage() {

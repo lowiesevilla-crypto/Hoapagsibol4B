@@ -10,6 +10,7 @@ import { isPayMongoPaymentRequest } from "@/lib/homeowner-payment-flow";
 import { requireHomeownerProfile } from "@/lib/portal";
 import { getStatementOfAccount } from "@/lib/services/statement-of-account";
 import { getHomeownerPaymentConfig } from "@/lib/services/homeowner-payment-config";
+import { resolveHomeownerPaymentStatus } from "@/lib/services/homeowner-payment-status";
 import { getAssociationSettings, getPaymentSettings } from "@/lib/system-settings";
 import { locateTenantUpload, locateUpload } from "@/lib/storage";
 import { canSubmitDocumentFeePayment, documentFeePaymentPurpose, documentFeePaymentStatusLabel, documentRequestPublicReference } from "@/lib/services/document-fee-payments";
@@ -49,9 +50,10 @@ export default async function PortalPayPage({ searchParams }: { searchParams: Pr
   const isPayMongoFlow = paymentConfig.flow === "PAYMONGO";
   const oldestUnpaid = openBills[0] ?? null;
   const pendingRequests = paymentRequests.filter((request) => request.status === "PENDING_REVIEW");
-  const latestRejected = paymentRequests.find((request) => request.status === "REJECTED");
+  const latestRequest = paymentRequests[0] ?? null;
+  const latestRejected = latestRequest?.status === "REJECTED" ? latestRequest : null;
   const latestPayment = soa.paymentHistory.find((payment) => payment.status === "Active");
-  const statusInfo = paymentStatus({
+  const statusInfo = resolveHomeownerPaymentStatus({
     hasBills: soa.billingHistory.length > 0,
     balance: soa.summary.currentOutstandingBalance,
     collectionStatus: soa.summary.collectionStatus,
@@ -158,15 +160,6 @@ export default async function PortalPayPage({ searchParams }: { searchParams: Pr
 
 function DocumentPaymentNotice({ title, message }: { title: string; message: string }) {
   return <section className="rounded-3xl border border-amber-200 bg-amber-50 p-5 shadow-soft"><h2 className="text-lg font-black text-amber-950">{title}</h2><p className="mt-2 text-sm font-semibold text-amber-900">{message}</p></section>;
-}
-
-function paymentStatus({ hasBills, balance, collectionStatus, hasPending, hasRejected }: { hasBills: boolean; balance: number; collectionStatus: string; hasPending: boolean; hasRejected: boolean }): { label: string; tone: PaymentTone } {
-  if (!hasBills) return { label: "No Billing Record", tone: "default" };
-  if (hasPending) return { label: "Payment Pending", tone: "warning" };
-  if (hasRejected) return { label: "Payment Rejected", tone: "danger" };
-  if (balance <= 0) return { label: "Fully Paid", tone: "success" };
-  if (collectionStatus === "Overdue") return { label: "Overdue", tone: "danger" };
-  return { label: "Amount Due", tone: "warning" };
 }
 
 function paymentRequestPurpose(request: { type: string; bill?: { billingMonth: Date } | null; collectionType?: unknown; description?: string | null; documentRequest?: { definition?: { displayName: string } | null; type?: unknown } | null }) {

@@ -5,7 +5,7 @@ import { Banknote, CircleDollarSign, ClipboardCheck, Clock3, FileText, HandCoins
 import { prisma } from "@/lib/db";
 import { paymentCoverageLabel } from "@/lib/payment-coverage";
 import { refreshOverdueBills } from "@/lib/actions/billing";
-import { collectionLabel, money, monthLabel, shortDate } from "@/lib/utils";
+import { collectionLabel, manilaDayPeriod, money, monthLabel, shortDate } from "@/lib/utils";
 import { requireUser } from "@/lib/auth";
 
 export default async function AdminDashboard() {
@@ -86,7 +86,7 @@ export default async function AdminDashboard() {
     <section className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
       <div>
         <p className="text-xs font-extrabold uppercase tracking-[.18em] text-leaf-700">Association overview · {monthLabel(monthStart)}</p>
-        <h1 className="mt-2 text-3xl font-black tracking-tight text-pine-900 sm:text-4xl">Good morning, {firstName(user.name)}</h1>
+        <h1 className="mt-2 text-3xl font-black tracking-tight text-pine-900 sm:text-4xl">Good {manilaDayPeriod(now).toLowerCase()}, {firstName(user.name)}</h1>
         <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-500">A focused view of collections, resident accounts, and work that needs action today.</p>
       </div>
       <div className="flex flex-wrap gap-2">

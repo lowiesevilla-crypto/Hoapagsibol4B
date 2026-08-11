@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { answerTenantKnowledgeQuestion } from "@/lib/ai-assistance/knowledge-assistant";
+import { answerTenantKnowledgeQuestionWithReasoning } from "@/lib/ai-assistance/reasoning-assistant";
 
 export const runtime = "nodejs";
 
@@ -14,7 +14,7 @@ export async function POST(request: Request) {
   try {
     const body = await request.json() as { question?: unknown; conversationId?: unknown };
     const conversationId = typeof body.conversationId === "string" ? body.conversationId.trim() || null : null;
-    const result = await answerTenantKnowledgeQuestion({ experience: "STAFF", question: body.question, conversationId });
+    const result = await answerTenantKnowledgeQuestionWithReasoning({ experience: "STAFF", question: body.question, conversationId });
     return NextResponse.json(result, {
       headers: {
         "Cache-Control": "private, no-store, max-age=0",

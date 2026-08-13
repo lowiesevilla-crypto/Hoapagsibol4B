@@ -129,19 +129,38 @@
 
 .loginStage::before {
   position: absolute;
-  top: -8rem;
-  right: -9rem;
-  z-index: -1;
-  width: 23rem;
-  height: 23rem;
+  top: -6rem;
+  right: -5rem;
+  z-index: 0;
+  width: 20rem;
+  height: 20rem;
   border-radius: 999px;
   content: "";
-  background: radial-gradient(circle, rgba(7, 139, 201, 0.13), rgba(7, 139, 201, 0));
+  background: radial-gradient(circle, rgba(7, 139, 201, 0.24), rgba(7, 139, 201, 0.035) 48%, rgba(7, 139, 201, 0));
+  filter: blur(3px);
   pointer-events: none;
-  animation: mobileAmbient 14s ease-in-out infinite alternate;
+  will-change: transform;
+  animation: mobileAmbient 9s ease-in-out infinite alternate;
+}
+
+.loginStage::after {
+  position: absolute;
+  bottom: -7rem;
+  left: -6rem;
+  z-index: 0;
+  width: 22rem;
+  height: 22rem;
+  border-radius: 999px;
+  content: "";
+  background: radial-gradient(circle, rgba(114, 216, 78, 0.2), rgba(114, 216, 78, 0.03) 50%, rgba(114, 216, 78, 0));
+  filter: blur(4px);
+  pointer-events: none;
+  will-change: transform;
+  animation: mobileAmbientAlt 12s ease-in-out infinite alternate;
 }
 
 .loginCard {
+  z-index: 1;
   opacity: 0;
   transform: translateY(14px) scale(0.992);
   animation: cardEnter 720ms cubic-bezier(.18, .8, .22, 1) 120ms forwards;
@@ -151,10 +170,13 @@
 .loginCard::before {
   position: absolute;
   inset: 0 0 auto;
-  height: 1px;
+  height: 2px;
   content: "";
-  background: linear-gradient(90deg, transparent, rgba(7, 139, 201, 0.32), transparent);
+  background: linear-gradient(90deg, transparent 0%, rgba(7, 139, 201, 0.08) 22%, rgba(7, 139, 201, 0.62) 48%, rgba(114, 216, 78, 0.48) 62%, transparent 100%);
+  background-position: -150% 0;
+  background-size: 240% 100%;
   pointer-events: none;
+  animation: cardAccentSweep 5.6s ease-in-out 1.2s infinite;
 }
 
 .mobileBrandEntrance {
@@ -277,7 +299,9 @@
   .featureGrid > li,
   .secureEntrance,
   .loginStage::before,
+  .loginStage::after,
   .loginCard,
+  .loginCard::before,
   .mobileBrandEntrance,
   .shell :global(.community-pulse-primary[data-verified="true"]) {
     animation: none !important;
@@ -333,7 +357,18 @@
 
 @keyframes mobileAmbient {
   from { transform: translate3d(0, 0, 0) scale(1); }
-  to { transform: translate3d(-2rem, 2.5rem, 0) scale(1.08); }
+  to { transform: translate3d(-3rem, 3rem, 0) scale(1.14); }
+}
+
+@keyframes mobileAmbientAlt {
+  from { transform: translate3d(0, 0, 0) scale(1); }
+  to { transform: translate3d(3rem, -2.4rem, 0) scale(1.12); }
+}
+
+@keyframes cardAccentSweep {
+  0%, 12% { background-position: -150% 0; opacity: 0.25; }
+  42% { opacity: 1; }
+  70%, 100% { background-position: 150% 0; opacity: 0.22; }
 }
 
 @keyframes buttonSheen {

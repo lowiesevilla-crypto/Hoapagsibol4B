@@ -36,7 +36,8 @@ export function LoginForm({ tenantSlug, returnTo }: { tenantSlug?: string; retur
           type="text"
           placeholder="Enter your verified email or account number"
           autoComplete="username"
-          inputMode="email"
+          autoCapitalize="none"
+          spellCheck={false}
           enterKeyHint="next"
           required
         />

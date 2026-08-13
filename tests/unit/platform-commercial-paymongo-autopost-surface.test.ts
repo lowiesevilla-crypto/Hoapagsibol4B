@@ -110,7 +110,8 @@ test("protected email deep links survive authentication without allowing externa
   assert.match(middleware, /loginUrl\.searchParams\.set\("returnTo", returnTo\)/);
   assert.match(middleware, /online"\) === "confirming"/);
   assert.match(loginPage, /safeReturnTo\(query\.returnTo\)/);
-  assert.match(loginForm, /window\.location\.replace\(returnTo \|\| state\.redirectTo\)/);
+  // Community Pulse may briefly show the verified state before redirecting; returnTo must remain the first redirect choice.
+  assert.match(loginForm, /window\.location\.replace\(returnTo \|\| state\.redirectTo/);
   assert.match(passkey, /safeReturnTo\(String\(data\.get\("returnTo"\)/);
   assert.match(passkey, /window\.location\.replace\(returnTo \|\| result\.redirectTo/);
 });

@@ -95,6 +95,10 @@ jobs:
     environment: production
     env:
       HOSTINGER_APP_URL: ${{ secrets.HOSTINGER_APP_URL }}
+      PROD_E2E_LOGIN: ${{ secrets.PROD_E2E_LOGIN }}
+      PROD_E2E_PASSWORD: ${{ secrets.PROD_E2E_PASSWORD }}
+      PROD_E2E_TENANT_SLUG: ${{ secrets.PROD_E2E_TENANT_SLUG }}
+      PROD_E2E_EXPECTED_PATH_PREFIX: ${{ secrets.PROD_E2E_EXPECTED_PATH_PREFIX }}
     steps:
       - name: Validate managed deployment configuration
         shell: bash
@@ -150,3 +154,34 @@ jobs:
           done
           echo "::error::Production health check failed: $HEALTH_URL"
           exit 1
+
+      - name: Report production login motion not configured
+        if: env.PROD_E2E_LOGIN == '' || env.PROD_E2E_PASSWORD == ''
+        shell: bash
+        run: |
+          echo "::warning::Production login motion verification is not configured. Add PROD_E2E_LOGIN and PROD_E2E_PASSWORD as production Environment secrets for a dedicated homeowner smoke-test account."
+
+      - name: Checkout production login verifier
+        if: env.PROD_E2E_LOGIN != '' && env.PROD_E2E_PASSWORD != ''
+        uses: actions/checkout@v4
+
+      - name: Set up pnpm for production login verifier
+        if: env.PROD_E2E_LOGIN != '' && env.PROD_E2E_PASSWORD != ''
+        uses: pnpm/action-setup@v4
+        with:
+          version: 11.9.0
+
+      - name: Set up Node for production login verifier
+        if: env.PROD_E2E_LOGIN != '' && env.PROD_E2E_PASSWORD != ''
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install production login verifier dependencies
+        if: env.PROD_E2E_LOGIN != '' && env.PROD_E2E_PASSWORD != ''
+        run: pnpm install --frozen-lockfile
+
+      - name: Verify production login motion
+        if: env.PROD_E2E_LOGIN != '' && env.PROD_E2E_PASSWORD != ''
+        run: node tests/e2e/production-login-motion.mjs

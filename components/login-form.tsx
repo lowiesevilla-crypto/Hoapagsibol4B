@@ -8,10 +8,10 @@ import { AssociationLogo } from "@/components/association-logo";
 import { PasskeyLoginButton } from "@/components/passkey-login-button";
 import { PasswordInput } from "@/components/password-input";
 import { LOGIN_HANDOFF_STORAGE_KEY } from "@/components/post-login-brand-orbit";
-import { DEFAULT_TENANT_LOGO_URL } from "@/lib/tenant-logo";
 import transitionStyles from "./login-verified-transition.module.css";
 
 const VERIFIED_TRANSITION_MS = 800;
+const LOGIN_FALLBACK_LOGO_URL = "/Hoahub-logo.png";
 
 export function LoginForm({
   tenantSlug,
@@ -28,7 +28,7 @@ export function LoginForm({
   const [verified, setVerified] = useState(false);
   const formRef = useRef<HTMLFormElement>(null);
   const hasChoices = Boolean(state.choices?.length);
-  const logo = logoUrl?.trim() || DEFAULT_TENANT_LOGO_URL;
+  const logo = logoUrl?.trim() || LOGIN_FALLBACK_LOGO_URL;
 
   useEffect(() => {
     if (!state.redirectTo) return;

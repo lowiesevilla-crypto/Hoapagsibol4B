@@ -314,7 +314,7 @@ async function verifyPublishedHomeownerAccess(browser, documentId) {
       };
     }, documentId);
     assert.equal(download.status, 200);
-    assert.match(download.contentType, /^text\/plain/i);
+    assert.match(download.contentType, /^application\/pdf/i);
     assert.match(download.disposition, /attachment/i);
     assert.match(download.body, /original DMS browser content/i);
   } finally {
@@ -368,10 +368,10 @@ async function replaceAndUnpublish(browser, documentId, replacementPath) {
     });
     assert.ok(replaced);
     assert.equal(replaced.currentRevision, 2);
-    assert.equal(replaced.originalFileName, "e2e-dms-replacement.txt");
+    assert.equal(replaced.originalFileName, "e2e-dms-replacement.pdf");
     assert.equal(replaced.revisions.length, 1);
     assert.equal(replaced.revisions[0].revision, 1);
-    assert.equal(replaced.revisions[0].originalFileName, "e2e-dms-original.txt");
+    assert.equal(replaced.revisions[0].originalFileName, "e2e-dms-original.pdf");
     assert.ok(replaced.revisions[0].storageKey, "Governed plan should retain the prior revision binary during this UAT.");
 
     await page.select('select[name="visibility"]', "INTERNAL");
@@ -472,10 +472,10 @@ async function main() {
   assertE2eDatabaseSafety();
   await cleanupStaleDatabaseRecords();
   const tempDirectory = await mkdtemp(join(tmpdir(), "hoahub-dms-e2e-"));
-  const originalPath = join(tempDirectory, "e2e-dms-original.txt");
-  const replacementPath = join(tempDirectory, "e2e-dms-replacement.txt");
-  await writeFile(originalPath, "Original DMS browser content for tenant A only.\n", "utf8");
-  await writeFile(replacementPath, "Replacement DMS browser content after controlled revision.\n", "utf8");
+  const originalPath = join(tempDirectory, "e2e-dms-original.pdf");
+  const replacementPath = join(tempDirectory, "e2e-dms-replacement.pdf");
+  await writeFile(originalPath, "%PDF-1.7\nOriginal DMS browser content for tenant A only.\n%%EOF\n", "utf8");
+  await writeFile(replacementPath, "%PDF-1.7\nReplacement DMS browser content after controlled revision.\n%%EOF\n", "utf8");
 
   const executablePath = await resolveBrowserExecutable();
   const browser = await puppeteer.launch({
@@ -491,7 +491,7 @@ async function main() {
     await replaceAndUnpublish(browser, documentId, replacementPath);
     await verifyUnpublishedHomeownerDenial(browser, documentId);
     await permanentlyDelete(browser, documentId);
-    console.log("DMS browser UAT passed: entitlement, admin controls, category access, upload, tenant-derived storage, publish/homeowner retrieval, tenant isolation, download, governed revision, unpublish denial, permanent delete and audit tombstone.");
+    console.log("DMS browser UAT passed: entitlement, admin controls, category access, approved-PDF upload, tenant-derived storage, publish/homeowner retrieval, tenant isolation, download, governed revision, unpublish denial, permanent delete and audit tombstone.");
   } finally {
     await browser.close();
     await rm(tempDirectory, { recursive: true, force: true });

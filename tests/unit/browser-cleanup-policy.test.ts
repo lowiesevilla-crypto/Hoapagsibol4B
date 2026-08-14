@@ -4,6 +4,7 @@ import { test } from "node:test";
 
 const packageJson = JSON.parse(readFileSync("package.json", "utf8")) as {
   scripts: Record<string, string>;
+  dependencies: Record<string, string>;
 };
 const cleanupSource = readFileSync(
   "tests/e2e/safe-browser-context-cleanup.mjs",
@@ -64,6 +65,11 @@ test("CI pins browser verification to the repository-controlled Chromium executa
   assert.match(ciWorkflowSource, /import chromium from "@sparticuz\/chromium"/);
   assert.match(ciWorkflowSource, /PUPPETEER_EXECUTABLE_PATH=\$CHROMIUM_PATH/);
   assert.match(ciWorkflowSource, />> "\$GITHUB_ENV"/);
+});
+
+test("controlled Chromium and Puppeteer stay on the verified compatible major pair", () => {
+  assert.equal(packageJson.dependencies["@sparticuz/chromium"], "149.0.0");
+  assert.equal(packageJson.dependencies["puppeteer-core"], "25.1.0");
 });
 
 test("controlled Chromium uses its supported chrome-headless-shell launch contract", () => {

@@ -143,11 +143,14 @@ Do not merge a known failing release merely to trigger deployment. Fix the defec
 ### CI Browser Runtime
 
 - GitHub Actions browser verification must prepare the repository-controlled `@sparticuz/chromium` executable and export its path as `PUPPETEER_EXECUTABLE_PATH` before the critical browser suite begins.
-- Do not use the GitHub-hosted runner's mutable system Chrome as the primary HOAHub E2E executable when the repository-controlled Chromium runtime is available; runner image/browser revisions have repeatedly closed during `Target.setDiscoverTargets` before assertions begin.
-- `tests/e2e/critical-path.mjs` already gives `PUPPETEER_EXECUTABLE_PATH` first priority, so the workflow-level export selects the controlled runtime without weakening business assertions.
-- Keep the bounded startup retry limited to the exact transient `Target.setDiscoverTargets` + `Target closed` condition. Authentication, authorization, tenant-isolation, payment, document, and other business assertion failures must still fail immediately.
-- Production authenticated login-motion verification also resolves the packaged `@sparticuz/chromium` runtime before system browser candidates.
-- `tests/unit/browser-cleanup-policy.test.ts` protects controlled-browser ordering, bounded retry behavior, and cleanup invariants.
+- `@sparticuz/chromium` provides a `chrome-headless-shell` binary, not a normal headed/new-headless Chrome executable. HOAHub Puppeteer launch sites using this runtime must use `headless: "shell"` and merge `chromium.args` through `await puppeteer.defaultArgs({ args: chromium.args, headless: "shell" })` rather than using `headless: true`.
+- Do not use the GitHub-hosted runner's mutable system Chrome as the primary HOAHub E2E executable when the repository-controlled Chromium runtime is available; runner image/browser revisions have repeatedly closed before assertions begin.
+- `tests/e2e/critical-path.mjs` gives `PUPPETEER_EXECUTABLE_PATH` first priority, so the workflow-level export selects the controlled runtime without weakening business assertions.
+- Keep the bounded startup retry limited to the exact transient `Target.setDiscoverTargets` + `Target closed` condition. Authentication, authorization, tenant-isolation, payment, document, and other business assertion failures must still fail immediately. A deterministic launch-contract error such as `Target.createTarget` must be fixed rather than hidden by retry expansion.
+- Production authenticated login-motion verification also uses the supported `chrome-headless-shell` launch contract before exercising the live site.
+- When Puppeteer or `@sparticuz/chromium` versions are changed, verify their Chromium-major compatibility against Puppeteer's supported-browser mapping; do not upgrade either side independently without that check.
+- `tests/unit/browser-cleanup-policy.test.ts` protects controlled-browser ordering, shell launch mode, bounded retry behavior, and cleanup invariants.
+- `tests/unit/production-login-motion.test.ts` protects the same shell launch contract for the production verifier.
 
 ## Hostinger Production Deployment Model
 
@@ -177,7 +180,7 @@ After the expected Hostinger release marker is live and `/api/health` passes, Gi
 - The verification runs desktop/web and mobile/PWA-sized browser contexts and asserts the visible secure orbit, `Verifying access…`, `Access verified`, dashboard navigation, and the one-shot authenticated-logo orbit/pulse.
 - The script intentionally delays the authentication POST briefly so the pending verification state can be observed deterministically; it does not alter the server action or authentication result.
 - The production workflow runs this smoke only after release and public-health verification. If the dedicated credentials are not configured, the workflow emits an explicit warning and skips the authenticated production smoke rather than using CI fixture credentials against production.
-- `tests/unit/production-login-motion.test.ts` protects ordering, credential requirements, viewport coverage, required transition assertions, and the no-business-route constraint.
+- `tests/unit/production-login-motion.test.ts` protects ordering, credential requirements, viewport coverage, required transition assertions, the supported headless-shell browser launch, and the no-business-route constraint.
 
 ### Hostinger Runtime and Filesystem
 

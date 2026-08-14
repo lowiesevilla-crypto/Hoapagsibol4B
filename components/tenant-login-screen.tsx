@@ -102,7 +102,7 @@ export function TenantLoginScreen({ tenant, reset, loggedOut, returnTo, universa
         {tenant.blocked ? <div role="alert" className="rounded-2xl border border-amber-200 bg-amber-50 p-5 text-amber-950">
           <p className="font-black">HOA portal unavailable</p>
           <p className="mt-2 text-sm leading-6">{tenant.advisory || "This HOA portal is inactive or suspended. Please contact the platform administrator."}</p>
-        </div> : <LoginForm tenantSlug={universal ? undefined : tenant.slug} returnTo={returnTo} />}
+        </div> : <LoginForm tenantSlug={universal ? undefined : tenant.slug} returnTo={returnTo} tenantName={tenant.name} logoUrl={logo} />}
 
         {!universal && <p className="mt-5 border-t pt-4 text-center text-xs leading-5 text-slate-500 sm:mt-7 sm:pt-5">Tenant login: <span className="break-all font-semibold">/{tenant.slug}/login</span></p>}
       </div>

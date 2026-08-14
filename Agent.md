@@ -160,9 +160,9 @@ The live HOAHub application is a Hostinger managed Node.js web application conne
 After the expected Hostinger release marker is live and `/api/health` passes, GitHub may run `tests/e2e/production-login-motion.mjs` against the real production login using a dedicated low-privilege homeowner smoke-test account.
 
 - Production login credentials must be stored only as GitHub `production` Environment secrets. Never place them in repository files, workflow logs, `Agent.md`, screenshots, PR text, or chat.
-- Required secret names are `PROD_E2E_LOGIN` and `PROD_E2E_PASSWORD`.
-- Optional `PROD_E2E_TENANT_SLUG` selects a tenant-specific login route; otherwise the universal `/login` route is used.
-- Optional `PROD_E2E_EXPECTED_PATH_PREFIX` defaults to `/portal/` and must remain a same-origin absolute path prefix.
+- Required GitHub secret names are `E2E_PROD_LOGIN` and `E2E_PROD_PASSWORD`; the workflow maps them into process-local verifier variables and never prints their values.
+- Optional `E2E_PROD_TENANT_SLUG` selects a tenant-specific login route; otherwise the universal `/login` route is used.
+- Optional `E2E_PROD_EXPECTED_PATH_PREFIX` defaults to `/portal/` and must remain a same-origin absolute path prefix.
 - Use a dedicated homeowner account with no sensitive production data and no administrative, finance, document-approval, or tenant-management authority.
 - The smoke test performs authentication/session creation only. It must not navigate to payment, billing, document submission, complaint submission, administration, or other business-operation routes.
 - The verification runs desktop/web and mobile/PWA-sized browser contexts and asserts the visible secure orbit, `Verifying access…`, `Access verified`, dashboard navigation, and the one-shot authenticated-logo orbit/pulse.

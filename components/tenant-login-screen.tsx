@@ -68,7 +68,13 @@ export function TenantLoginScreen({ tenant, reset, loggedOut, returnTo, universa
           </div>
         </div>
 
-        <p className="text-xs font-extrabold uppercase tracking-[.18em] text-pine-700">Secure Community Portal</p>
+        <p className="flex items-center gap-2 text-xs font-extrabold uppercase tracking-[.18em] text-pine-700">
+          <span className="relative flex size-2" aria-hidden="true">
+            <span className="absolute inline-flex size-full animate-ping rounded-full bg-[#72d84e] opacity-60 motion-reduce:animate-none" />
+            <span className="relative inline-flex size-2 rounded-full bg-[#52b835] shadow-[0_0_10px_rgba(82,184,53,.55)]" />
+          </span>
+          Secure Community Portal
+        </p>
         <h2 className="mt-2 text-2xl font-black tracking-tight text-[#10354c] sm:text-3xl">Welcome to HOAHub</h2>
         <p className="mb-5 mt-2 text-sm leading-6 text-slate-600 sm:mb-7 sm:mt-3">Sign in using your verified email or 11-digit homeowner account number.</p>
 

@@ -152,6 +152,8 @@ The live HOAHub application is a Hostinger managed Node.js web application conne
 - The production verification job waits until `${HOSTINGER_APP_URL}/release.txt` matches the expected `main` commit SHA, then checks `${HOSTINGER_APP_URL}/api/health`.
 - A release is considered deployed only after the expected release marker and public health check both pass.
 - Do not rely on a global `pm2` executable for the normal Hostinger managed-web-app deployment path; Hostinger manages the application process lifecycle for the connected web app.
+- Hostinger's install layer can invoke pnpm while the managed application build subprocess does not necessarily expose the `pnpm` executable in `PATH`. Production build scripts therefore must not shell out to a nested `pnpm` command. Invoke Node scripts and installed package binaries directly from the lifecycle command instead.
+- `tests/unit/hostinger-build-script.test.ts` protects this Hostinger build-PATH invariant.
 
 ### Hostinger Runtime and Filesystem
 
@@ -165,7 +167,7 @@ The live HOAHub application is a Hostinger managed Node.js web application conne
 
 ## Release Identification
 
-`package.json` runs `pnpm release:stamp` before both the normal Next.js build and `hostinger:build`. The stamp script writes a short Git revision to `public/release.txt`.
+`package.json` invokes `node scripts/write-release-id.mjs` directly before both the normal Next.js build and `hostinger:build`. Do not replace this with a nested `pnpm release:stamp` call in managed Hostinger build commands, because pnpm may be unavailable inside the build subprocess even though Hostinger used pnpm for dependency installation. The stamp script writes a short Git revision to `public/release.txt`.
 
 Production verification should compare that public marker with the expected `main` commit before asserting that a UI fix or feature is live. This avoids confusing an older healthy production build with the newly merged release.
 

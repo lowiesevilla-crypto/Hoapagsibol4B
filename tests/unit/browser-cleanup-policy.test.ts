@@ -13,6 +13,10 @@ const criticalPathRunnerSource = readFileSync(
   "tests/e2e/run-critical-path.mjs",
   "utf8",
 );
+const criticalPathSource = readFileSync(
+  "tests/e2e/critical-path.mjs",
+  "utf8",
+);
 const ciWorkflowSource = readFileSync(
   ".github/workflows/ci-deploy.yml",
   "utf8",
@@ -60,6 +64,16 @@ test("CI pins browser verification to the repository-controlled Chromium executa
   assert.match(ciWorkflowSource, /import chromium from "@sparticuz\/chromium"/);
   assert.match(ciWorkflowSource, /PUPPETEER_EXECUTABLE_PATH=\$CHROMIUM_PATH/);
   assert.match(ciWorkflowSource, />> "\$GITHUB_ENV"/);
+});
+
+test("controlled Chromium uses its supported chrome-headless-shell launch contract", () => {
+  assert.match(criticalPathSource, /const headlessMode = "shell"/);
+  assert.match(criticalPathSource, /headless: headlessMode/);
+  assert.match(
+    criticalPathSource,
+    /args: await puppeteer\.defaultArgs\(\{ args: chromium\.args, headless: headlessMode \}\)/,
+  );
+  assert.doesNotMatch(criticalPathSource, /headless: true/);
 });
 
 test("browser cleanup limits do not change business assertion timeouts", () => {

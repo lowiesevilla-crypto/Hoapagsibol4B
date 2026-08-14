@@ -1,6 +1,6 @@
 # HOAHub Agent Context
 
-Last updated: 2026-08-13
+Last updated: 2026-08-14
 
 ## Purpose
 
@@ -88,8 +88,22 @@ Do not merge a known failing release merely to trigger deployment. Fix the defec
 - Production changes must land on `main` through the approved GitHub flow.
 - A push/merge to `main` runs the HOAHub verification workflow.
 - Hostinger production deployment runs only after verification succeeds and when the production deployment configuration/flag and required environment secrets are enabled.
+- `HOSTINGER_APP_PATH` is the application root (currently `/home/u309242896/domains/hoahub.tech`), not the `storage` directory and not the `.env` file.
+- The persistent production environment file is `$HOSTINGER_APP_PATH/shared/.env`. Never place production secrets in a release directory or Git.
 - Confirm the production deployment job result before reporting a feature as live.
 - Run/confirm production smoke checks after deployment.
+
+## Hostinger Production Runtime
+
+The Hostinger production web application is configured for Node.js 22.x. Interactive and non-interactive SSH sessions may not include that runtime in `PATH` by default.
+
+- The current Hostinger Node 22 binary directory is `/opt/alt/alt-nodejs22/root/usr/bin`.
+- Production deployment and backup scripts must source `scripts/hostinger-runtime.sh` before invoking Node-based tooling.
+- `scripts/hostinger-runtime.sh` prepends the Hostinger Node 22 directory and fails closed if Node 22 cannot be resolved.
+- Prefer `corepack pnpm ...` in Hostinger SSH deployment scripts rather than `corepack enable` plus a global `pnpm` shim, because the `/opt/alt` runtime location may not be writable by the application user.
+- `scripts/backup-production.sh` depends on Node to parse `DATABASE_URL` before running `mysqldump`; do not move backup execution ahead of runtime initialization.
+- The custom SSH activation path currently expects `corepack`, `mysqldump`, `gzip`, `tar`, and `pm2` to be available after runtime initialization. If a required runtime command is absent, deployment must stop with an explicit error rather than switching the `current` release or claiming production success.
+- Do not expose, print, or copy the contents of `$HOSTINGER_APP_PATH/shared/.env` into CI logs.
 
 ## Community Pulse Rollback
 

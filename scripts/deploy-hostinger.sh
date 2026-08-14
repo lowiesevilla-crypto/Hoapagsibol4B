@@ -8,6 +8,17 @@ SHARED_DIR="$APP_ROOT/shared"
 SHARED_ENV="$SHARED_DIR/.env"
 
 test -d "$RELEASE_DIR" || { echo "Release directory does not exist: $RELEASE_DIR" >&2; exit 1; }
+# shellcheck disable=SC1091
+source "$RELEASE_DIR/scripts/hostinger-runtime.sh"
+
+for required in corepack mysqldump gzip tar pm2; do
+  if ! command -v "$required" >/dev/null 2>&1; then
+    echo "Required Hostinger production command is unavailable: $required" >&2
+    echo "Resolved Node runtime: $(command -v node) ($(node --version))" >&2
+    exit 1
+  fi
+done
+
 mkdir -p "$SHARED_DIR" "$SHARED_DIR/storage" "$SHARED_DIR/public-uploads" "$APP_ROOT/backups"
 chmod 700 "$SHARED_DIR" "$APP_ROOT/backups" 2>/dev/null || true
 
@@ -96,11 +107,10 @@ ln -sfn "$SHARED_DIR/public-uploads" "$RELEASE_DIR/public/uploads"
 
 RELEASE_DIR="$RELEASE_DIR" APP_ROOT="$APP_ROOT" bash "$RELEASE_DIR/scripts/backup-production.sh"
 cd "$RELEASE_DIR"
-corepack enable
-pnpm install --frozen-lockfile
-pnpm exec prisma generate
-pnpm exec prisma migrate deploy
-pnpm build
+corepack pnpm install --frozen-lockfile
+corepack pnpm exec prisma generate
+corepack pnpm exec prisma migrate deploy
+corepack pnpm build
 
 ln -sfn "$RELEASE_DIR" "$APP_ROOT/current.new"
 mv -Tf "$APP_ROOT/current.new" "$APP_ROOT/current"

@@ -35,6 +35,12 @@ test("verified transition uses tenant branding without changing authentication i
   assert.match(loginForm, /name="password"/);
 });
 
+test("client login keeps Node-only tenant logo storage code outside the browser bundle", () => {
+  assert.doesNotMatch(loginForm, /@\/lib\/tenant-logo/);
+  assert.match(loginForm, /const LOGIN_FALLBACK_LOGO_URL = "\/Hoahub-logo\.png"/);
+  assert.match(loginForm, /logoUrl\?\.trim\(\) \|\| LOGIN_FALLBACK_LOGO_URL/);
+});
+
 test("web login uses the same stable-logo secure orbit language as mobile", () => {
   assert.match(tenantLogin, /community-pulse-web-premium\.module\.css/);
   assert.match(tenantLogin, /webStyles\.webLogoWrap/);

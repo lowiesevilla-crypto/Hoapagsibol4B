@@ -95,10 +95,10 @@ jobs:
     environment: production
     env:
       HOSTINGER_APP_URL: ${{ secrets.HOSTINGER_APP_URL }}
-      PROD_E2E_LOGIN: ${{ secrets.PROD_E2E_LOGIN }}
-      PROD_E2E_PASSWORD: ${{ secrets.PROD_E2E_PASSWORD }}
-      PROD_E2E_TENANT_SLUG: ${{ secrets.PROD_E2E_TENANT_SLUG }}
-      PROD_E2E_EXPECTED_PATH_PREFIX: ${{ secrets.PROD_E2E_EXPECTED_PATH_PREFIX }}
+      PROD_E2E_LOGIN: ${{ secrets.E2E_PROD_LOGIN }}
+      PROD_E2E_PASSWORD: ${{ secrets.E2E_PROD_PASSWORD }}
+      PROD_E2E_TENANT_SLUG: ${{ secrets.E2E_PROD_TENANT_SLUG }}
+      PROD_E2E_EXPECTED_PATH_PREFIX: ${{ secrets.E2E_PROD_EXPECTED_PATH_PREFIX }}
     steps:
       - name: Validate managed deployment configuration
         shell: bash
@@ -159,7 +159,7 @@ jobs:
         if: env.PROD_E2E_LOGIN == '' || env.PROD_E2E_PASSWORD == ''
         shell: bash
         run: |
-          echo "::warning::Production login motion verification is not configured. Add PROD_E2E_LOGIN and PROD_E2E_PASSWORD as production Environment secrets for a dedicated homeowner smoke-test account."
+          echo "::warning::Production login motion verification is not configured. Add E2E_PROD_LOGIN and E2E_PROD_PASSWORD as production Environment secrets for a dedicated homeowner smoke-test account."
 
       - name: Checkout production login verifier
         if: env.PROD_E2E_LOGIN != '' && env.PROD_E2E_PASSWORD != ''

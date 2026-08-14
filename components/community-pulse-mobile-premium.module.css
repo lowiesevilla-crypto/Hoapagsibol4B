@@ -1,0 +1,339 @@
+.mobileStage {
+  position: relative;
+}
+
+.mobileHeaderScene,
+.mobileSignalBar {
+  display: none;
+}
+
+.mobileLogoWrap {
+  position: relative;
+  display: grid;
+  flex: 0 0 auto;
+  place-items: center;
+  isolation: isolate;
+}
+
+@media (max-width: 1023px) {
+  .mobileStage {
+    background:
+      radial-gradient(circle at 86% 8%, rgba(7, 139, 201, 0.2), transparent 17rem),
+      radial-gradient(circle at 10% 94%, rgba(114, 216, 78, 0.16), transparent 16rem),
+      linear-gradient(145deg, #eef9fe 0%, #f8fcff 48%, #eefaf2 100%);
+  }
+
+  .mobileHeaderScene {
+    position: absolute;
+    inset: 0 0 auto;
+    z-index: 1;
+    display: block;
+    height: min(15rem, 34dvh);
+    overflow: hidden;
+    pointer-events: none;
+  }
+
+  .mobileHeaderScene::before {
+    position: absolute;
+    inset: -35% -28%;
+    content: "";
+    background:
+      repeating-linear-gradient(118deg, transparent 0 28px, rgba(7, 139, 201, 0.11) 29px 30px, transparent 31px 58px),
+      repeating-linear-gradient(62deg, transparent 0 34px, rgba(114, 216, 78, 0.09) 35px 36px, transparent 37px 70px);
+    opacity: 0.9;
+    transform: translate3d(-4%, -3%, 0);
+    animation: mobileMeshDrift 7s linear infinite;
+    will-change: transform;
+  }
+
+  .mobileHeaderScene::after {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: -46%;
+    width: 44%;
+    content: "";
+    background: linear-gradient(90deg, transparent, rgba(89, 195, 244, 0.2), rgba(255, 255, 255, 0.72), rgba(114, 216, 78, 0.18), transparent);
+    filter: blur(1px);
+    opacity: 0;
+    transform: skewX(-16deg);
+    animation: mobileStageSweep 3.6s ease-in-out 500ms infinite;
+    will-change: left, opacity;
+  }
+
+  .pulseWave {
+    position: absolute;
+    top: 7.2rem;
+    left: -15%;
+    width: 130%;
+    height: 2px;
+    border-radius: 999px;
+    background: linear-gradient(90deg, transparent 0%, rgba(7, 139, 201, 0.18) 12%, rgba(7, 139, 201, 0.88) 38%, rgba(114, 216, 78, 0.92) 62%, rgba(114, 216, 78, 0.18) 88%, transparent 100%);
+    box-shadow: 0 0 16px rgba(7, 139, 201, 0.22), 0 0 20px rgba(114, 216, 78, 0.16);
+    opacity: 0.72;
+    animation: pulseWaveTravel 3.2s ease-in-out infinite;
+    will-change: transform, opacity;
+  }
+
+  .nodeA,
+  .nodeB,
+  .nodeC {
+    position: absolute;
+    width: 10px;
+    height: 10px;
+    border: 2px solid rgba(255, 255, 255, 0.95);
+    border-radius: 999px;
+    background: #078bc9;
+    box-shadow: 0 0 0 7px rgba(7, 139, 201, 0.1), 0 0 20px rgba(7, 139, 201, 0.5);
+    will-change: transform, opacity;
+  }
+
+  .nodeA {
+    top: 2.6rem;
+    left: 10%;
+    animation: nodeRouteA 4.3s ease-in-out infinite alternate;
+  }
+
+  .nodeB {
+    top: 5.4rem;
+    right: 11%;
+    background: #72d84e;
+    box-shadow: 0 0 0 7px rgba(114, 216, 78, 0.1), 0 0 20px rgba(114, 216, 78, 0.5);
+    animation: nodeRouteB 5.1s ease-in-out 450ms infinite alternate;
+  }
+
+  .nodeC {
+    top: 9.5rem;
+    left: 22%;
+    width: 8px;
+    height: 8px;
+    animation: nodeRouteC 3.8s ease-in-out 900ms infinite alternate;
+  }
+
+  .mobileLogoWrap::before {
+    position: absolute;
+    inset: -0.45rem;
+    z-index: -2;
+    content: "";
+    border: 2px solid rgba(7, 139, 201, 0.24);
+    border-radius: 999px;
+    box-shadow: 0 0 0 0 rgba(7, 139, 201, 0.16), 0 0 22px rgba(114, 216, 78, 0.12);
+    animation: logoHaloPulse 2.4s ease-in-out infinite;
+  }
+
+  .mobileLogoWrap::after {
+    position: absolute;
+    inset: -0.7rem;
+    z-index: -1;
+    content: "";
+    border-radius: 999px;
+    background: conic-gradient(from 0deg, transparent 0 16%, rgba(7, 139, 201, 0.45) 22%, transparent 31% 55%, rgba(114, 216, 78, 0.42) 62%, transparent 72% 100%);
+    opacity: 0.72;
+    animation: logoOrbitSpin 4.8s linear infinite;
+  }
+
+  .mobileSignalBar {
+    position: relative;
+    display: block;
+    height: 10px;
+    margin: -0.1rem 0 0.85rem;
+    overflow: hidden;
+    border-radius: 999px;
+    background: linear-gradient(90deg, rgba(7, 139, 201, 0.05), rgba(7, 139, 201, 0.16) 35%, rgba(114, 216, 78, 0.16) 65%, rgba(114, 216, 78, 0.05));
+  }
+
+  .mobileSignalBar::before {
+    position: absolute;
+    top: 4px;
+    right: 4%;
+    left: 4%;
+    height: 2px;
+    content: "";
+    border-radius: 999px;
+    background: linear-gradient(90deg, rgba(7, 139, 201, 0.14), rgba(7, 139, 201, 0.7), rgba(114, 216, 78, 0.72), rgba(114, 216, 78, 0.14));
+  }
+
+  .signalDot,
+  .signalDotAlt {
+    position: absolute;
+    top: 1px;
+    left: 3%;
+    width: 8px;
+    height: 8px;
+    border-radius: 999px;
+    background: #078bc9;
+    box-shadow: 0 0 0 4px rgba(7, 139, 201, 0.1), 0 0 14px rgba(7, 139, 201, 0.55);
+    animation: signalTravel 2.8s cubic-bezier(.45, .05, .55, .95) infinite alternate;
+    will-change: transform;
+  }
+
+  .signalDotAlt {
+    left: auto;
+    right: 3%;
+    background: #72d84e;
+    box-shadow: 0 0 0 4px rgba(114, 216, 78, 0.1), 0 0 14px rgba(114, 216, 78, 0.55);
+    animation-name: signalTravelReverse;
+    animation-delay: 350ms;
+  }
+
+  .premiumCard {
+    border-color: rgba(7, 139, 201, 0.28) !important;
+    box-shadow:
+      0 22px 64px rgba(8, 97, 141, 0.23),
+      0 0 0 1px rgba(255, 255, 255, 0.92),
+      0 0 34px rgba(7, 139, 201, 0.1),
+      0 0 38px rgba(114, 216, 78, 0.08) !important;
+  }
+
+  .cardPulseFrame {
+    position: absolute !important;
+    inset: 0;
+    z-index: 0 !important;
+    border-radius: inherit;
+    pointer-events: none;
+    overflow: hidden;
+  }
+
+  .cardPulseFrame::before {
+    position: absolute;
+    top: 0;
+    right: 0;
+    left: 0;
+    height: 6px;
+    content: "";
+    background: linear-gradient(90deg, #078bc9, #5ecbf1 36%, #baf5a3 67%, #72d84e);
+    background-size: 220% 100%;
+    box-shadow: 0 0 18px rgba(7, 139, 201, 0.3), 0 0 18px rgba(114, 216, 78, 0.24);
+    animation: cardBeamShift 2.6s linear infinite;
+  }
+
+  .cardPulseFrame::after {
+    position: absolute;
+    inset: 0;
+    content: "";
+    background:
+      radial-gradient(circle at 14% 7%, rgba(7, 139, 201, 0.13), transparent 7.5rem),
+      radial-gradient(circle at 90% 8%, rgba(114, 216, 78, 0.12), transparent 8rem);
+    opacity: 0.9;
+    animation: cardHeaderBreath 3s ease-in-out infinite alternate;
+  }
+
+  .mobileStage :global(.community-pulse-primary) {
+    box-shadow: 0 12px 28px rgba(7, 139, 201, 0.28), 0 0 0 1px rgba(7, 139, 201, 0.08);
+  }
+
+  .mobileStage :global(.community-pulse-primary)::after {
+    width: 54%;
+    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.82), transparent);
+    animation-duration: 3s;
+    animation-delay: 500ms;
+  }
+
+  .mobileStage :global(.community-pulse-passkey svg) {
+    animation-duration: 2.8s;
+  }
+}
+
+@media (max-width: 639px) {
+  .mobileHeaderScene {
+    height: 13rem;
+  }
+
+  .pulseWave {
+    top: 6.45rem;
+  }
+
+  .nodeC {
+    top: 8.8rem;
+  }
+
+  .premiumCard {
+    backdrop-filter: blur(3px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mobileHeaderScene::before,
+  .mobileHeaderScene::after,
+  .pulseWave,
+  .nodeA,
+  .nodeB,
+  .nodeC,
+  .mobileLogoWrap::before,
+  .mobileLogoWrap::after,
+  .signalDot,
+  .signalDotAlt,
+  .cardPulseFrame::before,
+  .cardPulseFrame::after,
+  .mobileStage :global(.community-pulse-primary)::after,
+  .mobileStage :global(.community-pulse-passkey svg) {
+    animation: none !important;
+    transform: none !important;
+  }
+
+  .mobileHeaderScene::after,
+  .pulseWave {
+    opacity: 0.35;
+  }
+}
+
+@keyframes mobileMeshDrift {
+  from { transform: translate3d(-4%, -3%, 0); }
+  to { transform: translate3d(7%, 5%, 0); }
+}
+
+@keyframes mobileStageSweep {
+  0%, 12% { left: -46%; opacity: 0; }
+  24% { opacity: 0.92; }
+  68% { opacity: 0.42; }
+  82%, 100% { left: 112%; opacity: 0; }
+}
+
+@keyframes pulseWaveTravel {
+  0%, 100% { transform: translate3d(-5%, 0, 0) scaleX(0.94); opacity: 0.48; }
+  50% { transform: translate3d(5%, 0, 0) scaleX(1.04); opacity: 0.92; }
+}
+
+@keyframes nodeRouteA {
+  from { transform: translate3d(0, 0, 0) scale(0.9); opacity: 0.62; }
+  to { transform: translate3d(5.8rem, 1.8rem, 0) scale(1.12); opacity: 1; }
+}
+
+@keyframes nodeRouteB {
+  from { transform: translate3d(0, 0, 0) scale(1); opacity: 0.68; }
+  to { transform: translate3d(-5rem, 2.3rem, 0) scale(1.16); opacity: 1; }
+}
+
+@keyframes nodeRouteC {
+  from { transform: translate3d(0, 0, 0); opacity: 0.5; }
+  to { transform: translate3d(7.2rem, -1.2rem, 0); opacity: 0.96; }
+}
+
+@keyframes logoHaloPulse {
+  0%, 100% { transform: scale(0.94); opacity: 0.55; box-shadow: 0 0 0 0 rgba(7, 139, 201, 0.14), 0 0 16px rgba(114, 216, 78, 0.08); }
+  50% { transform: scale(1.08); opacity: 1; box-shadow: 0 0 0 8px rgba(7, 139, 201, 0), 0 0 26px rgba(114, 216, 78, 0.18); }
+}
+
+@keyframes logoOrbitSpin {
+  to { transform: rotate(360deg); }
+}
+
+@keyframes signalTravel {
+  from { transform: translate3d(0, 0, 0); }
+  to { transform: translate3d(calc(100vw - 7.4rem), 0, 0); }
+}
+
+@keyframes signalTravelReverse {
+  from { transform: translate3d(0, 0, 0); }
+  to { transform: translate3d(calc(-100vw + 7.4rem), 0, 0); }
+}
+
+@keyframes cardBeamShift {
+  from { background-position: 100% 0; }
+  to { background-position: -120% 0; }
+}
+
+@keyframes cardHeaderBreath {
+  from { opacity: 0.5; transform: scale(0.98); }
+  to { opacity: 1; transform: scale(1.04); }
+}

@@ -3,6 +3,7 @@ import { LoginForm } from "@/components/login-form";
 import { AssociationLogo } from "@/components/association-logo";
 import { DEFAULT_TENANT_LOGO_URL } from "@/lib/tenant-logo";
 import styles from "./community-pulse-login.module.css";
+import premiumStyles from "./community-pulse-mobile-premium.module.css";
 
 type LoginTenant = { name: string; slug: string; logoUrl: string | null; address?: string | null; blocked?: boolean; advisory?: string };
 
@@ -58,14 +59,30 @@ export function TenantLoginScreen({ tenant, reset, loggedOut, returnTo, universa
       </p>
     </section>
 
-    <section className={`${styles.loginStage} relative grid place-items-center overflow-hidden px-4 py-4 sm:p-10`}>
-      <div className={`${styles.loginCard} relative w-full max-w-md overflow-hidden rounded-[2rem] border border-pine-100 bg-white p-5 shadow-[0_24px_70px_rgba(8,97,141,.16)] sm:p-10`}>
+    <section className={`${styles.loginStage} ${premiumStyles.mobileStage} relative grid place-items-center overflow-hidden px-4 py-4 sm:p-10`}>
+      <div className={premiumStyles.mobileHeaderScene} aria-hidden="true">
+        <span className={premiumStyles.pulseWave} />
+        <span className={premiumStyles.nodeA} />
+        <span className={premiumStyles.nodeB} />
+        <span className={premiumStyles.nodeC} />
+      </div>
+
+      <div className={`${styles.loginCard} ${premiumStyles.premiumCard} relative w-full max-w-md overflow-hidden rounded-[2rem] border border-pine-100 bg-white p-5 shadow-[0_24px_70px_rgba(8,97,141,.16)] sm:p-10`}>
+        <div className={premiumStyles.cardPulseFrame} aria-hidden="true" />
+
         <div className={`${styles.mobileBrandEntrance} mb-5 flex items-center gap-3 sm:mb-8 sm:gap-4 lg:hidden`}>
-          <AssociationLogo className="size-16 sm:size-20" src={logo} alt={`${tenant.name} logo`} />
+          <div className={premiumStyles.mobileLogoWrap}>
+            <AssociationLogo className="size-16 sm:size-20" src={logo} alt={`${tenant.name} logo`} />
+          </div>
           <div className="min-w-0">
             <p className="break-words font-black leading-tight text-pine-900">{tenant.name}</p>
             <p className="mt-1 text-sm font-extrabold text-leaf-700">HOA Portal</p>
           </div>
+        </div>
+
+        <div className={premiumStyles.mobileSignalBar} aria-hidden="true">
+          <span className={premiumStyles.signalDot} />
+          <span className={premiumStyles.signalDotAlt} />
         </div>
 
         <p className="flex items-center gap-2 text-xs font-extrabold uppercase tracking-[.18em] text-pine-700">

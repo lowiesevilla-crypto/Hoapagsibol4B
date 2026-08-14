@@ -155,6 +155,21 @@ The live HOAHub application is a Hostinger managed Node.js web application conne
 - Hostinger's install layer can invoke pnpm while the managed application build subprocess does not necessarily expose the `pnpm` executable in `PATH`. Production build scripts therefore must not shell out to a nested `pnpm` command. Invoke Node scripts and installed package binaries directly from the lifecycle command instead.
 - `tests/unit/hostinger-build-script.test.ts` protects this Hostinger build-PATH invariant.
 
+### Production Login Motion Verification
+
+After the expected Hostinger release marker is live and `/api/health` passes, GitHub may run `tests/e2e/production-login-motion.mjs` against the real production login using a dedicated low-privilege homeowner smoke-test account.
+
+- Production login credentials must be stored only as GitHub `production` Environment secrets. Never place them in repository files, workflow logs, `Agent.md`, screenshots, PR text, or chat.
+- Required secret names are `PROD_E2E_LOGIN` and `PROD_E2E_PASSWORD`.
+- Optional `PROD_E2E_TENANT_SLUG` selects a tenant-specific login route; otherwise the universal `/login` route is used.
+- Optional `PROD_E2E_EXPECTED_PATH_PREFIX` defaults to `/portal/` and must remain a same-origin absolute path prefix.
+- Use a dedicated homeowner account with no sensitive production data and no administrative, finance, document-approval, or tenant-management authority.
+- The smoke test performs authentication/session creation only. It must not navigate to payment, billing, document submission, complaint submission, administration, or other business-operation routes.
+- The verification runs desktop/web and mobile/PWA-sized browser contexts and asserts the visible secure orbit, `Verifying access…`, `Access verified`, dashboard navigation, and the one-shot authenticated-logo orbit/pulse.
+- The script intentionally delays the authentication POST briefly so the pending verification state can be observed deterministically; it does not alter the server action or authentication result.
+- The production workflow runs this smoke only after release and public-health verification. If the dedicated credentials are not configured, the workflow emits an explicit warning and skips the authenticated production smoke rather than using CI fixture credentials against production.
+- `tests/unit/production-login-motion.test.ts` protects ordering, credential requirements, viewport coverage, required transition assertions, and the no-business-route constraint.
+
 ### Hostinger Runtime and Filesystem
 
 - Hostinger production is configured for Node.js 22.x.

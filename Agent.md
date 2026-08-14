@@ -105,6 +105,14 @@ A short-lived browser session marker (`hoahub.login.handoff.v1`) is written only
 - `components/login-verified-transition.module.css`
 - `tests/unit/community-pulse-login-transition.test.ts`
 
+### Client/Server Branding Boundary
+
+- `lib/tenant-logo.ts` is a server-side logo upload/storage utility and imports Node-only APIs including `node:crypto`, `node:fs/promises`, and `node:path`.
+- Client components such as `components/login-form.tsx` must never import `lib/tenant-logo.ts`, even only to reuse `DEFAULT_TENANT_LOGO_URL`, because doing so pulls Node-only modules into the browser bundle and breaks the production build.
+- `TenantLoginScreen` resolves the tenant/default logo on the server and passes the resolved URL into client presentation components.
+- When a client-only defensive fallback is still required, use the static public path `/Hoahub-logo.png` locally rather than importing the server utility.
+- `tests/unit/community-pulse-login-transition.test.ts` enforces this boundary.
+
 ### Authentication Boundary
 
 Community Pulse is a presentation/interaction enhancement. It must not bypass or replace the existing authentication action, server-side session validation, tenant/account selection, safe redirect handling, homeowner account selection, or passkey verification.

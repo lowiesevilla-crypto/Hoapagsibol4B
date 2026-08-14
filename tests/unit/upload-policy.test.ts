@@ -79,3 +79,12 @@ test("admin, homeowner, platform, and chat upload pickers no longer advertise le
   }
   assert.match(pickerSources[7], /PDF, JPG, JPEG, PNG, DOCX, XLSX, and PPTX only/);
 });
+
+test("persisted-upload browser fixtures use approved file formats instead of banned convenience files", async () => {
+  const dmsBrowser = await readFile("tests/e2e/document-management.mjs", "utf8");
+  assert.match(dmsBrowser, /e2e-dms-original\.pdf/);
+  assert.match(dmsBrowser, /e2e-dms-replacement\.pdf/);
+  assert.match(dmsBrowser, /application\\\/pdf/);
+  assert.doesNotMatch(dmsBrowser, /e2e-dms-(?:original|replacement)\.txt/);
+  assert.doesNotMatch(dmsBrowser, /text\\\/plain/);
+});

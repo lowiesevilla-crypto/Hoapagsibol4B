@@ -1,0 +1,116 @@
+.webLogoWrap {
+  position: relative;
+  display: grid;
+  flex: 0 0 auto;
+  place-items: center;
+  isolation: isolate;
+}
+
+.webLogoWrap::before,
+.webLogoWrap::after {
+  position: absolute;
+  content: "";
+  border-radius: 999px;
+  pointer-events: none;
+}
+
+.webLogoWrap::before {
+  inset: -0.55rem;
+  z-index: -2;
+  border: 2px solid rgba(223, 248, 210, 0.3);
+  box-shadow:
+    0 0 0 0 rgba(114, 216, 78, 0.16),
+    0 0 24px rgba(103, 205, 255, 0.16),
+    0 0 32px rgba(114, 216, 78, 0.12);
+  animation: webHaloPulse 2.8s ease-in-out infinite;
+}
+
+.webLogoWrap::after {
+  inset: -0.88rem;
+  z-index: -1;
+  background: conic-gradient(
+    from 0deg,
+    transparent 0 13%,
+    rgba(126, 216, 255, 0.92) 20%,
+    rgba(255, 255, 255, 0.7) 27%,
+    transparent 34% 55%,
+    rgba(180, 244, 154, 0.86) 64%,
+    rgba(114, 216, 78, 0.92) 71%,
+    transparent 79% 100%
+  );
+  opacity: 0.84;
+  filter: drop-shadow(0 0 8px rgba(103, 205, 255, 0.28));
+  animation: webSecureOrbit 4.4s linear infinite;
+  will-change: transform;
+}
+
+.webLogo {
+  position: relative;
+  z-index: 1;
+  filter: drop-shadow(0 12px 24px rgba(2, 35, 54, 0.22));
+}
+
+.webSignal {
+  position: absolute;
+  right: -0.15rem;
+  bottom: 0.2rem;
+  z-index: 2;
+  width: 0.8rem;
+  height: 0.8rem;
+  border: 2px solid rgba(255, 255, 255, 0.96);
+  border-radius: 999px;
+  background: #72d84e;
+  box-shadow:
+    0 0 0 5px rgba(114, 216, 78, 0.1),
+    0 0 18px rgba(114, 216, 78, 0.65);
+  animation: webSignalPulse 1.9s ease-in-out infinite;
+}
+
+@media (max-width: 1023px) {
+  .webLogoWrap {
+    display: contents;
+  }
+
+  .webLogoWrap::before,
+  .webLogoWrap::after,
+  .webSignal {
+    display: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .webLogoWrap::before,
+  .webLogoWrap::after,
+  .webSignal {
+    animation: none !important;
+    transform: none !important;
+  }
+}
+
+@keyframes webSecureOrbit {
+  to { transform: rotate(360deg); }
+}
+
+@keyframes webHaloPulse {
+  0%, 100% {
+    transform: scale(0.96);
+    opacity: 0.58;
+    box-shadow:
+      0 0 0 0 rgba(114, 216, 78, 0.13),
+      0 0 18px rgba(103, 205, 255, 0.12),
+      0 0 24px rgba(114, 216, 78, 0.08);
+  }
+  50% {
+    transform: scale(1.07);
+    opacity: 1;
+    box-shadow:
+      0 0 0 8px rgba(114, 216, 78, 0),
+      0 0 30px rgba(103, 205, 255, 0.22),
+      0 0 38px rgba(114, 216, 78, 0.16);
+  }
+}
+
+@keyframes webSignalPulse {
+  0%, 100% { transform: scale(0.88); opacity: 0.72; }
+  50% { transform: scale(1.16); opacity: 1; }
+}

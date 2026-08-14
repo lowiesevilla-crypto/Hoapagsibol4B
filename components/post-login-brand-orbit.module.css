@@ -1,0 +1,103 @@
+.orbit {
+  position: relative;
+  display: grid;
+  flex: 0 0 auto;
+  place-items: center;
+  isolation: isolate;
+}
+
+.orbit::before,
+.orbit::after {
+  position: absolute;
+  content: "";
+  border-radius: 999px;
+  pointer-events: none;
+  opacity: 0;
+}
+
+.active::before {
+  inset: -0.32rem;
+  z-index: -2;
+  border: 2px solid rgba(7, 139, 201, 0.28);
+  box-shadow:
+    0 0 0 0 rgba(7, 139, 201, 0.16),
+    0 0 18px rgba(7, 139, 201, 0.2),
+    0 0 24px rgba(114, 216, 78, 0.16);
+  animation: arrivalHalo 1.45s ease-out both;
+}
+
+.active::after {
+  inset: -0.55rem;
+  z-index: -1;
+  background: conic-gradient(
+    from 0deg,
+    transparent 0 14%,
+    #078bc9 22%,
+    #72cdef 32%,
+    transparent 42% 57%,
+    #b7f2a0 67%,
+    #72d84e 77%,
+    transparent 87% 100%
+  );
+  filter: drop-shadow(0 0 7px rgba(7, 139, 201, 0.24));
+  animation: arrivalOrbit 1.35s cubic-bezier(.3, .7, .2, 1) both;
+}
+
+.signal {
+  position: absolute;
+  right: -0.08rem;
+  bottom: -0.02rem;
+  z-index: 3;
+  display: grid;
+  width: 1rem;
+  height: 1rem;
+  place-items: center;
+  border: 2px solid #ffffff;
+  border-radius: 999px;
+  background: #52b835;
+  box-shadow: 0 0 14px rgba(114, 216, 78, 0.5);
+  opacity: 0;
+  transform: scale(0);
+}
+
+.active .signal {
+  animation: arrivalSignal 420ms cubic-bezier(.17, .89, .32, 1.35) 880ms forwards;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .active::before,
+  .active::after,
+  .active .signal {
+    animation: none !important;
+  }
+
+  .active::before,
+  .active::after {
+    opacity: 0;
+  }
+
+  .active .signal {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes arrivalOrbit {
+  0% { transform: rotate(-35deg) scale(0.9); opacity: 0; }
+  18% { opacity: 0.95; }
+  78% { transform: rotate(325deg) scale(1.04); opacity: 1; }
+  100% { transform: rotate(360deg) scale(1); opacity: 0; }
+}
+
+@keyframes arrivalHalo {
+  0% { opacity: 0; transform: scale(0.92); box-shadow: 0 0 0 0 rgba(7, 139, 201, 0.18); }
+  35% { opacity: 1; }
+  72% { opacity: 0.9; transform: scale(1.09); box-shadow: 0 0 0 8px rgba(7, 139, 201, 0), 0 0 24px rgba(114, 216, 78, 0.2); }
+  100% { opacity: 0; transform: scale(1.04); box-shadow: 0 0 0 12px rgba(114, 216, 78, 0); }
+}
+
+@keyframes arrivalSignal {
+  0% { opacity: 0; transform: scale(0) rotate(-16deg); }
+  65% { opacity: 1; transform: scale(1.18) rotate(4deg); }
+  100% { opacity: 0; transform: scale(1) rotate(0); }
+}

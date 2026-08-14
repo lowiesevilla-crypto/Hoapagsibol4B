@@ -4,7 +4,24 @@ Last updated: 2026-08-14
 
 ## Purpose
 
-This file is the repository-level operating context for AI coding agents and maintainers working on HOAHub. Treat production safety, tenant isolation, authentication integrity, mobile/PWA usability, and auditable deployment as release gates rather than optional improvements.
+This file is the repository-level operating context for AI coding agents and maintainers working on HOAHub. Treat production safety, tenant isolation, authentication integrity, mobile/PWA usability, auditable deployment, and repository-context maintenance as release gates rather than optional improvements.
+
+## Mandatory Agent.md Maintenance
+
+`Agent.md` must be reviewed and updated for **every change** made to the repository before that change is merged or deployed.
+
+This requirement applies to feature work, bug fixes, refactors, UX/UI changes, tests, CI/CD changes, deployment changes, security changes, database changes, integrations, mobile/PWA changes, documentation-affecting behavior, and operational fixes.
+
+For every branch/PR/change:
+
+1. Read `Agent.md` before implementation.
+2. Update the relevant section(s) to reflect the new behavior, constraints, files, architecture, deployment assumptions, tests, or rollback information.
+3. If the change does not alter an existing section, add a concise entry or clarification so the repository context still records the change.
+4. Keep `Last updated` current.
+5. Do not merge or deploy a repository change that leaves `Agent.md` stale.
+6. Never place credentials, secret values, access tokens, database passwords, private keys, or other sensitive production values in `Agent.md`.
+
+A missing `Agent.md` update is considered an incomplete change.
 
 ## Product and Architecture Baseline
 
@@ -38,30 +55,71 @@ Homeowner-facing changes must be designed for installed PWA and mobile-browser u
 - Ensure critical cards/forms can scroll safely on short mobile viewports without horizontal overflow.
 - Preserve passkey support on compatible mobile devices.
 
-## Current Release: Community Pulse Login v1
+## Current Release: Community Pulse Premium Login
 
-Community Pulse is the premium HOAHub login experience introduced through PR #103.
+Community Pulse is the premium HOAHub login experience introduced through PR #103 and strengthened through subsequent mobile/PWA, web, verification, and post-login handoff work.
 
-### Scope
+### Current Login Motion
 
-- Desktop staged entrance for HOA branding, trust badge, headline, explanatory copy, and feature cards.
-- Slow grid drift, restrained ambient glows, and a subtle light sweep.
-- Premium but conservative feature-card, field-focus, primary-button, and passkey micro-interactions.
-- Short `Access verified` success state before navigation after successful credential login.
-- Mobile/PWA-specific layout using dynamic viewport sizing, safe-area handling, lightweight ambient motion, contained scrolling, and touch-friendly form controls.
-- The homeowner identifier remains compatible with either verified email or the 11-digit homeowner account number.
-- No new animation runtime/library is required; Community Pulse motion is CSS-based.
+- Desktop/web uses staged branding, animated grid/pulse layers, aurora glows, light sweeps, feature-card sheen, focused-field illumination, button sheen, passkey micro-motion, and a clearly visible blue/green secure orbit around the stable tenant/HOA logo.
+- Mobile/PWA uses a clearly visible community mesh, moving blue/green signal wave, traveling nodes, animated logo orbit/halo, signal rail, animated card beam, ambient glows, and touch-safe form motion.
+- The HOAHub/tenant logo itself remains visually stable during idle login on both desktop/web and mobile/PWA; only the surrounding orbit/halo rotates so brand legibility is preserved.
+- Desktop/web and mobile/PWA use the same authentication-state language: idle secure orbit, `Verifying access…`, branded `Access verified`, then authenticated-shell handoff.
+- All non-essential motion must honor `prefers-reduced-motion`.
 
-### Files
+### Login Verification Transition
+
+The current release adds an explicit authentication-state sequence without replacing the existing authentication logic:
+
+1. Idle: stable HOAHub/tenant logo with a rotating secure orbit and visible Community Pulse motion on desktop/web and mobile/PWA.
+2. Pending credential authentication: the primary button displays `Verifying access…` with a restrained spinner while the existing server action is pending.
+3. Successful credential authentication: the form transitions out and a dedicated success state shows the branded logo, one completing blue/green orbit, green confirmation badge, `Access verified`, and `Opening your HOAHub dashboard…`.
+4. Redirect: navigation occurs after an approximately 800 ms visible confirmation window using the existing safe redirect target (`returnTo` first, otherwise the authenticated `redirectTo`).
+5. Authenticated-shell handoff: the first shared HOA/tenant logo rendered after successful login receives one short blue/green orbit and confirmation pulse, then returns to a fully static logo.
+
+The success animation must never be shown before the existing server authentication action returns a valid redirect target.
+
+### Post-Login Brand Handoff
+
+A short-lived browser session marker (`hoahub.login.handoff.v1`) is written only after successful credential or passkey authentication.
+
+- The marker contains only a local timestamp; it contains no identity, tenant, session, credential, or authorization data.
+- `AssociationLogo` uses the shared `PostLoginBrandOrbit` wrapper so the handoff applies consistently across authenticated homeowner, admin, desktop/web, and mobile/PWA shells without duplicating layout logic.
+- Login, forgot-password, and reset-password routes explicitly do not consume or display the post-login handoff orbit.
+- The marker is accepted only for approximately 10 seconds after successful authentication.
+- The authenticated-logo handoff is visible for approximately 1.7 seconds, performs one rotation/pulse sequence, removes the marker, and does not continuously animate during normal navigation.
+- If browser session storage is blocked or unavailable, authentication and navigation must continue normally; the animation is optional presentation only.
+- `prefers-reduced-motion` removes the rotating/pulsing motion while preserving a minimal confirmation state.
+
+### Community Pulse Files
 
 - `components/tenant-login-screen.tsx`
 - `components/login-form.tsx`
 - `components/passkey-login-button.tsx`
+- `components/association-logo.tsx`
+- `components/post-login-brand-orbit.tsx`
+- `components/post-login-brand-orbit.module.css`
 - `components/community-pulse-login.module.css`
+- `components/community-pulse-mobile-premium.module.css`
+- `components/community-pulse-web-premium.module.css`
+- `components/login-verified-transition.module.css`
+- `tests/unit/community-pulse-login-transition.test.ts`
+
+### Client/Server Branding Boundary
+
+- `lib/tenant-logo.ts` is a server-side logo upload/storage utility and imports Node-only APIs including `node:crypto`, `node:fs/promises`, and `node:path`.
+- Client components such as `components/login-form.tsx` must never import `lib/tenant-logo.ts`, even only to reuse `DEFAULT_TENANT_LOGO_URL`, because doing so pulls Node-only modules into the browser bundle and breaks the production build.
+- `TenantLoginScreen` resolves the tenant/default logo on the server and passes the resolved URL into client presentation components.
+- When a client-only defensive fallback is still required, use the static public path `/Hoahub-logo.png` locally rather than importing the server utility.
+- `tests/unit/community-pulse-login-transition.test.ts` enforces this boundary.
 
 ### Authentication Boundary
 
-Community Pulse is a presentation/interaction enhancement. It must not bypass or replace the existing authentication action, server-side session validation, tenant/account selection, safe redirect handling, or passkey verification.
+Community Pulse is a presentation/interaction enhancement. It must not bypass or replace the existing authentication action, server-side session validation, tenant/account selection, safe redirect handling, homeowner account selection, or passkey verification.
+
+The post-login animation marker is never authoritative authentication state. Authenticated server/session checks remain the only authority for protected routes.
+
+The homeowner identifier remains compatible with either verified email or the 11-digit homeowner account number.
 
 ## Validation Gate
 
@@ -82,39 +140,56 @@ Before production deployment, the applicable CI pipeline must pass. The reposito
 
 Do not merge a known failing release merely to trigger deployment. Fix the defect or update a brittle test only when the changed test continues to assert the intended security/business invariant.
 
-## Production Deployment Rules
+## Hostinger Production Deployment Model
 
-- Feature branches are not production deployment targets.
+The live HOAHub application is a Hostinger managed Node.js web application connected to the GitHub `main` branch. Hostinger's managed GitHub deployment is the normal production activation path.
+
+- Production feature branches are not deployment targets.
 - Production changes must land on `main` through the approved GitHub flow.
-- A push/merge to `main` runs the HOAHub verification workflow.
-- Hostinger production deployment runs only after verification succeeds and when the production deployment configuration/flag and required environment secrets are enabled.
-- `HOSTINGER_APP_PATH` is the application root (currently `/home/u309242896/domains/hoahub.tech`), not the `storage` directory and not the `.env` file.
-- The persistent production environment file is `$HOSTINGER_APP_PATH/shared/.env`. Never place production secrets in a release directory or Git.
-- Confirm the production deployment job result before reporting a feature as live.
-- Run/confirm production smoke checks after deployment.
+- A push/merge to `main` runs the HOAHub verification workflow and triggers Hostinger's connected-GitHub auto-deployment.
+- GitHub CI must not claim a release is live merely because CI passed or because files were copied through SSH.
+- `scripts/write-release-id.mjs` stamps the build's short Git commit SHA into `public/release.txt`.
+- The production verification job waits until `${HOSTINGER_APP_URL}/release.txt` matches the expected `main` commit SHA, then checks `${HOSTINGER_APP_URL}/api/health`.
+- A release is considered deployed only after the expected release marker and public health check both pass.
+- Do not rely on a global `pm2` executable for the normal Hostinger managed-web-app deployment path; Hostinger manages the application process lifecycle for the connected web app.
 
-## Hostinger Production Runtime
+### Hostinger Runtime and Filesystem
 
-The Hostinger production web application is configured for Node.js 22.x. Interactive and non-interactive SSH sessions may not include that runtime in `PATH` by default.
+- Hostinger production is configured for Node.js 22.x.
+- The confirmed Node 22 binary directory exposed on the account is `/opt/alt/alt-nodejs22/root/usr/bin`.
+- Non-interactive SSH sessions may not automatically include that runtime in `PATH`; legacy/diagnostic SSH scripts must source `scripts/hostinger-runtime.sh` before invoking Node-based tooling.
+- `HOSTINGER_APP_PATH`, when used by legacy/diagnostic SSH tooling, is the application root `/home/u309242896/domains/hoahub.tech`, not the `storage` directory or `.env` file.
+- The persistent server-side environment file created for SSH tooling is `$HOSTINGER_APP_PATH/shared/.env`.
+- Never expose, print, commit, or copy the contents of the production `.env` into CI logs or repository files.
+- The older immutable-release/PM2 SSH activation script is not the authoritative production activation path for the Hostinger managed web app. Do not report its PM2 failure as evidence that the Hostinger GitHub-connected deployment failed.
 
-- The current Hostinger Node 22 binary directory is `/opt/alt/alt-nodejs22/root/usr/bin`.
-- Production deployment and backup scripts must source `scripts/hostinger-runtime.sh` before invoking Node-based tooling.
-- `scripts/hostinger-runtime.sh` prepends the Hostinger Node 22 directory and fails closed if Node 22 cannot be resolved.
-- Prefer `corepack pnpm ...` in Hostinger SSH deployment scripts rather than `corepack enable` plus a global `pnpm` shim, because the `/opt/alt` runtime location may not be writable by the application user.
-- `scripts/backup-production.sh` depends on Node to parse `DATABASE_URL` before running `mysqldump`; do not move backup execution ahead of runtime initialization.
-- The custom SSH activation path currently expects `corepack`, `mysqldump`, `gzip`, `tar`, and `pm2` to be available after runtime initialization. If a required runtime command is absent, deployment must stop with an explicit error rather than switching the `current` release or claiming production success.
-- Do not expose, print, or copy the contents of `$HOSTINGER_APP_PATH/shared/.env` into CI logs.
+## Release Identification
+
+`package.json` runs `pnpm release:stamp` before both the normal Next.js build and `hostinger:build`. The stamp script writes a short Git revision to `public/release.txt`.
+
+Production verification should compare that public marker with the expected `main` commit before asserting that a UI fix or feature is live. This avoids confusing an older healthy production build with the newly merged release.
 
 ## Community Pulse Rollback
 
-Community Pulse v1 introduces no dedicated database migration. If the release causes a login UX regression, revert the Community Pulse merge/commit on `main` and redeploy the previous application version. Authentication/session data should not require rollback for this UI-only release.
+Community Pulse, the verified-login transition, and the post-login brand handoff introduce no dedicated database migration.
+
+If the login UX causes a production regression:
+
+- revert the relevant Community Pulse/login-transition merge commit on `main`;
+- allow Hostinger's managed GitHub deployment to publish the reverted commit;
+- confirm `/release.txt` matches the rollback commit;
+- confirm `/api/health` succeeds;
+- re-test credential login, passkey login, tenant/account selection, safe return navigation, authenticated logo handoff, and homeowner mobile/PWA login.
+
+Authentication/session data should not require rollback for these presentation-layer changes.
 
 ## Change Discipline
 
-When changing authentication, payments, homeowner identity, multi-account behavior, tenant switching, documents, or AI access:
+For every repository change—not only security-sensitive changes:
 
-- Read the existing tests and security boundaries first.
+- Read the existing implementation, tests, and relevant security boundaries first.
 - Keep tenant/user authority server-controlled.
-- Add or update regression tests for the intended invariant.
-- Keep desktop and homeowner PWA/mobile behavior in the acceptance criteria.
-- Update this file when deployment rules, critical architecture assumptions, or agent-facing release constraints materially change.
+- Add or update regression tests for the intended invariant when behavior changes.
+- Keep desktop and homeowner PWA/mobile behavior in the acceptance criteria when user-facing behavior is affected.
+- Keep production deployment verification aligned with the actual Hostinger hosting model.
+- Update `Agent.md` in the same branch/PR before merge and deployment.

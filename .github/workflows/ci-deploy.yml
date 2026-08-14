@@ -88,81 +88,51 @@ jobs:
           pnpm test:e2e
 
   deploy-production:
-    name: Deploy to Hostinger production
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && vars.HOSTINGER_SSH_DEPLOY_ENABLED == 'true'
+    name: Verify Hostinger managed production
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     needs: verify
     runs-on: ubuntu-latest
     environment: production
     env:
-      HOSTINGER_HOST: ${{ secrets.HOSTINGER_HOST }}
-      HOSTINGER_PORT: ${{ secrets.HOSTINGER_PORT }}
-      HOSTINGER_USER: ${{ secrets.HOSTINGER_USER }}
-      HOSTINGER_SSH_PRIVATE_KEY: ${{ secrets.HOSTINGER_SSH_PRIVATE_KEY }}
-      HOSTINGER_APP_PATH: ${{ secrets.HOSTINGER_APP_PATH }}
       HOSTINGER_APP_URL: ${{ secrets.HOSTINGER_APP_URL }}
     steps:
-      - uses: actions/checkout@v4
-
-      - name: Validate production deployment configuration
+      - name: Validate managed deployment configuration
         shell: bash
         run: |
           set -Eeuo pipefail
-          missing=0
-          for name in HOSTINGER_HOST HOSTINGER_PORT HOSTINGER_USER HOSTINGER_SSH_PRIVATE_KEY HOSTINGER_APP_PATH HOSTINGER_APP_URL; do
-            if [ -z "${!name:-}" ]; then
-              echo "::error::$name is not configured for the production environment."
-              missing=1
+          if [ -z "${HOSTINGER_APP_URL:-}" ]; then
+            echo "::error::HOSTINGER_APP_URL is not configured for the production environment."
+            exit 1
+          fi
+
+      - name: Wait for Hostinger GitHub auto-deployment
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          EXPECTED_SHA="${GITHUB_SHA:0:12}"
+          RELEASE_URL="${HOSTINGER_APP_URL%/}/release.txt"
+          echo "Waiting for Hostinger managed deployment of $EXPECTED_SHA"
+
+          for attempt in {1..120}; do
+            LIVE_SHA="$(curl --fail --silent --show-error --max-time 10 \
+              -H 'Cache-Control: no-cache' \
+              "${RELEASE_URL}?expected=${EXPECTED_SHA}&attempt=${attempt}" 2>/dev/null | tr -d '\r\n' || true)"
+
+            if [ "$LIVE_SHA" = "$EXPECTED_SHA" ]; then
+              echo "Hostinger is serving the expected release: $LIVE_SHA"
+              exit 0
             fi
+
+            if [ -n "$LIVE_SHA" ]; then
+              echo "Hostinger currently serves $LIVE_SHA; waiting for $EXPECTED_SHA (attempt $attempt/120)."
+            else
+              echo "Release marker not available yet (attempt $attempt/120)."
+            fi
+            sleep 5
           done
-          exit "$missing"
 
-      - name: Configure deployment SSH
-        shell: bash
-        run: |
-          set -Eeuo pipefail
-          install -d -m 700 "$HOME/.ssh"
-          python3 - <<'PY'
-          import os
-          from pathlib import Path
-
-          key = os.environ["HOSTINGER_SSH_PRIVATE_KEY"].strip().lstrip("\ufeff")
-          if (key.startswith('"') and key.endswith('"')) or (key.startswith("'") and key.endswith("'")):
-              key = key[1:-1].strip()
-          key = key.replace("\\r\\n", "\n").replace("\\n", "\n")
-          key = key.replace("\r\n", "\n").replace("\r", "\n")
-          Path(os.environ["HOME"], ".ssh", "hoahub_hostinger").write_text(key + "\n", encoding="utf-8")
-          PY
-          chmod 600 "$HOME/.ssh/hoahub_hostinger"
-          ssh-keygen -y -f "$HOME/.ssh/hoahub_hostinger" > /dev/null
-          ssh-keyscan -p "$HOSTINGER_PORT" -H "$HOSTINGER_HOST" >> "$HOME/.ssh/known_hosts"
-          chmod 600 "$HOME/.ssh/known_hosts"
-
-      - name: Upload immutable release
-        shell: bash
-        run: |
-          set -Eeuo pipefail
-          SSH_TARGET="${HOSTINGER_USER}@${HOSTINGER_HOST}"
-          RELEASE_DIR="${HOSTINGER_APP_PATH}/releases/${GITHUB_SHA}"
-          ssh -i "$HOME/.ssh/hoahub_hostinger" -p "$HOSTINGER_PORT" "$SSH_TARGET" "mkdir -p '$RELEASE_DIR'"
-          rsync -az --delete \
-            --exclude '.git/' \
-            --exclude '.github/' \
-            --exclude '.next/' \
-            --exclude 'node_modules/' \
-            --exclude '.env' \
-            --exclude 'storage/' \
-            --exclude 'public/uploads/' \
-            -e "ssh -i $HOME/.ssh/hoahub_hostinger -p $HOSTINGER_PORT" \
-            ./ "$SSH_TARGET:$RELEASE_DIR/"
-
-      - name: Activate release on Hostinger
-        shell: bash
-        run: |
-          set -Eeuo pipefail
-          SSH_TARGET="${HOSTINGER_USER}@${HOSTINGER_HOST}"
-          RELEASE_DIR="${HOSTINGER_APP_PATH}/releases/${GITHUB_SHA}"
-          ssh -i "$HOME/.ssh/hoahub_hostinger" -p "$HOSTINGER_PORT" "$SSH_TARGET" \
-            "APP_ROOT='$HOSTINGER_APP_PATH' RELEASE_ID='$GITHUB_SHA' bash '$RELEASE_DIR/scripts/deploy-hostinger.sh'"
+          echo "::error::Hostinger did not publish expected release $EXPECTED_SHA within 10 minutes."
+          exit 1
 
       - name: Verify public production health
         shell: bash
@@ -170,7 +140,9 @@ jobs:
           set -Eeuo pipefail
           HEALTH_URL="${HOSTINGER_APP_URL%/}/api/health"
           for attempt in {1..30}; do
-            if curl --fail --silent --show-error "$HEALTH_URL" > /dev/null; then
+            if curl --fail --silent --show-error --max-time 10 \
+              -H 'Cache-Control: no-cache' \
+              "${HEALTH_URL}?attempt=${attempt}" > /dev/null; then
               echo "Production health check passed: $HEALTH_URL"
               exit 0
             fi

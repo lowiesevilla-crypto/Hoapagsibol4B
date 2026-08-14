@@ -57,32 +57,48 @@ Homeowner-facing changes must be designed for installed PWA and mobile-browser u
 
 ## Current Release: Community Pulse Premium Login
 
-Community Pulse is the premium HOAHub login experience introduced through PR #103 and strengthened through subsequent mobile/PWA and web animation work.
+Community Pulse is the premium HOAHub login experience introduced through PR #103 and strengthened through subsequent mobile/PWA, web, verification, and post-login handoff work.
 
 ### Current Login Motion
 
 - Desktop/web uses staged branding, animated grid/pulse layers, aurora glows, light sweeps, feature-card sheen, focused-field illumination, button sheen, passkey micro-motion, and a clearly visible blue/green secure orbit around the stable tenant/HOA logo.
 - Mobile/PWA uses a clearly visible community mesh, moving blue/green signal wave, traveling nodes, animated logo orbit/halo, signal rail, animated card beam, ambient glows, and touch-safe form motion.
 - The HOAHub/tenant logo itself remains visually stable during idle login on both desktop/web and mobile/PWA; only the surrounding orbit/halo rotates so brand legibility is preserved.
-- Desktop/web and mobile/PWA use the same authentication-state language: idle secure orbit, `Verifying access…`, branded `Access verified`, then dashboard navigation.
+- Desktop/web and mobile/PWA use the same authentication-state language: idle secure orbit, `Verifying access…`, branded `Access verified`, then authenticated-shell handoff.
 - All non-essential motion must honor `prefers-reduced-motion`.
 
 ### Login Verification Transition
 
-The current development change adds an explicit authentication-state sequence without replacing the existing authentication logic:
+The current release adds an explicit authentication-state sequence without replacing the existing authentication logic:
 
 1. Idle: stable HOAHub/tenant logo with a rotating secure orbit and visible Community Pulse motion on desktop/web and mobile/PWA.
 2. Pending credential authentication: the primary button displays `Verifying access…` with a restrained spinner while the existing server action is pending.
 3. Successful credential authentication: the form transitions out and a dedicated success state shows the branded logo, one completing blue/green orbit, green confirmation badge, `Access verified`, and `Opening your HOAHub dashboard…`.
 4. Redirect: navigation occurs after an approximately 800 ms visible confirmation window using the existing safe redirect target (`returnTo` first, otherwise the authenticated `redirectTo`).
+5. Authenticated-shell handoff: the first shared HOA/tenant logo rendered after successful login receives one short blue/green orbit and confirmation pulse, then returns to a fully static logo.
 
 The success animation must never be shown before the existing server authentication action returns a valid redirect target.
+
+### Post-Login Brand Handoff
+
+A short-lived browser session marker (`hoahub.login.handoff.v1`) is written only after successful credential or passkey authentication.
+
+- The marker contains only a local timestamp; it contains no identity, tenant, session, credential, or authorization data.
+- `AssociationLogo` uses the shared `PostLoginBrandOrbit` wrapper so the handoff applies consistently across authenticated homeowner, admin, desktop/web, and mobile/PWA shells without duplicating layout logic.
+- Login, forgot-password, and reset-password routes explicitly do not consume or display the post-login handoff orbit.
+- The marker is accepted only for approximately 10 seconds after successful authentication.
+- The authenticated-logo handoff is visible for approximately 1.7 seconds, performs one rotation/pulse sequence, removes the marker, and does not continuously animate during normal navigation.
+- If browser session storage is blocked or unavailable, authentication and navigation must continue normally; the animation is optional presentation only.
+- `prefers-reduced-motion` removes the rotating/pulsing motion while preserving a minimal confirmation state.
 
 ### Community Pulse Files
 
 - `components/tenant-login-screen.tsx`
 - `components/login-form.tsx`
 - `components/passkey-login-button.tsx`
+- `components/association-logo.tsx`
+- `components/post-login-brand-orbit.tsx`
+- `components/post-login-brand-orbit.module.css`
 - `components/community-pulse-login.module.css`
 - `components/community-pulse-mobile-premium.module.css`
 - `components/community-pulse-web-premium.module.css`
@@ -92,6 +108,8 @@ The success animation must never be shown before the existing server authenticat
 ### Authentication Boundary
 
 Community Pulse is a presentation/interaction enhancement. It must not bypass or replace the existing authentication action, server-side session validation, tenant/account selection, safe redirect handling, homeowner account selection, or passkey verification.
+
+The post-login animation marker is never authoritative authentication state. Authenticated server/session checks remain the only authority for protected routes.
 
 The homeowner identifier remains compatible with either verified email or the 11-digit homeowner account number.
 
@@ -145,7 +163,7 @@ Production verification should compare that public marker with the expected `mai
 
 ## Community Pulse Rollback
 
-Community Pulse and the verified-login transition introduce no dedicated database migration.
+Community Pulse, the verified-login transition, and the post-login brand handoff introduce no dedicated database migration.
 
 If the login UX causes a production regression:
 
@@ -153,7 +171,7 @@ If the login UX causes a production regression:
 - allow Hostinger's managed GitHub deployment to publish the reverted commit;
 - confirm `/release.txt` matches the rollback commit;
 - confirm `/api/health` succeeds;
-- re-test credential login, passkey login, tenant/account selection, safe return navigation, and homeowner mobile/PWA login.
+- re-test credential login, passkey login, tenant/account selection, safe return navigation, authenticated logo handoff, and homeowner mobile/PWA login.
 
 Authentication/session data should not require rollback for these presentation-layer changes.
 

@@ -41,6 +41,18 @@ A missing `Agent.md` update is considered an incomplete change.
 6. State-changing operations must continue to use server-side business validation and audit controls.
 7. Security-sensitive behavior must remain covered by automated tests when implementation details change.
 
+## Stored Upload Security Policy
+
+HOAHub persisted document and attachment uploads use `lib/upload-policy.ts` as the canonical server-side allowlist and validation boundary.
+
+- The global approved stored-file extensions are exactly `.pdf`, `.jpg`, `.jpeg`, `.png`, `.docx`, `.xlsx`, and `.pptx`.
+- Stored upload surfaces must validate filename extension, normalized MIME type, configured size limit, and known PDF/JPEG/PNG/OOXML signatures before writing bytes to storage. Client `accept` attributes are usability hints only and never replace server validation.
+- WebP, legacy Office binaries (`.doc`, `.xls`, `.ppt`), CSV, TXT, executable/renamed payloads, and other unapproved persisted attachment formats must be rejected unless the global policy is intentionally changed with security review and regression coverage.
+- Image-only stored surfaces such as tenant logos, organization photos/signatures, GCash QR, event/announcement images, and payment proofs must remain within the applicable JPG/JPEG/PNG/PDF subset and must not silently re-enable WebP.
+- Shared chat uploads and complaint attachments must pass the authoritative global policy before any tenant-configurable MIME subset is applied. Tenant settings may narrow the global policy but must never expand it.
+- CSV onboarding/master-data/data-migration imports are parsed ingestion workflows rather than persisted document/attachment storage and are outside this stored-upload allowlist unless their binaries become retained artifacts.
+- `tests/unit/upload-policy.test.ts` protects the exact global allowlist, file signatures, rejection cases, and centralized-policy coverage across persisted upload surfaces.
+
 ## Homeowner Mobile and PWA Requirements
 
 Homeowner-facing changes must be designed for installed PWA and mobile-browser use, not desktop only.

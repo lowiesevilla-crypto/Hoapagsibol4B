@@ -42,6 +42,10 @@ test("production login motion verification requires dedicated production credent
   }
 });
 
+test("production login verifier uses the shared safe default-context isolation runtime", () => {
+  assert.match(productionSmoke, /import "\.\/safe-browser-context-cleanup\.mjs";/);
+});
+
 test("production login verifier uses the supported chrome-headless-shell launch contract", () => {
   assert.match(productionSmoke, /const headlessMode = "shell"/);
   assert.match(productionSmoke, /headless: headlessMode/);

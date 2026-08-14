@@ -7,6 +7,7 @@ import { loginAction } from "@/lib/actions/auth";
 import { AssociationLogo } from "@/components/association-logo";
 import { PasskeyLoginButton } from "@/components/passkey-login-button";
 import { PasswordInput } from "@/components/password-input";
+import { LOGIN_HANDOFF_STORAGE_KEY } from "@/components/post-login-brand-orbit";
 import { DEFAULT_TENANT_LOGO_URL } from "@/lib/tenant-logo";
 import transitionStyles from "./login-verified-transition.module.css";
 
@@ -32,6 +33,9 @@ export function LoginForm({
   useEffect(() => {
     if (!state.redirectTo) return;
     setVerified(true);
+    try {
+      window.sessionStorage.setItem(LOGIN_HANDOFF_STORAGE_KEY, String(Date.now()));
+    } catch { /* Storage restrictions must never block authenticated navigation. */ }
     const redirectTimer = window.setTimeout(() => {
       window.location.replace(returnTo || state.redirectTo!);
     }, VERIFIED_TRANSITION_MS);

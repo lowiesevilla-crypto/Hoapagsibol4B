@@ -42,6 +42,16 @@ test("critical browser suite preloads bounded context cleanup", () => {
   assert.doesNotMatch(cleanupSource, /Target\.disposeBrowserContext|originalContextClose/);
 });
 
+test("controlled Chromium preserves logical context isolation with separate default-context browser processes", () => {
+  assert.match(cleanupSource, /const isolatedBrowsers = new Set\(\)/);
+  assert.match(cleanupSource, /const isolatedBrowser = await originalLaunch\(\.\.\.launchArguments\)/);
+  assert.match(cleanupSource, /const context = isolatedBrowser\.defaultBrowserContext\(\)/);
+  assert.match(cleanupSource, /isolatedBrowsers\.add\(isolatedBrowser\)/);
+  assert.match(cleanupSource, /isolatedBrowsers\.delete\(isolatedBrowser\)/);
+  assert.match(cleanupSource, /remainingBrowsers\.map/);
+  assert.doesNotMatch(cleanupSource, /originalCreateBrowserContext/);
+});
+
 test("critical browser startup retry is bounded and does not retry business assertion failures", () => {
   assert.match(criticalPathRunnerSource, /const maxAttempts = 3/);
   assert.match(criticalPathRunnerSource, /const retryMarker = "Target\.setDiscoverTargets"/);

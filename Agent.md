@@ -51,7 +51,8 @@ HOAHub persisted document and attachment uploads use `lib/upload-policy.ts` as t
 - Image-only stored surfaces such as tenant logos, organization photos/signatures, GCash QR, event/announcement images, and payment proofs must remain within the applicable JPG/JPEG/PNG/PDF subset and must not silently re-enable WebP.
 - Shared chat uploads and complaint attachments must pass the authoritative global policy before any tenant-configurable MIME subset is applied. Tenant settings may narrow the global policy but must never expand it.
 - CSV onboarding/master-data/data-migration imports are parsed ingestion workflows rather than persisted document/attachment storage and are outside this stored-upload allowlist unless their binaries become retained artifacts.
-- `tests/unit/upload-policy.test.ts` protects the exact global allowlist, file signatures, rejection cases, and centralized-policy coverage across persisted upload surfaces.
+- Browser/UAT fixtures that exercise persisted upload surfaces must themselves use an approved extension, MIME type, and matching signature; do not use TXT, CSV, WebP, legacy Office, or other banned convenience fixtures merely to simplify E2E setup.
+- `tests/unit/upload-policy.test.ts` protects the exact global allowlist, file signatures, rejection cases, centralized-policy coverage, and approved persisted-upload browser fixtures.
 
 ## Homeowner Mobile and PWA Requirements
 

@@ -140,6 +140,15 @@ Before production deployment, the applicable CI pipeline must pass. The reposito
 
 Do not merge a known failing release merely to trigger deployment. Fix the defect or update a brittle test only when the changed test continues to assert the intended security/business invariant.
 
+### CI Browser Runtime
+
+- GitHub Actions browser verification must prepare the repository-controlled `@sparticuz/chromium` executable and export its path as `PUPPETEER_EXECUTABLE_PATH` before the critical browser suite begins.
+- Do not use the GitHub-hosted runner's mutable system Chrome as the primary HOAHub E2E executable when the repository-controlled Chromium runtime is available; runner image/browser revisions have repeatedly closed during `Target.setDiscoverTargets` before assertions begin.
+- `tests/e2e/critical-path.mjs` already gives `PUPPETEER_EXECUTABLE_PATH` first priority, so the workflow-level export selects the controlled runtime without weakening business assertions.
+- Keep the bounded startup retry limited to the exact transient `Target.setDiscoverTargets` + `Target closed` condition. Authentication, authorization, tenant-isolation, payment, document, and other business assertion failures must still fail immediately.
+- Production authenticated login-motion verification also resolves the packaged `@sparticuz/chromium` runtime before system browser candidates.
+- `tests/unit/browser-cleanup-policy.test.ts` protects controlled-browser ordering, bounded retry behavior, and cleanup invariants.
+
 ## Hostinger Production Deployment Model
 
 The live HOAHub application is a Hostinger managed Node.js web application connected to the GitHub `main` branch. Hostinger's managed GitHub deployment is the normal production activation path.

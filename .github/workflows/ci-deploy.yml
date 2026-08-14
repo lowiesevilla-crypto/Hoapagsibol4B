@@ -65,6 +65,17 @@ jobs:
         run: pnpm test:critical
       - run: pnpm typecheck
       - run: pnpm build
+      - name: Prepare controlled Chromium for browser suites
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          CHROMIUM_PATH="$(node --input-type=module -e 'import chromium from "@sparticuz/chromium"; process.stdout.write(await chromium.executablePath())')"
+          if [ ! -x "$CHROMIUM_PATH" ]; then
+            echo "::error::Packaged Chromium executable was not prepared correctly."
+            exit 1
+          fi
+          echo "PUPPETEER_EXECUTABLE_PATH=$CHROMIUM_PATH" >> "$GITHUB_ENV"
+          echo "Using repository-controlled Chromium for browser verification."
       - name: Production smoke and critical browser suite
         run: |
           pnpm e2e:prepare
@@ -95,6 +106,10 @@ jobs:
     environment: production
     env:
       HOSTINGER_APP_URL: ${{ secrets.HOSTINGER_APP_URL }}
+      PROD_E2E_LOGIN: ${{ secrets.E2E_PROD_LOGIN }}
+      PROD_E2E_PASSWORD: ${{ secrets.E2E_PROD_PASSWORD }}
+      PROD_E2E_TENANT_SLUG: ${{ secrets.E2E_PROD_TENANT_SLUG }}
+      PROD_E2E_EXPECTED_PATH_PREFIX: ${{ secrets.E2E_PROD_EXPECTED_PATH_PREFIX }}
     steps:
       - name: Validate managed deployment configuration
         shell: bash
@@ -150,3 +165,34 @@ jobs:
           done
           echo "::error::Production health check failed: $HEALTH_URL"
           exit 1
+
+      - name: Report production login motion not configured
+        if: env.PROD_E2E_LOGIN == '' || env.PROD_E2E_PASSWORD == ''
+        shell: bash
+        run: |
+          echo "::warning::Production login motion verification is not configured. Add E2E_PROD_LOGIN and E2E_PROD_PASSWORD as production Environment secrets for a dedicated homeowner smoke-test account."
+
+      - name: Checkout production login verifier
+        if: env.PROD_E2E_LOGIN != '' && env.PROD_E2E_PASSWORD != ''
+        uses: actions/checkout@v4
+
+      - name: Set up pnpm for production login verifier
+        if: env.PROD_E2E_LOGIN != '' && env.PROD_E2E_PASSWORD != ''
+        uses: pnpm/action-setup@v4
+        with:
+          version: 11.9.0
+
+      - name: Set up Node for production login verifier
+        if: env.PROD_E2E_LOGIN != '' && env.PROD_E2E_PASSWORD != ''
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install production login verifier dependencies
+        if: env.PROD_E2E_LOGIN != '' && env.PROD_E2E_PASSWORD != ''
+        run: pnpm install --frozen-lockfile
+
+      - name: Verify production login motion
+        if: env.PROD_E2E_LOGIN != '' && env.PROD_E2E_PASSWORD != ''
+        run: node tests/e2e/production-login-motion.mjs

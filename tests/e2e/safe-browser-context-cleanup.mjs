@@ -42,25 +42,47 @@ async function closeContextPages(context) {
   );
 }
 
+async function closeBrowserSafely(browser, closeBrowser, label) {
+  const closed = await settleWithin(closeBrowser(), label, browserCloseTimeout);
+  if (!closed) browser.process()?.kill("SIGKILL");
+}
+
 const originalLaunch = puppeteer.launch.bind(puppeteer);
 
 Object.defineProperty(puppeteer, "launch", {
   configurable: true,
   value: async (...launchArguments) => {
     const browser = await originalLaunch(...launchArguments);
-    const originalCreateBrowserContext = browser.createBrowserContext.bind(browser);
     const originalBrowserClose = browser.close.bind(browser);
+    const isolatedBrowsers = new Set();
 
     Object.defineProperty(browser, "createBrowserContext", {
       configurable: true,
       value: async (...contextArguments) => {
-        const context = await originalCreateBrowserContext(...contextArguments);
+        if (contextArguments.length > 0) {
+          throw new Error(
+            "Controlled Chromium isolation does not support BrowserContext options; use a dedicated browser launch option instead.",
+          );
+        }
+
+        const isolatedBrowser = await originalLaunch(...launchArguments);
+        const isolatedBrowserClose = isolatedBrowser.close.bind(isolatedBrowser);
+        const context = isolatedBrowser.defaultBrowserContext();
+        isolatedBrowsers.add(isolatedBrowser);
+
         Object.defineProperty(context, "close", {
           configurable: true,
           value: async () => {
             await closeContextPages(context);
+            isolatedBrowsers.delete(isolatedBrowser);
+            await closeBrowserSafely(
+              isolatedBrowser,
+              isolatedBrowserClose,
+              "isolated browser close",
+            );
           },
         });
+
         return context;
       },
     });
@@ -68,12 +90,18 @@ Object.defineProperty(puppeteer, "launch", {
     Object.defineProperty(browser, "close", {
       configurable: true,
       value: async () => {
-        const closed = await settleWithin(
-          originalBrowserClose(),
-          "browser close",
-          browserCloseTimeout,
+        const remainingBrowsers = [...isolatedBrowsers];
+        isolatedBrowsers.clear();
+        await Promise.allSettled(
+          remainingBrowsers.map((isolatedBrowser, index) =>
+            closeBrowserSafely(
+              isolatedBrowser,
+              isolatedBrowser.close.bind(isolatedBrowser),
+              `orphan isolated browser ${index + 1} close`,
+            ),
+          ),
         );
-        if (!closed) browser.process()?.kill("SIGKILL");
+        await closeBrowserSafely(browser, originalBrowserClose, "browser close");
       },
     });
 

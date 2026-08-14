@@ -9,6 +9,10 @@ const cleanupSource = readFileSync(
   "tests/e2e/safe-browser-context-cleanup.mjs",
   "utf8",
 );
+const criticalPathRunnerSource = readFileSync(
+  "tests/e2e/run-critical-path.mjs",
+  "utf8",
+);
 const homeownerDashboardSource = readFileSync(
   "app/portal/dashboard/page.tsx",
   "utf8",
@@ -17,12 +21,30 @@ const homeownerDashboardSource = readFileSync(
 test("critical browser suite preloads bounded context cleanup", () => {
   assert.match(
     packageJson.scripts["test:e2e"] || "",
-    /^node --import \.\/tests\/e2e\/safe-browser-context-cleanup\.mjs tests\/e2e\/critical-path\.mjs/,
+    /^node tests\/e2e\/run-critical-path\.mjs/,
+  );
+  assert.match(
+    criticalPathRunnerSource,
+    /"--import", "\.\/tests\/e2e\/safe-browser-context-cleanup\.mjs", "tests\/e2e\/critical-path\.mjs"/,
   );
   assert.match(cleanupSource, /context\.pages\(\)/);
   assert.match(cleanupSource, /page\.close\(\{ runBeforeUnload: false \}\)/);
   assert.match(cleanupSource, /browser\.process\(\)\?\.kill\("SIGKILL"\)/);
   assert.doesNotMatch(cleanupSource, /Target\.disposeBrowserContext|originalContextClose/);
+});
+
+test("critical browser startup retry is bounded and does not retry business assertion failures", () => {
+  assert.match(criticalPathRunnerSource, /const maxAttempts = 3/);
+  assert.match(criticalPathRunnerSource, /const retryMarker = "Target\.setDiscoverTargets"/);
+  assert.match(criticalPathRunnerSource, /const targetClosedMarker = "Target closed"/);
+  assert.match(
+    criticalPathRunnerSource,
+    /result\.output\.includes\(retryMarker\) && result\.output\.includes\(targetClosedMarker\)/,
+  );
+  assert.match(
+    criticalPathRunnerSource,
+    /if \(!transientStartupClosure \|\| attempt === maxAttempts\)/,
+  );
 });
 
 test("browser cleanup limits do not change business assertion timeouts", () => {

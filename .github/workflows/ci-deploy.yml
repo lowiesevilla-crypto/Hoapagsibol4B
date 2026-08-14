@@ -65,6 +65,17 @@ jobs:
         run: pnpm test:critical
       - run: pnpm typecheck
       - run: pnpm build
+      - name: Prepare controlled Chromium for browser suites
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          CHROMIUM_PATH="$(node --input-type=module -e 'import chromium from "@sparticuz/chromium"; process.stdout.write(await chromium.executablePath())')"
+          if [ ! -x "$CHROMIUM_PATH" ]; then
+            echo "::error::Packaged Chromium executable was not prepared correctly."
+            exit 1
+          fi
+          echo "PUPPETEER_EXECUTABLE_PATH=$CHROMIUM_PATH" >> "$GITHUB_ENV"
+          echo "Using repository-controlled Chromium for browser verification."
       - name: Production smoke and critical browser suite
         run: |
           pnpm e2e:prepare

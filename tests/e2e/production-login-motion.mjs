@@ -1,3 +1,4 @@
+import "./safe-browser-context-cleanup.mjs";
 import assert from "node:assert/strict";
 import { access } from "node:fs/promises";
 import chromium from "@sparticuz/chromium";

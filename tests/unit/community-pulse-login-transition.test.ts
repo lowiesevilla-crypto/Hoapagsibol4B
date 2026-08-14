@@ -4,6 +4,7 @@ import test from "node:test";
 
 const loginForm = readFileSync("components/login-form.tsx", "utf8");
 const transitionCss = readFileSync("components/login-verified-transition.module.css", "utf8");
+const webPremiumCss = readFileSync("components/community-pulse-web-premium.module.css", "utf8");
 const tenantLogin = readFileSync("components/tenant-login-screen.tsx", "utf8");
 
 test("successful credential login shows a visible verified state before redirect", () => {
@@ -28,6 +29,15 @@ test("verified transition uses tenant branding without changing authentication i
   assert.match(loginForm, /loginAction/);
   assert.match(loginForm, /name="identifier"/);
   assert.match(loginForm, /name="password"/);
+});
+
+test("web login uses the same stable-logo secure orbit language as mobile", () => {
+  assert.match(tenantLogin, /community-pulse-web-premium\.module\.css/);
+  assert.match(tenantLogin, /webStyles\.webLogoWrap/);
+  assert.match(tenantLogin, /webStyles\.webSignal/);
+  assert.match(webPremiumCss, /@keyframes webSecureOrbit/);
+  assert.match(webPremiumCss, /@keyframes webHaloPulse/);
+  assert.match(webPremiumCss, /@media \(prefers-reduced-motion: reduce\)/);
 });
 
 test("premium success motion remains accessibility-aware", () => {

@@ -6,11 +6,14 @@ import styles from "./post-login-brand-orbit.module.css";
 export const LOGIN_HANDOFF_STORAGE_KEY = "hoahub.login.handoff.v1";
 const LOGIN_HANDOFF_MAX_AGE_MS = 10_000;
 const LOGIN_HANDOFF_VISIBLE_MS = 1_700;
+const AUTH_ENTRY_ROUTE = /\/(?:login|forgot-password|reset-password)(?:\/|$)/;
 
 export function PostLoginBrandOrbit({ children, className = "" }: { children: ReactNode; className?: string }) {
   const [active, setActive] = useState(false);
 
   useEffect(() => {
+    if (AUTH_ENTRY_ROUTE.test(window.location.pathname)) return;
+
     let timer: number | undefined;
     try {
       const raw = window.sessionStorage.getItem(LOGIN_HANDOFF_STORAGE_KEY);

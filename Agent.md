@@ -145,13 +145,16 @@ Do not merge a known failing release merely to trigger deployment. Fix the defec
 - GitHub Actions browser verification must prepare the repository-controlled `@sparticuz/chromium` executable and export its path as `PUPPETEER_EXECUTABLE_PATH` before the critical browser suite begins.
 - The currently verified browser protocol pair is exactly `@sparticuz/chromium` `149.0.0` with `puppeteer-core` `25.1.0`. Keep both dependencies pinned without semver ranges; Chromium 149 must not be driven by a Puppeteer release mapped to a later Chrome major.
 - `@sparticuz/chromium` provides a `chrome-headless-shell` binary, not a normal headed/new-headless Chrome executable. HOAHub Puppeteer launch sites using this runtime must use `headless: "shell"` and merge `chromium.args` through `await puppeteer.defaultArgs({ args: chromium.args, headless: "shell" })` rather than using `headless: true`.
+- Do not create non-default Chromium `BrowserContext` instances with this controlled runtime. That path can close the target at `Target.createTarget` before an HOAHub assertion begins.
+- `tests/e2e/safe-browser-context-cleanup.mjs` preserves logical context isolation without non-default contexts: every call to `browser.createBrowserContext()` launches a separate Chromium process and returns that process's `defaultBrowserContext()`. This gives admin, homeowner, tenant-isolation, and production smoke flows independent browser storage and session state.
+- Closing a logical context must close its pages and its dedicated Chromium process with bounded cleanup. Closing the coordinator browser must also close any orphan isolated browser processes. Do not replace this with one shared default context unless cookie, localStorage, sessionStorage, IndexedDB, cache, and authentication isolation are explicitly proven.
 - Do not use the GitHub-hosted runner's mutable system Chrome as the primary HOAHub E2E executable when the repository-controlled Chromium runtime is available; runner image/browser revisions have repeatedly closed before assertions begin.
 - `tests/e2e/critical-path.mjs` gives `PUPPETEER_EXECUTABLE_PATH` first priority, so the workflow-level export selects the controlled runtime without weakening business assertions.
 - Keep the bounded startup retry limited to the exact transient `Target.setDiscoverTargets` + `Target closed` condition. Authentication, authorization, tenant-isolation, payment, document, and other business assertion failures must still fail immediately. A deterministic launch-contract error such as `Target.createTarget` must be fixed rather than hidden by retry expansion.
-- Production authenticated login-motion verification also uses the supported `chrome-headless-shell` launch contract before exercising the live site.
+- Production authenticated login-motion verification imports the same safe browser-isolation runtime and uses the supported `chrome-headless-shell` launch contract before exercising the live site.
 - When Puppeteer or `@sparticuz/chromium` versions are changed, verify their Chromium-major compatibility against Puppeteer's supported-browser mapping; do not upgrade either side independently without that check.
-- `tests/unit/browser-cleanup-policy.test.ts` protects controlled-browser ordering, the exact compatible dependency pair, shell launch mode, bounded retry behavior, and cleanup invariants.
-- `tests/unit/production-login-motion.test.ts` protects the same shell launch contract for the production verifier.
+- `tests/unit/browser-cleanup-policy.test.ts` protects controlled-browser ordering, the exact compatible dependency pair, default-context process isolation, shell launch mode, bounded retry behavior, and cleanup invariants.
+- `tests/unit/production-login-motion.test.ts` protects the shared isolation runtime and shell launch contract for the production verifier.
 
 ## Hostinger Production Deployment Model
 
@@ -178,10 +181,10 @@ After the expected Hostinger release marker is live and `/api/health` passes, Gi
 - Optional `E2E_PROD_EXPECTED_PATH_PREFIX` defaults to `/portal/` and must remain a same-origin absolute path prefix.
 - Use a dedicated homeowner account with no sensitive production data and no administrative, finance, document-approval, or tenant-management authority.
 - The smoke test performs authentication/session creation only. It must not navigate to payment, billing, document submission, complaint submission, administration, or other business-operation routes.
-- The verification runs desktop/web and mobile/PWA-sized browser contexts and asserts the visible secure orbit, `Verifying access…`, `Access verified`, dashboard navigation, and the one-shot authenticated-logo orbit/pulse.
+- The verification runs isolated desktop/web and mobile/PWA-sized browser flows and asserts the visible secure orbit, `Verifying access…`, `Access verified`, dashboard navigation, and the one-shot authenticated-logo orbit/pulse.
 - The script intentionally delays the authentication POST briefly so the pending verification state can be observed deterministically; it does not alter the server action or authentication result.
 - The production workflow runs this smoke only after release and public-health verification. If the dedicated credentials are not configured, the workflow emits an explicit warning and skips the authenticated production smoke rather than using CI fixture credentials against production.
-- `tests/unit/production-login-motion.test.ts` protects ordering, credential requirements, viewport coverage, required transition assertions, the supported headless-shell browser launch, and the no-business-route constraint.
+- `tests/unit/production-login-motion.test.ts` protects ordering, credential requirements, viewport coverage, required transition assertions, shared safe browser isolation, the supported headless-shell browser launch, and the no-business-route constraint.
 
 ### Hostinger Runtime and Filesystem
 

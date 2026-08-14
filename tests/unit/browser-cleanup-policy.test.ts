@@ -27,15 +27,25 @@ const homeownerDashboardSource = readFileSync(
   "utf8",
 );
 
-test("critical browser suite preloads bounded context cleanup", () => {
-  assert.match(
-    packageJson.scripts["test:e2e"] || "",
-    /^node tests\/e2e\/run-critical-path\.mjs/,
-  );
+test("every browser E2E entry point preloads the safe controlled-Chromium runtime", () => {
+  const command = packageJson.scripts["test:e2e"] || "";
+  assert.match(command, /^node tests\/e2e\/run-critical-path\.mjs/);
   assert.match(
     criticalPathRunnerSource,
     /"--import", "\.\/tests\/e2e\/safe-browser-context-cleanup\.mjs", "tests\/e2e\/critical-path\.mjs"/,
   );
+
+  for (const script of [
+    "onboarding-workflow.mjs",
+    "document-workflow.mjs",
+    "document-management.mjs",
+    "rbac-stale-session.mjs",
+    "ai-assistant.mjs",
+  ]) {
+    const expected = `node --import ./tests/e2e/safe-browser-context-cleanup.mjs tests/e2e/${script}`;
+    assert.ok(command.includes(expected), `${script} must preload the safe browser runtime`);
+  }
+
   assert.match(cleanupSource, /context\.pages\(\)/);
   assert.match(cleanupSource, /page\.close\(\{ runBeforeUnload: false \}\)/);
   assert.match(cleanupSource, /browser\.process\(\)\?\.kill\("SIGKILL"\)/);

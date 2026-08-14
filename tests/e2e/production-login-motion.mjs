@@ -174,10 +174,11 @@ async function runLoginMotionFlow(browser, { label, viewport, logoSelector }) {
 }
 
 const executablePath = await resolveBrowserExecutable();
+const headlessMode = "shell";
 const browser = await puppeteer.launch({
   executablePath,
-  headless: true,
-  args: [...new Set([...(chromium.args || []), "--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage"])],
+  headless: headlessMode,
+  args: await puppeteer.defaultArgs({ args: chromium.args, headless: headlessMode }),
 });
 
 try {

@@ -4,6 +4,7 @@ import { AssociationLogo } from "@/components/association-logo";
 import { DEFAULT_TENANT_LOGO_URL } from "@/lib/tenant-logo";
 import styles from "./community-pulse-login.module.css";
 import premiumStyles from "./community-pulse-mobile-premium.module.css";
+import webStyles from "./community-pulse-web-premium.module.css";
 
 type LoginTenant = { name: string; slug: string; logoUrl: string | null; address?: string | null; blocked?: boolean; advisory?: string };
 
@@ -23,7 +24,10 @@ export function TenantLoginScreen({ tenant, reset, loggedOut, returnTo, universa
       <div className={styles.heroSweep} aria-hidden="true" />
 
       <div className={`${styles.brandEntrance} relative flex items-center gap-5`}>
-        <AssociationLogo className="size-24" src={logo} alt={`${tenant.name} logo`} />
+        <div className={webStyles.webLogoWrap}>
+          <AssociationLogo className={`${webStyles.webLogo} size-24`} src={logo} alt={`${tenant.name} logo`} />
+          <span className={webStyles.webSignal} aria-hidden="true" />
+        </div>
         <div>
           <p className="text-xl font-black leading-tight text-white">{tenant.name}</p>
           <p className="mt-1 text-sm font-bold uppercase tracking-[.18em] text-[#dff8d2]">Homeowners Association</p>

@@ -20,6 +20,13 @@ test("production login motion verification runs only after release and health ch
   assert.ok(healthIndex < loginIndex, "production login smoke must run only after public health passes");
 });
 
+test("workflow maps the configured production Environment secret names without logging values", () => {
+  assert.match(workflow, /PROD_E2E_LOGIN:\s*\$\{\{ secrets\.E2E_PROD_LOGIN \}\}/);
+  assert.match(workflow, /PROD_E2E_PASSWORD:\s*\$\{\{ secrets\.E2E_PROD_PASSWORD \}\}/);
+  assert.equal(workflow.includes("echo \"$PROD_E2E_LOGIN\""), false);
+  assert.equal(workflow.includes("echo \"$PROD_E2E_PASSWORD\""), false);
+});
+
 test("production login motion verification requires dedicated production credentials and checks both viewports", () => {
   for (const required of [
     "PROD_E2E_LOGIN",

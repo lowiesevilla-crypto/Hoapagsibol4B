@@ -7,6 +7,19 @@ BACKUP_ROOT="${BACKUP_ROOT:-$APP_ROOT/backups}"
 STAMP="$(date -u +%Y%m%dT%H%M%SZ)"
 RELEASE_DIR="${RELEASE_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
 
+# Non-interactive Hostinger SSH sessions do not automatically expose the
+# configured Node.js runtime, so initialize the same Node 22 environment used by
+# the application before parsing DATABASE_URL.
+# shellcheck disable=SC1091
+source "$RELEASE_DIR/scripts/hostinger-runtime.sh"
+
+for required in mysqldump gzip; do
+  if ! command -v "$required" >/dev/null 2>&1; then
+    echo "Required production backup command is unavailable: $required" >&2
+    exit 1
+  fi
+done
+
 test -f "$ENV_FILE" || { echo "Missing production environment file: $ENV_FILE" >&2; exit 1; }
 set -a
 # shellcheck disable=SC1090

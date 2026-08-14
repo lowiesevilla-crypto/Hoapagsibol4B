@@ -57,20 +57,21 @@ Homeowner-facing changes must be designed for installed PWA and mobile-browser u
 
 ## Current Release: Community Pulse Premium Login
 
-Community Pulse is the premium HOAHub login experience introduced through PR #103 and strengthened through subsequent mobile/PWA animation work.
+Community Pulse is the premium HOAHub login experience introduced through PR #103 and strengthened through subsequent mobile/PWA and web animation work.
 
 ### Current Login Motion
 
-- Desktop uses staged branding, animated grid/pulse layers, aurora glows, light sweeps, feature-card sheen, focused-field illumination, button sheen, and passkey micro-motion.
+- Desktop/web uses staged branding, animated grid/pulse layers, aurora glows, light sweeps, feature-card sheen, focused-field illumination, button sheen, passkey micro-motion, and a clearly visible blue/green secure orbit around the stable tenant/HOA logo.
 - Mobile/PWA uses a clearly visible community mesh, moving blue/green signal wave, traveling nodes, animated logo orbit/halo, signal rail, animated card beam, ambient glows, and touch-safe form motion.
-- The HOAHub/tenant logo itself remains visually stable during idle login; the surrounding orbit/halo rotates so brand legibility is preserved.
+- The HOAHub/tenant logo itself remains visually stable during idle login on both desktop/web and mobile/PWA; only the surrounding orbit/halo rotates so brand legibility is preserved.
+- Desktop/web and mobile/PWA use the same authentication-state language: idle secure orbit, `Verifying access…`, branded `Access verified`, then dashboard navigation.
 - All non-essential motion must honor `prefers-reduced-motion`.
 
 ### Login Verification Transition
 
 The current development change adds an explicit authentication-state sequence without replacing the existing authentication logic:
 
-1. Idle: stable HOAHub/tenant logo with a rotating secure orbit and visible Community Pulse motion.
+1. Idle: stable HOAHub/tenant logo with a rotating secure orbit and visible Community Pulse motion on desktop/web and mobile/PWA.
 2. Pending credential authentication: the primary button displays `Verifying access…` with a restrained spinner while the existing server action is pending.
 3. Successful credential authentication: the form transitions out and a dedicated success state shows the branded logo, one completing blue/green orbit, green confirmation badge, `Access verified`, and `Opening your HOAHub dashboard…`.
 4. Redirect: navigation occurs after an approximately 800 ms visible confirmation window using the existing safe redirect target (`returnTo` first, otherwise the authenticated `redirectTo`).
@@ -84,6 +85,7 @@ The success animation must never be shown before the existing server authenticat
 - `components/passkey-login-button.tsx`
 - `components/community-pulse-login.module.css`
 - `components/community-pulse-mobile-premium.module.css`
+- `components/community-pulse-web-premium.module.css`
 - `components/login-verified-transition.module.css`
 - `tests/unit/community-pulse-login-transition.test.ts`
 

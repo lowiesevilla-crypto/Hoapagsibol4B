@@ -6,6 +6,7 @@ import { requireUser } from "@/lib/auth";
 import { writeAuditLog } from "@/lib/audit";
 import { getChatSettings } from "@/lib/system-settings";
 import { tenantUploadDirectory } from "@/lib/storage";
+import { validateHoaHubUpload } from "@/lib/upload-policy";
 
 export const runtime = "nodejs";
 
@@ -24,21 +25,24 @@ export async function POST(request: Request) {
   await mkdir(uploadDir, { recursive: true });
 
   for (const file of files) {
-    if (!settings.allowedMimeTypes.includes(file.type)) {
-      return NextResponse.json({ error: `${file.name} is not an allowed file type.` }, { status: 400 });
+    let bytes: Uint8Array;
+    let validation: ReturnType<typeof validateHoaHubUpload>;
+    try {
+      bytes = new Uint8Array(await file.arrayBuffer());
+      validation = validateHoaHubUpload({ fileName: file.name, contentType: file.type, size: file.size, data: bytes, maxBytes });
+    } catch (error) {
+      return NextResponse.json({ error: error instanceof Error ? `${file.name}: ${error.message}` : `${file.name} is not an allowed file type.` }, { status: 400 });
     }
-    if (file.size > maxBytes) {
-      return NextResponse.json({ error: `${file.name} exceeds the ${settings.maxAttachmentMb}MB limit.` }, { status: 400 });
+    if (!settings.allowedMimeTypes.includes(validation.normalizedContentType)) {
+      return NextResponse.json({ error: `${file.name} is disabled by the tenant chat attachment policy.` }, { status: 400 });
     }
-    const ext = extensionFor(file.name, file.type);
     const safeName = sanitizeFileName(file.name);
-    const storedName = `${randomUUID()}${ext}`;
-    const bytes = Buffer.from(await file.arrayBuffer());
-    await writeFile(path.join(uploadDir, storedName), bytes);
+    const storedName = `${randomUUID()}${validation.extension}`;
+    await writeFile(path.join(uploadDir, storedName), Buffer.from(bytes));
     uploaded.push({
       url: `/uploads/chat/${user.tenant.slug}/${folder}/${storedName}`,
       fileName: safeName,
-      contentType: file.type,
+      contentType: validation.normalizedContentType,
       size: file.size,
     });
   }
@@ -50,19 +54,4 @@ export async function POST(request: Request) {
 function sanitizeFileName(name: string) {
   const cleaned = name.replace(/[^\w.\- ()]/g, "_").slice(0, 140);
   return cleaned || "attachment";
-}
-
-function extensionFor(name: string, type: string) {
-  const ext = path.extname(name).toLowerCase();
-  if (ext) return ext;
-  return {
-    "image/jpeg": ".jpg",
-    "image/png": ".png",
-    "image/webp": ".webp",
-    "application/pdf": ".pdf",
-    "application/msword": ".doc",
-    "application/vnd.openxmlformats-officedocument.wordprocessingml.document": ".docx",
-    "application/vnd.ms-excel": ".xls",
-    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": ".xlsx",
-  }[type] ?? ".bin";
 }

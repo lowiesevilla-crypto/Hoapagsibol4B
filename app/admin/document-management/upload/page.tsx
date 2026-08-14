@@ -82,7 +82,7 @@ export default async function UploadDocumentPage({
           <label className="mt-4 block rounded-2xl border border-dashed border-pine-200 bg-pine-50/40 p-5">
             <span className="label">Choose file</span>
             <input className="mt-2 block w-full text-sm" name="file" type="file" accept={repositoryAllowedFileExtensions.join(",")} required />
-            <span className="mt-2 block text-xs leading-5 text-slate-500">Maximum file size for this plan: {entitlement.maxFileSizeMb} MB. Supported: PDF, Word, Excel, PowerPoint, JPG, PNG, WEBP, TXT and CSV.</span>
+            <span className="mt-2 block text-xs leading-5 text-slate-500">Maximum file size for this plan: {entitlement.maxFileSizeMb} MB. Supported: PDF, JPG, JPEG, PNG, DOCX, XLSX, and PPTX only.</span>
           </label>
         </div>
 

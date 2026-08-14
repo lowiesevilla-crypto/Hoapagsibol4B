@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { Role } from "@prisma/client";
 import { requireUser } from "@/lib/auth";
+import { validateHoaHubUpload } from "@/lib/upload-policy";
 import {
   addComplaintMessage,
   assignComplaint,
@@ -17,9 +18,26 @@ import {
   type ComplaintTrackState,
 } from "@/lib/services/complaints";
 
+const complaintAttachmentExtensions = [".pdf", ".jpg", ".jpeg", ".png"] as const;
+
+async function validateComplaintAttachment(formData: FormData) {
+  const value = formData.get("attachment");
+  if (!(value instanceof File) || value.size === 0) return;
+  const bytes = new Uint8Array(await value.arrayBuffer());
+  validateHoaHubUpload({
+    fileName: value.name,
+    contentType: value.type,
+    size: value.size,
+    data: bytes,
+    maxBytes: 25 * 1024 * 1024,
+    allowedExtensions: complaintAttachmentExtensions,
+  });
+}
+
 export async function submitPortalComplaintAction(_previousState: ComplaintIntakeState, formData: FormData): Promise<ComplaintIntakeState> {
   try {
     const user = await requireComplaintHomeowner();
+    await validateComplaintAttachment(formData);
     const result = await submitComplaint({ user, formData, tenantSlug: user.tenant.slug });
     revalidatePath("/portal/complaints");
     if (result.trackingCode) return result;
@@ -31,6 +49,7 @@ export async function submitPortalComplaintAction(_previousState: ComplaintIntak
 
 export async function submitAdminComplaintAction(formData: FormData) {
   const user = await requireComplaintAdmin();
+  await validateComplaintAttachment(formData);
   const homeownerUserId = String(formData.get("homeownerUserId") || "");
   const effectiveUser = homeownerUserId
     ? await requireUser(Role.ADMIN).then(() => user)

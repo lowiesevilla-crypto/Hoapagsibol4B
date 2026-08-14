@@ -2,17 +2,12 @@ import { randomUUID } from "node:crypto";
 import { mkdir, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { tenantUploadDirectory } from "@/lib/storage";
+import { HOAHUB_ALLOWED_IMAGE_EXTENSIONS, validateHoaHubUpload } from "@/lib/upload-policy";
 
 export const DEFAULT_TENANT_LOGO_URL = "/Hoahub-logo.png";
 export const tenantLogoFileField = "TENANT_LOGO_FILE";
 export const tenantLogoRemoveField = "TENANT_LOGO_REMOVE";
 export const maxTenantLogoBytes = 3 * 1024 * 1024;
-
-const allowedTenantLogoTypes = new Map([
-  ["image/jpeg", ".jpg"],
-  ["image/png", ".png"],
-  ["image/webp", ".webp"],
-]);
 
 export async function resolveTenantLogo(formData: FormData, tenantSlug: string, currentUrl?: string | null) {
   const file = formData.get(tenantLogoFileField);
@@ -26,15 +21,21 @@ export async function resolveTenantLogo(formData: FormData, tenantSlug: string, 
     };
   }
 
-  const extension = allowedTenantLogoTypes.get(file.type);
-  if (!extension) throw new Error("Tenant logo must be a JPG, JPEG, PNG, or WEBP file.");
-  if (file.size > maxTenantLogoBytes) throw new Error("Tenant logo must not exceed 3MB.");
+  const bytes = new Uint8Array(await file.arrayBuffer());
+  const validation = validateHoaHubUpload({
+    fileName: file.name,
+    contentType: file.type,
+    size: file.size,
+    data: bytes,
+    maxBytes: maxTenantLogoBytes,
+    allowedExtensions: HOAHUB_ALLOWED_IMAGE_EXTENSIONS,
+  });
 
   const storageDirectory = tenantUploadDirectory(tenantSlug, "branding", "logo");
-  const storedName = `${randomUUID()}${extension}`;
+  const storedName = `${randomUUID()}${validation.extension}`;
   try {
     await mkdir(storageDirectory, { recursive: true });
-    await writeFile(path.join(storageDirectory, storedName), Buffer.from(await file.arrayBuffer()));
+    await writeFile(path.join(storageDirectory, storedName), Buffer.from(bytes));
   } catch {
     throw new Error("Tenant logo could not be uploaded. Please try again.");
   }
@@ -54,5 +55,5 @@ export async function removeStoredTenantLogo(tenantSlug: string, url?: string | 
 }
 
 function isUploadedFile(value: FormDataEntryValue | null): value is File {
-  return Boolean(value && typeof value !== "string" && typeof value.arrayBuffer === "function" && typeof value.size === "number" && typeof value.type === "string");
+  return Boolean(value && typeof value !== "string" && typeof value.arrayBuffer === "function" && typeof value.size === "number" && typeof value.type === "string" && typeof value.name === "string");
 }

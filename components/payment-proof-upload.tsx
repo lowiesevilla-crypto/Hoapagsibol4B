@@ -3,7 +3,8 @@
 import { FileText, ImageIcon, Paperclip, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
-const allowedTypes = ["image/jpeg", "image/png", "image/webp", "application/pdf"];
+const allowedTypes = ["image/jpeg", "image/png", "application/pdf"];
+const allowedExtensions = [".jpg", ".jpeg", ".png", ".pdf"];
 const maxBytes = 5 * 1024 * 1024;
 
 export function PaymentProofUpload() {
@@ -26,7 +27,8 @@ export function PaymentProofUpload() {
     if (previewUrl) URL.revokeObjectURL(previewUrl);
     setPreviewUrl(""); setFileName(""); setContentType(""); setFileSizeLabel(""); setError("");
     if (!file) return;
-    if (!allowedTypes.includes(file.type)) { if (inputRef.current) inputRef.current.value = ""; setError("Choose a JPG, JPEG, PNG, WEBP, or PDF file."); return; }
+    const extension = file.name.slice(file.name.lastIndexOf(".")).toLowerCase();
+    if (!allowedExtensions.includes(extension) || !allowedTypes.includes(file.type)) { if (inputRef.current) inputRef.current.value = ""; setError("Choose a JPG, JPEG, PNG, or PDF file."); return; }
     if (file.size > maxBytes) { if (inputRef.current) inputRef.current.value = ""; setError("Proof of payment must not exceed 5MB."); return; }
     setFileName(file.name);
     setContentType(file.type);
@@ -39,8 +41,8 @@ export function PaymentProofUpload() {
     <label htmlFor="proofFile" className="mt-2 flex min-h-24 cursor-pointer flex-col items-center justify-center rounded-2xl border border-pine-100 bg-white p-4 text-center shadow-sm transition hover:border-pine-300 focus-within:outline focus-within:outline-4 focus-within:outline-pine-500/20">
       <Paperclip className="size-7 text-pine-700" aria-hidden="true" />
       <span className="mt-2 text-sm font-black text-ink">{fileName ? "Replace proof" : "Choose photo, camera capture, PDF, or screenshot"}</span>
-      <span className="mt-1 text-xs font-semibold text-slate-500">JPG, PNG, WEBP, or PDF up to 5MB</span>
-      <input ref={inputRef} id="proofFile" className="sr-only" name="proofFile" type="file" accept="image/jpeg,image/png,image/webp,application/pdf" onChange={(event) => change(event.target.files?.[0])} />
+      <span className="mt-1 text-xs font-semibold text-slate-500">JPG, JPEG, PNG, or PDF up to 5MB</span>
+      <input ref={inputRef} id="proofFile" className="sr-only" name="proofFile" type="file" accept=".jpg,.jpeg,.png,.pdf" onChange={(event) => change(event.target.files?.[0])} />
     </label>
     <p className="mt-2 text-xs text-slate-500">The file is uploaded only when you submit the payment request. Storage paths are never shown.</p>
     {error && <p className="mt-3 rounded-xl bg-rose-50 p-3 text-sm font-bold text-rose-700" role="alert">{error}</p>}

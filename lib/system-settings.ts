@@ -3,6 +3,7 @@ import "server-only";
 import { SystemSettingCategory, type SystemSetting } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { withTenantContext } from "@/lib/tenant-context";
+import { HOAHUB_ALLOWED_UPLOAD_MIME_TYPES } from "@/lib/upload-policy";
 
 export const BOOTSTRAP_TENANT_ID = "tenant_pagsibol4b_default";
 
@@ -90,7 +91,7 @@ export const settingSections: { category: SystemSettingCategory; title: string; 
     description: "Controls the HOA Chat Center file upload rules and live messaging behavior.",
     fields: [
       { category: SystemSettingCategory.CHAT, key: "CHAT_MAX_ATTACHMENT_MB", label: "Maximum attachment size MB", help: "Maximum size per uploaded chat file.", placeholder: "10" },
-      { category: SystemSettingCategory.CHAT, key: "CHAT_ALLOWED_MIME_TYPES", label: "Allowed attachment file types", help: "Comma-separated MIME types. Images, PDF, Word and Excel are enabled by default.", multiline: true, placeholder: "image/jpeg,image/png,image/webp,application/pdf" },
+      { category: SystemSettingCategory.CHAT, key: "CHAT_ALLOWED_MIME_TYPES", label: "Allowed attachment file types", help: "Comma-separated MIME types. HOAHub always limits attachments to PDF, JPG/JPEG, PNG, DOCX, XLSX, and PPTX.", multiline: true, placeholder: "image/jpeg,image/png,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.openxmlformats-officedocument.presentationml.presentation" },
       { category: SystemSettingCategory.CHAT, key: "CHAT_POLL_INTERVAL_SECONDS", label: "Chat refresh interval seconds", help: "How often the chat client checks for new messages and presence updates.", placeholder: "5" },
     ],
   },
@@ -173,20 +174,20 @@ export async function getChatSettings(tenantId: string) {
   const defaultTypes = [
     "image/jpeg",
     "image/png",
-    "image/webp",
     "application/pdf",
-    "application/msword",
     "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-    "application/vnd.ms-excel",
     "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    "application/vnd.openxmlformats-officedocument.presentationml.presentation",
   ];
-  const allowedMimeTypes = value("CHAT_ALLOWED_MIME_TYPES", defaultTypes.join(","))
+  const globallyAllowedChatMimeTypes = new Set(HOAHUB_ALLOWED_UPLOAD_MIME_TYPES.filter((type) => type !== "application/zip"));
+  const configuredTypes = value("CHAT_ALLOWED_MIME_TYPES", defaultTypes.join(","))
     .split(",")
-    .map((item) => item.trim())
+    .map((item) => item.trim().toLowerCase())
     .filter(Boolean);
+  const allowedMimeTypes = [...new Set(configuredTypes.filter((item) => globallyAllowedChatMimeTypes.has(item)))];
   return {
     maxAttachmentMb: Math.max(1, Math.min(50, Number(value("CHAT_MAX_ATTACHMENT_MB", "10")) || 10)),
-    allowedMimeTypes,
+    allowedMimeTypes: allowedMimeTypes.length ? allowedMimeTypes : defaultTypes,
     pollIntervalSeconds: Math.max(3, Math.min(60, Number(value("CHAT_POLL_INTERVAL_SECONDS", "5")) || 5)),
   };
 }

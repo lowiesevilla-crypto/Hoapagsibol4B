@@ -7,7 +7,7 @@ import { useFormStatus } from "react-dom";
 import { saveAnnouncementAction } from "@/lib/actions/content";
 import { ContentImage } from "@/components/content-image";
 
-const allowedImageTypes = ["image/jpeg", "image/png", "image/webp"];
+const allowedImageTypes = ["image/jpeg", "image/png"];
 const maxImageBytes = 5 * 1024 * 1024;
 
 type AnnouncementFormRecord = {
@@ -63,9 +63,10 @@ export function AnnouncementAdminForm({
       return;
     }
     if (file) {
-      if (!allowedImageTypes.includes(file.type)) {
+      const extension = file.name.slice(file.name.lastIndexOf(".")).toLowerCase();
+      if (![".jpg", ".jpeg", ".png"].includes(extension) || !allowedImageTypes.includes(file.type)) {
         event.preventDefault();
-        setError("Upload a valid JPG, JPEG, PNG, or WEBP announcement image.");
+        setError("Upload a valid JPG, JPEG, or PNG announcement image.");
         return;
       }
       if (file.size > maxImageBytes) {
@@ -82,9 +83,10 @@ export function AnnouncementAdminForm({
       setPreviewUrl(selected?.imageUrl ?? "");
       return;
     }
-    if (!allowedImageTypes.includes(file.type)) {
+    const extension = file.name.slice(file.name.lastIndexOf(".")).toLowerCase();
+    if (![".jpg", ".jpeg", ".png"].includes(extension) || !allowedImageTypes.includes(file.type)) {
       setPreviewUrl(selected?.imageUrl ?? "");
-      setError("Upload a valid JPG, JPEG, PNG, or WEBP announcement image.");
+      setError("Upload a valid JPG, JPEG, or PNG announcement image.");
       return;
     }
     if (file.size > maxImageBytes) {
@@ -127,8 +129,8 @@ export function AnnouncementAdminForm({
       </div>
       <div className="rounded-3xl border border-dashed border-slate-200 bg-slate-50 p-4">
         <label className="label flex items-center gap-2"><UploadCloud className="size-4" /> Uploaded image or banner picture</label>
-        <input className="field bg-white" name="image" type="file" accept="image/jpeg,image/png,image/webp" onChange={(event) => handleImageChange(event.target.files?.[0])} />
-        <p className="mt-2 text-xs text-slate-500">Supported formats: JPG, JPEG, PNG, WEBP. Maximum size: 5MB.</p>
+        <input className="field bg-white" name="image" type="file" accept=".jpg,.jpeg,.png" onChange={(event) => handleImageChange(event.target.files?.[0])} />
+        <p className="mt-2 text-xs text-slate-500">Supported formats: JPG, JPEG, PNG. Maximum size: 5MB.</p>
         {selectedFileName && <p className="mt-2 rounded-xl bg-white p-2 text-xs font-bold text-slate-600">Ready to upload: {selectedFileName}</p>}
         {previewUrl && <div className="mt-4 overflow-hidden rounded-2xl border border-slate-200 bg-white">
           <ContentImage src={previewUrl} alt={selected?.title || "Announcement preview"} className="max-h-72 w-full object-contain" />

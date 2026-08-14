@@ -4,7 +4,9 @@ import { Role } from "@prisma/client";
 import { PageHeader } from "@/components/page-header";
 import { writeAuditLog } from "@/lib/audit";
 import { prisma } from "@/lib/db";
-import { getComplaintCategories, getComplaintSettings, normalizeComplaintText, requireComplaintAdmin, supportedComplaintUploadTypes } from "@/lib/services/complaints";
+import { getComplaintCategories, getComplaintSettings, normalizeComplaintText, requireComplaintAdmin } from "@/lib/services/complaints";
+
+const complaintAttachmentMimeTypes = ["image/jpeg", "image/png", "application/pdf"] as const;
 
 export default async function ComplaintSettingsPage({ searchParams }: { searchParams: Promise<{ success?: string; error?: string }> }) {
   const user = await requireComplaintAdmin();
@@ -21,7 +23,7 @@ export default async function ComplaintSettingsPage({ searchParams }: { searchPa
         confidentialEnabled: formData.get("confidentialEnabled") === "on",
         anonymousEnabled: formData.get("anonymousEnabled") === "on",
         maxAttachmentMb: Math.max(1, Math.min(25, Number(formData.get("maxAttachmentMb")) || 10)),
-        allowedMimeTypes: supportedComplaintUploadTypes.filter((type) => formData.get(`mime:${type}`) === "on").join(",") || "application/pdf",
+        allowedMimeTypes: complaintAttachmentMimeTypes.filter((type) => formData.get(`mime:${type}`) === "on").join(",") || "application/pdf",
         identityRevealRoles: [Role.ADMIN, Role.HOA_ADMIN, Role.SYSTEM_ADMIN, Role.STAFF].filter((role) => formData.get(`revealRole:${role}`) === "on").join(",") || "ADMIN,HOA_ADMIN,SYSTEM_ADMIN",
         acknowledgementSlaHours: Math.max(1, Math.min(720, Number(formData.get("acknowledgementSlaHours")) || 72)),
         resolutionSlaDays: Math.max(1, Math.min(365, Number(formData.get("resolutionSlaDays")) || 14)),
@@ -59,7 +61,7 @@ export default async function ComplaintSettingsPage({ searchParams }: { searchPa
         <label className="flex items-center gap-3 text-sm font-bold"><input type="checkbox" name="confidentialEnabled" defaultChecked={settings.confidentialEnabled} /> Confidential complaints</label>
         <label className="flex items-center gap-3 text-sm font-bold"><input type="checkbox" name="anonymousEnabled" defaultChecked={settings.anonymousEnabled} /> Anonymous complaints</label>
         <label><span className="label">Attachment size limit (MB)</span><input className="field" type="number" min={1} max={25} name="maxAttachmentMb" defaultValue={settings.maxAttachmentMb} /></label>
-        <fieldset className="space-y-2 rounded-xl bg-slate-50 p-3"><legend className="label">Allowed attachment types</legend>{supportedComplaintUploadTypes.map((type) => <label key={type} className="flex items-center gap-2 text-sm font-bold"><input type="checkbox" name={`mime:${type}`} defaultChecked={settings.allowedMimeTypes.split(",").includes(type)} /> {type}</label>)}</fieldset>
+        <fieldset className="space-y-2 rounded-xl bg-slate-50 p-3"><legend className="label">Allowed attachment types</legend>{complaintAttachmentMimeTypes.map((type) => <label key={type} className="flex items-center gap-2 text-sm font-bold"><input type="checkbox" name={`mime:${type}`} defaultChecked={settings.allowedMimeTypes.split(",").includes(type)} /> {type}</label>)}</fieldset>
         <fieldset className="space-y-2 rounded-xl bg-slate-50 p-3"><legend className="label">Confidential identity reveal roles</legend>{[Role.ADMIN, Role.HOA_ADMIN, Role.SYSTEM_ADMIN, Role.STAFF].map((role) => <label key={role} className="flex items-center gap-2 text-sm font-bold"><input type="checkbox" name={`revealRole:${role}`} defaultChecked={settings.identityRevealRoles.split(",").includes(role)} /> {role.replaceAll("_", " ")}</label>)}</fieldset>
         <label><span className="label">Acknowledgement SLA hours</span><input className="field" type="number" min={1} max={720} name="acknowledgementSlaHours" defaultValue={settings.acknowledgementSlaHours} /></label>
         <label><span className="label">Resolution SLA days</span><input className="field" type="number" min={1} max={365} name="resolutionSlaDays" defaultValue={settings.resolutionSlaDays} /></label>

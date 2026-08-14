@@ -3,7 +3,7 @@
 import { QrCode, UploadCloud, X } from "lucide-react";
 import { useEffect, useState } from "react";
 
-const allowedTypes = ["image/jpeg", "image/png", "image/webp"];
+const allowedTypes = ["image/jpeg", "image/png"];
 const gcashQrFileField = "GCASH_QR_IMAGE_FILE";
 const gcashQrRemoveField = "GCASH_QR_IMAGE_REMOVE";
 const maxGcashQrBytes = 5 * 1024 * 1024;
@@ -27,8 +27,9 @@ export function GcashQrUpload({ currentUrl }: { currentUrl: string }) {
       setPreviewUrl(removeCurrent ? "" : currentUrl);
       return;
     }
-    if (!allowedTypes.includes(file.type)) {
-      setError("Select a JPG, JPEG, PNG, or WEBP image.");
+    const extension = file.name.slice(file.name.lastIndexOf(".")).toLowerCase();
+    if (![".jpg", ".jpeg", ".png"].includes(extension) || !allowedTypes.includes(file.type)) {
+      setError("Select a JPG, JPEG, or PNG image.");
       setSelectedName("");
       return;
     }
@@ -44,8 +45,8 @@ export function GcashQrUpload({ currentUrl }: { currentUrl: string }) {
 
   return <div>
     <label className="label flex items-center gap-2" htmlFor={gcashQrFileField}><UploadCloud className="size-4" /> GCash QR image upload</label>
-    <input id={gcashQrFileField} className="field bg-white" name={gcashQrFileField} type="file" accept="image/jpeg,image/png,image/webp" onChange={(event) => selectFile(event.target.files?.[0])} />
-    <p className="mt-1 text-xs text-slate-500">Upload JPG, JPEG, PNG, or WEBP. Maximum size: 5MB. The QR is stored by the application; no image URL is required.</p>
+    <input id={gcashQrFileField} className="field bg-white" name={gcashQrFileField} type="file" accept=".jpg,.jpeg,.png" onChange={(event) => selectFile(event.target.files?.[0])} />
+    <p className="mt-1 text-xs text-slate-500">Upload JPG, JPEG, or PNG. Maximum size: 5MB. The QR is stored by the application; no image URL is required.</p>
     {error && <p className="mt-2 rounded-xl bg-rose-50 p-3 text-xs font-bold text-rose-700">{error}</p>}
     {selectedName && <p className="mt-2 rounded-xl bg-blue-50 p-3 text-xs font-bold text-blue-700">Ready to upload: {selectedName}</p>}
 

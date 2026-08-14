@@ -157,7 +157,8 @@ export default async function TenantDetailPage({
           <AssociationLogo className="size-20" src={logoUrl} alt={`${tenant.name} logo`} />
           <label className="min-w-0 flex-1">
             <span className="label">Upload tenant logo</span>
-            <input className="field" name={tenantLogoFileField} type="file" accept="image/png,image/jpeg,image/webp" />
+            <input className="field" name={tenantLogoFileField} type="file" accept=".jpg,.jpeg,.png" />
+            <span className="mt-1 block text-xs text-slate-500">JPG, JPEG, or PNG only.</span>
           </label>
         </div>
         <label className="flex items-center gap-3 text-sm font-semibold text-slate-700">

@@ -62,7 +62,7 @@ record("no browser balance API or client authority introduced", !existsSync(path
 record("Pay Now reuses existing payment action", hasAll(payForm, ["submitPaymentRequestAction", 'action={submitPaymentRequestAction}']) && hasAll(paymentActions, ["export async function submitPaymentRequestAction"]));
 record("Cash does not require a reference number in existing method rules", hasAll(paymentMethods, ["paymentMethodRequiresReference", 'method !== "CASH"']));
 record("GCash and transfer reference rules are preserved", hasAll(paymentMethods, ["paymentMethodRequiresReference", 'method !== "CASH"']) && hasAll(paymentActions, ["referenceNumber", "This payment reference number has already"]));
-record("proof upload validates type and size on client and server", hasAll(proofUpload, ["allowedTypes", "maxBytes", "image/jpeg", "application/pdf"]) && hasAll(paymentProofs, ["allowedTypes", "maxPaymentProofBytes"]));
+record("proof upload validates type and size on client and server", hasAll(proofUpload, ["allowedTypes", "allowedExtensions", "maxBytes", "image/jpeg", "application/pdf"]) && hasAll(paymentProofs, ["validateHoaHubUpload", "paymentProofExtensions", "maxPaymentProofBytes", "allowedExtensions: paymentProofExtensions"]));
 record("proof upload does not expose storage paths", !proofUpload.includes("storageKey") && !proofUpload.includes("filePath") && !proofUpload.includes("public/"));
 record("proof access remains tied to existing authorized receipt/payment routes", hasAll(receiptPage, ["getPaymentReceiptData", "user.homeownerProfile?.id !== receipt.homeownerId", "redirect(\"/portal/dashboard\")"]));
 record("duplicate submission is disabled", hasAll(payForm, ["pending", "disabled", "Duplicate"]));

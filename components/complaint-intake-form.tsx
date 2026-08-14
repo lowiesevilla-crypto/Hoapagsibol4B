@@ -30,7 +30,7 @@ export function ComplaintIntakeForm({ categories }: { categories: Category[] }) 
       <label><span className="label">Incident date</span><input className="field" type="date" name="incidentDate" /></label>
       <label className="md:col-span-2"><span className="label">Details</span><textarea className="field min-h-40" name="description" maxLength={4000} required /></label>
       <label className="md:col-span-2"><span className="label">Requested action</span><textarea className="field min-h-28" name="requestedAction" maxLength={1000} required /></label>
-      <label className="md:col-span-2"><span className="label">Attachment</span><input className="field" type="file" name="attachment" accept="image/jpeg,image/png,image/webp,application/pdf" /><span className="mt-1 block text-xs font-semibold text-slate-500">PDF, JPG, PNG, or WEBP up to 10 MB.</span></label>
+      <label className="md:col-span-2"><span className="label">Attachment</span><input className="field" type="file" name="attachment" accept=".pdf,.jpg,.jpeg,.png" /><span className="mt-1 block text-xs font-semibold text-slate-500">PDF, JPG, JPEG, or PNG up to 10 MB.</span></label>
     </div>
     {state.status === "error" && <p className="rounded-xl border border-rose-200 bg-rose-50 p-3 text-sm font-bold text-rose-800">{state.message}</p>}
     {state.status === "success" && <section className="rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm font-semibold text-emerald-900">

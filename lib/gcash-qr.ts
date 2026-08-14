@@ -2,12 +2,7 @@ import { randomUUID } from "node:crypto";
 import { mkdir, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { tenantUploadDirectory } from "@/lib/storage";
-
-const allowedTypes = new Map([
-  ["image/jpeg", ".jpg"],
-  ["image/png", ".png"],
-  ["image/webp", ".webp"],
-]);
+import { HOAHUB_ALLOWED_IMAGE_EXTENSIONS, validateHoaHubUpload } from "@/lib/upload-policy";
 
 export const maxGcashQrBytes = 5 * 1024 * 1024;
 export const gcashQrFileField = "GCASH_QR_IMAGE_FILE";
@@ -20,15 +15,21 @@ export async function resolveGcashQrImage(formData: FormData, tenantSlug: string
     return { url: removeCurrent ? null : currentUrl?.trim() || null, obsoleteUrl: removeCurrent ? currentUrl?.trim() || null : null };
   }
 
-  const extension = allowedTypes.get(file.type);
-  if (!extension) throw new Error("GCash QR image must be a JPG, JPEG, PNG, or WEBP file.");
-  if (file.size > maxGcashQrBytes) throw new Error("GCash QR image must not exceed 5MB.");
+  const bytes = new Uint8Array(await file.arrayBuffer());
+  const validation = validateHoaHubUpload({
+    fileName: file.name,
+    contentType: file.type,
+    size: file.size,
+    data: bytes,
+    maxBytes: maxGcashQrBytes,
+    allowedExtensions: HOAHUB_ALLOWED_IMAGE_EXTENSIONS,
+  });
 
   const storageDirectory = tenantUploadDirectory(tenantSlug, "settings", "gcash");
-  const storedName = `${randomUUID()}${extension}`;
+  const storedName = `${randomUUID()}${validation.extension}`;
   try {
     await mkdir(storageDirectory, { recursive: true });
-    await writeFile(path.join(storageDirectory, storedName), Buffer.from(await file.arrayBuffer()));
+    await writeFile(path.join(storageDirectory, storedName), Buffer.from(bytes));
   } catch {
     throw new Error("GCash QR image could not be uploaded. Please try again.");
   }
@@ -44,5 +45,5 @@ export async function removeStoredGcashQrImage(tenantSlug: string, url?: string 
 }
 
 function isUploadedFile(value: FormDataEntryValue | null): value is File {
-  return Boolean(value && typeof value !== "string" && typeof value.arrayBuffer === "function" && typeof value.size === "number" && typeof value.type === "string");
+  return Boolean(value && typeof value !== "string" && typeof value.arrayBuffer === "function" && typeof value.size === "number" && typeof value.type === "string" && typeof value.name === "string");
 }

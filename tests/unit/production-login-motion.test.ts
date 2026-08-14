@@ -42,6 +42,16 @@ test("production login motion verification requires dedicated production credent
   }
 });
 
+test("production login verifier uses the supported chrome-headless-shell launch contract", () => {
+  assert.match(productionSmoke, /const headlessMode = "shell"/);
+  assert.match(productionSmoke, /headless: headlessMode/);
+  assert.match(
+    productionSmoke,
+    /args: await puppeteer\.defaultArgs\(\{ args: chromium\.args, headless: headlessMode \}\)/,
+  );
+  assert.doesNotMatch(productionSmoke, /headless: true/);
+});
+
 test("production login motion smoke does not navigate to business-operation routes", () => {
   for (const forbidden of [
     "/admin/payments",

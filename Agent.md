@@ -1,6 +1,6 @@
 # HOAHub Agent Context
 
-Last updated: 2026-08-14
+Last updated: 2026-08-15
 
 ## Purpose
 
@@ -79,6 +79,21 @@ The current release adds an explicit authentication-state sequence without repla
 
 The success animation must never be shown before the existing server authentication action returns a valid redirect target.
 
+### Multi-Account Login Selection
+
+A user whose already-verified credentials match more than one active HOA/tenant account must authenticate **once** and then choose the isolated account/session to open.
+
+- The first credential submission performs the normal server-side password verification and builds only the authorized account choices.
+- When multiple choices exist, the server writes a short-lived signed `hoa_login_choice` cookie. It is `HttpOnly`, `SameSite=Lax`, secure in production, expires after approximately five minutes, contains only the allowed user IDs plus a purpose marker, and is signed with the same protected server secret boundary as authentication.
+- A verified choice handoff is created only for a non-empty multi-account choice set; optional/undefined choice state must never be treated as an authenticated selection proof.
+- If an authentication resolver ever produces a choice-bearing result with an empty or missing choice array, the login must fail closed with no session creation; it must never fall through to the normal authenticated-session path.
+- The account-selection UI removes the username/email and password fields after identity verification. The second submission sends only `selectedUserId` plus normal navigation context; the password is never retained in React state, hidden inputs, session storage, local storage, or the choice cookie.
+- The server accepts a selected account only when its user ID is present in the valid signed choice cookie, then revalidates the selected user and tenant as active before creating the tenant-scoped session.
+- The temporary choice cookie is cleared after successful selection, when a new credential login starts, on expiry/error, and during logout flows.
+- A missing, expired, tampered, or mismatched choice cookie fails closed and requires a fresh sign-in.
+- Tenant isolation remains mandatory: choosing one account loads only that tenant/account into the authenticated session.
+- Both `tests/unit/login-multi-account-selection.test.ts` and the existing `tests/unit/homeowner-multi-account-surface.test.ts` must assert the credential-free second step and tenant/account-isolated session behavior; stale tests must not require the former credential-resubmission UI.
+
 ### Post-Login Brand Handoff
 
 A short-lived browser session marker (`hoahub.login.handoff.v1`) is written only after successful credential or passkey authentication.
@@ -103,7 +118,10 @@ A short-lived browser session marker (`hoahub.login.handoff.v1`) is written only
 - `components/community-pulse-mobile-premium.module.css`
 - `components/community-pulse-web-premium.module.css`
 - `components/login-verified-transition.module.css`
+- `lib/login-choice-cookie.ts`
 - `tests/unit/community-pulse-login-transition.test.ts`
+- `tests/unit/login-multi-account-selection.test.ts`
+- `tests/unit/homeowner-multi-account-surface.test.ts`
 
 ### Client/Server Branding Boundary
 
@@ -120,6 +138,22 @@ Community Pulse is a presentation/interaction enhancement. It must not bypass or
 The post-login animation marker is never authoritative authentication state. Authenticated server/session checks remain the only authority for protected routes.
 
 The homeowner identifier remains compatible with either verified email or the 11-digit homeowner account number.
+
+## Homeowner Payment Status Authority
+
+Homeowner-facing payment status must describe the current financial state, not allow an older failed attempt to override a later successful payment.
+
+- The Statement of Account posted balance is authoritative for the homeowner's **current balance status**. If billing exists and `currentOutstandingBalance <= 0`, the current status is `Fully Paid` even when an older request was rejected, cancelled, or was previously pending.
+- Historical rejected/cancelled attempts remain valid audit/history records; they must not be promoted into the current balance headline after the account is settled.
+- When a balance remains outstanding, the latest relevant pending/rejected request may still be shown as `Payment Pending` or `Payment Rejected`.
+- PayMongo requests are gateway-controlled. Manual approval/rejection remains prohibited while awaiting gateway confirmation. A payment is posted only through verified PayMongo webhook processing and the normal transactional ledger/receipt path.
+- The PayMongo webhook is allowed to recover a request that was previously marked rejected by checkout cancellation when a later verified paid event for that same checkout arrives; it resets the request to a processable state and approves/posts it transactionally.
+- A posted `Payment` or `Collection` linked to a request is stronger evidence of settlement than stale request-display metadata. UI changes must prefer posted ledger artifacts and the resulting SOA balance when describing current payment state.
+- Every homeowner `Payment Status` card must resolve its displayed label/tone using the linked posted ledger artifacts (`request.payment` or `request.collection`) before stale request metadata. In particular, a PayMongo request with a linked posted artifact must display `Paid · PayMongo confirmed` even if an earlier request status remains `REJECTED` or `CANCELLED` in history.
+- Do not call the PayMongo API merely to render each homeowner payment page. The authoritative local posted ledger is created only from verified PayMongo webhook processing; page rendering reads that tenant-scoped local financial state.
+- Payment status corrections must never create a receipt merely from a browser redirect/query parameter. Only verified gateway confirmation or the existing authorized manual accounting workflow can post financial records.
+- Core implementation: `lib/services/homeowner-payment-status.ts`, `app/portal/pay/page.tsx`, `lib/services/homeowner-paymongo.ts`, and `lib/services/payment-requests.ts`.
+- Regression coverage: `tests/unit/homeowner-payment-status.test.ts`, including source-level wiring that ensures the homeowner page passes linked `Payment`/`Collection` evidence into the status resolver.
 
 ## Validation Gate
 
@@ -139,6 +173,20 @@ Before production deployment, the applicable CI pipeline must pass. The reposito
 - production smoke tests and critical browser/E2E tests
 
 Do not merge a known failing release merely to trigger deployment. Fix the defect or update a brittle test only when the changed test continues to assert the intended security/business invariant.
+
+### CI Browser Gate Recovery
+
+The production rollback to the PR #109 application tree intentionally removed PR #110 as a whole. The browser gate still needs a narrow, test-only reliability contract without restoring PR #110's production-login verifier or application behavior.
+
+- GitHub Actions prepares the repository-provided `@sparticuz/chromium` executable and exposes it only to the browser suites through `PUPPETEER_EXECUTABLE_PATH`.
+- `tests/e2e/critical-path.mjs` launches that packaged browser as `headless: "shell"` with Puppeteer's default arguments merged with `chromium.args`; this matches the chrome-headless-shell runtime contract.
+- `tests/e2e/safe-browser-context-cleanup.mjs` must not create non-default BrowserContexts on this runtime. Each logical isolated test context launches a separate browser process and uses that process's default context, preserving cookie/session isolation without the unstable `Target.createTarget` path.
+- Every standalone E2E entry point in `test:e2e` preloads the same isolation shim; the critical path already does so through `run-critical-path.mjs`.
+- Cleanup remains bounded and may force-kill only browser processes that fail to close; it must never relax business assertion/navigation timeouts.
+- The bounded retry in `run-critical-path.mjs` remains limited to the specific transient startup signature `Target.setDiscoverTargets` + `Target closed`; business assertion failures are never retried automatically.
+- This recovery deliberately does **not** restore PR #110's authenticated production-login verifier and does not change the Hostinger deployment activation path.
+- This recovery also does **not** change the existing application dependency versions in `package.json`; any future browser dependency alignment must first prove that it cannot alter production document/browser runtime behavior.
+- Regression coverage: `tests/unit/browser-cleanup-policy.test.ts`.
 
 ## Hostinger Production Deployment Model
 
@@ -173,17 +221,17 @@ Production verification should compare that public marker with the expected `mai
 
 ## Community Pulse Rollback
 
-Community Pulse, the verified-login transition, and the post-login brand handoff introduce no dedicated database migration.
+Community Pulse, the verified-login transition, the multi-account verified-choice cookie, and the post-login brand handoff introduce no dedicated database migration.
 
 If the login UX causes a production regression:
 
-- revert the relevant Community Pulse/login-transition merge commit on `main`;
+- revert the relevant login/authentication merge commit on `main`;
 - allow Hostinger's managed GitHub deployment to publish the reverted commit;
 - confirm `/release.txt` matches the rollback commit;
 - confirm `/api/health` succeeds;
-- re-test credential login, passkey login, tenant/account selection, safe return navigation, authenticated logo handoff, and homeowner mobile/PWA login.
+- re-test credential login, multi-account selection without password re-entry, passkey login, tenant/account isolation, safe return navigation, authenticated logo handoff, and homeowner mobile/PWA login.
 
-Authentication/session data should not require rollback for these presentation-layer changes.
+Authentication/session data should not require a database rollback for these interaction-layer changes.
 
 ## Change Discipline
 

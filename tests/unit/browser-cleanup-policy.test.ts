@@ -9,28 +9,57 @@ const cleanupSource = readFileSync(
   "tests/e2e/safe-browser-context-cleanup.mjs",
   "utf8",
 );
+const criticalPathSource = readFileSync("tests/e2e/critical-path.mjs", "utf8");
 const criticalPathRunnerSource = readFileSync(
   "tests/e2e/run-critical-path.mjs",
   "utf8",
 );
+const workflowSource = readFileSync(".github/workflows/ci-deploy.yml", "utf8");
 const homeownerDashboardSource = readFileSync(
   "app/portal/dashboard/page.tsx",
   "utf8",
 );
 
-test("critical browser suite preloads bounded context cleanup", () => {
-  assert.match(
-    packageJson.scripts["test:e2e"] || "",
-    /^node tests\/e2e\/run-critical-path\.mjs/,
-  );
+test("all browser E2E entry points use bounded safe browser isolation", () => {
+  const command = packageJson.scripts["test:e2e"] || "";
+  assert.match(command, /^node tests\/e2e\/run-critical-path\.mjs/);
+  for (const script of [
+    "onboarding-workflow.mjs",
+    "document-workflow.mjs",
+    "document-management.mjs",
+    "rbac-stale-session.mjs",
+    "ai-assistant.mjs",
+  ]) {
+    assert.match(
+      command,
+      new RegExp(`node --import \\.\\/tests\\/e2e\\/safe-browser-context-cleanup\\.mjs tests\\/e2e\\/${script.replace(".", "\\.")}`),
+    );
+  }
   assert.match(
     criticalPathRunnerSource,
     /"--import", "\.\/tests\/e2e\/safe-browser-context-cleanup\.mjs", "tests\/e2e\/critical-path\.mjs"/,
   );
+});
+
+test("controlled Chromium uses headless-shell launch and process-level context isolation", () => {
+  assert.match(criticalPathSource, /const headlessMode = "shell"/);
+  assert.match(criticalPathSource, /puppeteer\.defaultArgs\(\{ args: chromium\.args, headless: headlessMode \}\)/);
+  assert.match(cleanupSource, /const isolatedBrowsers = new Set\(\)/);
+  assert.match(cleanupSource, /const isolatedBrowser = await originalLaunch\(\.\.\.launchArguments\)/);
+  assert.match(cleanupSource, /isolatedBrowser\.defaultBrowserContext\(\)/);
+  assert.doesNotMatch(cleanupSource, /originalCreateBrowserContext/);
   assert.match(cleanupSource, /context\.pages\(\)/);
   assert.match(cleanupSource, /page\.close\(\{ runBeforeUnload: false \}\)/);
   assert.match(cleanupSource, /browser\.process\(\)\?\.kill\("SIGKILL"\)/);
-  assert.doesNotMatch(cleanupSource, /Target\.disposeBrowserContext|originalContextClose/);
+});
+
+test("CI prepares the repository-controlled Chromium executable without changing production deployment activation", () => {
+  assert.match(workflowSource, /Prepare controlled Chromium for browser suites/);
+  assert.match(workflowSource, /chromium\.executablePath\(\)/);
+  assert.match(workflowSource, /PUPPETEER_EXECUTABLE_PATH=\$CHROMIUM_PATH/);
+  assert.match(workflowSource, /Wait for Hostinger GitHub auto-deployment/);
+  assert.match(workflowSource, /Verify public production health/);
+  assert.doesNotMatch(workflowSource, /Verify production login motion/);
 });
 
 test("critical browser startup retry is bounded and does not retry business assertion failures", () => {

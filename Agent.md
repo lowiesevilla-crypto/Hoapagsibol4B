@@ -149,9 +149,11 @@ Homeowner-facing payment status must describe the current financial state, not a
 - PayMongo requests are gateway-controlled. Manual approval/rejection remains prohibited while awaiting gateway confirmation. A payment is posted only through verified PayMongo webhook processing and the normal transactional ledger/receipt path.
 - The PayMongo webhook is allowed to recover a request that was previously marked rejected by checkout cancellation when a later verified paid event for that same checkout arrives; it resets the request to a processable state and approves/posts it transactionally.
 - A posted `Payment` or `Collection` linked to a request is stronger evidence of settlement than stale request-display metadata. UI changes must prefer posted ledger artifacts and the resulting SOA balance when describing current payment state.
+- Every homeowner `Payment Status` card must resolve its displayed label/tone using the linked posted ledger artifacts (`request.payment` or `request.collection`) before stale request metadata. In particular, a PayMongo request with a linked posted artifact must display `Paid · PayMongo confirmed` even if an earlier request status remains `REJECTED` or `CANCELLED` in history.
+- Do not call the PayMongo API merely to render each homeowner payment page. The authoritative local posted ledger is created only from verified PayMongo webhook processing; page rendering reads that tenant-scoped local financial state.
 - Payment status corrections must never create a receipt merely from a browser redirect/query parameter. Only verified gateway confirmation or the existing authorized manual accounting workflow can post financial records.
 - Core implementation: `lib/services/homeowner-payment-status.ts`, `app/portal/pay/page.tsx`, `lib/services/homeowner-paymongo.ts`, and `lib/services/payment-requests.ts`.
-- Regression coverage: `tests/unit/homeowner-payment-status.test.ts`.
+- Regression coverage: `tests/unit/homeowner-payment-status.test.ts`, including source-level wiring that ensures the homeowner page passes linked `Payment`/`Collection` evidence into the status resolver.
 
 ## Validation Gate
 

@@ -71,7 +71,7 @@ record("development cleanup targets only local HOAHub /sw.js and caches", hasAll
 record("single PWA provider registration path", (provider.match(/serviceWorker\.register/g) || []).length === 1);
 record("Chromium deferred install prompt is captured safely", hasAll(provider, ["beforeinstallprompt", "event.preventDefault()", "deferredPrompt", ".prompt()", "userChoice"]));
 record("installed app state hides install UI", hasAll(provider, ["appinstalled", "setInstalled(true)", "isStandaloneMode"]));
-record("standalone detection covers display-mode and iOS navigator standalone", hasAll(provider, ['matchMedia("(display-mode: standalone)")', "navigator.standalone"]));
+record("standalone detection covers display-mode and typed iOS navigator standalone", hasAll(provider, ['matchMedia("(display-mode: standalone)")', "standalone?: boolean", "}).standalone"]));
 record("iOS install instructions exist", hasAll(provider, ["IOSInstallInstructions", "Add to Home Screen", "Safari"]));
 record("Android install instructions exist", hasAll(provider, ["AndroidInstallInstructions", "Android Chrome", "Install app"]));
 record("Desktop install instructions exist", hasAll(provider, ["DesktopInstallInstructions", "address bar"]));

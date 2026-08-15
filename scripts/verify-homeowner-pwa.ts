@@ -71,6 +71,7 @@ record("development cleanup targets only local HOAHub /sw.js and caches", hasAll
 record("single PWA provider registration path", (provider.match(/serviceWorker\.register/g) || []).length === 1);
 record("Chromium deferred install prompt is captured safely", hasAll(provider, ["beforeinstallprompt", "event.preventDefault()", "deferredPrompt", ".prompt()", "userChoice"]));
 record("installed app state hides install UI", hasAll(provider, ["appinstalled", "setInstalled(true)", "isStandaloneMode"]));
+record("standalone detection covers display-mode and iOS navigator standalone", hasAll(provider, ['matchMedia("(display-mode: standalone)")', "navigator.standalone"]));
 record("iOS install instructions exist", hasAll(provider, ["IOSInstallInstructions", "Add to Home Screen", "Safari"]));
 record("Android install instructions exist", hasAll(provider, ["AndroidInstallInstructions", "Android Chrome", "Install app"]));
 record("Desktop install instructions exist", hasAll(provider, ["DesktopInstallInstructions", "address bar"]));
@@ -108,14 +109,19 @@ const changedFiles = gitChangedFiles();
 const allowedPhaseChatFiles = new Set([
   "app/api/chat/conversations/route.ts",
   "app/api/chat/messages/route.ts",
+  "app/api/chat/privacy/route.ts",
+  "app/api/chat/requests/route.ts",
+  "app/api/chat/blocks/route.ts",
   "lib/actions/chat.ts",
   "lib/services/chat.ts",
+  "lib/services/chat-privacy.ts",
+  "prisma/migrations/20260815213000_chat_privacy_requests_blocks/migration.sql",
 ]);
 const disallowedChangedFiles = changedFiles.filter((file) => {
   const normalized = file.replaceAll("\\", "/");
   return /^(app\/admin|app\/employee|app\/platform|app\/api|prisma\/|lib\/actions|lib\/services|lib\/auth|lib\/tenant)/.test(normalized) && !allowedPhaseChatFiles.has(normalized);
 });
-record("no admin employee payroll platform non-chat api auth tenant prisma changes", disallowedChangedFiles.length === 0, disallowedChangedFiles.join(", "));
+record("no unrelated admin employee payroll platform api auth tenant prisma changes", disallowedChangedFiles.length === 0, disallowedChangedFiles.join(", "));
 
 const failed = checks.filter((check) => !check.passed);
 for (const check of checks) {

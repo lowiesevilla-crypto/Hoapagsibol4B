@@ -4,14 +4,16 @@ import { HomeownerChatPrivacyPanel } from "@/components/homeowner-chat-privacy-p
 import { requireUser } from "@/lib/auth";
 import { getChatPayload } from "@/lib/services/chat";
 import { getChatPrivacySnapshot } from "@/lib/services/chat-privacy";
+import { sanitizeHomeownerChatPayload } from "@/lib/services/homeowner-chat-view";
 
 export default async function PortalChatPage({ searchParams }: { searchParams: Promise<{ conversation?: string }> }) {
   const user = await requireUser(Role.HOMEOWNER);
   const { conversation } = await searchParams;
-  const [data, privacy] = await Promise.all([
+  const [rawData, privacy] = await Promise.all([
     getChatPayload(user, conversation),
     getChatPrivacySnapshot(user.tenantId, user.id),
   ]);
+  const data = sanitizeHomeownerChatPayload(rawData);
 
   return <>
     <ChatMessenger
@@ -20,7 +22,7 @@ export default async function PortalChatPage({ searchParams }: { searchParams: P
       description="Chat with verified HOA officials or other residents. New resident contacts follow your privacy preference and may arrive as Message Requests."
       initialData={data}
     />
-    <div className="mt-4">
+    <div className="mt-4 w-full min-w-0 max-w-full overflow-x-hidden">
       <HomeownerChatPrivacyPanel initialData={privacy} />
     </div>
   </>;

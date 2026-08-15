@@ -54,6 +54,9 @@ Homeowner-facing changes must be designed for installed PWA and mobile-browser u
 - Honor `prefers-reduced-motion`.
 - Ensure critical cards/forms can scroll safely on short mobile viewports without horizontal overflow.
 - Preserve passkey support on compatible mobile devices.
+- The root application layout owns the single `PwaInstallProvider` so installability detection, service-worker registration, offline state, and update handling are available from the public `hoahub.tech` entry as well as authenticated homeowner routes. Do not reintroduce a second provider in `app/portal/layout.tsx`.
+- When a homeowner opens the public HOAHub entry in a mobile browser and the current browsing context is not standalone/installed, `PublicPwaInstallBanner` may prompt the user to install. Chromium uses the captured `beforeinstallprompt` event and invokes `.prompt()` only from an explicit user action; iOS uses Share -> Add to Home Screen instructions. `appinstalled` and standalone checks suppress the install UI after installation, and dismissal metadata uses only generic local-storage cooldown state.
+- Installed-state detection is necessarily browser-scoped: use `(display-mode: standalone)`, iOS `navigator.standalone`, `appinstalled`, and the browser installability event. A normal browser tab cannot reliably discover every separately installed PWA instance on the device, so never claim universal device-level detection.
 - On `/portal/pay`, the long `Unpaid Billings`, `Payment Status`, `PayMongo Online` guidance, `Pay securely online` guidance, and `Online payment fee disclosure` surfaces are accessible disclosure controls and default to collapsed so homeowner phones do not require excessive vertical scrolling. Keep a clear expand/collapse chevron and keyboard-visible focus treatment on every trigger.
 - Keep the primary payment task visible without expanding guidance: `Transaction type` and `Billing items` remain outside the collapsed `Pay securely online` disclosure and receive stronger visual priority. The collapsed `PayMongo Online` summary continues to show the tenant payment account, association name, and payment mode.
 - The collapsed online-fee disclosure must continue to show the `HOAHub convenience fee` amount. Keep navigation actions such as `View billing` and `History` inside the expanded content rather than nesting interactive links inside a disclosure trigger.
@@ -141,6 +144,20 @@ Community Pulse is a presentation/interaction enhancement. It must not bypass or
 The post-login animation marker is never authoritative authentication state. Authenticated server/session checks remain the only authority for protected routes.
 
 The homeowner identifier remains compatible with either verified email or the 11-digit homeowner account number.
+
+## Resident Messaging Privacy and Message Requests
+
+The homeowner `/portal/chat` experience supports tenant-scoped resident-to-resident messaging in addition to verified HOA personnel, with server-enforced privacy, Message Requests, and block/unblock controls.
+
+- Homeowners may discover other active `HOMEOWNER` users only inside the same authenticated tenant. The client payload deliberately blanks email and omits email from homeowner recipient search text; private resident email/phone must never be exposed as directory metadata.
+- A homeowner's `residentMessagingMode` is one of `INBOX`, `REQUESTS`, or `NONE`. The default is `REQUESTS`. `INBOX` admits a new resident conversation directly, `REQUESTS` creates a pending request that remains outside the recipient's normal Chats until accepted, and `NONE` prevents another resident from starting a new resident chat.
+- Incoming pending/declined request conversations are excluded from the normal chat payload for the recipient. `HomeownerChatPrivacyPanel` exposes pending requests with explicit Accept/Decline actions. Accepting reveals the existing conversation; declining permanently stops sends on that request unless a future product change explicitly defines a re-request lifecycle.
+- A block is tenant-scoped and resident-only. If either resident has blocked the other, direct resident conversation creation and every resident-to-resident send fail server-side. Unblock removes only the current user's block record.
+- `HOA Official` status is derived only from authenticated server roles (`ADMIN`, `SYSTEM_ADMIN`, `EMPLOYEE`). The browser never supplies or upgrades official authority. Resident privacy and block records apply only when both participants are residents, so a resident cannot suppress or impersonate verified HOA official communication through these controls.
+- `createChatMessage` rechecks block and request state on every resident-to-resident send; the request recipient cannot reply while a request is pending and no participant can send after decline. Never rely on disabled client controls as the enforcement boundary.
+- Persistence is provided by migration `20260815213000_chat_privacy_requests_blocks`, which creates tenant-scoped `ChatPrivacyPreference`, `ChatUserBlock`, and `ChatMessageRequest` tables. The current service accesses these narrowly through parameterized Prisma raw SQL until the domain is promoted into generated Prisma models.
+- Core implementation: `lib/services/chat.ts`, `lib/services/chat-privacy.ts`, `components/homeowner-chat-privacy-panel.tsx`, `app/api/chat/privacy/route.ts`, `app/api/chat/requests/route.ts`, `app/api/chat/blocks/route.ts`, and `app/portal/chat/page.tsx`.
+- Regression coverage: `tests/unit/homeowner-chat-privacy-pwa-install.test.ts` plus the homeowner PWA verifier's narrow changed-file allow-list for this approved chat migration.
 
 ## Homeowner Payment Status Authority
 

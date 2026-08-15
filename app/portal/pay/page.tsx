@@ -2,7 +2,7 @@ import { CalendarDays, Clock3, CreditCard, QrCode, ReceiptText, ShieldCheck } fr
 import Link from "next/link";
 import { PayByQrForm } from "@/components/pay-by-qr-form";
 import { PayMongoHomeownerForm } from "@/components/paymongo-homeowner-form";
-import { PaymentAreaNavigation, PaymentEmptyState, PaymentHeroCard, PaymentMetricCard, PaymentRequestStatusCard, UnpaidBillingCard, type PaymentTone } from "@/components/homeowner/payments/payment-cards";
+import { PaymentAreaNavigation, PaymentEmptyState, PaymentHeroCard, PaymentMetricCard, PaymentRequestStatusCard, UnpaidBillingCard } from "@/components/homeowner/payments/payment-cards";
 import { PortalPageContainer, PortalSectionHeader } from "@/components/portal-mobile-shell";
 import { prisma } from "@/lib/db";
 import { getAppUrl } from "@/lib/app-url";
@@ -10,7 +10,7 @@ import { isPayMongoPaymentRequest } from "@/lib/homeowner-payment-flow";
 import { requireHomeownerProfile } from "@/lib/portal";
 import { getStatementOfAccount } from "@/lib/services/statement-of-account";
 import { getHomeownerPaymentConfig } from "@/lib/services/homeowner-payment-config";
-import { resolveHomeownerPaymentStatus } from "@/lib/services/homeowner-payment-status";
+import { resolveHomeownerPaymentRequestDisplayStatus, resolveHomeownerPaymentStatus } from "@/lib/services/homeowner-payment-status";
 import { getAssociationSettings, getPaymentSettings } from "@/lib/system-settings";
 import { locateTenantUpload, locateUpload } from "@/lib/storage";
 import { canSubmitDocumentFeePayment, documentFeePaymentPurpose, documentFeePaymentStatusLabel, documentRequestPublicReference } from "@/lib/services/document-fee-payments";
@@ -123,7 +123,12 @@ export default async function PortalPayPage({ searchParams }: { searchParams: Pr
             <div className="space-y-3">
               {paymentRequests.map((request) => {
                 const onlineRequest = isPayMongoPaymentRequest(request);
-                return <PaymentRequestStatusCard key={request.id} title={paymentRequestPurpose(request)} amount={money(request.amount)} status={onlineRequest && request.status === "PENDING_REVIEW" ? "Awaiting PayMongo" : statusLabel(request.status)} statusTone={requestTone(request.status)} meta={`Submitted ${shortDate(request.createdAt)} · Updated ${shortDate(request.updatedAt)}`} reference={request.referenceNumber || "Not submitted"} method={onlineRequest ? "PayMongo Online" : request.method.replaceAll("_", " ")} remarks={homeownerSafeRemarks(request.reviewRemarks)} proofLabel={onlineRequest ? "Gateway checkout" : request.proofImageUrl ? "Attached" : "No attachment"} />;
+                const displayStatus = resolveHomeownerPaymentRequestDisplayStatus({
+                  requestStatus: request.status,
+                  onlineRequest,
+                  hasPostedPayment: Boolean(request.payment || request.collection),
+                });
+                return <PaymentRequestStatusCard key={request.id} title={paymentRequestPurpose(request)} amount={money(request.amount)} status={displayStatus.label} statusTone={displayStatus.tone} meta={`Submitted ${shortDate(request.createdAt)} · Updated ${shortDate(request.updatedAt)}`} reference={request.referenceNumber || "Not submitted"} method={onlineRequest ? "PayMongo Online" : request.method.replaceAll("_", " ")} remarks={homeownerSafeRemarks(request.reviewRemarks)} proofLabel={onlineRequest ? "Gateway checkout" : request.proofImageUrl ? "Attached" : "No attachment"} />;
               })}
               {!paymentRequests.length && <PaymentEmptyState title="No payment activity" description={isPayMongoFlow ? "PayMongo checkout and confirmation activity will appear here." : "Submitted QR payments and HOA verification results will appear here."} icon={ShieldCheck} />}
             </div>
@@ -166,18 +171,6 @@ function paymentRequestPurpose(request: { type: string; bill?: { billingMonth: D
   if (request.type === "MONTHLY_DUES") return `Monthly dues - ${request.bill ? monthLabel(request.bill.billingMonth) : "Bill"}`;
   if (request.type === "DOCUMENT_FEE") return `Document Request Fee - ${request.documentRequest?.definition?.displayName || "Official HOA document"}`;
   return collectionLabel(String(request.collectionType), request.description);
-}
-
-function statusLabel(status: string) {
-  if (status === "PENDING_REVIEW") return "Pending Review";
-  return status.replaceAll("_", " ");
-}
-
-function requestTone(status: string): PaymentTone {
-  if (status === "APPROVED") return "success";
-  if (status === "REJECTED") return "danger";
-  if (status === "PENDING_REVIEW") return "warning";
-  return "info";
 }
 
 function homeownerSafeRemarks(remarks?: string | null) {

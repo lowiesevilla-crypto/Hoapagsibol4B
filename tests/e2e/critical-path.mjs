@@ -395,11 +395,10 @@ async function runHomeownerRegistrationFlow(browser) {
 }
 
 const executablePath = await resolveBrowserExecutable();
-const headlessMode = "shell";
 const browser = await puppeteer.launch({
   executablePath,
-  headless: headlessMode,
-  args: await puppeteer.defaultArgs({ args: chromium.args, headless: headlessMode }),
+  headless: true,
+  args: [...new Set([...(chromium.args || []), "--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage"])],
 });
 
 try {

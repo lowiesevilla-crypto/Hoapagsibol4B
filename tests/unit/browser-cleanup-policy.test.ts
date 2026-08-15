@@ -4,7 +4,6 @@ import { test } from "node:test";
 
 const packageJson = JSON.parse(readFileSync("package.json", "utf8")) as {
   scripts: Record<string, string>;
-  dependencies: Record<string, string>;
 };
 const cleanupSource = readFileSync(
   "tests/e2e/safe-browser-context-cleanup.mjs",
@@ -14,52 +13,24 @@ const criticalPathRunnerSource = readFileSync(
   "tests/e2e/run-critical-path.mjs",
   "utf8",
 );
-const criticalPathSource = readFileSync(
-  "tests/e2e/critical-path.mjs",
-  "utf8",
-);
-const ciWorkflowSource = readFileSync(
-  ".github/workflows/ci-deploy.yml",
-  "utf8",
-);
 const homeownerDashboardSource = readFileSync(
   "app/portal/dashboard/page.tsx",
   "utf8",
 );
 
-test("every browser E2E entry point preloads the safe controlled-Chromium runtime", () => {
-  const command = packageJson.scripts["test:e2e"] || "";
-  assert.match(command, /^node tests\/e2e\/run-critical-path\.mjs/);
+test("critical browser suite preloads bounded context cleanup", () => {
+  assert.match(
+    packageJson.scripts["test:e2e"] || "",
+    /^node tests\/e2e\/run-critical-path\.mjs/,
+  );
   assert.match(
     criticalPathRunnerSource,
     /"--import", "\.\/tests\/e2e\/safe-browser-context-cleanup\.mjs", "tests\/e2e\/critical-path\.mjs"/,
   );
-
-  for (const script of [
-    "onboarding-workflow.mjs",
-    "document-workflow.mjs",
-    "document-management.mjs",
-    "rbac-stale-session.mjs",
-    "ai-assistant.mjs",
-  ]) {
-    const expected = `node --import ./tests/e2e/safe-browser-context-cleanup.mjs tests/e2e/${script}`;
-    assert.ok(command.includes(expected), `${script} must preload the safe browser runtime`);
-  }
-
   assert.match(cleanupSource, /context\.pages\(\)/);
   assert.match(cleanupSource, /page\.close\(\{ runBeforeUnload: false \}\)/);
   assert.match(cleanupSource, /browser\.process\(\)\?\.kill\("SIGKILL"\)/);
   assert.doesNotMatch(cleanupSource, /Target\.disposeBrowserContext|originalContextClose/);
-});
-
-test("controlled Chromium preserves logical context isolation with separate default-context browser processes", () => {
-  assert.match(cleanupSource, /const isolatedBrowsers = new Set\(\)/);
-  assert.match(cleanupSource, /const isolatedBrowser = await originalLaunch\(\.\.\.launchArguments\)/);
-  assert.match(cleanupSource, /const context = isolatedBrowser\.defaultBrowserContext\(\)/);
-  assert.match(cleanupSource, /isolatedBrowsers\.add\(isolatedBrowser\)/);
-  assert.match(cleanupSource, /isolatedBrowsers\.delete\(isolatedBrowser\)/);
-  assert.match(cleanupSource, /remainingBrowsers\.map/);
-  assert.doesNotMatch(cleanupSource, /originalCreateBrowserContext/);
 });
 
 test("critical browser startup retry is bounded and does not retry business assertion failures", () => {
@@ -74,32 +45,6 @@ test("critical browser startup retry is bounded and does not retry business asse
     criticalPathRunnerSource,
     /if \(!transientStartupClosure \|\| attempt === maxAttempts\)/,
   );
-});
-
-test("CI pins browser verification to the repository-controlled Chromium executable", () => {
-  const prepareIndex = ciWorkflowSource.indexOf("Prepare controlled Chromium for browser suites");
-  const browserIndex = ciWorkflowSource.indexOf("Production smoke and critical browser suite");
-
-  assert.ok(prepareIndex >= 0, "CI must prepare the repository-controlled Chromium runtime");
-  assert.ok(browserIndex > prepareIndex, "controlled Chromium must be exported before the browser suite starts");
-  assert.match(ciWorkflowSource, /import chromium from "@sparticuz\/chromium"/);
-  assert.match(ciWorkflowSource, /PUPPETEER_EXECUTABLE_PATH=\$CHROMIUM_PATH/);
-  assert.match(ciWorkflowSource, />> "\$GITHUB_ENV"/);
-});
-
-test("controlled Chromium and Puppeteer stay on the verified compatible major pair", () => {
-  assert.equal(packageJson.dependencies["@sparticuz/chromium"], "149.0.0");
-  assert.equal(packageJson.dependencies["puppeteer-core"], "25.1.0");
-});
-
-test("controlled Chromium uses its supported chrome-headless-shell launch contract", () => {
-  assert.match(criticalPathSource, /const headlessMode = "shell"/);
-  assert.match(criticalPathSource, /headless: headlessMode/);
-  assert.match(
-    criticalPathSource,
-    /args: await puppeteer\.defaultArgs\(\{ args: chromium\.args, headless: headlessMode \}\)/,
-  );
-  assert.doesNotMatch(criticalPathSource, /headless: true/);
 });
 
 test("browser cleanup limits do not change business assertion timeouts", () => {

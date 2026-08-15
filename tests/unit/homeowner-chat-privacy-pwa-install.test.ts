@@ -13,7 +13,7 @@ const pwaProvider = readFileSync("components/pwa-install-provider.tsx", "utf8");
 const migration = readFileSync("prisma/migrations/20260815213000_chat_privacy_requests_blocks/migration.sql", "utf8");
 
 test("resident messaging policy is tenant scoped and persists privacy requests and blocks", () => {
-  for (const table of ["ChatPrivacyPreference", "ChatUserBlock", "ChatMessageRequest"]) assert.match(migration, new RegExp(`CREATE TABLE \\`${table}\\``));
+  for (const table of ["ChatPrivacyPreference", "ChatUserBlock", "ChatMessageRequest"]) assert.ok(migration.includes("CREATE TABLE `" + table + "`"));
   assert.match(migration, /tenantId/);
   assert.match(privacy, /WHERE tenantId = \$\{tenantId\}/);
   assert.match(privacy, /recipientUserId = \$\{input\.userId\}/);

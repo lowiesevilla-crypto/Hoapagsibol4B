@@ -1,8 +1,14 @@
+import { Role } from "@prisma/client";
 import { NextResponse } from "next/server";
 import { requireUser } from "@/lib/auth";
 import { writeAuditLog } from "@/lib/audit";
 import { prisma } from "@/lib/db";
 import { findOrCreateDirectConversation, getChatPayload } from "@/lib/services/chat";
+import { sanitizeHomeownerChatPayload } from "@/lib/services/homeowner-chat-view";
+
+function homeownerView<T>(role: Role, payload: T) {
+  return role === Role.HOMEOWNER ? sanitizeHomeownerChatPayload(payload) : payload;
+}
 
 export async function POST(request: Request) {
   const user = await requireUser();
@@ -12,7 +18,7 @@ export async function POST(request: Request) {
   try {
     const conversationId = await findOrCreateDirectConversation(user, recipientId);
     await writeAuditLog({ actorId: user.id, module: "CHAT", action: "OPEN_OR_CREATE_CONVERSATION", entityType: "ChatConversation", entityId: conversationId, metadata: { recipientId } });
-    const payload = await getChatPayload(user, conversationId);
+    const payload = homeownerView(user.role, await getChatPayload(user, conversationId));
     return NextResponse.json({ conversationId, payload });
   } catch (error) {
     return NextResponse.json({ error: error instanceof Error ? error.message : "Unable to open conversation." }, { status: 400 });
@@ -31,7 +37,7 @@ export async function PATCH(request: Request) {
     where: { conversationId_userId: { conversationId, userId: user.id } },
     data: { pinnedAt: pinned ? new Date() : null },
   });
-  return NextResponse.json(await getChatPayload(user, conversationId));
+  return NextResponse.json(homeownerView(user.role, await getChatPayload(user, conversationId)));
 }
 
 export async function DELETE(request: Request) {
@@ -46,5 +52,5 @@ export async function DELETE(request: Request) {
     data: { deletedAt: new Date() },
   });
   await writeAuditLog({ actorId: user.id, module: "CHAT", action: "DELETE_CONVERSATION_FOR_ME", entityType: "ChatConversation", entityId: conversationId });
-  return NextResponse.json(await getChatPayload(user));
+  return NextResponse.json(homeownerView(user.role, await getChatPayload(user)));
 }

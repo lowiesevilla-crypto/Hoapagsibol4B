@@ -154,13 +154,18 @@ export default async function PortalPayPage({ searchParams }: { searchParams: Pr
         </div>
 
         <div className="space-y-5">
-          {isPayMongoFlow ? <section className="rounded-3xl border border-blue-100 bg-white p-4 shadow-soft sm:p-5">
-            <div className="mb-4 flex items-center gap-3 rounded-2xl bg-blue-50 p-3">
-              {association.logoUrl ? <img src={association.logoUrl} alt={`${association.name} logo`} className="size-12 rounded-xl object-contain" /> : <span className="grid size-12 place-items-center rounded-xl bg-blue-100 text-sm font-black text-blue-800">HOA</span>}
-              <div className="min-w-0"><p className="text-xs font-bold uppercase tracking-wider text-slate-500">Tenant payment account</p><p className="break-words font-black text-slate-950">{association.name}</p></div>
+          {isPayMongoFlow ? <details className="group rounded-3xl border border-blue-100 bg-white shadow-soft">
+            <summary className="flex min-h-16 cursor-pointer list-none items-center justify-between gap-3 rounded-3xl p-4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-blue-500 sm:p-5 [&::-webkit-details-marker]:hidden">
+              <div className="flex min-w-0 items-center gap-3">
+                {association.logoUrl ? <img src={association.logoUrl} alt={`${association.name} logo`} className="size-12 shrink-0 rounded-xl object-contain" /> : <span className="grid size-12 shrink-0 place-items-center rounded-xl bg-blue-100 text-sm font-black text-blue-800">HOA</span>}
+                <div className="min-w-0"><p className="text-xs font-bold uppercase tracking-wider text-slate-500">Tenant payment account</p><p className="break-words font-black text-slate-950">{association.name}</p><p className="mt-1 text-sm font-black text-blue-900">PayMongo Online</p></div>
+              </div>
+              <span className="grid size-10 shrink-0 place-items-center rounded-2xl bg-blue-50 text-blue-700" aria-hidden="true"><ChevronDown className="size-5 transition-transform duration-200 group-open:rotate-180" /></span>
+            </summary>
+            <div className="border-t border-blue-100 px-4 pb-4 pt-3 sm:px-5 sm:pb-5">
+              <div className="flex items-start gap-3"><span className="grid size-11 shrink-0 place-items-center rounded-2xl bg-blue-50 text-blue-700"><CreditCard className="size-5" /></span><p className="text-sm leading-6 text-slate-600">This HOA has enabled online checkout as its homeowner payment flow. Manual QR proof submission is not available while this mode is active.</p></div>
             </div>
-            <div className="flex items-start gap-3"><span className="grid size-11 shrink-0 place-items-center rounded-2xl bg-blue-50 text-blue-700"><CreditCard className="size-5" /></span><div><h2 className="text-lg font-black">PayMongo Online</h2><p className="mt-1 text-sm leading-6 text-slate-600">This HOA has enabled online checkout as its homeowner payment flow. Manual QR proof submission is not available while this mode is active.</p></div></div>
-          </section> : <section className="rounded-3xl border border-pine-100 bg-white p-4 shadow-soft sm:p-5">
+          </details> : <section className="rounded-3xl border border-pine-100 bg-white p-4 shadow-soft sm:p-5">
             <div className="mb-4 flex items-center gap-3 rounded-2xl bg-slate-50 p-3">
               {association.logoUrl ? <img src={association.logoUrl} alt={`${association.name} logo`} className="size-12 rounded-xl object-contain" /> : <span className="grid size-12 place-items-center rounded-xl bg-pine-100 text-sm font-black text-pine-800">HOA</span>}
               <div className="min-w-0"><p className="text-xs font-bold uppercase tracking-wider text-slate-500">Tenant payment account</p><p className="break-words font-black text-slate-950">{association.name}</p></div>

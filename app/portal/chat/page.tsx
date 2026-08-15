@@ -14,12 +14,14 @@ export default async function PortalChatPage({ searchParams }: { searchParams: P
   ]);
 
   return <>
-    <HomeownerChatPrivacyPanel initialData={privacy} />
     <ChatMessenger
       basePath="/portal/chat"
       title="Messages"
       description="Chat with verified HOA officials or other residents. New resident contacts follow your privacy preference and may arrive as Message Requests."
       initialData={data}
     />
+    <div className="mt-4">
+      <HomeownerChatPrivacyPanel initialData={privacy} />
+    </div>
   </>;
 }

@@ -1,6 +1,6 @@
 # HOAHub Agent Context
 
-Last updated: 2026-08-15
+Last updated: 2026-08-16
 
 ## Purpose
 
@@ -147,17 +147,23 @@ The homeowner identifier remains compatible with either verified email or the 11
 
 ## Resident Messaging Privacy and Message Requests
 
-The homeowner `/portal/chat` experience supports tenant-scoped resident-to-resident messaging in addition to verified HOA personnel, with server-enforced privacy, Message Requests, and block/unblock controls.
+The homeowner `/portal/chat` experience supports tenant-scoped resident-to-resident messaging in addition to verified HOA personnel, with server-enforced privacy, Message Requests, block/unblock controls, and a phone-first Messenger-style interaction model.
 
 - Homeowners may discover other active `HOMEOWNER` users only inside the same authenticated tenant. The client payload deliberately blanks email and omits email from homeowner recipient search text; private resident email/phone must never be exposed as directory metadata.
+- Homeowner discovery supports **name, block, lot, and block+lot search**, but a resident's full/street/property address must never be returned to the homeowner browser, rendered in search results, conversation rows, message headers, privacy controls, or embedded in homeowner chat `searchText`. Block and lot are lookup keys only; normal resident rows identify the person by name/avatar/Resident status rather than exposing the property address.
+- `lib/services/homeowner-chat-view.ts` is the homeowner-facing payload boundary. Initial page data, chat refreshes, conversation mutations, and message mutations must pass through `sanitizeHomeownerChatPayload` before being returned to a `HOMEOWNER`; structured `homeownerProfile` and resident email are removed while a derived name/block/lot search string preserves approved lookup behavior.
+- `/api/chat/homeowners` is tenant-scoped, active-homeowner-only, excludes the current user, and selects only the minimum directory fields needed for name/block/lot discovery. Do not add address, phone, email, or other property/contact fields to that response.
+- The homeowner phone/PWA `/portal/chat` UI follows Messenger-like density and interaction hierarchy rather than the generic HOA workspace layout: compact inbox/search, resident conversation rows, a compact full-height active thread, left/right message bubbles, overflow-menu secondary actions, and a compact bottom composer. Decorative or instructional hero content must not dominate the messaging task.
+- Every homeowner messaging/privacy surface is a viewport-fit release gate. Containers, grids, rows, summaries, inputs, request cards, and block/unblock controls must use shrink-safe `min-w-0`/`max-w-full` patterns and must not create horizontal scrolling or clip actions on supported phone widths.
 - A homeowner's `residentMessagingMode` is one of `INBOX`, `REQUESTS`, or `NONE`. The default is `REQUESTS`. `INBOX` admits a new resident conversation directly, `REQUESTS` creates a pending request that remains outside the recipient's normal Chats until accepted, and `NONE` prevents another resident from starting a new resident chat.
 - Incoming pending/declined request conversations are excluded from the normal chat payload for the recipient. `HomeownerChatPrivacyPanel` exposes pending requests with explicit Accept/Decline actions. Accepting reveals the existing conversation; declining permanently stops sends on that request unless a future product change explicitly defines a re-request lifecycle.
 - A block is tenant-scoped and resident-only. If either resident has blocked the other, direct resident conversation creation and every resident-to-resident send fail server-side. Unblock removes only the current user's block record.
 - `HOA Official` status is derived only from authenticated server roles (`ADMIN`, `SYSTEM_ADMIN`, `EMPLOYEE`). The browser never supplies or upgrades official authority. Resident privacy and block records apply only when both participants are residents, so a resident cannot suppress or impersonate verified HOA official communication through these controls.
 - `createChatMessage` rechecks block and request state on every resident-to-resident send; the request recipient cannot reply while a request is pending and no participant can send after decline. Never rely on disabled client controls as the enforcement boundary.
 - Persistence is provided by migration `20260815213000_chat_privacy_requests_blocks`, which creates tenant-scoped `ChatPrivacyPreference`, `ChatUserBlock`, and `ChatMessageRequest` tables. The current service accesses these narrowly through parameterized Prisma raw SQL until the domain is promoted into generated Prisma models.
-- Core implementation: `lib/services/chat.ts`, `lib/services/chat-privacy.ts`, `components/homeowner-chat-privacy-panel.tsx`, `app/api/chat/privacy/route.ts`, `app/api/chat/requests/route.ts`, `app/api/chat/blocks/route.ts`, and `app/portal/chat/page.tsx`.
-- Regression coverage: `tests/unit/homeowner-chat-privacy-pwa-install.test.ts` plus the homeowner PWA verifier's narrow changed-file allow-list for this approved chat migration.
+- Core implementation: `lib/services/chat.ts`, `lib/services/chat-privacy.ts`, `lib/services/homeowner-chat-view.ts`, `components/chat-messenger.tsx`, `components/homeowner-chat-privacy-panel.tsx`, `app/api/chat/homeowners/route.ts`, `app/api/chat/privacy/route.ts`, `app/api/chat/requests/route.ts`, `app/api/chat/blocks/route.ts`, and `app/portal/chat/page.tsx`.
+- Regression coverage: `tests/unit/homeowner-chat-privacy-pwa-install.test.ts`, `tests/unit/homeowner-messenger-ui.test.ts`, and `tests/unit/homeowner-chat-mobile-privacy-layout.test.ts`, plus the homeowner PWA verifier's narrow changed-file allow-list for approved chat changes.
+- Do not merge/deploy a messaging change when homeowner directory population, name/block/lot search, address non-disclosure, phone viewport fit, message-request/block enforcement, or the Messenger-style mobile thread fails its acceptance checks. A visually incomplete desktop-card/form presentation is not an acceptable substitute for the approved phone chat experience.
 
 ## Homeowner Payment Status Authority
 

@@ -1,10 +1,16 @@
+import { Role } from "@prisma/client";
 import { NextResponse } from "next/server";
 import { requireUser } from "@/lib/auth";
 import { writeAuditLog } from "@/lib/audit";
 import { prisma } from "@/lib/db";
 import { createChatMessage, getChatPayload } from "@/lib/services/chat";
+import { sanitizeHomeownerChatPayload } from "@/lib/services/homeowner-chat-view";
 
 type UploadedAttachmentInput = { url?: unknown; fileName?: unknown; contentType?: unknown; size?: unknown };
+
+function homeownerView<T>(role: Role, payload: T) {
+  return role === Role.HOMEOWNER ? sanitizeHomeownerChatPayload(payload) : payload;
+}
 
 export async function POST(request: Request) {
   const user = await requireUser();
@@ -27,7 +33,7 @@ export async function POST(request: Request) {
       })),
     });
     await writeAuditLog({ actorId: user.id, module: "CHAT", action: "SEND_MESSAGE", entityType: "ChatMessage", entityId: message.id, metadata: { conversationId, attachments: attachments.length } });
-    return NextResponse.json(await getChatPayload(user, conversationId));
+    return NextResponse.json(homeownerView(user.role, await getChatPayload(user, conversationId)));
   } catch (error) {
     return NextResponse.json({ error: error instanceof Error ? error.message : "Unable to send message." }, { status: 400 });
   }
@@ -44,7 +50,7 @@ export async function PATCH(request: Request) {
     where: { conversationId_userId: { conversationId, userId: user.id } },
     data: { lastReadAt: new Date() },
   });
-  return NextResponse.json(await getChatPayload(user, conversationId));
+  return NextResponse.json(homeownerView(user.role, await getChatPayload(user, conversationId)));
 }
 
 export async function DELETE(request: Request) {
@@ -58,5 +64,5 @@ export async function DELETE(request: Request) {
   if (!message) return NextResponse.json({ error: "Only the sender can delete this message for everyone." }, { status: 403 });
   await prisma.chatMessage.update({ where: { id: message.id }, data: { deletedForEveryoneAt: new Date() } });
   await writeAuditLog({ actorId: user.id, module: "CHAT", action: "DELETE_MESSAGE_FOR_EVERYONE", entityType: "ChatMessage", entityId: message.id, metadata: { conversationId: message.conversationId } });
-  return NextResponse.json(await getChatPayload(user, message.conversationId));
+  return NextResponse.json(homeownerView(user.role, await getChatPayload(user, message.conversationId)));
 }

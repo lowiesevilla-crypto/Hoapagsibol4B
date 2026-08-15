@@ -54,6 +54,9 @@ Homeowner-facing changes must be designed for installed PWA and mobile-browser u
 - Honor `prefers-reduced-motion`.
 - Ensure critical cards/forms can scroll safely on short mobile viewports without horizontal overflow.
 - Preserve passkey support on compatible mobile devices.
+- On `/portal/pay`, the long `Unpaid Billings`, `Payment Status`, `PayMongo Online` guidance, `Pay securely online` guidance, and `Online payment fee disclosure` surfaces are accessible disclosure controls and default to collapsed so homeowner phones do not require excessive vertical scrolling. Keep a clear expand/collapse chevron and keyboard-visible focus treatment on every trigger.
+- Keep the primary payment task visible without expanding guidance: `Transaction type` and `Billing items` remain outside the collapsed `Pay securely online` disclosure and receive stronger visual priority. The collapsed `PayMongo Online` summary continues to show the tenant payment account, association name, and payment mode.
+- The collapsed online-fee disclosure must continue to show the `HOAHub convenience fee` amount. Keep navigation actions such as `View billing` and `History` inside the expanded content rather than nesting interactive links inside a disclosure trigger.
 
 ## Current Release: Community Pulse Premium Login
 
@@ -153,7 +156,7 @@ Homeowner-facing payment status must describe the current financial state, not a
 - Do not call the PayMongo API merely to render each homeowner payment page. The authoritative local posted ledger is created only from verified PayMongo webhook processing; page rendering reads that tenant-scoped local financial state.
 - Payment status corrections must never create a receipt merely from a browser redirect/query parameter. Only verified gateway confirmation or the existing authorized manual accounting workflow can post financial records.
 - Core implementation: `lib/services/homeowner-payment-status.ts`, `app/portal/pay/page.tsx`, `lib/services/homeowner-paymongo.ts`, and `lib/services/payment-requests.ts`.
-- Regression coverage: `tests/unit/homeowner-payment-status.test.ts`, including source-level wiring that ensures the homeowner page passes linked `Payment`/`Collection` evidence into the status resolver.
+- Regression coverage: `tests/unit/homeowner-payment-status.test.ts`, including source-level wiring that ensures the homeowner page passes linked `Payment`/`Collection` evidence into the status resolver and keeps the long homeowner payment sections/disclosure controls collapsible while payment inputs remain immediately usable.
 
 ## Validation Gate
 

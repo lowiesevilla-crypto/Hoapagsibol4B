@@ -90,7 +90,7 @@ A user whose already-verified credentials match more than one active HOA/tenant 
 - The temporary choice cookie is cleared after successful selection, when a new credential login starts, on expiry/error, and during logout flows.
 - A missing, expired, tampered, or mismatched choice cookie fails closed and requires a fresh sign-in.
 - Tenant isolation remains mandatory: choosing one account loads only that tenant/account into the authenticated session.
-- Regression coverage: `tests/unit/login-multi-account-selection.test.ts`.
+- Both `tests/unit/login-multi-account-selection.test.ts` and the existing `tests/unit/homeowner-multi-account-surface.test.ts` must assert the credential-free second step and tenant/account-isolated session behavior; stale tests must not require the former credential-resubmission UI.
 
 ### Post-Login Brand Handoff
 
@@ -119,6 +119,7 @@ A short-lived browser session marker (`hoahub.login.handoff.v1`) is written only
 - `lib/login-choice-cookie.ts`
 - `tests/unit/community-pulse-login-transition.test.ts`
 - `tests/unit/login-multi-account-selection.test.ts`
+- `tests/unit/homeowner-multi-account-surface.test.ts`
 
 ### Client/Server Branding Boundary
 

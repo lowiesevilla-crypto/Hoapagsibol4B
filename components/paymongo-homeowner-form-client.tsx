@@ -61,10 +61,18 @@ export function PayMongoHomeownerFormClient({
 
   return <form id="qr-payment" action={createHomeownerPayMongoCheckoutAction} className="scroll-mt-24 rounded-3xl border border-blue-100 bg-white shadow-soft">
     <div className="p-4 sm:p-5">
-      <div className="mb-5 flex items-start gap-3">
-        <span className="grid size-11 shrink-0 place-items-center rounded-2xl bg-blue-50 text-blue-700"><CreditCard className="size-5" /></span>
-        <div><h2 className="text-lg font-black">Pay securely online</h2><p className="text-sm leading-6 text-slate-500">Choose what to pay, then continue to the secure payment page. HOAHub records the HOA payment only after PayMongo sends a verified payment confirmation.</p></div>
-      </div>
+      <details className="group mb-4 rounded-2xl border border-blue-100 bg-blue-50/40">
+        <summary className="flex min-h-14 cursor-pointer list-none items-center justify-between gap-3 rounded-2xl p-3 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-blue-500 [&::-webkit-details-marker]:hidden">
+          <div className="flex min-w-0 items-center gap-3">
+            <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-blue-100 text-blue-700"><CreditCard className="size-5" /></span>
+            <div className="min-w-0"><h2 className="font-black text-slate-950">Pay securely online</h2><p className="text-xs font-semibold text-slate-500">How secure checkout works</p></div>
+          </div>
+          <span className="grid size-9 shrink-0 place-items-center rounded-xl bg-white text-blue-700" aria-hidden="true"><ChevronDown className="size-5 transition-transform duration-200 group-open:rotate-180" /></span>
+        </summary>
+        <div className="border-t border-blue-100 px-4 pb-4 pt-3">
+          <p className="text-sm leading-6 text-slate-600">Choose what to pay, then continue to the secure payment page. HOAHub records the HOA payment only after PayMongo sends a verified payment confirmation.</p>
+        </div>
+      </details>
 
       <div className="grid gap-4 sm:grid-cols-2">
         {documentPayment ? <div className="sm:col-span-2 rounded-2xl border border-blue-100 bg-blue-50/60 p-4">
@@ -77,17 +85,17 @@ export function PayMongoHomeownerFormClient({
             <div><dt className="font-bold uppercase tracking-wide text-slate-500">Payment status</dt><dd className="font-black text-slate-950">{documentPayment.statusLabel}</dd></div>
           </dl>
           <p className="mt-4 whitespace-pre-wrap rounded-xl bg-white p-3 text-sm font-semibold text-slate-700">{documentPayment.purpose}</p>
-        </div> : <div className="sm:col-span-2">
-          <label className="label" htmlFor="paymongoTransactionType">Transaction type</label>
+        </div> : <div className="sm:col-span-2 rounded-2xl border border-blue-100 bg-white p-3 shadow-sm">
+          <label className="mb-2 block text-xs font-black uppercase tracking-[.14em] text-blue-800" htmlFor="paymongoTransactionType">Transaction type</label>
           <select id="paymongoTransactionType" className="field" name="transactionType" value={transactionType} onChange={(event) => { setTransactionType(event.target.value); setSelectedBills([]); setAmount(""); }} required>
             {transactionTypes.map((type) => <option value={type.value} key={type.value}>{type.label}</option>)}
           </select>
         </div>}
 
-        {isMonthlyDues ? <div className="sm:col-span-2">
-          <div className="mb-2 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
-            <div><label className="label">Billing items</label><p className="text-xs text-slate-500">Select one or more unpaid months. HOAHub calculates the total automatically.</p></div>
-            <div className="rounded-2xl bg-blue-50 px-4 py-2 text-right"><p className="text-[10px] font-black uppercase tracking-widest text-blue-700">Selected total</p><p className="text-lg font-black text-blue-950">{selectedTotalLabel}</p></div>
+        {isMonthlyDues ? <div className="sm:col-span-2 rounded-2xl border border-blue-100 bg-blue-50/30 p-3 sm:p-4">
+          <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+            <div><p className="text-xs font-black uppercase tracking-[.14em] text-blue-800">Billing items</p><p className="mt-1 text-xs text-slate-500">Select one or more unpaid months. HOAHub calculates the total automatically.</p></div>
+            <div className="rounded-2xl bg-white px-4 py-2 text-right shadow-sm"><p className="text-[10px] font-black uppercase tracking-widest text-blue-700">Selected total</p><p className="text-lg font-black text-blue-950">{selectedTotalLabel}</p></div>
           </div>
           <div className="grid max-h-80 gap-2 overflow-y-auto rounded-2xl border border-slate-200 bg-slate-50/60 p-2">
             {openBills.map((bill) => {

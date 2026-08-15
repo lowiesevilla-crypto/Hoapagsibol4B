@@ -30,7 +30,6 @@ export async function GET(request: Request) {
                   { name: { contains: term } },
                   { homeownerProfile: { is: { block: { contains: term } } } },
                   { homeownerProfile: { is: { lot: { contains: term } } } },
-                  { homeownerProfile: { is: { address: { contains: term } } } },
                 ],
               })),
             }
@@ -41,7 +40,7 @@ export async function GET(request: Request) {
         name: true,
         role: true,
         presence: true,
-        homeownerProfile: { select: { address: true, block: true, lot: true } },
+        homeownerProfile: { select: { block: true, lot: true } },
       },
       orderBy: { name: "asc" },
       take: 500,
@@ -65,13 +64,12 @@ export async function GET(request: Request) {
                 online: now - lastSeenAt.valueOf() < ONLINE_WINDOW_MS,
               }
             : null,
-          homeownerProfile: profile,
+          homeownerProfile: null,
           employeeProfile: null,
           searchText: [
             resident.name,
             "homeowner",
             "resident",
-            profile?.address,
             profile?.block,
             profile?.lot,
             profile?.block ? `block ${profile.block}` : null,

@@ -53,70 +53,77 @@ export function LoginForm({
         {tenantSlug && <input type="hidden" name="tenantSlug" value={tenantSlug} />}
         {returnTo && <input type="hidden" name="returnTo" value={returnTo} />}
 
-        <div>
-          <label className="label text-slate-700" htmlFor="identifier">Email address or 11-digit account number</label>
-          <input
-            className="field min-h-12 border-slate-300 bg-white text-[#10354c]"
-            id="identifier"
-            name="identifier"
-            type="text"
-            placeholder="Enter your verified email or account number"
-            autoComplete="username"
-            autoCapitalize="none"
-            spellCheck={false}
-            enterKeyHint="next"
-            required
-          />
-        </div>
+        {!hasChoices && <>
+          <div>
+            <label className="label text-slate-700" htmlFor="identifier">Email address or 11-digit account number</label>
+            <input
+              className="field min-h-12 border-slate-300 bg-white text-[#10354c]"
+              id="identifier"
+              name="identifier"
+              type="text"
+              placeholder="Enter your verified email or account number"
+              autoComplete="username"
+              autoCapitalize="none"
+              spellCheck={false}
+              enterKeyHint="next"
+              required
+            />
+          </div>
 
-        <div>
-          <label className="label text-slate-700" htmlFor="password">Password</label>
-          <PasswordInput
-            className="field min-h-12 border-slate-300 bg-white pr-12 text-[#10354c]"
-            id="password"
-            name="password"
-            placeholder="Enter your password"
-            autoComplete="current-password"
-            minLength={6}
-            required
-          />
-        </div>
+          <div>
+            <label className="label text-slate-700" htmlFor="password">Password</label>
+            <PasswordInput
+              className="field min-h-12 border-slate-300 bg-white pr-12 text-[#10354c]"
+              id="password"
+              name="password"
+              placeholder="Enter your password"
+              autoComplete="current-password"
+              minLength={6}
+              required
+            />
+          </div>
+        </>}
 
         {hasChoices && (
-          <fieldset className="space-y-2 rounded-2xl border border-pine-100 bg-pine-50/60 p-3" aria-describedby="account-choice-help">
-            <legend className="px-1 text-sm font-black text-[#10354c]">Choose the HOA account to open</legend>
-            <p id="account-choice-help" className="px-1 text-xs leading-5 text-slate-600">
-              Your verified email and password match more than one tenant or homeowner account. Only the selected tenant is loaded into the session.
-            </p>
-            <div className="space-y-2">
-              {state.choices?.map((choice, index) => (
-                <label key={choice.userId} className="flex cursor-pointer gap-3 rounded-xl border border-slate-200 bg-white p-3 transition hover:border-pine-300 hover:shadow-sm">
-                  <input className="mt-1 size-4 accent-pine-700" type="radio" name="selectedUserId" value={choice.userId} defaultChecked={index === 0} required />
-                  <span className="min-w-0">
-                    <span className="block break-words text-sm font-black text-[#10354c]">{choice.tenantName}</span>
-                    <span className="mt-0.5 block text-xs font-bold text-pine-700">{choice.roleLabel}</span>
-                    {(choice.accountNumber || choice.propertyLabel) && (
-                      <span className="mt-1 block text-xs leading-5 text-slate-500">
-                        {choice.accountNumber ? `Account ${choice.accountNumber}` : ""}
-                        {choice.accountNumber && choice.propertyLabel ? " · " : ""}
-                        {choice.propertyLabel || ""}
-                      </span>
-                    )}
-                  </span>
-                </label>
-              ))}
+          <>
+            <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-3 text-sm font-semibold leading-6 text-emerald-900" role="status">
+              <span className="font-black">Identity verified.</span> Choose the HOA account you want to open. You do not need to enter your email or password again.
             </div>
-          </fieldset>
+            <fieldset className="space-y-2 rounded-2xl border border-pine-100 bg-pine-50/60 p-3" aria-describedby="account-choice-help">
+              <legend className="px-1 text-sm font-black text-[#10354c]">Choose the HOA account to open</legend>
+              <p id="account-choice-help" className="px-1 text-xs leading-5 text-slate-600">
+                Only the selected tenant/account is loaded into the authenticated session.
+              </p>
+              <div className="space-y-2">
+                {state.choices?.map((choice, index) => (
+                  <label key={choice.userId} className="flex cursor-pointer gap-3 rounded-xl border border-slate-200 bg-white p-3 transition hover:border-pine-300 hover:shadow-sm">
+                    <input className="mt-1 size-4 accent-pine-700" type="radio" name="selectedUserId" value={choice.userId} defaultChecked={index === 0} required />
+                    <span className="min-w-0">
+                      <span className="block break-words text-sm font-black text-[#10354c]">{choice.tenantName}</span>
+                      <span className="mt-0.5 block text-xs font-bold text-pine-700">{choice.roleLabel}</span>
+                      {(choice.accountNumber || choice.propertyLabel) && (
+                        <span className="mt-1 block text-xs leading-5 text-slate-500">
+                          {choice.accountNumber ? `Account ${choice.accountNumber}` : ""}
+                          {choice.accountNumber && choice.propertyLabel ? " · " : ""}
+                          {choice.propertyLabel || ""}
+                        </span>
+                      )}
+                    </span>
+                  </label>
+                ))}
+              </div>
+            </fieldset>
+          </>
         )}
 
-        <div className="flex justify-end">
+        {!hasChoices && <div className="flex justify-end">
           <Link
             className="text-sm font-bold text-pine-700 transition hover:text-pine-900 hover:underline"
             href={tenantSlug ? `/forgot-password?tenantSlug=${encodeURIComponent(tenantSlug)}` : "/forgot-password"}
           >
             Forgot password?
           </Link>
-        </div>
+        </div>}
 
         {state.error && (
           <p role="alert" className="rounded-xl bg-rose-50 px-3 py-2 text-sm text-rose-700">
@@ -134,7 +141,7 @@ export function LoginForm({
           {pending ? (
             <span className={transitionStyles.pendingLabel}>
               <span className={transitionStyles.pendingSpinner} aria-hidden="true" />
-              Verifying access…
+              {hasChoices ? "Opening selected account…" : "Verifying access…"}
             </span>
           ) : hasChoices ? "Open selected account" : "Sign in securely"}
         </button>

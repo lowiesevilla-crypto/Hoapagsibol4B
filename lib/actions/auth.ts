@@ -11,6 +11,7 @@ import {
   primaryRoleForRoles,
 } from "@/lib/authorization/effective-access";
 import { platformPrisma, prisma } from "@/lib/db";
+import { clearVerifiedLoginChoices, readVerifiedLoginChoices, setVerifiedLoginChoices } from "@/lib/login-choice-cookie";
 import { clearRateLimit, rateLimitAvailable, recordRateLimitFailure } from "@/lib/rate-limit";
 import { loginSchema } from "@/lib/validation";
 import { resolveTenant, tenantCanSignIn } from "@/lib/tenant";
@@ -29,14 +30,37 @@ export type LoginChoice = {
 export type AuthNavigationState = { error?: string; redirectTo?: string };
 export type LoginState = AuthNavigationState & { choices?: LoginChoice[] };
 
+type ResolvedLoginUser = Awaited<ReturnType<typeof resolveLoginUser>>;
+type SuccessfulLoginUser = Exclude<ResolvedLoginUser, null | { error: string } | { choices: LoginChoice[] }>;
+
 export async function loginAction(_state: LoginState, formData: FormData): Promise<LoginState> {
+  const selectedUserId = String(formData.get("selectedUserId") || "").trim();
+
+  // Account selection is step two of an already verified login. The browser never
+  // receives or retains the password: a short-lived HttpOnly signed cookie limits
+  // selection to the user IDs proven by the first credential check.
+  if (selectedUserId) {
+    const allowedUserIds = await readVerifiedLoginChoices();
+    if (!allowedUserIds?.includes(selectedUserId)) {
+      await clearVerifiedLoginChoices();
+      return { error: "Your verified sign-in has expired. Sign in again to choose an HOA account." };
+    }
+    const resolvedSelection = await resolveVerifiedLoginChoice(selectedUserId);
+    if (!resolvedSelection) {
+      await clearVerifiedLoginChoices();
+      return { error: "The selected HOA account is no longer available. Sign in again." };
+    }
+    await clearVerifiedLoginChoices();
+    return finishLogin(resolvedSelection, true);
+  }
+
+  await clearVerifiedLoginChoices();
   const parsed = loginSchema.safeParse(Object.fromEntries(formData.entries()));
   if (!parsed.success) return { error: parsed.error.issues[0]?.message || "Check your login details." };
 
   const requestHeaders = await headers();
   const ip = requestHeaders.get("x-forwarded-for")?.split(",")[0]?.trim() || requestHeaders.get("x-real-ip")?.trim() || "unknown";
   const tenantSlug = String(formData.get("tenantSlug") || "").trim().toLowerCase();
-  const selectedUserId = String(formData.get("selectedUserId") || "").trim();
   const identifier = parsed.data.identifier.trim();
   const identifierType = /^\d{11}$/.test(identifier) ? "accountNumber" : "email";
   const normalizedIdentifier = identifierType === "accountNumber" ? identifier : normalizeActivationEmail(identifier);
@@ -52,7 +76,6 @@ export async function loginAction(_state: LoginState, formData: FormData): Promi
     identifierType,
     identifier: normalizedIdentifier,
     password: parsed.data.password,
-    selectedUserId,
   });
   if (!resolved || "error" in resolved) {
     await Promise.all([
@@ -63,8 +86,15 @@ export async function loginAction(_state: LoginState, formData: FormData): Promi
   }
 
   await clearRateLimit("LOGIN_EMAIL", `${loginScope}:${identifierType}:${normalizedIdentifier}`);
-  if ("choices" in resolved) return { choices: resolved.choices };
+  if ("choices" in resolved) {
+    await setVerifiedLoginChoices(resolved.choices.map((choice) => choice.userId));
+    return { choices: resolved.choices };
+  }
 
+  return finishLogin(resolved, false);
+}
+
+async function finishLogin(resolved: SuccessfulLoginUser, selectedFromMultipleAccounts: boolean): Promise<LoginState> {
   const { tenant, user } = resolved;
   const roles = effectiveRolesForUser(user.role, user.userRoleAssignments);
   const role = primaryRoleForRoles(roles, user.role);
@@ -87,7 +117,7 @@ export async function loginAction(_state: LoginState, formData: FormData): Promi
         action: "TENANT_LOGIN",
         entityType: "User",
         entityId: user.id,
-        metadata: { tenantSlug: tenant.slug, roles, selectedFromMultipleAccounts: Boolean(selectedUserId), identityKey: "verified_email" },
+        metadata: { tenantSlug: tenant.slug, roles, selectedFromMultipleAccounts, identityKey: "verified_email" },
       },
     }),
   ]);
@@ -100,6 +130,7 @@ export async function logoutAction() {
   const session = await readSession();
   const redirectTo = await logoutRedirectForSession(session);
   await deleteSession();
+  await clearVerifiedLoginChoices();
   redirect(redirectTo);
 }
 
@@ -119,6 +150,7 @@ export async function logoutAllSessionsAction() {
     data: { revokedAt: new Date() },
   });
   await deleteSession();
+  await clearVerifiedLoginChoices();
   redirect(redirectTo);
 }
 
@@ -126,6 +158,7 @@ export async function logoutNavigationAction(_state: AuthNavigationState): Promi
   const session = await readSession();
   const redirectTo = await logoutRedirectForSession(session);
   await deleteSession();
+  await clearVerifiedLoginChoices();
   return { redirectTo };
 }
 
@@ -145,6 +178,7 @@ export async function logoutAllSessionsNavigationAction(_state: AuthNavigationSt
     data: { revokedAt: new Date() },
   });
   await deleteSession();
+  await clearVerifiedLoginChoices();
   return { redirectTo };
 }
 
@@ -153,7 +187,6 @@ async function resolveLoginUser(input: {
   identifierType: "email" | "accountNumber";
   identifier: string;
   password: string;
-  selectedUserId?: string;
 }) {
   if (input.identifierType === "email" && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(input.identifier)) return null;
   const tenant = input.tenantSlug ? await resolveTenant(input.tenantSlug) : null;
@@ -196,12 +229,6 @@ async function resolveLoginUser(input: {
   // which isolated tenant/account session to open.
   const selectable = input.identifierType === "email" ? authorized : passwordMatches;
 
-  if (input.selectedUserId) {
-    const selected = selectable.find((candidate) => candidate.id === input.selectedUserId);
-    if (!selected) return { error: "The selected HOA account could not be verified. Choose an account again." } as const;
-    return { user: selected, tenant: selected.tenant } as const;
-  }
-
   if (selectable.length > 1) {
     const choices: LoginChoice[] = selectable.map((candidate) => {
       const roles = effectiveRolesForUser(candidate.role, candidate.userRoleAssignments);
@@ -221,6 +248,31 @@ async function resolveLoginUser(input: {
 
   const user = selectable[0] || passwordMatches[0];
   return { user, tenant: user.tenant } as const;
+}
+
+async function resolveVerifiedLoginChoice(userId: string): Promise<SuccessfulLoginUser | null> {
+  const user = await platformPrisma.user.findFirst({
+    where: {
+      id: userId,
+      active: true,
+      tenant: { status: "ACTIVE", subscriptionStatus: { not: "CANCELLED" } },
+    },
+    include: {
+      homeownerProfile: true,
+      userRoleAssignments: { where: { active: true }, select: { role: true, active: true } },
+      tenant: { include: { advisories: { where: { active: true }, orderBy: { createdAt: "desc" }, take: 1 }, moduleEntitlements: true } },
+    },
+  });
+  if (!user || !tenantCanSignIn(user.tenant)) return null;
+  const roles = effectiveRolesForUser(user.role, user.userRoleAssignments);
+  if (roles.includes(Role.HOMEOWNER) && user.homeownerProfile) {
+    const profile = user.homeownerProfile;
+    if (profile.status !== "ACTIVE"
+      || profile.emailStatus !== "VERIFIED"
+      || profile.activationStatus !== HomeownerActivationStatus.ACTIVE
+      || !profile.activatedAt) return null;
+  }
+  return { user, tenant: user.tenant } as SuccessfulLoginUser;
 }
 
 function formatRoleLabel(role: Role) {

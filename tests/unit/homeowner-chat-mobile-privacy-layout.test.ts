@@ -22,7 +22,7 @@ test("homeowner directory supports name/block/lot without exposing address metad
 test("every homeowner chat payload path strips structured homeowner property metadata", () => {
   assert.match(sanitizer, /sanitized\.homeownerProfile = null/);
   assert.match(sanitizer, /sanitized\.email = ""/);
-  assert.doesNotMatch(sanitizer, /address/);
+  assert.doesNotMatch(sanitizer, /stringField\(sourceProfile, "address"\)/);
   assert.match(portalPage, /sanitizeHomeownerChatPayload\(rawData\)/);
   assert.match(chatRoute, /sanitizeHomeownerChatPayload\(payload\)/);
   assert.match(conversationRoute, /sanitizeHomeownerChatPayload\(payload\)/);

@@ -86,7 +86,7 @@ export async function loginAction(_state: LoginState, formData: FormData): Promi
   }
 
   await clearRateLimit("LOGIN_EMAIL", `${loginScope}:${identifierType}:${normalizedIdentifier}`);
-  if ("choices" in resolved) {
+  if ("choices" in resolved && resolved.choices?.length) {
     await setVerifiedLoginChoices(resolved.choices.map((choice) => choice.userId));
     return { choices: resolved.choices };
   }

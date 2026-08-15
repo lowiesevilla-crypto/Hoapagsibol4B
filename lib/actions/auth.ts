@@ -86,7 +86,10 @@ export async function loginAction(_state: LoginState, formData: FormData): Promi
   }
 
   await clearRateLimit("LOGIN_EMAIL", `${loginScope}:${identifierType}:${normalizedIdentifier}`);
-  if ("choices" in resolved && resolved.choices?.length) {
+  if ("choices" in resolved) {
+    if (!resolved.choices?.length) {
+      return { error: "No eligible HOA account is available for this sign-in." };
+    }
     await setVerifiedLoginChoices(resolved.choices.map((choice) => choice.userId));
     return { choices: resolved.choices };
   }

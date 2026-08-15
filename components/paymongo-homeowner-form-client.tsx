@@ -1,6 +1,6 @@
 "use client";
 
-import { CircleDollarSign, CreditCard, ShieldCheck } from "lucide-react";
+import { ChevronDown, CircleDollarSign, CreditCard, ShieldCheck } from "lucide-react";
 import { useMemo, useState } from "react";
 import { useFormStatus } from "react-dom";
 import { createHomeownerPayMongoCheckoutAction } from "@/lib/actions/homeowner-paymongo";
@@ -110,11 +110,18 @@ export function PayMongoHomeownerFormClient({
         </>}
       </div>
 
-      {platformFeeEnabled && <div className="mt-5 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm leading-6 text-amber-950">
-        <p className="font-black">Online payment fee disclosure</p>
-        <div className="mt-2 flex items-center justify-between gap-4"><span>HOAHub convenience fee</span><b>{pesoFormatter.format(platformFeeAmountPesos)}</b></div>
-        <p className="mt-2 text-xs leading-5">This platform fee is separate from your HOA payment. The payment provider will also calculate the applicable <b>Processing Fee</b> for your selected payment method before you authorize payment.</p>
-      </div>}
+      {platformFeeEnabled && <details className="group mt-5 rounded-2xl border border-amber-200 bg-amber-50 text-sm leading-6 text-amber-950">
+        <summary className="flex min-h-14 cursor-pointer list-none items-center justify-between gap-3 rounded-2xl p-4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-amber-500 [&::-webkit-details-marker]:hidden">
+          <div className="min-w-0 flex-1">
+            <p className="font-black">Online payment fee disclosure</p>
+            <div className="mt-2 flex items-center justify-between gap-4"><span>HOAHub convenience fee</span><b>{pesoFormatter.format(platformFeeAmountPesos)}</b></div>
+          </div>
+          <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-amber-100 text-amber-900" aria-hidden="true"><ChevronDown className="size-5 transition-transform duration-200 group-open:rotate-180" /></span>
+        </summary>
+        <div className="border-t border-amber-200 px-4 pb-4 pt-3">
+          <p className="text-xs leading-5">This platform fee is separate from your HOA payment. The payment provider will also calculate the applicable <b>Processing Fee</b> for your selected payment method before you authorize payment.</p>
+        </div>
+      </details>}
 
       <div className="mt-5 flex items-start gap-2 rounded-2xl border border-blue-100 bg-blue-50 p-3 text-xs font-semibold leading-5 text-blue-900"><ShieldCheck className="mt-0.5 size-4 shrink-0" /><p>You will leave HOAHub briefly to complete payment on the secure payment page. Returning to HOAHub does not by itself mark the account paid; the verified gateway webhook is the source of truth.</p></div>
     </div>

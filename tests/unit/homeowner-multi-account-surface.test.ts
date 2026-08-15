@@ -6,18 +6,22 @@ async function source(path: string) {
   return readFile(path, "utf8");
 }
 
-test("shared-email login returns an explicit tenant and account choice", async () => {
+test("shared-email login verifies identity once then returns an explicit tenant and account choice", async () => {
   const [action, form] = await Promise.all([
     source("lib/actions/auth.ts"),
     source("components/login-form.tsx"),
   ]);
   assert.match(action, /choices\?: LoginChoice\[\]/);
   assert.match(action, /selectedUserId/);
+  assert.match(action, /readVerifiedLoginChoices\(\)/);
   assert.match(action, /tenantName:/);
   assert.match(action, /accountNumber:/);
+  assert.match(form, /Identity verified\./);
   assert.match(form, /Choose the HOA account to open/);
   assert.match(form, /name="selectedUserId"/);
-  assert.match(form, /Only the selected tenant is loaded into the session/);
+  assert.match(form, /You do not need to enter your email or password again/);
+  assert.match(form, /Only the selected tenant\/account is loaded into the authenticated session/);
+  assert.match(form, /\{!hasChoices && <>/);
 });
 
 test("homeowner profile exposes linked accounts through a tenant-isolated switch action", async () => {

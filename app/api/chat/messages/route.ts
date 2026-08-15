@@ -12,21 +12,25 @@ export async function POST(request: Request) {
   const conversationId = String(body.conversationId || "");
   if (!conversationId) return NextResponse.json({ error: "Conversation is required." }, { status: 400 });
   const attachments = Array.isArray(body.attachments) ? body.attachments : [];
-  const message = await createChatMessage({
-    conversationId,
-    senderId: user.id,
-    tenantId: user.tenantId,
-    body: typeof body.message === "string" ? body.message : "",
-    replyToId: typeof body.replyToId === "string" ? body.replyToId : null,
-    attachments: attachments.map((item: UploadedAttachmentInput) => ({
-      url: String(item.url || ""),
-      fileName: String(item.fileName || ""),
-      contentType: String(item.contentType || ""),
-      size: Number(item.size || 0),
-    })),
-  });
-  await writeAuditLog({ actorId: user.id, module: "CHAT", action: "SEND_MESSAGE", entityType: "ChatMessage", entityId: message.id, metadata: { conversationId, attachments: attachments.length } });
-  return NextResponse.json(await getChatPayload(user, conversationId));
+  try {
+    const message = await createChatMessage({
+      conversationId,
+      senderId: user.id,
+      tenantId: user.tenantId,
+      body: typeof body.message === "string" ? body.message : "",
+      replyToId: typeof body.replyToId === "string" ? body.replyToId : null,
+      attachments: attachments.map((item: UploadedAttachmentInput) => ({
+        url: String(item.url || ""),
+        fileName: String(item.fileName || ""),
+        contentType: String(item.contentType || ""),
+        size: Number(item.size || 0),
+      })),
+    });
+    await writeAuditLog({ actorId: user.id, module: "CHAT", action: "SEND_MESSAGE", entityType: "ChatMessage", entityId: message.id, metadata: { conversationId, attachments: attachments.length } });
+    return NextResponse.json(await getChatPayload(user, conversationId));
+  } catch (error) {
+    return NextResponse.json({ error: error instanceof Error ? error.message : "Unable to send message." }, { status: 400 });
+  }
 }
 
 export async function PATCH(request: Request) {

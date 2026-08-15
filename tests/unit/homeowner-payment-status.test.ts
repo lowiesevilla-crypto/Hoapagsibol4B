@@ -63,3 +63,14 @@ test("homeowner payment page derives each request card from linked posted ledger
   assert.match(page, /status=\{displayStatus\.label\}/);
   assert.match(page, /statusTone=\{displayStatus\.tone\}/);
 });
+
+test("homeowner payment mobile surface keeps long payment sections collapsible", () => {
+  const page = readFileSync("app/portal/pay/page.tsx", "utf8");
+  const payMongoForm = readFileSync("components/paymongo-homeowner-form-client.tsx", "utf8");
+
+  assert.match(page, /<details className="group rounded-3xl[^>]*>[\s\S]*Unpaid Billings/);
+  assert.match(page, /<details className="group rounded-3xl[^>]*>[\s\S]*Payment Status/);
+  assert.match(page, /group-open:rotate-180/);
+  assert.match(payMongoForm, /<details className="group mt-5 rounded-2xl[^>]*>[\s\S]*Online payment fee disclosure/);
+  assert.match(payMongoForm, /HOAHub convenience fee[\s\S]*pesoFormatter\.format\(platformFeeAmountPesos\)/);
+});

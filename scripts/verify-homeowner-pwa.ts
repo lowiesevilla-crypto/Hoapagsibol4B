@@ -81,9 +81,12 @@ record("offline banner is implemented", hasAll(provider, ["OfflineBanner", "navi
 record("update available notice is implemented", hasAll(provider, ["PwaUpdateAvailableNotice", "SKIP_WAITING", "controllerchange"]));
 record("install UI is suppressed for print and document preview routes", hasAll(provider, ["/print", "/preview", "/documents/", "/receipts/"]));
 
+const rootLayout = readProjectFile("app/layout.tsx");
 const portalLayout = readProjectFile("app/portal/layout.tsx");
-record("homeowner portal integrates PWA provider", hasAll(portalLayout, ["PwaInstallProvider", "<PwaInstallProvider>"]));
-record("no duplicate PWA provider in portal layout", (portalLayout.match(/<PwaInstallProvider>/g) || []).length === 1);
+const publicInstallBanner = readProjectFile("components/public-pwa-install-banner.tsx");
+record("root layout integrates the single PWA provider", hasAll(rootLayout, ["PwaInstallProvider", "<PwaInstallProvider>", "PublicPwaInstallBanner"]));
+record("portal layout does not duplicate the root PWA provider", !portalLayout.includes("PwaInstallProvider"));
+record("public HOAHub entry exposes a mobile-only install prompt", hasAll(publicInstallBanner, ['pathname !== "/"', "lg:hidden", "InstallHoaHubBanner"]));
 
 const appLauncher = readProjectFile("app/app/page.tsx");
 record("global PWA launcher is role-aware", hasAll(appLauncher, ["readSession", "defaultHomeForRole", "redirect(\"/login\")"]));

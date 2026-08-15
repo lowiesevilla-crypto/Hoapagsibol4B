@@ -174,6 +174,20 @@ Before production deployment, the applicable CI pipeline must pass. The reposito
 
 Do not merge a known failing release merely to trigger deployment. Fix the defect or update a brittle test only when the changed test continues to assert the intended security/business invariant.
 
+### CI Browser Gate Recovery
+
+The production rollback to the PR #109 application tree intentionally removed PR #110 as a whole. The browser gate still needs a narrow, test-only reliability contract without restoring PR #110's production-login verifier or application behavior.
+
+- GitHub Actions prepares the repository-provided `@sparticuz/chromium` executable and exposes it only to the browser suites through `PUPPETEER_EXECUTABLE_PATH`.
+- `tests/e2e/critical-path.mjs` launches that packaged browser as `headless: "shell"` with Puppeteer's default arguments merged with `chromium.args`; this matches the chrome-headless-shell runtime contract.
+- `tests/e2e/safe-browser-context-cleanup.mjs` must not create non-default BrowserContexts on this runtime. Each logical isolated test context launches a separate browser process and uses that process's default context, preserving cookie/session isolation without the unstable `Target.createTarget` path.
+- Every standalone E2E entry point in `test:e2e` preloads the same isolation shim; the critical path already does so through `run-critical-path.mjs`.
+- Cleanup remains bounded and may force-kill only browser processes that fail to close; it must never relax business assertion/navigation timeouts.
+- The bounded retry in `run-critical-path.mjs` remains limited to the specific transient startup signature `Target.setDiscoverTargets` + `Target closed`; business assertion failures are never retried automatically.
+- This recovery deliberately does **not** restore PR #110's authenticated production-login verifier and does not change the Hostinger deployment activation path.
+- This recovery also does **not** change the existing application dependency versions in `package.json`; any future browser dependency alignment must first prove that it cannot alter production document/browser runtime behavior.
+- Regression coverage: `tests/unit/browser-cleanup-policy.test.ts`.
+
 ## Hostinger Production Deployment Model
 
 The live HOAHub application is a Hostinger managed Node.js web application connected to the GitHub `main` branch. Hostinger's managed GitHub deployment is the normal production activation path.

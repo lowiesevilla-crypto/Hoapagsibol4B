@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test from "node:test";
 import {
   resolveHomeownerPaymentRequestDisplayStatus,
@@ -53,4 +54,12 @@ test("posted PayMongo payment is displayed as paid even if request metadata is s
     }),
     { label: "Paid · PayMongo confirmed", tone: "success" },
   );
+});
+
+test("homeowner payment page derives each request card from linked posted ledger artifacts", () => {
+  const page = readFileSync("app/portal/pay/page.tsx", "utf8");
+  assert.match(page, /resolveHomeownerPaymentRequestDisplayStatus/);
+  assert.match(page, /hasPostedPayment: Boolean\(request\.payment \|\| request\.collection\)/);
+  assert.match(page, /status=\{displayStatus\.label\}/);
+  assert.match(page, /statusTone=\{displayStatus\.tone\}/);
 });

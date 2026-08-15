@@ -61,6 +61,7 @@ test("PWA install detection is global while the public install prompt remains mo
   assert.match(pwaProvider, /\.prompt\(\)/);
   assert.match(pwaProvider, /appinstalled/);
   assert.match(pwaProvider, /matchMedia\("\(display-mode: standalone\)"\)/);
-  assert.match(pwaProvider, /navigator\.standalone/);
+  assert.match(pwaProvider, /standalone\?: boolean/);
+  assert.match(pwaProvider, /\}\)\.standalone/);
   assert.match(pwaProvider, /Add to Home Screen/);
 });

@@ -9,10 +9,14 @@ export async function POST(request: Request) {
   const body = await request.json().catch(() => ({}));
   const recipientId = String(body.recipientId || "");
   if (!recipientId) return NextResponse.json({ error: "Recipient is required." }, { status: 400 });
-  const conversationId = await findOrCreateDirectConversation(user, recipientId);
-  await writeAuditLog({ actorId: user.id, module: "CHAT", action: "OPEN_OR_CREATE_CONVERSATION", entityType: "ChatConversation", entityId: conversationId, metadata: { recipientId } });
-  const payload = await getChatPayload(user, conversationId);
-  return NextResponse.json({ conversationId, payload });
+  try {
+    const conversationId = await findOrCreateDirectConversation(user, recipientId);
+    await writeAuditLog({ actorId: user.id, module: "CHAT", action: "OPEN_OR_CREATE_CONVERSATION", entityType: "ChatConversation", entityId: conversationId, metadata: { recipientId } });
+    const payload = await getChatPayload(user, conversationId);
+    return NextResponse.json({ conversationId, payload });
+  } catch (error) {
+    return NextResponse.json({ error: error instanceof Error ? error.message : "Unable to open conversation." }, { status: 400 });
+  }
 }
 
 export async function PATCH(request: Request) {

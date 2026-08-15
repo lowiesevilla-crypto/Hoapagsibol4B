@@ -85,7 +85,7 @@ record("announcement and event images have safe fallbacks", hasAll(communityCard
 record("organization and HOA contacts use existing services", hasAll(organizationPage, ["getActiveOrganizationOfficers", "getAssociationSettings", "profile.tenantId", "OfficerMobileCard"]));
 record("chat conversations are tenant-scoped", hasAll(chatService, ["tenantId: user.tenantId", "conversation: { tenantId }", "tenantId: currentUser.tenantId"]));
 record("chat messages are participant-authorized", hasAll(chatService + chatMessageApi + chatActions, ["participants", "userId: user.id", "senderId: user.id", "You do not have access to this conversation."]));
-record("recipient search cannot cross tenants", hasAll(chatService, ["getRecipients(scope, user.id, user.tenantId", "tenantId,", "findFirst({ where: { id: recipientId, tenantId: currentUser.tenantId }"]));
+record("recipient search cannot cross tenants", hasAll(chatService, ["getRecipients(scope, user.id, user.tenantId", "tenantId,", "findFirst({ where: { id: recipientId, tenantId: currentUser.tenantId, active: true }"]));
 record("private chat is not service-worker cached", hasAll(serviceWorker, ["/api/", "/portal", "/uploads/", "hasSensitiveRequest"]));
 record("offline chat mutations are not queued", !/syncManager|background sync|queueMutation|mutation queue/i.test(serviceWorker + chatMessenger) && hasAll(chatMessenger, ["navigator.onLine", "Messages and attachments are not queued"]));
 record("profile data belongs to authenticated homeowner", hasAll(profilePage, ["requireHomeownerProfile", "profile.tenantId", "profile.id", "PasskeyEnrollmentPanel"]));

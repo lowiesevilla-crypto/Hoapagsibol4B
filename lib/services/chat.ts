@@ -3,6 +3,14 @@ import "server-only";
 import { Role, type Prisma, type User } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { getChatSettings } from "@/lib/system-settings";
+import {
+  areResidentsBlocked,
+  ensureMessageRequest,
+  getConversationRequestState,
+  getHiddenIncomingConversationIds,
+  getResidentMessagingMode,
+  isHoaOfficialRole,
+} from "@/lib/services/chat-privacy";
 
 const onlineWindowMs = 5 * 60 * 1000;
 
@@ -31,7 +39,7 @@ export async function touchUserPresence(userId: string, tenantId: string, contex
 export async function getChatPayload(user: Pick<User, "id" | "role" | "tenantId">, selectedConversationId?: string | null, search = "") {
   await touchUserPresence(user.id, user.tenantId, "HOA Chat Center");
   const scope = scopeForRole(user.role);
-  const [settings, recipients, conversations] = await Promise.all([
+  const [settings, recipients, conversations, hiddenIncoming] = await Promise.all([
     getChatSettings(user.tenantId),
     getRecipients(scope, user.id, user.tenantId, search),
     prisma.chatConversation.findMany({
@@ -40,15 +48,16 @@ export async function getChatPayload(user: Pick<User, "id" | "role" | "tenantId"
       orderBy: [{ participants: { _count: "desc" } }, { lastMessageAt: "desc" }, { createdAt: "desc" }],
       take: 60,
     }),
+    getHiddenIncomingConversationIds(user.tenantId, user.id),
   ]);
 
-  const visibleConversations = conversations.sort((a, b) => {
+  const visibleConversations = conversations.filter((conversation) => !hiddenIncoming.has(conversation.id)).sort((a, b) => {
     const aPin = a.participants.find((item) => item.userId === user.id)?.pinnedAt?.valueOf() ?? 0;
     const bPin = b.participants.find((item) => item.userId === user.id)?.pinnedAt?.valueOf() ?? 0;
     if (aPin !== bPin) return bPin - aPin;
     return (b.lastMessageAt?.valueOf() ?? b.createdAt.valueOf()) - (a.lastMessageAt?.valueOf() ?? a.createdAt.valueOf());
   });
-  const selectedId = selectedConversationId || null;
+  const selectedId = selectedConversationId && !hiddenIncoming.has(selectedConversationId) ? selectedConversationId : null;
   const selectedConversation = selectedId
     ? await prisma.chatConversation.findFirst({
         where: { id: selectedId, tenantId: user.tenantId, participants: { some: { tenantId: user.tenantId, userId: user.id, deletedAt: null } } },
@@ -96,16 +105,19 @@ export async function getChatPayload(user: Pick<User, "id" | "role" | "tenantId"
 export async function getUnreadChatCount(userId: string) {
   const participants = await prisma.chatParticipant.findMany({
     where: { userId, deletedAt: null },
-    select: { conversationId: true, lastReadAt: true },
+    select: { conversationId: true, lastReadAt: true, tenantId: true },
   });
-  const counts = await Promise.all(participants.map((participant) => countUnreadMessages(participant.conversationId, userId, participant.lastReadAt)));
+  const counts = await Promise.all(participants.map(async (participant) => {
+    const hidden = await getHiddenIncomingConversationIds(participant.tenantId, userId);
+    return hidden.has(participant.conversationId) ? 0 : countUnreadMessages(participant.conversationId, userId, participant.lastReadAt);
+  }));
   return counts.reduce((sum, count) => sum + count, 0);
 }
 
 export async function getRecipients(scope: ChatScope, currentUserId: string, tenantId: string, search = "") {
   const roleFilter =
     scope === "portal"
-      ? [Role.ADMIN, Role.SYSTEM_ADMIN, Role.EMPLOYEE]
+      ? [Role.ADMIN, Role.SYSTEM_ADMIN, Role.EMPLOYEE, Role.HOMEOWNER]
       : scope === "employee"
         ? [Role.ADMIN, Role.SYSTEM_ADMIN, Role.HOMEOWNER]
         : [Role.ADMIN, Role.SYSTEM_ADMIN, Role.HOMEOWNER, Role.EMPLOYEE];
@@ -113,13 +125,14 @@ export async function getRecipients(scope: ChatScope, currentUserId: string, ten
   return prisma.user.findMany({
     where: {
       tenantId,
+      active: true,
       id: { not: currentUserId },
       role: { in: roleFilter },
       ...(normalized
         ? {
             OR: [
               { name: { contains: normalized } },
-              { email: { contains: normalized } },
+              ...(scope === "portal" ? [] : [{ email: { contains: normalized } }]),
               { homeownerProfile: { is: { block: { contains: normalized } } } },
               { homeownerProfile: { is: { lot: { contains: normalized } } } },
               { homeownerProfile: { is: { address: { contains: normalized } } } },
@@ -137,8 +150,18 @@ export async function getRecipients(scope: ChatScope, currentUserId: string, ten
 
 export async function findOrCreateDirectConversation(currentUser: Pick<User, "id" | "role" | "tenantId">, recipientId: string) {
   if (currentUser.id === recipientId) throw new Error("Choose another person to chat with.");
-  const recipient = await prisma.user.findFirst({ where: { id: recipientId, tenantId: currentUser.tenantId }, select: { id: true, role: true, name: true } });
+  const recipient = await prisma.user.findFirst({ where: { id: recipientId, tenantId: currentUser.tenantId, active: true }, select: { id: true, role: true, name: true } });
   if (!recipient) throw new Error("Recipient not found.");
+
+  const residentToResident = currentUser.role === Role.HOMEOWNER && recipient.role === Role.HOMEOWNER;
+  let residentMode: "INBOX" | "REQUESTS" | "NONE" = "INBOX";
+  if (residentToResident) {
+    if (await areResidentsBlocked(currentUser.tenantId, currentUser.id, recipient.id)) {
+      throw new Error("Messaging is unavailable between these resident accounts.");
+    }
+    residentMode = await getResidentMessagingMode(currentUser.tenantId, recipient.id);
+    if (residentMode === "NONE") throw new Error("This resident is not accepting resident messages.");
+  }
 
   const existing = await prisma.chatConversation.findFirst({
     where: {
@@ -151,6 +174,15 @@ export async function findOrCreateDirectConversation(currentUser: Pick<User, "id
   });
   if (existing && existing.participants.length === 2) {
     await prisma.chatParticipant.update({ where: { conversationId_userId: { conversationId: existing.id, userId: currentUser.id } }, data: { deletedAt: null } });
+    if (residentToResident && !(await getConversationRequestState(currentUser.tenantId, existing.id))) {
+      await ensureMessageRequest({
+        tenantId: currentUser.tenantId,
+        conversationId: existing.id,
+        requesterUserId: currentUser.id,
+        recipientUserId: recipient.id,
+        status: residentMode === "REQUESTS" ? "PENDING" : "ACCEPTED",
+      });
+    }
     return existing.id;
   }
 
@@ -166,6 +198,15 @@ export async function findOrCreateDirectConversation(currentUser: Pick<User, "id
       participants: { create: [{ tenantId: currentUser.tenantId, userId: currentUser.id, lastReadAt: now }, { tenantId: currentUser.tenantId, userId: recipient.id }] },
     },
   });
+  if (residentToResident) {
+    await ensureMessageRequest({
+      tenantId: currentUser.tenantId,
+      conversationId: conversation.id,
+      requesterUserId: currentUser.id,
+      recipientUserId: recipient.id,
+      status: residentMode === "REQUESTS" ? "PENDING" : "ACCEPTED",
+    });
+  }
   return conversation.id;
 }
 
@@ -184,8 +225,31 @@ export async function createChatMessage({
   attachments?: { url: string; fileName: string; contentType: string; size: number }[];
   replyToId?: string | null;
 }) {
-  const participant = await prisma.chatParticipant.findFirst({ where: { tenantId, conversationId, userId: senderId, conversation: { tenantId } } });
+  const participant = await prisma.chatParticipant.findFirst({
+    where: { tenantId, conversationId, userId: senderId, conversation: { tenantId } },
+    include: {
+      conversation: {
+        select: {
+          participants: { select: { userId: true, user: { select: { role: true } } } },
+        },
+      },
+    },
+  });
   if (!participant) throw new Error("You do not have access to this conversation.");
+
+  const sender = participant.conversation.participants.find((item) => item.userId === senderId);
+  const other = participant.conversation.participants.find((item) => item.userId !== senderId);
+  if (sender && other && sender.user.role === Role.HOMEOWNER && other.user.role === Role.HOMEOWNER) {
+    if (await areResidentsBlocked(tenantId, senderId, other.userId)) {
+      throw new Error("Messaging is unavailable between these resident accounts.");
+    }
+    const requestState = await getConversationRequestState(tenantId, conversationId);
+    if (requestState?.status === "DECLINED") throw new Error("This message request was declined.");
+    if (requestState?.status === "PENDING" && requestState.recipientUserId === senderId) {
+      throw new Error("Accept this message request before replying.");
+    }
+  }
+
   const cleanBody = body?.trim() || null;
   const cleanAttachments = attachments?.filter((item) => item.url && item.fileName && item.contentType) ?? [];
   if (!cleanBody && cleanAttachments.length === 0) throw new Error("Enter a message or upload an attachment.");
@@ -282,16 +346,18 @@ function serializeMessage(message: MessageWithInclude) {
 
 function serializeUser(user: UserWithSelect) {
   const lastSeenAt = user.presence?.lastSeenAt ?? null;
+  const official = isHoaOfficialRole(user.role);
   return {
     id: user.id,
     name: user.name,
-    email: user.email,
+    email: "",
     role: user.role,
+    official,
     initials: user.name.split(/\s+/).slice(0, 2).map((part) => part.charAt(0)).join("").toUpperCase() || "U",
     presence: lastSeenAt ? { lastSeenAt: lastSeenAt.toISOString(), context: user.presence?.context ?? null, online: Date.now() - lastSeenAt.valueOf() < onlineWindowMs } : null,
     homeownerProfile: user.homeownerProfile,
     employeeProfile: user.employeeProfile,
-    searchText: [user.name, user.email, user.role, user.homeownerProfile?.address, user.homeownerProfile?.block, user.homeownerProfile?.lot, user.employeeProfile?.employeeNumber, user.employeeProfile?.position].filter(Boolean).join(" ").toLowerCase(),
+    searchText: [user.name, user.role, user.homeownerProfile?.address, user.homeownerProfile?.block, user.homeownerProfile?.lot, user.employeeProfile?.employeeNumber, user.employeeProfile?.position, official ? "hoa official" : "resident"].filter(Boolean).join(" ").toLowerCase(),
   };
 }
 

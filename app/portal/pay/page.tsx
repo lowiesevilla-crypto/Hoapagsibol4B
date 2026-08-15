@@ -1,9 +1,9 @@
-import { CalendarDays, Clock3, CreditCard, QrCode, ReceiptText, ShieldCheck } from "lucide-react";
+import { CalendarDays, ChevronDown, Clock3, CreditCard, QrCode, ReceiptText, ShieldCheck } from "lucide-react";
 import Link from "next/link";
 import { PayByQrForm } from "@/components/pay-by-qr-form";
 import { PayMongoHomeownerForm } from "@/components/paymongo-homeowner-form";
 import { PaymentAreaNavigation, PaymentEmptyState, PaymentHeroCard, PaymentMetricCard, PaymentRequestStatusCard, UnpaidBillingCard } from "@/components/homeowner/payments/payment-cards";
-import { PortalPageContainer, PortalSectionHeader } from "@/components/portal-mobile-shell";
+import { PortalPageContainer } from "@/components/portal-mobile-shell";
 import { prisma } from "@/lib/db";
 import { getAppUrl } from "@/lib/app-url";
 import { isPayMongoPaymentRequest } from "@/lib/homeowner-payment-flow";
@@ -110,29 +110,47 @@ export default async function PortalPayPage({ searchParams }: { searchParams: Pr
 
       <section className="grid gap-5 xl:grid-cols-[.95fr_1.05fr]">
         <div className="space-y-5">
-          <section className="rounded-3xl border border-pine-100 bg-white p-4 shadow-soft sm:p-5">
-            <PortalSectionHeader eyebrow={`${openBills.length} shown`} title="Unpaid Billings" action={<Link href="/portal/billing" className="text-sm font-black text-pine-700">View billing</Link>} />
-            <div className="space-y-3">
-              {openBills.map((bill) => <UnpaidBillingCard key={bill.id} title="Monthly Dues" coverage={monthLabel(bill.billingMonth)} dueDate={shortDate(bill.dueDate)} originalAmount={money(bill.totalAmount)} paidAmount={money(bill.amountPaid)} balance={money(bill.balance)} status={bill.status.replaceAll("_", " ")} selectable pending={bill.paymentRequests.length > 0} />)}
-              {!openBills.length && <PaymentEmptyState title="No unpaid billing" description={isPayMongoFlow ? "Your current account has no unpaid monthly dues available for online payment." : "Your current account has no unpaid monthly dues available for QR payment."} />}
+          <details className="group rounded-3xl border border-pine-100 bg-white shadow-soft">
+            <summary className="flex min-h-16 cursor-pointer list-none items-center justify-between gap-3 rounded-3xl p-4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-pine-500 sm:p-5 [&::-webkit-details-marker]:hidden">
+              <div className="min-w-0">
+                <p className="text-xs font-black uppercase tracking-[.16em] text-pine-700">{openBills.length} shown</p>
+                <h2 className="mt-1 text-xl font-black text-slate-950">Unpaid Billings</h2>
+              </div>
+              <span className="grid size-10 shrink-0 place-items-center rounded-2xl bg-pine-50 text-pine-700" aria-hidden="true"><ChevronDown className="size-5 transition-transform duration-200 group-open:rotate-180" /></span>
+            </summary>
+            <div className="border-t border-pine-100 px-4 pb-4 pt-3 sm:px-5 sm:pb-5">
+              <div className="mb-3 flex justify-end"><Link href="/portal/billing" className="text-sm font-black text-pine-700">View billing</Link></div>
+              <div className="space-y-3">
+                {openBills.map((bill) => <UnpaidBillingCard key={bill.id} title="Monthly Dues" coverage={monthLabel(bill.billingMonth)} dueDate={shortDate(bill.dueDate)} originalAmount={money(bill.totalAmount)} paidAmount={money(bill.amountPaid)} balance={money(bill.balance)} status={bill.status.replaceAll("_", " ")} selectable pending={bill.paymentRequests.length > 0} />)}
+                {!openBills.length && <PaymentEmptyState title="No unpaid billing" description={isPayMongoFlow ? "Your current account has no unpaid monthly dues available for online payment." : "Your current account has no unpaid monthly dues available for QR payment."} />}
+              </div>
             </div>
-          </section>
+          </details>
 
-          <section className="rounded-3xl border border-pine-100 bg-white p-4 shadow-soft sm:p-5">
-            <PortalSectionHeader eyebrow={`${paymentRequests.length} recent`} title="Payment Status" action={<Link href="/portal/payments" className="text-sm font-black text-pine-700">History</Link>} />
-            <div className="space-y-3">
-              {paymentRequests.map((request) => {
-                const onlineRequest = isPayMongoPaymentRequest(request);
-                const displayStatus = resolveHomeownerPaymentRequestDisplayStatus({
-                  requestStatus: request.status,
-                  onlineRequest,
-                  hasPostedPayment: Boolean(request.payment || request.collection),
-                });
-                return <PaymentRequestStatusCard key={request.id} title={paymentRequestPurpose(request)} amount={money(request.amount)} status={displayStatus.label} statusTone={displayStatus.tone} meta={`Submitted ${shortDate(request.createdAt)} · Updated ${shortDate(request.updatedAt)}`} reference={request.referenceNumber || "Not submitted"} method={onlineRequest ? "PayMongo Online" : request.method.replaceAll("_", " ")} remarks={homeownerSafeRemarks(request.reviewRemarks)} proofLabel={onlineRequest ? "Gateway checkout" : request.proofImageUrl ? "Attached" : "No attachment"} />;
-              })}
-              {!paymentRequests.length && <PaymentEmptyState title="No payment activity" description={isPayMongoFlow ? "PayMongo checkout and confirmation activity will appear here." : "Submitted QR payments and HOA verification results will appear here."} icon={ShieldCheck} />}
+          <details className="group rounded-3xl border border-pine-100 bg-white shadow-soft">
+            <summary className="flex min-h-16 cursor-pointer list-none items-center justify-between gap-3 rounded-3xl p-4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-pine-500 sm:p-5 [&::-webkit-details-marker]:hidden">
+              <div className="min-w-0">
+                <p className="text-xs font-black uppercase tracking-[.16em] text-pine-700">{paymentRequests.length} recent</p>
+                <h2 className="mt-1 text-xl font-black text-slate-950">Payment Status</h2>
+              </div>
+              <span className="grid size-10 shrink-0 place-items-center rounded-2xl bg-pine-50 text-pine-700" aria-hidden="true"><ChevronDown className="size-5 transition-transform duration-200 group-open:rotate-180" /></span>
+            </summary>
+            <div className="border-t border-pine-100 px-4 pb-4 pt-3 sm:px-5 sm:pb-5">
+              <div className="mb-3 flex justify-end"><Link href="/portal/payments" className="text-sm font-black text-pine-700">History</Link></div>
+              <div className="space-y-3">
+                {paymentRequests.map((request) => {
+                  const onlineRequest = isPayMongoPaymentRequest(request);
+                  const displayStatus = resolveHomeownerPaymentRequestDisplayStatus({
+                    requestStatus: request.status,
+                    onlineRequest,
+                    hasPostedPayment: Boolean(request.payment || request.collection),
+                  });
+                  return <PaymentRequestStatusCard key={request.id} title={paymentRequestPurpose(request)} amount={money(request.amount)} status={displayStatus.label} statusTone={displayStatus.tone} meta={`Submitted ${shortDate(request.createdAt)} · Updated ${shortDate(request.updatedAt)}`} reference={request.referenceNumber || "Not submitted"} method={onlineRequest ? "PayMongo Online" : request.method.replaceAll("_", " ")} remarks={homeownerSafeRemarks(request.reviewRemarks)} proofLabel={onlineRequest ? "Gateway checkout" : request.proofImageUrl ? "Attached" : "No attachment"} />;
+                })}
+                {!paymentRequests.length && <PaymentEmptyState title="No payment activity" description={isPayMongoFlow ? "PayMongo checkout and confirmation activity will appear here." : "Submitted QR payments and HOA verification results will appear here."} icon={ShieldCheck} />}
+              </div>
             </div>
-          </section>
+          </details>
         </div>
 
         <div className="space-y-5">

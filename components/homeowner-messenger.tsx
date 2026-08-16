@@ -131,7 +131,7 @@ export function HomeownerMessenger({ initialData }: { initialData: ChatPayload }
   useEffect(() => {
     if (!selected) return;
     window.requestAnimationFrame(() => scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "auto" }));
-  }, [selected?.id, selected?.messages.length]);
+  }, [selected]);
 
   async function refresh(showError = true, conversationId = selectedId) {
     try {

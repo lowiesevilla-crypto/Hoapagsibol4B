@@ -1,6 +1,6 @@
 import Link from "next/link";
 import type { LucideIcon } from "lucide-react";
-import { CalendarDays, ChevronDown, Clock3, CreditCard, FileText, QrCode, ReceiptText } from "lucide-react";
+import { ChevronDown, Clock3, CreditCard, FileText, QrCode, ReceiptText } from "lucide-react";
 import type { ReactNode } from "react";
 import { HomeownerSoaPrintDocument } from "@/components/homeowner/payments/homeowner-soa-print-document";
 import { PaymentAreaNavigation } from "@/components/homeowner/payments/payment-cards";
@@ -17,7 +17,8 @@ export default async function PortalStatementOfAccountPage() {
   const soa = await getStatementOfAccount(profile.id, profile.tenantId, getAppUrl());
 
   return (
-    <PortalPageContainer className="homeowner-soa-print space-y-4">
+    <PortalPageContainer className="space-y-4">
+      <span className="homeowner-soa-print hidden" aria-hidden="true" />
       <div className="print-hidden space-y-4">
         <PaymentAreaNavigation active="soa" />
 

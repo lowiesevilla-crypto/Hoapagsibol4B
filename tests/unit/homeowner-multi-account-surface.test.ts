@@ -30,9 +30,11 @@ test("homeowner profile exposes linked accounts through a tenant-isolated switch
     source("lib/actions/linked-accounts.ts"),
     source("lib/linked-accounts.ts"),
   ]);
-  assert.match(profile, /My HOA accounts/);
+  assert.match(profile, /HOA accounts/);
+  assert.match(profile, /linkedAccounts\.length > 1/);
   assert.match(profile, /switchLinkedAccountAction/);
-  assert.match(profile, />Homeowner<\/p>/);
+  assert.match(profile, /name="targetUserId" value=\{account\.userId\}/);
+  assert.match(profile, /account\.current/);
   assert.doesNotMatch(profile, /account\.roles\.map\(displayRole\)/);
   assert.match(action, /listLinkedAccounts\(currentUser\.email/);
   assert.match(action, /setTenantContext\(/);

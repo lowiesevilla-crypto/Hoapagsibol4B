@@ -165,6 +165,21 @@ The homeowner `/portal/chat` experience supports tenant-scoped resident-to-resid
 - Regression coverage: `tests/unit/homeowner-chat-privacy-pwa-install.test.ts`, `tests/unit/homeowner-messenger-ui.test.ts`, and `tests/unit/homeowner-chat-mobile-privacy-layout.test.ts`, plus the homeowner PWA verifier's narrow changed-file allow-list for approved chat changes.
 - Do not merge/deploy a messaging change when homeowner directory population, name/block/lot search, address non-disclosure, phone viewport fit, message-request/block enforcement, or the Messenger-style mobile thread fails its acceptance checks. A visually incomplete desktop-card/form presentation is not an acceptable substitute for the approved phone chat experience.
 
+## Homeowner Profile UI and Photo Upload
+
+The homeowner `/portal/profile` surface is a mobile-first identity screen, not a long administrative record form.
+
+- Keep the primary profile card compact: profile photo, homeowner name, block/lot, account number, current homeowner status, and monthly dues are the first-screen hierarchy. Do not restore the large instructional `PageHeader`, oversized `InfoTile` grid, or verbose tenant-isolation explanations on this homeowner screen.
+- Contact information uses compact rows. `Home & household` and `Security` are disclosure sections so detailed property, household, and passkey information does not dominate the phone viewport. The linked HOA account switcher is rendered only when more than one linked account exists.
+- Homeowners may upload, replace, or remove their own profile photo. Accepted formats are JPEG, PNG, and WebP with a 5 MB maximum. Client MIME checks are convenience only; `app/api/profile/photo/route.ts` must also validate the file signature before persistence.
+- Profile photo reads/writes require an authenticated `HOMEOWNER` session. Photo metadata is keyed by both `tenantId` and `userId`, and the storage directory is derived from the authenticated tenant slug and authenticated user ID. Never accept tenant IDs, tenant slugs, user IDs, storage paths, or stored filenames from the browser as authority.
+- Profile image bytes are served through the authenticated `/api/profile/photo` route instead of a public upload URL. Use `X-Content-Type-Options: nosniff` and private caching; do not expose the underlying tenant storage path to the browser.
+- Migration `20260816090000_homeowner_profile_photo` creates `HomeownerProfilePhoto`. The table is intentionally separate from core `User`/`HomeownerProfile` records so photo storage can evolve or roll back without modifying authentication or homeowner master-data fields.
+- Photo upload/removal is audit logged. A successful replacement removes the previous stored file after the new metadata is committed; a failed metadata write removes the newly written file so orphaning is bounded.
+- Core implementation: `app/portal/profile/page.tsx`, `components/homeowner/profile-photo-uploader.tsx`, `app/api/profile/photo/route.ts`, and `lib/services/homeowner-profile-photo.ts`.
+- Regression coverage: `tests/unit/homeowner-profile-clean-ui.test.ts`.
+- Do not merge/deploy a profile change if the mobile profile returns to oversized cards/wordy guidance, if the image endpoint can cross tenant/user boundaries, or if unsupported/spoofed image types can be persisted.
+
 ## Homeowner Payment Status Authority
 
 Homeowner-facing payment status must describe the current financial state, not allow an older failed attempt to override a later successful payment.

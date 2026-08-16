@@ -46,7 +46,7 @@ export default async function PortalStatementOfAccountPage() {
         <p className="mt-2 text-xs font-semibold text-white/75">Outstanding less available homeowner credit</p>
       </div>
       <div className="soa-compact-stats grid grid-cols-3 divide-x divide-slate-100 p-3 sm:p-4">
-        <CompactStat label="Outstanding" value={money(soa.summary.currentOutstandingBalance)} note={soa.summary.collectionStatus} />
+        <CompactStat label="Outstanding balance" value={money(soa.summary.currentOutstandingBalance)} note={soa.summary.collectionStatus} />
         <CompactStat label="Credit" value={money(soa.summary.availableCredit)} note="Available" />
         <CompactStat label="Last payment" value={soa.summary.lastPaymentDate ? shortDate(soa.summary.lastPaymentDate) : "None"} note="Recorded" />
       </div>

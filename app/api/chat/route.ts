@@ -8,7 +8,7 @@ export async function GET(request: Request) {
   const user = await requireUser();
   const url = new URL(request.url);
   const conversationId = url.searchParams.get("conversation");
-  const search = url.searchParams.get("search") || "";
+  const search = user.role === Role.HOMEOWNER ? "" : url.searchParams.get("search") || "";
   const payload = await getChatPayload(user, conversationId, search);
   return NextResponse.json(user.role === Role.HOMEOWNER ? sanitizeHomeownerChatPayload(payload) : payload);
 }

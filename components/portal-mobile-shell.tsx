@@ -64,7 +64,7 @@ export function PortalBottomNavigation({ destinations, pathname }: { destination
 
 function BottomNavItem({ href, label, icon: Icon, active }: { href: string; label: string; icon: LucideIcon; active: boolean }) {
   return (
-    <Link href={href} aria-current={active ? "page" : undefined} className={`flex min-h-[52px] flex-col items-center justify-center gap-0.5 rounded-2xl px-1 text-[10px] font-black transition focus-visible:outline focus-visible:outline-4 focus-visible:outline-pine-500/20 ${active ? "text-pine-800" : "text-slate-400"}`}>
+    <Link href={href} aria-current={active ? "page" : undefined} className={`flex min-h-14 flex-col items-center justify-center gap-0.5 rounded-2xl px-1 text-[10px] font-black transition focus-visible:outline focus-visible:outline-4 focus-visible:outline-pine-500/20 ${active ? "text-pine-800" : "text-slate-400"}`}>
       <span className={`grid h-7 min-w-10 place-items-center rounded-full px-2 ${active ? "bg-pine-100 text-pine-800" : ""}`}><Icon className="size-[18px]" /></span>
       <span className="max-w-full truncate">{label}</span>
     </Link>

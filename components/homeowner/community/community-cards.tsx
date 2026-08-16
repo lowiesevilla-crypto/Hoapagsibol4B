@@ -15,7 +15,7 @@ export function CommunityAreaNavigation({ items }: { items: CommunityNavItem[] }
     <nav aria-label="Community sections" className="grid grid-cols-4 gap-2">
       {items.map((item) => (
         <Link key={item.href} href={item.href} aria-label={`${item.label}. ${item.description}`} className="group flex min-w-0 flex-col items-center gap-1.5 rounded-2xl border border-slate-100 bg-white px-2 py-3 text-center shadow-[0_4px_16px_rgba(15,23,42,.04)] transition hover:border-pine-100 focus-visible:outline focus-visible:outline-4 focus-visible:outline-pine-500/20">
-          <span className="grid size-10 place-items-center rounded-2xl bg-pine-50 text-pine-700 transition group-hover:bg-pine-100"><item.icon className="size-4.5" aria-hidden="true" /></span>
+          <span className="grid size-10 place-items-center rounded-2xl bg-pine-50 text-pine-700 transition group-hover:bg-pine-100"><item.icon className="size-[18px]" aria-hidden="true" /></span>
           <span className="max-w-full truncate text-[11px] font-black text-ink">{item.label}</span>
         </Link>
       ))}
@@ -92,7 +92,7 @@ export function InfoTile({ label, value, icon: Icon = UserRound }: { label: stri
 export function VehicleMobileCard({ title, subtitle, plate, sticker, issued, expires, status, remarks }: { title: string; subtitle: string; plate: string; sticker: string; issued: string; expires: string; status: React.ReactNode; remarks?: string | null }) {
   return (
     <article className="rounded-2xl border border-slate-100 bg-white p-4 shadow-[0_4px_18px_rgba(15,23,42,.04)]">
-      <div className="flex items-center justify-between gap-3"><span className="grid size-10 place-items-center rounded-2xl bg-pine-50 text-pine-700"><ShieldCheck className="size-4.5" aria-hidden="true" /></span>{status}</div>
+      <div className="flex items-center justify-between gap-3"><span className="grid size-10 place-items-center rounded-2xl bg-pine-50 text-pine-700"><ShieldCheck className="size-[18px]" aria-hidden="true" /></span>{status}</div>
       <h2 className="mt-3 text-base font-black text-ink">{title}</h2><p className="text-sm text-slate-400">{subtitle}</p>
       <dl className="mt-3 grid grid-cols-2 gap-2 text-sm"><Field label="Plate" value={plate} mono /><Field label="Sticker" value={sticker} mono /><Field label="Issued" value={issued} /><Field label="Expires" value={expires} /></dl>
       {remarks && <p className="mt-3 rounded-xl bg-amber-50 p-3 text-sm font-semibold text-amber-900">{remarks}</p>}

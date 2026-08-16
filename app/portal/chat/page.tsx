@@ -1,5 +1,5 @@
 import { Role } from "@prisma/client";
-import { ChatMessenger } from "@/components/chat-messenger";
+import { HomeownerMessenger } from "@/components/homeowner-messenger";
 import { HomeownerChatPrivacyPanel } from "@/components/homeowner-chat-privacy-panel";
 import { requireUser } from "@/lib/auth";
 import { getChatPayload } from "@/lib/services/chat";
@@ -15,15 +15,15 @@ export default async function PortalChatPage({ searchParams }: { searchParams: P
   ]);
   const data = sanitizeHomeownerChatPayload(rawData);
 
-  return <>
-    <ChatMessenger
-      basePath="/portal/chat"
-      title="Messages"
-      description="Chat with verified HOA officials or other residents. New resident contacts follow your privacy preference and may arrive as Message Requests."
-      initialData={data}
-    />
-    <div className="mt-4 w-full min-w-0 max-w-full overflow-x-hidden">
-      <HomeownerChatPrivacyPanel initialData={privacy} />
-    </div>
-  </>;
+  return <div className="mx-auto w-full max-w-7xl space-y-3">
+    <HomeownerMessenger initialData={data} />
+    <details className="group overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">
+      <summary className="flex min-h-14 cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 text-sm font-black text-slate-800 [&::-webkit-details-marker]:hidden">
+        <span>Message privacy</span>
+        <span className="text-xs font-bold text-pine-700 group-open:hidden">Open</span>
+        <span className="hidden text-xs font-bold text-pine-700 group-open:inline">Close</span>
+      </summary>
+      <div className="border-t border-slate-100 p-3"><HomeownerChatPrivacyPanel initialData={privacy} /></div>
+    </details>
+  </div>;
 }

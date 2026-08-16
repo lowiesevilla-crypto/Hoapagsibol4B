@@ -56,6 +56,7 @@ export async function GET(request: Request) {
           name: resident.name,
           email: "",
           role: resident.role,
+          avatarUrl: `/api/profile/photo/${encodeURIComponent(resident.id)}`,
           initials: resident.name.split(/\s+/).slice(0, 2).map((part) => part.charAt(0)).join("").toUpperCase() || "H",
           presence: lastSeenAt
             ? {

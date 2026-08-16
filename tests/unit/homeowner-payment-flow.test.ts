@@ -91,7 +91,7 @@ test("online payment UI exposes mobile navigation, neutral fee wording, and reco
   assert.match(cards, /Payment Cancelled/);
   assert.match(cards, /Payment Unsuccessful/);
   assert.match(cards, /paymongo-resume\?requestId=/);
-  assert.match(cards, /Start New Payment/);
+  assert.match(cards, /New Payment/);
 });
 
 test("only HOAHub platform roles can change a tenant convenience fee", () => {

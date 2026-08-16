@@ -14,6 +14,10 @@ const criticalPathRunnerSource = readFileSync(
   "tests/e2e/run-critical-path.mjs",
   "utf8",
 );
+const documentWorkflowSource = readFileSync(
+  "tests/e2e/document-workflow.mjs",
+  "utf8",
+);
 const workflowSource = readFileSync(".github/workflows/ci-deploy.yml", "utf8");
 const homeownerDashboardSource = readFileSync(
   "app/portal/dashboard/page.tsx",
@@ -80,6 +84,15 @@ test("browser cleanup limits do not change business assertion timeouts", () => {
   assert.match(cleanupSource, /const pageCloseTimeout = 5_000/);
   assert.match(cleanupSource, /const browserCloseTimeout = 15_000/);
   assert.doesNotMatch(cleanupSource, /setDefaultTimeout|waitForFunction|waitForNavigation/);
+});
+
+test("document workflow waits for the client submission handoff before clicking", () => {
+  assert.match(documentWorkflowSource, /input\[name=['"]submissionKey['"]\]/);
+  assert.match(documentWorkflowSource, /submissionKey\.value/);
+  assert.match(documentWorkflowSource, /button\.matches\(["']:disabled["']\)/);
+  assert.match(documentWorkflowSource, /\[role=['"]status['"]\], \[role=['"]alert['"]\]/);
+  assert.match(documentWorkflowSource, /Document request submitted/);
+  assert.match(documentWorkflowSource, /const timeout = 45_000/);
 });
 
 test("homeowner dashboard render remains read-only", () => {

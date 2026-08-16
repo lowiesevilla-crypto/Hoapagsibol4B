@@ -6,6 +6,7 @@ const chat = readFileSync("lib/services/chat.ts", "utf8");
 const privacy = readFileSync("lib/services/chat-privacy.ts", "utf8");
 const privacyPanel = readFileSync("components/homeowner-chat-privacy-panel.tsx", "utf8");
 const portalChat = readFileSync("app/portal/chat/page.tsx", "utf8");
+const messagesRoute = readFileSync("app/api/chat/messages/route.ts", "utf8");
 const rootLayout = readFileSync("app/layout.tsx", "utf8");
 const portalLayout = readFileSync("app/portal/layout.tsx", "utf8");
 const publicInstall = readFileSync("components/public-pwa-install-banner.tsx", "utf8");
@@ -31,6 +32,10 @@ test("resident-to-resident messages enforce blocks and message request acceptanc
   assert.match(chat, /areResidentsBlocked\(tenantId, senderId, other\.userId\)/);
   assert.match(chat, /requestState\?\.status === "DECLINED"/);
   assert.match(chat, /requestState\?\.status === "PENDING" && requestState\.recipientUserId === senderId/);
+  assert.match(messagesRoute, /requestState\?\.status === "PENDING" && requestState\.requesterUserId === user\.id/);
+  assert.match(messagesRoute, /prisma\.chatMessage\.count/);
+  assert.match(messagesRoute, /introductoryMessages >= 1/);
+  assert.match(messagesRoute, /Wait for the resident to accept before sending another message/);
 });
 
 test("HOA Official authority is server derived and resident block controls target homeowners only", () => {

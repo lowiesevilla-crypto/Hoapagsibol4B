@@ -151,11 +151,27 @@ async function submitRequest(browser) {
     await expectText(page, "E2E Clearance Certificate", "disposable document definition");
     await page.select("select[name='definitionId']", definitionId);
     await clearAndType(page, "textarea[name='field_purpose']", requestPurpose);
+
     await page.waitForFunction(() => {
+      const submissionKey = document.querySelector("input[name='submissionKey']");
       const button = [...document.querySelectorAll("button")].find((candidate) => candidate.textContent?.includes("Submit request"));
-      return Boolean(button && !button.disabled);
+      return submissionKey instanceof HTMLInputElement
+        && Boolean(submissionKey.value)
+        && button instanceof HTMLButtonElement
+        && !button.matches(":disabled");
     }, { timeout });
+
     await clickByText(page, "button", "Submit request");
+    const feedbackHandle = await page.waitForFunction(() => {
+      const node = document.querySelector("[role='status'], [role='alert']");
+      const text = node?.textContent?.replace(/\s+/g, " ").trim() || "";
+      return text ? { role: node?.getAttribute("role") || "", text } : null;
+    }, { timeout });
+    const feedback = await feedbackHandle.jsonValue();
+    await feedbackHandle.dispose();
+    if (!feedback?.text?.includes("Document request submitted")) {
+      throw new Error(`Document request form returned ${feedback?.role || "feedback"}: ${feedback?.text || "No response"}`);
+    }
 
     request = await waitForRequest(
       { tenantId, homeownerId, definitionId, purpose: requestPurpose },

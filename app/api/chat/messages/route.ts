@@ -4,6 +4,7 @@ import { requireUser } from "@/lib/auth";
 import { writeAuditLog } from "@/lib/audit";
 import { prisma } from "@/lib/db";
 import { createChatMessage, getChatPayload } from "@/lib/services/chat";
+import { getConversationRequestState } from "@/lib/services/chat-privacy";
 import { sanitizeHomeownerChatPayload } from "@/lib/services/homeowner-chat-view";
 
 type UploadedAttachmentInput = { url?: unknown; fileName?: unknown; contentType?: unknown; size?: unknown };
@@ -19,6 +20,18 @@ export async function POST(request: Request) {
   if (!conversationId) return NextResponse.json({ error: "Conversation is required." }, { status: 400 });
   const attachments = Array.isArray(body.attachments) ? body.attachments : [];
   try {
+    if (user.role === Role.HOMEOWNER) {
+      const requestState = await getConversationRequestState(user.tenantId, conversationId);
+      if (requestState?.status === "PENDING" && requestState.requesterUserId === user.id) {
+        const introductoryMessages = await prisma.chatMessage.count({
+          where: { tenantId: user.tenantId, conversationId, senderId: user.id, deletedForEveryoneAt: null },
+        });
+        if (introductoryMessages >= 1) {
+          throw new Error("Message request sent. Wait for the resident to accept before sending another message.");
+        }
+      }
+    }
+
     const message = await createChatMessage({
       conversationId,
       senderId: user.id,

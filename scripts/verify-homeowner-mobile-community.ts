@@ -106,7 +106,14 @@ record(
     && morePage.includes("aiAvailable")
     && morePage.includes("/portal/ai"),
 );
-record("mobile cards replace compressed desktop tables", hasAll(communityCards + announcementsPage + eventsPage + vehiclesPage, ["grid gap-4", "rounded-3xl", "AnnouncementMobileCard", "EventMobileCard", "VehicleMobileCard"]) && ![announcementsPage, eventsPage, vehiclesPage, organizationPage].some((source) => source.includes("<table")));
+record(
+  "mobile cards replace compressed desktop tables",
+  hasAll(communityCards, ["AnnouncementMobileCard", "EventMobileCard", "VehicleMobileCard"])
+    && announcementsPage.includes("AnnouncementMobileCard")
+    && eventsPage.includes("EventMobileCard")
+    && vehiclesPage.includes("VehicleMobileCard")
+    && ![announcementsPage, eventsPage, vehiclesPage, organizationPage].some((source) => source.includes("<table")),
+);
 record("loading and error states exist", ["community", "announcements", "events", "organization", "chat", "more", "profile", "vehicles"].every((route) => existsSync(path.join(root, `app/portal/${route}/loading.tsx`)) && existsSync(path.join(root, `app/portal/${route}/error.tsx`))));
 record("minimum touch targets are preserved", hasAll(communityCards + morePage + profilePage + chatMessenger, ["min-h-12", "size-11"]));
 record("Phase 1 PWA verifier remains registered", packageJson.includes("\"verify:homeowner-pwa\""));

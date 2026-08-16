@@ -24,6 +24,7 @@ function sanitizeNode(value: unknown): unknown {
     const lot = stringField(sourceProfile, "lot");
     sanitized.email = "";
     sanitized.homeownerProfile = null;
+    sanitized.avatarUrl = typeof value.id === "string" ? `/api/profile/photo/${encodeURIComponent(value.id)}` : null;
     sanitized.searchText = [
       value.name,
       "homeowner",
@@ -45,6 +46,8 @@ function sanitizeNode(value: unknown): unknown {
  * Removes resident property/contact metadata from homeowner-facing chat payloads.
  * Block and lot remain searchable only through the derived searchText string; the
  * structured homeowner profile (including address) is never sent to the browser.
+ * A same-tenant authenticated avatar URL is safe to expose because the image route
+ * performs its own tenant and active-homeowner authorization before serving bytes.
  */
 export function sanitizeHomeownerChatPayload<T>(payload: T): T {
   return sanitizeNode(payload) as T;

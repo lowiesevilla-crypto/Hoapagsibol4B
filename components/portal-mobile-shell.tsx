@@ -33,7 +33,7 @@ export function PortalMobileHeader({
           <h1 className="truncate text-[15px] font-black text-ink">{isDashboard ? `Hi, ${firstName}` : title}</h1>
         </div>
         {showChat && <Link href="/portal/chat" aria-label={unreadCount > 0 ? `Open chat, ${unreadCount} unread messages` : "Open chat"} className="relative grid size-10 place-items-center rounded-full bg-slate-50 text-pine-700 focus-visible:outline focus-visible:outline-4 focus-visible:outline-pine-500/20">
-          <MessageSquare className="size-4.5" />
+          <MessageSquare className="size-[18px]" />
           {unreadCount > 0 && <span className="absolute -right-1 -top-1 grid min-w-5 place-items-center rounded-full bg-rose-500 px-1 text-[10px] font-black text-white">{unreadCount > 99 ? "99+" : unreadCount}</span>}
         </Link>}
         <Link href="/portal/profile" aria-label="Open profile" className="rounded-full focus-visible:outline focus-visible:outline-4 focus-visible:outline-pine-500/20">
@@ -64,8 +64,8 @@ export function PortalBottomNavigation({ destinations, pathname }: { destination
 
 function BottomNavItem({ href, label, icon: Icon, active }: { href: string; label: string; icon: LucideIcon; active: boolean }) {
   return (
-    <Link href={href} aria-current={active ? "page" : undefined} className={`flex min-h-13 flex-col items-center justify-center gap-0.5 rounded-2xl px-1 text-[10px] font-black transition focus-visible:outline focus-visible:outline-4 focus-visible:outline-pine-500/20 ${active ? "text-pine-800" : "text-slate-400"}`}>
-      <span className={`grid h-7 min-w-10 place-items-center rounded-full px-2 ${active ? "bg-pine-100 text-pine-800" : ""}`}><Icon className="size-4.5" /></span>
+    <Link href={href} aria-current={active ? "page" : undefined} className={`flex min-h-[52px] flex-col items-center justify-center gap-0.5 rounded-2xl px-1 text-[10px] font-black transition focus-visible:outline focus-visible:outline-4 focus-visible:outline-pine-500/20 ${active ? "text-pine-800" : "text-slate-400"}`}>
+      <span className={`grid h-7 min-w-10 place-items-center rounded-full px-2 ${active ? "bg-pine-100 text-pine-800" : ""}`}><Icon className="size-[18px]" /></span>
       <span className="max-w-full truncate">{label}</span>
     </Link>
   );
@@ -91,7 +91,7 @@ export function PortalSummaryCard({ label, value, note, icon: Icon, tone = "defa
   const toneClass = tone === "success" ? "bg-emerald-50 text-emerald-800" : tone === "warning" ? "bg-amber-50 text-amber-900" : "bg-white text-ink";
   const content = (
     <div className="flex min-w-0 items-center gap-3">
-      <span className="grid size-10 shrink-0 place-items-center rounded-2xl bg-pine-50 text-pine-700"><Icon className="size-4.5" /></span>
+      <span className="grid size-10 shrink-0 place-items-center rounded-2xl bg-pine-50 text-pine-700"><Icon className="size-[18px]" /></span>
       <span className="min-w-0 flex-1"><span className="block truncate text-[11px] font-black uppercase tracking-[.08em] text-slate-400">{label}</span><span className="mt-0.5 block truncate text-xl font-black tabular-nums">{value}</span>{note && <span className="mt-0.5 hidden truncate text-[11px] text-slate-400 sm:block">{note}</span>}</span>
       {href && <ChevronRight className="size-4 shrink-0 text-slate-300" />}
     </div>
@@ -102,7 +102,7 @@ export function PortalSummaryCard({ label, value, note, icon: Icon, tone = "defa
 
 export function PortalQuickActionTile({ href, label, description, icon: Icon }: { href: string; label: string; description: string; icon: LucideIcon }) {
   return (
-    <Link href={href} className="group flex min-h-18 items-center gap-3 rounded-2xl border border-slate-100 bg-white p-3 shadow-[0_4px_18px_rgba(15,23,42,.04)] transition hover:border-pine-100 focus-visible:outline focus-visible:outline-4 focus-visible:outline-pine-500/20">
+    <Link href={href} className="group flex min-h-[72px] items-center gap-3 rounded-2xl border border-slate-100 bg-white p-3 shadow-[0_4px_18px_rgba(15,23,42,.04)] transition hover:border-pine-100 focus-visible:outline focus-visible:outline-4 focus-visible:outline-pine-500/20">
       <span className="grid size-11 shrink-0 place-items-center rounded-2xl bg-pine-50 text-pine-700 transition group-hover:bg-pine-100"><Icon className="size-5" /></span>
       <span className="min-w-0 flex-1"><span className="block truncate text-sm font-black text-ink">{label}</span><span className="mt-0.5 hidden line-clamp-1 text-xs text-slate-400 sm:block">{description}</span></span>
       <ChevronRight className="size-4 shrink-0 text-slate-300" />

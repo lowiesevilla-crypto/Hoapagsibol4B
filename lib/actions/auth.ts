@@ -4,7 +4,7 @@ import { HomeownerActivationStatus, Role } from "@prisma/client";
 import { compare } from "bcryptjs";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
-import { createSession, defaultHomeForRoles, deleteSession, readSession } from "@/lib/auth";
+import { defaultHomeForRoles, deleteSession, prepareSession, readSession, setSessionCookie } from "@/lib/auth";
 import {
   effectiveRolesForUser,
   isPlatformRoleSet,
@@ -40,18 +40,28 @@ export async function loginAction(_state: LoginState, formData: FormData): Promi
   // receives or retains the password: a short-lived HttpOnly signed cookie limits
   // selection to the user IDs proven by the first credential check.
   if (selectedUserId) {
-    const allowedUserIds = await readVerifiedLoginChoices();
-    if (!allowedUserIds?.includes(selectedUserId)) {
+    try {
+      const allowedUserIds = await readVerifiedLoginChoices();
+      if (!allowedUserIds?.includes(selectedUserId)) {
+        await clearVerifiedLoginChoices();
+        return { error: "Your verified sign-in has expired. Sign in again to choose an HOA account." };
+      }
+      const resolvedSelection = await resolveVerifiedLoginChoice(selectedUserId);
+      if (!resolvedSelection) {
+        await clearVerifiedLoginChoices();
+        return { error: "The selected HOA account is no longer available. Sign in again." };
+      }
+      const result = await finishLogin(resolvedSelection, true);
       await clearVerifiedLoginChoices();
-      return { error: "Your verified sign-in has expired. Sign in again to choose an HOA account." };
+      return result;
+    } catch (error) {
+      console.error("[auth] verified multi-account selection failed", {
+        errorName: error instanceof Error ? error.name : typeof error,
+        errorMessage: error instanceof Error ? error.message : "Unknown login selection error",
+      });
+      await clearVerifiedLoginChoices().catch(() => undefined);
+      return { error: "We could not open the selected HOA account. Please sign in again and retry." };
     }
-    const resolvedSelection = await resolveVerifiedLoginChoice(selectedUserId);
-    if (!resolvedSelection) {
-      await clearVerifiedLoginChoices();
-      return { error: "The selected HOA account is no longer available. Sign in again." };
-    }
-    await clearVerifiedLoginChoices();
-    return finishLogin(resolvedSelection, true);
   }
 
   await clearVerifiedLoginChoices();
@@ -94,25 +104,36 @@ export async function loginAction(_state: LoginState, formData: FormData): Promi
     return { choices: resolved.choices };
   }
 
-  return finishLogin(resolved, false);
+  try {
+    return await finishLogin(resolved, false);
+  } catch (error) {
+    console.error("[auth] login finalization failed", {
+      errorName: error instanceof Error ? error.name : typeof error,
+      errorMessage: error instanceof Error ? error.message : "Unknown login finalization error",
+    });
+    return { error: "We could not finish opening your HOA account. Please retry your sign-in." };
+  }
 }
 
 async function finishLogin(resolved: SuccessfulLoginUser, selectedFromMultipleAccounts: boolean): Promise<LoginState> {
   const { tenant, user } = resolved;
   const roles = effectiveRolesForUser(user.role, user.userRoleAssignments);
   const role = primaryRoleForRoles(roles, user.role);
+  const preparedSession = await prepareSession({ userId: user.id, role, roles, tenantId: tenant.id, tenantSlug: tenant.slug });
+  const loginAt = new Date();
 
-  setTenantContext({
-    tenantId: tenant.id,
-    role,
-    roles,
-    platform: isPlatformRoleSet(roles),
-    enabledModules: new Set(tenant.moduleEntitlements.filter((item) => item.enabled).map((item) => item.module)),
-  });
+  // Login happens before an authenticated tenant session exists. Finalize the
+  // revalidated user, audit record, and session row atomically through the platform
+  // client with explicit tenant predicates instead of depending on request-local
+  // tenant context during the account-selection handoff.
+  await platformPrisma.$transaction(async (tx) => {
+    const updated = await tx.user.updateMany({
+      where: { id: user.id, tenantId: tenant.id, active: true },
+      data: { lastLoginAt: loginAt },
+    });
+    if (updated.count !== 1) throw new Error("Selected login account is no longer active in the verified tenant.");
 
-  await prisma.$transaction([
-    prisma.user.update({ where: { id: user.id }, data: { lastLoginAt: new Date() } }),
-    prisma.auditLog.create({
+    await tx.auditLog.create({
       data: {
         tenantId: tenant.id,
         actorId: user.id,
@@ -122,10 +143,34 @@ async function finishLogin(resolved: SuccessfulLoginUser, selectedFromMultipleAc
         entityId: user.id,
         metadata: { tenantSlug: tenant.slug, roles, selectedFromMultipleAccounts, identityKey: "verified_email" },
       },
-    }),
-  ]);
+    });
+    await tx.userSession.create({ data: preparedSession.data });
+  });
 
-  await createSession({ userId: user.id, role, roles, tenantId: tenant.id, tenantSlug: tenant.slug });
+  try {
+    await setSessionCookie(preparedSession);
+  } catch (error) {
+    // A persisted session that never reached the browser must not remain usable.
+    await platformPrisma.userSession.updateMany({
+      where: {
+        tenantId: tenant.id,
+        userId: user.id,
+        tokenHash: preparedSession.data.tokenHash,
+        revokedAt: null,
+      },
+      data: { revokedAt: new Date() },
+    }).catch(() => undefined);
+    throw error;
+  }
+
+  setTenantContext({
+    tenantId: tenant.id,
+    role,
+    roles,
+    platform: isPlatformRoleSet(roles),
+    enabledModules: new Set(tenant.moduleEntitlements.filter((item) => item.enabled).map((item) => item.module)),
+  });
+
   return { redirectTo: defaultHomeForRoles(roles, role) };
 }
 

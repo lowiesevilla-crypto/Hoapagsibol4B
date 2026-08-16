@@ -206,6 +206,21 @@ The homeowner portal is a phone-first consumer experience. Premium means restrai
 - Regression coverage: `tests/unit/homeowner-premium-ui.test.ts` plus the existing payment, request, community, messaging, profile, and PWA tests.
 - Do not merge/deploy a homeowner UI change merely because desktop screenshots look acceptable. The mobile/PWA interaction hierarchy, touch targets, tenant/privacy boundaries, and browser E2E gates are part of the release acceptance contract.
 
+## Homeowner Statement of Account UI and Print
+
+The homeowner `/portal/soa` surface is a compact account screen with a separate print representation. The screen must optimize for phone/PWA scanning while `Print SOA` must always produce the complete statement, independent of which screen disclosures are open.
+
+- Keep the visible hierarchy compact: payment-area navigation, `My account` / `Statement of Account`, statement code, one primary outstanding-balance summary, and concise credit/net-balance/last-payment facts. Do not restore the previous four large summary cards or explanatory download note.
+- `Receivables aging`, `Running ledger`, `Payment history`, and `Billing history` are accessible native disclosure sections and default to collapsed. Each trigger uses a clear chevron and keyboard-visible focus treatment. Secondary links such as `Receipts` and `View bills` belong inside expanded content rather than inside the disclosure trigger.
+- `SoaPrintButton` continues to invoke the browser print dialog, but the printable DOM is `HomeownerSoaPrintDocument`, not the collapsed screen cards. The print document is rendered from the same server-loaded `getStatementOfAccount(profile.id, profile.tenantId, ...)` result, so disclosure state can never remove rows from the printed statement.
+- The homeowner print must include association identity/contact details, statement code/date, homeowner name/account/block/lot/property address/contact/email/monthly dues/status, outstanding/credit/net balance, total billed/payments/credits/penalties, last-payment and collection status, all receivable-aging buckets, the complete running ledger, complete payment history including receipt/method/reference/coverage/received/applied/credit/status/collector, complete billing history, and the authorization/signature footer.
+- Printing the homeowner's own property/contact details is permitted because the page is protected by `requireHomeownerProfile` and the statement query is scoped by the authenticated `profile.id` and `profile.tenantId`. Never accept browser-supplied tenant or homeowner identity to generate this print output, and never expose another resident's private data through it.
+- Do not reuse `soa.verifyUrl` in the homeowner print while it resolves to the admin-only SOA route. A future homeowner QR/verification feature must first define a homeowner-authorized or public verification boundary rather than sending homeowners to an admin URL.
+- The hidden `.homeowner-soa-print` marker exists only so global print CSS can suppress the portal shell. Keep the actual printable statement outside that marker so the richer `.soa-document` pagination/table rules control multi-page output rather than the older screen-card print rules.
+- Core implementation: `app/portal/soa/page.tsx`, `components/homeowner/payments/homeowner-soa-print-document.tsx`, and `components/soa-print-button.tsx`.
+- Regression coverage: `tests/unit/homeowner-soa-clean-print.test.ts` plus `scripts/verify-homeowner-mobile-payments.ts` and the critical browser homeowner SOA path.
+- Do not merge/deploy this surface if any of the four detail areas cannot collapse cleanly on phones, if Print SOA prints only the currently visible/collapsed subset, if full ledger/payment/billing rows are omitted from the print document, or if tenant/homeowner authority is moved into browser-controlled input.
+
 ## Homeowner Payment Status Authority
 
 Homeowner-facing payment status must describe the current financial state, not allow an older failed attempt to override a later successful payment.

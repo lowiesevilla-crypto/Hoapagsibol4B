@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ComplaintPrivacyMode, ComplaintStatus, DocumentRequestStatus, Prisma, Role, TenantModule } from "@prisma/client";
+import { ComplaintPrivacyMode, ComplaintStatus, DocumentRequestStatus, DocumentType, Prisma, Role, TenantModule } from "@prisma/client";
 import { FileCheck2, FileQuestion, MessageSquarePlus } from "lucide-react";
 import { ComplaintRequestCard, DocumentRequestCard, RequestAreaNavigation, RequestEmptyState, RequestMetricCard, requestTone, statusLabel } from "@/components/homeowner/requests/request-cards";
 import { PortalPageContainer, PortalQuickActionTile, PortalSectionHeader } from "@/components/portal-mobile-shell";
@@ -92,8 +92,8 @@ function buildDocumentWhere(tenantId: string, homeownerId: string, q: string, st
   if (status === "open") where.status = { notIn: [...terminalDocumentStatuses] };
   if (status === "ready") where.status = { in: [DocumentRequestStatus.APPROVED, DocumentRequestStatus.ISSUED, DocumentRequestStatus.READY_FOR_DOWNLOAD, DocumentRequestStatus.GENERATED, DocumentRequestStatus.DOWNLOADED] };
   if (status === "closed") where.status = { in: [...terminalDocumentStatuses] };
-  if (category === "gate") where.OR = [{ type: "GATE_PASS" }, { definition: { is: { displayName: { contains: "Gate" } } } }];
-  if (category === "move") where.OR = [{ type: "MOVE_IN_OUT_PASS" }, { definition: { is: { displayName: { contains: "Move" } } } }];
+  if (category === "gate") where.OR = [{ type: DocumentType.GATE_PASS }, { definition: { is: { displayName: { contains: "Gate" } } } }];
+  if (category === "move") where.OR = [{ type: DocumentType.MOVE_IN_OUT_PASS }, { definition: { is: { displayName: { contains: "Move" } } } }];
   if (q) where.AND = [{ OR: [{ id: { contains: q } }, { documentNumber: { contains: q } }, { purpose: { contains: q } }, { definition: { is: { displayName: { contains: q } } } }, { configuration: { is: { displayName: { contains: q } } } }] }];
   return where;
 }

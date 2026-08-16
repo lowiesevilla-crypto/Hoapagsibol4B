@@ -16,7 +16,9 @@ test("homeowner shell uses the uploaded photo with a resilient placeholder", () 
   assert.match(portalShell, /HomeownerAvatar/);
   assert.match(portalShell, /src="\/api\/profile\/photo"/);
   assert.match(portalShell, /rounded-full/);
-  assert.match(portalShell, /min-h-\[52px\]/);
+  assert.match(portalShell, /min-h-14/);
+  assert.match(portalShell, /env\(safe-area-inset-bottom\)/);
+  assert.match(portalShell, /focus-visible:outline/);
 });
 
 test("homeowner chat uses the dedicated messenger-style experience", () => {

@@ -2,6 +2,19 @@ import { Role } from "@prisma/client";
 
 type JsonRecord = Record<string, unknown>;
 
+type HomeownerSafeNode<T> =
+  T extends readonly (infer Item)[] ? HomeownerSafeNode<Item>[] :
+  T extends { homeownerProfile: unknown; email: string; searchText: string }
+    ? Omit<{ [Key in keyof T]: HomeownerSafeNode<T[Key]> }, "homeownerProfile" | "email" | "avatarUrl" | "searchText"> & {
+        homeownerProfile: null;
+        email: string;
+        avatarUrl: string | null;
+        searchText: string;
+      }
+    : T extends object
+      ? { [Key in keyof T]: HomeownerSafeNode<T[Key]> }
+      : T;
+
 function isRecord(value: unknown): value is JsonRecord {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
@@ -48,7 +61,10 @@ function sanitizeNode(value: unknown): unknown {
  * structured homeowner profile (including address) is never sent to the browser.
  * A same-tenant authenticated avatar URL is safe to expose because the image route
  * performs its own tenant and active-homeowner authorization before serving bytes.
+ *
+ * The return type intentionally reflects the browser-safe shape so TypeScript cannot
+ * require the original structured homeowner profile at the homeowner UI boundary.
  */
-export function sanitizeHomeownerChatPayload<T>(payload: T): T {
-  return sanitizeNode(payload) as T;
+export function sanitizeHomeownerChatPayload<T>(payload: T): HomeownerSafeNode<T> {
+  return sanitizeNode(payload) as HomeownerSafeNode<T>;
 }

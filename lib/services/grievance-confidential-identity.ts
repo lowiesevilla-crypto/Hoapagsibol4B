@@ -2,7 +2,7 @@ import "server-only";
 
 import { ComplaintIdentityAccessStatus, ComplaintPrivacyMode, ComplaintTimelineEventType, type Role } from "@prisma/client";
 import { platformPrisma } from "@/lib/db";
-import { requireGrievancePermission } from "@/lib/services/grievance-foundation";
+import { getActiveGrievancePermissions } from "@/lib/services/grievance-foundation";
 
 type EffectiveUser = {
   id: string;
@@ -12,8 +12,15 @@ type EffectiveUser = {
   name?: string;
 };
 
+export async function hasExplicitCommitteeIdentityRevealPermission(user: EffectiveUser) {
+  const permissions = await getActiveGrievancePermissions(user.tenantId, user.id);
+  return permissions.has("REVEAL_CONFIDENTIAL_IDENTITY");
+}
+
 export async function revealConfidentialIdentityWithCommitteePermission(user: EffectiveUser, formData: FormData) {
-  await requireGrievancePermission(user, "REVEAL_CONFIDENTIAL_IDENTITY");
+  if (!await hasExplicitCommitteeIdentityRevealPermission(user)) {
+    throw new Error("Confidential identity reveal requires an explicit active Grievance Committee reveal permission.");
+  }
   const id = String(formData.get("id") || "").trim().slice(0, 80);
   const reason = String(formData.get("reason") || "").trim().slice(0, 1000);
   const confirmed = formData.get("confirmReveal") === "on" || formData.get("confirmReveal") === "true";
@@ -25,9 +32,7 @@ export async function revealConfidentialIdentityWithCommitteePermission(user: Ef
     select: {
       id: true,
       publicReference: true,
-      confidentialIdentity: {
-        select: { displayName: true, email: true, phone: true, propertyAddress: true, block: true, lot: true },
-      },
+      confidentialIdentity: { select: { displayName: true, email: true, phone: true, propertyAddress: true, block: true, lot: true } },
     },
   });
   if (!complaint || !complaint.confidentialIdentity) throw new Error("Confidential complaint not found.");

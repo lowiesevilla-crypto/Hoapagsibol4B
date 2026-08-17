@@ -97,7 +97,8 @@ test("anonymous tracker is mobile/PWA safe, text-only, and uses incremental poll
   assert.match(tracker, /IDLE_POLL_MS = 12_000/);
   assert.match(tracker, /document\.hidden/);
   assert.match(tracker, /visibilitychange/);
-  assert.match(tracker, /\?after=/);
+  assert.match(tracker, /params\.set\("after", cursor\.after\)/);
+  assert.match(tracker, /messagesUrl\(reference, \{ after: cursorRef\.current \}\)/);
   assert.match(tracker, /MAX_MESSAGE_LENGTH = 2_000/);
   assert.match(tracker, /Text only/);
   assert.doesNotMatch(tracker, /type=["']file["']/);

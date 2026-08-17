@@ -25,8 +25,8 @@ export async function setGrievanceOperationalSlaPause(user: EffectiveUser, input
     throw new Error("Record the approved process/policy reason before pausing the operational SLA.");
   }
 
-  const rows = await platformPrisma.$queryRaw<Array<{ id: string; operationalSlaPausedAt: Date | null }>>`
-    SELECT id, operationalSlaPausedAt
+  const rows = await platformPrisma.$queryRaw<Array<{ id: string; operationalSlaPausedAt: Date | null; operationalSlaPauseReason: string | null }>>`
+    SELECT id, operationalSlaPausedAt, operationalSlaPauseReason
     FROM GrievanceCase
     WHERE tenantId = ${user.tenantId}
       AND id = ${input.grievanceCaseId}
@@ -38,10 +38,14 @@ export async function setGrievanceOperationalSlaPause(user: EffectiveUser, input
   if (input.paused && grievance.operationalSlaPausedAt) throw new Error("Operational SLA is already paused for this grievance.");
   if (!input.paused && !grievance.operationalSlaPausedAt) throw new Error("Operational SLA is not currently paused.");
 
+  const priorPauseReason = grievance.operationalSlaPauseReason || null;
   const eventType = input.paused ? "OPERATIONAL_SLA_PAUSED" : "OPERATIONAL_SLA_RESUMED";
   const message = input.paused
     ? "Complaint operational SLA paused while a grievance process deadline is running."
-    : "Complaint operational SLA resumed after the grievance process wait period.";
+    : "Complaint operational SLA resumed; the prior pause rationale remains preserved in this immutable history entry.";
+  const historyMetadata = input.paused
+    ? { paused: true, pauseReason: reason }
+    : { paused: false, priorPauseReason };
 
   await platformPrisma.$transaction(async (tx) => {
     await tx.$executeRaw`
@@ -57,7 +61,7 @@ export async function setGrievanceOperationalSlaPause(user: EffectiveUser, input
       INSERT INTO ComplaintGrievanceActivity
         (id, tenantId, complaintId, grievanceCaseId, actorId, eventType, message, metadata, createdAt)
       VALUES
-        (${randomUUID()}, ${user.tenantId}, ${input.complaintId}, ${input.grievanceCaseId}, ${user.id}, ${eventType}, ${message}, ${JSON.stringify({ paused: input.paused, reasonProvided: Boolean(reason) })}, NOW(3))
+        (${randomUUID()}, ${user.tenantId}, ${input.complaintId}, ${input.grievanceCaseId}, ${user.id}, ${eventType}, ${message}, ${JSON.stringify(historyMetadata)}, NOW(3))
     `;
     await tx.auditLog.create({
       data: {
@@ -67,7 +71,7 @@ export async function setGrievanceOperationalSlaPause(user: EffectiveUser, input
         action: input.paused ? "PAUSE_GRIEVANCE_OPERATIONAL_SLA" : "RESUME_GRIEVANCE_OPERATIONAL_SLA",
         entityType: "GrievanceCase",
         entityId: input.grievanceCaseId,
-        metadata: { complaintId: input.complaintId, paused: input.paused, reasonProvided: Boolean(reason) },
+        metadata: { complaintId: input.complaintId, ...historyMetadata },
       },
     });
   });

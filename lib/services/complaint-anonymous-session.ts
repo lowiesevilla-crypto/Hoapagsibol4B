@@ -163,7 +163,7 @@ function mapMessage(row: MessageRow): AnonymousConversationMessage {
       authorDisplayName: "HOAHub",
     };
   }
-  if (row.senderType === "COMPLAINANT" || row.authorId === null) {
+  if (row.senderType === "COMPLAINANT") {
     return {
       id: row.id,
       body: row.body,

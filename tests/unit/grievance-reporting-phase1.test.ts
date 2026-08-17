@@ -10,8 +10,18 @@ test("complaint queue exposes separate grievance and verification filters", () =
   assert.match(queue, /name="grievanceStatus"/);
   assert.match(queue, /name="verificationStatus"/);
   assert.match(queue, /Complaint status remains the operational queue state/);
-  assert.match(queue, /getGrievanceReport/);
+  assert.match(queue, /getGrievanceComplaintQueue/);
   assert.match(queue, /getGrievanceMetadataForComplaints/);
+});
+
+test("formal grievance queue filters are applied by SQL before its result cap", () => {
+  assert.match(reporting, /export async function getGrievanceComplaintQueue/);
+  const queueBlock = reporting.slice(reporting.indexOf("export async function getGrievanceComplaintQueue"), reporting.indexOf("export async function getGrievanceMetadataForComplaints"));
+  const whereIndex = queueBlock.indexOf("WHERE ${where}");
+  const limitIndex = queueBlock.indexOf("LIMIT 100");
+  assert.ok(whereIndex >= 0 && limitIndex > whereIndex);
+  assert.doesNotMatch(queue, /matchingIds/);
+  assert.doesNotMatch(queue, /baseComplaints\.filter/);
 });
 
 test("grievance report can filter complaint and grievance domains without identity columns", () => {

@@ -31,6 +31,8 @@ export type AnonymousConversation = {
   updatedAt: string;
   messages: AnonymousConversationMessage[];
   nextCursor: string | null;
+  previousCursor: string | null;
+  hasMoreBefore: boolean;
 };
 
 type SettingRow = {
@@ -155,75 +157,42 @@ async function touchSession(session: SessionRow) {
 
 function mapMessage(row: MessageRow): AnonymousConversationMessage {
   if (row.senderType === "SYSTEM") {
-    return {
-      id: row.id,
-      body: row.body,
-      createdAt: row.createdAt.toISOString(),
-      sender: "SYSTEM",
-      authorDisplayName: "HOAHub",
-    };
+    return { id: row.id, body: row.body, createdAt: row.createdAt.toISOString(), sender: "SYSTEM", authorDisplayName: "HOAHub" };
   }
   if (row.senderType === "COMPLAINANT") {
-    return {
-      id: row.id,
-      body: row.body,
-      createdAt: row.createdAt.toISOString(),
-      sender: "ANONYMOUS_COMPLAINANT",
-      authorDisplayName: "Anonymous complainant",
-    };
+    return { id: row.id, body: row.body, createdAt: row.createdAt.toISOString(), sender: "ANONYMOUS_COMPLAINANT", authorDisplayName: "Anonymous complainant" };
   }
-  return {
-    id: row.id,
-    body: row.body,
-    createdAt: row.createdAt.toISOString(),
-    sender: "HOA_STAFF",
-    authorDisplayName: "HOA Staff",
-  };
+  return { id: row.id, body: row.body, createdAt: row.createdAt.toISOString(), sender: "HOA_STAFF", authorDisplayName: "HOA Staff" };
 }
 
-async function safeAnonymousAudit(input: {
-  tenantId: string;
-  action: string;
-  entityType: string;
-  entityId: string;
-  metadata?: Record<string, unknown>;
-}) {
-  await platformPrisma.auditLog.create({
-    data: {
-      tenantId: input.tenantId,
-      actorId: null,
-      module: "COMPLAINTS",
-      action: input.action,
-      entityType: input.entityType,
-      entityId: input.entityId,
-      metadata: input.metadata ? JSON.parse(JSON.stringify(input.metadata)) : undefined,
-    },
-  });
+async function cursorCreatedAt(session: SessionRow, cursor: string) {
+  const rows = await platformPrisma.$queryRaw<CursorRow[]>`
+    SELECT createdAt
+    FROM ComplaintMessage
+    WHERE tenantId = ${session.tenantId}
+      AND complaintId = ${session.complaintId}
+      AND id = ${cursor}
+      AND visibility = 'PUBLIC'
+    LIMIT 1
+  `;
+  const createdAt = rows[0]?.createdAt;
+  if (!createdAt) throw new Error("Message cursor is invalid.");
+  return createdAt;
 }
 
 export async function createAnonymousComplaintSession(trackingCode: string, pin: string) {
   const normalizedCode = normalizeTrackingCode(trackingCode);
   const normalizedPin = pin.trim();
-  if (!/^[A-Z0-9-]{8,40}$/.test(normalizedCode) || !/^\d{6}$/.test(normalizedPin)) {
-    throw new Error("Tracking code or PIN was not found.");
-  }
+  if (!/^[A-Z0-9-]{8,40}$/.test(normalizedCode) || !/^\d{6}$/.test(normalizedPin)) throw new Error("Tracking code or PIN was not found.");
 
   const rateKey = `anonymous-session:${normalizedCode}`;
-  if (!await rateLimitAvailable("complaint-anonymous-session-auth", rateKey, 8, 15 * 60 * 1000)) {
-    throw new Error("Too many attempts. Please try again later.");
-  }
+  if (!await rateLimitAvailable("complaint-anonymous-session-auth", rateKey, 8, 15 * 60 * 1000)) throw new Error("Too many attempts. Please try again later.");
 
   const credential = await platformPrisma.complaintTrackingCredential.findUnique({
     where: { trackingCode: normalizedCode },
     include: { complaint: { select: { id: true, tenantId: true, privacyMode: true } } },
   });
-
-  if (
-    !credential ||
-    credential.disabledAt ||
-    credential.complaint.privacyMode !== ComplaintPrivacyMode.ANONYMOUS ||
-    !await compare(normalizedPin, credential.pinHash)
-  ) {
+  if (!credential || credential.disabledAt || credential.complaint.privacyMode !== ComplaintPrivacyMode.ANONYMOUS || !await compare(normalizedPin, credential.pinHash)) {
     await recordRateLimitFailure("complaint-anonymous-session-auth", rateKey);
     throw new Error("Tracking code or PIN was not found.");
   }
@@ -241,60 +210,63 @@ export async function createAnonymousComplaintSession(trackingCode: string, pin:
       VALUES
         (${id}, ${credential.tenantId}, ${credential.complaintId}, ${tokenHash}, ${expiresAt}, NOW(3), NOW(3), NOW(3))
     `;
-    await tx.$executeRaw`
-      UPDATE ComplaintMessage
-      SET senderType = 'COMPLAINANT', channel = 'ANONYMOUS_TRACKER'
-      WHERE tenantId = ${credential.tenantId}
-        AND complaintId = ${credential.complaintId}
-        AND authorId IS NULL
-        AND senderType <> 'SYSTEM'
-    `;
-    await tx.complaintTrackingCredential.update({
-      where: { id: credential.id },
-      data: { lastAccessAt: new Date() },
+    await tx.complaintTrackingCredential.update({ where: { id: credential.id }, data: { lastAccessAt: new Date() } });
+    await tx.auditLog.create({
+      data: {
+        tenantId: credential.tenantId,
+        actorId: null,
+        module: "COMPLAINTS",
+        action: "CREATE_ANONYMOUS_COMPLAINT_SESSION",
+        entityType: "Complaint",
+        entityId: credential.complaintId,
+        metadata: { sessionId: id, expiresAt: expiresAt.toISOString() },
+      },
     });
-  });
-
-  await safeAnonymousAudit({
-    tenantId: credential.tenantId,
-    action: "CREATE_ANONYMOUS_COMPLAINT_SESSION",
-    entityType: "Complaint",
-    entityId: credential.complaintId,
-    metadata: { sessionId: id, expiresAt: expiresAt.toISOString() },
   });
 
   const conversation = await getAnonymousComplaintConversation(rawToken);
   return { token: rawToken, expiresAt, conversation };
 }
 
-export async function getAnonymousComplaintConversation(rawToken: string, afterId?: string | null): Promise<AnonymousConversation> {
+export async function getAnonymousComplaintConversation(rawToken: string, afterId?: string | null, beforeId?: string | null): Promise<AnonymousConversation> {
   const session = await lookupSession(rawToken);
-  let messages: MessageRow[];
-  const cursor = String(afterId || "").trim();
+  const after = String(afterId || "").trim();
+  const before = String(beforeId || "").trim();
+  if (after && before) throw new Error("Choose only one message cursor direction.");
 
-  if (cursor) {
-    const cursorRows = await platformPrisma.$queryRaw<CursorRow[]>`
-      SELECT createdAt
-      FROM ComplaintMessage
-      WHERE tenantId = ${session.tenantId}
-        AND complaintId = ${session.complaintId}
-        AND id = ${cursor}
-        AND visibility = 'PUBLIC'
-      LIMIT 1
-    `;
-    const cursorCreatedAt = cursorRows[0]?.createdAt;
-    if (!cursorCreatedAt) throw new Error("Message cursor is invalid.");
+  let messages: MessageRow[] = [];
+  let nextCursor: string | null = null;
+  let previousCursor: string | null = null;
+  let hasMoreBefore = false;
 
+  if (after) {
+    const createdAt = await cursorCreatedAt(session, after);
     messages = await platformPrisma.$queryRaw<MessageRow[]>`
       SELECT id, body, createdAt, senderType, authorId
       FROM ComplaintMessage
       WHERE tenantId = ${session.tenantId}
         AND complaintId = ${session.complaintId}
         AND visibility = 'PUBLIC'
-        AND (createdAt > ${cursorCreatedAt} OR (createdAt = ${cursorCreatedAt} AND id > ${cursor}))
+        AND (createdAt > ${createdAt} OR (createdAt = ${createdAt} AND id > ${after}))
       ORDER BY createdAt ASC, id ASC
       LIMIT ${INCREMENTAL_MESSAGE_LIMIT}
     `;
+    nextCursor = messages.at(-1)?.id ?? after;
+  } else if (before) {
+    const createdAt = await cursorCreatedAt(session, before);
+    const older = await platformPrisma.$queryRaw<MessageRow[]>`
+      SELECT id, body, createdAt, senderType, authorId
+      FROM ComplaintMessage
+      WHERE tenantId = ${session.tenantId}
+        AND complaintId = ${session.complaintId}
+        AND visibility = 'PUBLIC'
+        AND (createdAt < ${createdAt} OR (createdAt = ${createdAt} AND id < ${before}))
+      ORDER BY createdAt DESC, id DESC
+      LIMIT ${INITIAL_MESSAGE_LIMIT + 1}
+    `;
+    hasMoreBefore = older.length > INITIAL_MESSAGE_LIMIT;
+    messages = older.slice(0, INITIAL_MESSAGE_LIMIT).reverse();
+    previousCursor = hasMoreBefore ? messages.at(0)?.id ?? null : null;
   } else {
     const recent = await platformPrisma.$queryRaw<MessageRow[]>`
       SELECT id, body, createdAt, senderType, authorId
@@ -303,9 +275,12 @@ export async function getAnonymousComplaintConversation(rawToken: string, afterI
         AND complaintId = ${session.complaintId}
         AND visibility = 'PUBLIC'
       ORDER BY createdAt DESC, id DESC
-      LIMIT ${INITIAL_MESSAGE_LIMIT}
+      LIMIT ${INITIAL_MESSAGE_LIMIT + 1}
     `;
-    messages = recent.reverse();
+    hasMoreBefore = recent.length > INITIAL_MESSAGE_LIMIT;
+    messages = recent.slice(0, INITIAL_MESSAGE_LIMIT).reverse();
+    nextCursor = messages.at(-1)?.id ?? null;
+    previousCursor = hasMoreBefore ? messages.at(0)?.id ?? null : null;
   }
 
   await touchSession(session);
@@ -318,7 +293,9 @@ export async function getAnonymousComplaintConversation(rawToken: string, afterI
     submittedAt: session.submittedAt.toISOString(),
     updatedAt: session.updatedAt.toISOString(),
     messages: mapped,
-    nextCursor: (mapped.at(-1)?.id ?? cursor) || null,
+    nextCursor,
+    previousCursor,
+    hasMoreBefore,
   };
 }
 
@@ -330,9 +307,7 @@ export async function postAnonymousComplaintMessage(rawToken: string, input: { b
   if (body.length > ANONYMOUS_MESSAGE_MAX_LENGTH) throw new Error(`Message must be ${ANONYMOUS_MESSAGE_MAX_LENGTH} characters or fewer.`);
 
   const rateKey = `${session.tenantId}:${session.complaintId}:${session.id}`;
-  if (!await rateLimitAvailable("complaint-anonymous-message", rateKey, 20, 5 * 60 * 1000)) {
-    throw new Error("Too many messages. Please wait before sending another message.");
-  }
+  if (!await rateLimitAvailable("complaint-anonymous-message", rateKey, 20, 5 * 60 * 1000)) throw new Error("Too many messages. Please wait before sending another message.");
   await recordRateLimitFailure("complaint-anonymous-message", rateKey);
 
   const existing = await platformPrisma.$queryRaw<ExistingMessageRow[]>`
@@ -350,28 +325,27 @@ export async function postAnonymousComplaintMessage(rawToken: string, input: { b
   }
 
   const messageId = randomUUID();
-  const affected = await platformPrisma.$executeRaw`
-    INSERT IGNORE INTO ComplaintMessage
-      (id, tenantId, complaintId, authorId, authorDisplayName, visibility, body, senderType, channel, clientMessageId, anonymousSessionId, createdAt)
-    VALUES
-      (${messageId}, ${session.tenantId}, ${session.complaintId}, NULL, 'Anonymous complainant', 'PUBLIC', ${body}, 'COMPLAINANT', 'ANONYMOUS_TRACKER', ${clientMessageId}, ${session.id}, NOW(3))
-  `;
-
-  if (Number(affected) !== 1) {
-    const raced = await platformPrisma.$queryRaw<ExistingMessageRow[]>`
-      SELECT id, body, createdAt, senderType, authorId, clientMessageId
-      FROM ComplaintMessage
-      WHERE tenantId = ${session.tenantId}
-        AND complaintId = ${session.complaintId}
-        AND anonymousSessionId = ${session.id}
-        AND clientMessageId = ${clientMessageId}
-      LIMIT 1
+  const saved = await platformPrisma.$transaction(async (tx) => {
+    const affected = await tx.$executeRaw`
+      INSERT IGNORE INTO ComplaintMessage
+        (id, tenantId, complaintId, authorId, authorDisplayName, visibility, body, senderType, channel, clientMessageId, anonymousSessionId, createdAt)
+      VALUES
+        (${messageId}, ${session.tenantId}, ${session.complaintId}, NULL, 'Anonymous complainant', 'PUBLIC', ${body}, 'COMPLAINANT', 'ANONYMOUS_TRACKER', ${clientMessageId}, ${session.id}, NOW(3))
     `;
-    if (!raced[0] || raced[0].body !== body) throw new Error("Message could not be saved safely. Please retry.");
-    return mapMessage(raced[0]);
-  }
+    if (Number(affected) !== 1) {
+      const raced = await tx.$queryRaw<ExistingMessageRow[]>`
+        SELECT id, body, createdAt, senderType, authorId, clientMessageId
+        FROM ComplaintMessage
+        WHERE tenantId = ${session.tenantId}
+          AND complaintId = ${session.complaintId}
+          AND anonymousSessionId = ${session.id}
+          AND clientMessageId = ${clientMessageId}
+        LIMIT 1
+      `;
+      if (!raced[0] || raced[0].body !== body) throw new Error("Message could not be saved safely. Please retry.");
+      return raced[0];
+    }
 
-  await platformPrisma.$transaction(async (tx) => {
     await tx.$executeRaw`
       INSERT INTO ComplaintGrievanceActivity
         (id, tenantId, complaintId, grievanceCaseId, actorId, eventType, message, metadata, createdAt)
@@ -388,28 +362,32 @@ export async function postAnonymousComplaintMessage(rawToken: string, input: { b
         metadata: { source: "ANONYMOUS_TRACKER" },
       },
     });
+    await tx.auditLog.create({
+      data: {
+        tenantId: session.tenantId,
+        actorId: null,
+        module: "COMPLAINTS",
+        action: "ADD_ANONYMOUS_COMPLAINT_MESSAGE",
+        entityType: "Complaint",
+        entityId: session.complaintId,
+        metadata: { messageId, source: "ANONYMOUS_TRACKER" },
+      },
+    });
+    const inserted = await tx.$queryRaw<MessageRow[]>`
+      SELECT id, body, createdAt, senderType, authorId
+      FROM ComplaintMessage
+      WHERE tenantId = ${session.tenantId}
+        AND complaintId = ${session.complaintId}
+        AND id = ${messageId}
+        AND visibility = 'PUBLIC'
+      LIMIT 1
+    `;
+    if (!inserted[0]) throw new Error("Message could not be loaded after saving.");
+    return inserted[0];
   });
 
-  await safeAnonymousAudit({
-    tenantId: session.tenantId,
-    action: "ADD_ANONYMOUS_COMPLAINT_MESSAGE",
-    entityType: "Complaint",
-    entityId: session.complaintId,
-    metadata: { messageId, source: "ANONYMOUS_TRACKER" },
-  });
-
-  const saved = await platformPrisma.$queryRaw<MessageRow[]>`
-    SELECT id, body, createdAt, senderType, authorId
-    FROM ComplaintMessage
-    WHERE tenantId = ${session.tenantId}
-      AND complaintId = ${session.complaintId}
-      AND id = ${messageId}
-      AND visibility = 'PUBLIC'
-    LIMIT 1
-  `;
-  if (!saved[0]) throw new Error("Message could not be loaded after saving.");
   await touchSession(session);
-  return mapMessage(saved[0]);
+  return mapMessage(saved);
 }
 
 export async function revokeAnonymousComplaintSession(rawToken: string) {
@@ -424,16 +402,22 @@ export async function revokeAnonymousComplaintSession(rawToken: string) {
   `;
   const session = sessions[0];
   if (!session) return;
-  await platformPrisma.$executeRaw`
-    UPDATE ComplaintAnonymousSession
-    SET revokedAt = NOW(3), updatedAt = NOW(3)
-    WHERE id = ${session.id} AND tenantId = ${session.tenantId}
-  `;
-  await safeAnonymousAudit({
-    tenantId: session.tenantId,
-    action: "REVOKE_ANONYMOUS_COMPLAINT_SESSION",
-    entityType: "Complaint",
-    entityId: session.complaintId,
-    metadata: { sessionId: session.id },
+  await platformPrisma.$transaction(async (tx) => {
+    await tx.$executeRaw`
+      UPDATE ComplaintAnonymousSession
+      SET revokedAt = NOW(3), updatedAt = NOW(3)
+      WHERE id = ${session.id} AND tenantId = ${session.tenantId}
+    `;
+    await tx.auditLog.create({
+      data: {
+        tenantId: session.tenantId,
+        actorId: null,
+        module: "COMPLAINTS",
+        action: "REVOKE_ANONYMOUS_COMPLAINT_SESSION",
+        entityType: "Complaint",
+        entityId: session.complaintId,
+        metadata: { sessionId: session.id },
+      },
+    });
   });
 }

@@ -156,8 +156,8 @@ test("grievance deadlines are separate from complaint dueAt and require explicit
 });
 
 test("anonymous audit metadata does not persist PINs, raw session tokens, or message bodies", () => {
-  assert.doesNotMatch(anonymousService, /metadata:\s*\{[^}]*\bpin\b/is);
-  assert.doesNotMatch(anonymousService, /metadata:\s*\{[^}]*\btoken\b/is);
-  assert.doesNotMatch(anonymousService, /metadata:\s*\{[^}]*\bbody\b/is);
+  assert.doesNotMatch(anonymousService, /metadata:\s*\{[^}]*\bpin\b/i);
+  assert.doesNotMatch(anonymousService, /metadata:\s*\{[^}]*\btoken\b/i);
+  assert.doesNotMatch(anonymousService, /metadata:\s*\{[^}]*\bbody\b/i);
   assert.match(anonymousService, /metadata: \{ messageId, source: "ANONYMOUS_TRACKER" \}/);
 });

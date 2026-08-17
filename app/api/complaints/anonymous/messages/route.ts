@@ -23,11 +23,12 @@ export async function GET(request: Request) {
   try {
     const url = new URL(request.url);
     const after = url.searchParams.get("after");
-    const conversation = await getAnonymousComplaintConversation(await sessionToken(), after);
+    const before = url.searchParams.get("before");
+    const conversation = await getAnonymousComplaintConversation(await sessionToken(), after, before);
     return NextResponse.json({ conversation }, { headers: privateNoStoreHeaders });
   } catch (error) {
     const message = error instanceof Error ? error.message : "";
-    if (message === "Message cursor is invalid.") return errorResponse(message, 400);
+    if (message === "Message cursor is invalid." || message === "Choose only one message cursor direction.") return errorResponse(message, 400);
     if (message === "Anonymous complaint session is invalid or expired.") return errorResponse(message, 401);
     if (message === "Anonymous complaint conversation is currently unavailable.") return errorResponse(message, 503);
     return errorResponse("Anonymous complaint conversation could not be loaded.", 500);

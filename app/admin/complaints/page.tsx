@@ -1,9 +1,10 @@
 import Link from "next/link";
-import { ComplaintPrivacyMode, ComplaintStatus, Role } from "@prisma/client";
+import { ComplaintPrivacyMode, ComplaintStatus } from "@prisma/client";
 import { PageHeader } from "@/components/page-header";
 import { StatusBadge } from "@/components/status-badge";
 import { complaintPrivacyLabel, getAdminComplaintList, requireComplaintAdmin } from "@/lib/services/complaints";
-import { getGrievanceMetadataForComplaints, getGrievanceReport } from "@/lib/services/grievance-reporting";
+import { requireGrievancePermission } from "@/lib/services/grievance-foundation";
+import { getGrievanceComplaintQueue, getGrievanceMetadataForComplaints } from "@/lib/services/grievance-reporting";
 import { shortDate } from "@/lib/utils";
 
 type Query = {
@@ -16,38 +17,99 @@ type Query = {
   error?: string;
 };
 
+type ComplaintQueueItem = {
+  id: string;
+  complaintNumber: string;
+  publicReference: string;
+  title: string;
+  privacyMode: ComplaintPrivacyMode;
+  status: ComplaintStatus;
+  submittedAt: Date;
+  category: { name: string } | null;
+  assignedTo: { name: string } | null;
+  _count: { messages: number; attachments: number };
+};
+
+type GrievanceMetadata = {
+  grievanceStatus: string | null;
+  verificationStatus: string | null;
+  verificationRequired: number | boolean | null;
+  blocksEnforcement: number | boolean | null;
+};
+
 const grievanceStatuses = ["ASSESSMENT", "VERIFICATION_REQUIRED", "VERIFIED", "READY_FOR_FORMAL_PROCESS", "CLOSED_NO_ACTION", "CLOSED_UNSUBSTANTIATED"] as const;
 const verificationStatuses = ["NOT_EVALUATED", "NOT_REQUIRED", "PENDING", "IN_PROGRESS", "PASSED", "FAILED", "INSUFFICIENT"] as const;
+
+async function canViewGrievance(user: Parameters<typeof requireGrievancePermission>[0]) {
+  try {
+    await requireGrievancePermission(user, "VIEW_GRIEVANCE");
+    return true;
+  } catch {
+    return false;
+  }
+}
 
 export default async function AdminComplaintsPage({ searchParams }: { searchParams: Promise<Query> }) {
   const user = await requireComplaintAdmin();
   const query = await searchParams;
-  const effectiveRoles = new Set(user.roles);
-  const hasPlatformRole = effectiveRoles.has(Role.SUPER_ADMIN) || effectiveRoles.has(Role.PLATFORM_ADMIN);
-  const canManageGrievance = !hasPlatformRole && [Role.ADMIN, Role.HOA_ADMIN, Role.SYSTEM_ADMIN].some((role) => effectiveRoles.has(role));
+  const canManageGrievance = await canViewGrievance(user);
+  const selectedGrievanceStatus = grievanceStatuses.includes(query.grievanceStatus as (typeof grievanceStatuses)[number]) ? query.grievanceStatus : undefined;
+  const selectedVerificationStatus = verificationStatuses.includes(query.verificationStatus as (typeof verificationStatuses)[number]) ? query.verificationStatus : undefined;
+  const complaintStatus = Object.values(ComplaintStatus).includes(query.status as ComplaintStatus) ? query.status : undefined;
+  const privacyMode = Object.values(ComplaintPrivacyMode).includes(query.privacy as ComplaintPrivacyMode) ? query.privacy : undefined;
+  const useFormalFilters = canManageGrievance && Boolean(selectedGrievanceStatus || selectedVerificationStatus);
 
-  const baseComplaints = await getAdminComplaintList(user, query);
-  let complaints = baseComplaints;
-  let grievanceMetadata = new Map<string, { grievanceStatus: string | null; verificationStatus: string | null; verificationRequired: number | boolean | null; blocksEnforcement: number | boolean | null }>();
+  let complaints: ComplaintQueueItem[];
+  let grievanceMetadata = new Map<string, GrievanceMetadata>();
 
-  if (canManageGrievance && baseComplaints.length > 0) {
-    const metadataRows = await getGrievanceMetadataForComplaints(user, baseComplaints.map((item) => item.id));
-    grievanceMetadata = new Map(metadataRows.map((item) => [item.complaintId, item]));
-
-    const selectedGrievanceStatus = grievanceStatuses.includes(query.grievanceStatus as (typeof grievanceStatuses)[number]) ? query.grievanceStatus : undefined;
-    const selectedVerificationStatus = verificationStatuses.includes(query.verificationStatus as (typeof verificationStatuses)[number]) ? query.verificationStatus : undefined;
-    if (selectedGrievanceStatus || selectedVerificationStatus) {
-      const grievanceReport = await getGrievanceReport(user, {
-        q: query.q,
-        complaintStatus: Object.values(ComplaintStatus).includes(query.status as ComplaintStatus) ? query.status : undefined,
-        grievanceStatus: selectedGrievanceStatus,
-        verificationStatus: selectedVerificationStatus,
-        privacyMode: Object.values(ComplaintPrivacyMode).includes(query.privacy as ComplaintPrivacyMode) ? query.privacy : undefined,
-        page: 1,
-        pageSize: 100,
-      });
-      const matchingIds = new Set(grievanceReport.rows.map((item) => item.complaintId));
-      complaints = baseComplaints.filter((item) => matchingIds.has(item.id));
+  if (useFormalFilters) {
+    const formalRows = await getGrievanceComplaintQueue(user, {
+      q: query.q,
+      complaintStatus,
+      grievanceStatus: selectedGrievanceStatus,
+      verificationStatus: selectedVerificationStatus,
+      privacyMode,
+    });
+    complaints = formalRows.map((row) => ({
+      id: row.id,
+      complaintNumber: row.complaintNumber,
+      publicReference: row.publicReference,
+      title: row.title,
+      privacyMode: row.privacyMode,
+      status: row.status,
+      submittedAt: row.submittedAt,
+      category: row.categoryName ? { name: row.categoryName } : null,
+      assignedTo: row.assignedToName ? { name: row.assignedToName } : null,
+      _count: { messages: Number(row.messageCount), attachments: Number(row.attachmentCount) },
+    }));
+    grievanceMetadata = new Map(formalRows.map((row) => [row.id, {
+      grievanceStatus: row.grievanceStatus,
+      verificationStatus: row.verificationStatus,
+      verificationRequired: row.verificationRequired,
+      blocksEnforcement: row.blocksEnforcement,
+    }]));
+  } else {
+    const baseComplaints = await getAdminComplaintList(user, query);
+    complaints = baseComplaints.map((item) => ({
+      id: item.id,
+      complaintNumber: item.complaintNumber,
+      publicReference: item.publicReference,
+      title: item.title,
+      privacyMode: item.privacyMode,
+      status: item.status,
+      submittedAt: item.submittedAt,
+      category: item.category ? { name: item.category.name } : null,
+      assignedTo: item.assignedTo ? { name: item.assignedTo.name } : null,
+      _count: item._count,
+    }));
+    if (canManageGrievance && complaints.length > 0) {
+      const metadataRows = await getGrievanceMetadataForComplaints(user, complaints.map((item) => item.id));
+      grievanceMetadata = new Map(metadataRows.map((item) => [item.complaintId, {
+        grievanceStatus: item.grievanceStatus,
+        verificationStatus: item.verificationStatus,
+        verificationRequired: item.verificationRequired,
+        blocksEnforcement: item.blocksEnforcement,
+      }]));
     }
   }
 

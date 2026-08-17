@@ -79,7 +79,7 @@ test("anonymous message sender classification remains authoritative after staff 
 
 test("anonymous message retries reuse the pending idempotency key until content changes", () => {
   assert.match(tracker, /pendingMessageRef/);
-  assert.match(tracker, /existingPending\?\.body === body \? existingPending\.clientMessageId : safeClientMessageId\(\)/);
+  assert.match(tracker, /existingPending\?\.body === body\s*\?\s*existingPending\.clientMessageId\s*:\s*safeClientMessageId\(\)/);
   assert.match(tracker, /pendingMessageRef\.current = \{ body, clientMessageId \}/);
   assert.match(tracker, /pendingMessageRef\.current && pendingMessageRef\.current\.body !== nextMessage\.trim\(\)/);
   assert.match(tracker, /pendingMessageRef\.current = null/);

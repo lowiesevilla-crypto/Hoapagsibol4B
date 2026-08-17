@@ -11,6 +11,19 @@ function errorResponse(message: string, status: number) {
   return NextResponse.json({ error: message }, { status, headers: privateNoStoreHeaders });
 }
 
+function expectedOriginError(message: string) {
+  return message === "Request origin is not allowed." || message === "Request origin is required.";
+}
+
+function createSessionError(error: unknown) {
+  const message = error instanceof Error ? error.message : "";
+  if (message === "Tracking code or PIN was not found.") return { message, status: 401 };
+  if (message === "Anonymous complaint conversation is currently unavailable.") return { message, status: 503 };
+  if (message === "Too many attempts. Please try again later.") return { message, status: 429 };
+  if (expectedOriginError(message)) return { message, status: 403 };
+  return { message: "Anonymous complaint session could not be created.", status: 500 };
+}
+
 export async function POST(request: Request) {
   try {
     assertSameOrigin(request);
@@ -32,9 +45,8 @@ export async function POST(request: Request) {
     });
     return response;
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Anonymous complaint session could not be created.";
-    const status = message.startsWith("Too many attempts") ? 429 : message.includes("origin") ? 403 : 401;
-    return errorResponse(message, status);
+    const safe = createSessionError(error);
+    return errorResponse(safe.message, safe.status);
   }
 }
 
@@ -55,7 +67,8 @@ export async function DELETE(request: Request) {
     });
     return response;
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Anonymous complaint session could not be revoked.";
-    return errorResponse(message, message.includes("origin") ? 403 : 400);
+    const message = error instanceof Error ? error.message : "";
+    if (expectedOriginError(message)) return errorResponse(message, 403);
+    return errorResponse("Anonymous complaint session could not be revoked.", 500);
   }
 }

@@ -22,9 +22,10 @@ async function sessionToken() {
 export async function GET(request: Request) {
   try {
     const url = new URL(request.url);
+    const reference = url.searchParams.get("reference");
     const after = url.searchParams.get("after");
     const before = url.searchParams.get("before");
-    const conversation = await getAnonymousComplaintConversation(await sessionToken(), after, before);
+    const conversation = await getAnonymousComplaintConversation(await sessionToken(), reference, after, before);
     return NextResponse.json({ conversation }, { headers: privateNoStoreHeaders });
   } catch (error) {
     const message = error instanceof Error ? error.message : "";
@@ -39,7 +40,7 @@ export async function POST(request: Request) {
   try {
     assertSameOrigin(request);
     const body = await request.json().catch(() => ({}));
-    const message = await postAnonymousComplaintMessage(await sessionToken(), {
+    const message = await postAnonymousComplaintMessage(await sessionToken(), body.publicReference, {
       body: body.message,
       clientMessageId: body.clientMessageId,
     });

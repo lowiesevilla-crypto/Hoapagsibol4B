@@ -53,9 +53,11 @@ export async function POST(request: Request) {
 export async function DELETE(request: Request) {
   try {
     assertSameOrigin(request);
+    const url = new URL(request.url);
+    const reference = url.searchParams.get("reference");
     const cookieStore = await cookies();
     const token = cookieStore.get(ANONYMOUS_COMPLAINT_COOKIE)?.value || "";
-    await revokeAnonymousComplaintSession(token);
+    await revokeAnonymousComplaintSession(token, reference);
     const response = NextResponse.json({ revoked: true }, { headers: privateNoStoreHeaders });
     response.cookies.set(ANONYMOUS_COMPLAINT_COOKIE, "", {
       httpOnly: true,
@@ -69,6 +71,7 @@ export async function DELETE(request: Request) {
   } catch (error) {
     const message = error instanceof Error ? error.message : "";
     if (expectedOriginError(message)) return errorResponse(message, 403);
+    if (message === "Anonymous complaint session is invalid or expired.") return errorResponse(message, 401);
     return errorResponse("Anonymous complaint session could not be revoked.", 500);
   }
 }

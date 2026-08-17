@@ -13,6 +13,7 @@ const MIN_SESSION_MINUTES = 5;
 const MAX_SESSION_MINUTES = 120;
 const INITIAL_MESSAGE_LIMIT = 50;
 const INCREMENTAL_MESSAGE_LIMIT = 50;
+const INVALID_SESSION_MESSAGE = "Anonymous complaint session is invalid or expired.";
 
 export type AnonymousConversationMessage = {
   id: string;
@@ -70,6 +71,12 @@ function normalizeTrackingCode(value: string) {
   return value.trim().toUpperCase();
 }
 
+function normalizePublicReference(value: unknown) {
+  const reference = String(value ?? "").trim().toUpperCase();
+  if (!/^[A-Z0-9-]{6,80}$/.test(reference)) throw new Error(INVALID_SESSION_MESSAGE);
+  return reference;
+}
+
 function sessionTokenHash(token: string) {
   return createHash("sha256").update(token).digest("hex");
 }
@@ -112,8 +119,9 @@ async function requireAnonymousMessagingEnabled(tenantId: string) {
   return settings;
 }
 
-async function lookupSession(rawToken: string): Promise<SessionRow> {
-  if (!rawToken || rawToken.length < 32 || rawToken.length > 160) throw new Error("Anonymous complaint session is invalid or expired.");
+async function lookupSession(rawToken: string, expectedPublicReference: unknown): Promise<SessionRow> {
+  if (!rawToken || rawToken.length < 32 || rawToken.length > 160) throw new Error(INVALID_SESSION_MESSAGE);
+  const publicReference = normalizePublicReference(expectedPublicReference);
   const tokenHash = sessionTokenHash(rawToken);
   const rows = await platformPrisma.$queryRaw<SessionRow[]>`
     SELECT
@@ -135,10 +143,11 @@ async function lookupSession(rawToken: string): Promise<SessionRow> {
       AND s.revokedAt IS NULL
       AND s.expiresAt > NOW(3)
       AND c.privacyMode = 'ANONYMOUS'
+      AND c.publicReference = ${publicReference}
     LIMIT 1
   `;
   const session = rows[0];
-  if (!session) throw new Error("Anonymous complaint session is invalid or expired.");
+  if (!session) throw new Error(INVALID_SESSION_MESSAGE);
   await requireAnonymousMessagingEnabled(session.tenantId);
   return session;
 }
@@ -190,7 +199,7 @@ export async function createAnonymousComplaintSession(trackingCode: string, pin:
 
   const credential = await platformPrisma.complaintTrackingCredential.findUnique({
     where: { trackingCode: normalizedCode },
-    include: { complaint: { select: { id: true, tenantId: true, privacyMode: true } } },
+    include: { complaint: { select: { id: true, tenantId: true, privacyMode: true, publicReference: true } } },
   });
   if (!credential || credential.disabledAt || credential.complaint.privacyMode !== ComplaintPrivacyMode.ANONYMOUS || !await compare(normalizedPin, credential.pinHash)) {
     await recordRateLimitFailure("complaint-anonymous-session-auth", rateKey);
@@ -224,12 +233,17 @@ export async function createAnonymousComplaintSession(trackingCode: string, pin:
     });
   });
 
-  const conversation = await getAnonymousComplaintConversation(rawToken);
+  const conversation = await getAnonymousComplaintConversation(rawToken, credential.complaint.publicReference);
   return { token: rawToken, expiresAt, conversation };
 }
 
-export async function getAnonymousComplaintConversation(rawToken: string, afterId?: string | null, beforeId?: string | null): Promise<AnonymousConversation> {
-  const session = await lookupSession(rawToken);
+export async function getAnonymousComplaintConversation(
+  rawToken: string,
+  expectedPublicReference: unknown,
+  afterId?: string | null,
+  beforeId?: string | null,
+): Promise<AnonymousConversation> {
+  const session = await lookupSession(rawToken, expectedPublicReference);
   const after = String(afterId || "").trim();
   const before = String(beforeId || "").trim();
   if (after && before) throw new Error("Choose only one message cursor direction.");
@@ -299,14 +313,18 @@ export async function getAnonymousComplaintConversation(rawToken: string, afterI
   };
 }
 
-export async function postAnonymousComplaintMessage(rawToken: string, input: { body: unknown; clientMessageId: unknown }) {
-  const session = await lookupSession(rawToken);
+export async function postAnonymousComplaintMessage(
+  rawToken: string,
+  expectedPublicReference: unknown,
+  input: { body: unknown; clientMessageId: unknown },
+) {
+  const session = await lookupSession(rawToken, expectedPublicReference);
   const body = normalizePlainText(input.body);
   const clientMessageId = safeClientMessageId(input.clientMessageId);
   if (body.length < 2) throw new Error("Enter a message.");
   if (body.length > ANONYMOUS_MESSAGE_MAX_LENGTH) throw new Error(`Message must be ${ANONYMOUS_MESSAGE_MAX_LENGTH} characters or fewer.`);
 
-  const rateKey = `${session.tenantId}:${session.complaintId}:${session.id}`;
+  const rateKey = `${session.tenantId}:${session.complaintId}`;
   if (!await rateLimitAvailable("complaint-anonymous-message", rateKey, 20, 5 * 60 * 1000)) throw new Error("Too many messages. Please wait before sending another message.");
   await recordRateLimitFailure("complaint-anonymous-message", rateKey);
 
@@ -390,18 +408,22 @@ export async function postAnonymousComplaintMessage(rawToken: string, input: { b
   return mapMessage(saved);
 }
 
-export async function revokeAnonymousComplaintSession(rawToken: string) {
+export async function revokeAnonymousComplaintSession(rawToken: string, expectedPublicReference: unknown) {
   if (!rawToken) return;
+  const publicReference = normalizePublicReference(expectedPublicReference);
   const tokenHash = sessionTokenHash(rawToken);
   const sessions = await platformPrisma.$queryRaw<Array<{ id: string; tenantId: string; complaintId: string }>>`
-    SELECT id, tenantId, complaintId
-    FROM ComplaintAnonymousSession
-    WHERE tokenHash = ${tokenHash}
-      AND revokedAt IS NULL
+    SELECT s.id, s.tenantId, s.complaintId
+    FROM ComplaintAnonymousSession s
+    INNER JOIN Complaint c ON c.tenantId = s.tenantId AND c.id = s.complaintId
+    WHERE s.tokenHash = ${tokenHash}
+      AND s.revokedAt IS NULL
+      AND c.privacyMode = 'ANONYMOUS'
+      AND c.publicReference = ${publicReference}
     LIMIT 1
   `;
   const session = sessions[0];
-  if (!session) return;
+  if (!session) throw new Error(INVALID_SESSION_MESSAGE);
   await platformPrisma.$transaction(async (tx) => {
     await tx.$executeRaw`
       UPDATE ComplaintAnonymousSession

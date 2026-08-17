@@ -6,6 +6,7 @@ import { LogOut, MessageCircle, Send, ShieldCheck } from "lucide-react";
 const ACTIVE_POLL_MS = 5_000;
 const IDLE_POLL_MS = 12_000;
 const MAX_MESSAGE_LENGTH = 2_000;
+const TAB_REFERENCE_KEY = "hoahub:anonymous-complaint:public-reference";
 
 type ConversationMessage = {
   id: string;
@@ -44,6 +45,26 @@ function safeClientMessageId() {
   return `msg-${Date.now()}-${Math.random().toString(36).slice(2)}`;
 }
 
+function readTabReference() {
+  if (typeof window === "undefined") return null;
+  return window.sessionStorage.getItem(TAB_REFERENCE_KEY);
+}
+
+function saveTabReference(reference: string) {
+  if (typeof window !== "undefined") window.sessionStorage.setItem(TAB_REFERENCE_KEY, reference);
+}
+
+function clearTabReference() {
+  if (typeof window !== "undefined") window.sessionStorage.removeItem(TAB_REFERENCE_KEY);
+}
+
+function messagesUrl(reference: string, cursor?: { after?: string | null; before?: string | null }) {
+  const params = new URLSearchParams({ reference });
+  if (cursor?.after) params.set("after", cursor.after);
+  if (cursor?.before) params.set("before", cursor.before);
+  return `/api/complaints/anonymous/messages?${params.toString()}`;
+}
+
 export function ComplaintTrackForm() {
   const [trackingCode, setTrackingCode] = useState("");
   const [pin, setPin] = useState("");
@@ -56,6 +77,7 @@ export function ComplaintTrackForm() {
   const [loadingEarlier, setLoadingEarlier] = useState(false);
   const [checkingSession, setCheckingSession] = useState(true);
   const cursorRef = useRef<string | null>(null);
+  const tabReferenceRef = useRef<string | null>(null);
   const emptyPollsRef = useRef(0);
   const bottomRef = useRef<HTMLDivElement | null>(null);
   const pendingMessageRef = useRef<{ body: string; clientMessageId: string } | null>(null);
@@ -64,6 +86,8 @@ export function ComplaintTrackForm() {
 
   const applyConversation = useCallback((next: Conversation, replaceMessages = false) => {
     cursorRef.current = next.nextCursor ?? cursorRef.current;
+    tabReferenceRef.current = next.publicReference;
+    saveTabReference(next.publicReference);
     setConversation((current) => {
       if (replaceMessages || !current) return next;
       return {
@@ -77,10 +101,29 @@ export function ComplaintTrackForm() {
     });
   }, []);
 
+  const expireLocalSession = useCallback(() => {
+    clearTabReference();
+    tabReferenceRef.current = null;
+    setConversation(null);
+    cursorRef.current = null;
+    pendingMessageRef.current = null;
+    setAuthError("Your anonymous complaint session expired. Enter the tracking code and PIN again.");
+  }, []);
+
   useEffect(() => {
     let cancelled = false;
-    void fetch("/api/complaints/anonymous/messages", { cache: "no-store" })
+    const reference = readTabReference();
+    tabReferenceRef.current = reference;
+    if (!reference) {
+      setCheckingSession(false);
+      return () => { cancelled = true; };
+    }
+    void fetch(messagesUrl(reference), { cache: "no-store" })
       .then(async (response) => {
+        if (response.status === 401) {
+          if (!cancelled) expireLocalSession();
+          return;
+        }
         if (!response.ok) return;
         const payload = await response.json() as { conversation: Conversation };
         if (!cancelled) applyConversation(payload.conversation, true);
@@ -90,7 +133,7 @@ export function ComplaintTrackForm() {
         if (!cancelled) setCheckingSession(false);
       });
     return () => { cancelled = true; };
-  }, [applyConversation]);
+  }, [applyConversation, expireLocalSession]);
 
   useEffect(() => {
     if (!sessionActive) return;
@@ -103,16 +146,15 @@ export function ComplaintTrackForm() {
         timer = setTimeout(poll, IDLE_POLL_MS);
         return;
       }
+      const reference = tabReferenceRef.current;
+      if (!reference) {
+        expireLocalSession();
+        return;
+      }
       try {
-        const after = cursorRef.current ? `?after=${encodeURIComponent(cursorRef.current)}` : "";
-        const response = await fetch(`/api/complaints/anonymous/messages${after}`, { cache: "no-store" });
+        const response = await fetch(messagesUrl(reference, { after: cursorRef.current }), { cache: "no-store" });
         if (response.status === 401) {
-          if (!cancelled) {
-            setConversation(null);
-            cursorRef.current = null;
-            pendingMessageRef.current = null;
-            setAuthError("Your anonymous complaint session expired. Enter the tracking code and PIN again.");
-          }
+          if (!cancelled) expireLocalSession();
           return;
         }
         if (response.ok) {
@@ -155,7 +197,7 @@ export function ComplaintTrackForm() {
       if (timer) clearTimeout(timer);
       document.removeEventListener("visibilitychange", onVisibility);
     };
-  }, [applyConversation, sessionActive]);
+  }, [applyConversation, expireLocalSession, sessionActive]);
 
   useEffect(() => {
     if (suppressNextAutoScrollRef.current) {
@@ -193,17 +235,15 @@ export function ComplaintTrackForm() {
 
   async function loadEarlierMessages() {
     const before = conversation?.previousCursor;
-    if (!before || loadingEarlier) return;
+    const reference = tabReferenceRef.current;
+    if (!before || !reference || loadingEarlier) return;
     setLoadingEarlier(true);
     setSendError("");
     try {
-      const response = await fetch(`/api/complaints/anonymous/messages?before=${encodeURIComponent(before)}`, { cache: "no-store" });
+      const response = await fetch(messagesUrl(reference, { before }), { cache: "no-store" });
       const payload = await response.json() as { conversation?: Conversation } & ApiError;
       if (response.status === 401) {
-        setConversation(null);
-        cursorRef.current = null;
-        pendingMessageRef.current = null;
-        setAuthError("Your anonymous complaint session expired. Enter the tracking code and PIN again.");
+        expireLocalSession();
         return;
       }
       if (!response.ok || !payload.conversation) throw new Error(payload.error || "Earlier messages could not be loaded.");
@@ -224,7 +264,8 @@ export function ComplaintTrackForm() {
   async function sendMessage(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const body = message.trim();
-    if (body.length < 2 || body.length > MAX_MESSAGE_LENGTH) return;
+    const reference = tabReferenceRef.current;
+    if (!reference || body.length < 2 || body.length > MAX_MESSAGE_LENGTH) return;
     setSending(true);
     setSendError("");
     const existingPending = pendingMessageRef.current;
@@ -234,9 +275,13 @@ export function ComplaintTrackForm() {
       const response = await fetch("/api/complaints/anonymous/messages", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message: body, clientMessageId }),
+        body: JSON.stringify({ message: body, clientMessageId, publicReference: reference }),
       });
       const payload = await response.json() as { message?: ConversationMessage } & ApiError;
+      if (response.status === 401) {
+        expireLocalSession();
+        return;
+      }
       const sentMessage = payload.message;
       if (!response.ok || !sentMessage) throw new Error(payload.error || "Message could not be sent.");
       setConversation((current) => current ? { ...current, messages: mergeMessages(current.messages, [sentMessage]) } : current);
@@ -251,9 +296,14 @@ export function ComplaintTrackForm() {
   }
 
   async function endSession() {
+    const reference = tabReferenceRef.current;
     try {
-      await fetch("/api/complaints/anonymous/session", { method: "DELETE" });
+      if (reference) {
+        await fetch(`/api/complaints/anonymous/session?reference=${encodeURIComponent(reference)}`, { method: "DELETE" });
+      }
     } finally {
+      clearTabReference();
+      tabReferenceRef.current = null;
       setConversation(null);
       setMessage("");
       setSendError("");

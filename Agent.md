@@ -4,429 +4,339 @@ Last updated: 2026-08-17
 
 ## Purpose
 
-This file is the repository-level operating context for AI coding agents and maintainers working on HOAHub. Treat production safety, tenant isolation, authentication integrity, mobile/PWA usability, auditable deployment, and repository-context maintenance as release gates rather than optional improvements.
+This file is the repository-level operating context for AI coding agents and maintainers working on HOAHub. Production safety, tenant isolation, authentication integrity, mobile/PWA usability, auditable deployment, and repository-context maintenance are release gates.
 
 ## Mandatory Agent.md Maintenance
 
-`Agent.md` must be reviewed and updated for **every change** made to the repository before that change is merged or deployed.
-
-This requirement applies to feature work, bug fixes, refactors, UX/UI changes, tests, CI/CD changes, deployment changes, security changes, database changes, integrations, mobile/PWA changes, documentation-affecting behavior, and operational fixes.
+`Agent.md` must be reviewed and updated for **every repository change** before that change is merged or deployed.
 
 For every branch/PR/change:
 
 1. Read `Agent.md` before implementation.
-2. Update the relevant section(s) to reflect the new behavior, constraints, files, architecture, deployment assumptions, tests, or rollback information.
-3. If the change does not alter an existing section, add a concise entry or clarification so the repository context still records the change.
-4. Keep `Last updated` current.
-5. Do not merge or deploy a repository change that leaves `Agent.md` stale.
-6. Never place credentials, secret values, access tokens, database passwords, private keys, or other sensitive production values in `Agent.md`.
+2. Update the relevant context, architecture, files, tests, rollback, and deployment state.
+3. Keep `Last updated` current.
+4. Never place credentials, tokens, production passwords, private keys, certificates, or secret values in this file.
+5. Do not merge or deploy while this file is stale.
 
-A missing `Agent.md` update is considered an incomplete change.
+A missing or stale `Agent.md` update is an incomplete change.
 
 ## Product and Architecture Baseline
 
 - HOAHub is a multi-tenant community/homeowners-association SaaS platform.
-- Primary application stack: Next.js, React, TypeScript, Tailwind CSS, Prisma, and MySQL.
-- Production hosting is Hostinger.
-- Tenant-owned data must remain tenant-scoped at every UI, API, service, job, storage, cache, export, and AI boundary.
-- Server-side authenticated session context is authoritative. Never trust a browser-supplied tenant identifier, role, account owner, or redirect destination as proof of authorization.
+- Primary stack: Next.js, React, TypeScript, Tailwind CSS, Prisma, and MySQL.
+- Production hosting: Hostinger managed Node.js web application connected to GitHub `main`.
+- Tenant-owned data must remain tenant-scoped at every UI, API, service, job, storage, cache, export, report, and AI boundary.
+- Authenticated server-side session context is authoritative. Browser-supplied tenant IDs, roles, account owners, route parameters, or redirect destinations are never proof of authority.
 
 ## Non-Negotiable Security Rules
 
 1. Preserve tenant isolation and fail closed when tenant/user authority is ambiguous.
-2. Preserve RBAC/permission checks and record-ownership checks on server-side actions.
-3. Do not weaken `safeReturnTo`, session validation, passkey verification, or authentication redirect controls.
-4. Never commit production secrets, API keys, passwords, private certificates, or Hostinger credentials.
-5. Do not expose raw database access to client code or AI/model surfaces.
-6. State-changing operations must continue to use server-side business validation and audit controls.
-7. Security-sensitive behavior must remain covered by automated tests when implementation details change.
+2. Preserve RBAC/granular permissions and record-ownership checks on server-side actions.
+3. Do not weaken session validation, passkey verification, login-choice authorization, `safeReturnTo`, CSRF/same-origin protections, or authentication redirect controls.
+4. Never commit production secrets or expose them in logs/client/model payloads.
+5. Do not expose raw database credentials/query execution to browser or AI/model surfaces.
+6. State-changing operations require server-side business validation and appropriate audit/history evidence.
+7. Security-sensitive behavior must remain covered by automated regression tests.
+8. CI passing is not equivalent to production deployment.
 
 ## Homeowner Mobile and PWA Requirements
 
-Homeowner-facing changes must be designed for installed PWA and mobile-browser use, not desktop only.
+Homeowner-facing changes are phone/PWA-first, not desktop-only.
 
-- Use dynamic viewport behavior (`100dvh`) where full-height layouts are required.
-- Respect `env(safe-area-inset-top/right/bottom/left)` for notches and home indicators.
-- Support standalone display mode where applicable.
-- Keep primary touch controls at least 48px high where practical.
-- Avoid desktop-only hover as the sole interaction cue.
-- Avoid expensive decorative animation on mobile; keep motion lightweight and non-blocking.
-- Honor `prefers-reduced-motion`.
-- Ensure critical cards/forms can scroll safely on short mobile viewports without horizontal overflow.
-- Preserve passkey support on compatible mobile devices.
-- The root application layout owns the single `PwaInstallProvider` so installability detection, service-worker registration, offline state, and update handling are available from the public `hoahub.tech` entry as well as authenticated homeowner routes. Do not reintroduce a second provider in `app/portal/layout.tsx`.
-- When a homeowner opens the public HOAHub entry in a mobile browser and the current browsing context is not standalone/installed, `PublicPwaInstallBanner` may prompt the user to install. Chromium uses the captured `beforeinstallprompt` event and invokes `.prompt()` only from an explicit user action; iOS uses Share -> Add to Home Screen instructions. `appinstalled` and standalone checks suppress the install UI after installation, and dismissal metadata uses only generic local-storage cooldown state.
-- Installed-state detection is necessarily browser-scoped: use `(display-mode: standalone)`, iOS `navigator.standalone`, `appinstalled`, and the browser installability event. A normal browser tab cannot reliably discover every separately installed PWA instance on the device, so never claim universal device-level detection.
-- On `/portal/pay`, the long `Unpaid Billings`, `Payment Status`, `PayMongo Online` guidance, `Pay securely online` guidance, and `Online payment fee disclosure` surfaces are accessible disclosure controls and default to collapsed so homeowner phones do not require excessive vertical scrolling. Keep a clear expand/collapse chevron and keyboard-visible focus treatment on every trigger.
-- Keep the primary payment task visible without expanding guidance: `Transaction type` and `Billing items` remain outside the collapsed `Pay securely online` disclosure and receive stronger visual priority. The collapsed `PayMongo Online` summary continues to show the tenant payment account, association name, and payment mode.
-- The collapsed online-fee disclosure must continue to show the `HOAHub convenience fee` amount. Keep navigation actions such as `View billing` and `History` inside the expanded content rather than nesting interactive links inside a disclosure trigger.
+- Use dynamic viewport behavior (`100dvh`) when full-height layout is needed.
+- Respect `env(safe-area-inset-top/right/bottom/left)`.
+- Keep primary touch targets approximately 48px where practical.
+- Avoid hover-only interaction and horizontal overflow.
+- Use shrink-safe `min-w-0`/`max-w-full` patterns where content can compress.
+- Honor `prefers-reduced-motion` for non-essential animation.
+- Ensure critical forms/cards can scroll on short phone viewports without hiding primary actions behind the keyboard or bottom navigation.
+- Preserve passkey support on compatible devices.
+- The root application layout owns the single `PwaInstallProvider`; do not reintroduce a second provider in `app/portal/layout.tsx`.
+- Public install prompting uses browser-supported installability events; do not claim universal device-level installed-PWA detection.
 
 ## Current Release: Community Pulse Premium Login
 
-Community Pulse is the premium HOAHub login experience introduced through PR #103 and strengthened through subsequent mobile/PWA, web, verification, and post-login handoff work.
+Community Pulse is the premium HOAHub login experience introduced through PR #103 and later hardened for mobile/PWA, web, multi-account login, and post-login handoff.
 
-### Current Login Motion
+### Login and Authentication Boundary
 
-- Desktop/web uses staged branding, animated grid/pulse layers, aurora glows, light sweeps, feature-card sheen, focused-field illumination, button sheen, passkey micro-motion, and a clearly visible blue/green secure orbit around the stable tenant/HOA logo.
-- Mobile/PWA uses a clearly visible community mesh, moving blue/green signal wave, traveling nodes, animated logo orbit/halo, signal rail, animated card beam, ambient glows, and touch-safe form motion.
-- The HOAHub/tenant logo itself remains visually stable during idle login on both desktop/web and mobile/PWA; only the surrounding orbit/halo rotates so brand legibility is preserved.
-- Desktop/web and mobile/PWA use the same authentication-state language: idle secure orbit, `Verifying access…`, branded `Access verified`, then authenticated-shell handoff.
-- All non-essential motion must honor `prefers-reduced-motion`.
+Community Pulse is presentation only. It must not replace or bypass the existing server authentication action, tenant/account selection, session validation, passkey verification, or safe redirect logic.
 
-### Login Verification Transition
-
-The current release adds an explicit authentication-state sequence without replacing the existing authentication logic:
-
-1. Idle: stable HOAHub/tenant logo with a rotating secure orbit and visible Community Pulse motion on desktop/web and mobile/PWA.
-2. Pending credential authentication: the primary button displays `Verifying access…` with a restrained spinner while the existing server action is pending.
-3. Successful credential authentication: the form transitions out and a dedicated success state shows the branded logo, one completing blue/green orbit, green confirmation badge, `Access verified`, and `Opening your HOAHub dashboard…`.
-4. Redirect: navigation occurs after an approximately 800 ms visible confirmation window using the existing safe redirect target (`returnTo` first, otherwise the authenticated `redirectTo`).
-5. Authenticated-shell handoff: the first shared HOA/tenant logo rendered after successful login receives one short blue/green orbit and confirmation pulse, then returns to a fully static logo.
-
-The success animation must never be shown before the existing server authentication action returns a valid redirect target.
+- Idle login may animate blue/green pulse/orbit effects around a visually stable HOAHub/tenant logo.
+- Pending credential authentication displays `Verifying access…`.
+- `Access verified` is shown only after the server returns a valid authenticated redirect target.
+- The visible confirmation window is short and non-authoritative; authentication remains server/session controlled.
+- All non-essential motion honors reduced motion.
 
 ### Multi-Account Login Selection
 
-A user whose already-verified credentials match more than one active HOA/tenant account must authenticate **once** and then choose the isolated account/session to open.
+A credential identity matching multiple active HOA/tenant accounts authenticates once and then chooses an authorized account.
 
-- The first credential submission performs the normal server-side password verification and builds only the authorized account choices.
-- When multiple choices exist, the server writes a short-lived signed `hoa_login_choice` cookie. It is `HttpOnly`, `SameSite=Lax`, secure in production, expires after approximately five minutes, contains only the allowed user IDs plus a purpose marker, and is signed with the same protected server secret boundary as authentication.
-- A verified choice handoff is created only for a non-empty multi-account choice set; optional/undefined choice state must never be treated as an authenticated selection proof.
-- If an authentication resolver ever produces a choice-bearing result with an empty or missing choice array, the login must fail closed with no session creation; it must never fall through to the normal authenticated-session path.
-- The account-selection UI removes the username/email and password fields after identity verification. The second submission sends only `selectedUserId` plus normal navigation context; the password is never retained in React state, hidden inputs, session storage, local storage, or the choice cookie.
-- The server accepts a selected account only when its user ID is present in the valid signed choice cookie, then revalidates the selected user and tenant as active before creating the tenant-scoped session.
-- Login finalization occurs before an authenticated tenant session exists, so it must not depend on request-local tenant-scoped Prisma context. After server revalidation, prepare the session and atomically persist `lastLoginAt`, the tenant audit entry, and `UserSession` through the platform client using explicit selected `userId`/`tenantId` predicates; issue the signed browser session cookie only after that transaction succeeds.
-- If session-cookie issuance fails after the database transaction, revoke the just-created session row. Account-selection finalization errors must be contained as a normal sign-in error rather than surfacing a generic server-side exception page.
-- The temporary choice cookie is cleared only after a successful selected-account session handoff, when a new credential login starts, on expiry/error, and during logout flows.
-- A missing, expired, tampered, or mismatched choice cookie fails closed and requires a fresh sign-in.
-- Tenant isolation remains mandatory: choosing one account loads only that tenant/account into the authenticated session.
-- Both `tests/unit/login-multi-account-selection.test.ts` and the existing `tests/unit/homeowner-multi-account-surface.test.ts` must assert the credential-free second step and tenant/account-isolated session behavior; stale tests must not require the former credential-resubmission UI.
+- The server creates a short-lived signed `hoa_login_choice` cookie containing only allowed user IDs and purpose metadata.
+- The cookie is `HttpOnly`, `SameSite=Lax`, secure in production, and short-lived.
+- The second step sends `selectedUserId` only; credentials are not retained in React state, hidden fields, browser storage, or the choice cookie.
+- A selected account is accepted only if present in the signed choice and is revalidated active with its tenant before session creation.
+- Missing/tampered/expired choice state fails closed.
+- Session/audit/last-login persistence occurs through server authority before issuing the browser session cookie.
+- Tenant isolation remains mandatory after account selection.
+- Regression: `tests/unit/login-multi-account-selection.test.ts` and `tests/unit/homeowner-multi-account-surface.test.ts`.
 
 ### Post-Login Brand Handoff
 
-A short-lived browser session marker (`hoahub.login.handoff.v1`) is written only after successful credential or passkey authentication.
+`hoahub.login.handoff.v1` is a short-lived browser presentation marker written only after successful credential/passkey authentication.
 
-- The marker contains only a local timestamp; it contains no identity, tenant, session, credential, or authorization data.
-- `AssociationLogo` uses the shared `PostLoginBrandOrbit` wrapper so the handoff applies consistently across authenticated homeowner, admin, desktop/web, and mobile/PWA shells without duplicating layout logic.
-- Login, forgot-password, and reset-password routes explicitly do not consume or display the post-login handoff orbit.
-- The marker is accepted only for approximately 10 seconds after successful authentication.
-- The authenticated-logo handoff is visible for approximately 1.7 seconds, performs one rotation/pulse sequence, removes the marker, and does not continuously animate during normal navigation.
-- If browser session storage is blocked or unavailable, authentication and navigation must continue normally; the animation is optional presentation only.
-- `prefers-reduced-motion` removes the rotating/pulsing motion while preserving a minimal confirmation state.
-
-### Community Pulse Files
-
-- `components/tenant-login-screen.tsx`
-- `components/login-form.tsx`
-- `components/passkey-login-button.tsx`
-- `components/association-logo.tsx`
-- `components/post-login-brand-orbit.tsx`
-- `components/post-login-brand-orbit.module.css`
-- `components/community-pulse-login.module.css`
-- `components/community-pulse-mobile-premium.module.css`
-- `components/community-pulse-web-premium.module.css`
-- `components/login-verified-transition.module.css`
-- `lib/login-choice-cookie.ts`
-- `tests/unit/community-pulse-login-transition.test.ts`
-- `tests/unit/login-multi-account-selection.test.ts`
-- `tests/unit/homeowner-multi-account-surface.test.ts`
+- It contains only a local timestamp, never identity/tenant/session/credential data.
+- `AssociationLogo` uses the shared `PostLoginBrandOrbit` wrapper.
+- Login/reset routes do not consume it.
+- It expires quickly and is removed after one short authenticated-shell orbit.
+- Browser storage failure must not affect authentication/navigation.
 
 ### Client/Server Branding Boundary
 
-- `lib/tenant-logo.ts` is a server-side logo upload/storage utility and imports Node-only APIs including `node:crypto`, `node:fs/promises`, and `node:path`.
-- Client components such as `components/login-form.tsx` must never import `lib/tenant-logo.ts`, even only to reuse `DEFAULT_TENANT_LOGO_URL`, because doing so pulls Node-only modules into the browser bundle and breaks the production build.
-- `TenantLoginScreen` resolves the tenant/default logo on the server and passes the resolved URL into client presentation components.
-- When a client-only defensive fallback is still required, use the static public path `/Hoahub-logo.png` locally rather than importing the server utility.
-- `tests/unit/community-pulse-login-transition.test.ts` enforces this boundary.
-
-### Authentication Boundary
-
-Community Pulse is a presentation/interaction enhancement. It must not bypass or replace the existing authentication action, server-side session validation, tenant/account selection, safe redirect handling, homeowner account selection, or passkey verification.
-
-The post-login animation marker is never authoritative authentication state. Authenticated server/session checks remain the only authority for protected routes.
-
-The homeowner identifier remains compatible with either verified email or the 11-digit homeowner account number.
+`lib/tenant-logo.ts` imports Node-only APIs and is server-only. Client components must not import it simply to reuse constants. Resolve the logo on the server or use the static `/Hoahub-logo.png` defensive fallback in browser-only code.
 
 ## Resident Messaging Privacy and Message Requests
 
-The homeowner `/portal/chat` experience supports tenant-scoped resident-to-resident messaging in addition to verified HOA personnel, with server-enforced privacy, Message Requests, block/unblock controls, and a phone-first Messenger-style interaction model.
+The homeowner `/portal/chat` experience supports same-tenant resident messaging plus verified HOA personnel communication.
 
-- Homeowners may discover other active `HOMEOWNER` users only inside the same authenticated tenant. The client payload deliberately blanks email and omits email from homeowner recipient search text; private resident email/phone must never be exposed as directory metadata.
-- Homeowner discovery supports **name, block, lot, and block+lot search**, but a resident's full/street/property address must never be returned to the homeowner browser, rendered in search results, conversation rows, message headers, privacy controls, or embedded in homeowner chat `searchText`. Block and lot are lookup keys only; normal resident rows identify the person by name/avatar/Resident status rather than exposing the property address.
-- `lib/services/homeowner-chat-view.ts` is the homeowner-facing payload boundary. Initial page data, chat refreshes, conversation mutations, and message mutations must pass through `sanitizeHomeownerChatPayload` before being returned to a `HOMEOWNER`; structured `homeownerProfile` and resident email are removed while a derived name/block/lot search string preserves approved lookup behavior.
-- The sanitizer's TypeScript return shape must mirror the browser-safe payload: homeowner-facing user nodes expose `homeownerProfile: null`, blank resident email, safe avatar URL, and derived search text. Do not fix type errors by widening the homeowner client type to accept the original structured property profile or address-bearing shape.
-- `/api/chat/homeowners` is tenant-scoped, active-homeowner-only, excludes the current user, and selects only the minimum directory fields needed for name/block/lot discovery. Do not add address, phone, email, or other property/contact fields to that response.
-- The homeowner phone/PWA `/portal/chat` UI follows Messenger-like density and interaction hierarchy rather than the generic HOA workspace layout: compact inbox/search, resident conversation rows, a compact full-height active thread, left/right message bubbles, overflow-menu secondary actions, and a compact bottom composer. Decorative or instructional hero content must not dominate the messaging task.
-- Every homeowner messaging/privacy surface is a viewport-fit release gate. Containers, grids, rows, summaries, inputs, request cards, and block/unblock controls must use shrink-safe `min-w-0`/`max-w-full` patterns and must not create horizontal scrolling or clip actions on supported phone widths.
-- A homeowner's `residentMessagingMode` is one of `INBOX`, `REQUESTS`, or `NONE`. The default is `REQUESTS`. `INBOX` admits a new resident conversation directly, `REQUESTS` creates a pending request that remains outside the recipient's normal Chats until accepted, and `NONE` prevents another resident from starting a new resident chat.
-- Incoming pending/declined request conversations are excluded from the normal chat payload for the recipient. `HomeownerChatPrivacyPanel` exposes pending requests with explicit Accept/Decline actions. Accepting reveals the existing conversation; declining permanently stops sends on that request unless a future product change explicitly defines a re-request lifecycle.
-- A block is tenant-scoped and resident-only. If either resident has blocked the other, direct resident conversation creation and every resident-to-resident send fail server-side. Unblock removes only the current user's block record.
-- `HOA Official` status is derived only from authenticated server roles (`ADMIN`, `SYSTEM_ADMIN`, `EMPLOYEE`). The browser never supplies or upgrades official authority. Resident privacy and block records apply only when both participants are residents, so a resident cannot suppress or impersonate verified HOA official communication through these controls.
-- `createChatMessage` rechecks block and request state on every resident-to-resident send; the request recipient cannot reply while a request is pending and no participant can send after decline. Never rely on disabled client controls as the enforcement boundary.
-- Persistence is provided by migration `20260815213000_chat_privacy_requests_blocks`, which creates tenant-scoped `ChatPrivacyPreference`, `ChatUserBlock`, and `ChatMessageRequest` tables. The current service accesses these narrowly through parameterized Prisma raw SQL until the domain is promoted into generated Prisma models.
-- The homeowner UI uses the dedicated `components/homeowner-messenger.tsx`; admin and employee messaging may continue to use the generic `components/chat-messenger.tsx`. Do not regress homeowner chat back to the generic workspace component.
-- Homeowner avatars may be shown in Messenger using `/api/profile/photo/[userId]`. That image route must authenticate the viewer, require the target to be an active homeowner in the same tenant, derive the tenant storage directory from the authenticated viewer context, and fall back to initials if no photo exists. The avatar route must never expose raw upload paths or weaken the address/contact privacy boundary.
-- Core implementation: `lib/services/chat.ts`, `lib/services/chat-privacy.ts`, `lib/services/homeowner-chat-view.ts`, `components/homeowner-messenger.tsx`, `components/homeowner-chat-privacy-panel.tsx`, `components/homeowner-avatar.tsx`, `app/api/chat/homeowners/route.ts`, `app/api/chat/privacy/route.ts`, `app/api/chat/requests/route.ts`, `app/api/chat/blocks/route.ts`, `app/api/profile/photo/[userId]/route.ts`, and `app/portal/chat/page.tsx`.
-- Regression coverage: `tests/unit/homeowner-chat-privacy-pwa-install.test.ts`, `tests/unit/homeowner-messenger-ui.test.ts`, `tests/unit/homeowner-chat-mobile-privacy-layout.test.ts`, and `tests/unit/homeowner-premium-ui.test.ts`, plus the homeowner PWA verifier's narrow changed-file allow-list for approved chat changes.
-- Do not merge/deploy a messaging change when homeowner directory population, name/block/lot search, address non-disclosure, phone viewport fit, message-request/block enforcement, or the Messenger-style mobile thread fails its acceptance checks. A visually incomplete desktop-card/form presentation is not an acceptable substitute for the approved phone chat experience.
+- Resident directory discovery is same-tenant active-homeowner only.
+- Homeowner discovery supports name, block, lot, and block+lot, but never exposes private email/phone or full/street/property address.
+- `lib/services/homeowner-chat-view.ts` is the homeowner-safe payload boundary. Sanitize payloads before returning them to a homeowner.
+- `/api/chat/homeowners` selects minimum safe directory fields only.
+- Homeowner Messenger is mobile-first and uses `components/homeowner-messenger.tsx` rather than the generic desktop workspace component.
+- `residentMessagingMode` values are `INBOX`, `REQUESTS`, or `NONE`; default is `REQUESTS`.
+- Pending/declined requests remain outside normal Chats until accepted. Declined requests block further sends unless a future approved lifecycle changes that rule.
+- Tenant-scoped resident blocks are enforced server-side on conversation creation and every send.
+- `HOA Official` is derived from authenticated server roles, never the browser.
+- Homeowner avatar access through `/api/profile/photo/[userId]` requires authenticated same-tenant authority and never exposes storage paths.
+- Core regression includes homeowner chat privacy/PWA/mobile tests.
 
 ## Homeowner Profile UI and Photo Upload
 
-The homeowner `/portal/profile` surface is a mobile-first identity screen, not a long administrative record form.
+`/portal/profile` is a compact mobile identity surface.
 
-- Keep the primary profile card compact: profile photo, homeowner name, block/lot, account number, current homeowner status, and monthly dues are the first-screen hierarchy. Do not restore the large instructional `PageHeader`, oversized `InfoTile` grid, or verbose tenant-isolation explanations on this homeowner screen.
-- Contact information uses compact rows. `Home & household` and `Security` are disclosure sections so detailed property, household, and passkey information does not dominate the phone viewport. The linked HOA account switcher is rendered only when more than one linked account exists.
-- Homeowners may upload, replace, or remove their own profile photo. Accepted formats are JPEG, PNG, and WebP with a 5 MB maximum. Client MIME checks are convenience only; `app/api/profile/photo/route.ts` must also validate the file signature before persistence.
-- Profile photo reads/writes require an authenticated `HOMEOWNER` session. Photo metadata is keyed by both `tenantId` and `userId`, and the storage directory is derived from the authenticated tenant slug and authenticated user ID. Never accept tenant IDs, tenant slugs, user IDs, storage paths, or stored filenames from the browser as authority.
-- Profile image bytes are served through the authenticated `/api/profile/photo` route instead of a public upload URL. Use `X-Content-Type-Options: nosniff` and private caching; do not expose the underlying tenant storage path to the browser.
-- Migration `20260816090000_homeowner_profile_photo` creates `HomeownerProfilePhoto`. The table is intentionally separate from core `User`/`HomeownerProfile` records so photo storage can evolve or roll back without modifying authentication or homeowner master-data fields.
-- Photo upload/removal is audit logged. A successful replacement removes the previous stored file after the new metadata is committed; a failed metadata write removes the newly written file so orphaning is bounded.
-- The current homeowner photo is also a shared identity surface. `components/homeowner-avatar.tsx` is the resilient photo/initials placeholder used by the homeowner mobile header and dedicated Messenger UI; modules must prefer that shared component instead of duplicating broken-image behavior.
-- Core implementation: `app/portal/profile/page.tsx`, `components/homeowner/profile-photo-uploader.tsx`, `components/homeowner-avatar.tsx`, `app/api/profile/photo/route.ts`, `app/api/profile/photo/[userId]/route.ts`, and `lib/services/homeowner-profile-photo.ts`.
-- Regression coverage: `tests/unit/homeowner-profile-clean-ui.test.ts`, `tests/unit/homeowner-profile-photo-api.test.ts`, and `tests/unit/homeowner-premium-ui.test.ts`.
-- Do not merge/deploy a profile change if the mobile profile returns to oversized cards/wordy guidance, if an image endpoint can cross tenant/user boundaries, or if unsupported/spoofed image types can be persisted.
+- Primary hierarchy: profile photo, name, block/lot, account number, status, and monthly dues.
+- Detailed household/security information uses compact disclosure sections.
+- Homeowners may manage only their own authenticated profile photo.
+- Accepted upload formats are JPEG/PNG/WebP up to 5 MB; client validation is convenience only, server checks file signature.
+- Photo storage is tenant/user scoped and served through authenticated routes, never a raw public upload path.
+- Metadata writes/removals are audit logged and orphan cleanup is bounded.
+- Shared `components/homeowner-avatar.tsx` provides resilient photo/initials behavior.
 
 ## Homeowner Premium UI System
 
-The homeowner portal is a phone-first consumer experience. Premium means restrained hierarchy, fast scanning, consistent iconography, compact state, and minimal explanatory copy—not adding decorative cards for every field.
+Homeowner portal UX is phone-first, compact, and task-oriented.
 
-- Use the existing Lucide icon system for functional navigation, states, payments, requests, community actions, and empty states. Do not introduce generated decorative imagery merely to replace a standard product icon; generated artwork is appropriate only when it adds real content value and does not reduce clarity or load performance.
-- Prefer icon-led rows, tabs, chips, compact summaries, and disclosure panels over large stacked cards. Reserve large cards for a single primary financial/state task, an actionable alert, or rich media that genuinely needs space.
-- Remove duplicate headings, repeated status explanations, marketing-style notes, and paragraphs that restate labels already visible in the UI. Put secondary guidance behind a disclosure when it must remain available.
-- `components/portal-mobile-shell.tsx` owns the compact homeowner mobile header, bottom navigation, summary cards, action tiles, and shared list/empty/error patterns. Changes to Payment, Requests, Community, Profile, and Messaging should reuse these patterns before creating one-off containers.
-- The homeowner mobile header shows the authenticated homeowner photo through `/api/profile/photo` with initials fallback. This provides identity continuity across Payment, Requests, Community, and other portal modules without repeating a profile card on every screen.
-- Payment UI keeps the balance and primary `Pay` action dominant, keeps transaction/billing inputs immediately usable, retains required collapsed PayMongo/fee disclosures, and represents secondary Statement/History/Receipts actions as compact icon actions. Do not re-expand redundant metric descriptions into large cards.
-- Requests UI uses a four-icon area switcher, compact open/document/complaint counts, only the two meaningful create actions (`Document request`, `Submit complaint`), and compact status/progress cards. Gate Pass and Move-In/Move-Out remain document types inside the document workflow rather than duplicate landing-page cards.
-- Community UI uses compact Notices/Events/Officers summaries and direct action rows for Announcements, Events, Messages, and HOA Officers. Avoid a second navigation grid that duplicates the same destinations and avoid notes such as `Tenant-scoped` or `Published HOA roster` when they do not help the homeowner complete a task.
-- The community mobile release verifier must assert the semantic contract—`AnnouncementMobileCard`, `EventMobileCard`, and `VehicleMobileCard` are actually used by their homeowner routes and compressed desktop `<table>` layouts are absent—without pinning the premium design to decorative radius or grid-gap tokens that may legitimately become more compact.
-- Homeowner Messenger uses actual same-tenant homeowner profile photos when available and initials placeholders otherwise. Search still supports name/block/lot, while normal rows show identity/status only and never expose addresses.
-- Premium homeowner surfaces must remain viewport-safe at narrow phone widths, use `min-w-0` where content can shrink, avoid horizontal scrolling for primary controls, honor safe-area insets, and keep primary touch targets at least approximately 48px.
-- The fixed homeowner bottom navigation keeps `min-h-14` on every destination and preserves `env(safe-area-inset-bottom)` plus keyboard-visible focus treatment. Do not shrink the destination touch target below this verified release-gate token merely to make the premium shell look denser.
-- Core implementation: `components/portal-mobile-shell.tsx`, `components/homeowner-avatar.tsx`, `components/homeowner/payments/payment-cards.tsx`, `components/homeowner/requests/request-cards.tsx`, `components/homeowner/community/community-cards.tsx`, `components/homeowner-messenger.tsx`, `app/portal/pay/page.tsx`, `app/portal/requests/page.tsx`, `app/portal/community/page.tsx`, and `app/portal/chat/page.tsx`.
-- Regression coverage: `tests/unit/homeowner-premium-ui.test.ts` plus the existing payment, request, community, messaging, profile, and PWA tests.
-- Do not merge/deploy a homeowner UI change merely because desktop screenshots look acceptable. The mobile/PWA interaction hierarchy, touch targets, tenant/privacy boundaries, and browser E2E gates are part of the release acceptance contract.
+- Prefer icon-led rows, tabs, chips, compact summaries, and disclosures over large decorative card grids.
+- Do not repeat headings/status explanations that are already visible.
+- Reuse `components/portal-mobile-shell.tsx` patterns before creating one-off mobile containers.
+- Keep Payment, Requests, Community, Messaging, and Profile viewport-safe and touch-safe.
+- Payment keeps current balance and primary Pay action dominant; required PayMongo/fee guidance remains accessible but may be collapsed.
+- Fixed homeowner bottom navigation preserves safe-area padding, keyboard focus, and approximately 48px+ destination touch targets.
 
 ## Homeowner Statement of Account UI and Print Contract
 
-The homeowner `/portal/soa` surface is a compact, mobile-first financial statement. The on-screen disclosures and the printable financial document are separate presentation surfaces backed by the same authenticated, tenant-scoped SOA payload.
+`/portal/soa` screen and print output are separate presentation surfaces over the same authenticated, tenant-scoped SOA payload.
 
-- Keep the primary financial hierarchy compact. `Net account balance` is the dominant summary; outstanding balance, available credit, and last payment are secondary compact metrics. Do not restore oversized four-card summary grids or duplicate financial summaries.
-- Receivables Aging, Running Ledger, Payment History, and Billing History are disclosure sections so secondary datasets do not create excessive phone scrolling. All four default collapsed on the homeowner screen and retain clear summary text, chevrons, keyboard focus treatment, and approximately 48px touch targets.
-- Narrow-screen histories should use stacked mobile transaction rows/cards; desktop may retain the existing tables. Avoid horizontal scrolling for the primary phone experience.
-- The screen identity block uses the authenticated SOA payload and includes homeowner/member name, 11-digit account number, property identification (phase/block/lot where present), property address, statement number, and statement/as-of date.
-- `Print SOA` must not print the disclosure UI itself. `components/homeowner/payments/homeowner-soa-print-document.tsx` renders a dedicated print-only statement while the interactive homeowner screen is hidden with `print-hidden`; disclosure open/closed state therefore cannot remove financial records from print output.
-- The dedicated homeowner print document includes association identity/contact details, statement code/date, homeowner name, account number, block/lot, property address, homeowner contact/email, monthly dues, homeowner status, current outstanding balance, available credit, net balance, total billed/payments/credits/penalties, last payment, collection status, full receivables aging, full running ledger, complete payment history, complete billing history, and the Treasurer/authorized-representative signature area.
-- Complete payment-history print columns include official receipt number, payment method, reference number, coverage, received amount, applied amount, unapplied credit, status, and collector. Mobile screen truncation or simplified desktop screen columns must never reduce the dedicated print dataset.
-- Do not add the existing `soa.verifyUrl` QR to the homeowner copy while that URL resolves to an admin-only SOA route. A future homeowner/public verification QR requires its own authorized verification boundary.
-- Core implementation: `app/portal/soa/page.tsx`, `components/homeowner/payments/homeowner-soa-print-document.tsx`, and `lib/services/statement-of-account.ts`.
-- Regression coverage: `tests/unit/homeowner-soa-premium-surface.test.ts` and `tests/unit/homeowner-soa-complete-print.test.ts` protect the compact disclosure contract, mandatory identity/details, print independence, complete financial rows, and tenant-scoped server authority.
-- Do not merge/deploy an SOA change if the screen regresses to oversized/noisy card grids, if a disclosure is forced open by default, or if printing can omit homeowner/account details, payment references/method/collector data, a financial-history section, or the signature area.
+- Screen keeps `Net account balance` dominant and uses collapsible Receivables Aging, Running Ledger, Payment History, and Billing History.
+- Narrow-screen history uses stacked mobile rows/cards rather than horizontal tables.
+- `Print SOA` uses `components/homeowner/payments/homeowner-soa-print-document.tsx`; print completeness must not depend on disclosure open/closed state.
+- Print includes association identity, homeowner/account/property details, balances, full aging/ledger/payment/billing history, receipt/payment references, and signature area.
+- Do not add an admin-only verification URL QR to the homeowner print surface.
+- Regression: `tests/unit/homeowner-soa-premium-surface.test.ts` and `tests/unit/homeowner-soa-complete-print.test.ts`.
 
 ## Homeowner Payment Status Authority
 
-Homeowner-facing payment status must describe the current financial state, not allow an older failed attempt to override a later successful payment.
+Current financial state is derived from authoritative posted ledger/SOA evidence, not an older failed attempt.
 
-- The Statement of Account posted balance is authoritative for the homeowner's **current balance status**. If billing exists and `currentOutstandingBalance <= 0`, the current status is `Fully Paid` even when an older request was rejected, cancelled, or was previously pending.
-- Historical rejected/cancelled attempts remain valid audit/history records; they must not be promoted into the current balance headline after the account is settled.
-- When a balance remains outstanding, the latest relevant pending/rejected request may still be shown as `Payment Pending` or `Payment Rejected`.
-- PayMongo requests are gateway-controlled. Manual approval/rejection remains prohibited while awaiting gateway confirmation. A payment is posted only through verified PayMongo webhook processing and the normal transactional ledger/receipt path.
-- The PayMongo webhook is allowed to recover a request that was previously marked rejected by checkout cancellation when a later verified paid event for that same checkout arrives; it resets the request to a processable state and approves/posts it transactionally.
-- A posted `Payment` or `Collection` linked to a request is stronger evidence of settlement than stale request-display metadata. UI changes must prefer posted ledger artifacts and the resulting SOA balance when describing current payment state.
-- Every homeowner `Payment Status` card must resolve its displayed label/tone using the linked posted ledger artifacts (`request.payment` or `request.collection`) before stale request metadata. In particular, a PayMongo request with a linked posted artifact must display `Paid · PayMongo confirmed` even if an earlier request status remains `REJECTED` or `CANCELLED` in history.
-- Do not call the PayMongo API merely to render each homeowner payment page. The authoritative local posted ledger is created only from verified PayMongo webhook processing; page rendering reads that tenant-scoped local financial state.
-- Payment status corrections must never create a receipt merely from a browser redirect/query parameter. Only verified gateway confirmation or the existing authorized manual accounting workflow can post financial records.
-- Core implementation: `lib/services/homeowner-payment-status.ts`, `app/portal/pay/page.tsx`, `lib/services/homeowner-paymongo.ts`, and `lib/services/payment-requests.ts`.
-- Regression coverage: `tests/unit/homeowner-payment-status.test.ts`, including source-level wiring that ensures the homeowner page passes linked `Payment`/`Collection` evidence into the status resolver and keeps the long homeowner payment sections/disclosure controls collapsible while payment inputs remain immediately usable.
+- If billing exists and current outstanding balance is `<= 0`, current status is Fully Paid even if an earlier payment request was rejected/cancelled.
+- Historical rejected/cancelled attempts remain audit history but do not override settled current status.
+- PayMongo posting occurs only from verified gateway processing and the normal transactional ledger/receipt path.
+- Linked posted `Payment`/`Collection` evidence is stronger than stale request metadata and should render Paid/confirmed status.
+- Browser redirects/query parameters cannot create receipts or financial postings.
 
-## Active Initiative: Complaint-to-Grievance Foundation — BRD v1.0
+# Active Initiative: Complaint-to-Grievance Foundation — BRD v1.0
 
-The approved requirements baseline for the HOA-specific grievance extension is `docs/complaints/HOAHUB_GRIEVANCE_FOUNDATION_BRD_V1_0.md`. Live implementation evidence is tracked in `docs/complaints/GRIEVANCE_PHASE1_IMPLEMENTATION_STATUS.md`, `docs/complaints/GRIEVANCE_PHASE1_TRACEABILITY.md`, and PR #122.
+Approved baseline: `docs/complaints/HOAHUB_GRIEVANCE_FOUNDATION_BRD_V1_0.md`.
 
-This initiative deliberately keeps the existing `Complaint` module as the intake/operational case layer and introduces a separate grievance/compliance foundation for formal verification and future due-process workflows. Do not turn `ComplaintStatus` into a monolithic notice/mediation/hearing/board/appeal state machine.
+Current status/evidence:
 
-### Initiative Status
+- `docs/complaints/GRIEVANCE_PHASE1_IMPLEMENTATION_STATUS.md`
+- `docs/complaints/GRIEVANCE_PHASE1_TRACEABILITY.md`
+- `docs/complaints/HOAHUB_GRIEVANCE_FOUNDATION_BRD_V1_0_RELEASE_RECORD.md`
+- PR #122 — `feat: grievance foundation phase 1`
 
-| Stage | Status | Agent rule |
+The architecture rule is mandatory: **Complaint remains the intake/operational case layer; formal grievance/compliance remains a separate domain.** Do not expand `ComplaintStatus` into a monolithic notice/mediation/hearing/board/appeal state machine.
+
+## Grievance Initiative Status
+
+| Stage | Status | Release rule |
 | --- | --- | --- |
 | Business recommendation | COMPLETE | Approved 2026-08-17 |
-| BRD v1.0 | COMPLETE | Requirements baseline exists in `docs/complaints/HOAHUB_GRIEVANCE_FOUNDATION_BRD_V1_0.md` |
-| Technical design | COMPLETE FOR PHASE 1 | Additive migration-backed grievance domain, explicit tenant-scoped services, REST polling, permission-aware admin surfaces, and no WebSocket infrastructure |
-| Schema/API design | COMPLETE / PRE-PRODUCTION VALIDATED | Anonymous APIs plus SUB/VER/GRV/COM/DDL persistence, actions, settings, queue filters, and privacy-safe reporting are implemented |
-| Implementation | IMPLEMENTED / REVIEW REMEDIATION COMPLETE | Phase 1 code is complete; all 10 original Codex findings (2 P1, 8 P2) were remediated with regression coverage and their threads resolved |
-| Automated validation/UAT | PRE-PRODUCTION VALIDATED | Implementation head `087d5cf5ba900026ef290ed9aef7f75713836c9b` passed HOAHub MySQL CI run #688 end-to-end; final documentation-only/current-head CI and fresh review remain release gates |
-| PR/merge to `main` | READY FOR REVIEW / NOT MERGED | PR #122 is open and non-draft; do not merge until fresh review and latest-head validation are clean |
-| Hostinger deployment | NOT DEPLOYED | Never report live until expected merged `main` release marker + health pass |
-| Production UAT | NOT STARTED | Required after verified production deployment |
+| BRD v1.0 | COMPLETE | Approved requirements baseline; business scope unchanged |
+| Technical design | COMPLETE FOR PHASE 1 | Additive separate grievance domain; REST anonymous messaging; server-authoritative tenant/permission gates |
+| Schema/API design | COMPLETE / RELEASE VALIDATED | Prisma desired state, additive migration chain, anonymous APIs, SUB/VER/GRV/COM/DDL services and UI are implemented |
+| Implementation | COMPLETE FOR PHASE 1 | Review remediations implemented and current review threads resolved |
+| Automated validation | RELEASE CANDIDATE VALIDATED | Implementation head `858badf7ce2efc7db35d7dd570aebef8c82f5531` passed HOAHub MySQL CI #713 (`32034186355`) end-to-end; documentation-synchronized head must also pass before merge |
+| PR/merge | READY AFTER FINAL DOC-HEAD CI / NOT MERGED | PR #122 remains the active release PR until latest-head CI/mergeability are clean |
+| Hostinger deployment | NOT DEPLOYED | Only merged `main` is a production target |
+| Production UAT | NOT STARTED | Required after release-marker and health verification |
 
-Update this table as the initiative moves through design, implementation, review, merge, deployment, rollback, or production UAT. Do not leave an implementation PR with stale status.
+## Phase 1 Requirement Groups
 
-### Current Implementation Evidence
+- **ANM** — anonymous two-way text messaging using REST polling and short-lived anonymous complaint sessions.
+- **SUB** — structured complaint subject/property/vehicle/common-area/unknown targets while preserving free-text incident location.
+- **VER** — policy-driven independent verification and server-enforced gate before configured formal/enforcement action.
+- **GRV** — minimal separate `GrievanceCase` foundation linked to a complaint.
+- **COM** — tenant-scoped Grievance Committee business appointments and scoped permissions.
+- **DDL** — formal/process deadlines separated from complaint operational SLA.
+- **SEC-GRV / UX-GRV / NFR-GRV** — tenant isolation, privacy, auditability, mobile/PWA, compatibility, validation, rollback, and deployment controls.
 
-- Additive migration: `prisma/migrations/20260817093000_grievance_foundation_phase1/migration.sql`.
-- Anonymous session/conversation and privacy boundary: `lib/services/complaint-anonymous-session.ts`, `lib/anonymous-request-security.ts`, `app/api/complaints/anonymous/session/route.ts`, and `app/api/complaints/anonymous/messages/route.ts`.
-- Grievance domain and admin services: `lib/services/grievance-foundation.ts`, `lib/services/grievance-admin.ts`, `lib/services/grievance-authorization.ts`, `lib/services/grievance-feature.ts`, `lib/services/grievance-reporting.ts`, and `lib/services/grievance-sla.ts`.
-- Server actions: `lib/actions/grievance.ts` and `lib/actions/grievance-sla.ts`.
-- Mobile/PWA tracker conversation: `components/complaint-track-form.tsx` and `app/complaints/track/page.tsx`.
-- Admin workflow surfaces: `components/grievance-foundation-panel.tsx`, `components/grievance-settings-panel.tsx`, `components/grievance-operational-sla-control.tsx`, `app/admin/complaints/[id]/page.tsx`, `app/admin/complaints/page.tsx`, `app/admin/complaints/settings/page.tsx`, and `app/admin/complaints/grievance-report/page.tsx`.
-- Regression coverage: `tests/unit/grievance-foundation-phase1.test.ts`, `tests/unit/grievance-admin-phase1.test.ts`, `tests/unit/grievance-feature-switch.test.ts`, `tests/unit/grievance-reporting-phase1.test.ts`, `tests/unit/grievance-migration-safety.test.ts`, and `tests/unit/grievance-review-remediation.test.ts`.
-- Live delivery/status records: `docs/complaints/GRIEVANCE_PHASE1_IMPLEMENTATION_STATUS.md` and `docs/complaints/GRIEVANCE_PHASE1_TRACEABILITY.md`.
-- The migration creates `ComplaintAnonymousSession`, `ComplaintSubject`, `ComplaintVerificationPolicy`, `ComplaintVerification`, `GrievanceCase`, `GrievanceCommitteeMembership`, `GrievanceDeadline`, `ComplaintGrievanceActivity`, `GrievanceSetting`, and additive anonymous-message metadata/indexes on `ComplaintMessage`.
-- The grievance-domain service layer uses parameterized raw SQL with explicit tenant predicates over migration-backed tables, matching the repository's existing narrow additive-domain pattern. Do not weaken explicit tenant predicates; promotion into generated Prisma models may happen later as a hardening/refactor.
-- Committee grievance UI access is derived from active grievance permissions (`VIEW_GRIEVANCE`, `TRIAGE_GRIEVANCE`, `VERIFY_GRIEVANCE`) rather than an administrator-role-only presentation gate.
-- Verification state, grievance activity, and audit evidence commit atomically; a grievance cannot become `VERIFIED` unless independent verification is `PASSED`, and `READY_FOR_FORMAL_PROCESS` continues to use `assertComplaintEnforcementAllowed`.
-- Formal grievance/verification queue filters are applied in SQL before the result cap; grievance reporting stays tenant-scoped and excludes complainant identity fields.
-- Anonymous message `senderType` is authoritative, retry of unchanged content reuses its pending client idempotency key, and unexpected anonymous API/internal errors return generic external messages rather than raw database/query details.
-- Routine application rollback must revert application behavior while leaving additive grievance/audit tables and columns in place. Do not drop grievance, verification, deadline, committee, anonymous-session, or activity history during routine rollback.
+The detailed requirement IDs and acceptance criteria in the BRD remain authoritative.
 
-### Phase 1 Requirement Groups
+## Grievance Implementation Evidence
 
-Phase 1 is limited to the following approved requirement groups:
+Primary implementation includes:
 
-- **ANM** — secure two-way anonymous text messaging using REST polling and short-lived anonymous complaint sessions;
-- **SUB** — `ComplaintSubject` and structured same-tenant property/Phase-Block-Lot targeting while keeping free-text incident location separate;
-- **VER** — policy-driven independent verification records and a server-enforced enforcement gate;
-- **GRV** — a minimal separate `GrievanceCase` foundation linked to the complaint, without replacing complaint operational status history;
-- **COM** — tenant-scoped Grievance Committee membership/positions and scoped permissions compatible with effective multi-role authorization;
-- **DDL** — process/grievance deadlines separated from complaint operational SLA, with tenant/policy-configurable durations;
-- **SEC-GRV / NFR-GRV / UX-GRV** — tenant isolation, privacy, audit, mobile/PWA, performance, backward compatibility, and deployment requirements.
+- Prisma desired state: `prisma/schema.prisma`, `prisma/grievance-foundation.prisma`.
+- Additive migration chain beginning with `prisma/migrations/20260817093000_grievance_foundation_phase1/migration.sql` plus reviewed follow-up referential-integrity migration(s).
+- Anonymous privacy/session: `lib/services/complaint-anonymous-session.ts`, `lib/anonymous-request-security.ts`, anonymous session/message API routes.
+- Grievance domain: `lib/services/grievance-foundation.ts`, `lib/services/grievance-admin.ts`, `lib/services/grievance-authorization.ts`, `lib/services/grievance-feature.ts`, `lib/services/grievance-reporting.ts`, `lib/services/grievance-sla.ts`.
+- Server actions: `lib/actions/grievance.ts`, `lib/actions/grievance-sla.ts`.
+- Mobile/PWA tracker: `components/complaint-track-form.tsx`, `app/complaints/track/page.tsx`.
+- Admin surfaces: grievance foundation/settings/SLA controls; complaint detail/queue/settings/grievance report pages.
+- Regression suites: grievance Phase 1, admin, feature-switch, reporting, migration-safety, and review-remediation unit tests plus normal integration/critical/browser gates.
 
-Detailed requirement IDs, acceptance criteria, UAT cases, risks, and Definition of Done are authoritative in the BRD.
+## Anonymous Messaging Release Gates
 
-### Anonymous Messaging Release Gates
+- Tracking Code + PIN establishes/re-establishes a short-lived anonymous session; PIN is not resent on polling/posting.
+- Raw token is HttpOnly browser state; only SHA-256 digest is stored.
+- Anonymous session contains no resident `userId`, `homeownerId`, account number, email, IP/user-agent identity link.
+- Every session lookup verifies the expected complaint public reference as well as token/expiry/revocation; this prevents a tab showing complaint A from silently polling/posting to complaint B after another tab replaces the cookie.
+- Reuse `ComplaintMessage`; anonymous complainant messages have no resident identity FK.
+- `senderType` is authoritative for complainant/staff/system classification, including after a staff account is deleted.
+- Initial complaint messages are explicitly classified as complainant-originated rather than relying on staff-biased defaults.
+- Anonymous APIs expose `PUBLIC` content only with safe labels and never expose internal/confidential notes, identities, emails, IDs, storage paths, or private timeline data.
+- Forward and backward cursor pagination are bounded; older public history must remain accessible.
+- Anonymous posting uses client idempotency; an uncertain retry keeps the same pending key until success or content change.
+- Message insert plus required complaint activity/timeline/audit evidence is atomic.
+- Message throttling is stable at tenant/complaint scope across short-lived session renewal; authentication and posting limits remain separate.
+- State-changing anonymous requests enforce same-origin policy; responses are no-store; unexpected internal errors are generic externally.
+- Follow-up attachments remain deferred.
+- Tracker remains mobile/PWA safe with Back to Home, `100dvh`, safe areas, shrink-safe content, and text-only touch-safe composer.
 
-- Use REST polling for Phase 1; do not introduce WebSocket infrastructure unless a separately approved requirement requires true real-time/presence behavior.
-- Tracking Code + PIN establishes/re-establishes a short-lived anonymous session; the PIN is not resent on polling or message-post requests.
-- The anonymous session token is a random opaque value delivered only as an HttpOnly browser cookie. Store only its SHA-256 digest in `ComplaintAnonymousSession`; raw tokens and PINs must not be logged.
-- `ComplaintAnonymousSession` must not contain `userId`, `homeownerId`, homeowner account number, email, IP/user-agent identity metadata, or another direct resident identity link.
-- Reuse/extend `ComplaintMessage`; anonymous complainant messages have no resident identity foreign key and are public/text-only in Phase 1.
-- Anonymous APIs expose `PUBLIC` content only and map authors to safe labels such as `Anonymous complainant`, `HOA Staff`, or `HOAHub`. `INTERNAL`, `CONFIDENTIAL`, identity-access grants, staff email/internal IDs, storage paths, and private timeline data must never be returned.
-- Use cursor/incremental retrieval, bounded payloads, separate authentication/message rate limits, idempotent client message IDs, no-store caching, and same-origin validation on state-changing requests.
-- Anonymous follow-up file attachments are deferred; do not add them implicitly because image/document metadata can deanonymize a resident and increases malware/privacy exposure.
-- The tracker conversation composer must remain phone/PWA safe, including `Back to Home`, `100dvh`, safe-area behavior, no horizontal overflow, practical touch targets, and text-only message input.
+## Complaint Subject and Verification Release Gates
 
-### Complaint Subject and Verification Release Gates
+- Subject property/person is different from incident location.
+- `addComplaintSubject` revalidates homeowner/vehicle inside authenticated tenant scope.
+- If both vehicle and homeowner IDs are supplied, the vehicle must belong to that homeowner/property.
+- Vehicle-linked grievance subjects use reviewed referential integrity so hard deletion cannot leave a dangling structured subject.
+- Verification is policy-driven; anonymity/named status is not proof strength.
+- A policy may block enforcement only when that same policy requires verification.
+- Verification status, activity, and audit evidence commit atomically.
+- Verification and linked grievance state are serialized/locked so downgrade and Verified/Ready transitions cannot race into contradictory state.
+- `IN_PROGRESS` records a start/non-completion event.
+- A grievance cannot become `VERIFIED`, nor enter configured formal/enforcement-ready state, unless required independent verification is `PASSED`.
+- `assertComplaintEnforcementAllowed` remains the reusable server gate for future punitive actions.
+- Verification never automatically reveals confidential complainant identity.
 
-- Model the subject of an allegation separately from free-text incident location. A structured subject may represent a homeowner, property, vehicle, common area, or unknown subject and may support multiple subjects where final UI/schema permits it.
-- Homeowner-facing target selection must never become a resident directory that leaks private email, phone, or cross-tenant property information.
-- `addComplaintSubject` must revalidate homeowner/vehicle targets by the authenticated tenant before persisting subject snapshots; when both IDs are supplied, the selected vehicle must belong to the selected homeowner/property.
-- Independent verification is policy-driven; do not infer `anonymous == automatically verified/unverified` or `named == sufficient proof`.
-- A verification policy may block enforcement only when that same matching policy also requires verification; do not synthesize a blocking gate from unrelated policy rows.
-- Verification result, grievance activity, and audit writes must remain atomic, and `IN_PROGRESS` verification must not be recorded as a completion event.
-- `assertComplaintEnforcementAllowed` is the reusable server gate for future punitive/enforcement actions. Do not add a fine/penalty action that bypasses this gate when verification policy says enforcement is blocked.
-- Verification completion must not automatically reveal a confidential complainant's identity.
+## Grievance, Committee, Identity, and Deadline Release Gates
 
-### Grievance, Committee, and Deadline Release Gates
+- Grievance promotion is explicit, tenant-scoped, and idempotent for creation history.
+- `ComplaintCategory.requiresBoardReview` is policy metadata only; it is not evidence of a board vote/quorum/recusal/approval.
+- Committee appointment grants only selected grievance permissions and never unrelated finance/platform authority.
+- Platform roles are denied tenant grievance authority.
+- Appointment target must already have a route-compatible complaint-admin or STAFF effective role; do not persist unusable HOMEOWNER/EMPLOYEE appointments while grievance routes require complaint-admin/STAFF access.
+- UI/report/action authority uses active grievance permissions rather than administrator-only presentation checks.
+- Confidential identity reveal is separately authorized. `REVEAL_CONFIDENTIAL_IDENTITY` does not derive from ordinary view/triage authority and must preserve the existing reason, confirmation, no-store, and audit controls.
+- `GrievanceDeadline` remains separate from `Complaint.dueAt` operational SLA.
+- Deadline creation plus activity/audit evidence is atomic.
+- Paused process-deadline reason is retained in immutable history before active pause fields are cleared.
+- Operational-SLA pause reason is likewise reconstructable after resume.
+- Do not hard-code a universal 5-day, 7-day, or similar legal period.
 
-- A formal grievance is a separate `GrievanceCase` linked to a complaint; complaint status remains the operational intake/case history.
-- `ComplaintCategory.requiresBoardReview` is only snapshotted as grievance policy metadata in Phase 1. It must not be represented as evidence that a board vote, quorum, recusal process, or decision has occurred.
-- Grievance Committee authority is a tenant-scoped business appointment. A Chair/Member/Secretary/Mediator appointment must not grant unrelated finance/platform/admin privileges.
-- Complaint/grievance authorization and UI visibility/actions must use effective assigned roles/permissions rather than accidentally falling back to legacy primary-role-only or administrator-only checks.
-- `STAFF` and ordinary committee members do not receive confidential identity access merely because they can process a grievance; reveal remains separately authorized, reasoned, confirmed, no-store, and audited.
-- Process/legal/policy deadlines are separate from `Complaint.dueAt` operational SLA. `createGrievanceDeadline` requires explicit start/due dates and policy source may be recorded; do not hard-code a universal 5-day/7-day grace period without a separately approved policy/legal requirement.
-- Operational-SLA pause is recorded separately on the grievance case and must not silently rewrite a process deadline.
-- Future notice/proof-of-service, mediation, hearing, board vote/quorum/recusal, evidence vault, decision, appeal, resolution agreement, and regulatory dossier features remain Phase 2/3 unless the BRD is explicitly revised.
+## Deferred Grievance Scope
 
-### Implementation and Deployment Tracking Rules
+Unless the BRD is explicitly revised, Phase 2/3 retains:
 
-For every Phase 1 implementation PR/change:
+- notice/proof-of-service;
+- mediation and hearing scheduling/records;
+- hearing witnesses/exhibits/minutes;
+- evidence vault/provenance;
+- board vote/quorum/abstention/recusal/formal decision;
+- appeal/reconsideration;
+- resolution agreement/e-signature;
+- regulatory/adjudication dossier export;
+- retention/legal-hold automation;
+- advanced redaction/notifications; and
+- real malware scanner integration.
 
-1. reference the relevant BRD requirement IDs in the PR/change description;
-2. update this Agent section and `GRIEVANCE_PHASE1_IMPLEMENTATION_STATUS.md` to the real implementation/test/review status;
-3. record new migrations, services/routes/components, tests, feature/configuration switches, and rollback behavior here before merge;
-4. preserve existing named/confidential/anonymous complaint intake and privacy regression coverage;
-5. run the normal repository validation gate plus new grievance/anonymous messaging tests;
-6. do not mark `DEPLOYED` merely because CI passes or a PR merges;
-7. mark Hostinger deployment complete only when `public/release.txt`/production `/release.txt` matches the expected merged `main` SHA and `/api/health` succeeds;
-8. record production smoke/UAT result for anonymous messaging, tenant isolation, verification gate, and committee/deadline behavior before marking the initiative production-complete.
+## Grievance Validation Gate
 
-The original planning branch contains documentation only. PR #122 is the active implementation PR, is Ready for review, and is not merged. The implementation may be called **ready for production deployment** only after the latest PR head has a clean final review state, complete repository CI, synchronized Agent/status/traceability records, no unresolved review threads, and no branch-sync/mergeability blocker. It must not be represented as deployed until the separate production release sequence succeeds.
-
-## Validation Gate
-
-Before production deployment, the applicable CI pipeline must pass. The repository production workflow currently covers:
+Before merge/production, the exact latest PR head must pass:
 
 - `pnpm install --frozen-lockfile`
 - `pnpm lint`
 - `pnpm exec prisma validate`
 - `pnpm exec prisma generate`
-- `pnpm exec prisma migrate deploy` against the CI database
+- `pnpm exec prisma migrate deploy` against clean CI MySQL
 - `pnpm db:seed`
 - `pnpm test`
 - `pnpm test:integration`
 - `pnpm test:critical`
 - `pnpm typecheck`
 - `pnpm build`
-- production smoke tests and critical browser/E2E tests
+- controlled Chromium preparation
+- production smoke and critical browser/E2E tests
 
-Do not merge a known failing release merely to trigger deployment. Fix the defect or update a brittle test only when the changed test continues to assert the intended security/business invariant.
+Do not merge a known failure merely to trigger deployment. Fix the defect or update a brittle source-contract test only when the changed assertion continues to protect the intended security/business invariant.
 
-### CI Browser Gate Recovery
+## Grievance Rollback
 
-The production rollback to the PR #109 application tree intentionally removed PR #110 as a whole. The browser gate still needs a narrow, test-only reliability contract without restoring PR #110's production-login verifier or application behavior.
+The grievance foundation is additive. Routine application rollback should ignore/disable new behavior while preserving grievance, verification, deadline, committee, anonymous-session, idempotency, activity, timeline, and audit history. Do not destructively drop those records in routine rollback.
 
-- GitHub Actions prepares the repository-provided `@sparticuz/chromium` executable and exposes it only to the browser suites through `PUPPETEER_EXECUTABLE_PATH`.
-- `tests/e2e/critical-path.mjs` launches that packaged browser as `headless: "shell"` with Puppeteer's default arguments merged with `chromium.args`; this matches the chrome-headless-shell runtime contract.
-- `tests/e2e/safe-browser-context-cleanup.mjs` must not create non-default BrowserContexts on this runtime. Each logical isolated test context launches a separate browser process and uses that process's default context, preserving cookie/session isolation without the unstable `Target.createTarget` path.
-- Every standalone E2E entry point in `test:e2e` preloads the same isolation shim; the critical path already does so through `run-critical-path.mjs`.
-- Cleanup remains bounded and may force-kill only browser processes that fail to close; it must never relax business assertion/navigation timeouts.
-- The bounded retry in `run-critical-path.mjs` remains limited to the specific transient startup signature `Target.setDiscoverTargets` + `Target closed`; business assertion failures are never retried automatically.
-- The document workflow E2E must wait for the client-generated `submissionKey` and an enabled submit control before clicking. After the click it must surface the form's `status`/`alert` response before polling the database, so a real validation failure is reported directly instead of being misclassified as a generic database timeout.
-- This recovery deliberately does **not** restore PR #110's authenticated production-login verifier and does not change the Hostinger deployment activation path.
-- This recovery also does **not** change the existing application dependency versions in `package.json`; any future browser dependency alignment must first prove that it cannot alter production document/browser runtime behavior.
-- Regression coverage: `tests/unit/browser-cleanup-policy.test.ts`.
+# Hostinger Production Deployment Model
 
-## Hostinger Production Deployment Model
+The authoritative production path is the Hostinger managed Node.js web application connected to GitHub `main`.
 
-The live HOAHub application is a Hostinger managed Node.js web application connected to the GitHub `main` branch. Hostinger's managed GitHub deployment is the normal production activation path.
+- Feature branches are not production deployment targets.
+- Approved production changes land on `main` through GitHub.
+- Push/merge to `main` runs HOAHub verification and triggers Hostinger connected-GitHub auto-deployment.
+- Node.js production runtime is 22.x.
+- `scripts/write-release-id.mjs` stamps the short Git revision into `public/release.txt` before build.
+- Hostinger's install layer may use pnpm while the managed build subprocess may not expose pnpm in `PATH`; production build lifecycle commands must invoke Node scripts/package binaries directly rather than nested `pnpm` commands.
+- Legacy PM2/SSH activation is not the authoritative managed-web-app deployment path.
+- Never expose or print production `.env` contents.
 
-- Production feature branches are not deployment targets.
-- Production changes must land on `main` through the approved GitHub flow.
-- A push/merge to `main` runs the HOAHub verification workflow and triggers Hostinger's connected-GitHub auto-deployment.
-- GitHub CI must not claim a release is live merely because CI passed or because files were copied through SSH.
-- `scripts/write-release-id.mjs` stamps the build's short Git commit SHA into `public/release.txt`.
-- The production verification job waits until `${HOSTINGER_APP_URL}/release.txt` matches the expected `main` commit SHA, then checks `${HOSTINGER_APP_URL}/api/health`.
-- A release is considered deployed only after the expected release marker and public health check both pass.
-- Do not rely on a global `pm2` executable for the normal Hostinger managed-web-app deployment path; Hostinger manages the application process lifecycle for the connected web app.
-- Hostinger's install layer can invoke pnpm while the managed application build subprocess does not necessarily expose the `pnpm` executable in `PATH`. Production build scripts therefore must not shell out to a nested `pnpm` command. Invoke Node scripts and installed package binaries directly from the lifecycle command instead.
-- `tests/unit/hostinger-build-script.test.ts` protects this Hostinger build-PATH invariant.
+## Production Release Identification
 
-### Hostinger Runtime and Filesystem
+A release is deployed only when all of these are true:
 
-- Hostinger production is configured for Node.js 22.x.
-- The confirmed Node 22 binary directory exposed on the account is `/opt/alt/alt-nodejs22/root/usr/bin`.
-- Non-interactive SSH sessions may not automatically include that runtime in `PATH`; legacy/diagnostic SSH scripts must source `scripts/hostinger-runtime.sh` before invoking Node-based tooling.
-- `HOSTINGER_APP_PATH`, when used by legacy/diagnostic SSH tooling, is the application root `/home/u309242896/domains/hoahub.tech`, not the `storage` directory or `.env` file.
-- The persistent server-side environment file created for SSH tooling is `$HOSTINGER_APP_PATH/shared/.env`.
-- Never expose, print, commit, or copy the contents of the production `.env` into CI logs or repository files.
-- The older immutable-release/PM2 SSH activation script is not the authoritative production activation path for the Hostinger managed web app. Do not report its PM2 failure as evidence that the Hostinger GitHub-connected deployment failed.
+1. the expected merged `main` commit passed the repository verification job;
+2. Hostinger auto-deployment publishes that build;
+3. production `/release.txt` equals the expected 12-character short `main` SHA; and
+4. production `/api/health` succeeds.
 
-## Release Identification
+The `deploy-production` job in `.github/workflows/ci-deploy.yml` performs the release-marker wait and public health check after a successful `main` verification run.
 
-`package.json` invokes `node scripts/write-release-id.mjs` directly before both the normal Next.js build and `hostinger:build`. Do not replace this with a nested `pnpm release:stamp` call in managed Hostinger build commands, because pnpm may be unavailable inside the build subprocess even though Hostinger used pnpm for dependency installation. The stamp script writes a short Git revision to `public/release.txt`.
+For the Complaint-to-Grievance initiative, production-complete additionally requires production smoke/UAT for anonymous messaging, tenant isolation, subject integrity, verification enforcement, committee/identity permissions, process-deadline/SLA separation, queue/report privacy, mobile/PWA behavior, and existing complaint privacy regression.
 
-Production verification should compare that public marker with the expected `main` commit before asserting that a UI fix or feature is live. This avoids confusing an older healthy production build with the newly merged release.
+## CI Browser Gate Recovery
 
-## Community Pulse Rollback
-
-Community Pulse, the verified-login transition, the multi-account verified-choice cookie, and the post-login brand handoff introduce no dedicated database migration.
-
-If the login UX causes a production regression:
-
-- revert the relevant login/authentication merge commit on `main`;
-- allow Hostinger's managed GitHub deployment to publish the reverted commit;
-- confirm `/release.txt` matches the rollback commit;
-- confirm `/api/health` succeeds;
-- re-test credential login, multi-account selection without password re-entry, passkey login, tenant/account isolation, safe return navigation, authenticated logo handoff, and homeowner mobile/PWA login.
-
-Authentication/session data should not require a database rollback for these interaction-layer changes.
+- GitHub Actions uses repository-provided `@sparticuz/chromium` via `PUPPETEER_EXECUTABLE_PATH`.
+- Browser isolation uses separate browser processes/default contexts where required; do not reintroduce unstable non-default context behavior without proof.
+- Cleanup may force-kill only failed browser processes and must not relax business assertion timeouts.
+- Retry remains limited to explicitly recognized transient browser-startup signatures, not business assertion failures.
+- Regression: `tests/unit/browser-cleanup-policy.test.ts`.
 
 ## Change Discipline
 
-For every repository change—not only security-sensitive changes:
+For every repository change:
 
-- Read the existing implementation, tests, and relevant security boundaries first.
-- Keep tenant/user authority server-controlled.
-- Add or update regression tests for the intended invariant when behavior changes.
-- Keep desktop and homeowner PWA/mobile behavior in the acceptance criteria when user-facing behavior is affected.
-- Keep production deployment verification aligned with the actual Hostinger hosting model.
-- Update `Agent.md` in the same branch/PR before merge and deployment.
+- read the implementation, tests, and relevant security boundaries first;
+- keep tenant/user authority server-controlled;
+- update or add regression tests when behavior changes;
+- preserve homeowner mobile/PWA acceptance for user-facing changes;
+- preserve the Hostinger managed deployment/release-marker model;
+- update `Agent.md` and relevant BRD/status/traceability records before merge/deployment; and
+- never report production deployment until release marker, health, and applicable production UAT are verified.

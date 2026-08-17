@@ -55,6 +55,7 @@ export function ComplaintTrackForm() {
   const cursorRef = useRef<string | null>(null);
   const emptyPollsRef = useRef(0);
   const bottomRef = useRef<HTMLDivElement | null>(null);
+  const pendingMessageRef = useRef<{ body: string; clientMessageId: string } | null>(null);
   const sessionActive = Boolean(conversation);
 
   const applyConversation = useCallback((next: Conversation, replaceMessages = false) => {
@@ -99,6 +100,7 @@ export function ComplaintTrackForm() {
           if (!cancelled) {
             setConversation(null);
             cursorRef.current = null;
+            pendingMessageRef.current = null;
             setAuthError("Your anonymous complaint session expired. Enter the tracking code and PIN again.");
           }
           return;
@@ -165,6 +167,7 @@ export function ComplaintTrackForm() {
       const payload = await response.json() as { conversation?: Conversation } & ApiError;
       if (!response.ok || !payload.conversation) throw new Error(payload.error || "Complaint could not be found.");
       emptyPollsRef.current = 0;
+      pendingMessageRef.current = null;
       applyConversation(payload.conversation, true);
       setPin("");
       setTrackingCode("");
@@ -182,7 +185,9 @@ export function ComplaintTrackForm() {
     if (body.length < 2 || body.length > MAX_MESSAGE_LENGTH) return;
     setSending(true);
     setSendError("");
-    const clientMessageId = safeClientMessageId();
+    const existingPending = pendingMessageRef.current;
+    const clientMessageId = existingPending?.body === body ? existingPending.clientMessageId : safeClientMessageId();
+    pendingMessageRef.current = { body, clientMessageId };
     try {
       const response = await fetch("/api/complaints/anonymous/messages", {
         method: "POST",
@@ -193,6 +198,7 @@ export function ComplaintTrackForm() {
       const sentMessage = payload.message;
       if (!response.ok || !sentMessage) throw new Error(payload.error || "Message could not be sent.");
       setConversation((current) => current ? { ...current, messages: mergeMessages(current.messages, [sentMessage]) } : current);
+      pendingMessageRef.current = null;
       setMessage("");
       emptyPollsRef.current = 0;
     } catch (error) {
@@ -209,6 +215,7 @@ export function ComplaintTrackForm() {
       setConversation(null);
       setMessage("");
       setSendError("");
+      pendingMessageRef.current = null;
       cursorRef.current = null;
       emptyPollsRef.current = 0;
     }
@@ -290,7 +297,11 @@ export function ComplaintTrackForm() {
           <textarea
             className="field min-h-12 max-h-36 resize-y py-3"
             value={message}
-            onChange={(event) => setMessage(event.target.value.slice(0, MAX_MESSAGE_LENGTH))}
+            onChange={(event) => {
+              const nextMessage = event.target.value.slice(0, MAX_MESSAGE_LENGTH);
+              setMessage(nextMessage);
+              if (pendingMessageRef.current && pendingMessageRef.current.body !== nextMessage.trim()) pendingMessageRef.current = null;
+            }}
             placeholder="Reply to the HOA…"
             maxLength={MAX_MESSAGE_LENGTH}
             rows={1}

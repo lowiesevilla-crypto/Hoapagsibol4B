@@ -1,10 +1,10 @@
 import Link from "next/link";
-import { redirect } from "next/navigation";
 import { ComplaintPrivacyMode, ComplaintStatus, Role } from "@prisma/client";
 import { PageHeader } from "@/components/page-header";
 import { StatusBadge } from "@/components/status-badge";
 import { prisma } from "@/lib/db";
 import { complaintPrivacyLabel, getComplaintCategories, requireComplaintAdmin } from "@/lib/services/complaints";
+import { requireGrievancePermission } from "@/lib/services/grievance-foundation";
 import { getGrievanceReport } from "@/lib/services/grievance-reporting";
 import { shortDate } from "@/lib/utils";
 
@@ -13,10 +13,7 @@ const verificationStatuses = ["NOT_EVALUATED", "NOT_REQUIRED", "PENDING", "IN_PR
 
 export default async function GrievanceReportPage({ searchParams }: { searchParams: Promise<Record<string, string | undefined>> }) {
   const user = await requireComplaintAdmin();
-  const effectiveRoles = new Set(user.roles);
-  const hasPlatformRole = effectiveRoles.has(Role.SUPER_ADMIN) || effectiveRoles.has(Role.PLATFORM_ADMIN);
-  const canManageGrievance = !hasPlatformRole && [Role.ADMIN, Role.HOA_ADMIN, Role.SYSTEM_ADMIN].some((role) => effectiveRoles.has(role));
-  if (!canManageGrievance) redirect("/admin/complaints/reports");
+  await requireGrievancePermission(user, "VIEW_GRIEVANCE");
 
   const query = await searchParams;
   const complaintStatus = Object.values(ComplaintStatus).includes(query.status as ComplaintStatus) ? query.status : undefined;

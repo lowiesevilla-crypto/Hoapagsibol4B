@@ -5,10 +5,14 @@ import test from "node:test";
 const complaintDetail = readFileSync("app/admin/complaints/[id]/page.tsx", "utf8");
 const complaintSettings = readFileSync("app/admin/complaints/settings/page.tsx", "utf8");
 const panel = readFileSync("components/grievance-foundation-panel.tsx", "utf8");
+const slaControl = readFileSync("components/grievance-operational-sla-control.tsx", "utf8");
 const settingsPanel = readFileSync("components/grievance-settings-panel.tsx", "utf8");
 const actions = readFileSync("lib/actions/grievance.ts", "utf8");
+const slaActions = readFileSync("lib/actions/grievance-sla.ts", "utf8");
 const adminService = readFileSync("lib/services/grievance-admin.ts", "utf8");
+const authorizationService = readFileSync("lib/services/grievance-authorization.ts", "utf8");
 const foundationService = readFileSync("lib/services/grievance-foundation.ts", "utf8");
+const slaService = readFileSync("lib/services/grievance-sla.ts", "utf8");
 
 test("complaint admin detail preserves complaint state while rendering a separate grievance domain", () => {
   assert.match(complaintDetail, /GrievanceFoundationPanel/);
@@ -50,6 +54,17 @@ test("grievance settings expose policy and tenant-scoped committee appointments 
   assert.match(foundationService, /user\.roles/);
 });
 
+test("platform roles are explicitly blocked from grievance actions and committee appointments", () => {
+  assert.match(authorizationService, /Role\.SUPER_ADMIN, Role\.PLATFORM_ADMIN/);
+  assert.match(authorizationService, /Platform roles do not receive tenant grievance authority/);
+  assert.match(authorizationService, /userRoleAssignments/);
+  assert.match(authorizationService, /Platform-role users cannot be appointed to a tenant Grievance Committee/);
+  assert.match(actions, /assertGrievanceActorEligible\(user\)/);
+  assert.match(actions, /assertGrievanceAdminAuthority\(user\)/);
+  assert.match(actions, /assertCommitteeAppointmentTargetEligible\(user\.tenantId, targetUserId\)/);
+  assert.match(slaActions, /assertGrievanceActorEligible\(user\)/);
+});
+
 test("legacy complaint staff access does not fail merely because grievance permission is absent", () => {
   assert.match(complaintDetail, /canManageGrievance/);
   assert.match(complaintDetail, /grievanceData = canManageGrievance/);
@@ -68,6 +83,18 @@ test("process deadlines are explicit Manila dates and remain separate from Compl
   assert.match(adminService, /policySource/);
   assert.doesNotMatch(adminService, /Complaint\.dueAt|complaint\.dueAt/);
   assert.doesNotMatch(actions, /\b5\s*days?\b|\b7\s*days?\b/i);
+});
+
+test("operational SLA pause and resume are explicit and cannot rewrite grievance deadlines", () => {
+  assert.match(complaintDetail, /GrievanceOperationalSlaControl/);
+  assert.match(slaControl, /Operational SLA pause/);
+  assert.match(slaControl, /does not pause, extend, or rewrite a grievance process deadline/);
+  assert.match(slaControl, /Pause operational SLA/);
+  assert.match(slaControl, /Resume operational SLA/);
+  assert.match(slaService, /operationalSlaPausedAt/);
+  assert.match(slaService, /operationalSlaPauseReason/);
+  assert.match(slaService, /reason\.length < 10/);
+  assert.doesNotMatch(slaService, /UPDATE GrievanceDeadline|Complaint\.dueAt|complaint\.dueAt/);
 });
 
 test("admin message controls clearly distinguish public complainant updates and internal notes", () => {

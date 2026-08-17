@@ -238,6 +238,86 @@ Homeowner-facing payment status must describe the current financial state, not a
 - Core implementation: `lib/services/homeowner-payment-status.ts`, `app/portal/pay/page.tsx`, `lib/services/homeowner-paymongo.ts`, and `lib/services/payment-requests.ts`.
 - Regression coverage: `tests/unit/homeowner-payment-status.test.ts`, including source-level wiring that ensures the homeowner page passes linked `Payment`/`Collection` evidence into the status resolver and keeps the long homeowner payment sections/disclosure controls collapsible while payment inputs remain immediately usable.
 
+## Planned Initiative: Complaint-to-Grievance Foundation — BRD v1.0
+
+The approved planning baseline for the HOA-specific grievance extension is `docs/complaints/HOAHUB_GRIEVANCE_FOUNDATION_BRD_V1_0.md`.
+
+This initiative deliberately keeps the existing `Complaint` module as the intake/operational case layer and introduces a separate grievance/compliance foundation for formal verification and future due-process workflows. Do not turn `ComplaintStatus` into a monolithic notice/mediation/hearing/board/appeal state machine.
+
+### Initiative Status
+
+| Stage | Status | Agent rule |
+| --- | --- | --- |
+| Business recommendation | COMPLETE | Approved 2026-08-17 |
+| BRD v1.0 | COMPLETE | Requirements baseline exists in `docs/complaints/HOAHUB_GRIEVANCE_FOUNDATION_BRD_V1_0.md` |
+| Technical design | NOT STARTED | Requires explicit next-task instruction before implementation |
+| Schema/API design | NOT STARTED | Must be reviewed against current complaint code before changes |
+| Implementation | NOT STARTED | No feature code is authorized by the BRD alone |
+| Automated validation/UAT | NOT STARTED | Requirement IDs/UAT cases are defined in the BRD |
+| PR/merge to `main` | NOT STARTED | Planning branch is not a production target |
+| Hostinger deployment | NOT DEPLOYED | Never report live until expected `main` release marker + health pass |
+| Production UAT | NOT STARTED | Required after verified deployment |
+
+Update this table as the initiative moves through design, implementation, review, merge, deployment, rollback, or production UAT. Do not leave an implementation PR with `Agent.md` still reporting `NOT STARTED`.
+
+### Phase 1 Requirement Groups
+
+Phase 1 is limited to the following approved requirement groups:
+
+- **ANM** — secure two-way anonymous text messaging using REST polling and short-lived anonymous complaint sessions;
+- **SUB** — `ComplaintSubject` and structured same-tenant property/Phase-Block-Lot targeting while keeping free-text incident location separate;
+- **VER** — policy-driven independent verification records and a server-enforced enforcement gate;
+- **GRV** — a minimal separate `GrievanceCase` foundation linked to the complaint, without replacing complaint operational status history;
+- **COM** — tenant-scoped Grievance Committee membership/positions and scoped permissions compatible with effective multi-role authorization;
+- **DDL** — process/grievance deadlines separated from complaint operational SLA, with tenant/policy-configurable durations;
+- **SEC-GRV / NFR-GRV / UX-GRV** — tenant isolation, privacy, audit, mobile/PWA, performance, backward compatibility, and deployment requirements.
+
+Detailed requirement IDs, acceptance criteria, UAT cases, risks, and Definition of Done are authoritative in the BRD.
+
+### Anonymous Messaging Release Gates
+
+- Use REST polling for Phase 1; do not introduce WebSocket infrastructure unless a separately approved requirement requires true real-time/presence behavior.
+- Tracking Code + PIN may establish/re-establish a short-lived anonymous session, but the PIN must not be resent on every poll.
+- Store only a one-way digest/hash of the anonymous session token; raw session tokens and PINs must not be logged.
+- `ComplaintAnonymousSession` must not contain `userId`, `homeownerId`, homeowner account number, email, or another direct resident identity link.
+- Reuse/extend `ComplaintMessage`; anonymous complainant messages have no resident identity foreign key and are public/text-only in Phase 1.
+- Anonymous APIs expose `PUBLIC` content only. `INTERNAL`, `CONFIDENTIAL`, identity-access grants, staff email/internal IDs, storage paths, and private timeline data must never be returned.
+- Use cursor/incremental retrieval, bounded payloads, message-posting rate limits, idempotent client message IDs, no-store caching, and the approved state-changing-request origin/CSRF boundary.
+- Anonymous follow-up file attachments are deferred; do not add them implicitly because image/document metadata can deanonymize a resident and increases malware/privacy exposure.
+- The tracker conversation composer must remain phone/PWA safe, including `Back to Home`, safe-area behavior, no horizontal overflow, and practical touch targets.
+
+### Complaint Subject and Verification Release Gates
+
+- Model the subject of an allegation separately from free-text incident location. A structured subject may represent a homeowner, property, vehicle, common area, or unknown subject and may support multiple subjects where final UI/schema permits it.
+- Homeowner-facing target selection must never become a resident directory that leaks private email, phone, or cross-tenant property information.
+- Independent verification is policy-driven; do not infer `anonymous == automatically verified/unverified` or `named == sufficient proof`.
+- When a configured punitive/enforcement action requires verification, the server must block that action until the verification gate is satisfied.
+- Verification completion must not automatically reveal a confidential complainant's identity.
+
+### Grievance, Committee, and Deadline Release Gates
+
+- A formal grievance is a separate domain record linked to a complaint; complaint status remains the operational intake/case history.
+- Grievance Committee authority is a tenant-scoped business appointment. A Chair/Member/Secretary/Mediator appointment must not grant unrelated finance/platform/admin privileges.
+- Complaint/grievance authorization must use effective assigned roles/permissions rather than accidentally falling back to legacy primary-role-only checks.
+- `STAFF` and ordinary committee members do not receive confidential identity access merely because they can process a grievance; reveal remains separately authorized, reasoned, confirmed, no-store, and audited.
+- Process/legal/policy deadlines are separate from `Complaint.dueAt` operational SLA. Do not hard-code a universal 5-day/7-day grace period without a separately approved policy/legal requirement.
+- Future notice/proof-of-service, mediation, hearing, board vote/quorum/recusal, evidence vault, decision, appeal, resolution agreement, and regulatory dossier features remain Phase 2/3 unless the BRD is explicitly revised.
+
+### Implementation and Deployment Tracking Rules
+
+For every Phase 1 implementation PR/change:
+
+1. reference the relevant BRD requirement IDs in the PR/change description;
+2. update this Agent section from `NOT STARTED` to the real implementation/test/review status;
+3. record new Prisma migrations, services/routes/components, tests, feature/configuration switches, and rollback behavior here before merge;
+4. preserve existing named/confidential/anonymous complaint intake and privacy regression coverage;
+5. run the normal repository validation gate plus new grievance/anonymous messaging tests;
+6. do not mark `DEPLOYED` merely because CI passes or a PR merges;
+7. mark Hostinger deployment complete only when `public/release.txt`/production `/release.txt` matches the expected merged `main` SHA and `/api/health` succeeds;
+8. record production smoke/UAT result for anonymous messaging, tenant isolation, verification gate, and committee/deadline behavior before marking the initiative production-complete.
+
+The planning branch that introduced BRD v1.0 contains documentation only. It must not be represented as an implemented or deployed grievance feature.
+
 ## Validation Gate
 
 Before production deployment, the applicable CI pipeline must pass. The repository production workflow currently covers:

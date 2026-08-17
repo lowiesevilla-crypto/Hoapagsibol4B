@@ -4,67 +4,98 @@
 **Branch:** `feature/grievance-foundation-phase1`  
 **Draft PR:** #122  
 **Status date:** 2026-08-17  
-**Overall implementation:** IN PROGRESS  
+**Overall implementation:** IMPLEMENTED — VALIDATION IN PROGRESS  
 **Deployment:** NOT DEPLOYED  
 **Production UAT:** NOT STARTED
 
-This document is the live implementation-status companion to BRD v1.0. The BRD remains the approved requirements baseline; this file records delivery evidence without rewriting the approved requirement text while work is underway.
+This document is the live implementation-status companion to BRD v1.0. The BRD remains the approved requirements baseline; this file records delivery evidence, validation findings, release readiness, and deployment state without changing the approved business scope.
 
 ## Delivery Status
 
 | BRD group | Status | Current evidence | Remaining before COMPLETE |
 | --- | --- | --- | --- |
-| ANM — Anonymous two-way messaging | IMPLEMENTED / VALIDATION PENDING | Additive anonymous-session persistence; tracking-code + PIN session exchange; HttpOnly cookie; REST polling; PUBLIC-only message DTO; anonymous reply with idempotency key; separate auth/message rate limits; session revoke; mobile conversation composer. | Automated validation, migration execution in CI, browser/UAT, security review. |
-| API — Anonymous REST endpoints | IMPLEMENTED / VALIDATION PENDING | `POST/DELETE /api/complaints/anonymous/session`, `GET/POST /api/complaints/anonymous/messages`; same-origin state-change guard; no-store responses. | Automated API/integration tests and CI. |
-| SUB — Complaint subject | FOUNDATION IMPLEMENTED | `ComplaintSubject` persistence and service-level same-tenant homeowner/vehicle validation; structured Phase/Block/Lot/address snapshots remain separate from `Complaint.location`. | Admin/intake UI, complete lifecycle/display UAT, reporting surfaces. |
-| VER — Independent verification | FOUNDATION IMPLEMENTED | Verification policy/record persistence; policy evaluation; verification result recording; reusable server-side enforcement gate. | Wire gate into future punitive/enforcement actions, admin policy/verification UI, end-to-end UAT. |
-| GRV — Separate grievance case | FOUNDATION IMPLEMENTED | Minimal `GrievanceCase`; explicit promotion service; Phase 1 statuses; `requiresBoardReview` snapshot only. | Admin workflow UI/actions, status lifecycle controls, end-to-end UAT. |
-| COM — Grievance Committee | FOUNDATION IMPLEMENTED | Tenant-scoped membership, positions, JSON permission allow-list, appointment/end lifecycle, effective-role-aware permission checks. | Admin committee management UI and permission UAT. |
-| DDL — Process deadlines vs SLA | FOUNDATION IMPLEMENTED | Separate `GrievanceDeadline`; explicit caller-supplied start/due dates; policy-source field; operational-SLA pause recorded separately on grievance case. | Deadline lifecycle UI/actions, SLA reporting behavior, timezone/deadline UAT. |
-| SEC-GRV | IN PROGRESS | Explicit tenant predicates in raw SQL services; anonymous session has no resident identity FK; raw token stored only in HttpOnly cookie while DB stores SHA-256 digest; confidential identity tables untouched; state-changing anonymous APIs enforce same origin. | CI security/regression tests and cross-tenant UAT. |
-| UX-GRV | IN PROGRESS | Anonymous tracker converted from read-only result to phone/PWA conversation; text-only composer; `Back to Home`, `100dvh`, safe-area padding, shrink-safe content. | Narrow-screen browser verification and accessibility/UAT. |
-| NFR-GRV | IN PROGRESS | Additive migration; bounded polling; cursor-based incremental reads; no WebSocket dependency; dedicated source-level BRD regression suite added. | Full repository validation gate and production smoke/UAT after merge/deploy. |
+| ANM — Anonymous two-way messaging | IMPLEMENTED / VALIDATION IN PROGRESS | Additive anonymous-session persistence; tracking-code + PIN session exchange; HttpOnly cookie; REST cursor polling; PUBLIC-only DTO; text-only anonymous replies with idempotency; separate auth/message rate limits; session revoke; mobile/PWA conversation composer. | Full current-head CI, browser/UAT, privacy/cross-tenant review. |
+| API — Anonymous REST endpoints | IMPLEMENTED / VALIDATION IN PROGRESS | `POST/DELETE /api/complaints/anonymous/session`, `GET/POST /api/complaints/anonymous/messages`; same-origin state-change guard; no-store responses; short-lived anonymous session instead of PIN-on-every-poll. | Current-head API/integration/browser validation. |
+| SUB — Complaint subject | IMPLEMENTED / VALIDATION IN PROGRESS | `ComplaintSubject`; same-tenant homeowner/vehicle revalidation; Phase/Block/Lot/address snapshots separate from incident location; admin subject add/remove workflow. | Lifecycle/browser UAT and negative cross-tenant verification. |
+| VER — Independent verification | IMPLEMENTED / VALIDATION IN PROGRESS | Verification policy/record persistence; tenant settings UI; verification findings workflow; reusable enforcement gate; `READY_FOR_FORMAL_PROCESS` is blocked when required verification has not passed. | Policy-matching/security UAT; future punitive actions must reuse the gate. |
+| GRV — Separate grievance case | IMPLEMENTED / VALIDATION IN PROGRESS | Additive `GrievanceCase`; explicit promotion; separate Phase 1 state machine; admin workflow; queue/report visibility; board-review category flag remains policy metadata only. | Current-head CI and browser/UAT. |
+| COM — Grievance Committee | IMPLEMENTED / VALIDATION IN PROGRESS | Tenant-scoped membership; Chair/Member/Secretary/Mediator; granular grievance permissions; effective-role-aware target validation; platform-role denial; settings UI and appointment/end lifecycle. | Permission matrix/security UAT. |
+| DDL — Process deadlines vs SLA | IMPLEMENTED / VALIDATION IN PROGRESS | Separate `GrievanceDeadline`; explicit Asia/Manila start/due dates; policy-source field; deadline lifecycle UI/actions; separate operational-SLA pause/resume with feature-switch enforcement. | Timezone/browser UAT and SLA reporting verification. |
+| Reporting / queue | IMPLEMENTED / VALIDATION IN PROGRESS | Complaint queue exposes separate complaint, grievance, and verification states/filters; privacy-safe `/admin/complaints/grievance-report`; report service contains explicit tenant predicates and no complainant identity fields. | Current-head CI, pagination/filter/browser privacy UAT. |
+| SEC-GRV | IN PROGRESS | Explicit tenant predicates; anonymous session has no resident identity FK; DB stores only SHA-256 session-token digest; confidential identity tables remain separate; state-changing anonymous APIs use same-origin checks; workflow writes honor the tenant foundation switch. | Full security regression, cross-tenant negative tests, browser UAT. |
+| UX-GRV | IN PROGRESS | Phone/PWA anonymous tracker with `Back to Home`, `100dvh`, safe-area padding, shrink-safe content, text-only composer, reduced-motion-aware behavior; admin grievance workflow/settings/report surfaces added. | Narrow-screen/accessibility browser UAT. |
+| NFR-GRV | IN PROGRESS | Additive migration; bounded cursor polling; no WebSocket dependency; feature switches; dedicated grievance regression suites; non-destructive rollback posture. | Complete repository validation gate, merge/release verification, production smoke/UAT. |
 
-## Files Added or Changed
+## Current Validation State
+
+A previous PR #122 CI run reached the unit-test stage after successfully completing dependency installation, lint, Prisma validation/generation, `prisma migrate deploy`, and database seeding. The unit suite exposed two source-contract defects: grievance workflow writes did not consistently call the foundation feature switch, and the complaint queue did not yet expose the promised grievance/verification filters.
+
+Both defects have now been corrected on the feature branch:
+
+- `lib/actions/grievance.ts` centralizes enabled-workflow authorization through `requireEnabledGrievanceActor`, which calls `assertGrievanceFoundationEnabled(user.tenantId)` while leaving the grievance-settings action recoverable when the feature is disabled.
+- `lib/actions/grievance-sla.ts` now applies the same foundation switch before operational-SLA pause/resume writes.
+- `app/admin/complaints/page.tsx` now displays separate grievance and verification filters/states and uses `getGrievanceReport` plus `getGrievanceMetadataForComplaints` for tenant-scoped formal-process metadata.
+
+These corrections require a new complete CI run. Do not treat the earlier partially successful run as a green release.
+
+## Primary Files Added or Changed
 
 - `prisma/migrations/20260817093000_grievance_foundation_phase1/migration.sql`
 - `lib/services/complaint-anonymous-session.ts`
 - `lib/services/grievance-foundation.ts`
+- `lib/services/grievance-admin.ts`
+- `lib/services/grievance-authorization.ts`
+- `lib/services/grievance-feature.ts`
+- `lib/services/grievance-reporting.ts`
+- `lib/services/grievance-sla.ts`
+- `lib/actions/grievance.ts`
+- `lib/actions/grievance-sla.ts`
 - `lib/anonymous-request-security.ts`
 - `app/api/complaints/anonymous/session/route.ts`
 - `app/api/complaints/anonymous/messages/route.ts`
 - `components/complaint-track-form.tsx`
+- `components/grievance-foundation-panel.tsx`
+- `components/grievance-settings-panel.tsx`
+- `components/grievance-operational-sla-control.tsx`
 - `app/complaints/track/page.tsx`
+- `app/admin/complaints/[id]/page.tsx`
+- `app/admin/complaints/page.tsx`
+- `app/admin/complaints/settings/page.tsx`
+- `app/admin/complaints/grievance-report/page.tsx`
 - `tests/unit/grievance-foundation-phase1.test.ts`
-- `docs/complaints/GRIEVANCE_PHASE1_IMPLEMENTATION_STATUS.md`
-- `Agent.md` (must reflect the same live status before review/merge)
+- `tests/unit/grievance-admin-phase1.test.ts`
+- `tests/unit/grievance-feature-switch.test.ts`
+- `tests/unit/grievance-reporting-phase1.test.ts`
+- `tests/unit/grievance-migration-safety.test.ts`
+- `docs/complaints/GRIEVANCE_PHASE1_TRACEABILITY.md`
+- `Agent.md`
 
 ## Security and Privacy Decisions Implemented
 
-- Anonymous tracking Code + PIN is used to establish a short-lived session; the PIN is not resent during polling or message posting.
-- Session tokens are random opaque values. The browser receives the raw token only as an HttpOnly cookie; `ComplaintAnonymousSession` stores only its SHA-256 digest.
-- `ComplaintAnonymousSession` deliberately has no `userId`, `homeownerId`, email, account number, IP, user-agent, or other resident identity linkage.
-- Anonymous message responses expose only PUBLIC complaint messages and safe labels (`Anonymous complainant`, `HOA Staff`, `HOAHub`). Internal user IDs/emails and confidential/internal messages are not serialized.
+- Tracking Code + PIN establishes a short-lived anonymous session; the PIN is not resent during polling or message posting.
+- The raw anonymous session token is delivered only as an HttpOnly cookie; `ComplaintAnonymousSession` stores only its SHA-256 digest.
+- `ComplaintAnonymousSession` has no `userId`, `homeownerId`, resident email, account number, IP, user-agent, or other resident identity linkage.
+- Anonymous message responses expose only PUBLIC messages and safe labels (`Anonymous complainant`, `HOA Staff`, `HOAHub`). Internal IDs/emails, confidential/internal messages, identity-access grants, and storage paths are not serialized.
 - Anonymous follow-up attachments remain out of scope for Phase 1.
 - Message bodies are not copied into audit metadata.
-- State-changing anonymous API requests require same-origin `Origin` or `Referer` validation.
-- Existing anonymous complaint opening messages are normalized to complainant/anonymous-tracker metadata when a secure anonymous session is established, so legacy Prisma inserts cannot cause the tracker to label the complainant as HOA staff.
+- State-changing anonymous requests require same-origin `Origin` or `Referer` validation.
+- Grievance/verification records never automatically reveal confidential complainant identity.
+- Platform roles cannot gain tenant grievance authority through committee appointment.
+- Disabling the grievance foundation blocks grievance workflow writes while settings remain available to authorized admins for recovery/re-enable.
 
 ## Migration and Rollback
 
-The migration is additive. It adds grievance-foundation tables plus anonymous-message metadata columns/indexes to `ComplaintMessage`. The application rollback strategy is to revert the application commit/merge while leaving the new tables/columns in place. Do not drop grievance, verification, deadline, committee, anonymous-session, message-idempotency, or activity history as part of routine rollback.
+The migration is additive. It creates grievance-foundation tables and anonymous-message metadata/indexes without replacing the existing Complaint domain. Routine rollback must revert application behavior while leaving grievance, verification, deadline, committee, anonymous-session, message-idempotency, activity, and audit history intact.
 
-The new grievance-domain services initially use explicit tenant-scoped parameterized SQL over migration-backed tables. This follows the repository's existing narrow migration/raw-SQL pattern for additive domains and avoids destabilizing the generated Prisma schema while Phase 1 is still under review. Promotion into generated Prisma models may be performed as a later hardening/refactor, but tenant predicates and regression coverage are mandatory either way.
-
-No production database change has been executed from this branch. Repository CI, `prisma migrate deploy`, merge to `main`, Hostinger publication, release-marker verification, health verification, and production UAT are still pending.
+The earlier CI run successfully executed the Phase 1 migration against its CI MySQL database. No production database change has been executed from this feature branch.
 
 ## Release Gate
 
 Do not change the status to `DEPLOYED` until all of the following are true:
 
-1. the implementation PR is approved and merged to `main`;
-2. the normal HOAHub validation pipeline passes, including migration deployment, unit/integration/critical tests, typecheck and build;
+1. the current feature-branch head passes the complete HOAHub validation pipeline, including migration deployment, unit/integration/critical tests, typecheck, build, and browser gates;
+2. PR #122 is reviewed/approved and merged to `main`;
 3. Hostinger publishes the expected merged `main` commit;
 4. production `/release.txt` matches that expected commit SHA;
 5. production `/api/health` succeeds;
-6. production smoke/UAT confirms anonymous messaging, tenant isolation, verification gate behavior, committee/deadline behavior, and existing complaint privacy regressions.
+6. production smoke/UAT confirms anonymous messaging, tenant isolation, verification enforcement, complaint-subject isolation, committee permissions, deadlines/SLA separation, queue/report privacy, and existing complaint privacy regressions.

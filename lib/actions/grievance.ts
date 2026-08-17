@@ -16,6 +16,7 @@ import {
   assertGrievanceActorEligible,
   assertGrievanceAdminAuthority,
 } from "@/lib/services/grievance-authorization";
+import { assertGrievanceFoundationEnabled } from "@/lib/services/grievance-feature";
 import {
   addComplaintSubject,
   appointGrievanceCommitteeMember,
@@ -43,6 +44,13 @@ const grievanceStatuses = new Set<GrievanceCaseStatus>(["ASSESSMENT", "VERIFICAT
 const deadlineStatuses = new Set<GrievanceDeadlineStatus>(["OPEN", "PAUSED", "COMPLETED", "CANCELLED"]);
 const privacyModes = new Set<ComplaintPrivacyMode>(Object.values(ComplaintPrivacyMode));
 const permissionSet = new Set<GrievancePermission>(grievancePermissions);
+
+type ComplaintAdminUser = Awaited<ReturnType<typeof requireComplaintAdmin>>;
+
+async function requireEnabledGrievanceActor(user: ComplaintAdminUser) {
+  assertGrievanceActorEligible(user);
+  await assertGrievanceFoundationEnabled(user.tenantId);
+}
 
 function text(formData: FormData, key: string, max = 4000) {
   return String(formData.get(key) || "").trim().slice(0, max);
@@ -72,7 +80,7 @@ export async function addComplaintSubjectAction(formData: FormData) {
   const user = await requireComplaintAdmin();
   const complaintId = text(formData, "complaintId", 191);
   try {
-    assertGrievanceActorEligible(user);
+    await requireEnabledGrievanceActor(user);
     const subjectType = text(formData, "subjectType", 40) as ComplaintSubjectType;
     if (!subjectTypes.has(subjectType)) throw new Error("Choose a valid complaint subject type.");
     await addComplaintSubject(user, {
@@ -93,7 +101,7 @@ export async function removeComplaintSubjectAction(formData: FormData) {
   const user = await requireComplaintAdmin();
   const complaintId = text(formData, "complaintId", 191);
   try {
-    assertGrievanceActorEligible(user);
+    await requireEnabledGrievanceActor(user);
     await removeComplaintSubject(user, complaintId, text(formData, "subjectId", 191));
   } catch (error) {
     complaintRedirect(complaintId, "error", error instanceof Error ? error.message : "Complaint subject could not be removed.");
@@ -106,7 +114,7 @@ export async function promoteComplaintToGrievanceAction(formData: FormData) {
   const user = await requireComplaintAdmin();
   const complaintId = text(formData, "complaintId", 191);
   try {
-    assertGrievanceActorEligible(user);
+    await requireEnabledGrievanceActor(user);
     await promoteComplaintToGrievance(user, complaintId);
   } catch (error) {
     complaintRedirect(complaintId, "error", error instanceof Error ? error.message : "Grievance case could not be created.");
@@ -119,7 +127,7 @@ export async function updateComplaintVerificationAction(formData: FormData) {
   const user = await requireComplaintAdmin();
   const complaintId = text(formData, "complaintId", 191);
   try {
-    assertGrievanceActorEligible(user);
+    await requireEnabledGrievanceActor(user);
     const status = text(formData, "verificationStatus", 40) as ComplaintVerificationStatus;
     const methodRaw = text(formData, "verificationType", 60);
     const verificationType = methodRaw ? methodRaw as ComplaintVerificationType : null;
@@ -142,7 +150,7 @@ export async function updateGrievanceCaseStatusAction(formData: FormData) {
   const user = await requireComplaintAdmin();
   const complaintId = text(formData, "complaintId", 191);
   try {
-    assertGrievanceActorEligible(user);
+    await requireEnabledGrievanceActor(user);
     const status = text(formData, "grievanceStatus", 60) as GrievanceCaseStatus;
     if (!grievanceStatuses.has(status)) throw new Error("Choose a valid grievance status.");
     await updateGrievanceCaseStatus(user, {
@@ -162,7 +170,7 @@ export async function createGrievanceDeadlineAction(formData: FormData) {
   const user = await requireComplaintAdmin();
   const complaintId = text(formData, "complaintId", 191);
   try {
-    assertGrievanceActorEligible(user);
+    await requireEnabledGrievanceActor(user);
     const deadlineType = text(formData, "deadlineType", 60) as GrievanceDeadlineType;
     if (!deadlineTypes.has(deadlineType)) throw new Error("Choose a valid process deadline type.");
     await createGrievanceDeadline(user, {
@@ -183,7 +191,7 @@ export async function updateGrievanceDeadlineAction(formData: FormData) {
   const user = await requireComplaintAdmin();
   const complaintId = text(formData, "complaintId", 191);
   try {
-    assertGrievanceActorEligible(user);
+    await requireEnabledGrievanceActor(user);
     const status = text(formData, "deadlineStatus", 30) as GrievanceDeadlineStatus;
     if (!deadlineStatuses.has(status)) throw new Error("Choose a valid process deadline status.");
     await updateGrievanceDeadlineStatus(user, {

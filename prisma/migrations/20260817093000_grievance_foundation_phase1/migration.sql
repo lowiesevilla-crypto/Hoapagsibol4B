@@ -213,8 +213,13 @@ ALTER TABLE `GrievanceSetting`
 ALTER TABLE `ComplaintAnonymousSession`
   ADD CONSTRAINT `ComplaintAnonymousSession_tenantId_complaintId_fkey` FOREIGN KEY (`tenantId`, `complaintId`) REFERENCES `Complaint`(`tenantId`, `id`) ON DELETE CASCADE ON UPDATE CASCADE;
 
+-- anonymousSessionId is nullable while ComplaintMessage.tenantId is not. MySQL cannot
+-- apply SET NULL to a composite (tenantId, anonymousSessionId) relationship because it
+-- would have to null tenantId as well. Session IDs are globally unique primary keys, so
+-- reference the session id directly and keep tenant/complaint binding enforced in service
+-- predicates and the idempotency index.
 ALTER TABLE `ComplaintMessage`
-  ADD CONSTRAINT `ComplaintMessage_tenantId_anonymousSessionId_fkey` FOREIGN KEY (`tenantId`, `anonymousSessionId`) REFERENCES `ComplaintAnonymousSession`(`tenantId`, `id`) ON DELETE SET NULL ON UPDATE CASCADE;
+  ADD CONSTRAINT `ComplaintMessage_anonymousSessionId_fkey` FOREIGN KEY (`anonymousSessionId`) REFERENCES `ComplaintAnonymousSession`(`id`) ON DELETE SET NULL ON UPDATE CASCADE;
 
 ALTER TABLE `ComplaintSubject`
   ADD CONSTRAINT `ComplaintSubject_tenantId_complaintId_fkey` FOREIGN KEY (`tenantId`, `complaintId`) REFERENCES `Complaint`(`tenantId`, `id`) ON DELETE RESTRICT ON UPDATE CASCADE,

@@ -3,12 +3,14 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { requireComplaintAdmin } from "@/lib/services/complaints";
+import { assertGrievanceActorEligible } from "@/lib/services/grievance-authorization";
 import { setGrievanceOperationalSlaPause } from "@/lib/services/grievance-sla";
 
 export async function setGrievanceOperationalSlaPauseAction(formData: FormData) {
   const user = await requireComplaintAdmin();
   const complaintId = String(formData.get("complaintId") || "").trim().slice(0, 191);
   try {
+    assertGrievanceActorEligible(user);
     await setGrievanceOperationalSlaPause(user, {
       complaintId,
       grievanceCaseId: String(formData.get("grievanceCaseId") || "").trim().slice(0, 191),

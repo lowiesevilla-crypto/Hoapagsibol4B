@@ -208,17 +208,19 @@ The homeowner portal is a phone-first consumer experience. Premium means restrai
 
 ## Homeowner Statement of Account UI and Print Contract
 
-The homeowner `/portal/soa` surface is a compact, mobile-first financial statement. The screen may use progressive disclosure, but the printed statement is a canonical financial document and must not depend on the current disclosure state.
+The homeowner `/portal/soa` surface is a compact, mobile-first financial statement. The on-screen disclosures and the printable financial document are separate presentation surfaces backed by the same authenticated, tenant-scoped SOA payload.
 
 - Keep the primary financial hierarchy compact. `Net account balance` is the dominant summary; outstanding balance, available credit, and last payment are secondary compact metrics. Do not restore oversized four-card summary grids or duplicate financial summaries.
-- Receivables Aging, Running Ledger, Payment History, and Billing History are disclosure sections so secondary datasets do not create excessive phone scrolling. Aging may default open; the longer histories should default collapsed while retaining clear summary text, chevrons, keyboard focus treatment, and approximately 48px touch targets.
+- Receivables Aging, Running Ledger, Payment History, and Billing History are disclosure sections so secondary datasets do not create excessive phone scrolling. All four default collapsed on the homeowner screen and retain clear summary text, chevrons, keyboard focus treatment, and approximately 48px touch targets.
 - Narrow-screen histories should use stacked mobile transaction rows/cards; desktop may retain the existing tables. Avoid horizontal scrolling for the primary phone experience.
-- The screen and print identity block must use the authenticated, tenant-scoped SOA payload and include homeowner/member name, 11-digit account number, property identification (phase/block/lot where present), property address, statement number, and statement/as-of date before the financial detail.
-- Print/PDF output must force all SOA disclosure content visible regardless of whether the homeowner collapsed sections on screen. Interactive disclosure headers, navigation, buttons, and `Ask AI`/other shell controls must not appear in the printed financial document.
-- Printed SOA financial history must include receivables aging, full running ledger, payment history, and billing history. Screen truncation used for mobile convenience must never truncate the print tables.
-- Core implementation: `app/portal/soa/page.tsx` and `lib/services/statement-of-account.ts`.
-- Regression coverage: `tests/unit/homeowner-soa-premium-surface.test.ts` must protect the compact disclosure contract, mandatory homeowner/account/property identity, statement metadata, and print-state independence.
-- Do not merge/deploy an SOA change if the screen regresses to oversized/noisy card grids or if printing can omit identity, property, statement metadata, or a financial-history section.
+- The screen identity block uses the authenticated SOA payload and includes homeowner/member name, 11-digit account number, property identification (phase/block/lot where present), property address, statement number, and statement/as-of date.
+- `Print SOA` must not print the disclosure UI itself. `components/homeowner/payments/homeowner-soa-print-document.tsx` renders a dedicated print-only statement while the interactive homeowner screen is hidden with `print-hidden`; disclosure open/closed state therefore cannot remove financial records from print output.
+- The dedicated homeowner print document includes association identity/contact details, statement code/date, homeowner name, account number, block/lot, property address, homeowner contact/email, monthly dues, homeowner status, current outstanding balance, available credit, net balance, total billed/payments/credits/penalties, last payment, collection status, full receivables aging, full running ledger, complete payment history, complete billing history, and the Treasurer/authorized-representative signature area.
+- Complete payment-history print columns include official receipt number, payment method, reference number, coverage, received amount, applied amount, unapplied credit, status, and collector. Mobile screen truncation or simplified desktop screen columns must never reduce the dedicated print dataset.
+- Do not add the existing `soa.verifyUrl` QR to the homeowner copy while that URL resolves to an admin-only SOA route. A future homeowner/public verification QR requires its own authorized verification boundary.
+- Core implementation: `app/portal/soa/page.tsx`, `components/homeowner/payments/homeowner-soa-print-document.tsx`, and `lib/services/statement-of-account.ts`.
+- Regression coverage: `tests/unit/homeowner-soa-premium-surface.test.ts` and `tests/unit/homeowner-soa-complete-print.test.ts` protect the compact disclosure contract, mandatory identity/details, print independence, complete financial rows, and tenant-scoped server authority.
+- Do not merge/deploy an SOA change if the screen regresses to oversized/noisy card grids, if a disclosure is forced open by default, or if printing can omit homeowner/account details, payment references/method/collector data, a financial-history section, or the signature area.
 
 ## Homeowner Payment Status Authority
 

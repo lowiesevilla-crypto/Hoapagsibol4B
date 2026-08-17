@@ -1,6 +1,6 @@
 import "server-only";
 
-import { Prisma, type Role } from "@prisma/client";
+import { ComplaintPrivacyMode, ComplaintStatus, Prisma, type Role } from "@prisma/client";
 import { platformPrisma } from "@/lib/db";
 import { assertGrievanceActorEligible } from "@/lib/services/grievance-authorization";
 import { requireGrievancePermission } from "@/lib/services/grievance-foundation";
@@ -44,6 +44,24 @@ export type GrievanceReportRow = {
   grievanceCaseId: string | null;
   grievanceStatus: string | null;
   boardReviewRequired: number | boolean | null;
+  verificationStatus: string | null;
+  verificationRequired: number | boolean | null;
+  blocksEnforcement: number | boolean | null;
+};
+
+export type GrievanceQueueRow = {
+  id: string;
+  complaintNumber: string;
+  publicReference: string;
+  title: string;
+  privacyMode: ComplaintPrivacyMode;
+  status: ComplaintStatus;
+  categoryName: string | null;
+  submittedAt: Date;
+  assignedToName: string | null;
+  messageCount: bigint | number;
+  attachmentCount: bigint | number;
+  grievanceStatus: string | null;
   verificationStatus: string | null;
   verificationRequired: number | boolean | null;
   blocksEnforcement: number | boolean | null;
@@ -147,6 +165,42 @@ export async function getGrievanceReport(user: EffectiveUser, filters: Grievance
 
   const total = Number(counts[0]?.total || 0);
   return { rows, total, page, pageSize, totalPages: Math.max(1, Math.ceil(total / pageSize)) };
+}
+
+export async function getGrievanceComplaintQueue(user: EffectiveUser, filters: GrievanceReportFilters = {}) {
+  assertGrievanceActorEligible(user);
+  await requireGrievancePermission(user, "VIEW_GRIEVANCE");
+  const where = whereSql(user, filters);
+  return platformPrisma.$queryRaw<GrievanceQueueRow[]>(Prisma.sql`
+    SELECT
+      c.id,
+      c.complaintNumber,
+      c.publicReference,
+      c.title,
+      c.privacyMode,
+      c.status,
+      cat.name AS categoryName,
+      c.submittedAt,
+      assignee.name AS assignedToName,
+      (SELECT COUNT(*) FROM ComplaintMessage m WHERE m.tenantId = c.tenantId AND m.complaintId = c.id) AS messageCount,
+      (SELECT COUNT(*) FROM ComplaintAttachment a WHERE a.tenantId = c.tenantId AND a.complaintId = c.id) AS attachmentCount,
+      g.status AS grievanceStatus,
+      v.status AS verificationStatus,
+      v.required AS verificationRequired,
+      v.blocksEnforcement
+    FROM Complaint c
+    LEFT JOIN ComplaintCategory cat
+      ON cat.tenantId = c.tenantId AND cat.id = c.categoryId
+    LEFT JOIN User assignee
+      ON assignee.tenantId = c.tenantId AND assignee.id = c.assignedToId
+    LEFT JOIN GrievanceCase g
+      ON g.tenantId = c.tenantId AND g.complaintId = c.id
+    LEFT JOIN ComplaintVerification v
+      ON v.tenantId = c.tenantId AND v.complaintId = c.id
+    WHERE ${where}
+    ORDER BY c.submittedAt DESC, c.id DESC
+    LIMIT 100
+  `);
 }
 
 export async function getGrievanceMetadataForComplaints(user: EffectiveUser, complaintIds: string[]) {

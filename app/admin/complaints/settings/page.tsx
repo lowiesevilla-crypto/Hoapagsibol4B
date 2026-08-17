@@ -11,19 +11,28 @@ import { getComplaintCategories, getComplaintSettings, normalizeComplaintText, r
 export default async function ComplaintSettingsPage({ searchParams }: { searchParams: Promise<{ success?: string; error?: string }> }) {
   const user = await requireComplaintAdmin();
   const query = await searchParams;
-  const [settings, categories, grievanceSettings, verificationPolicies, committeeMemberships, tenantUsers] = await Promise.all([
+  const effectiveRoles = new Set(user.roles);
+  const hasPlatformRole = effectiveRoles.has(Role.SUPER_ADMIN) || effectiveRoles.has(Role.PLATFORM_ADMIN);
+  const canManageGrievance = !hasPlatformRole && [Role.ADMIN, Role.HOA_ADMIN, Role.SYSTEM_ADMIN].some((role) => effectiveRoles.has(role));
+
+  const [settings, categories] = await Promise.all([
     getComplaintSettings(user.tenantId),
     getComplaintCategories(user.tenantId, false),
-    getGrievanceSetting(user),
-    listComplaintVerificationPolicies(user),
-    listGrievanceCommitteeMemberships(user),
-    prisma.user.findMany({
-      where: { tenantId: user.tenantId, active: true, role: { notIn: [Role.SUPER_ADMIN, Role.PLATFORM_ADMIN] } },
-      select: { id: true, name: true, role: true },
-      orderBy: { name: "asc" },
-      take: 500,
-    }),
   ]);
+  const grievanceData = canManageGrievance
+    ? await Promise.all([
+        getGrievanceSetting(user),
+        listComplaintVerificationPolicies(user),
+        listGrievanceCommitteeMemberships(user),
+        prisma.user.findMany({
+          where: { tenantId: user.tenantId, active: true, role: { notIn: [Role.SUPER_ADMIN, Role.PLATFORM_ADMIN] } },
+          select: { id: true, name: true, role: true },
+          orderBy: { name: "asc" },
+          take: 500,
+        }),
+      ])
+    : null;
+
   async function saveSettings(formData: FormData) {
     "use server";
     const admin = await requireComplaintAdmin();
@@ -91,12 +100,12 @@ export default async function ComplaintSettingsPage({ searchParams }: { searchPa
       </section>
     </div>
 
-    <GrievanceSettingsPanel
-      settings={grievanceSettings}
-      policies={verificationPolicies}
-      memberships={committeeMemberships}
+    {grievanceData && <GrievanceSettingsPanel
+      settings={grievanceData[0]}
+      policies={grievanceData[1]}
+      memberships={grievanceData[2]}
       categories={categories.map((category) => ({ id: category.id, name: category.name }))}
-      users={tenantUsers.map((tenantUser) => ({ id: tenantUser.id, name: tenantUser.name, role: tenantUser.role }))}
-    />
+      users={grievanceData[3].map((tenantUser) => ({ id: tenantUser.id, name: tenantUser.name, role: tenantUser.role }))}
+    />}
   </>;
 }

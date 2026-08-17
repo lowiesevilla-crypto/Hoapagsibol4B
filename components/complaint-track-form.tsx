@@ -24,6 +24,8 @@ type Conversation = {
   updatedAt: string;
   messages: ConversationMessage[];
   nextCursor: string | null;
+  previousCursor: string | null;
+  hasMoreBefore: boolean;
 };
 
 type ApiError = { error?: string };
@@ -51,20 +53,28 @@ export function ComplaintTrackForm() {
   const [sendError, setSendError] = useState("");
   const [authenticating, setAuthenticating] = useState(false);
   const [sending, setSending] = useState(false);
+  const [loadingEarlier, setLoadingEarlier] = useState(false);
   const [checkingSession, setCheckingSession] = useState(true);
   const cursorRef = useRef<string | null>(null);
   const emptyPollsRef = useRef(0);
   const bottomRef = useRef<HTMLDivElement | null>(null);
   const pendingMessageRef = useRef<{ body: string; clientMessageId: string } | null>(null);
+  const suppressNextAutoScrollRef = useRef(false);
   const sessionActive = Boolean(conversation);
 
   const applyConversation = useCallback((next: Conversation, replaceMessages = false) => {
     cursorRef.current = next.nextCursor ?? cursorRef.current;
-    setConversation((current) => ({
-      ...next,
-      messages: replaceMessages || !current ? next.messages : mergeMessages(current.messages, next.messages),
-      nextCursor: next.nextCursor ?? current?.nextCursor ?? null,
-    }));
+    setConversation((current) => {
+      if (replaceMessages || !current) return next;
+      return {
+        ...current,
+        ...next,
+        messages: mergeMessages(current.messages, next.messages),
+        nextCursor: next.nextCursor ?? current.nextCursor,
+        previousCursor: current.previousCursor,
+        hasMoreBefore: current.hasMoreBefore,
+      };
+    });
   }, []);
 
   useEffect(() => {
@@ -128,9 +138,7 @@ export function ComplaintTrackForm() {
       } catch {
         emptyPollsRef.current += 1;
       } finally {
-        if (!cancelled) {
-          timer = setTimeout(poll, emptyPollsRef.current >= 3 ? IDLE_POLL_MS : ACTIVE_POLL_MS);
-        }
+        if (!cancelled) timer = setTimeout(poll, emptyPollsRef.current >= 3 ? IDLE_POLL_MS : ACTIVE_POLL_MS);
       }
     }
 
@@ -150,6 +158,10 @@ export function ComplaintTrackForm() {
   }, [applyConversation, sessionActive]);
 
   useEffect(() => {
+    if (suppressNextAutoScrollRef.current) {
+      suppressNextAutoScrollRef.current = false;
+      return;
+    }
     const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     bottomRef.current?.scrollIntoView({ behavior: reducedMotion ? "auto" : "smooth", block: "nearest" });
   }, [conversation?.messages.length]);
@@ -176,6 +188,36 @@ export function ComplaintTrackForm() {
     } finally {
       setAuthenticating(false);
       setCheckingSession(false);
+    }
+  }
+
+  async function loadEarlierMessages() {
+    const before = conversation?.previousCursor;
+    if (!before || loadingEarlier) return;
+    setLoadingEarlier(true);
+    setSendError("");
+    try {
+      const response = await fetch(`/api/complaints/anonymous/messages?before=${encodeURIComponent(before)}`, { cache: "no-store" });
+      const payload = await response.json() as { conversation?: Conversation } & ApiError;
+      if (response.status === 401) {
+        setConversation(null);
+        cursorRef.current = null;
+        pendingMessageRef.current = null;
+        setAuthError("Your anonymous complaint session expired. Enter the tracking code and PIN again.");
+        return;
+      }
+      if (!response.ok || !payload.conversation) throw new Error(payload.error || "Earlier messages could not be loaded.");
+      suppressNextAutoScrollRef.current = true;
+      setConversation((current) => current ? {
+        ...current,
+        messages: mergeMessages(current.messages, payload.conversation!.messages),
+        previousCursor: payload.conversation!.previousCursor,
+        hasMoreBefore: payload.conversation!.hasMoreBefore,
+      } : current);
+    } catch (error) {
+      setSendError(error instanceof Error ? error.message : "Earlier messages could not be loaded.");
+    } finally {
+      setLoadingEarlier(false);
     }
   }
 
@@ -243,9 +285,7 @@ export function ComplaintTrackForm() {
         <input className="field min-h-12 font-mono" value={pin} onChange={(event) => setPin(event.target.value.replace(/\D/g, "").slice(0, 6))} type="password" inputMode="numeric" pattern="[0-9]{6}" maxLength={6} required autoComplete="off" />
       </label>
       {authError && <p className="rounded-xl border border-rose-200 bg-rose-50 p-3 text-sm font-bold text-rose-800" role="alert">{authError}</p>}
-      <button type="submit" disabled={authenticating} className="btn btn-primary min-h-12 w-full disabled:opacity-60">
-        {authenticating ? "Opening secure conversation…" : "Open complaint conversation"}
-      </button>
+      <button type="submit" disabled={authenticating} className="btn btn-primary min-h-12 w-full disabled:opacity-60">{authenticating ? "Opening secure conversation…" : "Open complaint conversation"}</button>
     </form>;
   }
 
@@ -260,21 +300,15 @@ export function ComplaintTrackForm() {
         </div>
       </div>
       <button type="button" onClick={() => void endSession()} className="inline-flex min-h-11 shrink-0 items-center gap-1.5 rounded-xl border border-slate-200 px-3 text-xs font-black text-slate-700 hover:bg-slate-50" aria-label="End anonymous complaint session">
-        <LogOut className="size-4" aria-hidden="true" />
-        <span className="hidden sm:inline">End session</span>
+        <LogOut className="size-4" aria-hidden="true" /><span className="hidden sm:inline">End session</span>
       </button>
     </header>
 
-    {conversation.requestedAction && <div className="border-b border-slate-100 bg-slate-50 px-4 py-3 text-sm sm:px-5">
-      <span className="font-black text-slate-800">Requested action: </span>
-      <span className="text-slate-700">{conversation.requestedAction}</span>
-    </div>}
+    {conversation.requestedAction && <div className="border-b border-slate-100 bg-slate-50 px-4 py-3 text-sm sm:px-5"><span className="font-black text-slate-800">Requested action: </span><span className="text-slate-700">{conversation.requestedAction}</span></div>}
 
     <div className="min-h-0 min-w-0 flex-1 overflow-y-auto px-3 py-4 sm:px-5" aria-live="polite">
-      {conversation.messages.length === 0 ? <div className="py-12 text-center text-sm text-slate-500">
-        <MessageCircle className="mx-auto mb-2 size-6" aria-hidden="true" />
-        No public messages yet.
-      </div> : <div className="space-y-3">
+      {conversation.messages.length === 0 ? <div className="py-12 text-center text-sm text-slate-500"><MessageCircle className="mx-auto mb-2 size-6" aria-hidden="true" />No public messages yet.</div> : <div className="space-y-3">
+        {conversation.hasMoreBefore && conversation.previousCursor && <div className="flex justify-center pb-1"><button type="button" onClick={() => void loadEarlierMessages()} disabled={loadingEarlier} className="min-h-11 rounded-xl border border-slate-200 px-4 text-xs font-black text-slate-700 hover:bg-slate-50 disabled:opacity-60">{loadingEarlier ? "Loading earlier messages…" : "Load earlier messages"}</button></div>}
         {conversation.messages.map((item) => {
           const mine = item.sender === "ANONYMOUS_COMPLAINANT";
           return <div key={item.id} className={`flex min-w-0 ${mine ? "justify-end" : "justify-start"}`}>
@@ -292,25 +326,12 @@ export function ComplaintTrackForm() {
     <form onSubmit={sendMessage} className="border-t border-slate-200 bg-white p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:p-4">
       {sendError && <p className="mb-2 rounded-lg bg-rose-50 px-3 py-2 text-xs font-bold text-rose-800" role="alert">{sendError}</p>}
       <div className="flex min-w-0 items-end gap-2">
-        <label className="min-w-0 flex-1">
-          <span className="sr-only">Reply to HOA</span>
-          <textarea
-            className="field min-h-12 max-h-36 resize-y py-3"
-            value={message}
-            onChange={(event) => {
-              const nextMessage = event.target.value.slice(0, MAX_MESSAGE_LENGTH);
-              setMessage(nextMessage);
-              if (pendingMessageRef.current && pendingMessageRef.current.body !== nextMessage.trim()) pendingMessageRef.current = null;
-            }}
-            placeholder="Reply to the HOA…"
-            maxLength={MAX_MESSAGE_LENGTH}
-            rows={1}
-          />
-        </label>
-        <button type="submit" disabled={sending || message.trim().length < 2} className="btn btn-primary min-h-12 min-w-12 shrink-0 px-3 disabled:opacity-50" aria-label="Send anonymous reply">
-          <Send className="size-4" aria-hidden="true" />
-          <span className="hidden sm:inline">{sending ? "Sending…" : "Send"}</span>
-        </button>
+        <label className="min-w-0 flex-1"><span className="sr-only">Reply to HOA</span><textarea className="field min-h-12 max-h-36 resize-y py-3" value={message} onChange={(event) => {
+          const nextMessage = event.target.value.slice(0, MAX_MESSAGE_LENGTH);
+          setMessage(nextMessage);
+          if (pendingMessageRef.current && pendingMessageRef.current.body !== nextMessage.trim()) pendingMessageRef.current = null;
+        }} placeholder="Reply to the HOA…" maxLength={MAX_MESSAGE_LENGTH} rows={1} /></label>
+        <button type="submit" disabled={sending || message.trim().length < 2} className="btn btn-primary min-h-12 min-w-12 shrink-0 px-3 disabled:opacity-50" aria-label="Send anonymous reply"><Send className="size-4" aria-hidden="true" /><span className="hidden sm:inline">{sending ? "Sending…" : "Send"}</span></button>
       </div>
       <p className="mt-1.5 text-right text-[11px] text-slate-500">{message.length}/{MAX_MESSAGE_LENGTH} · Text only</p>
     </form>

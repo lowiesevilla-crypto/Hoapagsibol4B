@@ -65,12 +65,15 @@ test("platform roles are explicitly blocked from grievance actions and committee
   assert.match(slaActions, /assertGrievanceActorEligible\(user\)/);
 });
 
-test("legacy complaint staff access does not fail merely because grievance permission is absent", () => {
-  assert.match(complaintDetail, /canManageGrievance/);
-  assert.match(complaintDetail, /grievanceData = canManageGrievance/);
+test("legacy complaint access stays usable while grievance UI follows active committee permissions", () => {
+  assert.match(complaintDetail, /requireComplaintAdmin\(\)/);
+  assert.match(complaintDetail, /hasGrievancePermission/);
+  assert.match(complaintDetail, /hasGrievancePermission\(user, "VIEW_GRIEVANCE"\)/);
+  assert.match(complaintDetail, /hasGrievancePermission\(user, "TRIAGE_GRIEVANCE"\)/);
+  assert.match(complaintDetail, /hasGrievancePermission\(user, "VERIFY_GRIEVANCE"\)/);
+  assert.match(complaintDetail, /grievanceFoundation = canViewGrievance/);
+  assert.doesNotMatch(complaintDetail, /\[Role\.ADMIN, Role\.HOA_ADMIN, Role\.SYSTEM_ADMIN\]/);
   assert.match(complaintSettings, /canManageGrievance/);
-  assert.match(complaintSettings, /grievanceData = canManageGrievance/);
-  assert.match(complaintDetail, /Role\.ADMIN, Role\.HOA_ADMIN, Role\.SYSTEM_ADMIN/);
   assert.match(complaintSettings, /Role\.ADMIN, Role\.HOA_ADMIN, Role\.SYSTEM_ADMIN/);
 });
 

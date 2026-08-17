@@ -19,6 +19,10 @@ function hasAll(source: string, values: string[]) {
   return values.every((value) => source.includes(value));
 }
 
+function hasResponsiveMobileCardsAndDesktopTable(source: string) {
+  return source.includes("md:hidden") && source.includes("<table") && /className="[^"]*\bhidden\b[^"]*\bmd:block\b[^"]*"/.test(source);
+}
+
 function changedFiles() {
   return execSync("git diff --name-only HEAD", { cwd: root, encoding: "utf8" })
     .split(/\r?\n/)
@@ -74,7 +78,7 @@ record("receipts uploads and documents are not cached by service worker", hasAll
 record("receipt numbering service is unchanged", !files.some((file) => /receipt|number/i.test(file) && file.startsWith("lib/")));
 record("billing coverage is displayed", hasAll(payPage, ["monthLabel", "oldestCoverage"]) && hasAll(paymentsPage, ["paymentAllocationCoverageLabel"]));
 record("payment history is paginated or limited", hasAll(paymentsPage, ["PAGE_SIZE", "skip:", "take: PAGE_SIZE"]));
-record("mobile cards replace wide tables below mobile breakpoint", [billingPage, paymentsPage, collectionsPage, soaPage].every((source) => hasAll(source, ["md:hidden", "hidden shadow-none md:block"])));
+record("mobile cards replace wide tables below mobile breakpoint", [billingPage, paymentsPage, collectionsPage, soaPage].every(hasResponsiveMobileCardsAndDesktopTable));
 record("desktop tables remain available", [billingPage, paymentsPage, collectionsPage, soaPage].every((source) => source.includes("<table")));
 record("mobile action remains above bottom navigation", hasAll(payForm, ["sticky", "bottom-[calc", "env(safe-area-inset-bottom)"]));
 record("minimum 48px touch targets exist", hasAll(payForm + paymentCards + paymentsPage, ["min-h-12", "focus-visible:outline"]));

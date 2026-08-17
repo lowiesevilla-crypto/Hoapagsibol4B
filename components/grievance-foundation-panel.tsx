@@ -53,11 +53,15 @@ export function GrievanceFoundationPanel({
   foundation,
   homeowners,
   vehicles,
+  canTriage,
+  canVerify,
 }: {
   complaintId: string;
   foundation: ComplaintGrievanceFoundation;
   homeowners: HomeownerOption[];
   vehicles: VehicleOption[];
+  canTriage: boolean;
+  canVerify: boolean;
 }) {
   const grievance = foundation.grievanceCase;
   const nextStatuses = grievance ? allowedGrievanceTransitions(grievance.status) : [];
@@ -69,6 +73,7 @@ export function GrievanceFoundationPanel({
       <p className="text-xs font-black uppercase tracking-[.16em] text-pine-700">Phase 1 grievance foundation</p>
       <h2 id="grievance-foundation-heading" className="mt-1 text-xl font-black text-slate-950">Subject, verification and formal grievance</h2>
       <p className="mt-2 text-sm text-slate-600">The complaint remains the intake/operational case. Formal grievance state, independent verification, and process deadlines are tracked separately.</p>
+      {!canTriage && !canVerify && <p className="mt-3 rounded-xl bg-slate-50 p-3 text-xs font-bold text-slate-600">Your active committee appointment provides view-only grievance access.</p>}
     </div>
 
     <section className="card">
@@ -87,15 +92,15 @@ export function GrievanceFoundationPanel({
             <p className="mt-1 text-slate-600">{propertyLabel(subject.phaseSnapshot, subject.blockSnapshot, subject.lotSnapshot) || "No structured property snapshot"}</p>
             {subject.addressSnapshot && <p className="mt-1 break-words text-xs text-slate-500">Admin record: {subject.addressSnapshot}</p>}
           </div>
-          <form action={removeComplaintSubjectAction}>
+          {canTriage && <form action={removeComplaintSubjectAction}>
             <input type="hidden" name="complaintId" value={complaintId} />
             <input type="hidden" name="subjectId" value={subject.id} />
             <button className="btn-secondary min-h-10 px-3 py-1.5 text-xs">Remove</button>
-          </form>
+          </form>}
         </article>)}
       </div>}
 
-      <form action={addComplaintSubjectAction} className="mt-5 grid gap-3 md:grid-cols-2">
+      {canTriage && <form action={addComplaintSubjectAction} className="mt-5 grid gap-3 md:grid-cols-2">
         <input type="hidden" name="complaintId" value={complaintId} />
         <label><span className="label">Subject type</span><select className="field" name="subjectType" defaultValue="PROPERTY" required>
           <option value="HOMEOWNER">Homeowner</option>
@@ -115,7 +120,7 @@ export function GrievanceFoundationPanel({
         </select></label>
         <p className="text-xs text-slate-500 md:col-span-2">For Homeowner/Property choose a same-HOA property. For Vehicle choose a same-HOA vehicle. No resident email or phone is exposed by this selector.</p>
         <button className="btn-secondary min-h-11 w-fit md:col-span-2">Add subject</button>
-      </form>
+      </form>}
     </section>
 
     <section className="card">
@@ -140,7 +145,7 @@ export function GrievanceFoundationPanel({
       </div>}
       {verification?.findings && <div className="mt-4 rounded-xl bg-slate-50 p-3 text-sm"><p className="font-black">Findings</p><p className="mt-1 whitespace-pre-wrap text-slate-700">{verification.findings}</p></div>}
 
-      <form action={updateComplaintVerificationAction} className="mt-5 grid gap-3 md:grid-cols-2">
+      {canVerify && <form action={updateComplaintVerificationAction} className="mt-5 grid gap-3 md:grid-cols-2">
         <input type="hidden" name="complaintId" value={complaintId} />
         <label><span className="label">Verification status</span><select className="field" name="verificationStatus" defaultValue="IN_PROGRESS" required>
           <option value="IN_PROGRESS">In progress</option>
@@ -154,7 +159,7 @@ export function GrievanceFoundationPanel({
         </select></label>
         <label className="md:col-span-2"><span className="label">Verification findings</span><textarea className="field min-h-24" name="findings" defaultValue={verification?.findings || ""} placeholder="Record independent findings. Completed results require findings." /></label>
         <button className="btn-secondary min-h-11 w-fit md:col-span-2">Save verification</button>
-      </form>
+      </form>}
     </section>
 
     <section className="card">
@@ -166,10 +171,10 @@ export function GrievanceFoundationPanel({
         <span className="badge badge-info">{grievance ? label(grievance.status) : "Not initiated"}</span>
       </div>
 
-      {!grievance ? <form action={promoteComplaintToGrievanceAction} className="mt-4">
+      {!grievance ? canTriage ? <form action={promoteComplaintToGrievanceAction} className="mt-4">
         <input type="hidden" name="complaintId" value={complaintId} />
         <button className="btn-primary min-h-11">Promote to formal grievance</button>
-      </form> : <>
+      </form> : <p className="mt-4 rounded-xl bg-slate-50 p-3 text-sm text-slate-500">No formal grievance case has been initiated.</p> : <>
         <div className="mt-4 grid gap-3 sm:grid-cols-2">
           <Info label="Grievance status" value={label(grievance.status)} />
           <Info label="Board review policy" value={Boolean(grievance.boardReviewRequired) ? "Required by category policy" : "Not flagged"} />
@@ -177,7 +182,7 @@ export function GrievanceFoundationPanel({
           <Info label="Created" value={formatManila(grievance.createdAt)} />
         </div>
         {Boolean(grievance.boardReviewRequired) && <p className="mt-3 rounded-xl border border-blue-200 bg-blue-50 p-3 text-sm text-blue-900"><b>Board review policy flag only.</b> This does not mean a board vote, quorum check, recusal process, or approval has occurred.</p>}
-        <form action={updateGrievanceCaseStatusAction} className="mt-5 grid gap-3 md:grid-cols-[1fr_1fr_auto] md:items-end">
+        {canTriage && <form action={updateGrievanceCaseStatusAction} className="mt-5 grid gap-3 md:grid-cols-[1fr_1fr_auto] md:items-end">
           <input type="hidden" name="complaintId" value={complaintId} />
           <input type="hidden" name="grievanceCaseId" value={grievance.id} />
           <label><span className="label">Next grievance status</span><select className="field" name="grievanceStatus" defaultValue="" required>
@@ -186,14 +191,14 @@ export function GrievanceFoundationPanel({
           </select></label>
           <label><span className="label">Reason / note</span><input className="field" name="note" maxLength={4000} placeholder="Required for closure" /></label>
           <button className="btn-secondary min-h-11" disabled={nextStatuses.length === 0}>Update grievance</button>
-        </form>
+        </form>}
       </>}
     </section>
 
     {grievance && <section className="card">
       <h3 className="text-lg font-black">Process deadlines</h3>
       <p className="mt-1 text-sm text-slate-600">These deadlines are separate from the complaint operational SLA. Dates are entered and displayed in Asia/Manila.</p>
-      <form action={createGrievanceDeadlineAction} className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+      {canTriage && <form action={createGrievanceDeadlineAction} className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
         <input type="hidden" name="complaintId" value={complaintId} />
         <input type="hidden" name="grievanceCaseId" value={grievance.id} />
         <label><span className="label">Deadline type</span><select className="field" name="deadlineType" required>{deadlineTypes.map((type) => <option key={type} value={type}>{label(type)}</option>)}</select></label>
@@ -201,7 +206,7 @@ export function GrievanceFoundationPanel({
         <label><span className="label">Due (Manila date)</span><input className="field" type="date" name="dueAt" required /></label>
         <label><span className="label">Policy source</span><input className="field" name="policySource" placeholder="Bylaw/policy reference" /></label>
         <button className="btn-secondary min-h-11 w-fit xl:col-span-4">Create deadline</button>
-      </form>
+      </form>}
 
       <div className="mt-5 space-y-3">
         {foundation.deadlines.length === 0 ? <p className="rounded-xl bg-slate-50 p-3 text-sm text-slate-500">No process deadlines recorded.</p> : foundation.deadlines.map((deadline) => <article key={deadline.id} className="rounded-xl border border-slate-200 bg-slate-50 p-3">
@@ -211,7 +216,7 @@ export function GrievanceFoundationPanel({
           </div>
           {deadline.policySource && <p className="mt-2 text-xs text-slate-500">Policy: {deadline.policySource}</p>}
           {deadline.pauseReason && <p className="mt-2 text-xs text-amber-800">Pause reason: {deadline.pauseReason}</p>}
-          <form action={updateGrievanceDeadlineAction} className="mt-3 grid gap-2 sm:grid-cols-[180px_1fr_auto] sm:items-end">
+          {canTriage && <form action={updateGrievanceDeadlineAction} className="mt-3 grid gap-2 sm:grid-cols-[180px_1fr_auto] sm:items-end">
             <input type="hidden" name="complaintId" value={complaintId} />
             <input type="hidden" name="grievanceCaseId" value={grievance.id} />
             <input type="hidden" name="deadlineId" value={deadline.id} />
@@ -220,7 +225,7 @@ export function GrievanceFoundationPanel({
             </select></label>
             <label><span className="label">Pause reason</span><input className="field" name="reason" placeholder="Required when pausing" /></label>
             <button className="btn-secondary min-h-11">Update</button>
-          </form>
+          </form>}
         </article>)}
       </div>
     </section>}

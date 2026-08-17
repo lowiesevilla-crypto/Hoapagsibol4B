@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { ComplaintVisibility, HomeownerStatus, Role, VehicleStatus } from "@prisma/client";
 import { ConfidentialIdentityReveal } from "@/components/confidential-identity-reveal";
 import { GrievanceFoundationPanel } from "@/components/grievance-foundation-panel";
+import { GrievanceOperationalSlaControl } from "@/components/grievance-operational-sla-control";
 import { PageHeader } from "@/components/page-header";
 import { StatusBadge } from "@/components/status-badge";
 import { addComplaintMessageAction, assignComplaintAction, requestIdentityAccessAction, updateComplaintStatusAction } from "@/lib/actions/complaints";
@@ -58,12 +59,15 @@ export default async function AdminComplaintDetailPage({ params, searchParams }:
           <div className="mt-4 rounded-xl bg-slate-50 p-3 text-sm"><p className="font-black">Requested action</p><p className="mt-1 whitespace-pre-wrap text-slate-700">{complaint.requestedAction || "Not provided"}</p></div>
         </article>
 
-        {grievanceData && <GrievanceFoundationPanel
-          complaintId={complaint.id}
-          foundation={grievanceData[0]}
-          homeowners={grievanceData[1].map((item) => ({ id: item.id, name: item.user.name, phase: item.phase, block: item.block, lot: item.lot }))}
-          vehicles={grievanceData[2].map((item) => ({ id: item.id, plateNumber: item.plateNumber, homeownerName: item.homeowner.user.name, block: item.homeowner.block, lot: item.homeowner.lot }))}
-        />}
+        {grievanceData && <>
+          <GrievanceFoundationPanel
+            complaintId={complaint.id}
+            foundation={grievanceData[0]}
+            homeowners={grievanceData[1].map((item) => ({ id: item.id, name: item.user.name, phase: item.phase, block: item.block, lot: item.lot }))}
+            vehicles={grievanceData[2].map((item) => ({ id: item.id, plateNumber: item.plateNumber, homeownerName: item.homeowner.user.name, block: item.homeowner.block, lot: item.homeowner.lot }))}
+          />
+          <GrievanceOperationalSlaControl complaintId={complaint.id} grievanceCase={grievanceData[0].grievanceCase} />
+        </>}
 
         <section className="card">
           <h2 className="text-lg font-black">Messages and Notes</h2>

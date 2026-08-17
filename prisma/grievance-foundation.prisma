@@ -1,0 +1,270 @@
+enum ComplaintMessageSenderType {
+  COMPLAINANT
+  STAFF
+  SYSTEM
+}
+
+enum ComplaintMessageChannel {
+  HOMEOWNER_PORTAL
+  ANONYMOUS_TRACKER
+  ADMIN
+  SYSTEM
+}
+
+enum ComplaintSubjectType {
+  HOMEOWNER
+  PROPERTY
+  VEHICLE
+  COMMON_AREA
+  UNKNOWN
+}
+
+enum ComplaintVerificationStatus {
+  NOT_REQUIRED
+  PENDING
+  IN_PROGRESS
+  PASSED
+  FAILED
+  INSUFFICIENT
+}
+
+enum ComplaintVerificationType {
+  SITE_INSPECTION
+  SECURITY_REPORT
+  CCTV_REVIEW
+  STAFF_OBSERVATION
+  DOCUMENT_REVIEW
+  MULTIPLE_INDEPENDENT_REPORTS
+  OTHER
+}
+
+enum GrievanceCaseStatus {
+  ASSESSMENT
+  VERIFICATION_REQUIRED
+  VERIFIED
+  READY_FOR_FORMAL_PROCESS
+  CLOSED_NO_ACTION
+  CLOSED_UNSUBSTANTIATED
+}
+
+enum GrievanceCommitteePosition {
+  CHAIR
+  MEMBER
+  SECRETARY
+  MEDIATOR
+}
+
+enum GrievanceDeadlineType {
+  RESPONDENT_RESPONSE
+  MEDIATION_SCHEDULING
+  HEARING_NOTICE
+  RECONSIDERATION
+  APPEAL
+  CORRECTIVE_ACTION
+}
+
+enum GrievanceDeadlineStatus {
+  OPEN
+  PAUSED
+  COMPLETED
+  CANCELLED
+}
+
+model GrievanceSetting {
+  tenantId                  String   @default("tenant_pagsibol4b_default")
+  id                        String   @id @default(cuid())
+  foundationEnabled         Boolean  @default(true)
+  anonymousMessagingEnabled Boolean  @default(true)
+  anonymousSessionMinutes   Int      @default(30)
+  updatedById               String?
+  createdAt                 DateTime @default(now())
+  updatedAt                 DateTime @default(now()) @updatedAt
+  tenant                    Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  updatedBy                 User?    @relation("GrievanceSettingUpdatedBy", fields: [updatedById], references: [id], onDelete: SetNull, onUpdate: Cascade)
+
+  @@unique([tenantId])
+  @@unique([tenantId, id])
+  @@index([updatedById])
+}
+
+model ComplaintAnonymousSession {
+  tenantId    String    @default("tenant_pagsibol4b_default")
+  id          String    @id @default(cuid())
+  complaintId String
+  tokenHash   String    @unique @db.VarChar(64)
+  expiresAt   DateTime
+  lastSeenAt  DateTime?
+  revokedAt   DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @default(now()) @updatedAt
+  complaint   Complaint @relation("ComplaintAnonymousSessions", fields: [tenantId, complaintId], references: [tenantId, id], onDelete: Cascade, onUpdate: Cascade)
+  messages    ComplaintMessage[] @relation("ComplaintMessageAnonymousSession")
+
+  @@unique([tenantId, id])
+  @@index([tenantId, complaintId])
+  @@index([expiresAt, revokedAt])
+}
+
+model ComplaintSubject {
+  tenantId       String               @default("tenant_pagsibol4b_default")
+  id             String               @id @default(cuid())
+  complaintId    String
+  subjectType    ComplaintSubjectType
+  homeownerId    String?
+  vehicleId      String?
+  displayLabel   String?              @db.VarChar(191)
+  phaseSnapshot  String?              @db.VarChar(191)
+  blockSnapshot  String?              @db.VarChar(191)
+  lotSnapshot    String?              @db.VarChar(191)
+  addressSnapshot String?             @db.VarChar(500)
+  createdById    String?
+  createdAt      DateTime             @default(now())
+  updatedAt      DateTime             @default(now()) @updatedAt
+  complaint      Complaint            @relation("ComplaintSubjects", fields: [tenantId, complaintId], references: [tenantId, id], onDelete: Restrict, onUpdate: Cascade)
+  homeowner      HomeownerProfile?    @relation("ComplaintSubjectHomeowner", fields: [tenantId, homeownerId], references: [tenantId, id], onDelete: Restrict, onUpdate: Cascade)
+  vehicle        Vehicle?             @relation("ComplaintSubjectVehicle", fields: [vehicleId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  createdBy      User?                @relation("ComplaintSubjectCreatedBy", fields: [createdById], references: [id], onDelete: SetNull, onUpdate: Cascade)
+
+  @@unique([tenantId, id])
+  @@index([tenantId, complaintId])
+  @@index([tenantId, homeownerId])
+  @@index([tenantId, vehicleId])
+  @@index([createdById])
+}
+
+model ComplaintVerificationPolicy {
+  tenantId             String               @default("tenant_pagsibol4b_default")
+  id                   String               @id @default(cuid())
+  policyKey            String               @db.VarChar(120)
+  categoryId           String?
+  privacyMode          ComplaintPrivacyMode?
+  verificationRequired Boolean              @default(true)
+  blocksEnforcement    Boolean              @default(true)
+  active               Boolean              @default(true)
+  createdById          String?
+  updatedById          String?
+  createdAt            DateTime             @default(now())
+  updatedAt            DateTime             @default(now()) @updatedAt
+  category             ComplaintCategory?   @relation("ComplaintVerificationPolicies", fields: [tenantId, categoryId], references: [tenantId, id], onDelete: Restrict, onUpdate: Cascade)
+  createdBy            User?                @relation("ComplaintVerificationPolicyCreatedBy", fields: [createdById], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  updatedBy            User?                @relation("ComplaintVerificationPolicyUpdatedBy", fields: [updatedById], references: [id], onDelete: SetNull, onUpdate: Cascade)
+
+  @@unique([tenantId, id])
+  @@unique([tenantId, policyKey])
+  @@index([tenantId, categoryId, privacyMode, active], map: "ComplaintVerificationPolicy_match_idx")
+  @@index([createdById])
+  @@index([updatedById])
+}
+
+model ComplaintVerification {
+  tenantId        String                      @default("tenant_pagsibol4b_default")
+  id              String                      @id @default(cuid())
+  complaintId     String
+  required        Boolean                     @default(false)
+  blocksEnforcement Boolean                   @default(false)
+  status          ComplaintVerificationStatus @default(NOT_REQUIRED)
+  verificationType ComplaintVerificationType?
+  findings        String?                     @db.Text
+  verifiedById    String?
+  verifiedAt      DateTime?
+  createdAt       DateTime                    @default(now())
+  updatedAt       DateTime                    @default(now()) @updatedAt
+  complaint       Complaint                   @relation("ComplaintVerification", fields: [tenantId, complaintId], references: [tenantId, id], onDelete: Restrict, onUpdate: Cascade)
+  verifiedBy      User?                       @relation("ComplaintVerificationVerifiedBy", fields: [verifiedById], references: [id], onDelete: SetNull, onUpdate: Cascade)
+
+  @@unique([tenantId, id])
+  @@unique([tenantId, complaintId])
+  @@index([tenantId, status])
+  @@index([verifiedById])
+}
+
+model GrievanceCase {
+  tenantId                 String              @default("tenant_pagsibol4b_default")
+  id                       String              @id @default(cuid())
+  complaintId              String
+  status                   GrievanceCaseStatus @default(ASSESSMENT)
+  boardReviewRequired      Boolean             @default(false)
+  operationalSlaPausedAt   DateTime?
+  operationalSlaPauseReason String?            @db.Text
+  createdById              String
+  closedAt                 DateTime?
+  createdAt                DateTime            @default(now())
+  updatedAt                DateTime            @default(now()) @updatedAt
+  complaint                Complaint           @relation("ComplaintGrievanceCase", fields: [tenantId, complaintId], references: [tenantId, id], onDelete: Restrict, onUpdate: Cascade)
+  createdBy                User                @relation("GrievanceCaseCreatedBy", fields: [createdById], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  deadlines                GrievanceDeadline[]
+  activities               ComplaintGrievanceActivity[]
+
+  @@unique([tenantId, id])
+  @@unique([tenantId, complaintId])
+  @@index([tenantId, status, updatedAt])
+  @@index([createdById])
+}
+
+model GrievanceCommitteeMembership {
+  tenantId     String                     @default("tenant_pagsibol4b_default")
+  id           String                     @id @default(cuid())
+  userId       String
+  position     GrievanceCommitteePosition
+  permissions  Json?
+  startsAt     DateTime
+  endsAt       DateTime?
+  active       Boolean                    @default(true)
+  appointedById String
+  createdAt    DateTime                   @default(now())
+  updatedAt    DateTime                   @default(now()) @updatedAt
+  tenant       Tenant                     @relation(fields: [tenantId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  user         User                       @relation("GrievanceCommitteeMember", fields: [tenantId, userId], references: [tenantId, id], onDelete: Restrict, onUpdate: Cascade)
+  appointedBy  User                       @relation("GrievanceCommitteeAppointedBy", fields: [appointedById], references: [id], onDelete: Restrict, onUpdate: Cascade)
+
+  @@unique([tenantId, id])
+  @@index([tenantId, userId, active, startsAt, endsAt], map: "GrievanceCommitteeMembership_active_idx")
+  @@index([tenantId, position, active], map: "GrievanceCommitteeMembership_position_idx")
+  @@index([appointedById])
+}
+
+model GrievanceDeadline {
+  tenantId       String                  @default("tenant_pagsibol4b_default")
+  id             String                  @id @default(cuid())
+  grievanceCaseId String
+  deadlineType   GrievanceDeadlineType
+  status         GrievanceDeadlineStatus @default(OPEN)
+  startsAt       DateTime
+  dueAt          DateTime
+  completedAt    DateTime?
+  pausedAt       DateTime?
+  pauseReason    String?                 @db.Text
+  policySource   String?                 @db.Text
+  createdById    String
+  updatedById    String?
+  createdAt      DateTime                @default(now())
+  updatedAt      DateTime                @default(now()) @updatedAt
+  grievanceCase  GrievanceCase           @relation(fields: [tenantId, grievanceCaseId], references: [tenantId, id], onDelete: Restrict, onUpdate: Cascade)
+  createdBy      User                    @relation("GrievanceDeadlineCreatedBy", fields: [createdById], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  updatedBy      User?                   @relation("GrievanceDeadlineUpdatedBy", fields: [updatedById], references: [id], onDelete: SetNull, onUpdate: Cascade)
+
+  @@unique([tenantId, id])
+  @@index([tenantId, grievanceCaseId, status, dueAt], map: "GrievanceDeadline_case_status_due_idx")
+  @@index([createdById])
+  @@index([updatedById])
+}
+
+model ComplaintGrievanceActivity {
+  tenantId       String         @default("tenant_pagsibol4b_default")
+  id             String         @id @default(cuid())
+  complaintId    String
+  grievanceCaseId String?
+  actorId        String?
+  eventType      String         @db.VarChar(80)
+  message        String         @db.Text
+  metadata       Json?
+  createdAt      DateTime       @default(now())
+  complaint      Complaint      @relation("ComplaintGrievanceActivities", fields: [tenantId, complaintId], references: [tenantId, id], onDelete: Restrict, onUpdate: Cascade)
+  grievanceCase  GrievanceCase? @relation(fields: [tenantId, grievanceCaseId], references: [tenantId, id], onDelete: Restrict, onUpdate: Cascade)
+  actor          User?          @relation("ComplaintGrievanceActivityActor", fields: [actorId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+
+  @@unique([tenantId, id])
+  @@index([tenantId, complaintId, createdAt], map: "ComplaintGrievanceActivity_complaint_created_idx")
+  @@index([tenantId, grievanceCaseId, createdAt], map: "ComplaintGrievanceActivity_grievance_created_idx")
+  @@index([actorId])
+}

@@ -8,6 +8,8 @@ import {
   ComplaintAttachmentVisibility,
   ComplaintIdentityAccessStatus,
   ComplaintMalwareScanStatus,
+  ComplaintMessageChannel,
+  ComplaintMessageSenderType,
   ComplaintPrivacyMode,
   ComplaintPriority,
   ComplaintSeverity,
@@ -224,7 +226,18 @@ export async function submitComplaint(input: {
       });
     }
     if (pinHash) await tx.complaintTrackingCredential.create({ data: { tenantId: user.tenantId, complaintId: created.id, trackingCode, pinHash } });
-    await tx.complaintMessage.create({ data: { tenantId: user.tenantId, complaintId: created.id, authorId: privacyMode === ComplaintPrivacyMode.NAMED ? user.id : null, authorDisplayName: initialComplainantLabel(privacyMode, user.name), body: description, visibility: ComplaintVisibility.PUBLIC } });
+    await tx.complaintMessage.create({
+      data: {
+        tenantId: user.tenantId,
+        complaintId: created.id,
+        authorId: privacyMode === ComplaintPrivacyMode.NAMED ? user.id : null,
+        authorDisplayName: initialComplainantLabel(privacyMode, user.name),
+        body: description,
+        visibility: ComplaintVisibility.PUBLIC,
+        senderType: ComplaintMessageSenderType.COMPLAINANT,
+        channel: ComplaintMessageChannel.HOMEOWNER_PORTAL,
+      },
+    });
     await tx.complaintStatusHistory.create({ data: { tenantId: user.tenantId, complaintId: created.id, toStatus: ComplaintStatus.SUBMITTED, actorId: privacyMode === ComplaintPrivacyMode.NAMED ? user.id : null, note: "Complaint submitted." } });
     await tx.complaintTimelineEvent.create({ data: { tenantId: user.tenantId, complaintId: created.id, actorId: privacyMode === ComplaintPrivacyMode.NAMED ? user.id : null, eventType: ComplaintTimelineEventType.SUBMITTED, message: privacyMode === ComplaintPrivacyMode.ANONYMOUS ? "Anonymous complaint submitted." : "Complaint submitted." } });
     if (attachment) {
@@ -395,7 +408,18 @@ export async function addComplaintMessage(user: Awaited<ReturnType<typeof requir
   const complaint = await prisma.complaint.findFirst({ where: { tenantId: user.tenantId, id }, select: { id: true } });
   if (!complaint) throw new Error("Complaint not found.");
   await prisma.$transaction([
-    prisma.complaintMessage.create({ data: { tenantId: user.tenantId, complaintId: complaint.id, authorId: user.id, authorDisplayName: user.name, body, visibility } }),
+    prisma.complaintMessage.create({
+      data: {
+        tenantId: user.tenantId,
+        complaintId: complaint.id,
+        authorId: user.id,
+        authorDisplayName: user.name,
+        body,
+        visibility,
+        senderType: ComplaintMessageSenderType.STAFF,
+        channel: ComplaintMessageChannel.ADMIN,
+      },
+    }),
     prisma.complaintTimelineEvent.create({ data: { tenantId: user.tenantId, complaintId: complaint.id, actorId: user.id, eventType: ComplaintTimelineEventType.COMMENTED, message: visibility === ComplaintVisibility.PUBLIC ? "Public update added." : "Internal note added." } }),
   ]);
 }

@@ -721,6 +721,8 @@ model Tenant {
   complaintTimelineEvents    ComplaintTimelineEvent[]
   complaintAssignments       ComplaintAssignment[]
   complaintIdentityAccess    ComplaintIdentityAccessGrant[]
+  grievanceSetting           GrievanceSetting?
+  grievanceCommitteeMemberships GrievanceCommitteeMembership[]
 
   @@index([name])
   @@index([status, subscriptionStatus])
@@ -1018,7 +1020,7 @@ model User {
   chatConversationsCreated              ChatConversation[]                @relation("ChatConversationCreator")
   chatConversationsAssigned             ChatConversation[]                @relation("ChatConversationAssignee")
   chatParticipants                      ChatParticipant[]
-  chatMessages                          ChatMessage[]                     @relation("ChatMessageSender")
+  chatMessages                          ChatMessage[]                      @relation("ChatMessageSender")
   presence                              UserPresence?
   passwordResetTokens                   PasswordResetToken[]
   homeownerActivationCredentials        HomeownerActivationCredential[]   @relation("HomeownerActivationUser")
@@ -1043,6 +1045,17 @@ model User {
   tenantOnboardingLastSaved             TenantOnboarding[]                 @relation("TenantOnboardingLastSavedBy")
   tenantImportBatchesCreated            TenantImportBatch[]                @relation("TenantImportBatchCreatedBy")
   tenantImportBatchesCommitted          TenantImportBatch[]                @relation("TenantImportBatchCommittedBy")
+  grievanceSettingsUpdated              GrievanceSetting[]                 @relation("GrievanceSettingUpdatedBy")
+  complaintSubjectsCreated              ComplaintSubject[]                 @relation("ComplaintSubjectCreatedBy")
+  complaintVerificationPoliciesCreated  ComplaintVerificationPolicy[]      @relation("ComplaintVerificationPolicyCreatedBy")
+  complaintVerificationPoliciesUpdated  ComplaintVerificationPolicy[]      @relation("ComplaintVerificationPolicyUpdatedBy")
+  complaintVerificationsVerified        ComplaintVerification[]            @relation("ComplaintVerificationVerifiedBy")
+  grievanceCasesCreated                 GrievanceCase[]                    @relation("GrievanceCaseCreatedBy")
+  grievanceCommitteeMemberships         GrievanceCommitteeMembership[]     @relation("GrievanceCommitteeMember")
+  grievanceCommitteeAppointments        GrievanceCommitteeMembership[]     @relation("GrievanceCommitteeAppointedBy")
+  grievanceDeadlinesCreated             GrievanceDeadline[]                @relation("GrievanceDeadlineCreatedBy")
+  grievanceDeadlinesUpdated             GrievanceDeadline[]                @relation("GrievanceDeadlineUpdatedBy")
+  complaintGrievanceActivities          ComplaintGrievanceActivity[]       @relation("ComplaintGrievanceActivityActor")
   tenant                                Tenant                            @relation(fields: [tenantId], references: [id], onDelete: Restrict)
 
   @@index([tenantId, email, active])
@@ -1219,6 +1232,7 @@ model HomeownerProfile {
   householdMembers    HouseholdMember[]
   complaints          Complaint[]
   complaintIdentities ComplaintConfidentialIdentity[]
+  complaintSubjects   ComplaintSubject[]               @relation("ComplaintSubjectHomeowner")
   createdAt           DateTime                         @default(now())
   updatedAt           DateTime                         @updatedAt
 
@@ -1541,6 +1555,7 @@ model Vehicle {
   expiresAt           DateTime?        @db.Date
   status              VehicleStatus    @default(ACTIVE)
   remarks             String?
+  complaintSubjects   ComplaintSubject[] @relation("ComplaintSubjectVehicle")
   createdAt           DateTime         @default(now())
   updatedAt           DateTime         @updatedAt
 
@@ -1703,7 +1718,7 @@ model DocumentTypeConfiguration {
   signatoryOfficer         OrganizationOfficer?         @relation("DocumentTypeConfigurationSignatory", fields: [tenantId, signatoryOfficerId], references: [tenantId, id])
   version                  Int                          @default(1)
   updatedById              String?
-  updatedBy                User?                        @relation("DocumentTypeConfigurationUpdater", fields: [updatedById], references: [id], onDelete: SetNull)
+  updatedBy                User?                       @relation("DocumentTypeConfigurationUpdater", fields: [updatedById], references: [id], onDelete: SetNull)
   fields                   DocumentFieldConfiguration[]
   requests                 DocumentRequest[]
   createdAt                DateTime                     @default(now())
@@ -2523,11 +2538,11 @@ model Attendance {
   nightDifferentialHours Decimal                @default(0) @db.Decimal(6, 2)
   isRestDay              Boolean                @default(false)
   holidayType            PayrollDayType?
-  remarks                String?
-  adjustments            AttendanceAdjustment[]
-  overtimeRecords        OvertimeRecord[]
-  createdAt              DateTime               @default(now())
-  updatedAt              DateTime               @updatedAt
+  remarks                 String?
+  adjustments             AttendanceAdjustment[]
+  overtimeRecords         OvertimeRecord[]
+  createdAt               DateTime               @default(now())
+  updatedAt               DateTime               @updatedAt
 
   @@unique([employeeId, date])
   @@index([date, status])
@@ -2997,18 +3012,19 @@ model ComplaintSetting {
 }
 
 model ComplaintCategory {
-  tenantId            String      @default("tenant_pagsibol4b_default")
-  id                  String      @id @default(cuid())
-  code                String
-  name                String
-  description         String?     @db.Text
-  active              Boolean     @default(true)
-  requiresBoardReview Boolean     @default(false)
-  displayOrder        Int         @default(0)
-  createdAt           DateTime    @default(now())
-  updatedAt           DateTime    @updatedAt
-  tenant              Tenant      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  complaints          Complaint[]
+  tenantId             String                        @default("tenant_pagsibol4b_default")
+  id                   String                        @id @default(cuid())
+  code                 String
+  name                 String
+  description          String?                       @db.Text
+  active               Boolean                       @default(true)
+  requiresBoardReview  Boolean                       @default(false)
+  displayOrder         Int                           @default(0)
+  createdAt            DateTime                      @default(now())
+  updatedAt            DateTime                      @updatedAt
+  tenant               Tenant                        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  complaints           Complaint[]
+  verificationPolicies ComplaintVerificationPolicy[] @relation("ComplaintVerificationPolicies")
 
   @@unique([tenantId, id])
   @@unique([tenantId, code])
@@ -3058,6 +3074,11 @@ model Complaint {
   timelineEvents       ComplaintTimelineEvent[]
   assignments          ComplaintAssignment[]
   identityAccess       ComplaintIdentityAccessGrant[]
+  anonymousSessions    ComplaintAnonymousSession[]     @relation("ComplaintAnonymousSessions")
+  subjects             ComplaintSubject[]              @relation("ComplaintSubjects")
+  verification         ComplaintVerification?          @relation("ComplaintVerification")
+  grievanceCase        GrievanceCase?                  @relation("ComplaintGrievanceCase")
+  grievanceActivities  ComplaintGrievanceActivity[]    @relation("ComplaintGrievanceActivities")
 
   @@unique([tenantId, id])
   @@unique([tenantId, complaintNumber])
@@ -3137,20 +3158,28 @@ model ComplaintAttachment {
 }
 
 model ComplaintMessage {
-  tenantId          String              @default("tenant_pagsibol4b_default")
-  id                String              @id @default(cuid())
+  tenantId          String                     @default("tenant_pagsibol4b_default")
+  id                String                     @id @default(cuid())
   complaintId       String
-  complaint         Complaint           @relation(fields: [tenantId, complaintId], references: [tenantId, id], onDelete: Cascade, onUpdate: Cascade)
+  complaint         Complaint                  @relation(fields: [tenantId, complaintId], references: [tenantId, id], onDelete: Cascade, onUpdate: Cascade)
   authorId          String?
-  author            User?               @relation("ComplaintMessageAuthor", fields: [authorId], references: [id], onDelete: SetNull)
+  author            User?                      @relation("ComplaintMessageAuthor", fields: [authorId], references: [id], onDelete: SetNull)
   authorDisplayName String?
-  visibility        ComplaintVisibility @default(PUBLIC)
-  body              String              @db.Text
-  createdAt         DateTime            @default(now())
-  tenant            Tenant              @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  visibility        ComplaintVisibility        @default(PUBLIC)
+  body              String                     @db.Text
+  senderType        ComplaintMessageSenderType @default(STAFF)
+  channel           ComplaintMessageChannel    @default(ADMIN)
+  clientMessageId   String?
+  anonymousSessionId String?
+  anonymousSession  ComplaintAnonymousSession? @relation("ComplaintMessageAnonymousSession", fields: [anonymousSessionId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  createdAt         DateTime                   @default(now())
+  tenant            Tenant                     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
   @@unique([tenantId, id])
+  @@unique([tenantId, complaintId, anonymousSessionId, clientMessageId], map: "ComplaintMessage_anon_idempotency_key")
   @@index([tenantId, complaintId, visibility, createdAt])
+  @@index([tenantId, complaintId, visibility, createdAt, id], map: "ComplaintMessage_anon_cursor_idx")
+  @@index([anonymousSessionId], map: "ComplaintMessage_anonymousSessionId_idx")
   @@index([authorId])
 }
 

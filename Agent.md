@@ -238,9 +238,9 @@ Homeowner-facing payment status must describe the current financial state, not a
 - Core implementation: `lib/services/homeowner-payment-status.ts`, `app/portal/pay/page.tsx`, `lib/services/homeowner-paymongo.ts`, and `lib/services/payment-requests.ts`.
 - Regression coverage: `tests/unit/homeowner-payment-status.test.ts`, including source-level wiring that ensures the homeowner page passes linked `Payment`/`Collection` evidence into the status resolver and keeps the long homeowner payment sections/disclosure controls collapsible while payment inputs remain immediately usable.
 
-## Planned Initiative: Complaint-to-Grievance Foundation — BRD v1.0
+## Active Initiative: Complaint-to-Grievance Foundation — BRD v1.0
 
-The approved planning baseline for the HOA-specific grievance extension is `docs/complaints/HOAHUB_GRIEVANCE_FOUNDATION_BRD_V1_0.md`.
+The approved requirements baseline for the HOA-specific grievance extension is `docs/complaints/HOAHUB_GRIEVANCE_FOUNDATION_BRD_V1_0.md`. Live implementation evidence is tracked in `docs/complaints/GRIEVANCE_PHASE1_IMPLEMENTATION_STATUS.md` and draft PR #122.
 
 This initiative deliberately keeps the existing `Complaint` module as the intake/operational case layer and introduces a separate grievance/compliance foundation for formal verification and future due-process workflows. Do not turn `ComplaintStatus` into a monolithic notice/mediation/hearing/board/appeal state machine.
 
@@ -250,15 +250,29 @@ This initiative deliberately keeps the existing `Complaint` module as the intake
 | --- | --- | --- |
 | Business recommendation | COMPLETE | Approved 2026-08-17 |
 | BRD v1.0 | COMPLETE | Requirements baseline exists in `docs/complaints/HOAHUB_GRIEVANCE_FOUNDATION_BRD_V1_0.md` |
-| Technical design | NOT STARTED | Requires explicit next-task instruction before implementation |
-| Schema/API design | NOT STARTED | Must be reviewed against current complaint code before changes |
-| Implementation | NOT STARTED | No feature code is authorized by the BRD alone |
-| Automated validation/UAT | NOT STARTED | Requirement IDs/UAT cases are defined in the BRD |
-| PR/merge to `main` | NOT STARTED | Planning branch is not a production target |
-| Hostinger deployment | NOT DEPLOYED | Never report live until expected `main` release marker + health pass |
+| Technical design | COMPLETE FOR CURRENT INCREMENT | Phase 1 uses additive migration-backed domain tables, explicit tenant-scoped services, REST polling, and no WebSocket infrastructure |
+| Schema/API design | IN PROGRESS | Anonymous session/message API and Phase 1 domain persistence exist; admin workflow/API/UI surfaces for SUB/VER/GRV/COM/DDL remain to be completed |
+| Implementation | IN PROGRESS | Anonymous two-way messaging is implemented pending validation; subject/verification/grievance/committee/deadline service foundations are implemented but their admin workflow surfaces are not complete |
+| Automated validation/UAT | IN PROGRESS | `tests/unit/grievance-foundation-phase1.test.ts` added; repository CI, migration execution, browser/UAT, and cross-tenant validation are pending |
+| PR/merge to `main` | DRAFT PR #122 / NOT MERGED | `feature/grievance-foundation-phase1` is under review and is not a production target |
+| Hostinger deployment | NOT DEPLOYED | Never report live until expected merged `main` release marker + health pass |
 | Production UAT | NOT STARTED | Required after verified deployment |
 
-Update this table as the initiative moves through design, implementation, review, merge, deployment, rollback, or production UAT. Do not leave an implementation PR with `Agent.md` still reporting `NOT STARTED`.
+Update this table as the initiative moves through design, implementation, review, merge, deployment, rollback, or production UAT. Do not leave an implementation PR with stale status.
+
+### Current Implementation Evidence
+
+- Additive migration: `prisma/migrations/20260817093000_grievance_foundation_phase1/migration.sql`.
+- Anonymous session and conversation service: `lib/services/complaint-anonymous-session.ts`.
+- Phase 1 domain service foundation: `lib/services/grievance-foundation.ts`.
+- State-changing anonymous request origin boundary: `lib/anonymous-request-security.ts`.
+- Anonymous APIs: `app/api/complaints/anonymous/session/route.ts` and `app/api/complaints/anonymous/messages/route.ts`.
+- Mobile/PWA tracker conversation: `components/complaint-track-form.tsx` and `app/complaints/track/page.tsx`.
+- Regression coverage: `tests/unit/grievance-foundation-phase1.test.ts`.
+- Live delivery/status record: `docs/complaints/GRIEVANCE_PHASE1_IMPLEMENTATION_STATUS.md`.
+- The migration creates `ComplaintAnonymousSession`, `ComplaintSubject`, `ComplaintVerificationPolicy`, `ComplaintVerification`, `GrievanceCase`, `GrievanceCommitteeMembership`, `GrievanceDeadline`, `ComplaintGrievanceActivity`, `GrievanceSetting`, and additive anonymous-message metadata/indexes on `ComplaintMessage`.
+- The new grievance-domain service layer initially uses parameterized raw SQL with explicit tenant predicates over migration-backed tables, matching the repository's existing narrow additive-domain pattern. Do not weaken explicit tenant predicates; promotion into generated Prisma models may happen later as a hardening/refactor.
+- Routine application rollback must revert application behavior while leaving additive grievance/audit tables and columns in place. Do not drop grievance, verification, deadline, committee, anonymous-session, or activity history during routine rollback.
 
 ### Phase 1 Requirement Groups
 
@@ -277,30 +291,33 @@ Detailed requirement IDs, acceptance criteria, UAT cases, risks, and Definition 
 ### Anonymous Messaging Release Gates
 
 - Use REST polling for Phase 1; do not introduce WebSocket infrastructure unless a separately approved requirement requires true real-time/presence behavior.
-- Tracking Code + PIN may establish/re-establish a short-lived anonymous session, but the PIN must not be resent on every poll.
-- Store only a one-way digest/hash of the anonymous session token; raw session tokens and PINs must not be logged.
-- `ComplaintAnonymousSession` must not contain `userId`, `homeownerId`, homeowner account number, email, or another direct resident identity link.
+- Tracking Code + PIN establishes/re-establishes a short-lived anonymous session; the PIN is not resent on polling or message-post requests.
+- The anonymous session token is a random opaque value delivered only as an HttpOnly browser cookie. Store only its SHA-256 digest in `ComplaintAnonymousSession`; raw tokens and PINs must not be logged.
+- `ComplaintAnonymousSession` must not contain `userId`, `homeownerId`, homeowner account number, email, IP/user-agent identity metadata, or another direct resident identity link.
 - Reuse/extend `ComplaintMessage`; anonymous complainant messages have no resident identity foreign key and are public/text-only in Phase 1.
-- Anonymous APIs expose `PUBLIC` content only. `INTERNAL`, `CONFIDENTIAL`, identity-access grants, staff email/internal IDs, storage paths, and private timeline data must never be returned.
-- Use cursor/incremental retrieval, bounded payloads, message-posting rate limits, idempotent client message IDs, no-store caching, and the approved state-changing-request origin/CSRF boundary.
+- Anonymous APIs expose `PUBLIC` content only and map authors to safe labels such as `Anonymous complainant`, `HOA Staff`, or `HOAHub`. `INTERNAL`, `CONFIDENTIAL`, identity-access grants, staff email/internal IDs, storage paths, and private timeline data must never be returned.
+- Use cursor/incremental retrieval, bounded payloads, separate authentication/message rate limits, idempotent client message IDs, no-store caching, and same-origin validation on state-changing requests.
 - Anonymous follow-up file attachments are deferred; do not add them implicitly because image/document metadata can deanonymize a resident and increases malware/privacy exposure.
-- The tracker conversation composer must remain phone/PWA safe, including `Back to Home`, safe-area behavior, no horizontal overflow, and practical touch targets.
+- The tracker conversation composer must remain phone/PWA safe, including `Back to Home`, `100dvh`, safe-area behavior, no horizontal overflow, practical touch targets, and text-only message input.
 
 ### Complaint Subject and Verification Release Gates
 
 - Model the subject of an allegation separately from free-text incident location. A structured subject may represent a homeowner, property, vehicle, common area, or unknown subject and may support multiple subjects where final UI/schema permits it.
 - Homeowner-facing target selection must never become a resident directory that leaks private email, phone, or cross-tenant property information.
+- `addComplaintSubject` must revalidate homeowner/vehicle targets by the authenticated tenant before persisting subject snapshots.
 - Independent verification is policy-driven; do not infer `anonymous == automatically verified/unverified` or `named == sufficient proof`.
-- When a configured punitive/enforcement action requires verification, the server must block that action until the verification gate is satisfied.
+- `assertComplaintEnforcementAllowed` is the reusable server gate for future punitive/enforcement actions. Do not add a fine/penalty action that bypasses this gate when verification policy says enforcement is blocked.
 - Verification completion must not automatically reveal a confidential complainant's identity.
 
 ### Grievance, Committee, and Deadline Release Gates
 
-- A formal grievance is a separate domain record linked to a complaint; complaint status remains the operational intake/case history.
+- A formal grievance is a separate `GrievanceCase` linked to a complaint; complaint status remains the operational intake/case history.
+- `ComplaintCategory.requiresBoardReview` is only snapshotted as grievance policy metadata in Phase 1. It must not be represented as evidence that a board vote, quorum, recusal process, or decision has occurred.
 - Grievance Committee authority is a tenant-scoped business appointment. A Chair/Member/Secretary/Mediator appointment must not grant unrelated finance/platform/admin privileges.
 - Complaint/grievance authorization must use effective assigned roles/permissions rather than accidentally falling back to legacy primary-role-only checks.
 - `STAFF` and ordinary committee members do not receive confidential identity access merely because they can process a grievance; reveal remains separately authorized, reasoned, confirmed, no-store, and audited.
-- Process/legal/policy deadlines are separate from `Complaint.dueAt` operational SLA. Do not hard-code a universal 5-day/7-day grace period without a separately approved policy/legal requirement.
+- Process/legal/policy deadlines are separate from `Complaint.dueAt` operational SLA. `createGrievanceDeadline` requires explicit start/due dates and policy source may be recorded; do not hard-code a universal 5-day/7-day grace period without a separately approved policy/legal requirement.
+- Operational-SLA pause is recorded separately on the grievance case and must not silently rewrite a process deadline.
 - Future notice/proof-of-service, mediation, hearing, board vote/quorum/recusal, evidence vault, decision, appeal, resolution agreement, and regulatory dossier features remain Phase 2/3 unless the BRD is explicitly revised.
 
 ### Implementation and Deployment Tracking Rules
@@ -308,15 +325,15 @@ Detailed requirement IDs, acceptance criteria, UAT cases, risks, and Definition 
 For every Phase 1 implementation PR/change:
 
 1. reference the relevant BRD requirement IDs in the PR/change description;
-2. update this Agent section from `NOT STARTED` to the real implementation/test/review status;
-3. record new Prisma migrations, services/routes/components, tests, feature/configuration switches, and rollback behavior here before merge;
+2. update this Agent section and `GRIEVANCE_PHASE1_IMPLEMENTATION_STATUS.md` to the real implementation/test/review status;
+3. record new migrations, services/routes/components, tests, feature/configuration switches, and rollback behavior here before merge;
 4. preserve existing named/confidential/anonymous complaint intake and privacy regression coverage;
 5. run the normal repository validation gate plus new grievance/anonymous messaging tests;
 6. do not mark `DEPLOYED` merely because CI passes or a PR merges;
 7. mark Hostinger deployment complete only when `public/release.txt`/production `/release.txt` matches the expected merged `main` SHA and `/api/health` succeeds;
 8. record production smoke/UAT result for anonymous messaging, tenant isolation, verification gate, and committee/deadline behavior before marking the initiative production-complete.
 
-The planning branch that introduced BRD v1.0 contains documentation only. It must not be represented as an implemented or deployed grievance feature.
+The original planning branch contains documentation only. Draft PR #122 is the active implementation PR; it is not merged and must not be represented as deployed.
 
 ## Validation Gate
 

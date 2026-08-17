@@ -11,6 +11,10 @@ function errorResponse(message: string, status: number) {
   return NextResponse.json({ error: message }, { status, headers: privateNoStoreHeaders });
 }
 
+function expectedOriginError(message: string) {
+  return message === "Request origin is not allowed." || message === "Request origin is required.";
+}
+
 async function sessionToken() {
   return (await cookies()).get(ANONYMOUS_COMPLAINT_COOKIE)?.value || "";
 }
@@ -22,8 +26,11 @@ export async function GET(request: Request) {
     const conversation = await getAnonymousComplaintConversation(await sessionToken(), after);
     return NextResponse.json({ conversation }, { headers: privateNoStoreHeaders });
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Anonymous complaint session is invalid or expired.";
-    return errorResponse(message, message.includes("cursor") ? 400 : 401);
+    const message = error instanceof Error ? error.message : "";
+    if (message === "Message cursor is invalid.") return errorResponse(message, 400);
+    if (message === "Anonymous complaint session is invalid or expired.") return errorResponse(message, 401);
+    if (message === "Anonymous complaint conversation is currently unavailable.") return errorResponse(message, 503);
+    return errorResponse("Anonymous complaint conversation could not be loaded.", 500);
   }
 }
 
@@ -37,8 +44,18 @@ export async function POST(request: Request) {
     });
     return NextResponse.json({ message }, { status: 201, headers: privateNoStoreHeaders });
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Message could not be sent.";
-    const status = message.includes("origin") ? 403 : message.startsWith("Too many messages") ? 429 : message.includes("session") ? 401 : 400;
-    return errorResponse(message, status);
+    const message = error instanceof Error ? error.message : "";
+    if (expectedOriginError(message)) return errorResponse(message, 403);
+    if (message === "Anonymous complaint session is invalid or expired.") return errorResponse(message, 401);
+    if (message === "Anonymous complaint conversation is currently unavailable.") return errorResponse(message, 503);
+    if (message === "Too many messages. Please wait before sending another message.") return errorResponse(message, 429);
+    if (
+      message === "Enter a message." ||
+      message === "Message request identifier is invalid." ||
+      message.startsWith("Message must be ") ||
+      message === "This message request identifier was already used for different content."
+    ) return errorResponse(message, 400);
+    if (message === "Message could not be saved safely. Please retry.") return errorResponse(message, 503);
+    return errorResponse("Message could not be sent.", 500);
   }
 }

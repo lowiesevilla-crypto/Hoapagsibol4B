@@ -90,6 +90,7 @@ function whereSql(user: EffectiveUser, filters: GrievanceReportFilters) {
       c.complaintNumber LIKE ${like}
       OR c.publicReference LIKE ${like}
       OR c.title LIKE ${like}
+      OR COALESCE(c.location, '') LIKE ${like}
       OR COALESCE(cat.name, '') LIKE ${like}
     )`);
   }

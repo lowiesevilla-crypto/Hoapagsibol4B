@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useEffect, useRef, useState } from "react";
+import { type FormEvent, useCallback, useEffect, useRef, useState } from "react";
 import { LogOut, MessageCircle, Send, ShieldCheck } from "lucide-react";
 
 const ACTIVE_POLL_MS = 5_000;
@@ -55,15 +55,16 @@ export function ComplaintTrackForm() {
   const cursorRef = useRef<string | null>(null);
   const emptyPollsRef = useRef(0);
   const bottomRef = useRef<HTMLDivElement | null>(null);
+  const sessionActive = Boolean(conversation);
 
-  function applyConversation(next: Conversation, replaceMessages = false) {
+  const applyConversation = useCallback((next: Conversation, replaceMessages = false) => {
     cursorRef.current = next.nextCursor ?? cursorRef.current;
     setConversation((current) => ({
       ...next,
       messages: replaceMessages || !current ? next.messages : mergeMessages(current.messages, next.messages),
       nextCursor: next.nextCursor ?? current?.nextCursor ?? null,
     }));
-  }
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -73,14 +74,15 @@ export function ComplaintTrackForm() {
         const payload = await response.json() as { conversation: Conversation };
         if (!cancelled) applyConversation(payload.conversation, true);
       })
+      .catch(() => undefined)
       .finally(() => {
         if (!cancelled) setCheckingSession(false);
       });
     return () => { cancelled = true; };
-  }, []);
+  }, [applyConversation]);
 
   useEffect(() => {
-    if (!conversation) return;
+    if (!sessionActive) return;
     let cancelled = false;
     let timer: ReturnType<typeof setTimeout> | null = null;
 
@@ -118,7 +120,11 @@ export function ComplaintTrackForm() {
               } : current);
             }
           }
+        } else {
+          emptyPollsRef.current += 1;
         }
+      } catch {
+        emptyPollsRef.current += 1;
       } finally {
         if (!cancelled) {
           timer = setTimeout(poll, emptyPollsRef.current >= 3 ? IDLE_POLL_MS : ACTIVE_POLL_MS);
@@ -139,10 +145,11 @@ export function ComplaintTrackForm() {
       if (timer) clearTimeout(timer);
       document.removeEventListener("visibilitychange", onVisibility);
     };
-  }, [Boolean(conversation)]);
+  }, [applyConversation, sessionActive]);
 
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    bottomRef.current?.scrollIntoView({ behavior: reducedMotion ? "auto" : "smooth", block: "nearest" });
   }, [conversation?.messages.length]);
 
   async function authenticate(event: FormEvent<HTMLFormElement>) {
@@ -183,8 +190,9 @@ export function ComplaintTrackForm() {
         body: JSON.stringify({ message: body, clientMessageId }),
       });
       const payload = await response.json() as { message?: ConversationMessage } & ApiError;
-      if (!response.ok || !payload.message) throw new Error(payload.error || "Message could not be sent.");
-      setConversation((current) => current ? { ...current, messages: mergeMessages(current.messages, [payload.message!]) } : current);
+      const sentMessage = payload.message;
+      if (!response.ok || !sentMessage) throw new Error(payload.error || "Message could not be sent.");
+      setConversation((current) => current ? { ...current, messages: mergeMessages(current.messages, [sentMessage]) } : current);
       setMessage("");
       emptyPollsRef.current = 0;
     } catch (error) {

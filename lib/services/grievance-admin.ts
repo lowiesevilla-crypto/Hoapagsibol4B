@@ -369,6 +369,18 @@ export async function updateGrievanceCaseStatus(user: EffectiveUser, input: {
   if ((input.status === "CLOSED_NO_ACTION" || input.status === "CLOSED_UNSUBSTANTIATED") && note.length < 10) {
     throw new Error("Record a closure reason before closing the grievance.");
   }
+  if (input.status === "VERIFIED") {
+    const verificationRows = await platformPrisma.$queryRaw<Array<{ status: string }>>`
+      SELECT status
+      FROM ComplaintVerification
+      WHERE tenantId = ${user.tenantId}
+        AND complaintId = ${input.complaintId}
+      LIMIT 1
+    `;
+    if (verificationRows[0]?.status !== "PASSED") {
+      throw new Error("Independent verification must be Passed before this grievance can be marked Verified.");
+    }
+  }
   if (input.status === "READY_FOR_FORMAL_PROCESS") {
     await assertComplaintEnforcementAllowed(user.tenantId, input.complaintId);
   }

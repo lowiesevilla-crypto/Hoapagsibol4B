@@ -38,7 +38,10 @@ test("verification gate is visible and enforced by the server before formal proc
   assert.match(panel, /Independent verification/);
   assert.match(panel, /Formal enforcement gate is blocked/);
   assert.match(panel, /Ready for Formal Process/);
-  assert.match(adminService, /assertComplaintEnforcementAllowed\(user\.tenantId, input\.complaintId\)/);
+  assert.match(adminService, /ComplaintVerification[\s\S]*FOR UPDATE/);
+  assert.match(adminService, /GrievanceCase[\s\S]*FOR UPDATE/);
+  assert.match(adminService, /input\.status === "READY_FOR_FORMAL_PROCESS"/);
+  assert.match(adminService, /verification\?\.status !== "PASSED"/);
   assert.match(foundationService, /blocksEnforcement/);
   assert.match(foundationService, /verification\.status !== \"PASSED\"/);
   assert.doesNotMatch(foundationService, /ComplaintConfidentialIdentity|confidentialIdentity/);

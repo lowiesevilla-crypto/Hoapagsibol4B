@@ -21,12 +21,13 @@ export default async function PlatformDashboardPage() {
   const riskStatuses = [TenantSubscriptionStatus.PAST_DUE, TenantSubscriptionStatus.GRACE, TenantSubscriptionStatus.RESTRICTED, TenantSubscriptionStatus.SUSPENDED];
   const openInvoiceStatuses = [PlatformInvoiceStatus.OPEN, PlatformInvoiceStatus.PARTIALLY_PAID, PlatformInvoiceStatus.OVERDUE];
 
-  const [totalTenants, activeSubscriptions, trials, riskSubscriptions, suspendedTenants, receivables, recentTenants, riskTenants] = await Promise.all([
+  const [totalTenants, activeSubscriptions, trials, riskSubscriptions, suspendedTenants, attentionTenants, receivables, recentTenants, riskTenants] = await Promise.all([
     prisma.tenant.count(),
     prisma.tenantSubscription.count({ where: { status: TenantSubscriptionStatus.ACTIVE } }),
     prisma.tenantSubscription.count({ where: { status: TenantSubscriptionStatus.TRIAL } }),
     prisma.tenantSubscription.count({ where: { status: { in: riskStatuses } } }),
     prisma.tenant.count({ where: { status: TenantStatus.SUSPENDED } }),
+    prisma.tenant.count({ where: { OR: [{ status: TenantStatus.SUSPENDED }, { subscriptionStatus: { in: riskStatuses } }] } }),
     prisma.platformInvoice.aggregate({ where: { status: { in: openInvoiceStatuses } }, _sum: { outstandingBalance: true } }),
     prisma.tenant.findMany({
       take: 5,
@@ -42,7 +43,6 @@ export default async function PlatformDashboardPage() {
   ]);
 
   const outstandingAr = Number(receivables._sum.outstandingBalance || 0);
-  const attentionCount = riskSubscriptions + suspendedTenants;
 
   return (
     <div className="space-y-5">
@@ -62,7 +62,7 @@ export default async function PlatformDashboardPage() {
       <section aria-label="Platform executive snapshot" className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <MetricCard label="Total tenants" value={totalTenants} note={`${activeSubscriptions} active subscriptions`} icon={Building2} tone="blue" href="/platform/tenants" />
         <MetricCard label="Trials" value={trials} note="Current commercial pipeline" icon={Clock3} tone="violet" href="/platform/subscriptions" />
-        <MetricCard label="Needs attention" value={attentionCount} note={`${riskSubscriptions} subscription risk · ${suspendedTenants} suspended tenants`} icon={ShieldAlert} tone={attentionCount ? "amber" : "green"} href="/platform/tenants" />
+        <MetricCard label="Needs attention" value={attentionTenants} note={`${riskSubscriptions} subscription risk · ${suspendedTenants} suspended tenants`} icon={ShieldAlert} tone={attentionTenants ? "amber" : "green"} href="/platform/tenants" />
         <MetricCard label="Outstanding AR" value={money(outstandingAr)} note="Open platform invoices" icon={CircleDollarSign} tone={outstandingAr > 0 ? "red" : "green"} href="/platform/invoices" />
       </section>
 

@@ -1,7 +1,7 @@
 import "server-only";
 
 import { randomUUID } from "node:crypto";
-import { ComplaintPrivacyMode, Role } from "@prisma/client";
+import { ComplaintPrivacyMode, Role, type Prisma } from "@prisma/client";
 import { platformPrisma } from "@/lib/db";
 
 export const grievancePermissions = [
@@ -78,7 +78,7 @@ function normalizePermissions(value: unknown): GrievancePermission[] {
   return [...new Set(candidate.map(String).filter((item): item is GrievancePermission => allowed.has(item)))];
 }
 
-async function audit(input: { tenantId: string; actorId: string | null; action: string; entityType: string; entityId: string; metadata?: Record<string, unknown> }) {
+async function audit(input: { tenantId: string; actorId: string | null; action: string; entityType: string; entityId: string; metadata?: Prisma.InputJsonValue }) {
   await platformPrisma.auditLog.create({
     data: {
       tenantId: input.tenantId,

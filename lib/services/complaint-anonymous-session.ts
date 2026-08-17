@@ -2,7 +2,7 @@ import "server-only";
 
 import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { compare } from "bcryptjs";
-import { ComplaintPrivacyMode, ComplaintStatus, ComplaintVisibility } from "@prisma/client";
+import { ComplaintPrivacyMode, ComplaintStatus } from "@prisma/client";
 import { platformPrisma } from "@/lib/db";
 import { rateLimitAvailable, recordRateLimitFailure } from "@/lib/rate-limit";
 
@@ -58,10 +58,10 @@ type MessageRow = {
   body: string;
   createdAt: Date;
   senderType: "COMPLAINANT" | "STAFF" | "SYSTEM";
+  authorId: string | null;
 };
 
 type ExistingMessageRow = MessageRow & { clientMessageId: string | null };
-
 type CursorRow = { createdAt: Date };
 
 function normalizeTrackingCode(value: string) {
@@ -154,15 +154,6 @@ async function touchSession(session: SessionRow) {
 }
 
 function mapMessage(row: MessageRow): AnonymousConversationMessage {
-  if (row.senderType === "COMPLAINANT") {
-    return {
-      id: row.id,
-      body: row.body,
-      createdAt: row.createdAt.toISOString(),
-      sender: "ANONYMOUS_COMPLAINANT",
-      authorDisplayName: "Anonymous complainant",
-    };
-  }
   if (row.senderType === "SYSTEM") {
     return {
       id: row.id,
@@ -170,6 +161,15 @@ function mapMessage(row: MessageRow): AnonymousConversationMessage {
       createdAt: row.createdAt.toISOString(),
       sender: "SYSTEM",
       authorDisplayName: "HOAHub",
+    };
+  }
+  if (row.senderType === "COMPLAINANT" || row.authorId === null) {
+    return {
+      id: row.id,
+      body: row.body,
+      createdAt: row.createdAt.toISOString(),
+      sender: "ANONYMOUS_COMPLAINANT",
+      authorDisplayName: "Anonymous complainant",
     };
   }
   return {
@@ -196,7 +196,7 @@ async function safeAnonymousAudit(input: {
       action: input.action,
       entityType: input.entityType,
       entityId: input.entityId,
-      metadata: input.metadata,
+      metadata: input.metadata ? JSON.parse(JSON.stringify(input.metadata)) : undefined,
     },
   });
 }
@@ -241,6 +241,14 @@ export async function createAnonymousComplaintSession(trackingCode: string, pin:
       VALUES
         (${id}, ${credential.tenantId}, ${credential.complaintId}, ${tokenHash}, ${expiresAt}, NOW(3), NOW(3), NOW(3))
     `;
+    await tx.$executeRaw`
+      UPDATE ComplaintMessage
+      SET senderType = 'COMPLAINANT', channel = 'ANONYMOUS_TRACKER'
+      WHERE tenantId = ${credential.tenantId}
+        AND complaintId = ${credential.complaintId}
+        AND authorId IS NULL
+        AND senderType <> 'SYSTEM'
+    `;
     await tx.complaintTrackingCredential.update({
       where: { id: credential.id },
       data: { lastAccessAt: new Date() },
@@ -278,7 +286,7 @@ export async function getAnonymousComplaintConversation(rawToken: string, afterI
     if (!cursorCreatedAt) throw new Error("Message cursor is invalid.");
 
     messages = await platformPrisma.$queryRaw<MessageRow[]>`
-      SELECT id, body, createdAt, senderType
+      SELECT id, body, createdAt, senderType, authorId
       FROM ComplaintMessage
       WHERE tenantId = ${session.tenantId}
         AND complaintId = ${session.complaintId}
@@ -289,7 +297,7 @@ export async function getAnonymousComplaintConversation(rawToken: string, afterI
     `;
   } else {
     const recent = await platformPrisma.$queryRaw<MessageRow[]>`
-      SELECT id, body, createdAt, senderType
+      SELECT id, body, createdAt, senderType, authorId
       FROM ComplaintMessage
       WHERE tenantId = ${session.tenantId}
         AND complaintId = ${session.complaintId}
@@ -310,7 +318,7 @@ export async function getAnonymousComplaintConversation(rawToken: string, afterI
     submittedAt: session.submittedAt.toISOString(),
     updatedAt: session.updatedAt.toISOString(),
     messages: mapped,
-    nextCursor: mapped.at(-1)?.id ?? cursor || null,
+    nextCursor: (mapped.at(-1)?.id ?? cursor) || null,
   };
 }
 
@@ -328,7 +336,7 @@ export async function postAnonymousComplaintMessage(rawToken: string, input: { b
   await recordRateLimitFailure("complaint-anonymous-message", rateKey);
 
   const existing = await platformPrisma.$queryRaw<ExistingMessageRow[]>`
-    SELECT id, body, createdAt, senderType, clientMessageId
+    SELECT id, body, createdAt, senderType, authorId, clientMessageId
     FROM ComplaintMessage
     WHERE tenantId = ${session.tenantId}
       AND complaintId = ${session.complaintId}
@@ -341,18 +349,17 @@ export async function postAnonymousComplaintMessage(rawToken: string, input: { b
     return mapMessage(existing[0]);
   }
 
-  const id = randomUUID();
+  const messageId = randomUUID();
   const affected = await platformPrisma.$executeRaw`
     INSERT IGNORE INTO ComplaintMessage
       (id, tenantId, complaintId, authorId, authorDisplayName, visibility, body, senderType, channel, clientMessageId, anonymousSessionId, createdAt)
     VALUES
-      (${id}, ${session.tenantId}, ${session.complaintId}, NULL, 'Anonymous complainant', 'PUBLIC', ${body}, 'COMPLAINANT', 'ANONYMOUS_TRACKER', ${clientMessageId}, ${session.id}, NOW(3))
+      (${messageId}, ${session.tenantId}, ${session.complaintId}, NULL, 'Anonymous complainant', 'PUBLIC', ${body}, 'COMPLAINANT', 'ANONYMOUS_TRACKER', ${clientMessageId}, ${session.id}, NOW(3))
   `;
 
-  let messageId = id;
   if (Number(affected) !== 1) {
     const raced = await platformPrisma.$queryRaw<ExistingMessageRow[]>`
-      SELECT id, body, createdAt, senderType, clientMessageId
+      SELECT id, body, createdAt, senderType, authorId, clientMessageId
       FROM ComplaintMessage
       WHERE tenantId = ${session.tenantId}
         AND complaintId = ${session.complaintId}
@@ -392,7 +399,7 @@ export async function postAnonymousComplaintMessage(rawToken: string, input: { b
   });
 
   const saved = await platformPrisma.$queryRaw<MessageRow[]>`
-    SELECT id, body, createdAt, senderType
+    SELECT id, body, createdAt, senderType, authorId
     FROM ComplaintMessage
     WHERE tenantId = ${session.tenantId}
       AND complaintId = ${session.complaintId}

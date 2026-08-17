@@ -10,7 +10,6 @@ import {
 import {
   allowedGrievanceTransitions,
   type ComplaintGrievanceFoundation,
-  type GrievanceCaseStatus,
 } from "@/lib/services/grievance-admin";
 import { MANILA_TIME_ZONE } from "@/lib/utils";
 
@@ -143,7 +142,7 @@ export function GrievanceFoundationPanel({
 
       <form action={updateComplaintVerificationAction} className="mt-5 grid gap-3 md:grid-cols-2">
         <input type="hidden" name="complaintId" value={complaintId} />
-        <label><span className="label">Verification status</span><select className="field" name="verificationStatus" defaultValue={verification?.status === "IN_PROGRESS" ? "IN_PROGRESS" : "IN_PROGRESS"} required>
+        <label><span className="label">Verification status</span><select className="field" name="verificationStatus" defaultValue="IN_PROGRESS" required>
           <option value="IN_PROGRESS">In progress</option>
           <option value="PASSED">Passed / substantiated</option>
           <option value="FAILED">Failed / not substantiated</option>

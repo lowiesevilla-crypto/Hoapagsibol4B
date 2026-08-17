@@ -9,6 +9,7 @@ import { StatusBadge } from "@/components/status-badge";
 import { addComplaintMessageAction, assignComplaintAction, requestIdentityAccessAction, updateComplaintStatusAction } from "@/lib/actions/complaints";
 import { prisma } from "@/lib/db";
 import { getComplaintGrievanceFoundation } from "@/lib/services/grievance-admin";
+import { hasExplicitCommitteeIdentityRevealPermission } from "@/lib/services/grievance-confidential-identity";
 import { requireGrievancePermission, type GrievancePermission } from "@/lib/services/grievance-foundation";
 import { allowedComplaintTransitions, canRevealConfidentialIdentity, complaintAdminRoles, complaintPrivacyLabel, complaintStatusLabel, getAdminComplaintDetail, requireComplaintAdmin } from "@/lib/services/complaints";
 import { shortDate } from "@/lib/utils";
@@ -29,16 +30,18 @@ export default async function AdminComplaintDetailPage({ params, searchParams }:
   const complaint = await getAdminComplaintDetail(user, id);
   if (!complaint) notFound();
 
-  const [canViewGrievance, canTriageGrievance, canVerifyGrievance] = await Promise.all([
+  const [canViewGrievance, canTriageGrievance, canVerifyGrievance, canRevealByCommittee] = await Promise.all([
     hasGrievancePermission(user, "VIEW_GRIEVANCE"),
     hasGrievancePermission(user, "TRIAGE_GRIEVANCE"),
     hasGrievancePermission(user, "VERIFY_GRIEVANCE"),
+    hasExplicitCommitteeIdentityRevealPermission(user),
   ]);
 
-  const [assignees, canRevealIdentity] = await Promise.all([
+  const [assignees, canRevealByPrivacyRole] = await Promise.all([
     prisma.user.findMany({ where: { tenantId: user.tenantId, role: { in: Array.from(complaintAdminRoles) }, active: true }, select: { id: true, name: true, role: true }, orderBy: { name: "asc" } }),
     canRevealConfidentialIdentity(user),
   ]);
+  const canRevealIdentity = canRevealByPrivacyRole || canRevealByCommittee;
 
   const grievanceFoundation = canViewGrievance ? await getComplaintGrievanceFoundation(user, complaint.id) : null;
   const [grievanceHomeowners, grievanceVehicles] = canViewGrievance && canTriageGrievance

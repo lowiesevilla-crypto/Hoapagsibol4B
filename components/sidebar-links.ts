@@ -124,16 +124,22 @@ export const systemAdminShellLinks: LinkItem[] = [
   { href: "/admin/settings", label: "Settings", icon: "settings", section: "Account" },
 ];
 
+/**
+ * Platform control-plane navigation is deliberately separate from tenant operations.
+ * A platform actor must always be able to tell they are operating HOAHub SaaS rather
+ * than an individual association.
+ */
 export const platformLinks: LinkItem[] = [
+  { href: "/platform/dashboard", label: "Dashboard", icon: "dashboard", section: "Platform Home" },
+  { href: "/platform/tenants", label: "Tenants", icon: "platform", section: "Customers" },
+  { href: "/platform/subscriptions", label: "Subscriptions", icon: "subscriptions", section: "Commercial" },
+  { href: "/platform/plans", label: "Plans & Features", icon: "plans", section: "Commercial" },
+  { href: "/platform/invoices", label: "Invoices", icon: "billing", section: "Commercial" },
+  { href: "/platform/agreements", label: "Agreements", icon: "documents", section: "Commercial" },
+  { href: "/platform/licenses", label: "Licenses", icon: "licenses", section: "Operations" },
+  { href: "/platform/document-management", label: "Document Usage", icon: "documents", section: "Operations" },
+  { href: "/platform/audit", label: "Audit & Security", icon: "audit", section: "Governance" },
   { href: "/platform/profile", label: "My Profile", icon: "profile", section: "Account" },
-  { href: "/platform/tenants", label: "Tenants", icon: "platform", section: "Platform" },
-  { href: "/platform/plans", label: "Plans", icon: "plans", section: "Platform" },
-  { href: "/platform/document-management", label: "Document Usage", icon: "documents", section: "Platform" },
-  { href: "/platform/subscriptions", label: "Subscriptions", icon: "subscriptions", section: "Platform" },
-  { href: "/platform/agreements", label: "Agreements", icon: "documents", section: "Platform" },
-  { href: "/platform/invoices", label: "Invoices", icon: "billing", section: "Platform" },
-  { href: "/platform/licenses", label: "Licenses", icon: "licenses", section: "Platform" },
-  { href: "/platform/audit", label: "Platform audit", icon: "audit", section: "Platform" },
 ];
 
 export const portalLinks: LinkItem[] = homeownerSidebarLinks;

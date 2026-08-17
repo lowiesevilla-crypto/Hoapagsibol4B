@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ComplaintVisibility, HomeownerStatus, VehicleStatus } from "@prisma/client";
+import { ComplaintVisibility, HomeownerStatus, Role, VehicleStatus } from "@prisma/client";
 import { ConfidentialIdentityReveal } from "@/components/confidential-identity-reveal";
 import { GrievanceFoundationPanel } from "@/components/grievance-foundation-panel";
 import { PageHeader } from "@/components/page-header";
@@ -18,38 +18,31 @@ export default async function AdminComplaintDetailPage({ params, searchParams }:
   const complaint = await getAdminComplaintDetail(user, id);
   if (!complaint) notFound();
 
-  const [assignees, canRevealIdentity, grievanceFoundation, homeownerRecords, vehicleRecords] = await Promise.all([
+  const effectiveRoles = new Set(user.roles);
+  const hasPlatformRole = effectiveRoles.has(Role.SUPER_ADMIN) || effectiveRoles.has(Role.PLATFORM_ADMIN);
+  const canManageGrievance = !hasPlatformRole && [Role.ADMIN, Role.HOA_ADMIN, Role.SYSTEM_ADMIN].some((role) => effectiveRoles.has(role));
+
+  const [assignees, canRevealIdentity] = await Promise.all([
     prisma.user.findMany({ where: { tenantId: user.tenantId, role: { in: Array.from(complaintAdminRoles) }, active: true }, select: { id: true, name: true, role: true }, orderBy: { name: "asc" } }),
     canRevealConfidentialIdentity(user),
-    getComplaintGrievanceFoundation(user, complaint.id),
-    prisma.homeownerProfile.findMany({
-      where: { tenantId: user.tenantId, status: HomeownerStatus.ACTIVE },
-      select: { id: true, phase: true, block: true, lot: true, user: { select: { name: true } } },
-      orderBy: [{ block: "asc" }, { lot: "asc" }],
-      take: 500,
-    }),
-    prisma.vehicle.findMany({
-      where: { tenantId: user.tenantId, status: VehicleStatus.ACTIVE },
-      select: { id: true, plateNumber: true, homeowner: { select: { block: true, lot: true, user: { select: { name: true } } } } },
-      orderBy: { plateNumber: "asc" },
-      take: 500,
-    }),
   ]);
-
-  const homeowners = homeownerRecords.map((item) => ({
-    id: item.id,
-    name: item.user.name,
-    phase: item.phase,
-    block: item.block,
-    lot: item.lot,
-  }));
-  const vehicles = vehicleRecords.map((item) => ({
-    id: item.id,
-    plateNumber: item.plateNumber,
-    homeownerName: item.homeowner.user.name,
-    block: item.homeowner.block,
-    lot: item.homeowner.lot,
-  }));
+  const grievanceData = canManageGrievance
+    ? await Promise.all([
+        getComplaintGrievanceFoundation(user, complaint.id),
+        prisma.homeownerProfile.findMany({
+          where: { tenantId: user.tenantId, status: HomeownerStatus.ACTIVE },
+          select: { id: true, phase: true, block: true, lot: true, user: { select: { name: true } } },
+          orderBy: [{ block: "asc" }, { lot: "asc" }],
+          take: 500,
+        }),
+        prisma.vehicle.findMany({
+          where: { tenantId: user.tenantId, status: VehicleStatus.ACTIVE },
+          select: { id: true, plateNumber: true, homeowner: { select: { block: true, lot: true, user: { select: { name: true } } } } },
+          orderBy: { plateNumber: "asc" },
+          take: 500,
+        }),
+      ])
+    : null;
 
   const identityRequested = complaint.identityAccess.some((item) => item.status === "REQUESTED" || item.status === "APPROVED");
   const nextStatuses = allowedComplaintTransitions(complaint.status);
@@ -65,7 +58,12 @@ export default async function AdminComplaintDetailPage({ params, searchParams }:
           <div className="mt-4 rounded-xl bg-slate-50 p-3 text-sm"><p className="font-black">Requested action</p><p className="mt-1 whitespace-pre-wrap text-slate-700">{complaint.requestedAction || "Not provided"}</p></div>
         </article>
 
-        <GrievanceFoundationPanel complaintId={complaint.id} foundation={grievanceFoundation} homeowners={homeowners} vehicles={vehicles} />
+        {grievanceData && <GrievanceFoundationPanel
+          complaintId={complaint.id}
+          foundation={grievanceData[0]}
+          homeowners={grievanceData[1].map((item) => ({ id: item.id, name: item.user.name, phase: item.phase, block: item.block, lot: item.lot }))}
+          vehicles={grievanceData[2].map((item) => ({ id: item.id, plateNumber: item.plateNumber, homeownerName: item.homeowner.user.name, block: item.homeowner.block, lot: item.homeowner.lot }))}
+        />}
 
         <section className="card">
           <h2 className="text-lg font-black">Messages and Notes</h2>

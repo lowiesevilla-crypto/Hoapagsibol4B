@@ -150,6 +150,9 @@ export async function addComplaintSubject(user: EffectiveUser, input: {
       select: { id: true, homeownerId: true, plateNumber: true },
     });
     if (!vehicle) throw new Error("The selected vehicle subject is not available in this HOA.");
+    if (homeowner && homeowner.id !== vehicle.homeownerId) {
+      throw new Error("The selected vehicle does not belong to the selected homeowner/property.");
+    }
     if (!homeowner) {
       homeowner = await platformPrisma.homeownerProfile.findFirst({
         where: { tenantId: user.tenantId, id: vehicle.homeownerId },
@@ -225,7 +228,7 @@ export async function evaluateComplaintVerificationRequirement(tenantId: string,
       AND (privacyMode IS NULL OR privacyMode = ${complaint.privacyMode})
   `;
   const required = policies.some((policy) => Boolean(policy.verificationRequired));
-  const blocksEnforcement = required && policies.some((policy) => Boolean(policy.blocksEnforcement));
+  const blocksEnforcement = policies.some((policy) => Boolean(policy.verificationRequired) && Boolean(policy.blocksEnforcement));
   const id = randomUUID();
   await platformPrisma.$executeRaw`
     INSERT INTO ComplaintVerification
@@ -265,18 +268,37 @@ export async function recordComplaintVerification(user: EffectiveUser, input: {
   if ((input.status === "PASSED" || input.status === "FAILED" || input.status === "INSUFFICIENT") && findings.length < 10) throw new Error("Record verification findings before completing verification.");
   const verification = await evaluateComplaintVerificationRequirement(user.tenantId, input.complaintId);
   if (!verification) throw new Error("Verification record could not be prepared.");
-  await platformPrisma.$executeRaw`
-    UPDATE ComplaintVerification
-    SET status = ${input.status},
-        verificationType = ${input.verificationType ?? null},
-        findings = ${findings || null},
-        verifiedById = ${user.id},
-        verifiedAt = ${input.status === "IN_PROGRESS" ? null : new Date()},
-        updatedAt = NOW(3)
-    WHERE tenantId = ${user.tenantId} AND complaintId = ${input.complaintId}
-  `;
-  await activity({ tenantId: user.tenantId, complaintId: input.complaintId, actorId: user.id, eventType: "VERIFICATION_COMPLETED", message: `Complaint verification updated to ${input.status}.`, metadata: { status: input.status, verificationType: input.verificationType ?? null } });
-  await audit({ tenantId: user.tenantId, actorId: user.id, action: "UPDATE_COMPLAINT_VERIFICATION", entityType: "Complaint", entityId: input.complaintId, metadata: { status: input.status, verificationType: input.verificationType ?? null } });
+  const eventType = input.status === "IN_PROGRESS" ? "VERIFICATION_STARTED" : "VERIFICATION_COMPLETED";
+  const verifiedAt = input.status === "IN_PROGRESS" ? null : new Date();
+  await platformPrisma.$transaction(async (tx) => {
+    await tx.$executeRaw`
+      UPDATE ComplaintVerification
+      SET status = ${input.status},
+          verificationType = ${input.verificationType ?? null},
+          findings = ${findings || null},
+          verifiedById = ${user.id},
+          verifiedAt = ${verifiedAt},
+          updatedAt = NOW(3)
+      WHERE tenantId = ${user.tenantId} AND complaintId = ${input.complaintId}
+    `;
+    await tx.$executeRaw`
+      INSERT INTO ComplaintGrievanceActivity
+        (id, tenantId, complaintId, grievanceCaseId, actorId, eventType, message, metadata, createdAt)
+      VALUES
+        (${randomUUID()}, ${user.tenantId}, ${input.complaintId}, ${null}, ${user.id}, ${eventType}, ${`Complaint verification updated to ${input.status}.`}, ${JSON.stringify({ status: input.status, verificationType: input.verificationType ?? null })}, NOW(3))
+    `;
+    await tx.auditLog.create({
+      data: {
+        tenantId: user.tenantId,
+        actorId: user.id,
+        module: "COMPLAINTS",
+        action: "UPDATE_COMPLAINT_VERIFICATION",
+        entityType: "Complaint",
+        entityId: input.complaintId,
+        metadata: { status: input.status, verificationType: input.verificationType ?? null },
+      },
+    });
+  });
 }
 
 export async function assertComplaintEnforcementAllowed(tenantId: string, complaintId: string) {

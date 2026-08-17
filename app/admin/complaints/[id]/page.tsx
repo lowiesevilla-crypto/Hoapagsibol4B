@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ComplaintVisibility, HomeownerStatus, Role, VehicleStatus } from "@prisma/client";
+import { ComplaintVisibility, HomeownerStatus, VehicleStatus } from "@prisma/client";
 import { ConfidentialIdentityReveal } from "@/components/confidential-identity-reveal";
 import { GrievanceFoundationPanel } from "@/components/grievance-foundation-panel";
 import { GrievanceOperationalSlaControl } from "@/components/grievance-operational-sla-control";
@@ -9,8 +9,18 @@ import { StatusBadge } from "@/components/status-badge";
 import { addComplaintMessageAction, assignComplaintAction, requestIdentityAccessAction, updateComplaintStatusAction } from "@/lib/actions/complaints";
 import { prisma } from "@/lib/db";
 import { getComplaintGrievanceFoundation } from "@/lib/services/grievance-admin";
+import { requireGrievancePermission, type GrievancePermission } from "@/lib/services/grievance-foundation";
 import { allowedComplaintTransitions, canRevealConfidentialIdentity, complaintAdminRoles, complaintPrivacyLabel, complaintStatusLabel, getAdminComplaintDetail, requireComplaintAdmin } from "@/lib/services/complaints";
 import { shortDate } from "@/lib/utils";
+
+async function hasGrievancePermission(user: Parameters<typeof requireGrievancePermission>[0], permission: GrievancePermission) {
+  try {
+    await requireGrievancePermission(user, permission);
+    return true;
+  } catch {
+    return false;
+  }
+}
 
 export default async function AdminComplaintDetailPage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ success?: string; error?: string }> }) {
   const user = await requireComplaintAdmin();
@@ -19,17 +29,20 @@ export default async function AdminComplaintDetailPage({ params, searchParams }:
   const complaint = await getAdminComplaintDetail(user, id);
   if (!complaint) notFound();
 
-  const effectiveRoles = new Set(user.roles);
-  const hasPlatformRole = effectiveRoles.has(Role.SUPER_ADMIN) || effectiveRoles.has(Role.PLATFORM_ADMIN);
-  const canManageGrievance = !hasPlatformRole && [Role.ADMIN, Role.HOA_ADMIN, Role.SYSTEM_ADMIN].some((role) => effectiveRoles.has(role));
+  const [canViewGrievance, canTriageGrievance, canVerifyGrievance] = await Promise.all([
+    hasGrievancePermission(user, "VIEW_GRIEVANCE"),
+    hasGrievancePermission(user, "TRIAGE_GRIEVANCE"),
+    hasGrievancePermission(user, "VERIFY_GRIEVANCE"),
+  ]);
 
   const [assignees, canRevealIdentity] = await Promise.all([
     prisma.user.findMany({ where: { tenantId: user.tenantId, role: { in: Array.from(complaintAdminRoles) }, active: true }, select: { id: true, name: true, role: true }, orderBy: { name: "asc" } }),
     canRevealConfidentialIdentity(user),
   ]);
-  const grievanceData = canManageGrievance
+
+  const grievanceFoundation = canViewGrievance ? await getComplaintGrievanceFoundation(user, complaint.id) : null;
+  const [grievanceHomeowners, grievanceVehicles] = canViewGrievance && canTriageGrievance
     ? await Promise.all([
-        getComplaintGrievanceFoundation(user, complaint.id),
         prisma.homeownerProfile.findMany({
           where: { tenantId: user.tenantId, status: HomeownerStatus.ACTIVE },
           select: { id: true, phase: true, block: true, lot: true, user: { select: { name: true } } },
@@ -43,7 +56,7 @@ export default async function AdminComplaintDetailPage({ params, searchParams }:
           take: 500,
         }),
       ])
-    : null;
+    : [[], []];
 
   const identityRequested = complaint.identityAccess.some((item) => item.status === "REQUESTED" || item.status === "APPROVED");
   const nextStatuses = allowedComplaintTransitions(complaint.status);
@@ -59,14 +72,16 @@ export default async function AdminComplaintDetailPage({ params, searchParams }:
           <div className="mt-4 rounded-xl bg-slate-50 p-3 text-sm"><p className="font-black">Requested action</p><p className="mt-1 whitespace-pre-wrap text-slate-700">{complaint.requestedAction || "Not provided"}</p></div>
         </article>
 
-        {grievanceData && <>
+        {grievanceFoundation && <>
           <GrievanceFoundationPanel
             complaintId={complaint.id}
-            foundation={grievanceData[0]}
-            homeowners={grievanceData[1].map((item) => ({ id: item.id, name: item.user.name, phase: item.phase, block: item.block, lot: item.lot }))}
-            vehicles={grievanceData[2].map((item) => ({ id: item.id, plateNumber: item.plateNumber, homeownerName: item.homeowner.user.name, block: item.homeowner.block, lot: item.homeowner.lot }))}
+            foundation={grievanceFoundation}
+            homeowners={grievanceHomeowners.map((item) => ({ id: item.id, name: item.user.name, phase: item.phase, block: item.block, lot: item.lot }))}
+            vehicles={grievanceVehicles.map((item) => ({ id: item.id, plateNumber: item.plateNumber, homeownerName: item.homeowner.user.name, block: item.homeowner.block, lot: item.homeowner.lot }))}
+            canTriage={canTriageGrievance}
+            canVerify={canVerifyGrievance}
           />
-          <GrievanceOperationalSlaControl complaintId={complaint.id} grievanceCase={grievanceData[0].grievanceCase} />
+          {canTriageGrievance && <GrievanceOperationalSlaControl complaintId={complaint.id} grievanceCase={grievanceFoundation.grievanceCase} />}
         </>}
 
         <section className="card">

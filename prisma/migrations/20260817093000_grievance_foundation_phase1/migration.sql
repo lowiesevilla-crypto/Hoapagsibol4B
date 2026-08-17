@@ -224,6 +224,7 @@ ALTER TABLE `ComplaintMessage`
 ALTER TABLE `ComplaintSubject`
   ADD CONSTRAINT `ComplaintSubject_tenantId_complaintId_fkey` FOREIGN KEY (`tenantId`, `complaintId`) REFERENCES `Complaint`(`tenantId`, `id`) ON DELETE RESTRICT ON UPDATE CASCADE,
   ADD CONSTRAINT `ComplaintSubject_tenantId_homeownerId_fkey` FOREIGN KEY (`tenantId`, `homeownerId`) REFERENCES `HomeownerProfile`(`tenantId`, `id`) ON DELETE RESTRICT ON UPDATE CASCADE,
+  ADD CONSTRAINT `ComplaintSubject_vehicleId_fkey` FOREIGN KEY (`vehicleId`) REFERENCES `Vehicle`(`id`) ON DELETE RESTRICT ON UPDATE CASCADE,
   ADD CONSTRAINT `ComplaintSubject_createdById_fkey` FOREIGN KEY (`createdById`) REFERENCES `User`(`id`) ON DELETE SET NULL ON UPDATE CASCADE;
 
 ALTER TABLE `ComplaintVerificationPolicy`

@@ -8,6 +8,9 @@ import { prisma } from "@/lib/db";
 import { getGrievanceSetting, listComplaintVerificationPolicies, listGrievanceCommitteeMemberships } from "@/lib/services/grievance-admin";
 import { getComplaintCategories, getComplaintSettings, normalizeComplaintText, requireComplaintAdmin, supportedComplaintUploadTypes } from "@/lib/services/complaints";
 
+const grievanceRouteRoles = [Role.ADMIN, Role.HOA_ADMIN, Role.SYSTEM_ADMIN, Role.STAFF] as const;
+const grievancePlatformRoles = [Role.SUPER_ADMIN, Role.PLATFORM_ADMIN] as const;
+
 export default async function ComplaintSettingsPage({ searchParams }: { searchParams: Promise<{ success?: string; error?: string }> }) {
   const user = await requireComplaintAdmin();
   const query = await searchParams;
@@ -25,8 +28,29 @@ export default async function ComplaintSettingsPage({ searchParams }: { searchPa
         listComplaintVerificationPolicies(user),
         listGrievanceCommitteeMemberships(user),
         prisma.user.findMany({
-          where: { tenantId: user.tenantId, active: true, role: { notIn: [Role.SUPER_ADMIN, Role.PLATFORM_ADMIN] } },
-          select: { id: true, name: true, role: true },
+          where: {
+            tenantId: user.tenantId,
+            active: true,
+            OR: [
+              { role: { in: [...grievanceRouteRoles] } },
+              { userRoleAssignments: { some: { active: true, role: { in: [...grievanceRouteRoles] } } } },
+            ],
+            NOT: {
+              OR: [
+                { role: { in: [...grievancePlatformRoles] } },
+                { userRoleAssignments: { some: { active: true, role: { in: [...grievancePlatformRoles] } } } },
+              ],
+            },
+          },
+          select: {
+            id: true,
+            name: true,
+            role: true,
+            userRoleAssignments: {
+              where: { active: true, role: { in: [...grievanceRouteRoles] } },
+              select: { role: true },
+            },
+          },
           orderBy: { name: "asc" },
           take: 500,
         }),
@@ -105,7 +129,13 @@ export default async function ComplaintSettingsPage({ searchParams }: { searchPa
       policies={grievanceData[1]}
       memberships={grievanceData[2]}
       categories={categories.map((category) => ({ id: category.id, name: category.name }))}
-      users={grievanceData[3].map((tenantUser) => ({ id: tenantUser.id, name: tenantUser.name, role: tenantUser.role }))}
+      users={grievanceData[3].map((tenantUser) => ({
+        id: tenantUser.id,
+        name: tenantUser.name,
+        role: grievanceRouteRoles.includes(tenantUser.role as typeof grievanceRouteRoles[number])
+          ? tenantUser.role
+          : tenantUser.userRoleAssignments[0]?.role ?? tenantUser.role,
+      }))}
     />}
   </>;
 }

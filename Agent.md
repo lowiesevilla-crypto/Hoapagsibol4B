@@ -155,6 +155,30 @@ Current financial state is derived from authoritative posted ledger/SOA evidence
 - Linked posted `Payment`/`Collection` evidence is stronger than stale request metadata and should render Paid/confirmed status.
 - Browser redirects/query parameters cannot create receipts or financial postings.
 
+# Active Initiative: Community Intelligence UI System — Phase 3
+
+Approved design baseline: `docs/ui/HOAHUB_COMMUNITY_INTELLIGENCE_UI_SYSTEM_V1.md`.
+
+Current implementation branch: `feature/ui-system-foundation`.
+
+### UI Foundation Scope
+
+- Existing `pine`, `leaf`, `ink`, `sand`, shared `.card`, `.field`, `.btn-*`, `.table-wrap`, and `.data-table` contracts remain supported; do not introduce a parallel UI framework.
+- `tailwind.config.ts` adds semantic surface/status/platform tokens plus workspace/floating elevation aliases while preserving the existing brand palette.
+- Shared primitives begin under `components/ui/`: `page-header.tsx`, `metric-card.tsx`, `status-badge.tsx`, and `workspace-card.tsx`.
+- Platform control-plane navigation is deliberately separated from tenant administration through `components/platform-topbar.tsx`, reorganized `platformLinks`, HOAHub platform branding, and `/platform/dashboard`.
+- `app/platform/layout.tsx` must never use a tenant/customer logo as the HOAHub platform identity; the defensive platform logo path is `/Hoahub-logo.png`.
+- The new platform dashboard uses existing authorized platform data only (tenant/subscription counts and platform invoice receivables). It introduces no new database schema or tenant-owned browser authority.
+- Homeowner/PWA navigation and behavior are not changed in this foundation wave; existing Home/Payments/Requests/Community/More navigation, safe-area, entitlement, and AI governance rules remain authoritative.
+- Regression contract: `tests/unit/ui-system-foundation.test.ts` protects semantic tokens, platform branding separation, platform taxonomy, and shared dashboard primitives.
+
+### UI Implementation Release Rules
+
+- This feature branch is not a production target and must not be merged/deployed solely on visual approval.
+- UI work must preserve RBAC, permission checks, module entitlements, tenant isolation, payroll confidentiality, complaint privacy, AI governance, payment authority, document issuance rules, and official print/template behavior.
+- Every subsequent workspace wave must update `Agent.md`, add/adjust targeted tests, and pass the normal repository validation gates before merge.
+- Production deployment remains explicitly unapproved until the expected merged `main` revision passes CI and Hostinger release-marker/health verification.
+
 # Active Initiative: Complaint-to-Grievance Foundation — BRD v1.0
 
 Approved baseline: `docs/complaints/HOAHUB_GRIEVANCE_FOUNDATION_BRD_V1_0.md`.

@@ -164,23 +164,23 @@ Current status/evidence:
 - `docs/complaints/GRIEVANCE_PHASE1_IMPLEMENTATION_STATUS.md`
 - `docs/complaints/GRIEVANCE_PHASE1_TRACEABILITY.md`
 - `docs/complaints/HOAHUB_GRIEVANCE_FOUNDATION_BRD_V1_0_RELEASE_RECORD.md`
-- PR #122 — `feat: grievance foundation phase 1`
+- PR #122 — `feat: grievance foundation phase 1` — MERGED
 
 The architecture rule is mandatory: **Complaint remains the intake/operational case layer; formal grievance/compliance remains a separate domain.** Do not expand `ComplaintStatus` into a monolithic notice/mediation/hearing/board/appeal state machine.
 
 ## Grievance Initiative Status
 
-| Stage | Status | Release rule |
+| Stage | Status | Release evidence |
 | --- | --- | --- |
 | Business recommendation | COMPLETE | Approved 2026-08-17 |
 | BRD v1.0 | COMPLETE | Approved requirements baseline; business scope unchanged |
 | Technical design | COMPLETE FOR PHASE 1 | Additive separate grievance domain; REST anonymous messaging; server-authoritative tenant/permission gates |
-| Schema/API design | COMPLETE / RELEASE VALIDATED | Prisma desired state, additive migration chain, anonymous APIs, SUB/VER/GRV/COM/DDL services and UI are implemented |
-| Implementation | COMPLETE FOR PHASE 1 | Review remediations implemented and current review threads resolved |
-| Automated validation | RELEASE CANDIDATE VALIDATED | Implementation head `858badf7ce2efc7db35d7dd570aebef8c82f5531` passed HOAHub MySQL CI #713 (`32034186355`) end-to-end; documentation-synchronized head must also pass before merge |
-| PR/merge | READY AFTER FINAL DOC-HEAD CI / NOT MERGED | PR #122 remains the active release PR until latest-head CI/mergeability are clean |
-| Hostinger deployment | NOT DEPLOYED | Only merged `main` is a production target |
-| Production UAT | NOT STARTED | Required after release-marker and health verification |
+| Schema/API design | COMPLETE | Prisma desired state, additive migration chain, anonymous APIs, SUB/VER/GRV/COM/DDL services and UI implemented |
+| Implementation | COMPLETE FOR PHASE 1 | Review remediations implemented; all PR #122 inline review threads resolved before merge |
+| Automated validation | COMPLETE | Exact merged-main SHA `e34bf48a8519cf6a8389a78f998bbfafd46653c0` passed HOAHub MySQL CI #718 (`32037027056`) end-to-end |
+| PR/merge | COMPLETE | PR #122 merged to `main` as `e34bf48a8519cf6a8389a78f998bbfafd46653c0` |
+| Hostinger deployment | DEPLOYED / VERIFIED | Production `/release.txt` matched `e34bf48a8519`; public `/api/health` passed |
+| Production UAT | AUTOMATED RELEASE UAT PASS | Exact main build passed unit/integration/critical/browser gates plus live release-marker and health verification; a separate authenticated live-tenant business sign-off session was not executed by the deployment workflow |
 
 ## Phase 1 Requirement Groups
 
@@ -206,6 +206,15 @@ Primary implementation includes:
 - Mobile/PWA tracker: `components/complaint-track-form.tsx`, `app/complaints/track/page.tsx`.
 - Admin surfaces: grievance foundation/settings/SLA controls; complaint detail/queue/settings/grievance report pages.
 - Regression suites: grievance Phase 1, admin, feature-switch, reporting, migration-safety, and review-remediation unit tests plus normal integration/critical/browser gates.
+
+## Grievance Production Deployment Evidence
+
+- Feature PR #122 merged to main SHA `e34bf48a8519cf6a8389a78f998bbfafd46653c0`.
+- Main workflow #718 (`32037027056`) passed repository verification on that exact merge.
+- Hostinger initially served the prior marker `f8becc4228d8`, then the connected-GitHub rollout published the expected `e34bf48a8519` marker.
+- The managed deployment job passed public `/api/health` after the marker matched.
+- This proves both repository validation and actual production publication; CI green alone is not treated as deployment evidence.
+- The production-record docs-only change records this completed release and does not alter grievance runtime behavior.
 
 ## Anonymous Messaging Release Gates
 
@@ -273,7 +282,7 @@ Unless the BRD is explicitly revised, Phase 2/3 retains:
 
 ## Grievance Validation Gate
 
-Before merge/production, the exact latest PR head must pass:
+Future grievance changes must preserve the same release gate on the exact candidate head:
 
 - `pnpm install --frozen-lockfile`
 - `pnpm lint`
@@ -319,7 +328,7 @@ A release is deployed only when all of these are true:
 
 The `deploy-production` job in `.github/workflows/ci-deploy.yml` performs the release-marker wait and public health check after a successful `main` verification run.
 
-For the Complaint-to-Grievance initiative, production-complete additionally requires production smoke/UAT for anonymous messaging, tenant isolation, subject integrity, verification enforcement, committee/identity permissions, process-deadline/SLA separation, queue/report privacy, mobile/PWA behavior, and existing complaint privacy regression.
+For the Complaint-to-Grievance initiative, the automated production release gate was completed for `e34bf48a8519cf6a8389a78f998bbfafd46653c0`: exact-main tests passed, Hostinger served `e34bf48a8519`, and public health passed. A separate authenticated tenant-representative sign-off may still be captured as an operational governance artifact when required; do not fabricate it.
 
 ## CI Browser Gate Recovery
 

@@ -22,8 +22,8 @@ This document is the live implementation-status companion to BRD v1.0. The BRD r
 | COM — Grievance Committee | FOUNDATION IMPLEMENTED | Tenant-scoped membership, positions, JSON permission allow-list, appointment/end lifecycle, effective-role-aware permission checks. | Admin committee management UI and permission UAT. |
 | DDL — Process deadlines vs SLA | FOUNDATION IMPLEMENTED | Separate `GrievanceDeadline`; explicit caller-supplied start/due dates; policy-source field; operational-SLA pause recorded separately on grievance case. | Deadline lifecycle UI/actions, SLA reporting behavior, timezone/deadline UAT. |
 | SEC-GRV | IN PROGRESS | Explicit tenant predicates in raw SQL services; anonymous session has no resident identity FK; raw token stored only in HttpOnly cookie while DB stores SHA-256 digest; confidential identity tables untouched; state-changing anonymous APIs enforce same origin. | CI security/regression tests and cross-tenant UAT. |
-| UX-GRV | IN PROGRESS | Anonymous tracker converted from read-only result to phone/PWA conversation; text-only composer; existing `Back to Home` retained. | Narrow-screen browser verification and accessibility/UAT. |
-| NFR-GRV | IN PROGRESS | Additive migration; bounded polling; cursor-based incremental reads; no WebSocket dependency; implementation behind existing COMPLAINTS module path. | Full repository validation gate and production smoke/UAT after merge/deploy. |
+| UX-GRV | IN PROGRESS | Anonymous tracker converted from read-only result to phone/PWA conversation; text-only composer; `Back to Home`, `100dvh`, safe-area padding, shrink-safe content. | Narrow-screen browser verification and accessibility/UAT. |
+| NFR-GRV | IN PROGRESS | Additive migration; bounded polling; cursor-based incremental reads; no WebSocket dependency; dedicated source-level BRD regression suite added. | Full repository validation gate and production smoke/UAT after merge/deploy. |
 
 ## Files Added or Changed
 
@@ -34,7 +34,9 @@ This document is the live implementation-status companion to BRD v1.0. The BRD r
 - `app/api/complaints/anonymous/session/route.ts`
 - `app/api/complaints/anonymous/messages/route.ts`
 - `components/complaint-track-form.tsx`
-- `tests/unit/grievance-foundation-phase1.test.ts` (planned in this implementation branch)
+- `app/complaints/track/page.tsx`
+- `tests/unit/grievance-foundation-phase1.test.ts`
+- `docs/complaints/GRIEVANCE_PHASE1_IMPLEMENTATION_STATUS.md`
 - `Agent.md` (must reflect the same live status before review/merge)
 
 ## Security and Privacy Decisions Implemented
@@ -46,12 +48,15 @@ This document is the live implementation-status companion to BRD v1.0. The BRD r
 - Anonymous follow-up attachments remain out of scope for Phase 1.
 - Message bodies are not copied into audit metadata.
 - State-changing anonymous API requests require same-origin `Origin` or `Referer` validation.
+- Existing anonymous complaint opening messages are normalized to complainant/anonymous-tracker metadata when a secure anonymous session is established, so legacy Prisma inserts cannot cause the tracker to label the complainant as HOA staff.
 
 ## Migration and Rollback
 
 The migration is additive. It adds grievance-foundation tables plus anonymous-message metadata columns/indexes to `ComplaintMessage`. The application rollback strategy is to revert the application commit/merge while leaving the new tables/columns in place. Do not drop grievance, verification, deadline, committee, anonymous-session, message-idempotency, or activity history as part of routine rollback.
 
-No production database change has been executed from this branch. `prisma migrate deploy`, repository CI, merge to `main`, Hostinger publication, release-marker verification, health verification, and production UAT are still pending.
+The new grievance-domain services initially use explicit tenant-scoped parameterized SQL over migration-backed tables. This follows the repository's existing narrow migration/raw-SQL pattern for additive domains and avoids destabilizing the generated Prisma schema while Phase 1 is still under review. Promotion into generated Prisma models may be performed as a later hardening/refactor, but tenant predicates and regression coverage are mandatory either way.
+
+No production database change has been executed from this branch. Repository CI, `prisma migrate deploy`, merge to `main`, Hostinger publication, release-marker verification, health verification, and production UAT are still pending.
 
 ## Release Gate
 

@@ -76,11 +76,11 @@ export async function addComplaintSubjectAction(formData: FormData) {
       vehicleId: optionalText(formData, "vehicleId", 191),
       displayLabel: optionalText(formData, "displayLabel", 191),
     });
-    revalidatePath(`/admin/complaints/${complaintId}`);
-    complaintRedirect(complaintId, "success", "Complaint subject added.");
   } catch (error) {
     complaintRedirect(complaintId, "error", error instanceof Error ? error.message : "Complaint subject could not be added.");
   }
+  revalidatePath(`/admin/complaints/${complaintId}`);
+  complaintRedirect(complaintId, "success", "Complaint subject added.");
 }
 
 export async function removeComplaintSubjectAction(formData: FormData) {
@@ -88,11 +88,11 @@ export async function removeComplaintSubjectAction(formData: FormData) {
   const complaintId = text(formData, "complaintId", 191);
   try {
     await removeComplaintSubject(user, complaintId, text(formData, "subjectId", 191));
-    revalidatePath(`/admin/complaints/${complaintId}`);
-    complaintRedirect(complaintId, "success", "Complaint subject removed.");
   } catch (error) {
     complaintRedirect(complaintId, "error", error instanceof Error ? error.message : "Complaint subject could not be removed.");
   }
+  revalidatePath(`/admin/complaints/${complaintId}`);
+  complaintRedirect(complaintId, "success", "Complaint subject removed.");
 }
 
 export async function promoteComplaintToGrievanceAction(formData: FormData) {
@@ -100,11 +100,11 @@ export async function promoteComplaintToGrievanceAction(formData: FormData) {
   const complaintId = text(formData, "complaintId", 191);
   try {
     await promoteComplaintToGrievance(user, complaintId);
-    revalidatePath(`/admin/complaints/${complaintId}`);
-    complaintRedirect(complaintId, "success", "Formal grievance case created.");
   } catch (error) {
     complaintRedirect(complaintId, "error", error instanceof Error ? error.message : "Grievance case could not be created.");
   }
+  revalidatePath(`/admin/complaints/${complaintId}`);
+  complaintRedirect(complaintId, "success", "Formal grievance case created.");
 }
 
 export async function updateComplaintVerificationAction(formData: FormData) {
@@ -122,11 +122,11 @@ export async function updateComplaintVerificationAction(formData: FormData) {
       verificationType,
       findings: optionalText(formData, "findings", 8000),
     });
-    revalidatePath(`/admin/complaints/${complaintId}`);
-    complaintRedirect(complaintId, "success", "Verification record updated.");
   } catch (error) {
     complaintRedirect(complaintId, "error", error instanceof Error ? error.message : "Verification could not be updated.");
   }
+  revalidatePath(`/admin/complaints/${complaintId}`);
+  complaintRedirect(complaintId, "success", "Verification record updated.");
 }
 
 export async function updateGrievanceCaseStatusAction(formData: FormData) {
@@ -141,11 +141,11 @@ export async function updateGrievanceCaseStatusAction(formData: FormData) {
       status,
       note: text(formData, "note", 4000),
     });
-    revalidatePath(`/admin/complaints/${complaintId}`);
-    complaintRedirect(complaintId, "success", "Grievance status updated.");
   } catch (error) {
     complaintRedirect(complaintId, "error", error instanceof Error ? error.message : "Grievance status could not be updated.");
   }
+  revalidatePath(`/admin/complaints/${complaintId}`);
+  complaintRedirect(complaintId, "success", "Grievance status updated.");
 }
 
 export async function createGrievanceDeadlineAction(formData: FormData) {
@@ -161,11 +161,11 @@ export async function createGrievanceDeadlineAction(formData: FormData) {
       dueAt: parseManilaDate(formData.get("dueAt"), "Due date"),
       policySource: optionalText(formData, "policySource", 4000),
     });
-    revalidatePath(`/admin/complaints/${complaintId}`);
-    complaintRedirect(complaintId, "success", "Process deadline created.");
   } catch (error) {
     complaintRedirect(complaintId, "error", error instanceof Error ? error.message : "Process deadline could not be created.");
   }
+  revalidatePath(`/admin/complaints/${complaintId}`);
+  complaintRedirect(complaintId, "success", "Process deadline created.");
 }
 
 export async function updateGrievanceDeadlineAction(formData: FormData) {
@@ -181,11 +181,11 @@ export async function updateGrievanceDeadlineAction(formData: FormData) {
       status,
       reason: optionalText(formData, "reason", 2000),
     });
-    revalidatePath(`/admin/complaints/${complaintId}`);
-    complaintRedirect(complaintId, "success", "Process deadline updated.");
   } catch (error) {
     complaintRedirect(complaintId, "error", error instanceof Error ? error.message : "Process deadline could not be updated.");
   }
+  revalidatePath(`/admin/complaints/${complaintId}`);
+  complaintRedirect(complaintId, "success", "Process deadline updated.");
 }
 
 export async function saveGrievanceSettingAction(formData: FormData) {
@@ -196,11 +196,11 @@ export async function saveGrievanceSettingAction(formData: FormData) {
       anonymousMessagingEnabled: formData.get("anonymousMessagingEnabled") === "on",
       anonymousSessionMinutes: Number(formData.get("anonymousSessionMinutes")) || 30,
     });
-    revalidatePath("/admin/complaints/settings");
-    settingsRedirect("success", "Grievance settings saved.");
   } catch (error) {
     settingsRedirect("error", error instanceof Error ? error.message : "Grievance settings could not be saved.");
   }
+  revalidatePath("/admin/complaints/settings");
+  settingsRedirect("success", "Grievance settings saved.");
 }
 
 export async function saveVerificationPolicyAction(formData: FormData) {
@@ -217,11 +217,11 @@ export async function saveVerificationPolicyAction(formData: FormData) {
       blocksEnforcement: formData.get("blocksEnforcement") === "on",
       active: formData.get("active") === "on",
     });
-    revalidatePath("/admin/complaints/settings");
-    settingsRedirect("success", "Verification policy saved.");
   } catch (error) {
     settingsRedirect("error", error instanceof Error ? error.message : "Verification policy could not be saved.");
   }
+  revalidatePath("/admin/complaints/settings");
+  settingsRedirect("success", "Verification policy saved.");
 }
 
 export async function appointGrievanceCommitteeMemberAction(formData: FormData) {
@@ -238,20 +238,20 @@ export async function appointGrievanceCommitteeMemberAction(formData: FormData) 
       startsAt: parseManilaDate(formData.get("startsAt"), "Appointment start date"),
       endsAt: formData.get("endsAt") ? parseManilaDate(formData.get("endsAt"), "Appointment end date") : null,
     });
-    revalidatePath("/admin/complaints/settings");
-    settingsRedirect("success", "Grievance Committee appointment saved.");
   } catch (error) {
     settingsRedirect("error", error instanceof Error ? error.message : "Committee appointment could not be saved.");
   }
+  revalidatePath("/admin/complaints/settings");
+  settingsRedirect("success", "Grievance Committee appointment saved.");
 }
 
 export async function endGrievanceCommitteeMembershipAction(formData: FormData) {
   const user = await requireComplaintAdmin();
   try {
     await endGrievanceCommitteeMembership(user, text(formData, "membershipId", 191));
-    revalidatePath("/admin/complaints/settings");
-    settingsRedirect("success", "Grievance Committee appointment ended.");
   } catch (error) {
     settingsRedirect("error", error instanceof Error ? error.message : "Committee appointment could not be ended.");
   }
+  revalidatePath("/admin/complaints/settings");
+  settingsRedirect("success", "Grievance Committee appointment ended.");
 }

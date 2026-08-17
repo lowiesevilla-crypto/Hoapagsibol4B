@@ -4,7 +4,7 @@ import { randomUUID } from "node:crypto";
 import type { Prisma, Role } from "@prisma/client";
 import { platformPrisma } from "@/lib/db";
 import {
-  assertComplaintEnforcementAllowed,
+  evaluateComplaintVerificationRequirement,
   requireGrievancePermission,
   type GrievancePermission,
 } from "@/lib/services/grievance-foundation";
@@ -352,40 +352,49 @@ export async function updateGrievanceCaseStatus(user: EffectiveUser, input: {
   await requireGrievancePermission(user, "TRIAGE_GRIEVANCE");
   await requireTenantComplaint(user, input.complaintId);
   if (!grievanceStatuses.has(input.status)) throw new Error("Choose a valid grievance status.");
-  const rows = await platformPrisma.$queryRaw<Array<{ id: string; status: GrievanceCaseStatus }>>`
-    SELECT id, status
-    FROM GrievanceCase
-    WHERE tenantId = ${user.tenantId}
-      AND id = ${input.grievanceCaseId}
-      AND complaintId = ${input.complaintId}
-    LIMIT 1
-  `;
-  const grievance = rows[0];
-  if (!grievance) throw new Error("Grievance case not found.");
-  if (!allowedGrievanceTransitions(grievance.status).includes(input.status)) {
-    throw new Error(`Grievance cannot move from ${grievance.status.replaceAll("_", " ")} to ${input.status.replaceAll("_", " ")}.`);
-  }
   const note = String(input.note || "").trim().slice(0, 4000);
   if ((input.status === "CLOSED_NO_ACTION" || input.status === "CLOSED_UNSUBSTANTIATED") && note.length < 10) {
     throw new Error("Record a closure reason before closing the grievance.");
   }
-  if (input.status === "VERIFIED") {
-    const verificationRows = await platformPrisma.$queryRaw<Array<{ status: string }>>`
-      SELECT status
+  await evaluateComplaintVerificationRequirement(user.tenantId, input.complaintId);
+
+  await platformPrisma.$transaction(async (tx) => {
+    const verificationRows = await tx.$queryRaw<Array<{ required: number | boolean; blocksEnforcement: number | boolean; status: string }>>`
+      SELECT required, blocksEnforcement, status
       FROM ComplaintVerification
       WHERE tenantId = ${user.tenantId}
         AND complaintId = ${input.complaintId}
       LIMIT 1
+      FOR UPDATE
     `;
-    if (verificationRows[0]?.status !== "PASSED") {
+    const grievanceRows = await tx.$queryRaw<Array<{ id: string; status: GrievanceCaseStatus }>>`
+      SELECT id, status
+      FROM GrievanceCase
+      WHERE tenantId = ${user.tenantId}
+        AND id = ${input.grievanceCaseId}
+        AND complaintId = ${input.complaintId}
+      LIMIT 1
+      FOR UPDATE
+    `;
+    const grievance = grievanceRows[0];
+    if (!grievance) throw new Error("Grievance case not found.");
+    if (!allowedGrievanceTransitions(grievance.status).includes(input.status)) {
+      throw new Error(`Grievance cannot move from ${grievance.status.replaceAll("_", " ")} to ${input.status.replaceAll("_", " ")}.`);
+    }
+    const verification = verificationRows[0];
+    if (input.status === "VERIFIED" && verification?.status !== "PASSED") {
       throw new Error("Independent verification must be Passed before this grievance can be marked Verified.");
     }
-  }
-  if (input.status === "READY_FOR_FORMAL_PROCESS") {
-    await assertComplaintEnforcementAllowed(user.tenantId, input.complaintId);
-  }
+    if (
+      input.status === "READY_FOR_FORMAL_PROCESS" &&
+      verification &&
+      Boolean(verification.required) &&
+      Boolean(verification.blocksEnforcement) &&
+      verification.status !== "PASSED"
+    ) {
+      throw new Error("Independent verification is required before this enforcement action can proceed.");
+    }
 
-  await platformPrisma.$transaction(async (tx) => {
     await tx.$executeRaw`
       UPDATE GrievanceCase
       SET status = ${input.status},
@@ -425,23 +434,30 @@ export async function updateGrievanceDeadlineStatus(user: EffectiveUser, input: 
   await requireGrievancePermission(user, "TRIAGE_GRIEVANCE");
   await requireTenantComplaint(user, input.complaintId);
   if (!deadlineStatuses.has(input.status)) throw new Error("Choose a valid deadline status.");
-  const rows = await platformPrisma.$queryRaw<Array<{ id: string; status: GrievanceDeadlineStatus }>>`
-    SELECT d.id, d.status
-    FROM GrievanceDeadline d
-    INNER JOIN GrievanceCase g ON g.tenantId = d.tenantId AND g.id = d.grievanceCaseId
-    WHERE d.tenantId = ${user.tenantId}
-      AND d.id = ${input.deadlineId}
-      AND d.grievanceCaseId = ${input.grievanceCaseId}
-      AND g.complaintId = ${input.complaintId}
-    LIMIT 1
-  `;
-  const deadline = rows[0];
-  if (!deadline) throw new Error("Grievance deadline not found.");
   const reason = String(input.reason || "").trim().slice(0, 2000);
   if (input.status === "PAUSED" && reason.length < 10) throw new Error("Record a reason before pausing a process deadline.");
 
   const now = new Date();
   await platformPrisma.$transaction(async (tx) => {
+    const rows = await tx.$queryRaw<Array<{ id: string; status: GrievanceDeadlineStatus; pauseReason: string | null }>>`
+      SELECT d.id, d.status, d.pauseReason
+      FROM GrievanceDeadline d
+      INNER JOIN GrievanceCase g ON g.tenantId = d.tenantId AND g.id = d.grievanceCaseId
+      WHERE d.tenantId = ${user.tenantId}
+        AND d.id = ${input.deadlineId}
+        AND d.grievanceCaseId = ${input.grievanceCaseId}
+        AND g.complaintId = ${input.complaintId}
+      LIMIT 1
+      FOR UPDATE
+    `;
+    const deadline = rows[0];
+    if (!deadline) throw new Error("Grievance deadline not found.");
+    const recordedPauseReason = input.status === "PAUSED"
+      ? reason
+      : deadline.status === "PAUSED"
+        ? deadline.pauseReason
+        : null;
+
     await tx.$executeRaw`
       UPDATE GrievanceDeadline
       SET status = ${input.status},
@@ -454,11 +470,17 @@ export async function updateGrievanceDeadlineStatus(user: EffectiveUser, input: 
         AND id = ${deadline.id}
         AND grievanceCaseId = ${input.grievanceCaseId}
     `;
+    const metadata = {
+      deadlineId: deadline.id,
+      from: deadline.status,
+      to: input.status,
+      pauseReason: recordedPauseReason,
+    };
     await tx.$executeRaw`
       INSERT INTO ComplaintGrievanceActivity
         (id, tenantId, complaintId, grievanceCaseId, actorId, eventType, message, metadata, createdAt)
       VALUES
-        (${randomUUID()}, ${user.tenantId}, ${input.complaintId}, ${input.grievanceCaseId}, ${user.id}, 'DEADLINE_UPDATED', ${`Process deadline changed from ${deadline.status} to ${input.status}.`}, ${JSON.stringify({ deadlineId: deadline.id, from: deadline.status, to: input.status, reasonProvided: Boolean(reason) })}, NOW(3))
+        (${randomUUID()}, ${user.tenantId}, ${input.complaintId}, ${input.grievanceCaseId}, ${user.id}, 'DEADLINE_UPDATED', ${`Process deadline changed from ${deadline.status} to ${input.status}.`}, ${JSON.stringify(metadata)}, NOW(3))
     `;
     await tx.auditLog.create({
       data: {
@@ -468,7 +490,7 @@ export async function updateGrievanceDeadlineStatus(user: EffectiveUser, input: 
         action: "UPDATE_GRIEVANCE_DEADLINE",
         entityType: "GrievanceDeadline",
         entityId: deadline.id,
-        metadata: { grievanceCaseId: input.grievanceCaseId, complaintId: input.complaintId, from: deadline.status, to: input.status, reasonProvided: Boolean(reason) },
+        metadata: { grievanceCaseId: input.grievanceCaseId, complaintId: input.complaintId, ...metadata },
       },
     });
   });

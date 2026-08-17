@@ -3,6 +3,7 @@ import "server-only";
 import { randomUUID } from "node:crypto";
 import { ComplaintPrivacyMode, Role, type Prisma } from "@prisma/client";
 import { platformPrisma } from "@/lib/db";
+import { assertCommitteeAppointmentTargetEligible } from "@/lib/services/grievance-authorization";
 
 export const grievancePermissions = [
   "VIEW_GRIEVANCE",
@@ -182,20 +183,27 @@ export async function recordComplaintVerification(user: EffectiveUser, input: { 
   const verification = await evaluateComplaintVerificationRequirement(user.tenantId, input.complaintId);
   if (!verification) throw new Error("Verification record could not be prepared.");
 
-  if (input.status !== "PASSED") {
-    const linked = await platformPrisma.$queryRaw<Array<{ id: string; status: string }>>`
-      SELECT id, status FROM GrievanceCase
-      WHERE tenantId = ${user.tenantId} AND complaintId = ${input.complaintId}
-      LIMIT 1
-    `;
-    if (linked[0] && (linked[0].status === "VERIFIED" || linked[0].status === "READY_FOR_FORMAL_PROCESS")) {
-      throw new Error("Move the grievance out of Verified/Ready for Formal Process before downgrading or reopening independent verification.");
-    }
-  }
-
   const eventType = input.status === "IN_PROGRESS" ? "VERIFICATION_STARTED" : "VERIFICATION_COMPLETED";
   const verifiedAt = input.status === "IN_PROGRESS" ? null : new Date();
   await platformPrisma.$transaction(async (tx) => {
+    const lockedVerification = await tx.$queryRaw<VerificationRow[]>`
+      SELECT id, required, blocksEnforcement, status
+      FROM ComplaintVerification
+      WHERE tenantId = ${user.tenantId} AND complaintId = ${input.complaintId}
+      LIMIT 1
+      FOR UPDATE
+    `;
+    if (!lockedVerification[0]) throw new Error("Verification record could not be prepared.");
+    const linked = await tx.$queryRaw<Array<{ id: string; status: string }>>`
+      SELECT id, status
+      FROM GrievanceCase
+      WHERE tenantId = ${user.tenantId} AND complaintId = ${input.complaintId}
+      LIMIT 1
+      FOR UPDATE
+    `;
+    if (input.status !== "PASSED" && linked[0] && (linked[0].status === "VERIFIED" || linked[0].status === "READY_FOR_FORMAL_PROCESS")) {
+      throw new Error("Move the grievance out of Verified/Ready for Formal Process before downgrading or reopening independent verification.");
+    }
     await tx.$executeRaw`
       UPDATE ComplaintVerification
       SET status = ${input.status}, verificationType = ${input.verificationType ?? null}, findings = ${findings || null}, verifiedById = ${user.id}, verifiedAt = ${verifiedAt}, updatedAt = NOW(3)
@@ -203,7 +211,7 @@ export async function recordComplaintVerification(user: EffectiveUser, input: { 
     `;
     await tx.$executeRaw`
       INSERT INTO ComplaintGrievanceActivity (id, tenantId, complaintId, grievanceCaseId, actorId, eventType, message, metadata, createdAt)
-      VALUES (${randomUUID()}, ${user.tenantId}, ${input.complaintId}, ${null}, ${user.id}, ${eventType}, ${`Complaint verification updated to ${input.status}.`}, ${JSON.stringify({ status: input.status, verificationType: input.verificationType ?? null })}, NOW(3))
+      VALUES (${randomUUID()}, ${user.tenantId}, ${input.complaintId}, ${linked[0]?.id ?? null}, ${user.id}, ${eventType}, ${`Complaint verification updated to ${input.status}.`}, ${JSON.stringify({ status: input.status, verificationType: input.verificationType ?? null })}, NOW(3))
     `;
     await tx.auditLog.create({ data: { tenantId: user.tenantId, actorId: user.id, module: "COMPLAINTS", action: "UPDATE_COMPLAINT_VERIFICATION", entityType: "Complaint", entityId: input.complaintId, metadata: { status: input.status, verificationType: input.verificationType ?? null } } });
   });
@@ -249,8 +257,7 @@ export async function promoteComplaintToGrievance(user: EffectiveUser, complaint
 export async function appointGrievanceCommitteeMember(user: EffectiveUser, input: { userId: string; position: GrievanceCommitteePosition; permissions: GrievancePermission[]; startsAt: Date; endsAt?: Date | null }) {
   if (!hasAdminAuthority(user)) throw new Error("Only an authorized HOA administrator may appoint grievance committee members.");
   if (!positions.has(input.position)) throw new Error("Choose a valid grievance committee position.");
-  const member = await platformPrisma.user.findFirst({ where: { tenantId: user.tenantId, id: input.userId, active: true }, select: { id: true } });
-  if (!member) throw new Error("Committee member was not found in this HOA.");
+  const member = await assertCommitteeAppointmentTargetEligible(user.tenantId, input.userId);
   if (!(input.startsAt instanceof Date) || Number.isNaN(input.startsAt.getTime())) throw new Error("Enter a valid committee appointment start date.");
   if (input.endsAt && input.endsAt <= input.startsAt) throw new Error("Committee appointment end date must be after its start date.");
   const permissions = normalizePermissions(input.permissions);
@@ -284,12 +291,18 @@ export async function createGrievanceDeadline(user: EffectiveUser, input: { grie
   const grievance = cases[0];
   if (!grievance) throw new Error("Grievance case not found.");
   const id = randomUUID();
-  await platformPrisma.$executeRaw`
-    INSERT INTO GrievanceDeadline (id, tenantId, grievanceCaseId, deadlineType, status, startsAt, dueAt, policySource, createdById, createdAt, updatedAt)
-    VALUES (${id}, ${user.tenantId}, ${grievance.id}, ${input.deadlineType}, 'OPEN', ${input.startsAt}, ${input.dueAt}, ${String(input.policySource || "").trim().slice(0, 4000) || null}, ${user.id}, NOW(3), NOW(3))
-  `;
-  await activity({ tenantId: user.tenantId, complaintId: grievance.complaintId, grievanceCaseId: grievance.id, actorId: user.id, eventType: "DEADLINE_CREATED", message: `Grievance deadline ${input.deadlineType} created.`, metadata: { deadlineId: id, dueAt: input.dueAt.toISOString() } });
-  await audit({ tenantId: user.tenantId, actorId: user.id, action: "CREATE_GRIEVANCE_DEADLINE", entityType: "GrievanceDeadline", entityId: id, metadata: { grievanceCaseId: grievance.id, deadlineType: input.deadlineType, dueAt: input.dueAt.toISOString(), policySourceProvided: Boolean(input.policySource) } });
+  const policySource = String(input.policySource || "").trim().slice(0, 4000) || null;
+  await platformPrisma.$transaction(async (tx) => {
+    await tx.$executeRaw`
+      INSERT INTO GrievanceDeadline (id, tenantId, grievanceCaseId, deadlineType, status, startsAt, dueAt, policySource, createdById, createdAt, updatedAt)
+      VALUES (${id}, ${user.tenantId}, ${grievance.id}, ${input.deadlineType}, 'OPEN', ${input.startsAt}, ${input.dueAt}, ${policySource}, ${user.id}, NOW(3), NOW(3))
+    `;
+    await tx.$executeRaw`
+      INSERT INTO ComplaintGrievanceActivity (id, tenantId, complaintId, grievanceCaseId, actorId, eventType, message, metadata, createdAt)
+      VALUES (${randomUUID()}, ${user.tenantId}, ${grievance.complaintId}, ${grievance.id}, ${user.id}, 'DEADLINE_CREATED', ${`Grievance deadline ${input.deadlineType} created.`}, ${JSON.stringify({ deadlineId: id, dueAt: input.dueAt.toISOString() })}, NOW(3))
+    `;
+    await tx.auditLog.create({ data: { tenantId: user.tenantId, actorId: user.id, module: "COMPLAINTS", action: "CREATE_GRIEVANCE_DEADLINE", entityType: "GrievanceDeadline", entityId: id, metadata: { grievanceCaseId: grievance.id, deadlineType: input.deadlineType, dueAt: input.dueAt.toISOString(), policySourceProvided: Boolean(policySource) } } });
+  });
   return { id };
 }
 

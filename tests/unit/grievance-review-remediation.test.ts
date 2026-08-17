@@ -64,7 +64,7 @@ test("VERIFIED grievance status requires a passed independent verification", () 
   const block = grievanceAdmin.slice(start, end);
   assert.match(block, /input\.status === "VERIFIED"/);
   assert.match(block, /ComplaintVerification/);
-  assert.match(block, /verificationRows\[0\]\?\.status !== "PASSED"/);
+  assert.match(block, /verification\?\.status !== "PASSED"/);
   assert.match(block, /must be Passed before this grievance can be marked Verified/);
 });
 

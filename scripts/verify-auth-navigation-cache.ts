@@ -30,8 +30,8 @@ async function main() {
   assert(!loginForm.includes("Activate homeowner account"), "Public universal login must not render an activation CTA.");
   assert(!loginForm.includes('href="/activate"'), "Public universal login must not link directly to /activate.");
   assert(loginForm.includes("PasskeyLoginButton"), "Public login must preserve passkey sign-in.");
-  assert(loginForm.includes("window.location.replace(state.redirectTo)"), "Password login success must use a full document navigation.");
-  assert(passkeyButton.includes("window.location.replace(result.redirectTo"), "Passkey login success must use a full document navigation.");
+  assert(loginForm.includes("window.location.replace(returnTo || state.redirectTo!)"), "Password login success must use a full document navigation to a server-approved destination.");
+  assert(passkeyButton.includes("window.location.replace(returnTo || result.redirectTo || \"/portal/dashboard\")"), "Passkey login success must use a full document navigation to a safe destination.");
 
   assert(activatePage.includes("const canActivate = query.verified === \"email\" || query.verified === \"already\""), "Activation page must gate the setup form on invitation verification state.");
   assert(activatePage.indexOf("canActivate ?") < activatePage.indexOf("<HomeownerActivationForm />"), "Activation form must not render before invitation verification is checked.");

@@ -96,13 +96,14 @@ record("cache recovery removes HOAHub /sw.js only in local development", hasAll(
 record("cache recovery removes only HOAHub-owned development caches", hasAll(cacheRecovery, ["shouldRemoveDevelopmentHoaHubCache", "DEVELOPMENT_HOAHUB_CACHE_PREFIX", "cacheName.startsWith(DEVELOPMENT_HOAHUB_CACHE_PREFIX)"]));
 
 const authButtons = readProjectFile("components/auth-navigation-buttons.tsx");
-const authActions = readProjectFile("lib/actions/auth.ts");
+const logoutRoute = readProjectFile("app/api/auth/logout/route.ts");
+const authLogout = readProjectFile("lib/auth-logout.ts");
 const profilePage = readProjectFile("app/portal/profile/page.tsx");
 const morePage = readProjectFile("app/portal/more/page.tsx");
-record("logout buttons use stable named server actions", hasAll(authButtons, ["logoutNavigationAction", "logoutAllSessionsNavigationAction", "useActionState"]));
-record("logout server actions are named exports", hasAll(authActions, ["export async function logoutNavigationAction", "export async function logoutAllSessionsNavigationAction", "return { redirectTo }"]));
+record("logout buttons use a normal full-document POST", hasAll(authButtons, ['action="/api/auth/logout"', 'method="post"', 'type="submit"', "disabled={pending}"]) && !authButtons.includes("useActionState"));
+record("logout endpoint enforces same-origin private 303 redirect", hasAll(logoutRoute, ["assertSameOrigin(request)", "privateNoStoreHeaders", "NextResponse.redirect(destination, 303)"]));
 record("profile and more contain no inline logout action", hasAll(profilePage, ["LogoutButton"]) && hasAll(morePage, ["LogoutButton"]) && !profilePage.includes("logoutAction") && !morePage.includes("logoutAction") && !profilePage.includes("form action={async") && !morePage.includes("form action={async"));
-record("logout navigation performs document redirect after server-side session deletion", hasAll(authButtons, ["window.location.replace(state.redirectTo)", "disabled={pending}"]) && hasAll(authActions, ["await deleteSession()", "logoutRedirectForSession"]));
+record("logout removes browser session before document redirect", hasAll(authLogout, ["await deleteSession()", "logoutRedirectForSession", "session.tenantSlug"]));
 
 const nextConfig = readProjectFile("next.config.ts");
 record("service worker served with safe headers", hasAll(nextConfig, ["Service-Worker-Allowed", "no-cache, no-store, must-revalidate"]));

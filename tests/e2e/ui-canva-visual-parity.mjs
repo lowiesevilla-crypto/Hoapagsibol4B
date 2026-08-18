@@ -62,6 +62,11 @@ async function screenshot(page, fileName) {
   await page.screenshot({ path: path.join(outputDir, fileName), fullPage: true });
 }
 
+async function assertNoOverflow(page, label) {
+  const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
+  assert.ok(overflow <= 1, `${label} has horizontal overflow: ${overflow}px`);
+}
+
 async function assertDesktopShell(page, shellSelector, topbarSelector) {
   await page.waitForSelector(shellSelector, { timeout });
   await page.waitForSelector(topbarSelector, { timeout });
@@ -80,6 +85,14 @@ async function assertDesktopShell(page, shellSelector, topbarSelector) {
   assert.ok(metrics.overflow <= 1, `Unexpected horizontal overflow: ${metrics.overflow}px`);
 }
 
+async function captureRoute(page, route, expectedPrefix, fileName, shellSelector) {
+  await page.goto(`${baseUrl}${route}`, { waitUntil: "networkidle2", timeout });
+  assert.ok(new URL(page.url()).pathname.startsWith(expectedPrefix), `${route} redirected unexpectedly to ${page.url()}`);
+  if (shellSelector) await page.waitForSelector(shellSelector, { timeout });
+  await assertNoOverflow(page, route);
+  await screenshot(page, fileName);
+}
+
 async function runAdmin(browser) {
   const context = await browser.createBrowserContext();
   const page = await context.newPage();
@@ -93,6 +106,11 @@ async function runAdmin(browser) {
     const cardBarCount = await page.$$eval(".ui-metric-card > span.absolute", (nodes) => nodes.length);
     assert.equal(cardBarCount, 0, "Metric cards must not use the rejected colored side-strip treatment");
     await screenshot(page, "01-tenant-dashboard.png");
+
+    await captureRoute(page, "/admin/actions", "/admin/actions", "05-action-center.png", ".canva-tenant-shell");
+    await captureRoute(page, "/admin/billing", "/admin/billing", "06-billing-workspace.png", ".canva-tenant-shell");
+    await captureRoute(page, "/admin/documents", "/admin/documents", "07-documents-workspace.png", ".canva-tenant-shell");
+    await captureRoute(page, "/admin/workforce", "/admin/workforce", "08-workforce-command-center.png", ".canva-tenant-shell");
   } finally { await context.close(); }
 }
 
@@ -112,7 +130,11 @@ async function runPlatform(browser) {
 
     await page.goto(`${baseUrl}/platform/tenants/${tenantId}`, { waitUntil: "networkidle2", timeout });
     assert.equal(new URL(page.url()).pathname, `/platform/tenants/${tenantId}`);
+    await assertNoOverflow(page, "Tenant 360");
     await screenshot(page, "03-tenant-360.png");
+
+    await captureRoute(page, "/platform/tenants", "/platform/tenants", "09-platform-tenant-list.png", ".canva-platform-shell");
+    await captureRoute(page, "/platform/audit", "/platform/audit", "10-platform-audit-security.png", ".canva-platform-shell");
   } finally { await context.close(); }
 }
 
@@ -126,9 +148,14 @@ async function runHomeowner(browser) {
     await page.waitForSelector(".canva-portal-shell", { timeout });
     const headerBackground = await page.$eval(".canva-portal-shell > header", (node) => getComputedStyle(node).backgroundImage);
     assert.match(headerBackground, /8,\s*50,\s*79/, `Expected blue-teal Canva mobile header, received ${headerBackground}`);
-    const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
-    assert.ok(overflow <= 1, `Homeowner dashboard has horizontal overflow: ${overflow}px`);
+    await assertNoOverflow(page, "Homeowner dashboard");
+    const mobileBody = await page.evaluate(() => document.body.textContent || "");
+    assert.ok(mobileBody.includes("Account Health"), "Homeowner dashboard should render the Canva Account Health hierarchy");
+    assert.ok(mobileBody.includes("Resident Shortcuts"), "Homeowner dashboard should render compact Canva resident shortcuts");
     await screenshot(page, "04-homeowner-pwa-dashboard.png");
+
+    await captureRoute(page, "/portal/pay", "/portal/pay", "11-homeowner-payment-center.png", ".canva-portal-shell");
+    await captureRoute(page, "/portal/documents", "/portal/documents", "12-homeowner-documents.png", ".canva-portal-shell");
   } finally { await context.close(); }
 }
 

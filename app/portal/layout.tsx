@@ -60,11 +60,11 @@ export default async function PortalLayout({ children }: { children: React.React
   const links = [...navigation.sidebarLinks, ...extraLinks];
   const title = pathname.startsWith("/portal/document-library") ? "Document Library" : pathname.startsWith("/portal/ai") ? "Association Assistant" : homeownerRouteTitle(pathname);
 
-  return <div className="min-h-screen">
+  return <div className="canva-portal-shell min-h-screen">
     <Sidebar user={user} links={links} roleLabel="Homeowner" association={association} initialChatUnreadCount={initialChatUnreadCount} desktopOnly />
     <PortalMobileHeader association={association} user={user} unreadCount={initialChatUnreadCount} showChat={navigation.hasChat} title={title} isDashboard={pathname === "/portal/dashboard"} />
     <Suspense><TransactionFeedback /></Suspense>
-    <main className="mx-auto min-w-0 max-w-[1800px] px-4 pb-[calc(6rem+env(safe-area-inset-bottom))] pt-5 sm:px-7 lg:ml-72 lg:px-10 lg:py-9">{children}</main>
+    <main className="mx-auto min-w-0 max-w-[1800px] px-4 pb-[calc(6.5rem+env(safe-area-inset-bottom))] pt-5 sm:px-7 lg:ml-[300px] lg:px-10 lg:py-9">{children}</main>
     {aiAvailable && <AiFloatingShortcut />}
     <PortalBottomNavigation destinations={navigation.primaryDestinations} pathname={pathname} />
   </div>;

@@ -1,3 +1,13 @@
+:root {
+  --canva-navy: #071f31;
+  --canva-navy-2: #0b2e46;
+  --canva-pine: #0d4f46;
+  --canva-blue: #0b95d8;
+  --canva-blue-2: #27b6ff;
+  --canva-green: #6ed64b;
+  --canva-canvas: #f3f8fb;
+}
+
 .canva-tenant-shell,
 .canva-platform-shell,
 .canva-portal-shell {

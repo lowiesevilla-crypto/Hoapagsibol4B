@@ -8,6 +8,13 @@ import { WorkspaceCard } from "@/components/ui/workspace-card";
 import { prisma } from "@/lib/db";
 import { requirePayrollAccess } from "@/lib/payroll-access";
 
+const presentStatuses = new Set<AttendanceStatus>([
+  AttendanceStatus.PRESENT,
+  AttendanceStatus.HALF_DAY,
+  AttendanceStatus.HOLIDAY,
+  AttendanceStatus.PAID_LEAVE,
+]);
+
 export default async function WorkforceHubPage() {
   const { user } = await requirePayrollAccess();
   const tenantId = user.tenantId;
@@ -22,7 +29,7 @@ export default async function WorkforceHubPage() {
     prisma.payrollPeriod.count({ where: { tenantId, status: PayrollStatus.FINALIZED } }),
     prisma.payrollPeriod.findMany({ where: { tenantId }, take: 5, orderBy: [{ payDate: "desc" }, { createdAt: "desc" }], select: { id: true, status: true, startDate: true, endDate: true, payDate: true, _count: { select: { payslips: true } } } }),
   ]);
-  const presentToday = todayAttendance.filter((item) => [AttendanceStatus.PRESENT, AttendanceStatus.HALF_DAY, AttendanceStatus.HOLIDAY, AttendanceStatus.PAID_LEAVE].includes(item.status)).length;
+  const presentToday = todayAttendance.filter((item) => presentStatuses.has(item.status)).length;
   const payrollAttention = draftPayrolls + finalizedPayrolls + pendingCorrections;
 
   return <div className="space-y-5">

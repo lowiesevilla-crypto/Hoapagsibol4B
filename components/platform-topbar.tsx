@@ -14,6 +14,7 @@ const LABELS: Record<string, string> = {
   agreements: "Agreements",
   licenses: "Licenses",
   "document-management": "Document Usage",
+  "ai-usage": "AI Usage",
   audit: "Audit & Security",
   profile: "My Profile",
   users: "Users",

@@ -12,10 +12,10 @@ const requestPage = readFileSync("app/portal/requests/page.tsx", "utf8");
 const communityPage = readFileSync("app/portal/community/page.tsx", "utf8");
 const paymentCards = readFileSync("components/homeowner/payments/payment-cards.tsx", "utf8");
 
-test("homeowner shell uses the uploaded photo with a resilient placeholder", () => {
+test("homeowner shell uses the uploaded photo with a resilient Canva-style placeholder", () => {
   assert.match(portalShell, /HomeownerAvatar/);
   assert.match(portalShell, /src="\/api\/profile\/photo"/);
-  assert.match(portalShell, /rounded-full/);
+  assert.match(portalShell, /rounded-2xl/);
   assert.match(portalShell, /min-h-14/);
   assert.match(portalShell, /env\(safe-area-inset-bottom\)/);
   assert.match(portalShell, /focus-visible:outline/);

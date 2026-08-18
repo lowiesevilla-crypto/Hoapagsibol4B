@@ -253,14 +253,16 @@ The first Phase 3 production implementation preserved business logic but materia
 - `.github/workflows/ui-canva-parity.yml` builds the exact PR head with CI MySQL and controlled Chromium, captures actual browser screenshots, and uploads `hoahub-canva-visual-parity` for comparison.
 - Browser evidence covers Tenant Dashboard, Action Center, Billing, Documents, Workforce, Platform Command Center, Tenant 360, Platform Tenant List, Platform Audit & Security, Homeowner PWA Dashboard, Payment Center, and Homeowner Documents.
 - The remediation is not ready merely because JSX/source review passes. The exact candidate head must pass normal HOAHub MySQL CI and the Canva visual-parity workflow, then the generated browser renders must be compared against the approved Canva references.
+- Exact-head browser regression on `182586bff4acd3d4e0c4a03bbeeafea05ed8a6da` was presentation-only: `tests/e2e/ai-assistant.mjs` still expected retired homeowner labels `Current Balance` and `Pay Now` after a simulated provider outage even though the redesigned dashboard correctly rendered `Account Health` and `Pay Dues`. The E2E assertion is updated to the approved Canva labels while preserving provider-outage isolation, AI governance, tenant isolation, quota, and floating-assistant checks.
 
 ### Current Remediation State
 
 - PR #125: DRAFT / OPEN / NOT MERGED.
-- User requirement: actual implementation must be tested and visually compared to Canva before approval.
-- Approval state: **NOT APPROVED**.
-- Production state: **NOT DEPLOYED** for this remediation.
-- Do not merge PR #125 or trigger production deployment until the user explicitly approves the compared, tested correction.
+- User requirement: actual implementation must be tested and visually compared to Canva before production.
+- User authorization on 2026-08-18: proceed to production deployment automatically once the exact candidate passes all required gates.
+- Approval state: **CONDITIONALLY AUTHORIZED — PENDING EXACT-HEAD GREEN CI + VISUAL PARITY**.
+- Production state: **AUTHORIZED / PENDING GREEN GATES** for this remediation.
+- Merge PR #125 and allow the connected Hostinger production deployment only after the same exact head passes normal HOAHub MySQL CI and the Canva visual-parity workflow and the generated browser renders remain aligned with the approved Canva references.
 
 # Active Initiative: Complaint-to-Grievance Foundation — BRD v1.0
 

@@ -20,7 +20,7 @@ export default async function WorkforceHubPage() {
     prisma.attendanceAdjustment.count({ where: { tenantId, status: "PENDING" } }),
     prisma.payrollPeriod.count({ where: { tenantId, status: PayrollStatus.DRAFT } }),
     prisma.payrollPeriod.count({ where: { tenantId, status: PayrollStatus.FINALIZED } }),
-    prisma.payrollPeriod.findMany({ where: { tenantId }, take: 5, orderBy: [{ payDate: "desc" }, { createdAt: "desc" }], select: { id: true, name: true, status: true, periodStart: true, periodEnd: true, payDate: true, _count: { select: { payslips: true } } } }),
+    prisma.payrollPeriod.findMany({ where: { tenantId }, take: 5, orderBy: [{ payDate: "desc" }, { createdAt: "desc" }], select: { id: true, status: true, startDate: true, endDate: true, payDate: true, _count: { select: { payslips: true } } } }),
   ]);
   const presentToday = todayAttendance.filter((item) => [AttendanceStatus.PRESENT, AttendanceStatus.HALF_DAY, AttendanceStatus.HOLIDAY, AttendanceStatus.PAID_LEAVE].includes(item.status)).length;
   const payrollAttention = draftPayrolls + finalizedPayrolls + pendingCorrections;
@@ -38,7 +38,7 @@ export default async function WorkforceHubPage() {
     <section className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_390px]">
       <WorkspaceCard title="Payroll readiness" description="Recent payroll periods and their authoritative processing state.">
         <div className="divide-y divide-slate-100">
-          {latestPeriods.map((period) => <Link key={period.id} href={`/admin/payroll?period=${period.id}`} className="grid gap-2 py-4 first:pt-0 last:pb-0 sm:grid-cols-[minmax(0,1fr)_150px_100px] sm:items-center"><div><p className="font-black text-slate-900">{period.name}</p><p className="mt-1 text-xs text-slate-500">{period.periodStart.toLocaleDateString("en-PH")} – {period.periodEnd.toLocaleDateString("en-PH")} · Pay {period.payDate.toLocaleDateString("en-PH")}</p></div><StatusBadge tone={period.status === PayrollStatus.PAID ? "success" : period.status === PayrollStatus.FINALIZED ? "info" : "warning"}>{period.status}</StatusBadge><p className="text-right text-sm font-black text-pine-700">{period._count.payslips} payslips →</p></Link>)}
+          {latestPeriods.map((period) => <Link key={period.id} href={`/admin/payroll?period=${period.id}`} className="grid gap-2 py-4 first:pt-0 last:pb-0 sm:grid-cols-[minmax(0,1fr)_150px_100px] sm:items-center"><div><p className="font-black text-slate-900">Payroll {period.startDate.toLocaleDateString("en-PH")} – {period.endDate.toLocaleDateString("en-PH")}</p><p className="mt-1 text-xs text-slate-500">Pay date {period.payDate.toLocaleDateString("en-PH")}</p></div><StatusBadge tone={period.status === PayrollStatus.PAID ? "success" : period.status === PayrollStatus.FINALIZED ? "info" : "warning"}>{period.status}</StatusBadge><p className="text-right text-sm font-black text-pine-700">{period._count.payslips} payslips →</p></Link>)}
           {!latestPeriods.length ? <p className="py-10 text-center text-sm text-slate-500">No payroll periods recorded.</p> : null}
         </div>
       </WorkspaceCard>

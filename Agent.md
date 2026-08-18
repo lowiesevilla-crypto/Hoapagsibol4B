@@ -1,6 +1,6 @@
 # HOAHub Agent Context
 
-Last updated: 2026-08-17
+Last updated: 2026-08-18
 
 ## Purpose
 
@@ -159,25 +159,49 @@ Current financial state is derived from authoritative posted ledger/SOA evidence
 
 Approved design baseline: `docs/ui/HOAHUB_COMMUNITY_INTELLIGENCE_UI_SYSTEM_V1.md`.
 
-Current implementation branch: `feature/ui-system-foundation`.
+Implementation branch / PR: `feature/ui-system-foundation` / PR #123.
 
-### UI Foundation Scope
+## Phase 3 Implementation State
 
-- Existing `pine`, `leaf`, `ink`, `sand`, shared `.card`, `.field`, `.btn-*`, `.table-wrap`, and `.data-table` contracts remain supported; do not introduce a parallel UI framework.
-- `tailwind.config.ts` adds semantic surface/status/platform tokens plus workspace/floating elevation aliases while preserving the existing brand palette.
-- Shared primitives begin under `components/ui/`: `page-header.tsx`, `metric-card.tsx`, `status-badge.tsx`, and `workspace-card.tsx`.
-- Platform control-plane navigation is deliberately separated from tenant administration through `components/platform-topbar.tsx`, reorganized `platformLinks`, HOAHub platform branding, and `/platform/dashboard`.
-- `app/platform/layout.tsx` must never use a tenant/customer logo as the HOAHub platform identity; the defensive platform logo path is `/Hoahub-logo.png`.
-- The new platform dashboard uses existing authorized platform data only (tenant/subscription counts and platform invoice receivables). It introduces no new database schema or tenant-owned browser authority.
-- Homeowner/PWA navigation and behavior are not changed in this foundation wave; existing Home/Payments/Requests/Community/More navigation, safe-area, entitlement, and AI governance rules remain authoritative.
-- Regression contract: `tests/unit/ui-system-foundation.test.ts` protects semantic tokens, platform branding separation, platform taxonomy, and shared dashboard primitives.
+| Wave | Status | Primary implementation |
+| --- | --- | --- |
+| Wave 1 — Design foundation | COMPLETE | semantic Tailwind tokens; shared `PageHeader`, `MetricCard`, `StatusBadge`, `WorkspaceCard`; design-system contract |
+| Wave 2 — Shell separation | COMPLETE | Platform topbar/control-plane identity, platform navigation taxonomy, `/platform/dashboard`, tenant/platform visual separation |
+| Wave 3 — Tenant core | COMPLETE FOR RELEASE CANDIDATE | Tenant Dashboard V2, permission-aware `/admin/actions`, tenant-scoped Resident 360 overview |
+| Wave 4 — Tenant operational workspaces | COMPLETE FOR RELEASE CANDIDATE | shared premium PageHeader/status layer applied across existing Finance/Documents/Workforce/AI workflows; new protected `/admin/workforce` HRIS/Payroll command center |
+| Wave 5 — Platform ecosystem | COMPLETE FOR RELEASE CANDIDATE | Tenant List V2, simplified Tenant 360 tabs, Platform AI Usage metadata workspace, real Platform Audit & Security evidence workspace; existing Subscriptions/Plans/Invoices/Agreements/Licenses/Document Usage retain authoritative actions with premium shared presentation |
+| Wave 6 — Homeowner/PWA | COMPLETE FOR RELEASE CANDIDATE | shared premium portal mobile header/bottom navigation/cards; existing Home/Payments/Requests/Community/More routing, payment/document workflows, AI governance and safe-area behavior preserved |
+| Exact-head automated validation | PENDING | must pass full HOAHub MySQL CI after this Agent synchronization |
+| Merge to `main` | PENDING | user explicitly authorized completion and production deployment on 2026-08-18; merge only after exact-head green CI and mergeability review |
+| Hostinger production deployment | AUTHORIZED / PENDING | after merge, verify expected release marker and public health before reporting production complete |
 
-### UI Implementation Release Rules
+## Phase 3 Architecture and Safety Contract
 
-- This feature branch is not a production target and must not be merged/deployed solely on visual approval.
-- UI work must preserve RBAC, permission checks, module entitlements, tenant isolation, payroll confidentiality, complaint privacy, AI governance, payment authority, document issuance rules, and official print/template behavior.
-- Every subsequent workspace wave must update `Agent.md`, add/adjust targeted tests, and pass the normal repository validation gates before merge.
-- Production deployment remains explicitly unapproved until the expected merged `main` revision passes CI and Hostinger release-marker/health verification.
+- Existing `pine`, `leaf`, `ink`, `sand`, `.card`, `.field`, `.btn-*`, `.table-wrap`, and `.data-table` remain supported; no parallel design framework was introduced.
+- Platform control-plane identity must use HOAHub branding (`/Hoahub-logo.png`), never a customer/tenant logo.
+- `/admin/actions` is an aggregator only. It checks the authenticated user permissions and links into authoritative Payment, Billing, Document, Payroll, and Complaint workflows; it does not add a cross-module approval bypass.
+- Resident 360 is tenant-scoped by authenticated `user.tenantId`; it adds account/payment/document/vehicle/household summaries and links back to the existing homeowner profile/access and SOA workflows. It does not expose confidential complaint identity data.
+- `/admin/workforce` uses `requirePayrollAccess()` and tenant-scoped workforce/payroll queries. Salary/payroll authority is not widened.
+- `/platform/ai-usage` reads `AiUsageLedger` metadata only (request/outcome/tokens/cost/latency/tenant identity); it must not expose prompt/response content.
+- `/platform/audit` is a read-only view over the existing `AuditLog`; it does not fabricate audit/security events or mutate evidence.
+- Platform Tenant List V2 and Tenant 360 navigation retain existing subscription, billing, user, feature, advisory/settings and audit actions.
+- `components/portal-mobile-shell.tsx` keeps safe-area padding, touch-size behavior and the existing Home/Payments/Requests/Community/More information architecture.
+- Official document output/print CSS and production Gate Pass / Move In-Out templates are not recreated or replaced by this UI initiative.
+- No Prisma schema migration is part of this UI initiative.
+- Complaint/grievance privacy, verification, committee/identity, deadline and reporting controls remain unchanged.
+
+## Phase 3 Validation and Regression
+
+Primary regression contracts:
+
+- `tests/unit/ui-system-foundation.test.ts`
+- `tests/unit/community-intelligence-ecosystem.test.ts`
+- normal homeowner mobile/PWA critical suites
+- normal payroll, document, complaint/grievance, finance, RBAC and browser suites through HOAHub MySQL CI
+
+Before merge/deployment, the exact candidate head must pass dependency install, lint, Prisma validation/generation/migration on CI MySQL, seed, unit tests, integration tests, critical verification, typecheck, production build, controlled Chromium preparation, and production smoke/critical browser suites.
+
+Rollback remains application-level: revert the UI release while preserving all existing business data and schema. No destructive data rollback is required for Phase 3 because no new database migration is introduced.
 
 # Active Initiative: Complaint-to-Grievance Foundation — BRD v1.0
 
@@ -188,23 +212,23 @@ Current status/evidence:
 - `docs/complaints/GRIEVANCE_PHASE1_IMPLEMENTATION_STATUS.md`
 - `docs/complaints/GRIEVANCE_PHASE1_TRACEABILITY.md`
 - `docs/complaints/HOAHUB_GRIEVANCE_FOUNDATION_BRD_V1_0_RELEASE_RECORD.md`
-- PR #122 — `feat: grievance foundation phase 1`
+- PR #122 — `feat: grievance foundation phase 1` — MERGED
 
 The architecture rule is mandatory: **Complaint remains the intake/operational case layer; formal grievance/compliance remains a separate domain.** Do not expand `ComplaintStatus` into a monolithic notice/mediation/hearing/board/appeal state machine.
 
 ## Grievance Initiative Status
 
-| Stage | Status | Release rule |
+| Stage | Status | Release evidence |
 | --- | --- | --- |
 | Business recommendation | COMPLETE | Approved 2026-08-17 |
 | BRD v1.0 | COMPLETE | Approved requirements baseline; business scope unchanged |
 | Technical design | COMPLETE FOR PHASE 1 | Additive separate grievance domain; REST anonymous messaging; server-authoritative tenant/permission gates |
-| Schema/API design | COMPLETE / RELEASE VALIDATED | Prisma desired state, additive migration chain, anonymous APIs, SUB/VER/GRV/COM/DDL services and UI are implemented |
-| Implementation | COMPLETE FOR PHASE 1 | Review remediations implemented and current review threads resolved |
-| Automated validation | RELEASE CANDIDATE VALIDATED | Implementation head `858badf7ce2efc7db35d7dd570aebef8c82f5531` passed HOAHub MySQL CI #713 (`32034186355`) end-to-end; documentation-synchronized head must also pass before merge |
-| PR/merge | READY AFTER FINAL DOC-HEAD CI / NOT MERGED | PR #122 remains the active release PR until latest-head CI/mergeability are clean |
-| Hostinger deployment | NOT DEPLOYED | Only merged `main` is a production target |
-| Production UAT | NOT STARTED | Required after release-marker and health verification |
+| Schema/API design | COMPLETE | Prisma desired state, additive migration chain, anonymous APIs, SUB/VER/GRV/COM/DDL services and UI implemented |
+| Implementation | COMPLETE FOR PHASE 1 | Review remediations implemented; all PR #122 inline review threads resolved before merge |
+| Automated validation | COMPLETE | Exact merged-main SHA `e34bf48a8519cf6a8389a78f998bbfafd46653c0` passed HOAHub MySQL CI #718 (`32037027056`) end-to-end |
+| PR/merge | COMPLETE | PR #122 merged to `main` as `e34bf48a8519cf6a8389a78f998bbfafd46653c0` |
+| Hostinger deployment | DEPLOYED / VERIFIED | Production `/release.txt` matched `e34bf48a8519`; public `/api/health` passed |
+| Production UAT | AUTOMATED RELEASE UAT PASS | Exact main build passed unit/integration/critical/browser gates plus live release-marker and health verification; a separate authenticated live-tenant business sign-off session was not executed by the deployment workflow |
 
 ## Phase 1 Requirement Groups
 
@@ -230,6 +254,15 @@ Primary implementation includes:
 - Mobile/PWA tracker: `components/complaint-track-form.tsx`, `app/complaints/track/page.tsx`.
 - Admin surfaces: grievance foundation/settings/SLA controls; complaint detail/queue/settings/grievance report pages.
 - Regression suites: grievance Phase 1, admin, feature-switch, reporting, migration-safety, and review-remediation unit tests plus normal integration/critical/browser gates.
+
+## Grievance Production Deployment Evidence
+
+- Feature PR #122 merged to main SHA `e34bf48a8519cf6a8389a78f998bbfafd46653c0`.
+- Main workflow #718 (`32037027056`) passed repository verification on that exact merge.
+- Hostinger initially served the prior marker `f8becc4228d8`, then the connected-GitHub rollout published the expected `e34bf48a8519` marker.
+- The managed deployment job passed public `/api/health` after the marker matched.
+- This proves both repository validation and actual production publication; CI green alone is not treated as deployment evidence.
+- The production-record docs-only change records this completed release and does not alter grievance runtime behavior.
 
 ## Anonymous Messaging Release Gates
 
@@ -297,7 +330,7 @@ Unless the BRD is explicitly revised, Phase 2/3 retains:
 
 ## Grievance Validation Gate
 
-Before merge/production, the exact latest PR head must pass:
+Future grievance changes must preserve the same release gate on the exact candidate head:
 
 - `pnpm install --frozen-lockfile`
 - `pnpm lint`
@@ -343,7 +376,7 @@ A release is deployed only when all of these are true:
 
 The `deploy-production` job in `.github/workflows/ci-deploy.yml` performs the release-marker wait and public health check after a successful `main` verification run.
 
-For the Complaint-to-Grievance initiative, production-complete additionally requires production smoke/UAT for anonymous messaging, tenant isolation, subject integrity, verification enforcement, committee/identity permissions, process-deadline/SLA separation, queue/report privacy, mobile/PWA behavior, and existing complaint privacy regression.
+For the Complaint-to-Grievance initiative, the automated production release gate was completed for `e34bf48a8519cf6a8389a78f998bbfafd46653c0`: exact-main tests passed, Hostinger served `e34bf48a8519`, and public health passed. A separate authenticated tenant-representative sign-off may still be captured as an operational governance artifact when required; do not fabricate it.
 
 ## CI Browser Gate Recovery
 

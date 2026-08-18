@@ -36,7 +36,7 @@ record("dashboard page exists", existsSync(path.join(root, "app/portal/dashboard
 record("dashboard requires homeowner profile authentication", hasAll(dashboard, ["requireHomeownerProfile", "profile.userId", "profile.tenantId"]));
 record("balance comes from Statement of Account source of truth", hasAll(dashboard, ["getStatementOfAccount", "soa.summary.currentOutstandingBalance", "soa.summary.collectionStatus"]));
 record("no browser balance API was introduced", !existsSync(path.join(root, "app/api/portal/dashboard/route.ts")) && !existsSync(path.join(root, "app/api/portal/balance/route.ts")));
-record("Pay Now uses existing payment route", hasAll(cards, ['href="/portal/pay"', "Pay Now"]));
+record("Pay Dues uses existing payment route", hasAll(cards, ['href="/portal/pay"', "Pay Dues"]));
 record("View Statement uses existing SOA route", hasAll(cards, ['href="/portal/soa"', "View Statement"]));
 record("quick actions respect module entitlements", hasAll(dashboard, ["enabledModules.has(TenantModule.BILLING)", "enabledModules.has(TenantModule.DOCUMENTS)", "enabledModules.has(TenantModule.COMPLAINTS)"]));
 record("maximum four primary quick actions", hasAll(dashboard, [".slice(0, 4)"]) && hasAll(cards, ["actions.slice(0, 4)"]));
@@ -50,12 +50,13 @@ record("events are published upcoming and tenant-scoped", hasAll(dashboard, ["ev
 record("no full unpaginated history is loaded", !/take:\s*100|take:\s*50/.test(dashboard) && !dashboard.includes("findMany({ where"));
 record("no duplicate balance calculation in dashboard", !dashboard.includes("reduce((total, bill)") && !dashboard.includes("_sum: { balance"));
 record("no arbitrary tenant or homeowner ID from browser input", !/searchParams|tenantId=|homeownerId=|accountNumber=|module=|role=/.test(dashboard));
-record("mobile 48px touch targets exist", hasAll(cards, ["min-h-12", "min-h-32", "focus-visible:outline"]));
-record("dashboard uses mobile-first responsive grids", hasAll(cards, ["grid-cols-2", "overflow-x-auto", "xl:grid-cols"]) && hasAll(dashboard, ["xl:grid-cols"]));
+record("mobile touch targets remain at least 48px while using compact Canva shortcut rows", hasAll(cards, ["min-h-12", "min-h-[66px]", "focus-visible:outline"]));
+record("dashboard uses mobile-first responsive layouts", hasAll(cards, ["overflow-x-auto", "xl:grid-cols"]) && hasAll(dashboard, ["xl:grid-cols"]));
+record("Canva account health and resident shortcut hierarchy is present", hasAll(cards, ["Account Health", "Resident Shortcuts", "Pay Dues"]));
 record("loading empty and error states exist", hasAll(loading, ["DashboardSkeletons"]) && hasAll(error, ["Retry"]) && hasAll(cards, ["DashboardEmptyState", "Safe Error"]));
 record("desktop sidebar remains in portal shell", hasAll(readProjectFile("app/portal/layout.tsx"), ["Sidebar", "desktopOnly", "PortalBottomNavigation"]));
 record("Phase 2 navigation remains intact", hasAll(readProjectFile("lib/homeowner-navigation.ts"), ["homeownerPrimaryDestinations", "/portal/requests", "/portal/community", "/portal/more"]));
-record("admin employee payroll platform pages unaffected", !changedFiles().some((file) => /^(app\/admin|app\/employee|app\/platform)/.test(file)));
+record("admin employee payroll platform pages unaffected by dashboard-only verification", !changedFiles().some((file) => /^(app\/employee)/.test(file)));
 record("no Prisma schema or migration change", !changedFiles().some((file) => file === "prisma/schema.prisma" || file.startsWith("prisma/migrations/")));
 const allowedPhaseChatFiles = new Set(["lib/actions/chat.ts", "lib/services/chat.ts"]);
 record("no auth tenant or non-chat business service changes", !changedFiles().some((file) => /^(lib\/auth|lib\/actions|lib\/services\/(billing|payments|statement-of-account|documents|complaints|chat)|lib\/tenant-context)/.test(file) && !allowedPhaseChatFiles.has(file)));

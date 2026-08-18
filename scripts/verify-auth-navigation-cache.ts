@@ -33,8 +33,9 @@ async function main() {
   assert(loginForm.includes("window.location.replace(returnTo || state.redirectTo!)"), "Password login success must use a full document navigation to a server-approved destination.");
   assert(passkeyButton.includes("window.location.replace(returnTo || result.redirectTo || \"/portal/dashboard\")"), "Passkey login success must use a full document navigation to a safe destination.");
 
-  assert(activatePage.includes("const canActivate = query.verified === \"email\" || query.verified === \"already\""), "Activation page must gate the setup form on invitation verification state.");
-  assert(activatePage.indexOf("canActivate ?") < activatePage.indexOf("<HomeownerActivationForm />"), "Activation form must not render before invitation verification is checked.");
+  assert(activatePage.includes('const handoffDetails = query.verified === "email" ? await getActivationHandoffDetails(handoffToken) : null'), "Email activation must require a verified secure handoff before setup is allowed.");
+  assert(activatePage.includes('const canActivate = Boolean(handoffDetails) || query.verified === "already"'), "Activation page must gate the setup form on verified invitation state.");
+  assert(activatePage.indexOf("canActivate ?") < activatePage.indexOf("<HomeownerActivationForm"), "Activation form must not render before invitation verification is checked.");
   assert(activatePage.includes("Activation requires a valid invitation link"), "Direct activation access must fail safely.");
   assert(activationService.includes("/activate/verify?token="), "Activation email must use the invitation verification URL.");
   assert(activationService.includes("const activationUrl = emailVerificationUrl"), "Activation email must not advertise an unauthenticated public activation page.");

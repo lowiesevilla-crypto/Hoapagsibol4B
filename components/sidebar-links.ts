@@ -1,6 +1,7 @@
 import { homeownerSidebarLinks } from "@/lib/homeowner-navigation";
 
 export type IconName =
+  | "actions"
   | "audit"
   | "dashboard"
   | "homeowners"
@@ -35,6 +36,7 @@ export type LinkItem = { href: string; label: string; icon: IconName; section: s
  */
 export const adminLinks: LinkItem[] = [
   { href: "/admin/dashboard", label: "Dashboard", icon: "dashboard", section: "Administration" },
+  { href: "/admin/actions", label: "Action Center", icon: "actions", section: "Administration" },
   { href: "/admin/profile", label: "My Profile", icon: "profile", section: "Account" },
   { href: "/admin/subscription", label: "HOAHub Subscription", icon: "subscriptions", section: "Account" },
   { href: "/admin/agreement", label: "HOAHub Agreement", icon: "documents", section: "Account" },
@@ -84,6 +86,7 @@ export const adminLinks: LinkItem[] = [
  */
 export const adminShellLinks: LinkItem[] = [
   { href: "/admin/dashboard", label: "Dashboard", icon: "dashboard", section: "Overview" },
+  { href: "/admin/actions", label: "Action Center", icon: "actions", section: "Overview" },
 
   { href: "/admin/homeowners", label: "Homeowners", icon: "homeowners", section: "Residents" },
   { href: "/admin/contractors", label: "Contractors", icon: "contractors", section: "Residents" },
@@ -138,6 +141,7 @@ export const platformLinks: LinkItem[] = [
   { href: "/platform/agreements", label: "Agreements", icon: "documents", section: "Commercial" },
   { href: "/platform/licenses", label: "Licenses", icon: "licenses", section: "Operations" },
   { href: "/platform/document-management", label: "Document Usage", icon: "documents", section: "Operations" },
+  { href: "/platform/ai-usage", label: "AI Usage", icon: "chat", section: "Operations" },
   { href: "/platform/audit", label: "Audit & Security", icon: "audit", section: "Governance" },
   { href: "/platform/profile", label: "My Profile", icon: "profile", section: "Account" },
 ];

@@ -131,7 +131,21 @@ async function currentLogoutButton(page) {
     const scope = await form.$eval('input[name="scope"]', (node) => node.value).catch(() => "");
     if (scope !== "current") continue;
     const button = await form.$('button[type="submit"]');
-    if (button) return button;
+    if (!button) continue;
+    const visible = await button.evaluate((node) => {
+      const style = getComputedStyle(node);
+      const rect = node.getBoundingClientRect();
+      return style.display !== "none"
+        && style.visibility !== "hidden"
+        && Number(style.opacity || "1") > 0
+        && rect.width > 0
+        && rect.height > 0
+        && rect.bottom > 0
+        && rect.right > 0
+        && rect.top < window.innerHeight
+        && rect.left < window.innerWidth;
+    });
+    if (visible) return button;
   }
   return null;
 }
@@ -143,7 +157,7 @@ function isLoginPath(pathname) {
 async function exerciseLogoutAndBack(page, identity) {
   await page.goto(`${baseUrl}${identity.logoutRoute}`, { waitUntil: "networkidle2", timeout });
   const logoutButton = await currentLogoutButton(page);
-  assert.ok(logoutButton, `${identity.label}: current-session logout form was not found`);
+  assert.ok(logoutButton, `${identity.label}: visible current-session logout form was not found`);
 
   await Promise.all([
     page.waitForNavigation({ waitUntil: "domcontentloaded", timeout }),

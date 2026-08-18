@@ -171,7 +171,7 @@ Implementation branch / PR: `feature/ui-system-foundation` / PR #123.
 | Wave 4 — Tenant operational workspaces | COMPLETE FOR RELEASE CANDIDATE | shared premium PageHeader/status layer applied across existing Finance/Documents/Workforce/AI workflows; new protected `/admin/workforce` HRIS/Payroll command center |
 | Wave 5 — Platform ecosystem | COMPLETE FOR RELEASE CANDIDATE | Tenant List V2, simplified Tenant 360 tabs, Platform AI Usage metadata workspace, real Platform Audit & Security evidence workspace; existing Subscriptions/Plans/Invoices/Agreements/Licenses/Document Usage retain authoritative actions with premium shared presentation |
 | Wave 6 — Homeowner/PWA | COMPLETE FOR RELEASE CANDIDATE | shared premium portal mobile header/bottom navigation/cards; existing Home/Payments/Requests/Community/More routing, payment/document workflows, AI governance and safe-area behavior preserved |
-| Exact-head automated validation | PENDING | must pass full HOAHub MySQL CI after this Agent synchronization |
+| Exact-head automated validation | PENDING | final release-candidate head includes the post-review Workforce Prisma field correction, AI usage group ordering correction, and Action Center lint cleanup; full HOAHub MySQL CI must pass this exact head |
 | Merge to `main` | PENDING | user explicitly authorized completion and production deployment on 2026-08-18; merge only after exact-head green CI and mergeability review |
 | Hostinger production deployment | AUTHORIZED / PENDING | after merge, verify expected release marker and public health before reporting production complete |
 
@@ -198,6 +198,12 @@ Primary regression contracts:
 - `tests/unit/community-intelligence-ecosystem.test.ts`
 - normal homeowner mobile/PWA critical suites
 - normal payroll, document, complaint/grievance, finance, RBAC and browser suites through HOAHub MySQL CI
+
+Validation history for this release candidate:
+
+- Earlier foundation head `e43f18d529d8d9a8bf90a6481b2bcfd827f79c4b` passed HOAHub MySQL CI #721 end-to-end before Waves 3–6 were added.
+- Full-ecosystem CI #742 stopped at lint because `app/admin/actions/page.tsx` had one unused `MessageSquareWarning` import; the import was removed.
+- Static Prisma review also corrected the new Workforce Hub to use the actual `PayrollPeriod.startDate/endDate/payDate` fields and normalized AI usage group ordering before the final candidate validation.
 
 Before merge/deployment, the exact candidate head must pass dependency install, lint, Prisma validation/generation/migration on CI MySQL, seed, unit tests, integration tests, critical verification, typecheck, production build, controlled Chromium preparation, and production smoke/critical browser suites.
 

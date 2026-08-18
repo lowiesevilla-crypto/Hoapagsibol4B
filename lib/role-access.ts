@@ -1,20 +1,12 @@
 import { Role } from "@prisma/client";
 import type { LinkItem } from "@/components/sidebar-links";
-import {
-  hasPermission,
-  Permission,
-  type Permission as PermissionValue,
-} from "@/lib/authorization/permissions";
+import { hasPermission, Permission, type Permission as PermissionValue } from "@/lib/authorization/permissions";
 
-const unrestrictedAdminRoles = new Set<Role>([
-  Role.SUPER_ADMIN,
-  Role.SYSTEM_ADMIN,
-  Role.HOA_ADMIN,
-  Role.ADMIN,
-]);
+const unrestrictedAdminRoles = new Set<Role>([Role.SUPER_ADMIN, Role.SYSTEM_ADMIN, Role.HOA_ADMIN, Role.ADMIN]);
 
 const adminRoutePermissions: readonly [string, PermissionValue][] = [
   ["/admin/profile", Permission.ADMIN_ACCESS],
+  ["/admin/actions", Permission.ADMIN_ACCESS],
   ["/admin/subscription", Permission.TENANT_SETTINGS_MANAGE],
   ["/admin/agreement", Permission.TENANT_SETTINGS_MANAGE],
   ["/admin/onboarding", Permission.TENANT_SETTINGS_MANAGE],
@@ -22,6 +14,7 @@ const adminRoutePermissions: readonly [string, PermissionValue][] = [
   ["/admin/settings/billing-exemptions", Permission.BILLING_MANAGE],
   ["/admin/settings", Permission.TENANT_SETTINGS_MANAGE],
   ["/admin/homeowners", Permission.HOMEOWNERS_MANAGE],
+  ["/admin/workforce", Permission.PAYROLL_MANAGE],
   ["/admin/employees", Permission.PAYROLL_MANAGE],
   ["/admin/attendance", Permission.ATTENDANCE_MANAGE],
   ["/admin/payroll", Permission.PAYROLL_MANAGE],
@@ -44,40 +37,9 @@ const adminRoutePermissions: readonly [string, PermissionValue][] = [
   ["/admin/dashboard", Permission.ADMIN_ACCESS],
 ];
 
-function normalizeRoles(roleOrRoles: Role | readonly Role[]) {
-  return typeof roleOrRoles === "string"
-    ? [roleOrRoles]
-    : [...new Set(roleOrRoles)];
-}
-
-export function requiredPermissionForAdminPath(pathname: string) {
-  const path = pathname.split(/[?#]/)[0];
-  return adminRoutePermissions.find(([prefix]) => path === prefix || path.startsWith(`${prefix}/`))?.[1] ?? null;
-}
-
-export function adminPrefixesForRole(role: Role) {
-  if (unrestrictedAdminRoles.has(role)) return null;
-  return adminRoutePermissions
-    .filter(([, permission]) => hasPermission([role], permission))
-    .map(([prefix]) => prefix);
-}
-
-export function canAccessAdminPath(roleOrRoles: Role | readonly Role[], pathname: string) {
-  const roles = normalizeRoles(roleOrRoles);
-  const requiredPermission = requiredPermissionForAdminPath(pathname);
-  if (requiredPermission) return hasPermission(roles, requiredPermission);
-  return roles.some((role) => unrestrictedAdminRoles.has(role));
-}
-
-export function filterAdminLinksByRole(links: LinkItem[], roleOrRoles: Role | readonly Role[]) {
-  return links.filter((link) => canAccessAdminPath(roleOrRoles, link.href));
-}
-
-export function adminHomeForRole(roleOrRoles: Role | readonly Role[]) {
-  const roles = normalizeRoles(roleOrRoles);
-  if (hasPermission(roles, Permission.TENANT_SETTINGS_MANAGE)) return "/admin/dashboard";
-  if (hasPermission(roles, Permission.BILLING_MANAGE)) return "/admin/billing";
-  if (hasPermission(roles, Permission.PAYROLL_MANAGE)) return "/admin/payroll";
-  if (hasPermission(roles, Permission.CHAT_USE)) return "/admin/chat";
-  return "/admin/dashboard";
-}
+function normalizeRoles(roleOrRoles: Role | readonly Role[]) { return typeof roleOrRoles === "string" ? [roleOrRoles] : [...new Set(roleOrRoles)]; }
+export function requiredPermissionForAdminPath(pathname: string) { const path = pathname.split(/[?#]/)[0]; return adminRoutePermissions.find(([prefix]) => path === prefix || path.startsWith(`${prefix}/`))?.[1] ?? null; }
+export function adminPrefixesForRole(role: Role) { if (unrestrictedAdminRoles.has(role)) return null; return adminRoutePermissions.filter(([, permission]) => hasPermission([role], permission)).map(([prefix]) => prefix); }
+export function canAccessAdminPath(roleOrRoles: Role | readonly Role[], pathname: string) { const roles = normalizeRoles(roleOrRoles); const requiredPermission = requiredPermissionForAdminPath(pathname); if (requiredPermission) return hasPermission(roles, requiredPermission); return roles.some((role) => unrestrictedAdminRoles.has(role)); }
+export function filterAdminLinksByRole(links: LinkItem[], roleOrRoles: Role | readonly Role[]) { return links.filter((link) => canAccessAdminPath(roleOrRoles, link.href)); }
+export function adminHomeForRole(roleOrRoles: Role | readonly Role[]) { const roles = normalizeRoles(roleOrRoles); if (hasPermission(roles, Permission.TENANT_SETTINGS_MANAGE)) return "/admin/dashboard"; if (hasPermission(roles, Permission.BILLING_MANAGE)) return "/admin/billing"; if (hasPermission(roles, Permission.PAYROLL_MANAGE)) return "/admin/payroll"; if (hasPermission(roles, Permission.CHAT_USE)) return "/admin/chat"; return "/admin/dashboard"; }

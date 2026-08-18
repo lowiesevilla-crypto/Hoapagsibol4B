@@ -1,6 +1,7 @@
 import { homeownerSidebarLinks } from "@/lib/homeowner-navigation";
 
 export type IconName =
+  | "actions"
   | "audit"
   | "dashboard"
   | "homeowners"
@@ -29,12 +30,9 @@ export type IconName =
 
 export type LinkItem = { href: string; label: string; icon: IconName; section: string };
 
-/**
- * Complete route catalogue used by metadata, role filtering, and route-level policy.
- * Keep leaf routes here even when they are intentionally omitted from the primary shell.
- */
 export const adminLinks: LinkItem[] = [
   { href: "/admin/dashboard", label: "Dashboard", icon: "dashboard", section: "Administration" },
+  { href: "/admin/actions", label: "Action Center", icon: "actions", section: "Administration" },
   { href: "/admin/profile", label: "My Profile", icon: "profile", section: "Account" },
   { href: "/admin/subscription", label: "HOAHub Subscription", icon: "subscriptions", section: "Account" },
   { href: "/admin/agreement", label: "HOAHub Agreement", icon: "documents", section: "Account" },
@@ -69,6 +67,7 @@ export const adminLinks: LinkItem[] = [
   { href: "/admin/announcements", label: "Announcements", icon: "announcements", section: "Community" },
   { href: "/admin/events", label: "Events", icon: "events", section: "Community" },
   { href: "/admin/chat", label: "Chat", icon: "chat", section: "Community" },
+  { href: "/admin/workforce", label: "Workforce Hub", icon: "employees", section: "HR & Payroll" },
   { href: "/admin/employees", label: "Employees", icon: "employees", section: "HR & Payroll" },
   { href: "/admin/attendance", label: "Attendance", icon: "attendance", section: "HR & Payroll" },
   { href: "/admin/payroll", label: "Payroll", icon: "payroll", section: "HR & Payroll" },
@@ -77,38 +76,28 @@ export const adminLinks: LinkItem[] = [
   { href: "/admin/data/migrations", label: "Balance migration", icon: "data", section: "Reports" },
 ];
 
-/**
- * Primary premium shell navigation. Secondary configuration, direct-create actions,
- * and tab destinations remain available inside their parent workspaces instead of
- * competing for permanent sidebar space.
- */
 export const adminShellLinks: LinkItem[] = [
   { href: "/admin/dashboard", label: "Dashboard", icon: "dashboard", section: "Overview" },
-
+  { href: "/admin/actions", label: "Action Center", icon: "actions", section: "Overview" },
   { href: "/admin/homeowners", label: "Homeowners", icon: "homeowners", section: "Residents" },
   { href: "/admin/contractors", label: "Contractors", icon: "contractors", section: "Residents" },
   { href: "/admin/vehicles", label: "Vehicles", icon: "vehicles", section: "Residents" },
-
   { href: "/admin/billing", label: "Billing", icon: "billing", section: "Finance" },
   { href: "/admin/payments/requests", label: "Payments", icon: "payments", section: "Finance" },
   { href: "/admin/collections", label: "Collections", icon: "collections", section: "Finance" },
   { href: "/admin/expenses", label: "Expenses", icon: "expenses", section: "Finance" },
-
   { href: "/admin/documents", label: "Documents", icon: "documents", section: "Resident Services" },
   { href: "/admin/document-management", label: "Document Repository", icon: "documents", section: "Resident Services" },
   { href: "/admin/complaints", label: "Complaints", icon: "complaints", section: "Resident Services" },
-
   { href: "/admin/announcements", label: "Announcements", icon: "announcements", section: "Community" },
   { href: "/admin/events", label: "Events", icon: "events", section: "Community" },
   { href: "/admin/chat", label: "Chat", icon: "chat", section: "Community" },
-
+  { href: "/admin/workforce", label: "Workforce Hub", icon: "employees", section: "Workforce" },
   { href: "/admin/employees", label: "Employees", icon: "employees", section: "Workforce" },
   { href: "/admin/attendance", label: "Attendance", icon: "attendance", section: "Workforce" },
   { href: "/admin/payroll", label: "Payroll", icon: "payroll", section: "Workforce" },
-
   { href: "/admin/reports", label: "Reports", icon: "reports", section: "Insights & Data" },
   { href: "/admin/data", label: "Data & Imports", icon: "data", section: "Insights & Data" },
-
   { href: "/admin/ai-copilot", label: "AI Staff Copilot", icon: "chat", section: "AI & Knowledge" },
   { href: "/admin/profile", label: "My Profile", icon: "profile", section: "Account" },
 ];
@@ -119,21 +108,20 @@ export const systemAdminLinks: LinkItem[] = [
   ...adminLinks,
 ];
 
-export const systemAdminShellLinks: LinkItem[] = [
-  ...adminShellLinks,
-  { href: "/admin/settings", label: "Settings", icon: "settings", section: "Account" },
-];
+export const systemAdminShellLinks: LinkItem[] = [...adminShellLinks, { href: "/admin/settings", label: "Settings", icon: "settings", section: "Account" }];
 
 export const platformLinks: LinkItem[] = [
+  { href: "/platform/dashboard", label: "Dashboard", icon: "dashboard", section: "Platform Home" },
+  { href: "/platform/tenants", label: "Tenants", icon: "platform", section: "Customers" },
+  { href: "/platform/subscriptions", label: "Subscriptions", icon: "subscriptions", section: "Commercial" },
+  { href: "/platform/plans", label: "Plans & Features", icon: "plans", section: "Commercial" },
+  { href: "/platform/invoices", label: "Invoices", icon: "billing", section: "Commercial" },
+  { href: "/platform/agreements", label: "Agreements", icon: "documents", section: "Commercial" },
+  { href: "/platform/licenses", label: "Licenses", icon: "licenses", section: "Operations" },
+  { href: "/platform/document-management", label: "Document Usage", icon: "documents", section: "Operations" },
+  { href: "/platform/ai-usage", label: "AI Usage", icon: "chat", section: "Operations" },
+  { href: "/platform/audit", label: "Audit & Security", icon: "audit", section: "Governance" },
   { href: "/platform/profile", label: "My Profile", icon: "profile", section: "Account" },
-  { href: "/platform/tenants", label: "Tenants", icon: "platform", section: "Platform" },
-  { href: "/platform/plans", label: "Plans", icon: "plans", section: "Platform" },
-  { href: "/platform/document-management", label: "Document Usage", icon: "documents", section: "Platform" },
-  { href: "/platform/subscriptions", label: "Subscriptions", icon: "subscriptions", section: "Platform" },
-  { href: "/platform/agreements", label: "Agreements", icon: "documents", section: "Platform" },
-  { href: "/platform/invoices", label: "Invoices", icon: "billing", section: "Platform" },
-  { href: "/platform/licenses", label: "Licenses", icon: "licenses", section: "Platform" },
-  { href: "/platform/audit", label: "Platform audit", icon: "audit", section: "Platform" },
 ];
 
 export const portalLinks: LinkItem[] = homeownerSidebarLinks;

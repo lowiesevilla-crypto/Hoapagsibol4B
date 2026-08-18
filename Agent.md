@@ -1,6 +1,6 @@
 # HOAHub Agent Context
 
-Last updated: 2026-08-17
+Last updated: 2026-08-18
 
 ## Purpose
 
@@ -154,6 +154,61 @@ Current financial state is derived from authoritative posted ledger/SOA evidence
 - PayMongo posting occurs only from verified gateway processing and the normal transactional ledger/receipt path.
 - Linked posted `Payment`/`Collection` evidence is stronger than stale request metadata and should render Paid/confirmed status.
 - Browser redirects/query parameters cannot create receipts or financial postings.
+
+# Active Initiative: Community Intelligence UI System — Phase 3
+
+Approved design baseline: `docs/ui/HOAHUB_COMMUNITY_INTELLIGENCE_UI_SYSTEM_V1.md`.
+
+Implementation branch / PR: `feature/ui-system-foundation` / PR #123.
+
+## Phase 3 Implementation State
+
+| Wave | Status | Primary implementation |
+| --- | --- | --- |
+| Wave 1 — Design foundation | COMPLETE | semantic Tailwind tokens; shared `PageHeader`, `MetricCard`, `StatusBadge`, `WorkspaceCard`; design-system contract |
+| Wave 2 — Shell separation | COMPLETE | Platform topbar/control-plane identity, platform navigation taxonomy, `/platform/dashboard`, tenant/platform visual separation |
+| Wave 3 — Tenant core | COMPLETE FOR RELEASE CANDIDATE | Tenant Dashboard V2, permission-aware `/admin/actions`, tenant-scoped Resident 360 overview |
+| Wave 4 — Tenant operational workspaces | COMPLETE FOR RELEASE CANDIDATE | shared premium PageHeader/status layer applied across existing Finance/Documents/Workforce/AI workflows; new protected `/admin/workforce` HRIS/Payroll command center |
+| Wave 5 — Platform ecosystem | COMPLETE FOR RELEASE CANDIDATE | Tenant List V2, simplified Tenant 360 tabs, Platform AI Usage metadata workspace, real Platform Audit & Security evidence workspace; existing Subscriptions/Plans/Invoices/Agreements/Licenses/Document Usage retain authoritative actions with premium shared presentation |
+| Wave 6 — Homeowner/PWA | COMPLETE FOR RELEASE CANDIDATE | shared premium portal mobile header/bottom navigation/cards; existing Home/Payments/Requests/Community/More routing, payment/document workflows, AI governance and safe-area behavior preserved |
+| Exact-head automated validation | PENDING | final release-candidate head includes all post-review corrections; full HOAHub MySQL CI must pass this exact head |
+| Merge to `main` | PENDING | user explicitly authorized completion and production deployment on 2026-08-18; merge only after exact-head green CI and mergeability review |
+| Hostinger production deployment | AUTHORIZED / PENDING | after merge, verify expected release marker and public health before reporting production complete |
+
+## Phase 3 Architecture and Safety Contract
+
+- Existing `pine`, `leaf`, `ink`, `sand`, `.card`, `.field`, `.btn-*`, `.table-wrap`, and `.data-table` remain supported; no parallel design framework was introduced.
+- Platform control-plane identity must use HOAHub branding (`/Hoahub-logo.png`), never a customer/tenant logo.
+- `/admin/actions` is an aggregator only. It checks the authenticated user permissions and links into authoritative Payment, Billing, Document, Payroll, and Complaint workflows; it does not add a cross-module approval bypass.
+- Resident 360 is tenant-scoped by authenticated `user.tenantId`; it adds account/payment/document/vehicle/household summaries and links back to the existing homeowner profile/access and SOA workflows. It does not expose confidential complaint identity data.
+- `/admin/workforce` uses `requirePayrollAccess()` and tenant-scoped workforce/payroll queries. Salary/payroll authority is not widened.
+- `/platform/ai-usage` reads `AiUsageLedger` metadata only (request/outcome/tokens/cost/latency/tenant identity); it must not expose prompt/response content.
+- `/platform/audit` is a read-only view over the existing `AuditLog`; it does not fabricate audit/security events or mutate evidence.
+- Platform Tenant List V2 and Tenant 360 navigation retain existing subscription, billing, user, feature, advisory/settings and audit actions.
+- `components/portal-mobile-shell.tsx` keeps safe-area padding, touch-size behavior and the existing Home/Payments/Requests/Community/More information architecture.
+- Official document output/print CSS and production Gate Pass / Move In-Out templates are not recreated or replaced by this UI initiative.
+- No Prisma schema migration is part of this UI initiative.
+- Complaint/grievance privacy, verification, committee/identity, deadline and reporting controls remain unchanged.
+
+## Phase 3 Validation and Regression
+
+Primary regression contracts:
+
+- `tests/unit/ui-system-foundation.test.ts`
+- `tests/unit/community-intelligence-ecosystem.test.ts`
+- normal homeowner mobile/PWA critical suites
+- normal payroll, document, complaint/grievance, finance, RBAC and browser suites through HOAHub MySQL CI
+
+Validation history for this release candidate:
+
+- Earlier foundation head `e43f18d529d8d9a8bf90a6481b2bcfd827f79c4b` passed HOAHub MySQL CI #721 end-to-end before Waves 3–6 were added.
+- Full-ecosystem CI #742 stopped at lint because `app/admin/actions/page.tsx` had one unused `MessageSquareWarning` import; the import was removed.
+- Static Prisma review corrected the Workforce Hub to use the actual `PayrollPeriod.startDate/endDate/payDate` fields and normalized AI usage group ordering.
+- Full-ecosystem CI #746 then passed dependency integrity, lint, Prisma validation/generation/migration, database seed, unit tests, finance integration, and the critical verification suite, but TypeScript typecheck caught a narrow-array `AttendanceStatus` inference in the Workforce present-count calculation. The calculation now uses a typed `Set<AttendanceStatus>` so all enum values are accepted safely.
+
+Before merge/deployment, the exact candidate head must pass dependency install, lint, Prisma validation/generation/migration on CI MySQL, seed, unit tests, integration tests, critical verification, typecheck, production build, controlled Chromium preparation, and production smoke/critical browser suites.
+
+Rollback remains application-level: revert the UI release while preserving all existing business data and schema. No destructive data rollback is required for Phase 3 because no new database migration is introduced.
 
 # Active Initiative: Complaint-to-Grievance Foundation — BRD v1.0
 

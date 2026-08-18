@@ -11,7 +11,7 @@ export default async function PlatformLayout({ children }: { children: React.Rea
   const roleLabel = user.role.replaceAll("_", " ");
 
   return (
-    <div className="min-h-screen overflow-x-hidden bg-surface-canvas print:bg-white">
+    <div className="canva-platform-shell min-h-screen overflow-x-hidden print:bg-white">
       <div className="print:hidden">
         <Sidebar
           user={user}
@@ -25,7 +25,7 @@ export default async function PlatformLayout({ children }: { children: React.Rea
         <TransactionFeedback />
       </Suspense>
 
-      <div className="min-w-0 lg:ml-72 print:ml-0">
+      <div className="min-w-0 lg:ml-[300px] print:ml-0">
         <div className="print:hidden">
           <PlatformTopbar userName={user.name} roleLabel={roleLabel} />
         </div>
@@ -33,7 +33,7 @@ export default async function PlatformLayout({ children }: { children: React.Rea
           {children}
         </main>
 
-        <footer className="mx-auto max-w-[1800px] px-4 pb-6 text-xs text-slate-400 sm:px-7 lg:px-10 print:hidden">
+        <footer className="mx-auto max-w-[1800px] px-4 pb-6 text-xs text-[#91a4af] sm:px-7 lg:px-10 print:hidden">
           HOAHub™ v1.1 • Community Intelligence OS • © 2026 Lowie Sevilla
         </footer>
       </div>

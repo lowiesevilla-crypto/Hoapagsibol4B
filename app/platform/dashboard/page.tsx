@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { PlatformInvoiceStatus, TenantStatus, TenantSubscriptionStatus } from "@prisma/client";
-import { Building2, CircleDollarSign, Clock3, CreditCard, ShieldAlert, Sparkles, UsersRound } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
+import { Building2, CircleDollarSign, CreditCard, ShieldAlert, Sparkles, UsersRound } from "lucide-react";
 import { MetricCard } from "@/components/ui/metric-card";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { WorkspaceCard } from "@/components/ui/workspace-card";
@@ -54,10 +55,10 @@ export default async function PlatformDashboardPage() {
             <p className="text-[11px] font-black uppercase tracking-[.2em] text-[#8fd6e9]">SaaS Intelligence · Live</p>
             <h1 className="mt-2 text-[34px] font-black leading-[1.04] tracking-[-.04em] sm:text-[42px]">HOAHub Platform Command Center</h1>
             <p className="mt-3 max-w-3xl text-sm leading-6 text-[#c6e0e8] sm:text-[15px]">A single operational view of customers, subscription state, platform receivables, and tenant risk using authoritative HOAHub records.</p>
-            <div className="mt-4 flex flex-wrap gap-2"><span className="rounded-full border border-white/10 bg-white/8 px-3 py-1.5 text-xs font-black text-[#d7edf2]">{healthyShare}% portfolio health</span><span className="rounded-full border border-white/10 bg-white/8 px-3 py-1.5 text-xs font-black text-[#d7edf2]">{activeShare}% active tenants</span></div>
+            <div className="mt-4 flex flex-wrap gap-2"><span className="rounded-full border border-white/10 bg-white/[0.08] px-3 py-1.5 text-xs font-black text-[#d7edf2]">{healthyShare}% portfolio health</span><span className="rounded-full border border-white/10 bg-white/[0.08] px-3 py-1.5 text-xs font-black text-[#d7edf2]">{activeShare}% active tenants</span></div>
           </div>
           <div className="flex flex-wrap gap-2">
-            <Link className="inline-flex min-h-11 items-center gap-2 rounded-[13px] border border-white/12 bg-white/8 px-4 text-sm font-black text-white hover:bg-white/12" href="/platform/subscriptions"><CreditCard className="size-4" /> Subscriptions</Link>
+            <Link className="inline-flex min-h-11 items-center gap-2 rounded-[13px] border border-white/[0.12] bg-white/[0.08] px-4 text-sm font-black text-white hover:bg-white/[0.12]" href="/platform/subscriptions"><CreditCard className="size-4" /> Subscriptions</Link>
             <Link className="inline-flex min-h-11 items-center gap-2 rounded-[13px] bg-[#0b95d8] px-4 text-sm font-black text-white shadow-[0_10px_24px_rgba(11,149,216,.2)] hover:bg-[#27b6ff]" href="/platform/tenants/new"><Building2 className="size-4" /> Onboard HOA</Link>
           </div>
         </div>
@@ -128,6 +129,6 @@ function PortfolioBar({ label, value, max, className }: { label: string; value: 
   return <div className="mb-4 last:mb-0"><div className="flex items-center justify-between gap-3 text-xs font-bold"><span className="text-[#6f8294]">{label}</span><span className="text-[#0c3248]">{value}</span></div><div className="mt-2 h-2.5 overflow-hidden rounded-full bg-[#e3ebef]"><div className={`h-full rounded-full ${className}`} style={{ width: `${percentage}%` }} /></div></div>;
 }
 
-function SignalTile({ icon: Icon, label, value, note }: { icon: typeof Building2; label: string; value: string; note: string }) {
+function SignalTile({ icon: Icon, label, value, note }: { icon: LucideIcon; label: string; value: string; note: string }) {
   return <div className="rounded-[16px] border border-[#e3edf2] bg-white p-3.5"><div className="flex items-center gap-3"><span className="grid size-9 place-items-center rounded-[12px] bg-[#eaf6ff] text-[#0b80be]"><Icon className="size-4" /></span><div className="min-w-0"><p className="text-[10px] font-black uppercase tracking-[.08em] text-[#8091a0]">{label}</p><p className="mt-0.5 truncate text-base font-black text-[#0c3248]">{value}</p></div></div><p className="mt-2 text-[11px] text-[#7c8d9b]">{note}</p></div>;
 }

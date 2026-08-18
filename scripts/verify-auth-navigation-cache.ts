@@ -1,6 +1,4 @@
-import { existsSync, readFileSync } from "node:fs";
-
-loadLocalEnv();
+import { readFileSync } from "node:fs";
 
 function assert(condition: unknown, message: string): asserts condition {
   if (!condition) throw new Error(message);
@@ -10,37 +8,21 @@ function read(path: string) {
   return readFileSync(path, "utf8");
 }
 
-function requireLocalClone() {
-  const url = process.env.DATABASE_URL || "";
-  assert(url.includes("127.0.0.1") && url.includes("hoahub_prodclone_local"), "Verification must run only against 127.0.0.1 / hoahub_prodclone_local.");
-}
-
-function loadLocalEnv() {
-  for (const file of [".env.local", ".env"]) {
-    if (!existsSync(file)) continue;
-    const text = readFileSync(file, "utf8");
-    for (const line of text.split(/\r?\n/)) {
-      const match = line.match(/^\s*([A-Z0-9_]+)\s*=\s*(.*)\s*$/);
-      if (!match || process.env[match[1]]) continue;
-      process.env[match[1]] = match[2].trim().replace(/^"(.*)"$/, "$1");
-    }
-  }
-}
-
 async function main() {
-  requireLocalClone();
-
   const loginForm = read("components/login-form.tsx");
   const passkeyButton = read("components/passkey-login-button.tsx");
   const activatePage = read("app/activate/page.tsx");
   const activationService = read("lib/services/homeowner-activation.ts");
   const authActions = read("lib/actions/auth.ts");
   const authButtons = read("components/auth-navigation-buttons.tsx");
+  const logoutRoute = read("app/api/auth/logout/route.ts");
+  const authLogout = read("lib/auth-logout.ts");
   const sidebar = read("components/sidebar.tsx");
   const profile = read("app/portal/profile/page.tsx");
   const layout = read("app/layout.tsx");
   const globalError = read("app/error.tsx");
   const chunkRecovery = read("lib/chunk-recovery.ts");
+  const navigationRecovery = read("lib/navigation-recovery.ts");
   const browserRecovery = read("components/browser-cache-recovery.tsx");
   const nextConfig = read("next.config.ts");
   const packageJson = read("package.json");
@@ -57,30 +39,41 @@ async function main() {
   assert(activationService.includes("/activate/verify?token="), "Activation email must use the invitation verification URL.");
   assert(activationService.includes("const activationUrl = emailVerificationUrl"), "Activation email must not advertise an unauthenticated public activation page.");
 
-  assert(authActions.includes("return { redirectTo: defaultHomeForRole(user.role) }"), "Password login must return a verified server-computed redirect destination.");
-  assert(authActions.includes("logoutNavigationAction") && authActions.includes("logoutAllSessionsNavigationAction"), "Logout navigation actions are missing.");
-  assert(authButtons.includes("useActionState") && authButtons.includes("window.location.replace(state.redirectTo)"), "Logout buttons must perform full document navigation after server-side logout.");
-  assert(sidebar.includes("LogoutButton") && !sidebar.includes("logoutAction"), "Sidebar logout must use the safe navigation logout control.");
-  assert(profile.includes("LogoutButton") && !profile.includes("logoutAction"), "Profile logout controls must use the safe navigation logout control.");
+  assert(authActions.includes("return { redirectTo: defaultHomeForRoles(roles, role) }"), "Password login must return a verified server-computed redirect destination.");
+  assert(authButtons.includes('action="/api/auth/logout"') && authButtons.includes('method="post"'), "Logout buttons must use a normal same-origin document POST.");
+  assert(!authButtons.includes("useActionState") && !authButtons.includes("logoutNavigationAction"), "Logout must not revoke the session inside a React Server Action state transition.");
+  assert(logoutRoute.includes("assertSameOrigin(request)"), "Logout POST must enforce same-origin request validation.");
+  assert(logoutRoute.includes("NextResponse.redirect(destination, 303)"), "Logout POST must finish with an HTTP 303 full-document redirect.");
+  assert(logoutRoute.includes("privateNoStoreHeaders"), "Logout responses must be private/no-store.");
+  assert(authLogout.includes("session.tenantSlug") && !authLogout.includes("platformPrisma.tenant"), "Logout redirect must use signed session routing data instead of a database lookup.");
+  assert(authLogout.includes("await deleteSession()"), "Logout must remove the signed browser session even when persisted-session cleanup is best-effort.");
+  assert(sidebar.includes("LogoutButton") && !sidebar.includes("logoutAction"), "Sidebar logout must use the shared safe logout control.");
+  assert(profile.includes("LogoutButton") && !profile.includes("logoutAction"), "Profile logout controls must use the shared safe logout control.");
 
-  assert(layout.includes("BrowserCacheRecovery"), "Root layout must mount browser cache/chunk recovery.");
+  assert(layout.includes("BrowserCacheRecovery"), "Root layout must mount browser cache/navigation recovery.");
   assert(chunkRecovery.includes("ChunkLoadError") && chunkRecovery.includes("_next") && chunkRecovery.includes("static") && chunkRecovery.includes("chunks"), "Chunk recovery must detect genuine Next.js chunk failures.");
   assert(globalError.includes("SAFE_CHUNK_RECOVERY_MESSAGE"), "Global error boundary must use a safe chunk recovery message.");
-  assert(!globalError.includes("error.message"), "Global error boundary must not expose raw chunk URLs or exception messages.");
-  assert(browserRecovery.includes("sessionStorage") && browserRecovery.includes("window.location.reload()"), "Chunk recovery must be guarded and reload once.");
+  assert(!globalError.includes("error.message"), "Global error boundary must not expose raw exception messages.");
+  assert(globalError.includes("window.location.reload()") && globalError.includes('window.location.replace("/")'), "Try again must use full-document recovery with a safe-entry fallback.");
+  assert(!globalError.includes("reset()"), "Global Try again must not retry the same broken React render tree.");
+  assert(navigationRecovery.includes('"/admin"') && navigationRecovery.includes('"/platform"') && navigationRecovery.includes('"/portal"') && navigationRecovery.includes('"/employee"'), "Protected navigation recovery must cover all authenticated shells.");
+  assert(browserRecovery.includes('addEventListener("pageshow"') && browserRecovery.includes('addEventListener("popstate"'), "Back/Forward recovery must handle BFCache and history traversal.");
+  assert(browserRecovery.includes("isProtectedApplicationPath") && browserRecovery.includes("window.location.reload()"), "Protected history traversal must refresh from authoritative server state.");
+  assert(browserRecovery.includes("sessionStorage") && browserRecovery.includes("GLOBAL_ERROR_RECOVERY_KEY"), "Stable pages must clear guarded recovery state.");
   assert(browserRecovery.includes("getRegistrations") && browserRecovery.includes("registration.unregister()"), "Stale service workers must be removed safely.");
   assert(browserRecovery.includes("window.caches.delete"), "Old PWA runtime caches must be cleaned.");
-  assert(browserRecovery.includes("routeCategory(pathname)") && !browserRecovery.includes("error.message"), "Chunk recovery logging must avoid sensitive request data and raw errors.");
+  assert(browserRecovery.includes("routeCategory(currentPath)") && !browserRecovery.includes("error.message"), "Navigation recovery logging must avoid sensitive request data and raw errors.");
 
   assert(nextConfig.includes('{ source: "/", headers: noStoreHeaders }'), "Root auth redirect page must be no-store.");
   assert(nextConfig.includes('{ source: "/login", headers: noStoreHeaders }'), "Universal login must be no-store.");
   assert(nextConfig.includes('{ source: "/api/auth/:path*", headers: noStoreHeaders }'), "Auth API routes must be no-store.");
+  assert(nextConfig.includes('{ source: "/portal/:path*", headers: noStoreHeaders }') && nextConfig.includes('{ source: "/admin/:path*", headers: noStoreHeaders }') && nextConfig.includes('{ source: "/platform/:path*", headers: noStoreHeaders }'), "Authenticated shells must remain no-store.");
   assert(nextConfig.includes('{ source: "/manifest.webmanifest", headers: revalidateHeaders }'), "PWA manifest must revalidate instead of going stale.");
-  assert(nextConfig.includes('{ source: "/sw.js", headers: revalidateHeaders }'), "Legacy service worker script path must revalidate.");
+  assert(nextConfig.includes('{ source: "/sw.js", headers: serviceWorkerHeaders }'), "Service worker script must never be served stale.");
   assert(!nextConfig.includes('/_next/static'), "Hashed Next.js static chunks must retain Next's immutable caching behavior.");
   assert(packageJson.includes('"verify:auth-navigation-cache": "tsx scripts/verify-auth-navigation-cache.ts"'), "Package script verify:auth-navigation-cache is missing.");
 
-  console.log("Auth navigation and cache recovery verification passed.");
+  console.log("Auth navigation, logout, history, and error recovery verification passed.");
 }
 
 main().catch((error) => {

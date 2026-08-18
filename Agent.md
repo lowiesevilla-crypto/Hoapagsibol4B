@@ -159,7 +159,7 @@ Current financial state is derived from authoritative posted ledger/SOA evidence
 
 Approved design baseline: `docs/ui/HOAHUB_COMMUNITY_INTELLIGENCE_UI_SYSTEM_V1.md`.
 
-Implementation branch / PR: `feature/ui-system-foundation` / PR #123, followed by Canva visual-parity remediation PR #125.
+Implementation branch / PR: `feature/ui-system-foundation` / PR #123, followed by Canva visual-parity remediation PR #125 and content-aside scope hotfix PR #126.
 
 ## Phase 3 Implementation State
 
@@ -171,9 +171,10 @@ Implementation branch / PR: `feature/ui-system-foundation` / PR #123, followed b
 | Wave 4 — Tenant operational workspaces | COMPLETE | shared premium PageHeader/status layer applied across existing Finance/Documents/Workforce/AI workflows; protected `/admin/workforce` HRIS/Payroll command center |
 | Wave 5 — Platform ecosystem | COMPLETE | Tenant List V2, simplified Tenant 360 tabs, Platform AI Usage metadata workspace, real Platform Audit & Security evidence workspace; existing Subscriptions/Plans/Invoices/Agreements/Licenses/Document Usage retain authoritative actions with premium shared presentation |
 | Wave 6 — Homeowner/PWA | COMPLETE | shared premium portal mobile header/bottom navigation/cards; existing Home/Payments/Requests/Community/More routing, payment/document workflows, AI governance and safe-area behavior preserved |
-| Exact-head automated validation | COMPLETE | remediation head `f6f07f23e95912047dec36daba88c91d5d2da825` passed HOAHub MySQL CI #762 and Canva Visual Parity #13 |
-| Merge to `main` | COMPLETE | PR #125 merged to `main` as `cb279581ddff60070db31d3b08a475778e38ec52` on 2026-08-18 |
-| Hostinger production deployment | IN VERIFICATION | connected-GitHub deployment is authorized; production is complete only after `/release.txt` matches the expected main SHA and `/api/health` succeeds |
+| Exact-head automated validation | COMPLETE FOR PR #125 | remediation head `f6f07f23e95912047dec36daba88c91d5d2da825` passed HOAHub MySQL CI #762 and Canva Visual Parity #13 |
+| Merge to `main` | COMPLETE FOR PR #125 | PR #125 merged to `main` as `cb279581ddff60070db31d3b08a475778e38ec52` on 2026-08-18 |
+| Content-aside scope hotfix | VALIDATED / PENDING FINAL EXACT-HEAD RERUN | pre-Agent head `5dd5fab7fb4c3b029bb36cbc7039a6ff2ac87a33` passed HOAHub MySQL CI #765 and Canva Visual Parity #14; PR #126 remains draft until this Agent record is included in a new exact-head validation |
+| Hostinger production deployment | AUTHORIZED / PENDING HOTFIX MERGE | deploy PR #126 only after final exact-head CI and visual parity pass; verify `/release.txt` and `/api/health` before reporting complete |
 
 ## Phase 3 Architecture and Safety Contract
 
@@ -196,6 +197,8 @@ Primary regression contracts:
 
 - `tests/unit/ui-system-foundation.test.ts`
 - `tests/unit/community-intelligence-ecosystem.test.ts`
+- `tests/unit/canva-aside-scope.test.ts`
+- `tests/e2e/ui-aside-scope-regression.mjs`
 - normal homeowner mobile/PWA critical suites
 - normal payroll, document, complaint/grievance, finance, RBAC and browser suites through HOAHub MySQL CI
 
@@ -206,6 +209,7 @@ Validation history for this release candidate:
 - Static Prisma review corrected the Workforce Hub to use the actual `PayrollPeriod.startDate/endDate/payDate` fields and normalized AI usage group ordering.
 - Full-ecosystem CI #746 then passed dependency integrity, lint, Prisma validation/generation/migration, database seed, unit tests, finance integration, and the critical verification suite, but TypeScript typecheck caught a narrow-array `AttendanceStatus` inference in the Workforce present-count calculation. The calculation now uses a typed `Set<AttendanceStatus>` so all enum values are accepted safely.
 - Final remediation head `f6f07f23e95912047dec36daba88c91d5d2da825` passed HOAHub MySQL CI #762 end-to-end and HOAHub Canva Visual Parity #13, including production build, controlled Chromium, production smoke/critical browser tests, and 12-screen actual-render capture.
+- Content-aside hotfix pre-Agent head `5dd5fab7fb4c3b029bb36cbc7039a6ff2ac87a33` passed HOAHub MySQL CI #765 end-to-end and Canva Visual Parity #14. The visual workflow additionally asserted and captured `/admin/ai-copilot` and `/admin/ai-assistance`, while retaining the Platform and Homeowner comparison screens.
 
 Before any future Phase 3 production change, the exact candidate head must pass dependency install, lint, Prisma validation/generation/migration on CI MySQL, seed, unit tests, integration tests, critical verification, typecheck, production build, controlled Chromium preparation, and production smoke/critical browser suites.
 
@@ -252,7 +256,7 @@ The first Phase 3 production implementation preserved business logic but materia
 - Existing presentation-only tests were updated only where they encoded the rejected visual implementation; security/business assertions remain in place.
 - `scripts/verify-homeowner-mobile-dashboard.ts` continues to enforce authenticated/tenant-scoped SOA data, entitlements, no browser-supplied authority, ≥48px touch safety, PWA/cache boundaries, and approved Canva Account Health/Resident Shortcuts presentation.
 - `.github/workflows/ui-canva-parity.yml` builds the exact PR head with CI MySQL and controlled Chromium, captures actual browser screenshots, and uploads `hoahub-canva-visual-parity` for comparison.
-- Browser evidence covers Tenant Dashboard, Action Center, Billing, Documents, Workforce, Platform Command Center, Tenant 360, Platform Tenant List, Platform Audit & Security, Homeowner PWA Dashboard, Payment Center, and Homeowner Documents.
+- Browser evidence covers Tenant Dashboard, Action Center, Billing, Documents, Workforce, Platform Command Center, Tenant 360, Platform Tenant List, Platform Audit & Security, Homeowner PWA Dashboard, Payment Center, Homeowner Documents, Admin AI Staff Copilot, and Admin AI Assistance governance.
 - Exact-head browser regression on `182586bff4acd3d4e0c4a03bbeeafea05ed8a6da` was presentation-only: `tests/e2e/ai-assistant.mjs` still expected retired homeowner labels `Current Balance` and `Pay Now` after a simulated provider outage even though the redesigned dashboard correctly rendered `Account Health` and `Pay Dues`. The E2E assertion was updated to the approved Canva labels while preserving provider-outage isolation, AI governance, tenant isolation, quota, and floating-assistant checks.
 - Final release head `f6f07f23e95912047dec36daba88c91d5d2da825` passed HOAHub MySQL CI #762 and Canva Visual Parity #13 on the same source state before merge.
 
@@ -262,8 +266,22 @@ The first Phase 3 production implementation preserved business logic but materia
 - User requirement: actual implementation must be tested and visually compared to Canva before production — **SATISFIED on final remediation head**.
 - User authorization on 2026-08-18: proceed to production deployment automatically once the exact candidate passes all required gates — **AUTHORIZED**.
 - Approval state: **AUTOMATED RELEASE GATES PASSED / MERGED**.
-- Production state: **DEPLOYMENT VERIFICATION PENDING** until Hostinger serves the expected `main` release marker and public `/api/health` passes.
-- Do not report production complete from CI/merge evidence alone; record the exact live release marker and health verification when available.
+- Production state for PR #125: superseded by the content-aside hotfix release candidate; do not report the corrected ecosystem complete until PR #126 is verified live.
+
+## Canva Shell Content-Aside Scope Hotfix — 2026-08-18
+
+Authenticated production screenshots of `/admin/ai-copilot` and `/admin/ai-assistance` exposed a shared CSS scoping defect after the Canva parity release: page-level `<aside>` content surfaces inherited the navigation sidebar's dark gradient, border/shadow, and forced 300px desktop width. The same broad selector created risk for Platform and Homeowner screens containing nested `<aside>` elements.
+
+- Root cause: `app/canva-parity.css` used `.canva-tenant-shell aside`, `.canva-platform-shell aside`, and `.canva-portal-shell aside` descendant selectors for navigation-sidebar styling.
+- The actual shared `Sidebar` root carries the literal Tailwind class `lg:fixed`. PR #126 therefore scopes gradient, link/nav styling, accent strip, shadow, and desktop width rules to `aside.lg\:fixed` only.
+- Page-level `<aside>` elements retain their component-owned light/dark surfaces and layout dimensions.
+- `tests/unit/canva-aside-scope.test.ts` rejects future broad shell-aside selectors and guards the forced-width rule.
+- `tests/e2e/ui-aside-scope-regression.mjs` logs into the admin shell, checks the real sidebar remains approximately 300px with its Canva gradient, verifies content asides on both affected AI routes are not forced to 300px or given the navigation gradient, checks horizontal overflow, and saves screenshots.
+- Canva Visual Parity now includes screenshots `13-admin-ai-copilot-aside-scope.png` and `14-admin-ai-assistance-aside-scope.png` in addition to the existing Tenant, Platform, and Homeowner renders.
+- Manual screenshot comparison on the pre-Agent hotfix head confirms the AI content panels are restored to light content surfaces; Platform retains the dark control plane; Homeowner PWA, Payment Center, and Documents retain their approved visual treatment.
+- Pre-Agent hotfix head `5dd5fab7fb4c3b029bb36cbc7039a6ff2ac87a33` passed HOAHub MySQL CI #765 and Canva Visual Parity #14. Because this `Agent.md` update changes the head, the new exact head must pass both workflows again before merge.
+- No Prisma schema, auth, RBAC, tenant isolation, payroll confidentiality, complaint/grievance privacy, payment authority, document generation/template, AI governance, or tenant-data behavior is changed by this hotfix.
+- PR #126 remains **DRAFT / NOT MERGED / NOT DEPLOYED** until the exact documented head is green. User authorization to merge and deploy automatically after green exact-head CI + visual parity remains in force.
 
 # Active Initiative: Complaint-to-Grievance Foundation — BRD v1.0
 
@@ -441,6 +459,8 @@ The `deploy-production` job in `.github/workflows/ci-deploy.yml` performs the re
 For the Complaint-to-Grievance initiative, the automated production release gate was completed for `e34bf48a8519cf6a8389a78f998bbfafd46653c0`: exact-main tests passed, Hostinger served `e34bf48a8519`, and public health passed. A separate authenticated tenant-representative sign-off may still be captured as an operational governance artifact when required; do not fabricate it.
 
 For the Canva visual-parity remediation, the code release was validated on head `f6f07f23e95912047dec36daba88c91d5d2da825` and merged to main as `cb279581ddff60070db31d3b08a475778e38ec52`. Production completion must be recorded only after Hostinger serves the expected current `main` short SHA and `/api/health` passes.
+
+For the Canva content-aside scope hotfix, PR #126 is authorized for automatic merge/deploy only after the exact documented head passes both HOAHub MySQL CI and Canva Visual Parity. Production completion requires the merged main short SHA from that release to be served at `/release.txt` and `/api/health` to pass.
 
 ## CI Browser Gate Recovery
 

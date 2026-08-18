@@ -80,6 +80,7 @@ jobs:
           done
           curl --fail --silent http://127.0.0.1:3000/api/health
           node --import ./tests/e2e/safe-browser-context-cleanup.mjs tests/e2e/ui-canva-visual-parity.mjs
+          node --import ./tests/e2e/safe-browser-context-cleanup.mjs tests/e2e/ui-aside-scope-regression.mjs
       - name: Upload Canva visual comparison renders
         if: always()
         uses: actions/upload-artifact@v4

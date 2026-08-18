@@ -15,42 +15,44 @@
   background: #f3f8fb;
 }
 
-.canva-tenant-shell aside,
-.canva-portal-shell aside {
+/* Scope the Canva shell treatment to the real navigation sidebar only.
+   Page-level <aside> elements are content surfaces and must retain their own styling. */
+.canva-tenant-shell aside.lg\:fixed,
+.canva-portal-shell aside.lg\:fixed {
   background: linear-gradient(180deg, #071f31 0%, #0b3a49 48%, #082b39 100%) !important;
   border-color: rgba(255, 255, 255, .08) !important;
   box-shadow: 18px 0 50px rgba(7, 31, 49, .12) !important;
 }
 
-.canva-platform-shell aside {
+.canva-platform-shell aside.lg\:fixed {
   background: linear-gradient(180deg, #061d2d 0%, #0b2e46 50%, #071f31 100%) !important;
   border-color: rgba(255, 255, 255, .08) !important;
   box-shadow: 18px 0 54px rgba(6, 29, 45, .16) !important;
 }
 
-.canva-tenant-shell aside > span:first-child,
-.canva-portal-shell aside > span:first-child,
-.canva-platform-shell aside > span:first-child {
+.canva-tenant-shell aside.lg\:fixed > span:first-child,
+.canva-portal-shell aside.lg\:fixed > span:first-child,
+.canva-platform-shell aside.lg\:fixed > span:first-child {
   height: 2px !important;
   background: linear-gradient(90deg, #27b6ff 0%, #6ed64b 100%) !important;
   opacity: .9;
 }
 
-.canva-tenant-shell aside nav button,
-.canva-portal-shell aside nav button,
-.canva-platform-shell aside nav button {
+.canva-tenant-shell aside.lg\:fixed nav button,
+.canva-portal-shell aside.lg\:fixed nav button,
+.canva-platform-shell aside.lg\:fixed nav button {
   color: #88acc9 !important;
 }
 
-.canva-tenant-shell aside a,
-.canva-portal-shell aside a,
-.canva-platform-shell aside a {
+.canva-tenant-shell aside.lg\:fixed a,
+.canva-portal-shell aside.lg\:fixed a,
+.canva-platform-shell aside.lg\:fixed a {
   border-radius: 14px;
 }
 
-.canva-tenant-shell aside a.bg-white,
-.canva-portal-shell aside a.bg-white,
-.canva-platform-shell aside a.bg-white {
+.canva-tenant-shell aside.lg\:fixed a.bg-white,
+.canva-portal-shell aside.lg\:fixed a.bg-white,
+.canva-platform-shell aside.lg\:fixed a.bg-white {
   color: #0d3b46 !important;
   box-shadow: 0 8px 24px rgba(0, 0, 0, .13) !important;
 }
@@ -121,9 +123,9 @@
 }
 
 @media (min-width: 1024px) {
-  .canva-tenant-shell aside,
-  .canva-platform-shell aside,
-  .canva-portal-shell aside {
+  .canva-tenant-shell aside.lg\:fixed,
+  .canva-platform-shell aside.lg\:fixed,
+  .canva-portal-shell aside.lg\:fixed {
     width: 300px !important;
   }
 }

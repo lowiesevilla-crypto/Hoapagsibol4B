@@ -4,13 +4,13 @@ import type { ReactNode } from "react";
 
 export type MetricTone = "blue" | "green" | "amber" | "red" | "violet" | "neutral";
 
-const toneClasses: Record<MetricTone, { bar: string; icon: string; note: string }> = {
-  blue: { bar: "bg-pine-500", icon: "bg-pine-50 text-pine-700", note: "text-pine-700" },
-  green: { bar: "bg-leaf-600", icon: "bg-emerald-50 text-status-success", note: "text-status-success" },
-  amber: { bar: "bg-amber-500", icon: "bg-amber-50 text-status-warning", note: "text-status-warning" },
-  red: { bar: "bg-rose-600", icon: "bg-rose-50 text-status-critical", note: "text-status-critical" },
-  violet: { bar: "bg-violet-600", icon: "bg-violet-50 text-status-ai", note: "text-status-ai" },
-  neutral: { bar: "bg-slate-400", icon: "bg-slate-100 text-slate-700", note: "text-slate-600" },
+const toneClasses: Record<MetricTone, { icon: string; note: string; ring: string }> = {
+  blue: { icon: "bg-[#eaf6ff] text-[#0872ae]", note: "text-[#5d7a8b]", ring: "ring-[#d9edf8]" },
+  green: { icon: "bg-[#e9f8ee] text-status-success", note: "text-[#5d7a8b]", ring: "ring-[#d7eedf]" },
+  amber: { icon: "bg-[#fff4dd] text-status-warning", note: "text-[#6f8294]", ring: "ring-[#f7e4b9]" },
+  red: { icon: "bg-[#ffe9ec] text-status-critical", note: "text-[#6f8294]", ring: "ring-[#f6d4da]" },
+  violet: { icon: "bg-[#f0edff] text-status-ai", note: "text-[#6f8294]", ring: "ring-[#dfd9ff]" },
+  neutral: { icon: "bg-slate-100 text-slate-700", note: "text-[#6f8294]", ring: "ring-slate-200" },
 };
 
 export function MetricCard({
@@ -32,19 +32,18 @@ export function MetricCard({
 }) {
   const style = toneClasses[tone];
   const content = (
-    <article className="group relative min-w-0 overflow-hidden rounded-workspace border border-slate-200 bg-surface-card p-4 shadow-workspace transition sm:p-5">
-      <span className={`absolute inset-y-4 left-0 w-1 rounded-r-full ${style.bar}`} aria-hidden="true" />
-      <div className="flex items-start justify-between gap-3 pl-1">
+    <article className="ui-metric-card group relative min-w-0 overflow-hidden rounded-[22px] border border-[#dbe7ee] bg-white p-[19px] shadow-[0_8px_24px_rgba(22,65,87,.055)] transition hover:-translate-y-0.5 hover:shadow-[0_16px_34px_rgba(22,65,87,.09)] motion-reduce:hover:translate-y-0 sm:p-5">
+      <div className="flex items-start justify-between gap-4">
         <div className="min-w-0">
-          <p className="text-[11px] font-extrabold uppercase tracking-[.12em] text-slate-500">{label}</p>
-          <div className="mt-2 break-words text-2xl font-black tracking-tight text-pine-900 sm:text-3xl">{value}</div>
-          {note ? <div className={`mt-1.5 text-xs font-bold leading-5 ${style.note}`}>{note}</div> : null}
+          <p className="text-[10px] font-black uppercase tracking-[.13em] text-[#7c8fa0] sm:text-[11px]">{label}</p>
+          <div className="mt-2 break-words text-[26px] font-black tracking-[-.035em] text-[#0c3248] sm:text-[29px]">{value}</div>
+          {note ? <div className={`mt-1.5 text-[12px] font-bold leading-5 ${style.note}`}>{note}</div> : null}
         </div>
-        {Icon ? <span className={`grid size-10 shrink-0 place-items-center rounded-2xl ${style.icon}`}><Icon className="size-5" aria-hidden="true" /></span> : null}
+        {Icon ? <span className={`grid size-10 shrink-0 place-items-center rounded-[14px] ring-1 ring-inset ${style.icon} ${style.ring}`}><Icon className="size-[18px]" aria-hidden="true" /></span> : null}
       </div>
-      {footer ? <div className="mt-4 border-t border-slate-100 pt-3 text-xs text-slate-500">{footer}</div> : null}
+      {footer ? <div className="mt-4 border-t border-[#edf2f5] pt-3 text-xs text-[#6f8294]">{footer}</div> : null}
     </article>
   );
 
-  return href ? <Link href={href} className="block rounded-workspace focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-pine-500/20">{content}</Link> : content;
+  return href ? <Link href={href} className="block rounded-[22px] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#0b95d8]/20">{content}</Link> : content;
 }

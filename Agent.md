@@ -210,6 +210,60 @@ Before merge/deployment, the exact candidate head must pass dependency install, 
 
 Rollback remains application-level: revert the UI release while preserving all existing business data and schema. No destructive data rollback is required for Phase 3 because no new database migration is introduced.
 
+## Phase 3 Canva Visual Parity Remediation — 2026-08-18
+
+The first Phase 3 production implementation preserved business logic but materially drifted from the user-approved Canva visual specifications. PR #125 (`fix/ui-canva-visual-parity`) is the corrective visual-parity candidate.
+
+### Approved Canva Sources of Truth
+
+- `DAHSjdJ1uyU` — HOAHub Premium UI Mockups — Tenant + Platform: Tenant Dashboard, Platform Command Center, Tenant 360.
+- `DAHSjeTUc_E` — HOAHub Premium UI Mockups — Operational Suite: Action Center, Resident 360, Billing & Payments, Documents, HRIS/Payroll, AI Staff Copilot.
+- `DAHSjYfpLyE` — HOAHub Premium UI — Remaining Platform + PWA Screens: Platform Tenant List, Subscription & Billing, Plans & Modules, Platform Audit & Security, Homeowner PWA Dashboard, Payment Center, Homeowner Documents, Mobile Action Center.
+- `DAHSjqtAxf4` — HOAHub Phase 3 — Community Intelligence OS Design System.
+
+### Visual Parity Contract
+
+- The Canva mockups are the visual source of truth; existing production workflows remain the business source of truth.
+- Central approved palette: navy `#071f31`, navy2 `#0b2e46`, pine `#0d4f46`, technology blue `#0b95d8`, blue2 `#27b6ff`, community green `#6ed64b`, neutral canvas `#f3f8fb`.
+- Desktop Tenant, Platform, and homeowner shells use an approximately 300px navigation rail at large breakpoints.
+- Tenant UI uses a restrained navy/teal rail, neutral canvas, white executive cards, controlled technology-blue interactions, and green primarily for positive/community state.
+- Platform UI must be visually distinct and dark: HOAHub platform identity, dark control-plane topbar/hero, SaaS portfolio hierarchy, and real commercial/governance signals.
+- KPI cards must use restrained executive surfaces; the rejected colored vertical side-strip treatment must not return.
+- Homeowner/PWA uses a blue/teal gradient mobile header, compact Account Health hierarchy, compact Resident Shortcuts, floating white bottom navigation, safe areas, and approximately 48px+ touch targets.
+- Functional mockup controls must connect to existing routes/actions. Tenant Quick Create links to real payment/homeowner/document workflows; navigation search is route navigation, not fake global data search.
+- Mockup-only sample data must never be copied into production. No fabricated MRR, uptime, revenue, health score, AI answer, integration state, or placeholder KPI may be presented as real.
+- Deterministic insight cards may summarize authoritative records (for example posted collection momentum, subscription state, receivables, tenant status) but must not imply an AI/model inference when no model evaluation occurred.
+
+### Remediation Implementation and Safety
+
+- `app/canva-parity.css` centralizes the approved visual palette and shell treatment.
+- Shared `PageHeader`, `MetricCard`, and `WorkspaceCard` presentation is corrected to the approved visual language.
+- Tenant Dashboard uses real billing/payment/collection/outflow/receivable/action data in the Canva composition.
+- Platform Command Center uses real tenant/subscription/invoice-risk records; no fake MRR/uptime is introduced.
+- Tenant 360 uses real tenant/user/module/payment-routing/audit data while preserving existing platform fee, branding, advisory, module, subscription, and settings actions below the overview.
+- Homeowner dashboard keeps Statement of Account as the financial source of truth and preserves existing Pay, Documents, Complaints, Community, and PWA navigation/entitlement boundaries.
+- No Prisma schema or migration is part of this remediation.
+- No auth, RBAC, tenant-isolation, payroll confidentiality, complaint/grievance privacy, payment authority, document generation, or official production template workflow is widened or replaced.
+
+### Testing and Visual Comparison Gate
+
+- `tests/unit/ui-canva-visual-parity.test.ts` locks the approved palette, shell geometry, flagship compositions, real-data-only rule, and absence of rejected KPI strips.
+- Existing presentation-only tests were updated only where they encoded the rejected visual implementation; security/business assertions remain in place.
+- `scripts/verify-homeowner-mobile-dashboard.ts` continues to enforce authenticated/tenant-scoped SOA data, entitlements, no browser-supplied authority, ≥48px touch safety, PWA/cache boundaries, and approved Canva Account Health/Resident Shortcuts presentation.
+- `.github/workflows/ui-canva-parity.yml` builds the exact PR head with CI MySQL and controlled Chromium, captures actual browser screenshots, and uploads `hoahub-canva-visual-parity` for comparison.
+- Browser evidence covers Tenant Dashboard, Action Center, Billing, Documents, Workforce, Platform Command Center, Tenant 360, Platform Tenant List, Platform Audit & Security, Homeowner PWA Dashboard, Payment Center, and Homeowner Documents.
+- The remediation is not ready merely because JSX/source review passes. The exact candidate head must pass normal HOAHub MySQL CI and the Canva visual-parity workflow, then the generated browser renders must be compared against the approved Canva references.
+- Exact-head browser regression on `182586bff4acd3d4e0c4a03bbeeafea05ed8a6da` was presentation-only: `tests/e2e/ai-assistant.mjs` still expected retired homeowner labels `Current Balance` and `Pay Now` after a simulated provider outage even though the redesigned dashboard correctly rendered `Account Health` and `Pay Dues`. The E2E assertion is updated to the approved Canva labels while preserving provider-outage isolation, AI governance, tenant isolation, quota, and floating-assistant checks.
+
+### Current Remediation State
+
+- PR #125: DRAFT / OPEN / NOT MERGED.
+- User requirement: actual implementation must be tested and visually compared to Canva before production.
+- User authorization on 2026-08-18: proceed to production deployment automatically once the exact candidate passes all required gates.
+- Approval state: **CONDITIONALLY AUTHORIZED — PENDING EXACT-HEAD GREEN CI + VISUAL PARITY**.
+- Production state: **AUTHORIZED / PENDING GREEN GATES** for this remediation.
+- Merge PR #125 and allow the connected Hostinger production deployment only after the same exact head passes normal HOAHub MySQL CI and the Canva visual-parity workflow and the generated browser renders remain aligned with the approved Canva references.
+
 # Active Initiative: Complaint-to-Grievance Foundation — BRD v1.0
 
 Approved baseline: `docs/complaints/HOAHUB_GRIEVANCE_FOUNDATION_BRD_V1_0.md`.

@@ -1,0 +1,90 @@
+name: HOAHub Canva Visual Parity
+
+on:
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: hoa-canva-parity-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  visual-parity:
+    runs-on: ubuntu-latest
+    services:
+      mysql:
+        image: mysql:8.4
+        env:
+          MYSQL_DATABASE: hoa_portal
+          MYSQL_USER: hoa_app
+          MYSQL_PASSWORD: hoa_ci_password
+          MYSQL_ROOT_PASSWORD: hoa_ci_root_password
+        ports: ["3306:3306"]
+        options: >-
+          --health-cmd="mysqladmin ping -h localhost -uroot -phoa_ci_root_password"
+          --health-interval=5s --health-timeout=5s --health-retries=20
+    env:
+      DATABASE_URL: mysql://hoa_app:hoa_ci_password@127.0.0.1:3306/hoa_portal
+      AUTH_SECRET: ci-only-auth-secret-with-at-least-32-characters
+      APP_URL: http://127.0.0.1:3000
+      BASE_URL: http://127.0.0.1:3000
+      API_URL: http://127.0.0.1:3000/api
+      ALLOWED_ORIGINS: http://127.0.0.1:3000
+      CRON_SECRET: ci-only-cron-secret-with-at-least-32-characters
+      STORAGE_ROOT: /tmp/hoahub-storage
+      SEED_SYSTEM_ADMIN_EMAIL: ci-system@example.invalid
+      SEED_SYSTEM_ADMIN_PASSWORD: CI-Temporary-Password-2026!
+      E2E_BASE_URL: http://127.0.0.1:3000
+      E2E_COVERAGE_YEAR: "2099"
+      E2E_COVERAGE_MONTH: "1"
+      AI_RUNTIME_ENABLED: "true"
+      AI_PROVIDER_MODE: mock
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.9.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm exec prisma generate
+      - run: pnpm exec prisma migrate deploy
+      - run: pnpm db:seed
+      - run: pnpm build
+      - name: Prepare controlled Chromium
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          CHROMIUM_PATH="$(node --input-type=module -e 'import chromium from "@sparticuz/chromium"; process.stdout.write(await chromium.executablePath())')"
+          test -x "$CHROMIUM_PATH"
+          echo "PUPPETEER_EXECUTABLE_PATH=$CHROMIUM_PATH" >> "$GITHUB_ENV"
+      - name: Capture actual Canva-parity renders
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          pnpm e2e:prepare
+          pnpm start > /tmp/hoa-next-visual.log 2>&1 &
+          APP_PID=$!
+          cleanup() {
+            kill "$APP_PID" 2>/dev/null || true
+            pnpm e2e:cleanup || true
+            echo "--- HOAHub visual parity server log ---"
+            cat /tmp/hoa-next-visual.log || true
+          }
+          trap cleanup EXIT
+          for attempt in {1..45}; do
+            if curl --fail --silent http://127.0.0.1:3000/api/health > /dev/null; then break; fi
+            sleep 2
+          done
+          curl --fail --silent http://127.0.0.1:3000/api/health
+          node --import ./tests/e2e/safe-browser-context-cleanup.mjs tests/e2e/ui-canva-visual-parity.mjs
+      - name: Upload Canva visual comparison renders
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: hoahub-canva-visual-parity
+          path: artifacts/ui-canva-parity/*.png
+          if-no-files-found: warn
+          retention-days: 7

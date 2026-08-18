@@ -76,7 +76,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
   const linkBadges: Record<string, number> = showDocumentRequestBadge ? { [requestBadgeHref]: actionableDocumentRequests } : {};
   const sectionBadges: Record<string, number> = showDocumentRequestBadge ? { "Resident Services": actionableDocumentRequests } : {};
 
-  return <div className="min-h-screen bg-[#f7fbfd] print:bg-white">
+  return <div className="canva-tenant-shell min-h-screen print:bg-white">
     <div className="print:hidden">
       <Sidebar
         user={user}
@@ -89,11 +89,11 @@ export default async function AdminLayout({ children }: { children: React.ReactN
       />
     </div>
     <Suspense><TransactionFeedback /></Suspense>
-    <div className="min-w-0 lg:ml-72 print:ml-0">
+    <div className="min-w-0 lg:ml-[300px] print:ml-0">
       <div className="print:hidden">
         <AdminTopbar associationName={association.name} roleLabel={roleLabel} userName={user.name} />
       </div>
-      <main className="mx-auto min-w-0 max-w-[1680px] px-4 py-5 sm:px-7 lg:px-8 lg:py-7 print:max-w-none print:p-0">
+      <main className="mx-auto min-w-0 max-w-[1680px] px-4 py-6 sm:px-7 lg:px-9 lg:py-8 print:max-w-none print:p-0">
         {children}
       </main>
     </div>

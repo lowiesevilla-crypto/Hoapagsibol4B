@@ -24,7 +24,7 @@ test("platform shell is branded as the HOAHub control plane, not a tenant", () =
   assert.match(layout, /logoUrl: "\/Hoahub-logo\.png"/);
   assert.doesNotMatch(layout, /pagsibol-logo\.png/);
   assert.match(layout, /PlatformTopbar/);
-  assert.match(topbar, /HOAHub Platform Mode/);
+  assert.match(topbar, /Platform Mode/);
   assert.match(topbar, /HOAHub SaaS Control Plane/);
 });
 
@@ -37,10 +37,12 @@ test("platform navigation exposes the command center with separated taxonomy", (
   assert.match(links, /section: "Governance"/);
 });
 
-test("platform dashboard uses shared design-system primitives", () => {
+test("platform dashboard uses the approved Canva command hero plus shared system primitives", () => {
   const dashboard = source("app/platform/dashboard/page.tsx");
-  assert.match(dashboard, /PageHeader/);
+  assert.match(dashboard, /canva-platform-hero/);
+  assert.match(dashboard, /HOAHub Platform Command Center/);
   assert.match(dashboard, /MetricCard/);
   assert.match(dashboard, /WorkspaceCard/);
   assert.match(dashboard, /StatusBadge/);
+  assert.doesNotMatch(dashboard, /PageHeader/);
 });

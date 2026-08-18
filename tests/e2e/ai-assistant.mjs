@@ -188,8 +188,8 @@ async function primaryTenantFlow(browser) {
     assert.match(outage.body.error || "", /temporarily unavailable.*core HOAHub services remain available/i);
     await page.goto(`${baseUrl}/portal/dashboard`, { waitUntil: "networkidle2", timeout });
     assert.equal(new URL(page.url()).pathname, "/portal/dashboard", "AI provider outage must not redirect or disable the core homeowner portal.");
-    await expectText(page, "Current Balance", "core homeowner balance dashboard after AI outage");
-    await expectText(page, "Pay Now", "core homeowner payment action after AI outage");
+    await expectText(page, "Account Health", "core homeowner account health dashboard after AI outage");
+    await expectText(page, "Pay Dues", "core homeowner payment action after AI outage");
     assert.ok(await page.$('a[aria-label="Open Association Assistant"]'), "Floating AI access must remain available after an isolated provider failure.");
 
     const currentPrimaryUsage = await prisma.aiUsageLedger.count({ where: { tenantId: primaryTenantId, outcome: { in: ["SUCCEEDED", "PROVIDER_ERROR"] } } });

@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
+import "./canva-parity.css";
 import { BrowserCacheRecovery } from "@/components/browser-cache-recovery";
 import { PublicPwaInstallBanner } from "@/components/public-pwa-install-banner";
 import { PwaInstallProvider } from "@/components/pwa-install-provider";

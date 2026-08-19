@@ -125,12 +125,12 @@ async function exerciseAuthenticatedBack(page, identity) {
 }
 
 async function currentLogoutButton(page) {
-  await page.waitForSelector('form[action="/api/auth/logout"]', { timeout });
-  const forms = await page.$$('form[action="/api/auth/logout"]');
+  await page.waitForSelector('[data-hoahub-logout-form="true"]', { timeout });
+  const forms = await page.$$('[data-hoahub-logout-form="true"]');
   for (const form of forms) {
     const scope = await form.$eval('input[name="scope"]', (node) => node.value).catch(() => "");
     if (scope !== "current") continue;
-    const button = await form.$('button[type="submit"]');
+    const button = await form.$('[data-hoahub-logout-button="true"]');
     if (!button) continue;
     const visible = await button.evaluate((node) => {
       const style = getComputedStyle(node);
@@ -179,11 +179,28 @@ async function exerciseLogoutAndBack(page, identity) {
   const logoutButton = await currentLogoutButton(page);
   assert.ok(logoutButton, `${identity.label}: visible current-session logout form was not found`);
 
-  // Interactive logout intentionally performs a same-origin fetch first and only then
-  // replaces the protected document. Observe the browser URL from Puppeteer/Node rather
-  // than attaching a WaitTask to the document that location.replace() destroys.
+  const logoutResponsePromise = page.waitForResponse((response) => {
+    try {
+      const url = new URL(response.url());
+      return url.pathname === "/api/auth/logout" && response.request().method() === "POST";
+    } catch {
+      return false;
+    }
+  }, { timeout });
+
+  // The real endpoint response is part of the browser contract: server revocation must
+  // complete before we accept a login navigation as successful.
   await logoutButton.click();
-  await waitForObservedUrl(page, (url) => isLoginPath(url.pathname), `${identity.label} logout`);
+  const logoutResponse = await logoutResponsePromise;
+  const logoutStatus = logoutResponse.status();
+  const logoutBody = await logoutResponse.text().catch(() => "");
+  assert.ok([200, 303].includes(logoutStatus), `${identity.label}: logout endpoint returned ${logoutStatus}: ${logoutBody.slice(0, 500)}`);
+
+  try {
+    await waitForObservedUrl(page, (url) => isLoginPath(url.pathname), `${identity.label} logout`);
+  } catch (error) {
+    throw new Error(`${identity.label}: logout endpoint completed with ${logoutStatus}, but browser remained on ${page.url()}. Response: ${logoutBody.slice(0, 500)}`, { cause: error });
+  }
   await page.waitForNetworkIdle({ idleTime: 300, timeout }).catch(() => undefined);
   assert.ok(isLoginPath(new URL(page.url()).pathname), `${identity.label}: logout did not reach a login page`);
   await assertNoGlobalError(page, `${identity.label} logout`);

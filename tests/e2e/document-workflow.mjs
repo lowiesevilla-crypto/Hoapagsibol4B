@@ -17,6 +17,8 @@ const homeownerId = "e2e_browser_homeowner";
 const definitionId = "e2e_browser_document_workflow_definition";
 const requestPurpose = "E2E homeowner approval and generated document";
 const timeout = 45_000;
+const submissionTimeout = 90_000;
+const documentRequestFormSelector = "[data-document-request-form='true']";
 
 function assertE2eDatabaseSafety() {
   const allowLocal = process.env.HOAHUB_E2E_ALLOW_LOCAL === "1";
@@ -124,8 +126,8 @@ async function createPage(context, viewport) {
   return page;
 }
 
-async function waitForRequest(where, description) {
-  const deadline = Date.now() + timeout;
+async function waitForRequest(where, description, waitMs = timeout) {
+  const deadline = Date.now() + waitMs;
   while (Date.now() < deadline) {
     const request = await prisma.documentRequest.findFirst({
       where,
@@ -149,34 +151,66 @@ async function submitRequest(browser) {
     await page.goto(`${baseUrl}/portal/documents`, { waitUntil: "networkidle2", timeout });
     await expectText(page, "Request an HOA document");
     await expectText(page, "E2E Clearance Certificate", "disposable document definition");
-    await page.select("select[name='definitionId']", definitionId);
-    await clearAndType(page, "textarea[name='field_purpose']", requestPurpose);
+    await page.waitForSelector(documentRequestFormSelector, { timeout });
+    await page.waitForFunction(
+      (formSelector) => document.querySelector(formSelector)?.getAttribute("data-submission-ready") === "true",
+      { timeout },
+      documentRequestFormSelector,
+    );
 
-    await page.waitForFunction(() => {
-      const submissionKey = document.querySelector("input[name='submissionKey']");
-      const button = [...document.querySelectorAll("button")].find((candidate) => candidate.textContent?.includes("Submit request"));
+    const definitionSelector = `${documentRequestFormSelector} select[name='definitionId']`;
+    const purposeSelector = `${documentRequestFormSelector} textarea[name='field_purpose']`;
+    await page.select(definitionSelector, definitionId);
+    await clearAndType(page, purposeSelector, requestPurpose);
+
+    await page.waitForFunction((formSelector) => {
+      const form = document.querySelector(formSelector);
+      const submissionKey = form?.querySelector("input[name='submissionKey']");
+      const button = [...(form?.querySelectorAll("button") || [])].find((candidate) => candidate.textContent?.includes("Submit request"));
       return submissionKey instanceof HTMLInputElement
         && Boolean(submissionKey.value)
         && button instanceof HTMLButtonElement
         && !button.matches(":disabled");
-    }, { timeout });
+    }, { timeout }, documentRequestFormSelector);
 
-    await clickByText(page, "button", "Submit request");
-    const feedbackHandle = await page.waitForFunction(() => {
-      const node = document.querySelector("[role='status'], [role='alert']");
-      const text = node?.textContent?.replace(/\s+/g, " ").trim() || "";
-      return text ? { role: node?.getAttribute("role") || "", text } : null;
-    }, { timeout });
-    const feedback = await feedbackHandle.jsonValue();
-    await feedbackHandle.dispose();
-    if (!feedback?.text?.includes("Document request submitted")) {
-      throw new Error(`Document request form returned ${feedback?.role || "feedback"}: ${feedback?.text || "No response"}`);
-    }
+    const feedbackPromise = page.waitForFunction((formSelector) => {
+      const form = document.querySelector(formSelector);
+      if (!(form instanceof HTMLFormElement)) return null;
+      const state = form.getAttribute("data-submission-state") || "idle";
+      if (!['success', 'error'].includes(state)) return null;
+      const feedback = form.querySelector("[data-document-request-feedback]");
+      return {
+        state,
+        requestId: form.getAttribute("data-submission-request-id") || "",
+        text: feedback?.textContent?.replace(/\s+/g, " ").trim() || "",
+      };
+    }, { timeout: submissionTimeout }, documentRequestFormSelector);
 
-    request = await waitForRequest(
+    const persistedRequestPromise = waitForRequest(
       { tenantId, homeownerId, definitionId, purpose: requestPurpose },
       "the homeowner-submitted document request",
+      submissionTimeout,
     );
+
+    await page.evaluate((formSelector) => {
+      const form = document.querySelector(formSelector);
+      if (!(form instanceof HTMLFormElement)) throw new Error("Document request form is unavailable.");
+      const button = [...form.querySelectorAll("button")].find((candidate) => candidate.textContent?.includes("Submit request"));
+      if (!(button instanceof HTMLButtonElement) || button.disabled) throw new Error("Submit request button is unavailable.");
+      button.click();
+    }, documentRequestFormSelector);
+
+    const [feedbackHandle, persistedRequest] = await Promise.all([feedbackPromise, persistedRequestPromise]);
+    const feedback = await feedbackHandle.jsonValue();
+    await feedbackHandle.dispose();
+    if (feedback?.state !== "success") {
+      throw new Error(`Document request form returned ${feedback?.state || "unknown"}: ${feedback?.text || "No response"}`);
+    }
+    if (!feedback.text.includes("Document request submitted")) {
+      throw new Error(`Document request success feedback was unexpected: ${feedback.text || "No response"}`);
+    }
+    request = persistedRequest;
+    assert.equal(feedback.requestId, request.id, "Visible submission state must reference the persisted tenant-scoped request.");
 
     const historyUrl = new URL("/portal/documents", baseUrl);
     historyUrl.searchParams.set("q", requestPurpose);

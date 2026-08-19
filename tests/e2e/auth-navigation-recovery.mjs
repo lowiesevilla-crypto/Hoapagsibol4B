@@ -154,16 +154,36 @@ function isLoginPath(pathname) {
   return pathname === "/login" || pathname.endsWith("/login");
 }
 
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function waitForObservedUrl(page, predicate, label) {
+  const deadline = Date.now() + timeout;
+  let lastUrl = page.url();
+  while (Date.now() < deadline) {
+    lastUrl = page.url();
+    try {
+      const current = new URL(lastUrl);
+      if (predicate(current)) return current;
+    } catch {
+      // A transient, not-yet-committed URL is not success; keep observing.
+    }
+    await sleep(100);
+  }
+  assert.fail(`${label}: timed out waiting for safe navigation; current URL ${lastUrl}`);
+}
+
 async function exerciseLogoutAndBack(page, identity) {
   await page.goto(`${baseUrl}${identity.logoutRoute}`, { waitUntil: "networkidle2", timeout });
   const logoutButton = await currentLogoutButton(page);
   assert.ok(logoutButton, `${identity.label}: visible current-session logout form was not found`);
 
   // Interactive logout intentionally performs a same-origin fetch first and only then
-  // replaces the protected document. Waiting for a navigation event before the fetch
-  // resolves races that design, so assert the observable destination instead.
+  // replaces the protected document. Observe the browser URL from Puppeteer/Node rather
+  // than attaching a WaitTask to the document that location.replace() destroys.
   await logoutButton.click();
-  await page.waitForFunction(() => window.location.pathname === "/login" || window.location.pathname.endsWith("/login"), { timeout });
+  await waitForObservedUrl(page, (url) => isLoginPath(url.pathname), `${identity.label} logout`);
   await page.waitForNetworkIdle({ idleTime: 300, timeout }).catch(() => undefined);
   assert.ok(isLoginPath(new URL(page.url()).pathname), `${identity.label}: logout did not reach a login page`);
   await assertNoGlobalError(page, `${identity.label} logout`);
@@ -172,7 +192,7 @@ async function exerciseLogoutAndBack(page, identity) {
   // The root recovery guard reloads any protected history/BFCache entry so server
   // session validation redirects it back to the correct login surface.
   await page.goBack({ waitUntil: "domcontentloaded", timeout }).catch(() => undefined);
-  await page.waitForFunction(() => window.location.pathname === "/login" || window.location.pathname.endsWith("/login"), { timeout });
+  await waitForObservedUrl(page, (url) => isLoginPath(url.pathname), `${identity.label} Back after logout`);
   await page.waitForNetworkIdle({ idleTime: 300, timeout }).catch(() => undefined);
   assert.ok(isLoginPath(new URL(page.url()).pathname), `${identity.label}: Back after logout exposed a protected route`);
   await assertNoGlobalError(page, `${identity.label} Back after logout`);

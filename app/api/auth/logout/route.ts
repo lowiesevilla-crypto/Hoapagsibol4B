@@ -23,6 +23,21 @@ export async function POST(request: Request) {
   const destination = new URL(result.redirectTo, request.url);
   if (scope === "all" && !result.allSessionsRevoked) destination.searchParams.set("allSessions", "partial");
 
+  // Interactive logout must finish revocation/cookie clearing before the browser
+  // performs a new document request. Returning JSON avoids fetch following the 303
+  // while the auth cookie is being changed. The client validates this same-origin
+  // login destination and then performs location.replace().
+  if (request.headers.get("X-HOA-Logout-Navigation") === "fetch") {
+    const response = NextResponse.json(
+      { redirectTo: `${destination.pathname}${destination.search}${destination.hash}` },
+      { status: 200 },
+    );
+    for (const [key, value] of Object.entries(privateNoStoreHeaders)) response.headers.set(key, value);
+    return response;
+  }
+
+  // Progressive enhancement / no-JavaScript fallback: normal form POST receives a
+  // 303 after the server has revoked the session and cleared authentication cookies.
   const response = NextResponse.redirect(destination, 303);
   for (const [key, value] of Object.entries(privateNoStoreHeaders)) response.headers.set(key, value);
   return response;

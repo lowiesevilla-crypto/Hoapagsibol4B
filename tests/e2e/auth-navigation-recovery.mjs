@@ -159,11 +159,12 @@ async function exerciseLogoutAndBack(page, identity) {
   const logoutButton = await currentLogoutButton(page);
   assert.ok(logoutButton, `${identity.label}: visible current-session logout form was not found`);
 
-  await Promise.all([
-    page.waitForNavigation({ waitUntil: "domcontentloaded", timeout }),
-    logoutButton.click(),
-  ]);
+  // Interactive logout intentionally performs a same-origin fetch first and only then
+  // replaces the protected document. Waiting for a navigation event before the fetch
+  // resolves races that design, so assert the observable destination instead.
+  await logoutButton.click();
   await page.waitForFunction(() => window.location.pathname === "/login" || window.location.pathname.endsWith("/login"), { timeout });
+  await page.waitForNetworkIdle({ idleTime: 300, timeout }).catch(() => undefined);
   assert.ok(isLoginPath(new URL(page.url()).pathname), `${identity.label}: logout did not reach a login page`);
   await assertNoGlobalError(page, `${identity.label} logout`);
 

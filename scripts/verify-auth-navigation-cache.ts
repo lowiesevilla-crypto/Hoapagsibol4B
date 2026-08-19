@@ -43,9 +43,12 @@ async function main() {
   assert(authActions.includes("return { redirectTo: defaultHomeForRoles(roles, role) }"), "Password login must return a verified server-computed redirect destination.");
   assert(authButtons.includes('action="/api/auth/logout"') && authButtons.includes('method="post"'), "Logout must retain a normal same-origin POST fallback.");
   assert(authButtons.includes("event.preventDefault()") && authButtons.includes("await fetch(form.action") && authButtons.includes('credentials: "same-origin"'), "Interactive logout must use the same-origin endpoint without a React Server Action rerender.");
-  assert(authButtons.includes('redirect: "manual"') && authButtons.includes('Accept: "application/json"'), "Interactive logout must not follow an intermediate redirect before cookie clearing completes.");
+  assert(authButtons.includes('cache: "no-store"') && authButtons.includes('"X-HOA-Logout-Navigation": "fetch"'), "Interactive logout must use the private no-store JSON navigation contract.");
   assert(authButtons.includes("await response.json()") && authButtons.includes("typeof result.redirectTo !== \"string\""), "Interactive logout must require the server-computed JSON login destination.");
-  assert(authButtons.includes("window.location.replace(safeLogoutDestination(result.redirectTo))"), "Interactive logout must hard-replace the current protected history entry after server-side revocation completes.");
+  assert(authButtons.includes("window.location.replace(destination)"), "Interactive logout must hard-replace the current protected history entry after server-side revocation completes.");
+  assert(authButtons.includes("LOGOUT_NAVIGATION_WATCHDOG_MS") && authButtons.includes("submitNativeLogout(form)"), "Logout must have a watchdog that falls back to the native POST/303 flow if interactive navigation stalls.");
+  assert(authButtons.includes("HTMLFormElement.prototype.submit.call(form)"), "Logout fallback must bypass the React submit handler and perform a real document POST.");
+  assert(authButtons.includes('data-hoahub-logout-form="true"') && authButtons.includes('data-hoahub-logout-button="true"'), "Logout controls must expose stable browser-regression selectors.");
   assert(!authButtons.includes("useActionState") && !authButtons.includes("logoutNavigationAction"), "Logout must not revoke the session inside a React Server Action state transition.");
   assert(logoutRoute.includes("assertSameOrigin(request)"), "Logout POST must enforce same-origin request validation.");
   assert(logoutRoute.includes('request.headers.get("X-HOA-Logout-Navigation") === "fetch"') && logoutRoute.includes("NextResponse.json("), "Interactive logout must return a completed no-redirect JSON response after revocation/cookie clearing.");

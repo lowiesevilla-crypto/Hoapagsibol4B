@@ -18,6 +18,10 @@ const documentWorkflowSource = readFileSync(
   "tests/e2e/document-workflow.mjs",
   "utf8",
 );
+const documentRequestFormSource = readFileSync(
+  "components/document-request-form.tsx",
+  "utf8",
+);
 const workflowSource = readFileSync(".github/workflows/ci-deploy.yml", "utf8");
 const homeownerDashboardSource = readFileSync(
   "app/portal/dashboard/page.tsx",
@@ -86,13 +90,24 @@ test("browser cleanup limits do not change business assertion timeouts", () => {
   assert.doesNotMatch(cleanupSource, /setDefaultTimeout|waitForFunction|waitForNavigation/);
 });
 
-test("document workflow waits for the client submission handoff before clicking", () => {
+test("document workflow waits for the client submission handoff and authoritative submission state", () => {
+  assert.match(documentRequestFormSource, /data-document-request-form="true"/);
+  assert.match(documentRequestFormSource, /data-submission-ready=\{submissionKey \? "true" : "false"\}/);
+  assert.match(documentRequestFormSource, /data-submission-state=\{submissionState\.status\}/);
+  assert.match(documentRequestFormSource, /data-submission-request-id=\{submissionState\.requestId \|\| ""\}/);
+  assert.match(documentRequestFormSource, /data-document-request-feedback=\{submissionState\.status\}/);
+
   assert.match(documentWorkflowSource, /input\[name=['"]submissionKey['"]\]/);
   assert.match(documentWorkflowSource, /submissionKey\.value/);
   assert.match(documentWorkflowSource, /button\.matches\(["']:disabled["']\)/);
-  assert.match(documentWorkflowSource, /\[role=['"]status['"]\], \[role=['"]alert['"]\]/);
+  assert.match(documentWorkflowSource, /data-submission-state/);
+  assert.match(documentWorkflowSource, /data-submission-request-id/);
+  assert.match(documentWorkflowSource, /data-document-request-feedback/);
+  assert.match(documentWorkflowSource, /persistedRequestPromise = waitForRequest/);
+  assert.match(documentWorkflowSource, /feedback\.requestId, request\.id/);
   assert.match(documentWorkflowSource, /Document request submitted/);
   assert.match(documentWorkflowSource, /const timeout = 45_000/);
+  assert.match(documentWorkflowSource, /const submissionTimeout = 90_000/);
 });
 
 test("homeowner dashboard render remains read-only", () => {

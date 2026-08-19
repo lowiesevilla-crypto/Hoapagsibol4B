@@ -41,10 +41,12 @@ async function main() {
   assert(activationService.includes("const activationUrl = emailVerificationUrl"), "Activation email must not advertise an unauthenticated public activation page.");
 
   assert(authActions.includes("return { redirectTo: defaultHomeForRoles(roles, role) }"), "Password login must return a verified server-computed redirect destination.");
-  assert(authButtons.includes('action="/api/auth/logout"') && authButtons.includes('method="post"'), "Logout buttons must use a normal same-origin document POST.");
+  assert(authButtons.includes('action="/api/auth/logout"') && authButtons.includes('method="post"'), "Logout must retain a normal same-origin POST fallback.");
+  assert(authButtons.includes("event.preventDefault()") && authButtons.includes("await fetch(form.action") && authButtons.includes('credentials: "same-origin"'), "Interactive logout must use the same-origin endpoint without a React Server Action rerender.");
+  assert(authButtons.includes("window.location.replace(safeLogoutDestination(response.url))"), "Interactive logout must replace the current protected history entry after server-side revocation.");
   assert(!authButtons.includes("useActionState") && !authButtons.includes("logoutNavigationAction"), "Logout must not revoke the session inside a React Server Action state transition.");
   assert(logoutRoute.includes("assertSameOrigin(request)"), "Logout POST must enforce same-origin request validation.");
-  assert(logoutRoute.includes("NextResponse.redirect(destination, 303)"), "Logout POST must finish with an HTTP 303 full-document redirect.");
+  assert(logoutRoute.includes("NextResponse.redirect(destination, 303)"), "Logout POST fallback must finish with an HTTP 303 full-document redirect.");
   assert(logoutRoute.includes("privateNoStoreHeaders"), "Logout responses must be private/no-store.");
   assert(authLogout.includes("session.tenantSlug") && !authLogout.includes("platformPrisma.tenant"), "Logout redirect must use signed session routing data instead of a database lookup.");
   assert(authLogout.includes("await deleteSession()"), "Logout must remove the signed browser session even when persisted-session cleanup is best-effort.");

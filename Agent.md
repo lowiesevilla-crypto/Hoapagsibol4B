@@ -1,6 +1,6 @@
 # HOAHub Agent Context
 
-Last updated: 2026-08-18
+Last updated: 2026-08-19
 
 ## Purpose
 
@@ -94,6 +94,34 @@ A credential identity matching multiple active HOA/tenant accounts authenticates
 ### Client/Server Branding Boundary
 
 `lib/tenant-logo.ts` imports Node-only APIs and is server-only. Client components must not import it simply to reuse constants. Resolve the logo on the server or use the static `/Hoahub-logo.png` defensive fallback in browser-only code.
+
+## Authentication Navigation Recovery Hotfix — PR #127
+
+PR #127 (`fix/auth-navigation-recovery`) permanently hardens logout, browser Back/Forward restoration, and global error recovery across Tenant Admin, Platform Admin, Homeowner/PWA, and Employee protected surfaces.
+
+### Auth Navigation Architecture
+
+- Shared logout uses same-origin `POST /api/auth/logout` with server-side session revocation, verified-login-choice cleanup, private/no-store responses, and the server-authoritative login destination.
+- `components/logout-button.tsx` no longer revokes authority inside a React Server Action render transition. It posts through `fetch`, validates the returned redirect target, then uses `window.location.replace(...)` to perform a full-document handoff that does not leave the protected document as the current history entry.
+- Protected-route recovery listens to browser `pageshow` and `popstate` restoration for `/admin`, `/platform`, `/portal`, and `/employee`. A restored protected document is reloaded so current server session/RBAC authority is re-established instead of trusting stale browser/React history state.
+- `app/error.tsx` uses a hard-document retry for non-chunk failures. If the same route fails again immediately, recovery falls back through `/` so the server selects a safe authenticated or login entry point rather than repeatedly resetting the same broken tree.
+- Login/auth/private responses remain no-store. Same-origin/CSRF protections remain mandatory on logout. Tenant identity, role, and redirect authority remain server controlled.
+- Legacy navigation Server Actions in `lib/actions/auth.ts` are not wired into the shared logout control; do not reintroduce the prior logout race through `useActionState` or another client-effect redirect pattern.
+
+### Permanent Regression Contract
+
+- `tests/e2e/auth-navigation-recovery.mjs` signs in as Tenant Admin, Platform Admin, and Homeowner, exercises authenticated history navigation, logs out, then verifies Browser Back cannot revive an interactive protected document or global error state.
+- Unit/source contracts cover protected-route recovery, repeated-error fallback, same-origin logout behavior, and the requirement that the shared logout component not depend on the retired navigation Server Actions.
+- `verify:auth-navigation-cache` is part of `test:critical`; the normal MySQL CI production smoke/browser stage runs the real Chromium regression.
+- No Prisma schema/migration, finance authority, payroll confidentiality, complaint/grievance privacy, document/template workflow, AI governance, tenant isolation, or RBAC scope is changed by this hotfix.
+
+### Release State — 2026-08-19
+
+- User has explicitly authorized PR #127 to merge and deploy to production after the exact documented head passes the required release gates.
+- Pre-Agent implementation/test head `0e6fb05e2b65e9d09a22295d0c1196625c0d1cb3`: Canva Visual Parity #24 passed; HOAHub MySQL CI #776 had passed dependency integrity, lint, Prisma validation/generation/migration, seed, unit tests, integration tests, critical verification, typecheck, production build, and controlled Chromium preparation, with the final production smoke/browser step still executing when this Agent record was written.
+- This `Agent.md` commit changes the candidate head. Therefore PR #127 must not merge until the **new exact documented head** passes the required HOAHub MySQL CI and applicable visual-parity workflow.
+- Production completion may be reported only after the merged `main` commit passes the main verification/deploy workflow, Hostinger serves the expected 12-character short SHA at `/release.txt`, and `/api/health` succeeds.
+- Rollback is application-level: revert the PR #127 merge if needed. No destructive data rollback is required because this hotfix has no database schema migration.
 
 ## Resident Messaging Privacy and Message Requests
 
@@ -273,7 +301,7 @@ The first Phase 3 production implementation preserved business logic but materia
 Authenticated production screenshots of `/admin/ai-copilot` and `/admin/ai-assistance` exposed a shared CSS scoping defect after the Canva parity release: page-level `<aside>` content surfaces inherited the navigation sidebar's dark gradient, border/shadow, and forced 300px desktop width. The same broad selector created risk for Platform and Homeowner screens containing nested `<aside>` elements.
 
 - Root cause: `app/canva-parity.css` used `.canva-tenant-shell aside`, `.canva-platform-shell aside`, and `.canva-portal-shell aside` descendant selectors for navigation-sidebar styling.
-- The actual shared `Sidebar` root carries the literal Tailwind class `lg:fixed`. PR #126 therefore scopes gradient, link/nav styling, accent strip, shadow, and desktop width rules to `aside.lg\:fixed` only.
+- The actual shared `Sidebar` root carries the literal Tailwind class `lg:fixed`. PR #126 therefore scopes gradient, link/nav styling, accent strip, shadow, and desktop width rules to `aside.lg\\:fixed` only.
 - Page-level `<aside>` elements retain their component-owned light/dark surfaces and layout dimensions.
 - `tests/unit/canva-aside-scope.test.ts` rejects future broad shell-aside selectors and guards the forced-width rule.
 - `tests/e2e/ui-aside-scope-regression.mjs` logs into the admin shell, checks the real sidebar remains approximately 300px with its Canva gradient, verifies content asides on both affected AI routes are not forced to 300px or given the navigation gradient, checks horizontal overflow, and saves screenshots.
@@ -461,6 +489,8 @@ For the Complaint-to-Grievance initiative, the automated production release gate
 For the Canva visual-parity remediation, the code release was validated on head `f6f07f23e95912047dec36daba88c91d5d2da825` and merged to main as `cb279581ddff60070db31d3b08a475778e38ec52`. Production completion must be recorded only after Hostinger serves the expected current `main` short SHA and `/api/health` passes.
 
 For the Canva content-aside scope hotfix, PR #126 is authorized for automatic merge/deploy only after the exact documented head passes both HOAHub MySQL CI and Canva Visual Parity. Production completion requires the merged main short SHA from that release to be served at `/release.txt` and `/api/health` to pass.
+
+For the authentication navigation recovery hotfix, PR #127 is authorized for merge/deploy only after its exact documented head passes the required PR workflows. Production completion requires the resulting merged main short SHA at `/release.txt`, successful `/api/health`, and a green main `deploy-production` job.
 
 ## CI Browser Gate Recovery
 

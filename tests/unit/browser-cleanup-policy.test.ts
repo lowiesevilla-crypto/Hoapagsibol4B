@@ -14,6 +14,10 @@ const criticalPathRunnerSource = readFileSync(
   "tests/e2e/run-critical-path.mjs",
   "utf8",
 );
+const browserSuiteRunnerSource = readFileSync(
+  "tests/e2e/run-browser-suites.mjs",
+  "utf8",
+);
 const documentWorkflowSource = readFileSync(
   "tests/e2e/document-workflow.mjs",
   "utf8",
@@ -29,20 +33,28 @@ const homeownerDashboardSource = readFileSync(
 );
 
 test("all browser E2E entry points use bounded safe browser isolation", () => {
-  const command = packageJson.scripts["test:e2e"] || "";
-  assert.match(command, /^node tests\/e2e\/run-critical-path\.mjs/);
+  assert.equal(packageJson.scripts["test:e2e"], "node tests/e2e/run-browser-suites.mjs");
+  assert.match(browserSuiteRunnerSource, /const defaultTimeoutMs = 8 \* 60_000/);
+  assert.match(browserSuiteRunnerSource, /const extendedTimeoutMs = 10 \* 60_000/);
+  assert.match(browserSuiteRunnerSource, /\[E2E \$\{position\}\] START/);
+  assert.match(browserSuiteRunnerSource, /\[E2E \$\{position\}\] PASS/);
+  assert.match(browserSuiteRunnerSource, /\[E2E \$\{position\}\] TIMEOUT/);
+  assert.match(browserSuiteRunnerSource, /killProcessTree\(child, "SIGTERM"\)/);
+  assert.match(browserSuiteRunnerSource, /killProcessTree\(child, "SIGKILL"\)/);
+
+  assert.match(browserSuiteRunnerSource, /tests\/e2e\/run-critical-path\.mjs/);
   for (const script of [
     "onboarding-workflow.mjs",
     "document-workflow.mjs",
     "document-management.mjs",
     "rbac-stale-session.mjs",
     "ai-assistant.mjs",
+    "auth-navigation-recovery.mjs",
   ]) {
-    assert.match(
-      command,
-      new RegExp(`node --import \\.\\/tests\\/e2e\\/safe-browser-context-cleanup\\.mjs tests\\/e2e\\/${script.replace(".", "\\.")}`),
-    );
+    assert.match(browserSuiteRunnerSource, new RegExp(`tests/e2e/${script.replace(".", "\\.")}`));
   }
+  assert.match(browserSuiteRunnerSource, /--import/);
+  assert.match(browserSuiteRunnerSource, /safe-browser-context-cleanup\.mjs/);
   assert.match(
     criticalPathRunnerSource,
     /"--import", "\.\/tests\/e2e\/safe-browser-context-cleanup\.mjs", "tests\/e2e\/critical-path\.mjs"/,

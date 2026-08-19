@@ -41,15 +41,13 @@ async function main() {
   assert(activationService.includes("const activationUrl = emailVerificationUrl"), "Activation email must not advertise an unauthenticated public activation page.");
 
   assert(authActions.includes("return { redirectTo: defaultHomeForRoles(roles, role) }"), "Password login must return a verified server-computed redirect destination.");
-  assert(authButtons.includes('action="/api/auth/logout"') && authButtons.includes('method="post"'), "Logout must retain a normal same-origin POST fallback.");
-  assert(authButtons.includes("event.preventDefault()") && authButtons.includes("await fetch(form.action") && authButtons.includes('credentials: "same-origin"'), "Interactive logout must use the same-origin endpoint without a React Server Action rerender.");
-  assert(authButtons.includes('redirect: "manual"') && authButtons.includes('Accept: "application/json"'), "Interactive logout must not follow an intermediate redirect before cookie clearing completes.");
-  assert(authButtons.includes("await response.json()") && authButtons.includes("typeof result.redirectTo !== \"string\""), "Interactive logout must require the server-computed JSON login destination.");
-  assert(authButtons.includes("window.location.replace(safeLogoutDestination(result.redirectTo))"), "Interactive logout must hard-replace the current protected history entry after server-side revocation completes.");
-  assert(!authButtons.includes("useActionState") && !authButtons.includes("logoutNavigationAction"), "Logout must not revoke the session inside a React Server Action state transition.");
+  assert(authButtons.includes('action="/api/auth/logout"') && authButtons.includes('method="post"'), "Logout must use the dedicated same-origin POST endpoint.");
+  assert(authButtons.includes('name="scope"') && authButtons.includes('value={allSessions ? "all" : "current"}'), "Logout scope must be submitted explicitly by the shared control.");
+  assert(!authButtons.includes("event.preventDefault()") && !authButtons.includes("fetch(form.action") && !authButtons.includes("useActionState"), "Logout must remain a deterministic native document POST rather than a React or fetch state transition.");
+  assert(!authButtons.includes("logoutNavigationAction"), "Logout must not revoke the session inside a React Server Action state transition.");
   assert(logoutRoute.includes("assertSameOrigin(request)"), "Logout POST must enforce same-origin request validation.");
-  assert(logoutRoute.includes('request.headers.get("X-HOA-Logout-Navigation") === "fetch"') && logoutRoute.includes("NextResponse.json("), "Interactive logout must return a completed no-redirect JSON response after revocation/cookie clearing.");
-  assert(logoutRoute.includes("NextResponse.redirect(destination, 303)"), "Logout POST fallback must finish with an HTTP 303 full-document redirect.");
+  assert(logoutRoute.includes("NextResponse.redirect(destination, 303)"), "Logout POST must finish with an HTTP 303 full-document redirect after revocation.");
+  assert(!logoutRoute.includes("X-HOA-Logout-Navigation") && !logoutRoute.includes("NextResponse.json("), "Logout route must not depend on a client fetch navigation branch.");
   assert(logoutRoute.includes("privateNoStoreHeaders"), "Logout responses must be private/no-store.");
   assert(authLogout.includes("session.tenantSlug") && !authLogout.includes("platformPrisma.tenant"), "Logout redirect must use signed session routing data instead of a database lookup.");
   assert(authLogout.includes("await deleteSession()"), "Logout must remove the signed browser session even when persisted-session cleanup is best-effort.");

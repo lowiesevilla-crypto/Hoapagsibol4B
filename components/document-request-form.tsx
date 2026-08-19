@@ -89,10 +89,18 @@ export function DocumentRequestForm({ configs, members, disabled = false }: { co
     if (subjectType === "HOUSEHOLD_MEMBER") setMemberSectionOpen(true);
   }, [subjectType]);
   if (!selected) return <section className="card"><h2 className="text-lg font-black">Request an HOA document</h2><p className="mt-2 text-sm text-slate-500">No document types are currently available. Please contact the HOA office.</p></section>;
-  return <form ref={formRef} action={submitAction} className="card">
+  return <form
+    ref={formRef}
+    action={submitAction}
+    className="card"
+    data-document-request-form="true"
+    data-submission-ready={submissionKey ? "true" : "false"}
+    data-submission-state={submissionState.status}
+    data-submission-request-id={submissionState.requestId || ""}
+  >
     <h2 className="text-lg font-black">Request an HOA document</h2>
     <p className="mb-5 text-sm text-slate-500">Select who the document is for and complete the tenant-required fields.</p>
-    {submissionState.status !== "idle" && <p ref={errorRef} tabIndex={-1} role={submissionState.status === "error" ? "alert" : "status"} aria-live="polite" className={`mb-4 rounded-xl p-3 text-sm font-semibold ${submissionState.status === "success" ? "bg-emerald-50 text-emerald-800" : "bg-rose-50 text-rose-800"}`}>{submissionState.message}</p>}
+    {submissionState.status !== "idle" && <p data-document-request-feedback={submissionState.status} ref={errorRef} tabIndex={-1} role={submissionState.status === "error" ? "alert" : "status"} aria-live="polite" className={`mb-4 rounded-xl p-3 text-sm font-semibold ${submissionState.status === "success" ? "bg-emerald-50 text-emerald-800" : "bg-rose-50 text-rose-800"}`}>{submissionState.message}</p>}
     <input type="hidden" name="submissionKey" value={submissionKey} />
     <fieldset disabled={disabled || !submissionKey} className="grid gap-4 md:grid-cols-2 disabled:opacity-60">
       <div className="md:col-span-2">

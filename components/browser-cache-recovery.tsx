@@ -3,6 +3,7 @@
 import { useEffect } from "react";
 import { usePathname } from "next/navigation";
 import { chunkRecoveryKey, isChunkLoadFailure, routeCategory } from "@/lib/chunk-recovery";
+import { GLOBAL_ERROR_RECOVERY_KEY, isProtectedApplicationPath } from "@/lib/navigation-recovery";
 
 const LEGACY_CACHE_NAME_PATTERN = /^(next-pwa|workbox|pwa|offline)(-|$)/i;
 const LEGACY_SERVICE_WORKER_PATH_PATTERN = /\/service-worker\.js$|\/workbox-/i;
@@ -14,6 +15,28 @@ export function BrowserCacheRecovery() {
 
   useEffect(() => {
     void removeStaleServiceWorkerCaches();
+  }, []);
+
+  useEffect(() => {
+    let recovering = false;
+    const refreshProtectedHistoryEntry = (reason: "history_pop" | "bfcache_restore") => {
+      const currentPath = window.location.pathname;
+      if (recovering || !isProtectedApplicationPath(currentPath)) return;
+      recovering = true;
+      console.info("[HOAHub]", { event: "protected_history_recovery", route: routeCategory(currentPath), action: "reload", reason });
+      window.location.reload();
+    };
+    const onPageShow = (event: PageTransitionEvent) => {
+      if (event.persisted) refreshProtectedHistoryEntry("bfcache_restore");
+    };
+    const onPopState = () => refreshProtectedHistoryEntry("history_pop");
+
+    window.addEventListener("pageshow", onPageShow);
+    window.addEventListener("popstate", onPopState);
+    return () => {
+      window.removeEventListener("pageshow", onPageShow);
+      window.removeEventListener("popstate", onPopState);
+    };
   }, []);
 
   useEffect(() => {
@@ -36,6 +59,7 @@ export function BrowserCacheRecovery() {
     const stableTimer = window.setTimeout(() => {
       try {
         window.sessionStorage.removeItem(storageKey);
+        window.sessionStorage.removeItem(GLOBAL_ERROR_RECOVERY_KEY);
       } catch {
         // Storage may be unavailable in restricted browser modes.
       }

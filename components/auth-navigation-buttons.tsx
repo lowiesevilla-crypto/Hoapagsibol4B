@@ -11,9 +11,13 @@ type LogoutButtonProps = {
   onClick?: () => void;
 };
 
-function safeLogoutDestination(responseUrl: string) {
+type LogoutNavigationResponse = {
+  redirectTo?: unknown;
+};
+
+function safeLogoutDestination(destinationValue: string) {
   try {
-    const destination = new URL(responseUrl, window.location.origin);
+    const destination = new URL(destinationValue, window.location.origin);
     if (destination.origin !== window.location.origin) return "/login?loggedOut=1";
     if (destination.pathname === "/login" || destination.pathname.endsWith("/login")) {
       return `${destination.pathname}${destination.search}${destination.hash}`;
@@ -40,14 +44,21 @@ export function LogoutButton({ allSessions = false, className = "btn-secondary w
         method: "POST",
         body: new FormData(form),
         credentials: "same-origin",
-        redirect: "follow",
-        headers: { "X-HOA-Logout-Navigation": "fetch" },
+        redirect: "manual",
+        headers: {
+          Accept: "application/json",
+          "X-HOA-Logout-Navigation": "fetch",
+        },
       });
       if (!response.ok) throw new Error("Logout request failed");
 
-      // The server has already revoked/deleted the signed session. Replace the current
-      // protected history entry rather than appending a POST/303 chain that Back can revisit.
-      window.location.replace(safeLogoutDestination(response.url));
+      const result = await response.json() as LogoutNavigationResponse;
+      if (typeof result.redirectTo !== "string") throw new Error("Logout redirect was not returned");
+
+      // The server has already revoked/deleted the signed session and completed the
+      // cookie-clearing response. Replace the current protected history entry only
+      // after that response is complete so Back cannot revive it as the current page.
+      window.location.replace(safeLogoutDestination(result.redirectTo));
     } catch {
       setPending(false);
       setError("We couldn't sign you out. Please try again.");

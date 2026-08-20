@@ -1,6 +1,6 @@
 # HOAHub Premium Admin UI V2 — Implementation & Traceability
 
-Status: IMPLEMENTED — FINAL EXACT-HEAD GATES PENDING
+Status: IMPLEMENTED — FINAL EXACT-HEAD VALIDATION IN PROGRESS
 Baseline main SHA: `a0965d49bab5c475a75864b4e8cea5594b5a9a00` (PR #127 merged)
 Implementation branch: `feature/premium-admin-ui-v2`
 Tracking issue: #128
@@ -56,7 +56,9 @@ No inaccessible route is intentionally added to the client command catalog.
 
 ### Logout/browser regression recovery
 
-The inherited post-PR #127 logout browser regression was fixed by removing custom click interception and manual `HTMLFormElement.prototype.submit()` dispatch. Logout now uses the browser's unmodified native form submission path to the guarded POST endpoint; the server remains authoritative for session revocation and the HTTP 303 redirect. The static auth-navigation contract was updated to prevent reintroduction of client fetch, React action-state, manual submit or client redirect authority.
+The Premium Admin branch exposed an inherited logout race where React/Next could classify the Route Handler POST as a Server Action and leave a Tenant Admin on `/admin/dashboard`. The shared logout control now prevents the delegated default submit event and invokes `HTMLFormElement.prototype.submit.call(form)` to perform exactly one normal same-origin document POST to `/api/auth/logout`. The browser remains non-authoritative: the server validates same-origin/configured-origin or browser Fetch Metadata, revokes the session, clears browser session state and returns the authoritative private/no-store HTTP 303 destination. Client `fetch`, `useActionState`, `requestSubmit`, `form.submit()` and client redirect authority remain prohibited for logout.
+
+`tests/e2e/auth-navigation-recovery.mjs` remains unchanged as the real-browser gate. `verify:auth-navigation-cache` now locks the single native submission contract instead of accepting a duplicate delegated/default submission path.
 
 ## 42-route implementation scope
 
@@ -129,9 +131,18 @@ The approved design remains a visual and hierarchy reference. Production data va
 - `tests/unit/premium-admin-ux-surface.test.ts` — shell, canonical PageHeader, command search keyboard contract and dashboard composition.
 - `tests/unit/homeowner-admin-search.test.ts` — structured Block/Lot parsing and Prisma filter construction.
 - `tests/e2e/admin-premium-search.mjs` — real Admin command navigation, combined Block/Lot lookup and empty-result behavior.
-- `tests/e2e/auth-navigation-recovery.mjs` — existing cross-shell logout/Back regression remains a critical gate.
+- `tests/e2e/auth-navigation-recovery.mjs` — cross-shell logout/Back regression remains a critical gate and was not weakened for this release.
+- `tests/e2e/document-workflow.mjs` — homeowner document submission success remains observable before server-rendered history refresh.
 - `tests/e2e/ui-canva-visual-parity.mjs` — expanded desktop/tablet/mobile workspace evidence.
 - `package.json` — Premium Admin search browser regression is included in `test:e2e`.
+
+## Validation evidence
+
+The candidate immediately before the final logout correction demonstrated that the Premium Admin implementation itself is stable:
+- HOAHub Canva Visual Parity #71 completed successfully, including browser screenshot capture across the expanded Admin/tablet/mobile matrix.
+- HOAHub MySQL CI #825 passed dependency integrity, lint, Prisma validation/generation/migration/seed, 295 unit tests, 30 integration tests, all critical static verifiers, typecheck, production build, production smoke, critical business browser flow, onboarding, document workflow, Document Management, RBAC stale-session, AI assistant, and Premium Admin command/Block-Lot search regression.
+- CI #825 failed only at the final Tenant Admin logout navigation assertion in `auth-navigation-recovery.mjs`; the server log showed the duplicate/delegated POST being interpreted as an unknown Server Action.
+- That root cause is now addressed by the single native prototype submission contract above. Final release still requires both workflows to pass on the exact documented head after this record and `Agent.md` are current.
 
 ## Release gates
 
@@ -149,4 +160,4 @@ PR #130 must remain draft until the final branch head satisfies all of the follo
 
 Failures must be fixed at root cause and rerun. Tests, tenant scoping, RBAC, permission gates or release checks must not be weakened to produce green status.
 
-After exact-head green: mark PR #130 ready, merge that verified head to `main`, allow the existing Hostinger managed production flow to publish the merge, then verify the expected `/release.txt`, `/api/health`, and authenticated production UI/search smoke checks. Only then may issue #128 be treated as production complete.
+After exact-head green: mark PR #130 ready, merge that verified head to `main`, allow the existing Hostinger managed production flow to publish the merge, then verify the expected `/release.txt`, `/api/health`, and applicable authenticated production UI/search smoke evidence. Only then may issue #128 be treated as production complete.

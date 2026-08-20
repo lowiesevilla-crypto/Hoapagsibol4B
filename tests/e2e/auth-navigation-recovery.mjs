@@ -124,28 +124,46 @@ async function exerciseAuthenticatedBack(page, identity) {
   await assertNoGlobalError(page, `${identity.label} Back`);
 }
 
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 async function currentLogoutButton(page) {
-  await page.waitForSelector('form[action="/api/auth/logout"]', { timeout });
-  const forms = await page.$$('form[action="/api/auth/logout"]');
-  for (const form of forms) {
-    const scope = await form.$eval('input[name="scope"]', (node) => node.value).catch(() => "");
-    if (scope !== "current") continue;
-    const button = await form.$('button[type="submit"]');
-    if (!button) continue;
-    const visible = await button.evaluate((node) => {
+  const selector = 'a[data-hoahub-logout-button="true"][data-hoahub-logout-scope="current"]';
+  await page.waitForSelector(selector, { timeout });
+  const buttons = await page.$$(selector);
+
+  for (const button of buttons) {
+    const renderable = await button.evaluate((node) => {
       const style = getComputedStyle(node);
       const rect = node.getBoundingClientRect();
       return style.display !== "none"
         && style.visibility !== "hidden"
         && Number(style.opacity || "1") > 0
         && rect.width > 0
-        && rect.height > 0
-        && rect.bottom > 0
+        && rect.height > 0;
+    });
+    if (!renderable) continue;
+
+    // Mobile pages can place a valid logout control close to the fixed bottom nav.
+    // Center the control before using a real pointer click so Puppeteer cannot hit an
+    // overlapping navigation item when the control is only partially in the viewport.
+    await button.evaluate((node) => node.scrollIntoView({ block: "center", inline: "nearest" }));
+    await sleep(100);
+
+    const actionable = await button.evaluate((node) => {
+      const rect = node.getBoundingClientRect();
+      const x = Math.min(window.innerWidth - 1, Math.max(0, rect.left + rect.width / 2));
+      const y = Math.min(window.innerHeight - 1, Math.max(0, rect.top + rect.height / 2));
+      const hit = document.elementFromPoint(x, y);
+      return rect.bottom > 0
         && rect.right > 0
         && rect.top < window.innerHeight
-        && rect.left < window.innerWidth;
+        && rect.left < window.innerWidth
+        && Boolean(hit)
+        && (hit === node || node.contains(hit));
     });
-    if (visible) return button;
+    if (actionable) return button;
   }
   return null;
 }
@@ -154,8 +172,51 @@ function isLoginPath(pathname) {
   return pathname === "/login" || pathname.endsWith("/login");
 }
 
-function sleep(ms) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
+function isLogoutDiagnosticPath(pathname) {
+  return pathname === "/api/auth/logout" || pathname === "/api/auth/logout-transition";
+}
+
+function installLogoutDiagnostics(page, label) {
+  page.on("request", (request) => {
+    try {
+      const url = new URL(request.url());
+      if (isLogoutDiagnosticPath(url.pathname)) {
+        console.log(`[auth-nav] ${label} request ${request.method()} ${url.pathname}`);
+      }
+    } catch {
+      // Ignore non-URL browser requests.
+    }
+  });
+  page.on("response", (response) => {
+    try {
+      const url = new URL(response.url());
+      if (isLogoutDiagnosticPath(url.pathname)) {
+        console.log(`[auth-nav] ${label} response ${response.status()} ${url.pathname}`);
+      }
+    } catch {
+      // Ignore non-URL browser responses.
+    }
+  });
+  page.on("pageerror", (error) => {
+    if (page.url().includes("/api/auth/logout-transition")) {
+      console.log(`[auth-nav] ${label} transition pageerror ${error.name}: ${error.message}`);
+    }
+  });
+}
+
+async function transitionDiagnosticState(page) {
+  try {
+    if (!new URL(page.url()).pathname.includes("/api/auth/logout-transition")) return "";
+    const state = await page.evaluate(() => ({
+      readyState: document.readyState,
+      marker: document.documentElement.dataset.hoahubLogoutTransition || "none",
+      retryPresent: Boolean(document.querySelector('[data-hoahub-logout-retry="true"]')),
+      scriptCount: document.scripts.length,
+    }));
+    return `; transition=${JSON.stringify(state)}`;
+  } catch {
+    return "; transition=unavailable";
+  }
 }
 
 async function waitForObservedUrl(page, predicate, label) {
@@ -171,17 +232,19 @@ async function waitForObservedUrl(page, predicate, label) {
     }
     await sleep(100);
   }
-  assert.fail(`${label}: timed out waiting for safe navigation; current URL ${lastUrl}`);
+  const diagnostic = await transitionDiagnosticState(page);
+  assert.fail(`${label}: timed out waiting for safe navigation; current URL ${lastUrl}${diagnostic}`);
 }
 
 async function exerciseLogoutAndBack(page, identity) {
   await page.goto(`${baseUrl}${identity.logoutRoute}`, { waitUntil: "networkidle2", timeout });
   const logoutButton = await currentLogoutButton(page);
-  assert.ok(logoutButton, `${identity.label}: visible current-session logout form was not found`);
+  assert.ok(logoutButton, `${identity.label}: actionable current-session logout control was not found`);
 
-  // Interactive logout intentionally performs a same-origin fetch first and only then
-  // replaces the protected document. Observe the browser URL from Puppeteer/Node rather
-  // than attaching a WaitTask to the document that location.replace() destroys.
+  // The protected React tree exposes only an ordinary same-origin navigation link.
+  // That GET reaches a private/no-store transition document outside React. Its
+  // nonce-scoped script sends the authoritative same-origin PUT, validates the 204
+  // destination header, then replaces the protected history entry with the login page.
   await logoutButton.click();
   await waitForObservedUrl(page, (url) => isLoginPath(url.pathname), `${identity.label} logout`);
   await page.waitForNetworkIdle({ idleTime: 300, timeout }).catch(() => undefined);
@@ -205,6 +268,7 @@ try {
     const context = await browser.createBrowserContext();
     const page = await context.newPage();
     try {
+      installLogoutDiagnostics(page, identity.label);
       await page.setViewport(identity.label === "homeowner"
         ? { width: 390, height: 844, deviceScaleFactor: 1 }
         : { width: 1440, height: 1000, deviceScaleFactor: 1 });

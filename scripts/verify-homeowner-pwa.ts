@@ -96,12 +96,68 @@ record("cache recovery removes HOAHub /sw.js only in local development", hasAll(
 record("cache recovery removes only HOAHub-owned development caches", hasAll(cacheRecovery, ["shouldRemoveDevelopmentHoaHubCache", "DEVELOPMENT_HOAHUB_CACHE_PREFIX", "cacheName.startsWith(DEVELOPMENT_HOAHUB_CACHE_PREFIX)"]));
 
 const authButtons = readProjectFile("components/auth-navigation-buttons.tsx");
+const logoutTransitionRoute = readProjectFile("app/api/auth/logout-transition/route.ts");
 const logoutRoute = readProjectFile("app/api/auth/logout/route.ts");
 const authLogout = readProjectFile("lib/auth-logout.ts");
 const profilePage = readProjectFile("app/portal/profile/page.tsx");
 const morePage = readProjectFile("app/portal/more/page.tsx");
-record("logout buttons use a normal full-document POST", hasAll(authButtons, ['action="/api/auth/logout"', 'method="post"', 'type="submit"', "disabled={pending}"]) && !authButtons.includes("useActionState"));
-record("logout endpoint enforces same-origin private 303 redirect", hasAll(logoutRoute, ["assertSameOrigin(request)", "privateNoStoreHeaders", "NextResponse.redirect(destination, 303)"]));
+record(
+  "logout buttons use a self-contained isolated same-origin transition before shared server logout authority",
+  hasAll(authButtons, [
+    'const LOGOUT_TRANSITION_ENDPOINT = "/api/auth/logout-transition"',
+    "href={href}",
+    'rel="nofollow"',
+    'data-hoahub-logout-button="true"',
+    'data-hoahub-logout-scope={scope}',
+  ])
+    && !authButtons.includes("document.createElement(\"form\")")
+    && !authButtons.includes("HTMLFormElement.prototype.submit.call")
+    && !authButtons.includes("useActionState")
+    && !authButtons.includes("fetch(")
+    && !authButtons.includes("location.replace")
+    && hasAll(logoutTransitionRoute, [
+      'request.headers.get("sec-fetch-site") === "same-origin"',
+      'request.headers.get("sec-fetch-mode") === "navigate"',
+      'request.headers.get("sec-fetch-dest") === "document"',
+      "allowedOrigins()",
+      'const nonce = randomBytes(16).toString("hex")',
+      'script nonce="${nonce}"',
+      'fetch("/api/auth/logout?scope=" + encodeURIComponent(scope)',
+      'method: "PUT"',
+      'credentials: "same-origin"',
+      'redirect: "error"',
+      'cache: "no-store"',
+      '"X-HOAHub-Logout-Transition": "1"',
+      "response.status !== 204",
+      'response.headers.get("X-HOAHub-Logout-Destination")',
+      "new URL(rawDestination, window.location.origin)",
+      "destination.origin === window.location.origin",
+      'destination.pathname === "/login"',
+      'destination.pathname.endsWith("/login")',
+      "window.location.replace(destination.href)",
+      'data-hoahub-logout-retry="true"',
+      "privateNoStoreHeaders",
+      "script-src 'nonce-${nonce}'",
+      "connect-src 'self'",
+      "form-action 'none'",
+      "frame-ancestors 'none'",
+    ])
+    && !logoutTransitionRoute.includes("body: new URLSearchParams")
+    && !logoutTransitionRoute.includes("HTMLFormElement.prototype.submit.call")
+    && !logoutTransitionRoute.includes("window.setTimeout(submitLogout")
+    && !logoutTransitionRoute.includes('/api/auth/logout-transition-script')
+    && hasAll(logoutRoute, [
+      "assertSameOrigin(request)",
+      "privateNoStoreHeaders",
+      "NextResponse.redirect(result.destination, 303)",
+      "export async function POST(request: Request)",
+      "export async function PUT(request: Request)",
+      'request.headers.get(TRANSITION_REQUEST_HEADER) !== "1"',
+      "status: 204",
+      "TRANSITION_DESTINATION_HEADER",
+    ]),
+);
+record("logout endpoint enforces same-origin private server authority", hasAll(logoutRoute, ["assertSameOrigin(request)", "privateNoStoreHeaders", "NextResponse.redirect(result.destination, 303)", "export async function POST(request: Request)", "export async function PUT(request: Request)", "status: 204", "TRANSITION_DESTINATION_HEADER"]));
 record("profile and more contain no inline logout action", hasAll(profilePage, ["LogoutButton"]) && hasAll(morePage, ["LogoutButton"]) && !profilePage.includes("logoutAction") && !morePage.includes("logoutAction") && !profilePage.includes("form action={async") && !morePage.includes("form action={async"));
 record("logout removes browser session before document redirect", hasAll(authLogout, ["await deleteSession()", "logoutRedirectForSession", "session.tenantSlug"]));
 

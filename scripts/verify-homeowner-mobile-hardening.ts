@@ -55,6 +55,7 @@ const eventsPage = readProjectFile("app/portal/events/page.tsx");
 const profilePage = readProjectFile("app/portal/profile/page.tsx");
 const vehiclesPage = readProjectFile("app/portal/vehicles/page.tsx");
 const authButtons = readProjectFile("components/auth-navigation-buttons.tsx");
+const logoutTransitionRoute = readProjectFile("app/api/auth/logout-transition/route.ts");
 const logoutRoute = readProjectFile("app/api/auth/logout/route.ts");
 const files = changedFiles();
 
@@ -78,7 +79,62 @@ record("RSC and router prefetch requests are never cached", hasAll(serviceWorker
 record("credential and private responses are not cached", hasAll(serviceWorker, ["isCacheableStaticResponse", "set-cookie", "no-store", "private"]) && /application\\\/json|application\/json/.test(serviceWorker) && /text\\\/x-component|text\/x-component/.test(serviceWorker));
 record("navigation offline fallback is generic only", hasAll(serviceWorker, ["networkFirstNavigation", "cache.match(OFFLINE_URL)", 'const OFFLINE_URL = "/offline"']));
 record("PWA update flow avoids reload loop", hasAll(provider, ["UPDATE_RELOAD_KEY", "updatingRef", "controllerchange", "{ once: true }", "updateReloadAlreadyStarted"]));
-record("logout uses a same-origin full-document transition", hasAll(authButtons + logoutRoute, ['action="/api/auth/logout"', 'method="post"', "assertSameOrigin(request)", "privateNoStoreHeaders", "NextResponse.redirect(destination, 303)"]) && !authButtons.includes("useActionState"));
+record(
+  "logout uses a same-origin full-document transition outside the protected React tree",
+  hasAll(authButtons, [
+    'const LOGOUT_TRANSITION_ENDPOINT = "/api/auth/logout-transition"',
+    "href={href}",
+    'rel="nofollow"',
+    'data-hoahub-logout-button="true"',
+    'data-hoahub-logout-scope={scope}',
+  ])
+    && !authButtons.includes("document.createElement(\"form\")")
+    && !authButtons.includes("HTMLFormElement.prototype.submit.call")
+    && !authButtons.includes("useActionState")
+    && !authButtons.includes("fetch(")
+    && !authButtons.includes("location.replace")
+    && hasAll(logoutTransitionRoute, [
+      'request.headers.get("sec-fetch-site") === "same-origin"',
+      'request.headers.get("sec-fetch-mode") === "navigate"',
+      'request.headers.get("sec-fetch-dest") === "document"',
+      "allowedOrigins()",
+      'const nonce = randomBytes(16).toString("hex")',
+      'script nonce="${nonce}"',
+      'fetch("/api/auth/logout?scope=" + encodeURIComponent(scope)',
+      'method: "PUT"',
+      'credentials: "same-origin"',
+      'redirect: "error"',
+      'cache: "no-store"',
+      '"X-HOAHub-Logout-Transition": "1"',
+      "response.status !== 204",
+      'response.headers.get("X-HOAHub-Logout-Destination")',
+      "new URL(rawDestination, window.location.origin)",
+      "destination.origin === window.location.origin",
+      'destination.pathname === "/login"',
+      'destination.pathname.endsWith("/login")',
+      "window.location.replace(destination.href)",
+      'data-hoahub-logout-retry="true"',
+      "privateNoStoreHeaders",
+      "script-src 'nonce-${nonce}'",
+      "connect-src 'self'",
+      "form-action 'none'",
+      "frame-ancestors 'none'",
+    ])
+    && !logoutTransitionRoute.includes("body: new URLSearchParams")
+    && !logoutTransitionRoute.includes("HTMLFormElement.prototype.submit.call")
+    && !logoutTransitionRoute.includes("window.setTimeout(submitLogout")
+    && !logoutTransitionRoute.includes('/api/auth/logout-transition-script')
+    && hasAll(logoutRoute, [
+      "assertSameOrigin(request)",
+      "privateNoStoreHeaders",
+      "NextResponse.redirect(result.destination, 303)",
+      "export async function POST(request: Request)",
+      "export async function PUT(request: Request)",
+      'request.headers.get(TRANSITION_REQUEST_HEADER) !== "1"',
+      "status: 204",
+      "TRANSITION_DESTINATION_HEADER",
+    ]),
+);
 
 record("focus indicators exist globally", globals.includes(":focus-visible") && globals.includes("outline-offset"));
 record("reduced-motion support exists", hasAll(globals, ["prefers-reduced-motion: reduce", "animation-duration", "transition-duration", "scroll-behavior: auto"]));

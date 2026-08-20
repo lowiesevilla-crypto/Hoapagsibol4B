@@ -9,6 +9,7 @@ import { bulkSendHomeownerActivationInvitationsAction } from "@/lib/actions/home
 import { requireUser } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { homeownerAccountNumber } from "@/lib/homeowner-account";
+import { homeownerSearchWhere } from "@/lib/homeowner-admin-search";
 import { activationInvitationExpiresAt, deliveryStatusLabel, digitalActivationLabel, homeownerDigitalActivationEligibility, maskAccountNumber, maskEmail } from "@/lib/services/homeowner-digital-activation";
 import { money } from "@/lib/utils";
 
@@ -49,7 +50,7 @@ export default async function HomeownersPage({ searchParams }: { searchParams: P
     baseWhere,
     operationalStatus === "all" ? {} : { status: operationalStatus as HomeownerStatus },
     digitalWhere(digitalFilter),
-    searchWhere(query.q || ""),
+    homeownerSearchWhere(query.q || ""),
   ].filter((part) => Object.keys(part).length);
   const filteredWhere: Prisma.HomeownerProfileWhereInput = { AND: filterParts };
   const skip = (page - 1) * pageSize;
@@ -132,22 +133,6 @@ export default async function HomeownersPage({ searchParams }: { searchParams: P
   </>;
 }
 
-function searchWhere(raw: string): Prisma.HomeownerProfileWhereInput {
-  const terms = normalizeSearch(raw).split(" ").filter(Boolean);
-  if (!terms.length) return {};
-  return {
-    AND: terms.map((term) => ({
-      OR: [
-        { user: { name: { contains: term } } },
-        { user: { email: { contains: term } } },
-        { accountNumber: { contains: term.replace(/\D/g, "") || term } },
-        { block: { contains: term } },
-        { lot: { contains: term } },
-      ],
-    })),
-  };
-}
-
 function digitalWhere(value: string): Prisma.HomeownerProfileWhereInput {
   if (value === "not_invited") return { activationStatus: HomeownerActivationStatus.NOT_INVITED };
   if (value === "eligible") return eligibleWhere();
@@ -195,10 +180,6 @@ function PaginationLink({ children, disabled, query, page }: { children: ReactNo
   params.set("page", String(page));
   if (disabled) return <span className="btn-secondary min-h-9 cursor-not-allowed px-3 py-1.5 text-xs opacity-50">{children}</span>;
   return <Link className="btn-secondary min-h-9 px-3 py-1.5 text-xs" href={`/admin/homeowners?${params.toString()}`}>{children}</Link>;
-}
-
-function normalizeSearch(value: string) {
-  return value.normalize("NFKD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9@._-]+/g, " ").trim();
 }
 
 function emailLabel(value: string) {

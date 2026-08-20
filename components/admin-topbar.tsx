@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { Building2, ChevronDown, Plus, UserRound } from "lucide-react";
 import { usePathname } from "next/navigation";
-import { ShellCommandSearch } from "@/components/shell-command-search";
+import { ShellCommandSearch, type CommandDestination } from "@/components/shell-command-search";
 
 const LABELS: Record<string, string> = {
   admin: "Admin",
@@ -41,7 +41,7 @@ function labelFor(segment: string) {
   return LABELS[segment] ?? segment.replaceAll("-", " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
 
-export function AdminTopbar({ associationName, roleLabel, userName }: { associationName: string; roleLabel: string; userName: string }) {
+export function AdminTopbar({ associationName, roleLabel, userName, searchLinks }: { associationName: string; roleLabel: string; userName: string; searchLinks: CommandDestination[] }) {
   const pathname = usePathname();
   const segments = pathname.split("/").filter(Boolean).slice(1);
   const breadcrumbs = segments.length ? segments.map(labelFor) : ["Dashboard"];
@@ -58,7 +58,7 @@ export function AdminTopbar({ associationName, roleLabel, userName }: { associat
         </div>
 
         <div className="flex shrink-0 items-center gap-2.5">
-          <ShellCommandSearch scope="admin" />
+          <ShellCommandSearch scope="admin" destinations={searchLinks} />
           <details className="relative hidden lg:block">
             <summary className="flex h-11 cursor-pointer list-none items-center gap-2 rounded-[13px] bg-[#0b95d8] px-4 text-[13px] font-black text-white shadow-[0_10px_24px_rgba(11,149,216,.18)] hover:bg-[#087db8]">
               <Plus className="size-4" aria-hidden="true" /> Quick create <ChevronDown className="size-3.5" aria-hidden="true" />

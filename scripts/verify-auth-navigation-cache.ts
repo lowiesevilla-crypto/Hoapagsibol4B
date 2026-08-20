@@ -15,6 +15,7 @@ async function main() {
   const activationService = read("lib/services/homeowner-activation.ts");
   const authActions = read("lib/actions/auth.ts");
   const authButtons = read("components/auth-navigation-buttons.tsx");
+  const logoutTransitionRoute = read("app/api/auth/logout-transition/route.ts");
   const logoutRoute = read("app/api/auth/logout/route.ts");
   const authLogout = read("lib/auth-logout.ts");
   const sidebar = read("components/sidebar.tsx");
@@ -24,6 +25,7 @@ async function main() {
   const chunkRecovery = read("lib/chunk-recovery.ts");
   const navigationRecovery = read("lib/navigation-recovery.ts");
   const browserRecovery = read("components/browser-cache-recovery.tsx");
+  const authNavigationE2e = read("tests/e2e/auth-navigation-recovery.mjs");
   const nextConfig = read("next.config.ts");
   const packageJson = read("package.json");
 
@@ -41,15 +43,31 @@ async function main() {
   assert(activationService.includes("const activationUrl = emailVerificationUrl"), "Activation email must not advertise an unauthenticated public activation page.");
 
   assert(authActions.includes("return { redirectTo: defaultHomeForRoles(roles, role) }"), "Password login must return a verified server-computed redirect destination.");
-  assert(authButtons.includes('action="/api/auth/logout"') && authButtons.includes('method="post"'), "Logout must retain a normal same-origin POST fallback.");
-  assert(authButtons.includes("event.preventDefault()") && authButtons.includes("await fetch(form.action") && authButtons.includes('credentials: "same-origin"'), "Interactive logout must use the same-origin endpoint without a React Server Action rerender.");
-  assert(authButtons.includes('redirect: "manual"') && authButtons.includes('Accept: "application/json"'), "Interactive logout must not follow an intermediate redirect before cookie clearing completes.");
-  assert(authButtons.includes("await response.json()") && authButtons.includes("typeof result.redirectTo !== \"string\""), "Interactive logout must require the server-computed JSON login destination.");
-  assert(authButtons.includes("window.location.replace(safeLogoutDestination(result.redirectTo))"), "Interactive logout must hard-replace the current protected history entry after server-side revocation completes.");
-  assert(!authButtons.includes("useActionState") && !authButtons.includes("logoutNavigationAction"), "Logout must not revoke the session inside a React Server Action state transition.");
-  assert(logoutRoute.includes("assertSameOrigin(request)"), "Logout POST must enforce same-origin request validation.");
-  assert(logoutRoute.includes('request.headers.get("X-HOA-Logout-Navigation") === "fetch"') && logoutRoute.includes("NextResponse.json("), "Interactive logout must return a completed no-redirect JSON response after revocation/cookie clearing.");
-  assert(logoutRoute.includes("NextResponse.redirect(destination, 303)"), "Logout POST fallback must finish with an HTTP 303 full-document redirect.");
+  assert(authButtons.includes('const LOGOUT_TRANSITION_ENDPOINT = "/api/auth/logout-transition"') && authButtons.includes("href={href}"), "Logout must leave the protected React tree through the dedicated same-origin transition route.");
+  assert(authButtons.includes('data-hoahub-logout-button="true"') && authButtons.includes('data-hoahub-logout-scope={scope}'), "Logout must expose a visible control with explicit scope metadata.");
+  assert(authButtons.includes('rel="nofollow"'), "Logout transition links must not invite speculative crawler navigation.");
+  assert(!authButtons.includes("document.createElement(\"form\")") && !authButtons.includes("HTMLFormElement.prototype.submit.call"), "Protected React pages must not submit the logout mutation directly.");
+  assert(!authButtons.includes("event.preventDefault()") && !authButtons.includes("useActionState") && !authButtons.includes("fetch("), "Protected React logout controls must not depend on delegated submit suppression, React action state, or client fetch authority.");
+  assert(!authButtons.includes("location.replace") && !authButtons.includes("logoutNavigationAction"), "Protected React logout controls must not depend on client redirect authority or a React Server Action revocation path.");
+
+  assert(logoutTransitionRoute.includes('request.headers.get("sec-fetch-site") === "same-origin"') && logoutTransitionRoute.includes('request.headers.get("sec-fetch-mode") === "navigate"') && logoutTransitionRoute.includes('request.headers.get("sec-fetch-dest") === "document"'), "Logout transition must require browser-controlled same-origin top-level navigation when referrer proof is unavailable.");
+  assert(logoutTransitionRoute.includes("allowedOrigins()") && logoutTransitionRoute.includes("new URL(referer).origin === new URL(request.url).origin"), "Logout transition must accept only exact or explicitly configured application origins.");
+  assert(logoutTransitionRoute.includes("const nonce = randomBytes(16).toString(\"hex\")") && logoutTransitionRoute.includes('script nonce="${nonce}"'), "Logout transition must use a per-response nonce for its isolated transport script.");
+  assert(logoutTransitionRoute.includes('fetch("/api/auth/logout?scope=" + encodeURIComponent(scope)') && logoutTransitionRoute.includes('method: "PUT"') && logoutTransitionRoute.includes('credentials: "same-origin"') && logoutTransitionRoute.includes('redirect: "error"') && logoutTransitionRoute.includes('cache: "no-store"'), "The isolated transition document must create a fresh same-origin non-POST mutation outside the protected React tree without a redirect-follow chain.");
+  assert(logoutTransitionRoute.includes('"X-HOAHub-Logout-Transition": "1"') && !logoutTransitionRoute.includes("body: new URLSearchParams"), "Logout transition must carry only the bounded scope in the same-origin URL and use an explicit isolated-transport marker without a mutation body.");
+  assert(logoutTransitionRoute.includes('response.status !== 204') && logoutTransitionRoute.includes('response.headers.get("X-HOAHub-Logout-Destination")') && logoutTransitionRoute.includes("new URL(rawDestination, window.location.origin)") && logoutTransitionRoute.includes("destination.origin === window.location.origin") && logoutTransitionRoute.includes('destination.pathname === "/login"') && logoutTransitionRoute.includes('destination.pathname.endsWith("/login")') && logoutTransitionRoute.includes("window.location.replace(destination.href)"), "Transition navigation must use only the bounded same-origin login destination returned after server revocation.");
+  assert(logoutTransitionRoute.includes('data-hoahub-logout-retry="true"') && logoutTransitionRoute.includes('dataset.hoahubLogoutError = reason') && !logoutTransitionRoute.includes("HTMLFormElement.prototype.submit.call") && !logoutTransitionRoute.includes("window.setTimeout(submitLogout"), "Transition retries must be explicit and diagnostics must remain bounded without duplicating logout mutations automatically.");
+  assert(logoutTransitionRoute.includes("privateNoStoreHeaders") && logoutTransitionRoute.includes("script-src 'nonce-${nonce}'") && logoutTransitionRoute.includes("connect-src 'self'") && logoutTransitionRoute.includes("form-action 'none'") && logoutTransitionRoute.includes("frame-ancestors 'none'"), "Logout transition document must be private/no-store and CSP-restricted to its nonce-scoped same-origin transport.");
+  assert(!logoutTransitionRoute.includes('/api/auth/logout-transition-script'), "Logout transition must be self-contained so sign-out cannot stall on a secondary script request.");
+
+  assert(authNavigationE2e.includes('a[data-hoahub-logout-button=\\"true\\"][data-hoahub-logout-scope=\\"current\\"]') || authNavigationE2e.includes('a[data-hoahub-logout-button="true"][data-hoahub-logout-scope="current"]'), "Auth browser regression must locate the visible current-session logout link directly.");
+  assert(authNavigationE2e.includes("await logoutButton.click()"), "Auth browser regression must exercise logout through the visible control.");
+  assert(!authNavigationE2e.includes('page.request') && !authNavigationE2e.includes('fetch(`${baseUrl}/api/auth/logout'), "Auth browser regression must not bypass the visible logout control with a direct API mutation.");
+  assert(logoutRoute.includes("assertSameOrigin(request)"), "Logout mutations must enforce same-origin request validation.");
+  assert(logoutRoute.includes("export async function POST(request: Request)") && logoutRoute.includes("export async function PUT(request: Request)"), "Logout route must keep POST document compatibility while exposing the isolated transition PUT mutation.");
+  assert(logoutRoute.includes('request.headers.get(TRANSITION_REQUEST_HEADER) !== "1"') && logoutRoute.includes('new URL(request.url).searchParams.get("scope") === "all"'), "Isolated logout PUT must require its explicit transition marker and bound scope to current or all.");
+  assert(logoutRoute.includes("NextResponse.redirect(result.destination, 303)"), "Direct POST logout must retain the authoritative HTTP 303 redirect after revocation.");
+  assert(logoutRoute.includes("status: 204") && logoutRoute.includes("TRANSITION_DESTINATION_HEADER") && logoutRoute.includes("result.destination.pathname"), "Isolated logout must return only a bounded server-resolved destination after revocation instead of following a fetch redirect chain.");
   assert(logoutRoute.includes("privateNoStoreHeaders"), "Logout responses must be private/no-store.");
   assert(authLogout.includes("session.tenantSlug") && !authLogout.includes("platformPrisma.tenant"), "Logout redirect must use signed session routing data instead of a database lookup.");
   assert(authLogout.includes("await deleteSession()"), "Logout must remove the signed browser session even when persisted-session cleanup is best-effort.");

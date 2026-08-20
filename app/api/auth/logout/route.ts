@@ -1,16 +1,60 @@
 import { NextResponse } from "next/server";
 import { assertSameOrigin, privateNoStoreHeaders } from "@/lib/anonymous-request-security";
+import { allowedOrigins } from "@/lib/app-url";
 import { performLogout, type LogoutScope } from "@/lib/auth-logout";
 
 export const dynamic = "force-dynamic";
 
-export async function POST(request: Request) {
+const TRANSITION_REQUEST_HEADER = "x-hoahub-logout-transition";
+const TRANSITION_DESTINATION_HEADER = "X-HOAHub-Logout-Destination";
+
+function trustedConfiguredSource(value: string | null) {
+  if (!value || value === "null") return false;
   try {
-    assertSameOrigin(request);
+    return allowedOrigins().has(new URL(value).origin);
   } catch {
-    return new NextResponse("Forbidden", { status: 403, headers: privateNoStoreHeaders });
+    return false;
+  }
+}
+
+function isTrustedLogoutMutation(request: Request) {
+  const origin = request.headers.get("origin");
+  const referer = request.headers.get("referer");
+
+  if (origin || referer) {
+    try {
+      assertSameOrigin(request);
+      return true;
+    } catch {
+      if (trustedConfiguredSource(origin) || trustedConfiguredSource(referer)) return true;
+    }
   }
 
+  return (
+    request.method === "POST" &&
+    request.headers.get("sec-fetch-site") === "same-origin" &&
+    request.headers.get("sec-fetch-mode") === "navigate" &&
+    request.headers.get("sec-fetch-dest") === "document"
+  );
+}
+
+async function executeLogout(request: Request, scope: LogoutScope) {
+  if (!isTrustedLogoutMutation(request)) {
+    return { response: new NextResponse("Forbidden", { status: 403, headers: privateNoStoreHeaders }) } as const;
+  }
+
+  const result = await performLogout(scope);
+  const destination = new URL(result.redirectTo, request.url);
+  if (scope === "all" && !result.allSessionsRevoked) destination.searchParams.set("allSessions", "partial");
+  return { destination } as const;
+}
+
+function applyPrivateNoStore(response: NextResponse) {
+  for (const [key, value] of Object.entries(privateNoStoreHeaders)) response.headers.set(key, value);
+  return response;
+}
+
+export async function POST(request: Request) {
   let scope: LogoutScope = "current";
   try {
     const formData = await request.formData();
@@ -19,26 +63,26 @@ export async function POST(request: Request) {
     // A malformed body still performs a safe current-session logout.
   }
 
-  const result = await performLogout(scope);
-  const destination = new URL(result.redirectTo, request.url);
-  if (scope === "all" && !result.allSessionsRevoked) destination.searchParams.set("allSessions", "partial");
+  const result = await executeLogout(request, scope);
+  if ("response" in result) return result.response;
+  return applyPrivateNoStore(NextResponse.redirect(result.destination, 303));
+}
 
-  // Interactive logout must finish revocation/cookie clearing before the browser
-  // performs a new document request. Returning JSON avoids fetch following the 303
-  // while the auth cookie is being changed. The client validates this same-origin
-  // login destination and then performs location.replace().
-  if (request.headers.get("X-HOA-Logout-Navigation") === "fetch") {
-    const response = NextResponse.json(
-      { redirectTo: `${destination.pathname}${destination.search}${destination.hash}` },
-      { status: 200 },
-    );
-    for (const [key, value] of Object.entries(privateNoStoreHeaders)) response.headers.set(key, value);
-    return response;
+export async function PUT(request: Request) {
+  if (request.headers.get(TRANSITION_REQUEST_HEADER) !== "1") {
+    return new NextResponse("Forbidden", { status: 403, headers: privateNoStoreHeaders });
   }
 
-  // Progressive enhancement / no-JavaScript fallback: normal form POST receives a
-  // 303 after the server has revoked the session and cleared authentication cookies.
-  const response = NextResponse.redirect(destination, 303);
-  for (const [key, value] of Object.entries(privateNoStoreHeaders)) response.headers.set(key, value);
-  return response;
+  const scope: LogoutScope = new URL(request.url).searchParams.get("scope") === "all" ? "all" : "current";
+  const result = await executeLogout(request, scope);
+  if ("response" in result) return result.response;
+
+  // The isolated transition needs only a bounded server-resolved destination. Returning
+  // it on a no-content response avoids a fetch redirect chain while keeping revocation,
+  // tenant/session authority, and destination selection on the server.
+  const destination = `${result.destination.pathname}${result.destination.search}${result.destination.hash}`;
+  return applyPrivateNoStore(new NextResponse(null, {
+    status: 204,
+    headers: { [TRANSITION_DESTINATION_HEADER]: destination },
+  }));
 }

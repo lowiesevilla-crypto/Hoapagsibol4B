@@ -61,8 +61,26 @@ jobs:
         run: pnpm test
       - name: Database finance integration suite
         run: pnpm test:integration
-      - name: Critical verification suite
-        run: pnpm test:critical
+      - name: Verify auth navigation and cache recovery
+        run: pnpm run verify:auth-navigation-cache
+      - name: Verify complaint management
+        run: pnpm run verify:complaint-management
+      - name: Verify document fee payment
+        run: pnpm run verify:document-fee-payment
+      - name: Verify homeowner mobile shell
+        run: pnpm run verify:homeowner-mobile-shell
+      - name: Verify homeowner mobile dashboard
+        run: pnpm run verify:homeowner-mobile-dashboard
+      - name: Verify homeowner mobile community
+        run: pnpm run verify:homeowner-mobile-community
+      - name: Verify homeowner mobile payments
+        run: pnpm run verify:homeowner-mobile-payments
+      - name: Verify homeowner mobile requests
+        run: pnpm run verify:homeowner-mobile-requests
+      - name: Verify homeowner mobile hardening
+        run: pnpm run verify:homeowner-mobile-hardening
+      - name: Verify homeowner PWA
+        run: pnpm run verify:homeowner-pwa
       - run: pnpm typecheck
       - run: pnpm build
       - name: Prepare controlled Chromium for browser suites

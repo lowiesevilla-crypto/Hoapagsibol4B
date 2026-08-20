@@ -11,40 +11,52 @@ type LogoutButtonProps = {
 };
 
 const LOGOUT_ENCODING = "application/x-www-form-urlencoded";
+const LOGOUT_ENDPOINT = "/api/auth/logout";
+
+function submitNativeLogout(scope: "current" | "all") {
+  const form = document.createElement("form");
+  form.method = "post";
+  form.action = LOGOUT_ENDPOINT;
+  form.enctype = LOGOUT_ENCODING;
+  form.target = "_self";
+  form.hidden = true;
+  form.dataset.hoahubNativeLogout = "true";
+
+  const scopeInput = document.createElement("input");
+  scopeInput.type = "hidden";
+  scopeInput.name = "scope";
+  scopeInput.value = scope;
+  form.append(scopeInput);
+  document.body.append(form);
+
+  // This form is created outside React's managed tree, so Next/React cannot attach
+  // Server Action metadata or delegated submit semantics to it. The native browser
+  // submission performs one full-document same-origin POST; the route handler remains
+  // authoritative for session revocation, cookie clearing, and the HTTP 303 redirect.
+  HTMLFormElement.prototype.submit.call(form);
+}
 
 export function LogoutButton({ allSessions = false, className = "btn-secondary w-full", formClassName, label, onClick }: LogoutButtonProps) {
+  const scope = allSessions ? "all" : "current";
+
   return (
-    <form
-      action="/api/auth/logout"
-      method="post"
-      encType={LOGOUT_ENCODING}
-      target="_self"
-      className={formClassName}
-      data-hoahub-native-logout="true"
-    >
-      <input type="hidden" name="scope" value={allSessions ? "all" : "current"} />
+    <span className={formClassName} data-hoahub-logout-control="true">
       <button
         className={className}
         type="button"
         data-hoahub-logout-button="true"
+        data-hoahub-logout-scope={scope}
         onClick={(event) => {
-          const button = event.currentTarget;
-          const form = button.form;
-          onClick?.();
-          if (!form) return;
-
-          // This control is intentionally not a submit button. React/Next therefore
-          // receives no default submit activation to reinterpret as a Server Action.
-          // Calling the native prototype submit algorithm bypasses delegated submit
-          // events and performs exactly one same-origin full-document POST. The server
-          // remains authoritative for session revocation, cookie clearing, and the
-          // HTTP 303 redirect destination.
-          button.disabled = true;
-          HTMLFormElement.prototype.submit.call(form);
+          event.currentTarget.disabled = true;
+          try {
+            onClick?.();
+          } finally {
+            submitNativeLogout(scope);
+          }
         }}
       >
         <LogOut className="size-4" /> {label || (allSessions ? "Log out all sessions" : "Log out")}
       </button>
-    </form>
+    </span>
   );
 }

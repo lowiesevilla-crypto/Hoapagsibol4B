@@ -50,15 +50,17 @@ Homeowner document request creation remains authoritative in `submitDocumentRequ
 
 ### Logout/browser regression recovery
 
-The Premium Admin branch exposed an inherited logout race where a protected-page POST could be interpreted by Next.js as stale Server Action transport. The final architecture removes logout mutation submission from the protected React tree.
+The Premium Admin branch exposed an inherited logout race where requests from a protected Next.js tree could be diverted by framework transport state or stall while following a mutation redirect. The final architecture removes logout mutation submission from the protected React tree and separates revocation from final document navigation.
 
-`components/auth-navigation-buttons.tsx` renders an ordinary same-origin anchor to `/api/auth/logout-transition?scope=current|all`. `GET /api/auth/logout-transition` returns a private/no-store raw HTML transition document outside React and accepts only trusted same-origin/configured navigation evidence. Its per-response nonce-scoped inline script performs a same-origin `DELETE /api/auth/logout` request with same-origin credentials, no-store semantics, explicit URL-encoded scope, and redirect following. The transition accepts only the server-returned same-origin login destination and then uses `window.location.replace()` solely to navigate to that server-authoritative destination.
+`components/auth-navigation-buttons.tsx` renders an ordinary same-origin anchor to `/api/auth/logout-transition?scope=current|all`. `GET /api/auth/logout-transition` returns a private/no-store raw HTML transition document outside React and accepts only trusted same-origin/configured navigation evidence. Its per-response nonce-scoped inline script performs a fresh same-origin `PUT /api/auth/logout?scope=current|all` request with same-origin credentials, no-store semantics, `redirect: "error"`, no request body, and an explicit `X-HOAHub-Logout-Transition` marker.
 
-`app/api/auth/logout/route.ts` keeps one shared `handleLogout` authority for both POST and DELETE. Both methods use the same server-side origin validation, session revocation, private/no-store response handling, and authoritative HTTP 303 login redirect. POST remains available for direct same-origin document clients; the isolated transition uses DELETE specifically so stale `Next-Action` POST metadata cannot divert the request into Next Server Action dispatch before the route handler runs.
+`app/api/auth/logout/route.ts` remains the sole revocation authority. The isolated PUT requires the transition marker, revalidates same-origin/configured source evidence, bounds scope to `current|all`, revokes server-side session state, and returns `204` with only a bounded server-resolved relative login destination header. The transition validates that destination is same-origin and a login path before using `window.location.replace()`. This avoids a fetch redirect-follow chain while keeping destination authority on the server.
 
-This transport change does not weaken CSRF/same-origin policy, tenant isolation, RBAC, session authority, or redirect safety. The browser cannot choose tenant/session authority or invent a post-logout destination. GET-based session mutation remains prohibited.
+POST remains available for direct same-origin document clients and retains the authoritative HTTP 303 redirect after the same server-side revocation. GET-based session mutation remains prohibited. The browser cannot choose tenant/session authority or invent an arbitrary post-logout destination.
 
-`tests/e2e/auth-navigation-recovery.mjs` continues to exercise the real visible logout control for Tenant Admin, Platform Admin and Homeowner and requires final login navigation plus Browser Back protection. `verify:auth-navigation-cache`, `verify:homeowner-mobile-hardening`, and `verify:homeowner-pwa` must recognize this isolated transition/DELETE transport while continuing to enforce same-origin proof, no-store/CSP boundaries, server-side revocation, HTTP 303 authority, and the absence of protected-page client mutation authority.
+This transport change does not weaken CSRF/same-origin policy, tenant isolation, RBAC, session authority, or redirect safety. It also avoids relying on DELETE request bodies or stale Next Server Action POST metadata.
+
+`tests/e2e/auth-navigation-recovery.mjs` continues to exercise the real visible logout control for Tenant Admin, Platform Admin and Homeowner and requires final login navigation plus Browser Back protection. `verify:auth-navigation-cache`, `verify:homeowner-mobile-hardening`, and `verify:homeowner-pwa` validate the isolated transition/PUT transport, explicit marker, no-body mutation, bounded server-returned destination, same-origin proof, no-store/CSP boundaries, server-side revocation, direct-POST 303 compatibility, and the absence of protected-page client mutation authority.
 
 ## 42-route implementation scope
 
@@ -139,11 +141,11 @@ The approved design remains a visual/hierarchy reference. Production data values
 
 ## Validation evidence and current gate
 
-The implementation has repeatedly demonstrated green dependency integrity, lint, Prisma validation/generation/migration/seed, 297 unit tests, 30 integration tests, tenant/business verifiers, typecheck/build on the candidates that reached those stages, and Canva visual parity on the reviewed candidates.
+The implementation has repeatedly demonstrated green dependency integrity, lint, Prisma validation/generation/migration/seed, 297 unit tests, 30 integration tests, tenant/business verifiers, typecheck/build on the candidates that reached those stages, and Canva visual parity on reviewed candidates.
 
-The final static hardening failure on prior head `fccb2a075beb8bfe4872c3c26ecab62925dca6d0` was a verifier-contract mismatch: the runtime transition had moved to same-origin DELETE, while `verify:homeowner-mobile-hardening` still searched for `method: "POST"`. The verifier is corrected to require the actual DELETE transition plus shared POST/DELETE server authority, same-origin validation, private/no-store handling, and HTTP 303 redirect. This is a test-contract alignment, not a bypass of the security gate.
+The immediately preceding exact browser blocker was deterministic logout transport failure: the raw transition loaded, but the DELETE mutation/303 fetch-follow sequence did not complete navigation. The release candidate now uses the isolated no-body PUT/204 destination-handoff architecture described above. This is a runtime root-cause correction, not a bypass or reduction of the logout security gate.
 
-The exact final branch head created by the verifier/documentation alignment must still pass both HOAHub MySQL CI and HOAHub Canva Visual Parity before merge. A passing older head is not sufficient.
+Because this runtime, verifier, and documentation correction changes the branch SHA, the resulting exact final head must pass both HOAHub MySQL CI and HOAHub Canva Visual Parity before merge. A passing older head is not sufficient.
 
 ## Release gates
 

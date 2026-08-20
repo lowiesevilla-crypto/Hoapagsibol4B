@@ -36,14 +36,14 @@ export function LogoutButton({ allSessions = false, className = "btn-secondary w
           onClick?.();
           if (!form) return;
 
-          // Next/React delegates form submit events from the application root and can
-          // misclassify this Route Handler POST as a Server Action. The native submit()
-          // algorithm bypasses that delegated submit event while preserving a normal
-          // full-document POST. The server remains authoritative for session revocation
-          // and the HTTP 303 destination. Disabling the button prevents a second default
-          // activation after this programmatic native submission starts.
+          // Prevent React/Next's delegated default form submission from seeing this
+          // Route Handler POST as a Server Action. Calling the native prototype submit
+          // algorithm bypasses the delegated submit event and performs exactly one
+          // same-origin full-document POST. The server remains authoritative for session
+          // revocation, cookie clearing, and the HTTP 303 redirect destination.
+          event.preventDefault();
           button.disabled = true;
-          form.submit();
+          HTMLFormElement.prototype.submit.call(form);
         }}
       >
         <LogOut className="size-4" /> {label || (allSessions ? "Log out all sessions" : "Log out")}

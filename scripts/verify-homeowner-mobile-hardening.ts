@@ -56,6 +56,7 @@ const profilePage = readProjectFile("app/portal/profile/page.tsx");
 const vehiclesPage = readProjectFile("app/portal/vehicles/page.tsx");
 const authButtons = readProjectFile("components/auth-navigation-buttons.tsx");
 const logoutTransitionRoute = readProjectFile("app/api/auth/logout-transition/route.ts");
+const logoutTransitionScript = readProjectFile("app/api/auth/logout-transition-script/route.ts");
 const logoutRoute = readProjectFile("app/api/auth/logout/route.ts");
 const files = changedFiles();
 
@@ -101,16 +102,20 @@ record(
       'action="/api/auth/logout"',
       'method="post"',
       'name="scope"',
-      'const nonce = randomBytes(16).toString("hex")',
-      'script nonce="${nonce}"',
-      'form[data-hoahub-logout-transition="true"]',
-      "HTMLFormElement.prototype.submit.call(form)",
+      'src="/api/auth/logout-transition-script"',
+      "defer",
       "privateNoStoreHeaders",
-      "script-src 'nonce-${nonce}'",
+      "script-src 'self'",
       "form-action 'self'",
       "frame-ancestors 'none'",
     ])
-    && !logoutTransitionRoute.includes('/logout-transition.js')
+    && hasAll(logoutTransitionScript, [
+      'form[data-hoahub-logout-transition="true"]',
+      "HTMLFormElement.prototype.submit.call(form)",
+      "privateNoStoreHeaders",
+      '"cross-origin-resource-policy": "same-origin"',
+      '"x-content-type-options": "nosniff"',
+    ])
     && hasAll(logoutRoute, ["assertSameOrigin(request)", "privateNoStoreHeaders", "NextResponse.redirect(destination, 303)"]),
 );
 

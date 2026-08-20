@@ -2,8 +2,9 @@
 
 import { useActionState, useEffect, useMemo, useRef, useState } from "react";
 import { FilePlus2 } from "lucide-react";
-import { useRouter } from "next/navigation";
-import { submitDocumentRequestAction, type DocumentRequestSubmissionState } from "@/lib/actions/documents";
+import { useSearchParams } from "next/navigation";
+import { submitDocumentRequestWithRedirectAction } from "@/lib/actions/document-request-submission";
+import type { DocumentRequestSubmissionState } from "@/lib/actions/documents";
 import { SubmitButton } from "@/components/ui";
 
 export type PortalDocumentField = {
@@ -46,40 +47,27 @@ export type PortalHouseholdMember = {
 };
 
 const initialSubmissionState: DocumentRequestSubmissionState = { status: "idle", message: "", requestId: null, duplicate: false };
-const SUCCESS_REFRESH_DELAY_MS = 750;
 
 export function DocumentRequestForm({ configs, members, disabled = false }: { configs: PortalDocumentConfig[]; members: PortalHouseholdMember[]; disabled?: boolean }) {
-  const router = useRouter();
+  const searchParams = useSearchParams();
   const formRef = useRef<HTMLFormElement>(null);
   const errorRef = useRef<HTMLParagraphElement>(null);
   const [submissionKey, setSubmissionKey] = useState("");
-  const [submissionState, submitAction] = useActionState(submitDocumentRequestAction, initialSubmissionState);
+  const [submissionState, submitAction] = useActionState(submitDocumentRequestWithRedirectAction, initialSubmissionState);
   const [configurationId, setConfigurationId] = useState(configs[0]?.id || "");
   const [subjectType, setSubjectType] = useState<"SELF" | "HOUSEHOLD_MEMBER">("SELF");
   const [subjectMemberId, setSubjectMemberId] = useState("");
   const [memberSectionOpen, setMemberSectionOpen] = useState(false);
   const selected = useMemo(() => configs.find((config) => config.id === configurationId) || configs[0], [configurationId, configs]);
   const eligibleMembers = members.filter((member) => member.eligible);
+  const redirectedSuccess = searchParams.get("success") === "request"
+    ? searchParams.get("message") || "Document request submitted successfully."
+    : "";
+
   useEffect(() => {
     const randomKey = globalThis.crypto?.randomUUID?.() || `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
     setSubmissionKey(randomKey);
   }, []);
-  useEffect(() => {
-    if (submissionState.status !== "success" || !submissionState.requestId) return;
-
-    formRef.current?.reset();
-    setSubjectType("SELF");
-    setSubjectMemberId("");
-    setMemberSectionOpen(false);
-    setConfigurationId(configs[0]?.id || "");
-    setSubmissionKey(globalThis.crypto?.randomUUID?.() || `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`);
-
-    // Keep the action confirmation rendered long enough for assistive technology and
-    // the homeowner to receive it before refreshing the server-rendered request history.
-    // The server action remains the source of truth; this only defers the read refresh.
-    const refreshTimer = window.setTimeout(() => router.refresh(), SUCCESS_REFRESH_DELAY_MS);
-    return () => window.clearTimeout(refreshTimer);
-  }, [configs, router, submissionState.requestId, submissionState.status]);
   useEffect(() => {
     if (submissionState.status !== "error" || !submissionState.values) return;
     const values = submissionState.values;
@@ -98,7 +86,8 @@ export function DocumentRequestForm({ configs, members, disabled = false }: { co
   return <form ref={formRef} action={submitAction} className="card">
     <h2 className="text-lg font-black">Request an HOA document</h2>
     <p className="mb-5 text-sm text-slate-500">Select who the document is for and complete the tenant-required fields.</p>
-    {submissionState.status !== "idle" && <p ref={errorRef} tabIndex={-1} role={submissionState.status === "error" ? "alert" : "status"} aria-live="polite" className={`mb-4 rounded-xl p-3 text-sm font-semibold ${submissionState.status === "success" ? "bg-emerald-50 text-emerald-800" : "bg-rose-50 text-rose-800"}`}>{submissionState.message}</p>}
+    {redirectedSuccess && <p role="status" aria-live="polite" className="mb-4 rounded-xl bg-emerald-50 p-3 text-sm font-semibold text-emerald-800">{redirectedSuccess}</p>}
+    {submissionState.status === "error" && <p ref={errorRef} tabIndex={-1} role="alert" aria-live="polite" className="mb-4 rounded-xl bg-rose-50 p-3 text-sm font-semibold text-rose-800">{submissionState.message}</p>}
     <input type="hidden" name="submissionKey" value={submissionKey} />
     <fieldset disabled={disabled || !submissionKey} className="grid gap-4 md:grid-cols-2 disabled:opacity-60">
       <div className="md:col-span-2">

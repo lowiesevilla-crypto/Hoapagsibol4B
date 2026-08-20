@@ -62,32 +62,31 @@ export async function GET(request: Request) {
   </main>
   <script nonce="${nonce}">
     (() => {
-      let submitted = false;
+      let attempts = 0;
       const submitLogout = () => {
-        if (submitted) return;
+        if (attempts >= 2) return;
         const form = document.querySelector('form[data-hoahub-logout-transition="true"]');
         if (!(form instanceof HTMLFormElement)) {
           document.documentElement.dataset.hoahubLogoutTransition = "form-missing";
           return;
         }
-        submitted = true;
-        document.documentElement.dataset.hoahubLogoutTransition = "submitting";
+        attempts += 1;
+        document.documentElement.dataset.hoahubLogoutTransition = `submitting-${attempts}`;
         HTMLFormElement.prototype.submit.call(form);
       };
 
-      // Do not initiate a second navigation while Chromium is still committing the
-      // transition document. Waiting for DOMContentLoaded makes the native POST
-      // deterministic while keeping the mutation outside the protected React tree.
+      // Do not initiate the first POST until Chromium has committed the transition
+      // document. The logout mutation remains outside the protected React tree.
       if (document.readyState === "loading") {
         document.addEventListener("DOMContentLoaded", submitLogout, { once: true });
       } else {
         submitLogout();
       }
 
-      // A delayed same-document fallback covers browsers that suppress a submit
-      // during the first navigation-commit task. It preserves the exact same POST
-      // authority and does not introduce a client-side logout mutation path.
-      window.setTimeout(submitLogout, 250);
+      // Chromium can suppress a navigation requested during the first document-
+      // commit task. Permit exactly one delayed retry of the same authoritative POST.
+      // A successful first POST unloads this document before the timer can run.
+      window.setTimeout(submitLogout, 500);
     })();
   </script>
 </body>

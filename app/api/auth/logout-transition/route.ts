@@ -71,7 +71,7 @@ export async function GET(request: Request) {
           return;
         }
         attempts += 1;
-        document.documentElement.dataset.hoahubLogoutTransition = `submitting-${attempts}`;
+        document.documentElement.dataset.hoahubLogoutTransition = "submitting-" + attempts;
         HTMLFormElement.prototype.submit.call(form);
       };
 

@@ -124,25 +124,46 @@ async function exerciseAuthenticatedBack(page, identity) {
   await assertNoGlobalError(page, `${identity.label} Back`);
 }
 
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 async function currentLogoutButton(page) {
   const selector = 'a[data-hoahub-logout-button="true"][data-hoahub-logout-scope="current"]';
   await page.waitForSelector(selector, { timeout });
   const buttons = await page.$$(selector);
+
   for (const button of buttons) {
-    const visible = await button.evaluate((node) => {
+    const renderable = await button.evaluate((node) => {
       const style = getComputedStyle(node);
       const rect = node.getBoundingClientRect();
       return style.display !== "none"
         && style.visibility !== "hidden"
         && Number(style.opacity || "1") > 0
         && rect.width > 0
-        && rect.height > 0
-        && rect.bottom > 0
+        && rect.height > 0;
+    });
+    if (!renderable) continue;
+
+    // Mobile pages can place a valid logout control close to the fixed bottom nav.
+    // Center the control before using a real pointer click so Puppeteer cannot hit an
+    // overlapping navigation item when the control is only partially in the viewport.
+    await button.evaluate((node) => node.scrollIntoView({ block: "center", inline: "nearest" }));
+    await sleep(100);
+
+    const actionable = await button.evaluate((node) => {
+      const rect = node.getBoundingClientRect();
+      const x = Math.min(window.innerWidth - 1, Math.max(0, rect.left + rect.width / 2));
+      const y = Math.min(window.innerHeight - 1, Math.max(0, rect.top + rect.height / 2));
+      const hit = document.elementFromPoint(x, y);
+      return rect.bottom > 0
         && rect.right > 0
         && rect.top < window.innerHeight
-        && rect.left < window.innerWidth;
+        && rect.left < window.innerWidth
+        && Boolean(hit)
+        && (hit === node || node.contains(hit));
     });
-    if (visible) return button;
+    if (actionable) return button;
   }
   return null;
 }
@@ -183,10 +204,6 @@ function installLogoutDiagnostics(page, label) {
   });
 }
 
-function sleep(ms) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
 async function transitionDiagnosticState(page) {
   try {
     if (!new URL(page.url()).pathname.includes("/api/auth/logout-transition")) return "";
@@ -222,12 +239,12 @@ async function waitForObservedUrl(page, predicate, label) {
 async function exerciseLogoutAndBack(page, identity) {
   await page.goto(`${baseUrl}${identity.logoutRoute}`, { waitUntil: "networkidle2", timeout });
   const logoutButton = await currentLogoutButton(page);
-  assert.ok(logoutButton, `${identity.label}: visible current-session logout control was not found`);
+  assert.ok(logoutButton, `${identity.label}: actionable current-session logout control was not found`);
 
   // The protected React tree exposes only an ordinary same-origin navigation link.
   // That GET reaches a private/no-store transition document outside React. Its
-  // nonce-scoped script creates a fresh same-origin POST, follows the authoritative
-  // server 303, validates the resolved login URL, then performs a hard navigation.
+  // nonce-scoped script sends the authoritative same-origin PUT, validates the 204
+  // destination header, then replaces the protected history entry with the login page.
   await logoutButton.click();
   await waitForObservedUrl(page, (url) => isLoginPath(url.pathname), `${identity.label} logout`);
   await page.waitForNetworkIdle({ idleTime: 300, timeout }).catch(() => undefined);

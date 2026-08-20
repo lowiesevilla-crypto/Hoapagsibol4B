@@ -25,23 +25,20 @@ export function LogoutButton({ allSessions = false, className = "btn-secondary w
       <input type="hidden" name="scope" value={allSessions ? "all" : "current"} />
       <button
         className={className}
-        type="submit"
-        formAction="/api/auth/logout"
-        formMethod="post"
-        formEncType={LOGOUT_ENCODING}
-        formTarget="_self"
+        type="button"
+        data-hoahub-logout-button="true"
         onClick={(event) => {
           const button = event.currentTarget;
           const form = button.form;
           onClick?.();
           if (!form) return;
 
-          // Prevent React/Next's delegated default form submission from seeing this
-          // Route Handler POST as a Server Action. Calling the native prototype submit
-          // algorithm bypasses the delegated submit event and performs exactly one
-          // same-origin full-document POST. The server remains authoritative for session
-          // revocation, cookie clearing, and the HTTP 303 redirect destination.
-          event.preventDefault();
+          // This control is intentionally not a submit button. React/Next therefore
+          // receives no default submit activation to reinterpret as a Server Action.
+          // Calling the native prototype submit algorithm bypasses delegated submit
+          // events and performs exactly one same-origin full-document POST. The server
+          // remains authoritative for session revocation, cookie clearing, and the
+          // HTTP 303 redirect destination.
           button.disabled = true;
           HTMLFormElement.prototype.submit.call(form);
         }}

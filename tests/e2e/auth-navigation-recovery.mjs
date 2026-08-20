@@ -193,7 +193,7 @@ async function transitionDiagnosticState(page) {
     const state = await page.evaluate(() => ({
       readyState: document.readyState,
       marker: document.documentElement.dataset.hoahubLogoutTransition || "none",
-      formPresent: Boolean(document.querySelector('form[data-hoahub-logout-transition="true"]')),
+      retryPresent: Boolean(document.querySelector('[data-hoahub-logout-retry="true"]')),
       scriptCount: document.scripts.length,
     }));
     return `; transition=${JSON.stringify(state)}`;
@@ -225,9 +225,9 @@ async function exerciseLogoutAndBack(page, identity) {
   assert.ok(logoutButton, `${identity.label}: visible current-session logout control was not found`);
 
   // The protected React tree exposes only an ordinary same-origin navigation link.
-  // That GET reaches a no-store route-handler transition document outside React;
-  // its nonce-scoped inline submitter performs the native POST /api/auth/logout.
-  // The POST route remains authoritative for session revocation and the HTTP 303.
+  // That GET reaches a private/no-store transition document outside React. Its
+  // nonce-scoped script creates a fresh same-origin POST, follows the authoritative
+  // server 303, validates the resolved login URL, then performs a hard navigation.
   await logoutButton.click();
   await waitForObservedUrl(page, (url) => isLoginPath(url.pathname), `${identity.label} logout`);
   await page.waitForNetworkIdle({ idleTime: 300, timeout }).catch(() => undefined);

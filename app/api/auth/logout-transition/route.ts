@@ -52,41 +52,62 @@ export async function GET(request: Request) {
   <meta name="robots" content="noindex,nofollow,noarchive">
   <title>Signing out | HOAHub</title>
 </head>
-<body>
+<body data-hoahub-logout-scope="${safeScope}">
   <main>
-    <p>Signing out securely…</p>
-    <form data-hoahub-logout-transition="true" action="/api/auth/logout" method="post" enctype="application/x-www-form-urlencoded">
-      <input type="hidden" name="scope" value="${safeScope}">
-      <button type="submit">Continue sign out</button>
-    </form>
+    <p data-hoahub-logout-status="true">Signing out securely…</p>
+    <button type="button" data-hoahub-logout-retry="true" hidden>Try sign out again</button>
   </main>
   <script nonce="${nonce}">
     (() => {
-      let attempts = 0;
-      const submitLogout = () => {
-        if (attempts >= 2) return;
-        const form = document.querySelector('form[data-hoahub-logout-transition="true"]');
-        if (!(form instanceof HTMLFormElement)) {
-          document.documentElement.dataset.hoahubLogoutTransition = "form-missing";
-          return;
+      const status = document.querySelector('[data-hoahub-logout-status="true"]');
+      const retryButton = document.querySelector('[data-hoahub-logout-retry="true"]');
+      let inFlight = false;
+
+      const safeLoginDestination = (destination) => destination.origin === window.location.origin
+        && (destination.pathname === "/login" || destination.pathname.endsWith("/login"));
+
+      const submitLogout = async () => {
+        if (inFlight) return;
+        inFlight = true;
+        if (retryButton instanceof HTMLButtonElement) retryButton.hidden = true;
+        document.documentElement.dataset.hoahubLogoutTransition = "posting";
+
+        const scope = document.body.dataset.hoahubLogoutScope === "all" ? "all" : "current";
+        try {
+          // Create a fresh browser request from this isolated non-React document.
+          // This deliberately avoids carrying stale Next Server Action transport state
+          // from the protected App Router tree while preserving same-origin POST authority.
+          const response = await fetch("/api/auth/logout", {
+            method: "POST",
+            credentials: "same-origin",
+            cache: "no-store",
+            redirect: "follow",
+            headers: { "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8" },
+            body: new URLSearchParams({ scope }).toString(),
+          });
+
+          if (!response.ok || !response.redirected) throw new Error("logout-redirect-required");
+          const destination = new URL(response.url);
+          if (!safeLoginDestination(destination)) throw new Error("unsafe-logout-destination");
+
+          // The server remains redirect authority: navigate only to the same-origin
+          // login URL obtained by following the POST route's HTTP 303 response.
+          document.documentElement.dataset.hoahubLogoutTransition = "navigating";
+          window.location.replace(destination.href);
+        } catch {
+          inFlight = false;
+          document.documentElement.dataset.hoahubLogoutTransition = "failed";
+          if (status) status.textContent = "We could not complete sign out. Try again.";
+          if (retryButton instanceof HTMLButtonElement) retryButton.hidden = false;
         }
-        attempts += 1;
-        document.documentElement.dataset.hoahubLogoutTransition = "submitting-" + attempts;
-        HTMLFormElement.prototype.submit.call(form);
       };
 
-      // Do not initiate the first POST until Chromium has committed the transition
-      // document. The logout mutation remains outside the protected React tree.
+      if (retryButton instanceof HTMLButtonElement) retryButton.addEventListener("click", () => void submitLogout());
       if (document.readyState === "loading") {
-        document.addEventListener("DOMContentLoaded", submitLogout, { once: true });
+        document.addEventListener("DOMContentLoaded", () => void submitLogout(), { once: true });
       } else {
-        submitLogout();
+        void submitLogout();
       }
-
-      // Chromium can suppress a navigation requested during the first document-
-      // commit task. Permit exactly one delayed retry of the same authoritative POST.
-      // A successful first POST unloads this document before the timer can run.
-      window.setTimeout(submitLogout, 500);
     })();
   </script>
 </body>
@@ -97,7 +118,7 @@ export async function GET(request: Request) {
     headers: {
       ...privateNoStoreHeaders,
       "content-type": "text/html; charset=utf-8",
-      "content-security-policy": `default-src 'none'; script-src 'nonce-${nonce}'; form-action 'self'; base-uri 'none'; frame-ancestors 'none'`,
+      "content-security-policy": `default-src 'none'; script-src 'nonce-${nonce}'; connect-src 'self'; form-action 'none'; base-uri 'none'; frame-ancestors 'none'`,
       "referrer-policy": "same-origin",
       "x-content-type-options": "nosniff",
     },

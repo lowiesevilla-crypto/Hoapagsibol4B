@@ -6,9 +6,10 @@ import type { HomeownerPrimaryDestination } from "@/lib/homeowner-navigation";
 
 type AssociationBrand = { name: string; logoUrl: string };
 type PortalUser = { name: string; email: string };
+type RouteTitle = { href: string; label: string };
 
-export function PortalMobileHeader({ association, user, unreadCount, showChat = true }: { association: AssociationBrand; user: PortalUser; unreadCount: number; showChat?: boolean }) {
-  return <PortalMobileHeaderClient association={association} user={user} unreadCount={unreadCount} showChat={showChat} />;
+export function PortalMobileHeader({ association, user, unreadCount, routeTitles, showChat = true }: { association: AssociationBrand; user: PortalUser; unreadCount: number; routeTitles: RouteTitle[]; showChat?: boolean }) {
+  return <PortalMobileHeaderClient association={association} user={user} unreadCount={unreadCount} routeTitles={routeTitles} showChat={showChat} />;
 }
 
 export function PortalBottomNavigation({ destinations }: { destinations: HomeownerPrimaryDestination[] }) {
@@ -41,6 +42,6 @@ export function PortalMobileListItem({ title, meta, value, href, icon: Icon = Ca
 
 export function PortalEmptyState({ title, description }: { title: string; description: string }) { return <div className="rounded-[18px] border border-dashed border-[#cbdfe9] bg-[#f7fbfd] p-5 text-center"><p className="font-black text-[#11384d]">{title}</p><p className="mt-1 text-sm text-[#7f8d98]">{description}</p></div>; }
 export function PortalSkeletonCard() { return <div className="rounded-[18px] border border-[#e3edf2] bg-white p-4"><div className="h-3 w-24 rounded bg-slate-100" /><div className="mt-4 h-7 w-32 rounded bg-slate-100" /></div>; }
-export function PortalErrorState({ title, description }: { title: string; description: string }) { return <div className="rounded-[18px] border border-rose-100 bg-rose-50 p-4 text-rose-900"><p className="font-black">{title}</p><p className="mt-1 text-sm text-rose-700">{description}</p></div>; }
+export function PortalErrorState({ title, description }: { title: string; description: string }) { return <div className="rounded-[18px] border border-rose-100 bg-rose-50 p-4 text-rose-900"><p className="font-black">{title}</p><p className="mt-1 text-sm">{description}</p></div>; }
 
 export const portalQuickActionIcons = { pay: QrCode, soa: ReceiptText, receipts: CreditCard, documents: FileText, announcements: Megaphone, chat: MessageSquare, vehicles: MoreHorizontal, events: CalendarDays };

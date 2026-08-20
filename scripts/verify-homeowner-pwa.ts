@@ -97,13 +97,12 @@ record("cache recovery removes only HOAHub-owned development caches", hasAll(cac
 
 const authButtons = readProjectFile("components/auth-navigation-buttons.tsx");
 const logoutTransitionRoute = readProjectFile("app/api/auth/logout-transition/route.ts");
-const logoutTransitionScript = readProjectFile("app/api/auth/logout-transition-script/route.ts");
 const logoutRoute = readProjectFile("app/api/auth/logout/route.ts");
 const authLogout = readProjectFile("lib/auth-logout.ts");
 const profilePage = readProjectFile("app/portal/profile/page.tsx");
 const morePage = readProjectFile("app/portal/more/page.tsx");
 record(
-  "logout buttons use an isolated same-origin transition document before the authoritative POST",
+  "logout buttons use a self-contained isolated same-origin transition document before the authoritative POST",
   hasAll(authButtons, [
     'const LOGOUT_TRANSITION_ENDPOINT = "/api/auth/logout-transition"',
     "href={href}",
@@ -124,20 +123,16 @@ record(
       'action="/api/auth/logout"',
       'method="post"',
       'name="scope"',
-      'src="/api/auth/logout-transition-script"',
-      "defer",
-      "privateNoStoreHeaders",
-      "script-src 'self'",
-      "form-action 'self'",
-      "frame-ancestors 'none'",
-    ])
-    && hasAll(logoutTransitionScript, [
+      'const nonce = randomBytes(16).toString("hex")',
+      'script nonce="${nonce}"',
       'form[data-hoahub-logout-transition="true"]',
       "HTMLFormElement.prototype.submit.call(form)",
       "privateNoStoreHeaders",
-      '"cross-origin-resource-policy": "same-origin"',
-      '"x-content-type-options": "nosniff"',
-    ]),
+      "script-src 'nonce-${nonce}'",
+      "form-action 'self'",
+      "frame-ancestors 'none'",
+    ])
+    && !logoutTransitionRoute.includes('/api/auth/logout-transition-script'),
 );
 record("logout endpoint enforces same-origin private 303 redirect", hasAll(logoutRoute, ["assertSameOrigin(request)", "privateNoStoreHeaders", "NextResponse.redirect(destination, 303)"]));
 record("profile and more contain no inline logout action", hasAll(profilePage, ["LogoutButton"]) && hasAll(morePage, ["LogoutButton"]) && !profilePage.includes("logoutAction") && !morePage.includes("logoutAction") && !profilePage.includes("form action={async") && !morePage.includes("form action={async"));

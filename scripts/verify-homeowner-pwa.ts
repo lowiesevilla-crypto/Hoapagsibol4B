@@ -97,7 +97,6 @@ record("cache recovery removes only HOAHub-owned development caches", hasAll(cac
 
 const authButtons = readProjectFile("components/auth-navigation-buttons.tsx");
 const logoutTransitionRoute = readProjectFile("app/api/auth/logout-transition/route.ts");
-const logoutTransitionScript = readProjectFile("public/logout-transition.js");
 const logoutRoute = readProjectFile("app/api/auth/logout/route.ts");
 const authLogout = readProjectFile("lib/auth-logout.ts");
 const profilePage = readProjectFile("app/portal/profile/page.tsx");
@@ -112,6 +111,7 @@ record(
     'data-hoahub-logout-scope={scope}',
   ])
     && !authButtons.includes("document.createElement(\"form\")")
+    && !authButtons.includes("HTMLFormElement.prototype.submit.call")
     && !authButtons.includes("useActionState")
     && !authButtons.includes("fetch(")
     && !authButtons.includes("location.replace")
@@ -119,18 +119,20 @@ record(
       'request.headers.get("sec-fetch-site") === "same-origin"',
       'request.headers.get("sec-fetch-mode") === "navigate"',
       'request.headers.get("sec-fetch-dest") === "document"',
+      "allowedOrigins()",
       'action="/api/auth/logout"',
       'method="post"',
       'name="scope"',
-      'script src="/logout-transition.js" defer',
+      'const nonce = randomBytes(16).toString("hex")',
+      'script nonce="${nonce}"',
+      'form[data-hoahub-logout-transition="true"]',
+      "HTMLFormElement.prototype.submit.call(form)",
       "privateNoStoreHeaders",
+      "script-src 'nonce-${nonce}'",
       "form-action 'self'",
       "frame-ancestors 'none'",
     ])
-    && hasAll(logoutTransitionScript, [
-      'form[data-hoahub-logout-transition="true"]',
-      "HTMLFormElement.prototype.submit.call(form)",
-    ]),
+    && !logoutTransitionRoute.includes('/logout-transition.js'),
 );
 record("logout endpoint enforces same-origin private 303 redirect", hasAll(logoutRoute, ["assertSameOrigin(request)", "privateNoStoreHeaders", "NextResponse.redirect(destination, 303)"]));
 record("profile and more contain no inline logout action", hasAll(profilePage, ["LogoutButton"]) && hasAll(morePage, ["LogoutButton"]) && !profilePage.includes("logoutAction") && !morePage.includes("logoutAction") && !profilePage.includes("form action={async") && !morePage.includes("form action={async"));

@@ -122,6 +122,72 @@
     linear-gradient(145deg, #f9fcfd 0%, #f3f8fb 75%, #edf8f1 100%);
 }
 
+/* Premium Admin V2 is applied at the shared shell boundary so all authorized
+   workspaces inherit the same surface hierarchy without rewriting business forms. */
+.premium-admin-workspace {
+  --workspace-border: #dbe7ee;
+  --workspace-muted: #6f8294;
+  --workspace-ink: #0a2d42;
+}
+
+.premium-admin-workspace > .ui-page-header,
+.premium-admin-workspace > div > .ui-page-header,
+.premium-admin-workspace > section > .ui-page-header {
+  margin-bottom: 24px;
+}
+
+.premium-admin-workspace .card {
+  border-color: var(--workspace-border);
+  border-radius: 20px;
+  background: rgba(255, 255, 255, .97);
+  box-shadow: 0 10px 30px rgba(7, 31, 49, .055);
+}
+
+.premium-admin-workspace .table-wrap {
+  border-color: var(--workspace-border);
+  border-radius: 20px;
+  background: #fff;
+  box-shadow: 0 10px 30px rgba(7, 31, 49, .05);
+}
+
+.premium-admin-workspace .data-table th {
+  border-color: #dbe7ee;
+  background: linear-gradient(90deg, #f5fafc 0%, #f0f8f4 100%);
+  color: #0d4055;
+}
+
+.premium-admin-workspace .data-table tbody tr:hover {
+  background: #f4fafc;
+}
+
+.premium-admin-workspace .field {
+  border-color: #d7e4eb;
+  border-radius: 13px;
+  background: #fbfdfe;
+}
+
+.premium-admin-workspace .field:focus {
+  border-color: #8bcce8;
+  background: #fff;
+}
+
+.premium-admin-workspace form.card:has(input[type="search"]) {
+  position: relative;
+  border-color: #d5e5ec;
+  background: linear-gradient(135deg, #ffffff 0%, #f8fcfd 100%);
+}
+
+.premium-admin-workspace nav[aria-label="Pagination"],
+.premium-admin-workspace nav.rounded-xl.border {
+  border-color: var(--workspace-border);
+  border-radius: 16px;
+  box-shadow: 0 6px 20px rgba(7, 31, 49, .035);
+}
+
+.premium-admin-workspace [role="alert"] {
+  border-radius: 14px;
+}
+
 @media (min-width: 1024px) {
   .canva-tenant-shell aside.lg\:fixed,
   .canva-platform-shell aside.lg\:fixed,
@@ -135,5 +201,28 @@
   .canva-platform-shell,
   .canva-portal-shell {
     min-height: 100dvh;
+  }
+
+  .premium-admin-workspace .ui-page-header {
+    gap: 16px;
+  }
+
+  .premium-admin-workspace .ui-page-header h1 {
+    font-size: clamp(1.75rem, 7vw, 2.25rem);
+  }
+}
+
+@media (max-width: 639px) {
+  .premium-admin-workspace .card,
+  .premium-admin-workspace .table-wrap {
+    border-radius: 16px;
+  }
+
+  .premium-admin-workspace .btn,
+  .premium-admin-workspace .btn-primary,
+  .premium-admin-workspace .btn-secondary,
+  .premium-admin-workspace button,
+  .premium-admin-workspace a[role="button"] {
+    min-height: 44px;
   }
 }

@@ -14,7 +14,7 @@ function trustedConfiguredSource(value: string | null) {
   }
 }
 
-function isTrustedLogoutPost(request: Request) {
+function isTrustedLogoutMutation(request: Request) {
   const origin = request.headers.get("origin");
   const referer = request.headers.get("referer");
 
@@ -23,26 +23,20 @@ function isTrustedLogoutPost(request: Request) {
       assertSameOrigin(request);
       return true;
     } catch {
-      // Reverse proxies can present the route handler with a canonical request URL
-      // while the browser legitimately posts from another explicitly configured app
-      // origin. Keep the stronger exact-origin check first, then accept only a source
-      // that is present in the server's allow-list. Never trust an arbitrary Host.
       if (trustedConfiguredSource(origin) || trustedConfiguredSource(referer)) return true;
     }
   }
 
-  // Native document form submissions can legitimately arrive without usable Origin
-  // or Referer headers under restrictive browser/privacy policies. In that case rely
-  // on browser-controlled Fetch Metadata proving a same-origin top-level navigation.
   return (
+    request.method === "POST" &&
     request.headers.get("sec-fetch-site") === "same-origin" &&
     request.headers.get("sec-fetch-mode") === "navigate" &&
     request.headers.get("sec-fetch-dest") === "document"
   );
 }
 
-export async function POST(request: Request) {
-  if (!isTrustedLogoutPost(request)) {
+async function handleLogout(request: Request) {
+  if (!isTrustedLogoutMutation(request)) {
     return new NextResponse("Forbidden", { status: 403, headers: privateNoStoreHeaders });
   }
 
@@ -58,12 +52,14 @@ export async function POST(request: Request) {
   const destination = new URL(result.redirectTo, request.url);
   if (scope === "all" && !result.allSessionsRevoked) destination.searchParams.set("allSessions", "partial");
 
-  // Logout is intentionally a normal same-origin document POST. Session revocation
-  // and cookie clearing finish before the 303 is emitted, which avoids React Server
-  // Action state races and gives every shell the same deterministic navigation path.
-  // BrowserCacheRecovery handles a later Back/BFCache traversal by forcing protected
-  // history entries through authoritative server-side session validation.
   const response = NextResponse.redirect(destination, 303);
   for (const [key, value] of Object.entries(privateNoStoreHeaders)) response.headers.set(key, value);
   return response;
 }
+
+// Keep POST for direct same-origin document clients. The isolated transition uses
+// DELETE so stale Next-Action POST metadata cannot divert logout into Server Action
+// dispatch before this Route Handler runs. Both methods share identical revocation,
+// origin validation, no-store response, and authoritative HTTP 303 behavior.
+export const POST = handleLogout;
+export const DELETE = handleLogout;

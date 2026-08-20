@@ -102,7 +102,7 @@ const authLogout = readProjectFile("lib/auth-logout.ts");
 const profilePage = readProjectFile("app/portal/profile/page.tsx");
 const morePage = readProjectFile("app/portal/more/page.tsx");
 record(
-  "logout buttons use a self-contained isolated same-origin transition document before the authoritative POST",
+  "logout buttons use a self-contained isolated same-origin transition before shared server logout authority",
   hasAll(authButtons, [
     'const LOGOUT_TRANSITION_ENDPOINT = "/api/auth/logout-transition"',
     "href={href}",
@@ -123,7 +123,7 @@ record(
       'const nonce = randomBytes(16).toString("hex")',
       'script nonce="${nonce}"',
       'fetch("/api/auth/logout"',
-      'method: "POST"',
+      'method: "DELETE"',
       'credentials: "same-origin"',
       'redirect: "follow"',
       'cache: "no-store"',
@@ -144,9 +144,16 @@ record(
     ])
     && !logoutTransitionRoute.includes("HTMLFormElement.prototype.submit.call")
     && !logoutTransitionRoute.includes("window.setTimeout(submitLogout")
-    && !logoutTransitionRoute.includes('/api/auth/logout-transition-script'),
+    && !logoutTransitionRoute.includes('/api/auth/logout-transition-script')
+    && hasAll(logoutRoute, [
+      "assertSameOrigin(request)",
+      "privateNoStoreHeaders",
+      "NextResponse.redirect(destination, 303)",
+      "export const POST = handleLogout",
+      "export const DELETE = handleLogout",
+    ]),
 );
-record("logout endpoint enforces same-origin private 303 redirect", hasAll(logoutRoute, ["assertSameOrigin(request)", "privateNoStoreHeaders", "NextResponse.redirect(destination, 303)"]));
+record("logout endpoint enforces same-origin private 303 redirect", hasAll(logoutRoute, ["assertSameOrigin(request)", "privateNoStoreHeaders", "NextResponse.redirect(destination, 303)", "export const POST = handleLogout", "export const DELETE = handleLogout"]));
 record("profile and more contain no inline logout action", hasAll(profilePage, ["LogoutButton"]) && hasAll(morePage, ["LogoutButton"]) && !profilePage.includes("logoutAction") && !morePage.includes("logoutAction") && !profilePage.includes("form action={async") && !morePage.includes("form action={async"));
 record("logout removes browser session before document redirect", hasAll(authLogout, ["await deleteSession()", "logoutRedirectForSession", "session.tenantSlug"]));
 

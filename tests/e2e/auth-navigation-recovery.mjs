@@ -151,8 +151,55 @@ function isLoginPath(pathname) {
   return pathname === "/login" || pathname.endsWith("/login");
 }
 
+function isLogoutDiagnosticPath(pathname) {
+  return pathname === "/api/auth/logout" || pathname === "/api/auth/logout-transition";
+}
+
+function installLogoutDiagnostics(page, label) {
+  page.on("request", (request) => {
+    try {
+      const url = new URL(request.url());
+      if (isLogoutDiagnosticPath(url.pathname)) {
+        console.log(`[auth-nav] ${label} request ${request.method()} ${url.pathname}`);
+      }
+    } catch {
+      // Ignore non-URL browser requests.
+    }
+  });
+  page.on("response", (response) => {
+    try {
+      const url = new URL(response.url());
+      if (isLogoutDiagnosticPath(url.pathname)) {
+        console.log(`[auth-nav] ${label} response ${response.status()} ${url.pathname}`);
+      }
+    } catch {
+      // Ignore non-URL browser responses.
+    }
+  });
+  page.on("pageerror", (error) => {
+    if (page.url().includes("/api/auth/logout-transition")) {
+      console.log(`[auth-nav] ${label} transition pageerror ${error.name}: ${error.message}`);
+    }
+  });
+}
+
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function transitionDiagnosticState(page) {
+  try {
+    if (!new URL(page.url()).pathname.includes("/api/auth/logout-transition")) return "";
+    const state = await page.evaluate(() => ({
+      readyState: document.readyState,
+      marker: document.documentElement.dataset.hoahubLogoutTransition || "none",
+      formPresent: Boolean(document.querySelector('form[data-hoahub-logout-transition="true"]')),
+      scriptCount: document.scripts.length,
+    }));
+    return `; transition=${JSON.stringify(state)}`;
+  } catch {
+    return "; transition=unavailable";
+  }
 }
 
 async function waitForObservedUrl(page, predicate, label) {
@@ -168,7 +215,8 @@ async function waitForObservedUrl(page, predicate, label) {
     }
     await sleep(100);
   }
-  assert.fail(`${label}: timed out waiting for safe navigation; current URL ${lastUrl}`);
+  const diagnostic = await transitionDiagnosticState(page);
+  assert.fail(`${label}: timed out waiting for safe navigation; current URL ${lastUrl}${diagnostic}`);
 }
 
 async function exerciseLogoutAndBack(page, identity) {
@@ -203,6 +251,7 @@ try {
     const context = await browser.createBrowserContext();
     const page = await context.newPage();
     try {
+      installLogoutDiagnostics(page, identity.label);
       await page.setViewport(identity.label === "homeowner"
         ? { width: 390, height: 844, deviceScaleFactor: 1 }
         : { width: 1440, height: 1000, deviceScaleFactor: 1 });

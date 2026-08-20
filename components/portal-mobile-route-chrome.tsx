@@ -7,17 +7,20 @@ import type { LucideIcon } from "lucide-react";
 import { FileQuestion, Home, MessageSquare, MoreHorizontal, QrCode, UsersRound } from "lucide-react";
 import { AssociationLogo } from "@/components/association-logo";
 import { HomeownerAvatar } from "@/components/homeowner-avatar";
-import {
-  homeownerRouteTitle,
-  isHomeownerPrimaryActive,
-  type HomeownerPrimaryDestination,
-} from "@/lib/homeowner-navigation";
 import { philippineGreeting } from "@/lib/philippine-greeting";
 
 type AssociationBrand = { name: string; logoUrl: string };
 type PortalUser = { name: string; email: string };
+type RouteTitle = { href: string; label: string };
+type PrimaryDestination = {
+  id: "home" | "payments" | "requests" | "community" | "more";
+  label: string;
+  href: string;
+  icon: "home" | "payments" | "requests" | "community" | "more";
+  prefixes: string[];
+};
 
-const bottomNavIcons: Record<HomeownerPrimaryDestination["icon"], LucideIcon> = {
+const bottomNavIcons: Record<PrimaryDestination["icon"], LucideIcon> = {
   home: Home,
   payments: QrCode,
   requests: FileQuestion,
@@ -25,27 +28,34 @@ const bottomNavIcons: Record<HomeownerPrimaryDestination["icon"], LucideIcon> = 
   more: MoreHorizontal,
 };
 
-function currentPortalTitle(pathname: string) {
-  if (pathname.startsWith("/portal/document-library")) return "Document Library";
-  if (pathname.startsWith("/portal/ai")) return "Association Assistant";
-  return homeownerRouteTitle(pathname);
+function currentPortalTitle(pathname: string, routeTitles: RouteTitle[]) {
+  const match = [...routeTitles]
+    .sort((left, right) => right.href.length - left.href.length)
+    .find((item) => pathname === item.href || pathname.startsWith(`${item.href}/`));
+  return match?.label || "Dashboard";
+}
+
+function isPrimaryActive(destination: PrimaryDestination, pathname: string) {
+  return destination.prefixes.some((prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`));
 }
 
 export function PortalMobileHeaderClient({
   association,
   user,
   unreadCount,
+  routeTitles,
   showChat = true,
 }: {
   association: AssociationBrand;
   user: PortalUser;
   unreadCount: number;
+  routeTitles: RouteTitle[];
   showChat?: boolean;
 }) {
   const pathname = usePathname() || "/portal/dashboard";
   const isDashboard = pathname === "/portal/dashboard";
   const firstName = user.name.split(" ")[0] || "Homeowner";
-  const title = currentPortalTitle(pathname);
+  const title = currentPortalTitle(pathname, routeTitles);
   const [greeting, setGreeting] = useState(() => philippineGreeting());
 
   useEffect(() => {
@@ -100,7 +110,7 @@ export function PortalMobileHeaderClient({
   );
 }
 
-export function PortalBottomNavigationClient({ destinations }: { destinations: HomeownerPrimaryDestination[] }) {
+export function PortalBottomNavigationClient({ destinations }: { destinations: PrimaryDestination[] }) {
   const pathname = usePathname() || "/portal/dashboard";
 
   return (
@@ -119,7 +129,7 @@ export function PortalBottomNavigationClient({ destinations }: { destinations: H
             href={entry.href}
             label={entry.label}
             icon={bottomNavIcons[entry.icon]}
-            active={isHomeownerPrimaryActive(entry, pathname)}
+            active={isPrimaryActive(entry, pathname)}
           />
         ))}
       </div>
@@ -134,7 +144,7 @@ function BottomNavItem({
   icon: Icon,
   active,
 }: {
-  id: HomeownerPrimaryDestination["id"];
+  id: PrimaryDestination["id"];
   href: string;
   label: string;
   icon: LucideIcon;

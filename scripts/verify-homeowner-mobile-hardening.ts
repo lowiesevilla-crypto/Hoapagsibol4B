@@ -78,7 +78,29 @@ record("RSC and router prefetch requests are never cached", hasAll(serviceWorker
 record("credential and private responses are not cached", hasAll(serviceWorker, ["isCacheableStaticResponse", "set-cookie", "no-store", "private"]) && /application\\\/json|application\/json/.test(serviceWorker) && /text\\\/x-component|text\/x-component/.test(serviceWorker));
 record("navigation offline fallback is generic only", hasAll(serviceWorker, ["networkFirstNavigation", "cache.match(OFFLINE_URL)", 'const OFFLINE_URL = "/offline"']));
 record("PWA update flow avoids reload loop", hasAll(provider, ["UPDATE_RELOAD_KEY", "updatingRef", "controllerchange", "{ once: true }", "updateReloadAlreadyStarted"]));
-record("logout uses a same-origin full-document transition", hasAll(authButtons + logoutRoute, ['action="/api/auth/logout"', 'method="post"', "assertSameOrigin(request)", "privateNoStoreHeaders", "NextResponse.redirect(destination, 303)"]) && !authButtons.includes("useActionState"));
+record(
+  "logout uses a same-origin full-document transition",
+  hasAll(authButtons + logoutRoute, [
+    'const LOGOUT_ENDPOINT = "/api/auth/logout"',
+    'document.createElement("form")',
+    'form.method = "post"',
+    "form.action = LOGOUT_ENDPOINT",
+    'scopeInput.name = "scope"',
+    "scopeInput.value = scope",
+    "document.body.append(form)",
+    "HTMLFormElement.prototype.submit.call(form)",
+    'type="button"',
+    "assertSameOrigin(request)",
+    "privateNoStoreHeaders",
+    "NextResponse.redirect(destination, 303)",
+  ])
+    && !authButtons.includes("<form")
+    && !authButtons.includes('type="submit"')
+    && !authButtons.includes("event.preventDefault()")
+    && !authButtons.includes("useActionState")
+    && !authButtons.includes("fetch(form.action")
+    && !authButtons.includes("location.replace"),
+);
 
 record("focus indicators exist globally", globals.includes(":focus-visible") && globals.includes("outline-offset"));
 record("reduced-motion support exists", hasAll(globals, ["prefers-reduced-motion: reduce", "animation-duration", "transition-duration", "scroll-behavior: auto"]));

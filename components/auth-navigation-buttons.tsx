@@ -10,13 +10,12 @@ type LogoutButtonProps = {
   onClick?: () => void;
 };
 
-const LOGOUT_ACTION = "/api/auth/logout";
 const LOGOUT_ENCODING = "application/x-www-form-urlencoded";
 
 export function LogoutButton({ allSessions = false, className = "btn-secondary w-full", formClassName, label, onClick }: LogoutButtonProps) {
   return (
     <form
-      action={LOGOUT_ACTION}
+      action="/api/auth/logout"
       method="post"
       encType={LOGOUT_ENCODING}
       target="_self"
@@ -27,7 +26,7 @@ export function LogoutButton({ allSessions = false, className = "btn-secondary w
       <button
         className={className}
         type="submit"
-        formAction={LOGOUT_ACTION}
+        formAction="/api/auth/logout"
         formMethod="post"
         formEncType={LOGOUT_ENCODING}
         formTarget="_self"

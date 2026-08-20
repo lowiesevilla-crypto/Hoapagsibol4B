@@ -66,40 +66,55 @@ export async function GET(request: Request) {
       const safeLoginDestination = (destination) => destination.origin === window.location.origin
         && (destination.pathname === "/login" || destination.pathname.endsWith("/login"));
 
+      const fail = (reason) => {
+        inFlight = false;
+        document.documentElement.dataset.hoahubLogoutTransition = "failed";
+        document.documentElement.dataset.hoahubLogoutError = reason;
+        if (status) status.textContent = "We could not complete sign out. Try again.";
+        if (retryButton instanceof HTMLButtonElement) retryButton.hidden = false;
+      };
+
       const submitLogout = async () => {
         if (inFlight) return;
         inFlight = true;
         if (retryButton instanceof HTMLButtonElement) retryButton.hidden = true;
+        delete document.documentElement.dataset.hoahubLogoutError;
         document.documentElement.dataset.hoahubLogoutTransition = "revoking";
 
         const scope = document.body.dataset.hoahubLogoutScope === "all" ? "all" : "current";
         try {
-          // Next.js reserves POST requests carrying stale Next-Action transport state for
-          // Server Action dispatch before the Route Handler can answer. This isolated
-          // same-origin DELETE uses the same server-side logout authority while avoiding
-          // that framework-only POST dispatch path.
-          const response = await fetch("/api/auth/logout", {
-            method: "DELETE",
+          // The transition uses a fresh same-origin PUT with no request body. This avoids
+          // Next.js Server Action POST dispatch and DELETE-body transport edge cases while
+          // keeping session revocation entirely under the authoritative logout Route Handler.
+          const response = await fetch("/api/auth/logout?scope=" + encodeURIComponent(scope), {
+            method: "PUT",
             credentials: "same-origin",
             cache: "no-store",
-            redirect: "follow",
-            headers: { "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8" },
-            body: new URLSearchParams({ scope }).toString(),
+            redirect: "error",
+            headers: { "X-HOAHub-Logout-Transition": "1" },
           });
 
-          if (!response.ok || !response.redirected) throw new Error("logout-redirect-required");
-          const destination = new URL(response.url);
-          if (!safeLoginDestination(destination)) throw new Error("unsafe-logout-destination");
+          if (response.status !== 204) {
+            fail("status");
+            return;
+          }
 
-          // The server remains redirect authority: navigate only to the same-origin
-          // login URL obtained by following the logout route's HTTP 303 response.
+          const rawDestination = response.headers.get("X-HOAHub-Logout-Destination");
+          if (!rawDestination) {
+            fail("destination-missing");
+            return;
+          }
+
+          const destination = new URL(rawDestination, window.location.origin);
+          if (!safeLoginDestination(destination)) {
+            fail("destination-unsafe");
+            return;
+          }
+
           document.documentElement.dataset.hoahubLogoutTransition = "navigating";
           window.location.replace(destination.href);
         } catch {
-          inFlight = false;
-          document.documentElement.dataset.hoahubLogoutTransition = "failed";
-          if (status) status.textContent = "We could not complete sign out. Try again.";
-          if (retryButton instanceof HTMLButtonElement) retryButton.hidden = false;
+          fail("network");
         }
       };
 

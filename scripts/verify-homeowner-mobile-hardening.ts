@@ -56,7 +56,6 @@ const profilePage = readProjectFile("app/portal/profile/page.tsx");
 const vehiclesPage = readProjectFile("app/portal/vehicles/page.tsx");
 const authButtons = readProjectFile("components/auth-navigation-buttons.tsx");
 const logoutTransitionRoute = readProjectFile("app/api/auth/logout-transition/route.ts");
-const logoutTransitionScript = readProjectFile("public/logout-transition.js");
 const logoutRoute = readProjectFile("app/api/auth/logout/route.ts");
 const files = changedFiles();
 
@@ -90,23 +89,28 @@ record(
     'data-hoahub-logout-scope={scope}',
   ])
     && !authButtons.includes("document.createElement(\"form\")")
+    && !authButtons.includes("HTMLFormElement.prototype.submit.call")
     && !authButtons.includes("useActionState")
     && !authButtons.includes("fetch(")
+    && !authButtons.includes("location.replace")
     && hasAll(logoutTransitionRoute, [
       'request.headers.get("sec-fetch-site") === "same-origin"',
       'request.headers.get("sec-fetch-mode") === "navigate"',
       'request.headers.get("sec-fetch-dest") === "document"',
+      "allowedOrigins()",
       'action="/api/auth/logout"',
       'method="post"',
-      'script src="/logout-transition.js" defer',
+      'name="scope"',
+      'const nonce = randomBytes(16).toString("hex")',
+      'script nonce="${nonce}"',
+      'form[data-hoahub-logout-transition="true"]',
+      "HTMLFormElement.prototype.submit.call(form)",
       "privateNoStoreHeaders",
+      "script-src 'nonce-${nonce}'",
       "form-action 'self'",
       "frame-ancestors 'none'",
     ])
-    && hasAll(logoutTransitionScript, [
-      'form[data-hoahub-logout-transition="true"]',
-      "HTMLFormElement.prototype.submit.call(form)",
-    ])
+    && !logoutTransitionRoute.includes('/logout-transition.js')
     && hasAll(logoutRoute, ["assertSameOrigin(request)", "privateNoStoreHeaders", "NextResponse.redirect(destination, 303)"]),
 );
 

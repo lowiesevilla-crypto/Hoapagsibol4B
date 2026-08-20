@@ -122,15 +122,15 @@ record(
       "allowedOrigins()",
       'const nonce = randomBytes(16).toString("hex")',
       'script nonce="${nonce}"',
-      'fetch("/api/auth/logout"',
-      'method: "DELETE"',
+      'fetch("/api/auth/logout?scope=" + encodeURIComponent(scope)',
+      'method: "PUT"',
       'credentials: "same-origin"',
-      'redirect: "follow"',
+      'redirect: "error"',
       'cache: "no-store"',
-      '"Content-Type": "application/x-www-form-urlencoded;charset=UTF-8"',
-      "new URLSearchParams({ scope }).toString()",
-      "response.redirected",
-      "new URL(response.url)",
+      '"X-HOAHub-Logout-Transition": "1"',
+      "response.status !== 204",
+      'response.headers.get("X-HOAHub-Logout-Destination")',
+      "new URL(rawDestination, window.location.origin)",
       "destination.origin === window.location.origin",
       'destination.pathname === "/login"',
       'destination.pathname.endsWith("/login")',
@@ -142,18 +142,22 @@ record(
       "form-action 'none'",
       "frame-ancestors 'none'",
     ])
+    && !logoutTransitionRoute.includes("body: new URLSearchParams")
     && !logoutTransitionRoute.includes("HTMLFormElement.prototype.submit.call")
     && !logoutTransitionRoute.includes("window.setTimeout(submitLogout")
     && !logoutTransitionRoute.includes('/api/auth/logout-transition-script')
     && hasAll(logoutRoute, [
       "assertSameOrigin(request)",
       "privateNoStoreHeaders",
-      "NextResponse.redirect(destination, 303)",
-      "export const POST = handleLogout",
-      "export const DELETE = handleLogout",
+      "NextResponse.redirect(result.destination, 303)",
+      "export async function POST(request: Request)",
+      "export async function PUT(request: Request)",
+      'request.headers.get(TRANSITION_REQUEST_HEADER) !== "1"',
+      "status: 204",
+      "TRANSITION_DESTINATION_HEADER",
     ]),
 );
-record("logout endpoint enforces same-origin private 303 redirect", hasAll(logoutRoute, ["assertSameOrigin(request)", "privateNoStoreHeaders", "NextResponse.redirect(destination, 303)", "export const POST = handleLogout", "export const DELETE = handleLogout"]));
+record("logout endpoint enforces same-origin private server authority", hasAll(logoutRoute, ["assertSameOrigin(request)", "privateNoStoreHeaders", "NextResponse.redirect(result.destination, 303)", "export async function POST(request: Request)", "export async function PUT(request: Request)", "status: 204", "TRANSITION_DESTINATION_HEADER"]));
 record("profile and more contain no inline logout action", hasAll(profilePage, ["LogoutButton"]) && hasAll(morePage, ["LogoutButton"]) && !profilePage.includes("logoutAction") && !morePage.includes("logoutAction") && !profilePage.includes("form action={async") && !morePage.includes("form action={async"));
 record("logout removes browser session before document redirect", hasAll(authLogout, ["await deleteSession()", "logoutRedirectForSession", "session.tenantSlug"]));
 

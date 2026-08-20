@@ -97,6 +97,7 @@ record("cache recovery removes only HOAHub-owned development caches", hasAll(cac
 
 const authButtons = readProjectFile("components/auth-navigation-buttons.tsx");
 const logoutTransitionRoute = readProjectFile("app/api/auth/logout-transition/route.ts");
+const logoutTransitionScript = readProjectFile("app/api/auth/logout-transition-script/route.ts");
 const logoutRoute = readProjectFile("app/api/auth/logout/route.ts");
 const authLogout = readProjectFile("lib/auth-logout.ts");
 const profilePage = readProjectFile("app/portal/profile/page.tsx");
@@ -123,16 +124,20 @@ record(
       'action="/api/auth/logout"',
       'method="post"',
       'name="scope"',
-      'const nonce = randomBytes(16).toString("hex")',
-      'script nonce="${nonce}"',
-      'form[data-hoahub-logout-transition="true"]',
-      "HTMLFormElement.prototype.submit.call(form)",
+      'src="/api/auth/logout-transition-script"',
+      "defer",
       "privateNoStoreHeaders",
-      "script-src 'nonce-${nonce}'",
+      "script-src 'self'",
       "form-action 'self'",
       "frame-ancestors 'none'",
     ])
-    && !logoutTransitionRoute.includes('/logout-transition.js'),
+    && hasAll(logoutTransitionScript, [
+      'form[data-hoahub-logout-transition="true"]',
+      "HTMLFormElement.prototype.submit.call(form)",
+      "privateNoStoreHeaders",
+      '"cross-origin-resource-policy": "same-origin"',
+      '"x-content-type-options": "nosniff"',
+    ]),
 );
 record("logout endpoint enforces same-origin private 303 redirect", hasAll(logoutRoute, ["assertSameOrigin(request)", "privateNoStoreHeaders", "NextResponse.redirect(destination, 303)"]));
 record("profile and more contain no inline logout action", hasAll(profilePage, ["LogoutButton"]) && hasAll(morePage, ["LogoutButton"]) && !profilePage.includes("logoutAction") && !morePage.includes("logoutAction") && !profilePage.includes("form action={async") && !morePage.includes("form action={async"));

@@ -57,13 +57,28 @@ export async function GET(request: Request) {
     <p>Signing out securely…</p>
     <form data-hoahub-logout-transition="true" action="/api/auth/logout" method="post" enctype="application/x-www-form-urlencoded">
       <input type="hidden" name="scope" value="${safeScope}">
-      <noscript><button type="submit">Continue sign out</button></noscript>
+      <button type="submit">Continue sign out</button>
     </form>
   </main>
   <script nonce="${nonce}">
     (() => {
-      const form = document.querySelector('form[data-hoahub-logout-transition="true"]');
-      if (form instanceof HTMLFormElement) HTMLFormElement.prototype.submit.call(form);
+      let submitted = false;
+      const submit = () => {
+        if (submitted) return;
+        const form = document.querySelector('form[data-hoahub-logout-transition="true"]');
+        if (!(form instanceof HTMLFormElement)) return;
+        submitted = true;
+        HTMLFormElement.prototype.submit.call(form);
+      };
+
+      // Chromium can suppress a parser-time navigation that races the commit of the
+      // transition document itself. Hand the native POST off only after the document
+      // is ready, while keeping the mutation outside React/Next and server-authorized.
+      if (document.readyState === "loading") {
+        document.addEventListener("DOMContentLoaded", submit, { once: true });
+      } else {
+        window.setTimeout(submit, 0);
+      }
     })();
   </script>
 </body>

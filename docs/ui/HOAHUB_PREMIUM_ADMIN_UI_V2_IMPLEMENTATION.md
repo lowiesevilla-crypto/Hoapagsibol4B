@@ -1,6 +1,6 @@
 # HOAHub Premium Admin UI V2 — Implementation & Traceability
 
-Status: IMPLEMENTED — FINAL EXACT-HEAD VALIDATION IN PROGRESS
+Status: IMPLEMENTED — FINAL EXACT-HEAD VALIDATION REQUIRED BEFORE MERGE
 Baseline main SHA: `a0965d49bab5c475a75864b4e8cea5594b5a9a00` (PR #127 merged)
 Implementation branch: `feature/premium-admin-ui-v2`
 Tracking issue: #128
@@ -13,56 +13,52 @@ Implement the approved premium Tenant Admin experience across the 42-route scope
 
 ## Non-negotiable UI contract
 
-1. Compare the rendered current implementation to the approved Canva composition before changing each workspace.
+1. Compare rendered implementation to the approved Canva composition for scoped workspaces.
 2. Preserve authoritative production data and server-side actions. Never introduce mock KPI values or client-authoritative business state.
 3. Use shared design primitives and one consistent PageHeader/workspace hierarchy rather than page-specific visual forks.
 4. Search is a release blocker: every visible search control must be functional, tenant scoped, resettable, pagination-safe, keyboard/focus usable, and covered by regression tests.
-5. Search coverage explicitly includes Admin command search; homeowner name/account/email/reference search where authorized; block, lot and combined inputs such as `block 1 lot 2`; billing/payment/document/reference searches; empty-result behavior; and no cross-tenant leakage.
-6. Desktop tables that exceed a practical operational width retain safe horizontal table containment while the shared workspace shell prevents page-level overflow on tablet/mobile.
-7. Essential actions must not clip or become unreachable on tablet/mobile widths.
+5. Search coverage includes Admin command search; authorized homeowner name/account/email/reference search; block, lot and combined inputs such as `block 1 lot 2`; billing/payment/document/reference searches; empty-result behavior; and no cross-tenant leakage.
+6. Desktop tables that exceed practical operational width retain safe horizontal table containment while the shared workspace shell prevents page-level overflow on tablet/mobile.
+7. Essential actions must remain reachable on tablet/mobile widths.
 8. Loading, empty, success, recoverable-error and permission-limited states are part of visual completion.
 9. Production Gate Pass / Move In-Out templates are not recreated or replaced by this UI initiative.
-10. `Agent.md` must be updated before the implementation PR can leave draft/merge.
+10. `Agent.md` and this traceability record must be current before PR #130 leaves draft or merges.
 
 ## Implemented foundation
 
 ### Canonical PageHeader
 
-The previous two visual implementations were consolidated. `components/page-header.tsx` is now the single renderer and supports both the legacy `action` compatibility prop and the premium `actions`/`context` contract. `components/ui/page-header.tsx` re-exports the canonical component. This removes the rounded decorative hero fork without requiring risky route-level business-logic rewrites.
+`components/page-header.tsx` is the single PageHeader renderer and supports the legacy `action` compatibility prop plus the premium `actions`/`context` contract. `components/ui/page-header.tsx` re-exports the canonical component.
 
 ### Shared Premium Admin workspace
 
-`app/admin/layout.tsx` now applies `premium-admin-workspace` at the common Admin content boundary. `app/canva-parity.css` provides the approved Canva-derived surface hierarchy for cards, search/filter forms, tables, fields, pagination, alerts and responsive touch targets. Because the styling is attached to the authenticated Admin shell, all scoped routes inherit the same workspace treatment while preserving route-specific server actions and authorization.
+`app/admin/layout.tsx` applies `premium-admin-workspace` at the common Admin content boundary. `app/canva-parity.css` provides the approved Canva-derived surface hierarchy for cards, search/filter forms, tables, fields, pagination, alerts and responsive touch targets. Route-specific server actions and authorization remain unchanged.
 
 ### Permission/entitlement-filtered command search
 
-The topbar command search no longer relies on the small hard-coded visual navigation subset for Tenant Admin users. The server layout builds a full command catalog from the authorized Admin route definitions and applies the same module, role, Document Management entitlement, AI use/manage permission and payroll-access filters used by the shell before serializing destinations to the client.
+The server layout builds the Admin command catalog from authorized route definitions and applies role, enabled tenant modules, Document Management entitlement, AI use/manage permission, and payroll-access filters before serializing destinations to the client.
 
-The command control supports:
-- full authorized route labels, sections and path keywords;
-- deduplication by destination;
-- `Ctrl/Cmd + K` focus;
-- Arrow Up/Down selection;
-- Enter navigation;
-- Escape dismissal;
-- combobox/listbox ARIA state;
-- clear no-match feedback.
-
-No inaccessible route is intentionally added to the client command catalog.
+The command control supports full authorized route labels/sections/path terms, deduplication, `Ctrl/Cmd + K`, Arrow Up/Down, Enter, Escape, and combobox/listbox semantics. Inaccessible routes are not intentionally serialized for discoverability.
 
 ### Homeowner Block/Lot search
 
-`lib/homeowner-admin-search.ts` adds structured parsing for common property searches such as `block 1 lot 2`, `blk 1 lot 2`, and labeled block/lot forms while retaining residual name/email/account search terms. The page still composes this search predicate beneath the existing `tenantId` constraint, preserving tenant isolation. Unit regression coverage validates parser and query construction, and the critical browser suite exercises a real seeded Block/Lot lookup and empty-result state.
+`lib/homeowner-admin-search.ts` parses searches such as `block 1 lot 2`, `blk 1 lot 2`, and labeled block/lot forms while retaining residual name/email/account terms. The resulting predicate remains beneath authenticated `tenantId` authority. Unit and critical browser coverage validate the parser, Prisma query construction, real seeded Block/Lot lookup, and empty-result behavior.
+
+### Document request success handoff
+
+Homeowner document request creation remains authoritative in `submitDocumentRequestAction`, including workflow, audit, and page revalidation. `lib/actions/document-request-submission.ts` wraps that action only to redirect successful submissions back to `/portal/documents` with presentation-only success/message query parameters. The form reads that server-controlled redirect state and renders an accessible `role="status"` confirmation. Errors remain in `useActionState`; the client does not optimistically claim success or race a local `router.refresh()` against server revalidation.
 
 ### Logout/browser regression recovery
 
-The Premium Admin branch exposed an inherited logout race where React/Next could classify a protected-page form POST as a Server Action. The final architecture removes POST submission from the protected React tree entirely. `components/auth-navigation-buttons.tsx` exposes an ordinary same-origin anchor to `/api/auth/logout-transition?scope=current|all`.
+The Premium Admin branch exposed an inherited logout race where a protected-page POST could be interpreted by Next.js as stale Server Action transport. The final architecture removes logout mutation submission from the protected React tree.
 
-`GET /api/auth/logout-transition` returns a private/no-store raw HTML transition document outside React. It accepts only trusted same-origin/configured navigation evidence, contains an ordinary URL-encoded form targeting `POST /api/auth/logout`, and uses a per-response CSP nonce for a self-contained inline submitter. The submitter waits for `DOMContentLoaded` before invoking `HTMLFormElement.prototype.submit.call(form)` so Chromium has committed the transition document before the second navigation begins. A bounded 250 ms same-document retry covers a browser that suppresses the first submit during navigation commit. Both attempts target the same server-authoritative POST; no client-side logout mutation or redirect authority is added.
+`components/auth-navigation-buttons.tsx` renders an ordinary same-origin anchor to `/api/auth/logout-transition?scope=current|all`. `GET /api/auth/logout-transition` returns a private/no-store raw HTML transition document outside React and accepts only trusted same-origin/configured navigation evidence. Its per-response nonce-scoped inline script performs a same-origin `DELETE /api/auth/logout` request with same-origin credentials, no-store semantics, explicit URL-encoded scope, and redirect following. The transition accepts only the server-returned same-origin login destination and then uses `window.location.replace()` solely to navigate to that server-authoritative destination.
 
-The browser remains non-authoritative: the server validates same-origin authority, revokes the session, clears browser session state and returns the authoritative private/no-store HTTP 303 destination. Client `fetch`, `useActionState`, `requestSubmit`, client redirect authority, and GET-based session mutation remain prohibited.
+`app/api/auth/logout/route.ts` keeps one shared `handleLogout` authority for both POST and DELETE. Both methods use the same server-side origin validation, session revocation, private/no-store response handling, and authoritative HTTP 303 login redirect. POST remains available for direct same-origin document clients; the isolated transition uses DELETE specifically so stale `Next-Action` POST metadata cannot divert the request into Next Server Action dispatch before the route handler runs.
 
-`tests/e2e/auth-navigation-recovery.mjs` exercises the real visible logout control for Tenant Admin, Platform Admin and Homeowner, requires final login navigation, and verifies Browser Back cannot revive a protected interactive document. It now emits only safe method/path/status diagnostics for the two logout endpoints and, on timeout, reports transition readiness, a non-sensitive marker, form presence, and script count. It does not log cookies, credentials, auth headers, tenant data, or bypass the UI. `verify:auth-navigation-cache` locks the transition document, nonce/CSP, native prototype submission, server POST/303, and no-client-authority contract. Existing homeowner PWA/hardening verifiers continue to protect no-store/network-only logout behavior.
+This transport change does not weaken CSRF/same-origin policy, tenant isolation, RBAC, session authority, or redirect safety. The browser cannot choose tenant/session authority or invent a post-logout destination. GET-based session mutation remains prohibited.
+
+`tests/e2e/auth-navigation-recovery.mjs` continues to exercise the real visible logout control for Tenant Admin, Platform Admin and Homeowner and requires final login navigation plus Browser Back protection. `verify:auth-navigation-cache`, `verify:homeowner-mobile-hardening`, and `verify:homeowner-pwa` must recognize this isolated transition/DELETE transport while continuing to enforce same-origin proof, no-store/CSP boundaries, server-side revocation, HTTP 303 authority, and the absence of protected-page client mutation authority.
 
 ## 42-route implementation scope
 
@@ -128,42 +124,43 @@ The original issue inventory contains 42 entries because `/admin/documents` appe
 
 The visual-parity browser suite retains the dashboard/platform/homeowner baseline and expands Admin evidence across every implementation wave. Desktop captures include Action Center, Settings, Onboarding, Homeowners, Billing, Payment Requests, Reports, Data Management, Document Operations, Document Repository, Complaints, Chat and Workforce. Tablet captures cover Homeowners, Payment Review and Documents; mobile captures cover Onboarding and Complaints. Every capture asserts no page-level horizontal overflow.
 
-The approved design remains a visual and hierarchy reference. Production data values and workflow states remain authoritative and can intentionally differ from Canva sample values.
+The approved design remains a visual/hierarchy reference. Production data values and workflow states remain authoritative and can intentionally differ from Canva sample values.
 
 ## Automated verification added or strengthened
 
 - `tests/unit/premium-admin-ux-surface.test.ts` — shell, canonical PageHeader, command search keyboard contract and dashboard composition.
 - `tests/unit/homeowner-admin-search.test.ts` — structured Block/Lot parsing and Prisma filter construction.
+- `tests/unit/document-request-submission-feedback.test.ts` — authoritative document-request redirect handoff and accessible success feedback.
 - `tests/e2e/admin-premium-search.mjs` — real Admin command navigation, combined Block/Lot lookup and empty-result behavior.
 - `tests/e2e/auth-navigation-recovery.mjs` — real visible logout control, cross-shell logout, Browser Back security regression, and safe transition diagnostics.
-- `tests/e2e/document-workflow.mjs` — homeowner document submission success remains observable before server-rendered history refresh.
+- `tests/e2e/document-workflow.mjs` — homeowner document submission success plus server-rendered history visibility.
 - `tests/e2e/ui-canva-visual-parity.mjs` — expanded desktop/tablet/mobile workspace evidence.
-- `package.json` — Premium Admin search browser regression is included in `test:e2e`.
+- `package.json` — Premium Admin search browser regression remains in `test:e2e`.
 
-## Validation evidence
+## Validation evidence and current gate
 
-The Premium Admin implementation has demonstrated stability across the release gate except for the final logout/history browser correction still being revalidated on the resulting exact head:
-- HOAHub Canva Visual Parity #117 completed successfully on exact candidate `95c8a9f55df21ff56f2046a4a83898a30701417b`, including expanded Admin/tablet/mobile browser screenshot capture.
-- HOAHub MySQL CI #871 on that same candidate passed dependency integrity, lint, Prisma validation/generation/migration/seed, 297 unit tests, 30 integration tests, all critical static/business verifiers, typecheck, production build, production smoke, critical business browser flow, onboarding, document workflow, Document Management, RBAC stale-session, AI assistant, and Premium Admin command/Block-Lot search regression.
-- CI #871 isolated the only remaining failure to the real logout/history browser path: after the visible logout control navigated to the raw transition document, Chromium remained on `/api/auth/logout-transition?scope=current` instead of completing the final login navigation.
-- Earlier failures showed protected-page form submission entering Next Server Action handling; later failures proved that moving the POST outside React was necessary but not sufficient. The current correction starts native submission only after `DOMContentLoaded` and adds one bounded same-document retry while preserving the authoritative mutation in `POST /api/auth/logout`.
-- Safe E2E diagnostics were added without changing success criteria. The test still requires one visible logout activation, actual server revocation/303 navigation, and safe Browser Back behavior; it does not bypass the UI or relax the security assertions.
-- `Agent.md`, the static verifier expectations, and this traceability record are aligned to the current architecture. Final release requires both workflows to pass on the resulting exact branch head.
+The implementation has repeatedly demonstrated green dependency integrity, lint, Prisma validation/generation/migration/seed, 297 unit tests, 30 integration tests, tenant/business verifiers, typecheck/build on the candidates that reached those stages, and Canva visual parity on the reviewed candidates.
+
+The final static hardening failure on prior head `fccb2a075beb8bfe4872c3c26ecab62925dca6d0` was a verifier-contract mismatch: the runtime transition had moved to same-origin DELETE, while `verify:homeowner-mobile-hardening` still searched for `method: "POST"`. The verifier is corrected to require the actual DELETE transition plus shared POST/DELETE server authority, same-origin validation, private/no-store handling, and HTTP 303 redirect. This is a test-contract alignment, not a bypass of the security gate.
+
+The exact final branch head created by the verifier/documentation alignment must still pass both HOAHub MySQL CI and HOAHub Canva Visual Parity before merge. A passing older head is not sufficient.
 
 ## Release gates
 
-PR #130 must remain draft until the final branch head satisfies all of the following:
+PR #130 must remain draft until the exact final branch head satisfies all applicable gates:
 - lint;
 - Prisma validation/generation/migration and seed;
 - unit suite;
-- database finance integration suite;
-- critical verification suite;
+- database integration suite;
+- all named critical/static verifiers;
 - typecheck;
 - production build;
-- controlled Chromium production smoke and complete E2E suite, including Premium Admin search and auth navigation recovery;
-- Canva Visual Parity workflow on the same exact head;
+- controlled Chromium production smoke and complete E2E suite, including Premium Admin search, document workflow, and auth navigation recovery;
+- Canva Visual Parity on the same exact head;
 - current `Agent.md` and this traceability record.
 
-Failures must be fixed at root cause and rerun. Tests, tenant scoping, RBAC, permission gates or release checks must not be weakened to produce green status.
+Failures must be fixed at root cause. Tests, tenant scoping, RBAC, permission gates or release checks must not be weakened to obtain green status.
 
-After exact-head green: mark PR #130 ready, merge that verified head to `main`, allow the existing Hostinger managed production flow to publish the merge, then verify the expected `/release.txt`, `/api/health`, and applicable authenticated production UI/search smoke evidence. Only then may issue #128 be treated as production complete.
+After exact-head green, the user has already authorized marking PR #130 ready, merging the verified head to `main`, and proceeding through the existing Hostinger managed production flow without another approval prompt. Production completion requires the merged `main` verification/deploy workflow to pass, the expected short merge SHA to be served at `/release.txt`, and `/api/health` to succeed. Applicable authenticated production UI/search smoke should be performed when an authorized production session is available; no live authenticated sign-off may be fabricated when such access is unavailable.
+
+Rollback is application-level: revert the PR #130 merge if necessary while preserving business data.

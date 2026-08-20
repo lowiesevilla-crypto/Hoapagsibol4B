@@ -55,6 +55,8 @@ const eventsPage = readProjectFile("app/portal/events/page.tsx");
 const profilePage = readProjectFile("app/portal/profile/page.tsx");
 const vehiclesPage = readProjectFile("app/portal/vehicles/page.tsx");
 const authButtons = readProjectFile("components/auth-navigation-buttons.tsx");
+const logoutTransitionRoute = readProjectFile("app/api/auth/logout-transition/route.ts");
+const logoutTransitionScript = readProjectFile("public/logout-transition.js");
 const logoutRoute = readProjectFile("app/api/auth/logout/route.ts");
 const files = changedFiles();
 
@@ -79,27 +81,33 @@ record("credential and private responses are not cached", hasAll(serviceWorker, 
 record("navigation offline fallback is generic only", hasAll(serviceWorker, ["networkFirstNavigation", "cache.match(OFFLINE_URL)", 'const OFFLINE_URL = "/offline"']));
 record("PWA update flow avoids reload loop", hasAll(provider, ["UPDATE_RELOAD_KEY", "updatingRef", "controllerchange", "{ once: true }", "updateReloadAlreadyStarted"]));
 record(
-  "logout uses a same-origin full-document transition",
-  hasAll(authButtons + logoutRoute, [
-    'const LOGOUT_ENDPOINT = "/api/auth/logout"',
-    'document.createElement("form")',
-    'form.method = "post"',
-    "form.action = LOGOUT_ENDPOINT",
-    'scopeInput.name = "scope"',
-    "scopeInput.value = scope",
-    "document.body.append(form)",
-    "HTMLFormElement.prototype.submit.call(form)",
-    'type="button"',
-    "assertSameOrigin(request)",
-    "privateNoStoreHeaders",
-    "NextResponse.redirect(destination, 303)",
+  "logout uses a same-origin full-document transition outside the protected React tree",
+  hasAll(authButtons, [
+    'const LOGOUT_TRANSITION_ENDPOINT = "/api/auth/logout-transition"',
+    "href={href}",
+    'rel="nofollow"',
+    'data-hoahub-logout-button="true"',
+    'data-hoahub-logout-scope={scope}',
   ])
-    && !authButtons.includes("<form")
-    && !authButtons.includes('type="submit"')
-    && !authButtons.includes("event.preventDefault()")
+    && !authButtons.includes("document.createElement(\"form\")")
     && !authButtons.includes("useActionState")
-    && !authButtons.includes("fetch(form.action")
-    && !authButtons.includes("location.replace"),
+    && !authButtons.includes("fetch(")
+    && hasAll(logoutTransitionRoute, [
+      'request.headers.get("sec-fetch-site") === "same-origin"',
+      'request.headers.get("sec-fetch-mode") === "navigate"',
+      'request.headers.get("sec-fetch-dest") === "document"',
+      'action="/api/auth/logout"',
+      'method="post"',
+      'script src="/logout-transition.js" defer',
+      "privateNoStoreHeaders",
+      "form-action 'self'",
+      "frame-ancestors 'none'",
+    ])
+    && hasAll(logoutTransitionScript, [
+      'form[data-hoahub-logout-transition="true"]',
+      "HTMLFormElement.prototype.submit.call(form)",
+    ])
+    && hasAll(logoutRoute, ["assertSameOrigin(request)", "privateNoStoreHeaders", "NextResponse.redirect(destination, 303)"]),
 );
 
 record("focus indicators exist globally", globals.includes(":focus-visible") && globals.includes("outline-offset"));

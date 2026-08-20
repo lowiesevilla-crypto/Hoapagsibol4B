@@ -30,7 +30,7 @@ const dashboard = readProjectFile("app/portal/dashboard/page.tsx");
 const cards = readProjectFile("components/homeowner/dashboard/dashboard-cards.tsx");
 const loading = readProjectFile("app/portal/dashboard/loading.tsx");
 const error = readProjectFile("app/portal/dashboard/error.tsx");
-const shell = readProjectFile("components/portal-mobile-shell.tsx");
+const routeChrome = readProjectFile("components/portal-mobile-route-chrome.tsx");
 
 record("dashboard page exists", existsSync(path.join(root, "app/portal/dashboard/page.tsx")));
 record("dashboard requires homeowner profile authentication", hasAll(dashboard, ["requireHomeownerProfile", "profile.userId", "profile.tenantId"]));
@@ -61,7 +61,7 @@ record("no Prisma schema or migration change", !changedFiles().some((file) => fi
 const allowedPhaseChatFiles = new Set(["lib/actions/chat.ts", "lib/services/chat.ts"]);
 record("no auth tenant or non-chat business service changes", !changedFiles().some((file) => /^(lib\/auth|lib\/actions|lib\/services\/(billing|payments|statement-of-account|documents|complaints|chat)|lib\/tenant-context)/.test(file) && !allowedPhaseChatFiles.has(file)));
 record("private portal cache boundaries remain network-only", hasAll(readProjectFile("public/sw.js"), ["/portal", "/api/", 'request.method !== "GET"']));
-record("mobile shell still hides bottom navigation on desktop", shell.includes("lg:hidden"));
+record("mobile shell still hides bottom navigation on desktop", routeChrome.includes("lg:hidden"));
 
 const failed = checks.filter((check) => !check.passed);
 for (const check of checks) {

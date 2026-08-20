@@ -4,27 +4,24 @@ Last updated: 2026-08-20
 
 ## Purpose
 
-This file is the repository-level operating context for AI coding agents and maintainers working on HOAHub. Production safety, tenant isolation, authentication integrity, mobile/PWA usability, auditable deployment, and repository-context maintenance are release gates.
+Repository-level operating context for AI coding agents and maintainers working on HOAHub. Production safety, tenant isolation, authentication integrity, mobile/PWA usability, auditable deployment, and repository-context maintenance are release gates.
 
 ## Mandatory Agent.md Maintenance
 
-`Agent.md` must be reviewed and updated for **every repository change** before that change is merged or deployed.
+`Agent.md` must be reviewed and updated for every repository change before merge or deployment.
 
 For every branch/PR/change:
-
 1. Read `Agent.md` before implementation.
-2. Update relevant context, architecture, files, tests, rollback, and deployment state.
+2. Update relevant architecture, files, tests, rollback, and deployment state.
 3. Keep `Last updated` current.
-4. Never place credentials, tokens, production passwords, private keys, certificates, or secret values in this file.
+4. Never place credentials, tokens, production passwords, private keys, certificates, or secret values here.
 5. Do not merge or deploy while this file is stale.
-
-A missing or stale `Agent.md` update is an incomplete change.
 
 ## Product and Architecture Baseline
 
 - HOAHub is a multi-tenant community/homeowners-association SaaS platform.
-- Primary stack: Next.js, React, TypeScript, Tailwind CSS, Prisma, and MySQL.
-- Production hosting: Hostinger managed Node.js web application connected to GitHub `main`.
+- Primary stack: Next.js, React, TypeScript, Tailwind CSS, Prisma, MySQL.
+- Production hosting: Hostinger managed Node.js application connected to GitHub `main`.
 - Tenant-owned data must remain tenant-scoped at every UI, API, service, job, storage, cache, export, report, and AI boundary.
 - Authenticated server-side session context is authoritative. Browser-supplied tenant IDs, roles, account owners, route parameters, or redirect destinations are never proof of authority.
 
@@ -41,19 +38,19 @@ A missing or stale `Agent.md` update is an incomplete change.
 
 ## Homeowner Mobile and PWA Requirements
 
-Homeowner-facing changes are phone/PWA-first, not desktop-only.
+Homeowner-facing changes are phone/PWA-first.
 
-- Use dynamic viewport behavior (`100dvh`) when full-height layout is needed.
-- Respect `env(safe-area-inset-top/right/bottom/left)`.
+- Use `100dvh` when full-height layout is needed.
+- Respect safe-area insets.
 - Keep primary touch targets approximately 48px where practical.
 - Avoid hover-only interaction and horizontal overflow.
 - Use shrink-safe `min-w-0`/`max-w-full` patterns where content can compress.
 - Honor `prefers-reduced-motion` for non-essential animation.
-- Ensure critical forms/cards can scroll on short phone viewports without hiding primary actions behind the keyboard or bottom navigation.
-- Preserve passkey support on compatible devices.
-- The root application layout owns the single `PwaInstallProvider`; do not reintroduce another provider in `app/portal/layout.tsx`.
+- Keep critical forms/cards scrollable on short phone viewports without hiding primary actions behind keyboard/bottom navigation.
+- Preserve passkey support.
+- The root application layout owns the single `PwaInstallProvider`; do not add another provider in `app/portal/layout.tsx`.
 - Private portal HTML, payments, receipts, documents, uploads, Server Actions, RSC, and router-prefetch traffic remain network-only/no-store under the reviewed PWA/cache policy.
-- Public install prompting uses browser-supported installability events; do not claim universal device-level installed-PWA detection.
+- Public install prompting uses browser-supported installability events; do not claim universal installed-PWA detection.
 
 ## Authentication and Account Selection
 
@@ -70,10 +67,9 @@ Community Pulse is presentation only. It must not replace or bypass the existing
 
 A credential identity matching multiple active HOA/tenant accounts authenticates once and then chooses an authorized account.
 
-- The server creates a short-lived signed `hoa_login_choice` cookie containing only allowed user IDs and purpose metadata.
-- The cookie is `HttpOnly`, `SameSite=Lax`, secure in production, and short-lived.
+- The server creates a short-lived signed `hoa_login_choice` HttpOnly cookie containing only allowed user IDs and purpose metadata.
 - The second step sends `selectedUserId` only; credentials are not retained in React state, hidden fields, browser storage, or the choice cookie.
-- A selected account is accepted only if present in the signed choice and is revalidated active with its tenant before session creation.
+- A selected account must be present in the signed choice and revalidated active with its tenant before session creation.
 - Missing/tampered/expired choice state fails closed.
 - Session/audit/last-login persistence occurs through server authority before issuing the browser session cookie.
 - Tenant isolation remains mandatory after account selection.
@@ -84,50 +80,43 @@ A credential identity matching multiple active HOA/tenant accounts authenticates
 
 ## Authentication Navigation Recovery — PR #127 / PR #130 Follow-up
 
-PR #127 hardened logout, Browser Back/Forward restoration, and global error recovery across Tenant Admin, Platform Admin, Homeowner/PWA, and Employee protected surfaces. Premium Admin V2 PR #130 carries the final browser correction found by the exact-head E2E suite.
+PR #127 hardened logout, Browser Back/Forward restoration, and global error recovery across Tenant Admin, Platform Admin, Homeowner/PWA, and Employee protected surfaces. Premium Admin V2 PR #130 contains the final exact-browser transport correction.
 
-### Auth Navigation Architecture
+### Final Auth Navigation Architecture
 
-- Shared logout authority remains same-origin `POST /api/auth/logout` with server-side session revocation, verified-login-choice cleanup, private/no-store responses, and a server-authoritative login destination.
-- Protected React pages no longer submit the logout POST. `components/auth-navigation-buttons.tsx` exposes an ordinary same-origin anchor to `/api/auth/logout-transition?scope=...`, with the scope limited to `current` or `all`. It does not use a React form, client `fetch`, React action state, manual client redirect authority, or a Server Action for revocation.
-- `GET /api/auth/logout-transition` is a non-mutating, private/no-store transition document outside the protected React tree. It accepts only exact/configured application referrers or browser-controlled same-origin top-level navigation metadata. Its CSP restricts form submission to self, blocks framing, and authorizes only a per-response nonce-scoped inline submitter.
-- The transition document is self-contained. After the raw document commits, its nonce-scoped submitter waits for `DOMContentLoaded`, marks only non-sensitive diagnostic state, and invokes `HTMLFormElement.prototype.submit.call(form)` on the raw HTML form that posts to `/api/auth/logout`. A bounded 250 ms same-document retry covers browsers that suppress a navigation initiated during the first document-commit task. No secondary static script request is required, and both attempts retain the exact same authoritative POST target; no browser-side logout mutation authority is introduced.
-- `app/api/auth/logout/route.ts` remains authoritative: exact same-origin validation is attempted first; only explicitly configured app-origin fallback is accepted for reverse-proxy/canonical URL mismatch; browser Fetch Metadata fallback is allowed only for same-origin top-level document navigation when usable Origin/Referer headers are absent. Session state is revoked before the private/no-store HTTP 303 response.
-- Do not collapse this back into a React-managed form or direct protected-page POST. Do not replace the path with client `fetch`, `useActionState`, `requestSubmit()`, client redirect authority, or GET-based session mutation.
-- Protected-route recovery listens to `pageshow` and `popstate` restoration for `/admin`, `/platform`, `/portal`, and `/employee`. Restored protected documents are reloaded so current server session/RBAC authority is re-established.
+- Protected React pages do not directly mutate logout state. `components/auth-navigation-buttons.tsx` exposes an ordinary same-origin anchor to `/api/auth/logout-transition?scope=...`; scope is limited to `current` or `all`.
+- The protected-page control does not use React form submission, direct client `fetch`, `useActionState`, `requestSubmit()`, client redirect authority, or a Server Action for session revocation.
+- `GET /api/auth/logout-transition` is a non-mutating, private/no-store raw HTML transition document outside the protected React tree. It accepts only trusted same-origin/configured top-level navigation evidence.
+- The transition document is self-contained and protected by a per-response CSP nonce, `connect-src 'self'`, `form-action 'none'`, `frame-ancestors 'none'`, private/no-store response headers, and a same-origin referrer policy.
+- Its nonce-scoped script performs a same-origin `DELETE /api/auth/logout` request with `credentials: "same-origin"`, `cache: "no-store"`, explicit URL-encoded scope, and redirect following. The transition accepts only a server-returned same-origin login URL and uses `window.location.replace()` solely to navigate to that server-authoritative destination.
+- `app/api/auth/logout/route.ts` exposes both `POST` and `DELETE` through the same `handleLogout` authority. POST remains available for direct same-origin document clients; the isolated transition uses DELETE specifically so stale Next.js `Next-Action` POST transport metadata cannot divert logout into Server Action dispatch before the route handler runs.
+- Both methods share the same server-side origin validation, session revocation, login-choice cleanup, private/no-store response handling, and authoritative HTTP 303 login redirect.
+- GET-based session mutation remains prohibited.
+- Browser-supplied scope cannot expand beyond `current|all`, and the browser cannot invent tenant/session authority or a post-logout destination.
+- Protected-route recovery listens to `pageshow`/`popstate` restoration for `/admin`, `/platform`, `/portal`, and `/employee`; restored protected documents are reloaded so current server session/RBAC authority is re-established.
 - `app/error.tsx` uses hard-document recovery for non-chunk failures and a guarded safe-entry fallback instead of repeatedly resetting the same broken React tree.
-- Login/auth/private responses remain no-store. Same-origin/CSRF protections remain mandatory on logout. Tenant identity, role, and redirect authority remain server controlled.
+- Login/auth/private responses remain no-store. Same-origin/CSRF protections remain mandatory.
 
 ### Permanent Regression Contract
 
-- `tests/e2e/auth-navigation-recovery.mjs` signs in as Tenant Admin, Platform Admin, and Homeowner, exercises authenticated history navigation, clicks the real visible logout link, requires the transition POST to complete through the server 303/login navigation, then verifies Browser Back cannot revive an interactive protected document or global error state.
-- The auth-navigation E2E logs only safe method/path/status diagnostics for the two logout endpoints and, on a transition timeout, reports document readiness, a non-sensitive transition marker, form presence, and script count. It never logs cookies, credentials, auth headers, tenant data, or bypasses the visible logout control.
-- The E2E selector may track the explicit `data-hoahub-logout-button` control, but the test must not bypass the UI with a direct API call.
-- `verify:auth-navigation-cache`, `verify:homeowner-mobile-hardening`, and `verify:homeowner-pwa` validate the isolated transition-document architecture, same-origin/navigation proof, private/no-store/CSP boundary, nonce-scoped native submitter, final POST same-origin validation, and HTTP 303 redirect. They reject protected-page React form submission, client fetch/action-state, and client redirect authority.
-- Critical CI verifiers are intentionally split into named workflow steps for diagnosability; this changes observability only, not the verification contract or release threshold.
-- No Prisma schema/migration, finance authority, payroll confidentiality, complaint/grievance privacy, document/template workflow, AI governance, tenant isolation, or RBAC scope is changed by this correction.
+- `tests/e2e/auth-navigation-recovery.mjs` signs in as Tenant Admin, Platform Admin, and Homeowner, exercises authenticated history navigation, clicks the real visible logout control, requires server revocation and final login navigation, then verifies Browser Back cannot revive interactive protected content.
+- The E2E selector may use `data-hoahub-logout-button` but must not bypass the UI with direct API mutation calls.
+- Diagnostics may log only safe method/path/status and non-sensitive transition state; never cookies, credentials, auth headers, tenant data, or session material.
+- `verify:auth-navigation-cache`, `verify:homeowner-mobile-hardening`, and `verify:homeowner-pwa` must validate the actual isolated transition/DELETE transport, same-origin proof, private/no-store/CSP boundary, shared POST/DELETE server authority, session revocation, and HTTP 303 redirect.
+- A verifier may be updated when runtime transport changes only if the revised assertion continues to protect the intended security invariant. Do not make brittle source checks pass by adding dead strings/comments or weakening runtime behavior.
+- No Prisma schema/migration, finance authority, payroll confidentiality, complaint/grievance privacy, document/template authority, AI governance, tenant isolation, or RBAC scope is changed by this auth correction.
 
-### Auth Follow-up Release State — 2026-08-20
-
-- PR #127 is merged; Premium Admin V2 started from main baseline `a0965d49bab5c475a75864b4e8cea5594b5a9a00`.
-- Repeated PR #130 MySQL CI runs reproduced a Tenant Admin logout timeout while dependency integrity, lint, Prisma, unit/integration, business verifiers, production build/smoke, and the preceding browser suites remained green.
-- Exact-head run #871 on `95c8a9f55df21ff56f2046a4a83898a30701417b` passed 297 unit tests, 30 integration tests, every named static/business verifier, typecheck, production build/smoke, all preceding browser suites, and Premium Admin search; only the real logout/history browser path remained red. Canva Visual Parity #117 passed on that same candidate.
-- The failed browser evidence first showed a protected-page logout POST being interpreted by Next as an unknown Server Action; after moving POST submission outside React, later exact-head runs showed the transition document itself could remain committed before final login navigation. The current correction therefore waits until the raw transition document is committed before native submission and includes a bounded same-document retry, while preserving the same POST and server-authoritative revocation/303 contract.
-- The real-browser security postconditions are unchanged: the user must exercise the visible control, session revocation remains server authoritative, the final navigation must reach the server-approved login surface, and Browser Back must not revive protected content.
-- The exact documented branch head must pass both HOAHub MySQL CI and HOAHub Canva Visual Parity before PR #130 leaves draft or merges. A passing older head is not sufficient.
-- Rollback is application-level; there is no database migration for this auth-navigation change.
-
-# Active Initiative: Premium Admin UI V2 — PR #130
+## Active Initiative: Premium Admin UI V2 — PR #130
 
 Approved Canva design: `DAHSu6LXZUk` — HOAHub Premium Admin UI V2 — 42 Route Redesign.
 Tracking issue: #128.
 Implementation branch: `feature/premium-admin-ui-v2`.
 Implementation/traceability record: `docs/ui/HOAHUB_PREMIUM_ADMIN_UI_V2_IMPLEMENTATION.md`.
 
-## Premium Admin V2 Architecture
+### Premium Admin V2 Architecture
 
-- The Admin UI preserves the authenticated server layout as tenant/RBAC/module/entitlement authority. Visual redesign must never make the browser authoritative for tenant, role, module, payroll, AI, document, finance, complaint, or workflow decisions.
-- `components/page-header.tsx` is the canonical workspace PageHeader and supports the legacy `action` alias plus premium `actions` and `context`; `components/ui/page-header.tsx` re-exports it. Do not create another competing PageHeader implementation.
+- The Admin UI preserves the authenticated server layout as tenant/RBAC/module/entitlement authority.
+- `components/page-header.tsx` is the canonical workspace PageHeader and supports legacy `action` plus premium `actions`/`context`; `components/ui/page-header.tsx` re-exports it.
 - `app/admin/layout.tsx` applies `premium-admin-workspace` at the common content boundary. `app/canva-parity.css` owns shared premium card, table, field, filter, pagination, and responsive surface treatment.
 - The Admin command catalog is built server-side from authorized route definitions, then filtered by role, enabled tenant modules, Document Management entitlement, AI use/manage permission, and payroll access before serialization to `ShellCommandSearch`.
 - `ShellCommandSearch` supports authorized route/section/path terms, deduplication, `Ctrl/Cmd + K`, Arrow Up/Down, Enter, Escape, and combobox/listbox semantics. Never serialize inaccessible routes merely for discoverability.
@@ -136,15 +125,15 @@ Implementation/traceability record: `docs/ui/HOAHUB_PREMIUM_ADMIN_UI_V2_IMPLEMEN
 - Production Gate Pass / Move In-Out templates and official document output are not recreated or replaced by this UI initiative.
 - No Prisma schema migration is introduced by Premium Admin V2.
 
-## Premium Admin V2 Scope and Responsive Contract
+### Premium Admin V2 Scope and Responsive Contract
 
-- The tracked 42-route inventory spans Settings/Account, Dashboard/Onboarding/Residents, Finance/Payments/Reports/Data, Document Operations/Repository, Complaints, AI, Chat, Attendance, and Payroll.
-- All scoped routes inherit the shared premium workspace boundary and canonical PageHeader presentation while retaining route-specific data/actions.
-- Tables remain contained within operational scroll surfaces instead of causing page-level horizontal overflow.
-- Essential Admin actions remain reachable at desktop/tablet/mobile widths; shared Admin mobile treatment preserves practical touch sizes.
+- The tracked inventory spans Settings/Account, Dashboard/Onboarding/Residents, Finance/Payments/Reports/Data, Document Operations/Repository, Complaints, AI, Chat, Attendance, and Payroll.
+- Scoped routes inherit the shared premium workspace boundary and canonical PageHeader while retaining route-specific data/actions.
+- Tables remain contained within operational scroll surfaces rather than causing page-level horizontal overflow.
+- Essential Admin actions remain reachable at desktop/tablet/mobile widths.
 - Visual-parity evidence covers representative desktop workspaces across Settings, Onboarding, Homeowners, Action Center, Billing, Payment Requests, Reports, Data, Documents, Document Repository, Complaints, Chat, and Workforce; tablet/mobile captures cover high-value responsive routes.
 
-## Premium Admin V2 Search Release Gate
+### Premium Admin V2 Search Release Gate
 
 - Search is a release blocker, not decorative UI.
 - `tests/unit/homeowner-admin-search.test.ts` covers structured Block/Lot parsing and generated Prisma conditions.
@@ -152,16 +141,23 @@ Implementation/traceability record: `docs/ui/HOAHUB_PREMIUM_ADMIN_UI_V2_IMPLEMEN
 - The browser search regression remains part of `test:e2e`; do not remove or bypass it to obtain green CI.
 - Existing route-level search controls remain server/tenant scoped and preserve reset/pagination semantics.
 
-## Premium Admin V2 Release State — 2026-08-20
+### Document Request Success Handoff
 
-- Implementation is complete. PR #130 remains draft until its exact final branch head passes both HOAHub MySQL CI and HOAHub Canva Visual Parity.
-- CI has already proven dependency integrity, lint, Prisma validate/generate/migrate/seed, 297 unit tests, 30 integration tests, critical business verifiers, typecheck, production build/smoke, core business browser flow, onboarding, document workflow, Document Management, RBAC stale-session, AI assistant, and Premium Admin command/combined Block-Lot search. The remaining release proof is the corrected real-browser logout/history path on the exact documented head.
-- The logout correction is intentionally narrow: protected React pages perform only a same-origin navigation to an isolated no-store transition document; that self-contained nonce-scoped document performs the native POST after document commit with a bounded retry; server CSRF/session/303 authority and the real-browser security postconditions remain unchanged.
-- `docs/ui/HOAHUB_PREMIUM_ADMIN_UI_V2_IMPLEMENTATION.md` records route waves, visual evidence, search coverage, and release gates.
+- `submitDocumentRequestAction` remains the authoritative request/workflow/audit/revalidation operation.
+- `lib/actions/document-request-submission.ts` wraps the action only to redirect successful submissions back to `/portal/documents` with presentation-only success/message query parameters.
+- `components/document-request-form.tsx` renders the server-controlled redirected success as an accessible `role="status"` message.
+- Error state remains in `useActionState`; the form does not optimistically claim success or use a delayed client `router.refresh()` race.
+- `tests/unit/document-request-submission-feedback.test.ts` and `tests/e2e/document-workflow.mjs` protect the handoff and browser-visible success/history behavior.
+
+### Premium Admin V2 Release Contract
+
+- PR #130 must remain draft until the exact final branch head passes both HOAHub MySQL CI and HOAHub Canva Visual Parity.
+- A passing older head is never sufficient after a code, test, or documentation commit changes the branch SHA.
+- The latest pre-alignment failure was a static hardening verifier mismatch: runtime logout had moved to the isolated DELETE transport while the verifier still expected `method: "POST"`. The verifier is now aligned to require the actual DELETE transition plus shared POST/DELETE server authority, same-origin validation, private/no-store handling, and HTTP 303 redirect. This is not a bypass of the security gate.
 - After exact-head green, the user has authorized marking PR #130 ready, merging the verified head to `main`, and proceeding through the existing Hostinger managed deployment without another approval prompt.
-- Production completion requires the merged `main` verification/deploy workflow to pass, Hostinger to serve the expected 12-character merge SHA at `/release.txt`, `/api/health` to succeed, and applicable production UI/search smoke evidence to pass.
-- Do not claim a separate live-tenant authenticated sign-off unless such a production session was actually executed.
-- Rollback is application-level: revert the PR #130 merge if necessary while preserving all business data.
+- Production completion requires the merged `main` verification/deploy workflow to pass, Hostinger to publish the expected short merge SHA at `/release.txt`, and `/api/health` to succeed.
+- Applicable authenticated production UI/search smoke should be performed when an authorized production session is available. Do not fabricate live authenticated sign-off if production credentials/session access are unavailable.
+- Rollback is application-level; revert the PR #130 merge if necessary while preserving business data.
 
 ## Resident Messaging Privacy and Message Requests
 
@@ -194,22 +190,20 @@ Implementation/traceability record: `docs/ui/HOAHUB_PREMIUM_ADMIN_UI_V2_IMPLEMEN
 - PayMongo posting occurs only from verified gateway processing and the normal transactional ledger/receipt path.
 - Browser redirects/query parameters cannot create receipts or financial postings.
 
-# Community Intelligence UI System — Phase 3 Baseline
-
-Phase 3, Canva remediation PR #125, and content-aside scope hotfix PR #126 established the shared premium ecosystem baseline that Premium Admin V2 extends.
+## Community Intelligence UI System — Phase 3 Baseline
 
 - Existing `pine`, `leaf`, `ink`, `sand`, `.card`, `.field`, `.btn-*`, `.table-wrap`, and `.data-table` remain supported; do not introduce a parallel design framework without an approved migration.
 - Platform control-plane identity uses HOAHub branding, never a customer/tenant logo.
-- `/admin/actions` is an aggregator only and must delegate to authoritative Payment, Billing, Document, Payroll, and Complaint workflows.
+- `/admin/actions` is an aggregator only and delegates to authoritative Payment, Billing, Document, Payroll, and Complaint workflows.
 - Resident 360 remains tenant-scoped and must not expose confidential complaint identity data.
 - `/admin/workforce` requires payroll access and tenant-scoped workforce/payroll queries.
 - `/platform/ai-usage` exposes metadata only, not prompt/response content.
 - `/platform/audit` is read-only evidence over existing `AuditLog` records.
 - Official document output/print CSS and production Gate Pass / Move In-Out templates remain outside visual redesign authority.
 - Complaint/grievance privacy, verification, committee/identity, deadline, and reporting controls remain unchanged by UI-only initiatives.
-- Navigation-sidebar Canva styling must stay scoped to the actual fixed navigation aside; page-level `<aside>` content must not inherit forced navigation width/gradient styles.
+- Navigation-sidebar Canva styling must remain scoped to the actual fixed navigation aside; page-level `<aside>` content must not inherit navigation width/gradient styles.
 
-## Canva Visual Parity Contract
+### Canva Visual Parity Contract
 
 - Approved palette baseline: navy `#071f31`, navy2 `#0b2e46`, pine `#0d4f46`, technology blue `#0b95d8`, blue2 `#27b6ff`, community green `#6ed64b`, neutral canvas `#f3f8fb`.
 - Tenant UI uses restrained navy/teal navigation, neutral canvas, white executive surfaces, technology-blue interactions, and green primarily for positive/community state.
@@ -217,73 +211,59 @@ Phase 3, Canva remediation PR #125, and content-aside scope hotfix PR #126 estab
 - KPI cards use restrained executive surfaces; rejected colored vertical side-strip treatment must not return.
 - Homeowner/PWA keeps blue/teal mobile hierarchy, compact account health/shortcuts, floating bottom navigation, safe areas, and approximately 48px+ touch targets.
 - Functional mockup controls must connect to real existing routes/actions. Mockup-only sample values must never be presented as real production metrics.
-- `.github/workflows/ui-canva-parity.yml` builds the exact candidate with CI MySQL and controlled Chromium, captures actual browser screenshots, and uploads the comparison artifact.
+- `.github/workflows/ui-canva-parity.yml` builds the exact candidate with CI MySQL and controlled Chromium, captures actual browser screenshots, and uploads comparison evidence.
 
-# Complaint-to-Grievance Foundation — BRD v1.0
+## Complaint-to-Grievance Foundation — BRD v1.0
 
 Approved baseline: `docs/complaints/HOAHUB_GRIEVANCE_FOUNDATION_BRD_V1_0.md`.
 
-The architecture rule is mandatory: **Complaint remains the intake/operational case layer; formal grievance/compliance remains a separate domain.** Do not expand `ComplaintStatus` into a monolithic notice/mediation/hearing/board/appeal state machine.
-
-## Grievance Foundation Status
-
-- Phase 1 implementation and exact-main automated validation are complete; PR #122 merged and was deployed/verified.
-- Anonymous two-way text messaging, structured subject, independent verification, separate grievance case, tenant committee appointments, and separate formal deadlines are implemented as additive domains.
-- Future grievance changes must preserve tenant isolation, privacy, auditability, mobile/PWA behavior, compatibility, and exact-head release validation.
-
-## Grievance Release Gates
+Mandatory architecture rule: Complaint remains the intake/operational case layer; formal grievance/compliance remains a separate domain. Do not expand `ComplaintStatus` into a monolithic notice/mediation/hearing/board/appeal state machine.
 
 - Anonymous complaint session tokens are HttpOnly browser state; only digests are persisted. Anonymous sessions must not recreate resident identity linkage.
 - Anonymous APIs expose PUBLIC content only and never expose internal/confidential notes, identities, emails, private IDs, storage paths, or private timeline data.
 - State-changing anonymous requests enforce same-origin policy and no-store responses; retries remain idempotent and bounded.
 - Complaint subject/person/property is distinct from incident location. Vehicle/homeowner relationships are revalidated inside authenticated tenant scope.
-- Verification is policy-driven; anonymity/named status is not proof strength. Configured enforcement/formal transitions must fail closed until required independent verification passes.
+- Verification is policy-driven; anonymity/named status is not proof strength. Configured enforcement/formal transitions fail closed until required independent verification passes.
 - Confidential identity reveal is separately authorized, reasoned, confirmed, no-store, and audited.
 - Grievance committee appointments grant only selected grievance authority and never unrelated finance/platform permissions. Platform roles cannot inherit tenant grievance authority.
 - `GrievanceDeadline` remains separate from `Complaint.dueAt` operational SLA. Do not hard-code a universal legal period.
-- Complaint, verification, grievance, committee, and deadline evidence must remain tenant-scoped and transactional where the existing service contract requires atomic history/audit writes.
+- Complaint, verification, grievance, committee, and deadline evidence must remain tenant-scoped and transactional where the service contract requires atomic history/audit writes.
 
-## Deferred Grievance Scope
+Deferred grievance scope remains notice/proof-of-service, mediation/hearing records, witness/exhibit/minutes management, evidence vault/provenance, formal board vote/quorum/recusal/decision, appeal/reconsideration, resolution agreement/e-signature, regulatory dossier export, retention/legal hold automation, advanced redaction/notifications, and real malware-scanner integration unless the BRD is revised.
 
-Unless the BRD is explicitly revised, later phases retain notice/proof-of-service, mediation/hearing records, witness/exhibit/minutes management, evidence vault/provenance, formal board vote/quorum/recusal/decision, appeal/reconsideration, resolution agreement/e-signature, regulatory dossier export, retention/legal hold automation, advanced redaction/notifications, and real malware-scanner integration.
+## Hostinger Production Deployment Model
 
-# Hostinger Production Deployment Model
-
-The authoritative production path is the Hostinger managed Node.js web application connected to GitHub `main`.
+The authoritative production path is the Hostinger managed Node.js application connected to GitHub `main`.
 
 - Feature branches are not production deployment targets.
 - Approved production changes land on `main` through GitHub.
 - Push/merge to `main` runs HOAHub verification and triggers Hostinger connected-GitHub auto-deployment.
 - Node.js production runtime is 22.x.
 - `scripts/write-release-id.mjs` stamps the short Git revision into `public/release.txt` before build.
-- Hostinger's install layer may use pnpm while managed build subprocesses may not expose pnpm in `PATH`; production lifecycle commands must invoke Node scripts/package binaries directly rather than assuming nested `pnpm` is available.
+- Hostinger's install layer may use pnpm while managed build subprocesses may not expose pnpm in `PATH`; lifecycle commands must invoke Node scripts/package binaries directly rather than assuming nested `pnpm` is available.
 - Legacy PM2/SSH activation is not the authoritative managed-web-app deployment path.
 - Never expose or print production `.env` contents.
 
-## Production Release Identification
+### Production Release Identification
 
-A release is deployed only when all of these are true:
-
+A release is deployed only when all are true:
 1. the expected merged `main` commit passed repository verification;
 2. Hostinger auto-deployment published that build;
 3. production `/release.txt` equals the expected 12-character short `main` SHA; and
 4. production `/api/health` succeeds.
 
-The `deploy-production` job in `.github/workflows/ci-deploy.yml` performs the release-marker wait and public health check after a successful `main` verification run.
-
-For Premium Admin V2, PR #130 is authorized for automatic ready/merge/deploy only after its exact final head passes HOAHub MySQL CI and Canva Visual Parity. Production completion additionally requires the green main deployment job and applicable authenticated UI/search smoke evidence. Do not fabricate live authenticated production sign-off if credentials/session access are unavailable.
+The `deploy-production` job in `.github/workflows/ci-deploy.yml` performs the release-marker wait and public health check after successful `main` verification.
 
 ## CI Browser Gate Recovery
 
 - GitHub Actions uses repository-provided `@sparticuz/chromium` via `PUPPETEER_EXECUTABLE_PATH`.
-- Browser isolation uses the reviewed bounded context/process strategy; do not reintroduce unstable isolation behavior without proof.
+- Browser isolation uses the reviewed bounded context/process strategy.
 - Cleanup may force-kill failed browser processes but must not relax business assertion timeouts.
 - Retry remains limited to explicitly recognized transient browser-startup signatures, not business assertion failures.
 
 ## Standard Exact-Head Validation Gate
 
-Before merge/deploy of runtime changes, the exact candidate must pass the applicable full gate, including:
-
+Before merge/deploy of runtime changes, the exact candidate must pass applicable full gates:
 - `pnpm install --frozen-lockfile`
 - `pnpm lint`
 - Prisma validate/generate/migrate on clean CI MySQL
@@ -297,14 +277,13 @@ Before merge/deploy of runtime changes, the exact candidate must pass the applic
 - production smoke and critical browser/E2E tests
 - Canva Visual Parity for UI initiatives
 
-The critical/static verification stage is split into named CI substeps so failures identify the affected contract quickly; each verifier remains mandatory and a later step is never a substitute for a failed earlier one.
+Critical/static verification is split into named CI substeps for diagnosability. Each verifier remains mandatory; a later step never substitutes for a failed earlier one.
 
 Do not merge a known failure merely to trigger deployment. Fix the defect or update a brittle source-contract assertion only when the revised assertion continues to protect the intended security/business invariant.
 
 ## Change Discipline
 
 For every repository change:
-
 - read the implementation, tests, and relevant security boundaries first;
 - keep tenant/user authority server-controlled;
 - update/add regression tests when behavior changes;

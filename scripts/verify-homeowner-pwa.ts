@@ -100,7 +100,7 @@ const logoutRoute = readProjectFile("app/api/auth/logout/route.ts");
 const authLogout = readProjectFile("lib/auth-logout.ts");
 const profilePage = readProjectFile("app/portal/profile/page.tsx");
 const morePage = readProjectFile("app/portal/more/page.tsx");
-record("logout buttons use a normal full-document POST", hasAll(authButtons, ['action="/api/auth/logout"', 'method="post"', 'type="submit"', "disabled={pending}"]) && !authButtons.includes("useActionState"));
+record("logout buttons use a normal full-document POST", hasAll(authButtons, ['action="/api/auth/logout"', 'method="post"', 'type="submit"', 'name="scope"']) && !authButtons.includes("useActionState") && !authButtons.includes("event.preventDefault()") && !authButtons.includes("fetch(form.action"));
 record("logout endpoint enforces same-origin private 303 redirect", hasAll(logoutRoute, ["assertSameOrigin(request)", "privateNoStoreHeaders", "NextResponse.redirect(destination, 303)"]));
 record("profile and more contain no inline logout action", hasAll(profilePage, ["LogoutButton"]) && hasAll(morePage, ["LogoutButton"]) && !profilePage.includes("logoutAction") && !morePage.includes("logoutAction") && !profilePage.includes("form action={async") && !morePage.includes("form action={async"));
 record("logout removes browser session before document redirect", hasAll(authLogout, ["await deleteSession()", "logoutRedirectForSession", "session.tenantSlug"]));

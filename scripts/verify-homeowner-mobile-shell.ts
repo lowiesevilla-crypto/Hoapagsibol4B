@@ -90,14 +90,15 @@ for (const relativePath of ["app/portal/requests/page.tsx", "app/portal/communit
 const portalLayout = readProjectFile("app/portal/layout.tsx");
 record("portal layout uses centralized navigation", hasAll(portalLayout, ["resolveHomeownerNavigation", "homeownerRouteTitle", "navigation.primaryDestinations"]));
 record("portal layout still requires homeowner role", hasAll(portalLayout, ["requireUser(Role.HOMEOWNER)", "getEnabledTenantModules"]));
-record("portal layout leaves live mobile route state to client chrome", hasAll(portalLayout, ["<PortalMobileHeader", "<PortalBottomNavigation destinations={navigation.primaryDestinations} />"]) && !portalLayout.includes("pathname={pathname}"));
+record("portal layout leaves live mobile route state to client chrome", hasAll(portalLayout, ["const mobileRouteTitles = links.map", "routeTitles={mobileRouteTitles}", "<PortalBottomNavigation destinations={navigation.primaryDestinations} />"]) && !portalLayout.includes("pathname={pathname}"));
 record("portal content reserves mobile space for nav and floating AI", portalLayout.includes("pb-[calc(10.25rem+env(safe-area-inset-bottom))]"));
 
 const mobileShell = readProjectFile("components/portal-mobile-shell.tsx");
 const routeChrome = readProjectFile("components/portal-mobile-route-chrome.tsx");
 const greeting = readProjectFile("lib/philippine-greeting.ts");
 record("mobile header uses chat icon not notification bell", hasAll(routeChrome, ["MessageSquare", "Open chat"]) && !routeChrome.includes("Bell"));
-record("mobile chrome follows client-side route changes", hasAll(routeChrome, ['"use client"', "usePathname", "homeownerRouteTitle(pathname)", "isHomeownerPrimaryActive(entry, pathname)", "data-portal-mobile-route", "data-portal-primary-id"]));
+record("mobile chrome follows client-side route changes", hasAll(routeChrome, ['"use client"', "usePathname", "currentPortalTitle(pathname, routeTitles)", "isPrimaryActive(entry, pathname)", "data-portal-mobile-route", "data-portal-primary-id"]));
+record("mobile route chrome stays client-safe", !routeChrome.includes("@prisma/client") && !routeChrome.includes("@/lib/homeowner-navigation"));
 record("dashboard-only mobile greeting and PWA banner follow live route", hasAll(routeChrome, ['pathname === "/portal/dashboard"', "Community Hub · Installed PWA ready", "Resident Services"]));
 record("Philippines greeting uses explicit Asia Manila time boundaries", hasAll(greeting, ['PHILIPPINE_TIME_ZONE = "Asia/Manila"', 'return "Good morning"', 'return "Good afternoon"', 'return "Good evening"']) && routeChrome.includes("philippineGreeting"));
 record("bottom nav uses dynamic visible destination count", hasAll(routeChrome, ["gridTemplateColumns", "destinations.length"]));

@@ -4,10 +4,31 @@ import { performLogout, type LogoutScope } from "@/lib/auth-logout";
 
 export const dynamic = "force-dynamic";
 
+function isTrustedLogoutPost(request: Request) {
+  const origin = request.headers.get("origin");
+  const referer = request.headers.get("referer");
+
+  if (origin || referer) {
+    try {
+      assertSameOrigin(request);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  // Native document form submissions can legitimately arrive without Origin or
+  // Referer under restrictive browser/privacy policies. In that case require
+  // browser Fetch Metadata proving this is a same-origin top-level navigation.
+  return (
+    request.headers.get("sec-fetch-site") === "same-origin" &&
+    request.headers.get("sec-fetch-mode") === "navigate" &&
+    request.headers.get("sec-fetch-dest") === "document"
+  );
+}
+
 export async function POST(request: Request) {
-  try {
-    assertSameOrigin(request);
-  } catch {
+  if (!isTrustedLogoutPost(request)) {
     return new NextResponse("Forbidden", { status: 403, headers: privateNoStoreHeaders });
   }
 

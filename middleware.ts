@@ -13,6 +13,14 @@ if (process.env.NODE_ENV === "production" && (!configuredSecret || configuredSec
 }
 const secret = new TextEncoder().encode(configuredSecret || "development-only-secret-change-me-now");
 
+const LOGOUT_NEXT_INTERNAL_HEADERS = [
+  "next-action",
+  "rsc",
+  "next-router-state-tree",
+  "next-router-prefetch",
+  "next-url",
+] as const;
+
 function cors(response: NextResponse, request: NextRequest) {
   if (!request.nextUrl.pathname.startsWith("/api/")) return response;
   const origin = request.headers.get("origin");
@@ -29,6 +37,12 @@ function loginWithReturnTo(request: NextRequest) {
   const returnTo = safeReturnTo(`${request.nextUrl.pathname}${request.nextUrl.search}`);
   if (returnTo) loginUrl.searchParams.set("returnTo", returnTo);
   return loginUrl;
+}
+
+function logoutRouteHandlerRequest(request: NextRequest) {
+  const requestHeaders = new Headers(request.headers);
+  for (const header of LOGOUT_NEXT_INTERNAL_HEADERS) requestHeaders.delete(header);
+  return cors(NextResponse.next({ request: { headers: requestHeaders } }), request);
 }
 
 export async function middleware(request: NextRequest) {
@@ -56,6 +70,15 @@ export async function middleware(request: NextRequest) {
     response.headers.set("Access-Control-Allow-Methods", "GET,POST,PUT,PATCH,DELETE,OPTIONS");
     response.headers.set("Access-Control-Allow-Headers", "Content-Type, Authorization, X-HOA-Payment-Webhook-Secret, Paymongo-Signature");
     return cors(response, request);
+  }
+
+  // The logout mutation is an ordinary Route Handler POST. A stale Next.js client can
+  // carry App Router / Server Action transport headers into a later document form
+  // navigation. Strip only those framework-internal hints, only for this endpoint,
+  // before Next performs action dispatch. Origin enforcement above and the route's
+  // own same-origin / Fetch-Metadata validation remain authoritative.
+  if (path === "/api/auth/logout" && request.method === "POST") {
+    return logoutRouteHandlerRequest(request);
   }
 
   if (!isProtectedApplicationPath(path)) return cors(NextResponse.next(), request);

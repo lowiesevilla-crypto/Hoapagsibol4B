@@ -101,7 +101,7 @@ record(
       'const nonce = randomBytes(16).toString("hex")',
       'script nonce="${nonce}"',
       'fetch("/api/auth/logout"',
-      'method: "POST"',
+      'method: "DELETE"',
       'credentials: "same-origin"',
       'redirect: "follow"',
       'cache: "no-store"',
@@ -123,7 +123,13 @@ record(
     && !logoutTransitionRoute.includes("HTMLFormElement.prototype.submit.call")
     && !logoutTransitionRoute.includes("window.setTimeout(submitLogout")
     && !logoutTransitionRoute.includes('/api/auth/logout-transition-script')
-    && hasAll(logoutRoute, ["assertSameOrigin(request)", "privateNoStoreHeaders", "NextResponse.redirect(destination, 303)"]),
+    && hasAll(logoutRoute, [
+      "assertSameOrigin(request)",
+      "privateNoStoreHeaders",
+      "NextResponse.redirect(destination, 303)",
+      "export const POST = handleLogout",
+      "export const DELETE = handleLogout",
+    ]),
 );
 
 record("focus indicators exist globally", globals.includes(":focus-visible") && globals.includes("outline-offset"));

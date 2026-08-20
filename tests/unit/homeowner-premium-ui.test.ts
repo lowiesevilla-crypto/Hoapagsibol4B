@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 
-const portalShell = readFileSync("components/portal-mobile-shell.tsx", "utf8");
+const portalRouteChrome = readFileSync("components/portal-mobile-route-chrome.tsx", "utf8");
 const messengerPage = readFileSync("app/portal/chat/page.tsx", "utf8");
 const messenger = readFileSync("components/homeowner-messenger.tsx", "utf8");
 const directoryRoute = readFileSync("app/api/chat/homeowners/route.ts", "utf8");
@@ -13,12 +13,12 @@ const communityPage = readFileSync("app/portal/community/page.tsx", "utf8");
 const paymentCards = readFileSync("components/homeowner/payments/payment-cards.tsx", "utf8");
 
 test("homeowner shell uses the uploaded photo with a resilient Canva-style placeholder", () => {
-  assert.match(portalShell, /HomeownerAvatar/);
-  assert.match(portalShell, /src="\/api\/profile\/photo"/);
-  assert.match(portalShell, /rounded-2xl/);
-  assert.match(portalShell, /min-h-14/);
-  assert.match(portalShell, /env\(safe-area-inset-bottom\)/);
-  assert.match(portalShell, /focus-visible:outline/);
+  assert.match(portalRouteChrome, /HomeownerAvatar/);
+  assert.match(portalRouteChrome, /src="\/api\/profile\/photo"/);
+  assert.match(portalRouteChrome, /rounded-2xl/);
+  assert.match(portalRouteChrome, /min-h-14/);
+  assert.match(portalRouteChrome, /env\(safe-area-inset-bottom\)/);
+  assert.match(portalRouteChrome, /focus-visible:outline/);
 });
 
 test("homeowner chat uses the dedicated messenger-style experience", () => {

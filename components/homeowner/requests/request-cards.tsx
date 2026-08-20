@@ -40,7 +40,7 @@ export function RequestAreaNavigation({ active }: { active: "requests" | "docume
 }
 
 export function RequestMetricCard({ label, value, note, icon: Icon, tone = "default" }: { label: string; value: string; note?: string; icon: LucideIcon; tone?: RequestTone }) {
-  return <section className={`flex min-w-0 items-center gap-3 rounded-2xl border border-slate-100 p-3 shadow-[0_4px_18px_rgba(15,23,42,.04)] ${toneClasses[tone]}`} aria-label={note ? `${label}. ${note}` : label}><span className="grid size-10 shrink-0 place-items-center rounded-2xl bg-white text-pine-700 shadow-sm"><Icon className="size-4" aria-hidden="true" /></span><span className="min-w-0 flex-1"><span className="block truncate text-[10px] font-black uppercase tracking-[.1em] text-slate-400">{label}</span><span className="mt-0.5 block truncate text-xl font-black tabular-nums text-ink">{value}</span></span></section>;
+  return <section className={`flex min-w-0 flex-col items-start gap-2 rounded-2xl border border-slate-100 p-3 shadow-[0_4px_18px_rgba(15,23,42,.04)] sm:flex-row sm:items-center sm:gap-3 ${toneClasses[tone]}`} aria-label={note ? `${label}. ${note}` : label}><span className="grid size-9 shrink-0 place-items-center rounded-xl bg-white text-pine-700 shadow-sm sm:size-10 sm:rounded-2xl"><Icon className="size-4" aria-hidden="true" /></span><span className="min-w-0 flex-1"><span className="block w-full text-[9px] font-black uppercase leading-3 tracking-[.06em] text-slate-400 sm:truncate sm:text-[10px] sm:tracking-[.1em]">{label}</span><span className="mt-0.5 block truncate text-xl font-black tabular-nums text-ink">{value}</span></span></section>;
 }
 
 export function RequestStatusPill({ label, tone = "default" }: { label: string; tone?: RequestTone }) {

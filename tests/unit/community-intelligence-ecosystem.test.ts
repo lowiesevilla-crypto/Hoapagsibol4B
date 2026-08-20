@@ -48,11 +48,11 @@ test("platform AI usage is metadata-only and platform audit uses real audit evid
 });
 
 test("homeowner PWA premium shell preserves safe area and primary navigation contracts", () => {
-  const shell = source("components/portal-mobile-shell.tsx");
+  const routeChrome = source("components/portal-mobile-route-chrome.tsx");
   const navigation = source("lib/homeowner-navigation.ts");
-  assert.match(shell, /env\(safe-area-inset-top\)/);
-  assert.match(shell, /env\(safe-area-inset-bottom\)/);
-  assert.match(shell, /min-h-14/);
+  assert.match(routeChrome, /env\(safe-area-inset-top\)/);
+  assert.match(routeChrome, /env\(safe-area-inset-bottom\)/);
+  assert.match(routeChrome, /min-h-14/);
   for (const label of ["Home", "Payments", "Requests", "Community", "More"]) assert.match(navigation, new RegExp(`label: "${label}"`));
 });
 

@@ -66,11 +66,11 @@ test("executive metrics use restrained Canva cards rather than colored side stri
 });
 
 test("homeowner PWA shell uses the approved blue-teal mobile treatment", () => {
-  const shell = source("components/portal-mobile-shell.tsx");
+  const routeChrome = source("components/portal-mobile-route-chrome.tsx");
   const layout = source("app/portal/layout.tsx");
-  assert.match(shell, /linear-gradient\(150deg,#08324f,#0d6c83_68%,#1bb0d0\)/);
-  assert.match(shell, /rounded-\[22px\]/);
-  assert.match(shell, /Community Hub · Installed PWA ready/);
+  assert.match(routeChrome, /linear-gradient\(150deg,#08324f,#0d6c83_68%,#1bb0d0\)/);
+  assert.match(routeChrome, /rounded-\[22px\]/);
+  assert.match(routeChrome, /Community Hub · Installed PWA ready/);
   assert.match(layout, /canva-portal-shell/);
   assert.match(layout, /lg:ml-\[300px\]/);
 });

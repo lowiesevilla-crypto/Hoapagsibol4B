@@ -58,14 +58,14 @@ export default async function PortalLayout({ children }: { children: React.React
     aiAvailable && { href: "/portal/ai", label: "Association Assistant", icon: "chat" as const, section: "Resident Services", description: "Tenant-scoped answers from approved HOA knowledge" },
   ].filter(Boolean) as Array<{ href: string; label: string; icon: "documents" | "chat"; section: string; description: string }>;
   const links = [...navigation.sidebarLinks, ...extraLinks];
-  const title = pathname.startsWith("/portal/document-library") ? "Document Library" : pathname.startsWith("/portal/ai") ? "Association Assistant" : homeownerRouteTitle(pathname);
+  const mobileRouteTitles = links.map(({ href, label }) => ({ href, label }));
 
   return <div className="canva-portal-shell min-h-screen">
     <Sidebar user={user} links={links} roleLabel="Homeowner" association={association} initialChatUnreadCount={initialChatUnreadCount} desktopOnly />
-    <PortalMobileHeader association={association} user={user} unreadCount={initialChatUnreadCount} showChat={navigation.hasChat} title={title} isDashboard={pathname === "/portal/dashboard"} />
+    <PortalMobileHeader association={association} user={user} unreadCount={initialChatUnreadCount} routeTitles={mobileRouteTitles} showChat={navigation.hasChat} />
     <Suspense><TransactionFeedback /></Suspense>
-    <main className="mx-auto min-w-0 max-w-[1800px] px-4 pb-[calc(6.5rem+env(safe-area-inset-bottom))] pt-5 sm:px-7 lg:ml-[300px] lg:px-10 lg:py-9">{children}</main>
+    <main className="mx-auto min-w-0 max-w-[1800px] px-4 pb-[calc(10.25rem+env(safe-area-inset-bottom))] pt-5 sm:px-7 lg:ml-[300px] lg:px-10 lg:py-9">{children}</main>
     {aiAvailable && <AiFloatingShortcut />}
-    <PortalBottomNavigation destinations={navigation.primaryDestinations} pathname={pathname} />
+    <PortalBottomNavigation destinations={navigation.primaryDestinations} />
   </div>;
 }

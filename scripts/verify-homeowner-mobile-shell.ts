@@ -83,19 +83,29 @@ record("new route titles are mapped", homeownerRouteTitle("/portal/requests") ==
 record("homeowner module rules cover entitled portal children", hasAll(JSON.stringify(homeownerModuleRules), ["/portal/documents", "/portal/complaints", "/portal/announcements", "/portal/events", "/portal/chat", "/portal/vehicles"]));
 record("homeowner sidebar links contain no unsupported document query params", !homeownerSidebarLinks.some((link) => link.href.includes("?intent=") || link.href.includes("?section=")));
 
-for (const relativePath of ["app/portal/requests/page.tsx", "app/portal/community/page.tsx", "app/portal/more/page.tsx", "lib/homeowner-navigation.ts"]) {
+for (const relativePath of ["app/portal/requests/page.tsx", "app/portal/community/page.tsx", "app/portal/more/page.tsx", "lib/homeowner-navigation.ts", "lib/philippine-greeting.ts", "components/portal-mobile-route-chrome.tsx"]) {
   record(`${relativePath} exists`, existsSync(path.join(root, relativePath)));
 }
 
 const portalLayout = readProjectFile("app/portal/layout.tsx");
 record("portal layout uses centralized navigation", hasAll(portalLayout, ["resolveHomeownerNavigation", "homeownerRouteTitle", "navigation.primaryDestinations"]));
 record("portal layout still requires homeowner role", hasAll(portalLayout, ["requireUser(Role.HOMEOWNER)", "getEnabledTenantModules"]));
+record("portal layout leaves live mobile route state to client chrome", hasAll(portalLayout, ["const mobileRouteTitles = links.map", "routeTitles={mobileRouteTitles}", "<PortalBottomNavigation destinations={navigation.primaryDestinations} />"]) && !portalLayout.includes("pathname={pathname}"));
+record("portal content reserves mobile space for nav and floating AI", portalLayout.includes("pb-[calc(10.25rem+env(safe-area-inset-bottom))]"));
 
 const mobileShell = readProjectFile("components/portal-mobile-shell.tsx");
-record("mobile header uses chat icon not notification bell", hasAll(mobileShell, ["MessageSquare", "Open chat"]) && !mobileShell.includes("Bell"));
-record("bottom nav uses dynamic visible destination count", hasAll(mobileShell, ["gridTemplateColumns", "destinations.length"]));
-record("bottom nav keeps 48px touch target and safe area", hasAll(mobileShell, ["min-h-14", "env(safe-area-inset-bottom)", "focus-visible:outline"]));
-record("desktop sidebar and mobile bottom nav are not shown together", hasAll(readProjectFile("app/portal/layout.tsx"), ["desktopOnly", "PortalBottomNavigation"]) && mobileShell.includes("lg:hidden"));
+const routeChrome = readProjectFile("components/portal-mobile-route-chrome.tsx");
+const greeting = readProjectFile("lib/philippine-greeting.ts");
+record("mobile header uses chat icon not notification bell", hasAll(routeChrome, ["MessageSquare", "Open chat"]) && !routeChrome.includes("Bell"));
+record("mobile chrome follows client-side route changes", hasAll(routeChrome, ['"use client"', "usePathname", "currentPortalTitle(pathname, routeTitles)", "isPrimaryActive(entry, pathname)", "data-portal-mobile-route", "data-portal-primary-id"]));
+record("mobile route chrome stays client-safe", !routeChrome.includes("@prisma/client") && !routeChrome.includes("@/lib/homeowner-navigation"));
+record("dashboard-only mobile greeting and PWA banner follow live route", hasAll(routeChrome, ['pathname === "/portal/dashboard"', "Community Hub · Installed PWA ready", "Resident Services"]));
+record("Philippines greeting uses explicit Asia Manila time boundaries", hasAll(greeting, ['PHILIPPINE_TIME_ZONE = "Asia/Manila"', 'return "Good morning"', 'return "Good afternoon"', 'return "Good evening"']) && routeChrome.includes("philippineGreeting"));
+record("bottom nav uses dynamic visible destination count", hasAll(routeChrome, ["gridTemplateColumns", "destinations.length"]));
+record("bottom nav keeps 48px touch target and safe area", hasAll(routeChrome, ["min-h-14", "env(safe-area-inset-bottom)", "focus-visible:outline"]));
+record("desktop sidebar and mobile bottom nav are not shown together", hasAll(portalLayout, ["desktopOnly", "PortalBottomNavigation"]) && routeChrome.includes("lg:hidden"));
+record("community compact metrics avoid narrow-card truncation", hasAll(mobileShell, ["compact = false", "flex-col items-start", "sm:flex-row"]) && readProjectFile("app/portal/community/page.tsx").includes("<PortalSummaryCard compact"));
+record("request summary metrics use mobile vertical layout", hasAll(readProjectFile("components/homeowner/requests/request-cards.tsx"), ["flex-col items-start", "sm:flex-row", "text-[9px]"]));
 
 const pwaProvider = readProjectFile("components/pwa-install-provider.tsx");
 record("More page can invoke Phase 1 install provider", hasAll(pwaProvider, ["PwaInstallActionCard", "usePwaInstall", "runInstallPrompt", "openInstallSheet"]));

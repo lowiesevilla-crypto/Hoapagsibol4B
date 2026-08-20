@@ -34,9 +34,9 @@ export default async function PortalCommunityPage() {
       <PortalSectionHeader eyebrow="Community" title="Stay connected" />
 
       <section className="grid grid-cols-3 gap-2" aria-label="Community summary">
-        <PortalSummaryCard label="Notices" value={String(announcementCount)} icon={Megaphone} href={enabledModules.has(TenantModule.ANNOUNCEMENTS) ? "/portal/announcements" : undefined} />
-        <PortalSummaryCard label="Events" value={String(eventCount)} icon={CalendarDays} href={enabledModules.has(TenantModule.EVENTS) ? "/portal/events" : undefined} />
-        <PortalSummaryCard label="Officers" value={String(officers.length)} icon={UsersRound} href="/portal/organization" />
+        <PortalSummaryCard compact label="Notices" value={String(announcementCount)} icon={Megaphone} href={enabledModules.has(TenantModule.ANNOUNCEMENTS) ? "/portal/announcements" : undefined} />
+        <PortalSummaryCard compact label="Events" value={String(eventCount)} icon={CalendarDays} href={enabledModules.has(TenantModule.EVENTS) ? "/portal/events" : undefined} />
+        <PortalSummaryCard compact label="Officers" value={String(officers.length)} icon={UsersRound} href="/portal/organization" />
       </section>
 
       {actions.length ? (

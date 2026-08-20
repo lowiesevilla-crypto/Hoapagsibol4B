@@ -1,4 +1,3 @@
-import { randomBytes } from "node:crypto";
 import { NextResponse } from "next/server";
 import { allowedOrigins } from "@/lib/app-url";
 import { privateNoStoreHeaders } from "@/lib/anonymous-request-security";
@@ -43,7 +42,6 @@ export async function GET(request: Request) {
 
   const scope = new URL(request.url).searchParams.get("scope") === "all" ? "all" : "current";
   const safeScope = escapeHtmlAttribute(scope);
-  const nonce = randomBytes(16).toString("hex");
   const html = `<!doctype html>
 <html lang="en">
 <head>
@@ -51,6 +49,7 @@ export async function GET(request: Request) {
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="robots" content="noindex,nofollow,noarchive">
   <title>Signing out | HOAHub</title>
+  <script src="/api/auth/logout-transition-script" defer></script>
 </head>
 <body>
   <main>
@@ -60,27 +59,6 @@ export async function GET(request: Request) {
       <button type="submit">Continue sign out</button>
     </form>
   </main>
-  <script nonce="${nonce}">
-    (() => {
-      let submitted = false;
-      const submit = () => {
-        if (submitted) return;
-        const form = document.querySelector('form[data-hoahub-logout-transition="true"]');
-        if (!(form instanceof HTMLFormElement)) return;
-        submitted = true;
-        HTMLFormElement.prototype.submit.call(form);
-      };
-
-      // Chromium can suppress a parser-time navigation that races the commit of the
-      // transition document itself. Hand the native POST off only after the document
-      // is ready, while keeping the mutation outside React/Next and server-authorized.
-      if (document.readyState === "loading") {
-        document.addEventListener("DOMContentLoaded", submit, { once: true });
-      } else {
-        window.setTimeout(submit, 0);
-      }
-    })();
-  </script>
 </body>
 </html>`;
 
@@ -89,7 +67,7 @@ export async function GET(request: Request) {
     headers: {
       ...privateNoStoreHeaders,
       "content-type": "text/html; charset=utf-8",
-      "content-security-policy": `default-src 'none'; script-src 'nonce-${nonce}'; form-action 'self'; base-uri 'none'; frame-ancestors 'none'`,
+      "content-security-policy": "default-src 'none'; script-src 'self'; form-action 'self'; base-uri 'none'; frame-ancestors 'none'",
       "referrer-policy": "same-origin",
       "x-content-type-options": "nosniff",
     },

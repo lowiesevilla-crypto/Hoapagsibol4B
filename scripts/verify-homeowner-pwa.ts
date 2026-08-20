@@ -101,15 +101,21 @@ const authLogout = readProjectFile("lib/auth-logout.ts");
 const profilePage = readProjectFile("app/portal/profile/page.tsx");
 const morePage = readProjectFile("app/portal/more/page.tsx");
 record(
-  "logout buttons use one browser-native full-document POST without delegated submit activation",
+  "logout buttons use a detached browser-native full-document POST outside the React form tree",
   hasAll(authButtons, [
-    'action="/api/auth/logout"',
-    'method="post"',
+    'const LOGOUT_ENDPOINT = "/api/auth/logout"',
+    'document.createElement("form")',
+    'form.method = "post"',
+    "form.action = LOGOUT_ENDPOINT",
     'type="button"',
     'data-hoahub-logout-button="true"',
-    'name="scope"',
+    'data-hoahub-logout-scope={scope}',
+    'scopeInput.name = "scope"',
+    "scopeInput.value = scope",
+    "document.body.append(form)",
     "HTMLFormElement.prototype.submit.call(form)",
   ])
+    && !authButtons.includes("<form")
     && !authButtons.includes('type="submit"')
     && !authButtons.includes("event.preventDefault()")
     && !authButtons.includes("form.submit()")

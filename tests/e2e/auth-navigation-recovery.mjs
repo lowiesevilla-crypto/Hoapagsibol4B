@@ -125,13 +125,9 @@ async function exerciseAuthenticatedBack(page, identity) {
 }
 
 async function currentLogoutButton(page) {
-  await page.waitForSelector('form[action="/api/auth/logout"]', { timeout });
-  const forms = await page.$$('form[action="/api/auth/logout"]');
-  for (const form of forms) {
-    const scope = await form.$eval('input[name="scope"]', (node) => node.value).catch(() => "");
-    if (scope !== "current") continue;
-    const button = await form.$('button[type="button"][data-hoahub-logout-button="true"]');
-    if (!button) continue;
+  await page.waitForSelector('button[data-hoahub-logout-button="true"][data-hoahub-logout-scope="current"]', { timeout });
+  const buttons = await page.$$('button[data-hoahub-logout-button="true"][data-hoahub-logout-scope="current"]');
+  for (const button of buttons) {
     const visible = await button.evaluate((node) => {
       const style = getComputedStyle(node);
       const rect = node.getBoundingClientRect();
@@ -177,11 +173,11 @@ async function waitForObservedUrl(page, predicate, label) {
 async function exerciseLogoutAndBack(page, identity) {
   await page.goto(`${baseUrl}${identity.logoutRoute}`, { waitUntil: "networkidle2", timeout });
   const logoutButton = await currentLogoutButton(page);
-  assert.ok(logoutButton, `${identity.label}: visible current-session logout form was not found`);
+  assert.ok(logoutButton, `${identity.label}: visible current-session logout control was not found`);
 
-  // The visible control is deliberately not a submit button. Its click invokes the
-  // browser's native HTMLFormElement.submit() path so React/Next delegated form
-  // handling cannot strand a stale authenticated document. Observe the resulting
+  // The React tree contains only the visible type=button control. Clicking it creates
+  // a detached browser form outside React and performs the same-origin POST natively,
+  // so Next cannot reinterpret the logout request as a Server Action. Observe the
   // server 303/login navigation from Puppeteer/Node.
   await logoutButton.click();
   await waitForObservedUrl(page, (url) => isLoginPath(url.pathname), `${identity.label} logout`);

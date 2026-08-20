@@ -5,6 +5,9 @@ import { performLogout, type LogoutScope } from "@/lib/auth-logout";
 
 export const dynamic = "force-dynamic";
 
+const TRANSITION_REQUEST_HEADER = "x-hoahub-logout-transition";
+const TRANSITION_DESTINATION_HEADER = "X-HOAHub-Logout-Destination";
+
 function trustedConfiguredSource(value: string | null) {
   if (!value || value === "null") return false;
   try {
@@ -35,11 +38,23 @@ function isTrustedLogoutMutation(request: Request) {
   );
 }
 
-async function handleLogout(request: Request) {
+async function executeLogout(request: Request, scope: LogoutScope) {
   if (!isTrustedLogoutMutation(request)) {
-    return new NextResponse("Forbidden", { status: 403, headers: privateNoStoreHeaders });
+    return { response: new NextResponse("Forbidden", { status: 403, headers: privateNoStoreHeaders }) } as const;
   }
 
+  const result = await performLogout(scope);
+  const destination = new URL(result.redirectTo, request.url);
+  if (scope === "all" && !result.allSessionsRevoked) destination.searchParams.set("allSessions", "partial");
+  return { destination } as const;
+}
+
+function applyPrivateNoStore(response: NextResponse) {
+  for (const [key, value] of Object.entries(privateNoStoreHeaders)) response.headers.set(key, value);
+  return response;
+}
+
+export async function POST(request: Request) {
   let scope: LogoutScope = "current";
   try {
     const formData = await request.formData();
@@ -48,18 +63,26 @@ async function handleLogout(request: Request) {
     // A malformed body still performs a safe current-session logout.
   }
 
-  const result = await performLogout(scope);
-  const destination = new URL(result.redirectTo, request.url);
-  if (scope === "all" && !result.allSessionsRevoked) destination.searchParams.set("allSessions", "partial");
-
-  const response = NextResponse.redirect(destination, 303);
-  for (const [key, value] of Object.entries(privateNoStoreHeaders)) response.headers.set(key, value);
-  return response;
+  const result = await executeLogout(request, scope);
+  if ("response" in result) return result.response;
+  return applyPrivateNoStore(NextResponse.redirect(result.destination, 303));
 }
 
-// Keep POST for direct same-origin document clients. The isolated transition uses
-// DELETE so stale Next-Action POST metadata cannot divert logout into Server Action
-// dispatch before this Route Handler runs. Both methods share identical revocation,
-// origin validation, no-store response, and authoritative HTTP 303 behavior.
-export const POST = handleLogout;
-export const DELETE = handleLogout;
+export async function PUT(request: Request) {
+  if (request.headers.get(TRANSITION_REQUEST_HEADER) !== "1") {
+    return new NextResponse("Forbidden", { status: 403, headers: privateNoStoreHeaders });
+  }
+
+  const scope: LogoutScope = new URL(request.url).searchParams.get("scope") === "all" ? "all" : "current";
+  const result = await executeLogout(request, scope);
+  if ("response" in result) return result.response;
+
+  // The isolated transition needs only a bounded server-resolved destination. Returning
+  // it on a no-content response avoids a fetch redirect chain while keeping revocation,
+  // tenant/session authority, and destination selection on the server.
+  const destination = `${result.destination.pathname}${result.destination.search}${result.destination.hash}`;
+  return applyPrivateNoStore(new NextResponse(null, {
+    status: 204,
+    headers: { [TRANSITION_DESTINATION_HEADER]: destination },
+  }));
+}

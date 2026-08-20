@@ -15,6 +15,8 @@ async function main() {
   const activationService = read("lib/services/homeowner-activation.ts");
   const authActions = read("lib/actions/auth.ts");
   const authButtons = read("components/auth-navigation-buttons.tsx");
+  const logoutTransitionRoute = read("app/api/auth/logout-transition/route.ts");
+  const logoutTransitionScript = read("public/logout-transition.js");
   const logoutRoute = read("app/api/auth/logout/route.ts");
   const authLogout = read("lib/auth-logout.ts");
   const sidebar = read("components/sidebar.tsx");
@@ -42,16 +44,21 @@ async function main() {
   assert(activationService.includes("const activationUrl = emailVerificationUrl"), "Activation email must not advertise an unauthenticated public activation page.");
 
   assert(authActions.includes("return { redirectTo: defaultHomeForRoles(roles, role) }"), "Password login must return a verified server-computed redirect destination.");
-  assert(authButtons.includes('const LOGOUT_ENDPOINT = "/api/auth/logout"') && authButtons.includes('form.method = "post"') && authButtons.includes("form.action = LOGOUT_ENDPOINT"), "Logout must create the dedicated same-origin POST outside the React-managed form tree.");
-  assert(authButtons.includes('scopeInput.name = "scope"') && authButtons.includes("scopeInput.value = scope"), "Logout scope must be submitted explicitly by the detached native form.");
-  assert(authButtons.includes('type="button"') && authButtons.includes('data-hoahub-logout-button="true"') && authButtons.includes('data-hoahub-logout-scope={scope}'), "Logout must expose a non-submit visible control with explicit scope metadata.");
-  assert(authButtons.includes('document.createElement("form")') && authButtons.includes("document.body.append(form)") && authButtons.includes("HTMLFormElement.prototype.submit.call(form)"), "Logout must create and submit a detached native browser form for full-document navigation.");
-  assert(!authButtons.includes('<form') && !authButtons.includes('action="/api/auth/logout"'), "Logout must not render a React-managed form that Next can reinterpret as a Server Action.");
-  assert(!authButtons.includes("event.preventDefault()") && !authButtons.includes('type="submit"'), "Logout must not depend on suppressing a delegated submit event.");
-  assert(!authButtons.includes("form.submit()") && !authButtons.includes("requestSubmit("), "Logout must not re-enter delegated submit handling through form.submit/requestSubmit helpers.");
-  assert(!authButtons.includes("fetch(form.action") && !authButtons.includes("useActionState") && !authButtons.includes("location.replace"), "Logout must not use client fetch, React action state, or client redirect as the revocation authority.");
-  assert(!authButtons.includes("logoutNavigationAction"), "Logout must not revoke the session inside a React Server Action state transition.");
-  assert(authNavigationE2e.includes('button[data-hoahub-logout-button=\\"true\\"][data-hoahub-logout-scope=\\"current\\"]') || authNavigationE2e.includes('button[data-hoahub-logout-button="true"][data-hoahub-logout-scope="current"]'), "Auth browser regression must locate the visible current-session logout button directly.");
+  assert(authButtons.includes('const LOGOUT_TRANSITION_ENDPOINT = "/api/auth/logout-transition"') && authButtons.includes("href={href}"), "Logout must leave the protected React tree through the dedicated same-origin transition route.");
+  assert(authButtons.includes('data-hoahub-logout-button="true"') && authButtons.includes('data-hoahub-logout-scope={scope}'), "Logout must expose a visible control with explicit scope metadata.");
+  assert(authButtons.includes('rel="nofollow"'), "Logout transition links must not invite speculative crawler navigation.");
+  assert(!authButtons.includes("document.createElement(\"form\")") && !authButtons.includes("HTMLFormElement.prototype.submit.call"), "Protected React pages must not submit the logout POST directly.");
+  assert(!authButtons.includes("event.preventDefault()") && !authButtons.includes("useActionState") && !authButtons.includes("fetch("), "Logout must not depend on delegated submit suppression, React action state, or client fetch authority.");
+  assert(!authButtons.includes("location.replace") && !authButtons.includes("logoutNavigationAction"), "Logout must not depend on client redirect authority or a React Server Action revocation path.");
+
+  assert(logoutTransitionRoute.includes('request.headers.get("sec-fetch-site") === "same-origin"') && logoutTransitionRoute.includes('request.headers.get("sec-fetch-mode") === "navigate"') && logoutTransitionRoute.includes('request.headers.get("sec-fetch-dest") === "document"'), "Logout transition must require browser-controlled same-origin top-level navigation when referrer proof is unavailable.");
+  assert(logoutTransitionRoute.includes("allowedOrigins()") && logoutTransitionRoute.includes("new URL(referer).origin === new URL(request.url).origin"), "Logout transition must accept only exact or explicitly configured application origins.");
+  assert(logoutTransitionRoute.includes('action="/api/auth/logout"') && logoutTransitionRoute.includes('method="post"') && logoutTransitionRoute.includes('name="scope"'), "Logout transition document must submit scope to the authoritative POST route.");
+  assert(logoutTransitionRoute.includes('script src="/logout-transition.js" defer'), "Logout transition document must use the external same-origin submitter instead of inline script.");
+  assert(logoutTransitionRoute.includes("privateNoStoreHeaders") && logoutTransitionRoute.includes("form-action 'self'") && logoutTransitionRoute.includes("frame-ancestors 'none'"), "Logout transition document must be private/no-store and CSP-restricted to same-origin form submission without framing.");
+  assert(logoutTransitionScript.includes('form[data-hoahub-logout-transition="true"]') && logoutTransitionScript.includes("HTMLFormElement.prototype.submit.call(form)"), "The isolated transition document must perform the native POST outside React's event system.");
+
+  assert(authNavigationE2e.includes('a[data-hoahub-logout-button=\\"true\\"][data-hoahub-logout-scope=\\"current\\"]') || authNavigationE2e.includes('a[data-hoahub-logout-button="true"][data-hoahub-logout-scope="current"]'), "Auth browser regression must locate the visible current-session logout link directly.");
   assert(authNavigationE2e.includes("await logoutButton.click()"), "Auth browser regression must exercise logout through the visible control.");
   assert(!authNavigationE2e.includes('page.request') && !authNavigationE2e.includes('fetch(`${baseUrl}/api/auth/logout'), "Auth browser regression must not bypass the visible logout control with a direct API POST.");
   assert(logoutRoute.includes("assertSameOrigin(request)"), "Logout POST must enforce same-origin request validation.");

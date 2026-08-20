@@ -1,3 +1,4 @@
+import { randomBytes } from "node:crypto";
 import { NextResponse } from "next/server";
 import { allowedOrigins } from "@/lib/app-url";
 import { privateNoStoreHeaders } from "@/lib/anonymous-request-security";
@@ -42,6 +43,7 @@ export async function GET(request: Request) {
 
   const scope = new URL(request.url).searchParams.get("scope") === "all" ? "all" : "current";
   const safeScope = escapeHtmlAttribute(scope);
+  const nonce = randomBytes(16).toString("hex");
   const html = `<!doctype html>
 <html lang="en">
 <head>
@@ -58,19 +60,23 @@ export async function GET(request: Request) {
       <noscript><button type="submit">Continue sign out</button></noscript>
     </form>
   </main>
-  <script src="/logout-transition.js" defer></script>
+  <script nonce="${nonce}">
+    (() => {
+      const form = document.querySelector('form[data-hoahub-logout-transition="true"]');
+      if (form instanceof HTMLFormElement) HTMLFormElement.prototype.submit.call(form);
+    })();
+  </script>
 </body>
 </html>`;
 
-  const response = new NextResponse(html, {
+  return new NextResponse(html, {
     status: 200,
     headers: {
       ...privateNoStoreHeaders,
       "content-type": "text/html; charset=utf-8",
-      "content-security-policy": "default-src 'none'; script-src 'self'; form-action 'self'; base-uri 'none'; frame-ancestors 'none'",
+      "content-security-policy": `default-src 'none'; script-src 'nonce-${nonce}'; form-action 'self'; base-uri 'none'; frame-ancestors 'none'`,
       "referrer-policy": "same-origin",
       "x-content-type-options": "nosniff",
     },
   });
-  return response;
 }

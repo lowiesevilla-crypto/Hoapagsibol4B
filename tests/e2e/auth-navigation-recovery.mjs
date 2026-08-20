@@ -130,7 +130,7 @@ async function currentLogoutButton(page) {
   for (const form of forms) {
     const scope = await form.$eval('input[name="scope"]', (node) => node.value).catch(() => "");
     if (scope !== "current") continue;
-    const button = await form.$('button[type="submit"]');
+    const button = await form.$('button[type="button"][data-hoahub-logout-button="true"]');
     if (!button) continue;
     const visible = await button.evaluate((node) => {
       const style = getComputedStyle(node);
@@ -179,9 +179,10 @@ async function exerciseLogoutAndBack(page, identity) {
   const logoutButton = await currentLogoutButton(page);
   assert.ok(logoutButton, `${identity.label}: visible current-session logout form was not found`);
 
-  // The UI forces the browser's native HTMLFormElement.submit() path so React/Next
-  // delegated form handling cannot strand a stale authenticated document. Observe
-  // the resulting server 303/login navigation from Puppeteer/Node.
+  // The visible control is deliberately not a submit button. Its click invokes the
+  // browser's native HTMLFormElement.submit() path so React/Next delegated form
+  // handling cannot strand a stale authenticated document. Observe the resulting
+  // server 303/login navigation from Puppeteer/Node.
   await logoutButton.click();
   await waitForObservedUrl(page, (url) => isLoginPath(url.pathname), `${identity.label} logout`);
   await page.waitForNetworkIdle({ idleTime: 300, timeout }).catch(() => undefined);

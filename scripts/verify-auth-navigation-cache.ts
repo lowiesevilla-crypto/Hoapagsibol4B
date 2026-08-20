@@ -43,7 +43,8 @@ async function main() {
   assert(authActions.includes("return { redirectTo: defaultHomeForRoles(roles, role) }"), "Password login must return a verified server-computed redirect destination.");
   assert(authButtons.includes('action="/api/auth/logout"') && authButtons.includes('method="post"'), "Logout must use the dedicated same-origin POST endpoint.");
   assert(authButtons.includes('name="scope"') && authButtons.includes('value={allSessions ? "all" : "current"}'), "Logout scope must be submitted explicitly by the shared control.");
-  assert(!authButtons.includes("event.preventDefault()") && !authButtons.includes("HTMLFormElement.prototype.submit") && !authButtons.includes("requestSubmit("), "Logout must preserve the browser's unmodified native form submission path.");
+  assert(authButtons.includes("event.preventDefault()") && authButtons.includes("HTMLFormElement.prototype.submit.call(form)"), "Logout must suppress React/Next delegated default submission and invoke the native form algorithm exactly once.");
+  assert(!authButtons.includes("form.submit()") && !authButtons.includes("requestSubmit("), "Logout must not re-enter delegated submit handling through form.submit/requestSubmit helpers.");
   assert(!authButtons.includes("fetch(form.action") && !authButtons.includes("useActionState") && !authButtons.includes("location.replace"), "Logout must not use client fetch, React action state, or client redirect as the revocation authority.");
   assert(!authButtons.includes("logoutNavigationAction"), "Logout must not revoke the session inside a React Server Action state transition.");
   assert(logoutRoute.includes("assertSameOrigin(request)"), "Logout POST must enforce same-origin request validation.");

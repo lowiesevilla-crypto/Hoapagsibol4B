@@ -1,9 +1,9 @@
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
+import { readFileSync } from "node:fs";
 import test from "node:test";
 
-const actionSource = await readFile("lib/actions/document-request-submission.ts", "utf8");
-const formSource = await readFile("components/document-request-form.tsx", "utf8");
+const actionSource = readFileSync("lib/actions/document-request-submission.ts", "utf8");
+const formSource = readFileSync("components/document-request-form.tsx", "utf8");
 
 test("document request success uses a redirect handoff after the authoritative server action", () => {
   assert.match(actionSource, /await submitDocumentRequestAction\(previousState, formData\)/);

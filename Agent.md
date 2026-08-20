@@ -1,6 +1,6 @@
 # HOAHub Agent Context
 
-Last updated: 2026-08-19
+Last updated: 2026-08-20
 
 ## Purpose
 
@@ -102,7 +102,7 @@ PR #127 (`fix/auth-navigation-recovery`) permanently hardens logout, browser Bac
 ### Auth Navigation Architecture
 
 - Shared logout uses same-origin `POST /api/auth/logout` with server-side session revocation, verified-login-choice cleanup, private/no-store responses, and the server-authoritative login destination.
-- `components/logout-button.tsx` no longer revokes authority inside a React Server Action render transition. It posts through `fetch`, validates the returned redirect target, then uses `window.location.replace(...)` to perform a full-document handoff that does not leave the protected document as the current history entry.
+- `components/auth-navigation-buttons.tsx` uses an ordinary HTML form POST and leaves the browser's native submit/default navigation path unmodified. Do not intercept logout with client `fetch`, React Server Action state, manual `HTMLFormElement.submit()`/`requestSubmit()`, or client-side redirect authority; the guarded server endpoint revokes the session and returns the authoritative HTTP 303 destination.
 - Protected-route recovery listens to browser `pageshow` and `popstate` restoration for `/admin`, `/platform`, `/portal`, and `/employee`. A restored protected document is reloaded so current server session/RBAC authority is re-established instead of trusting stale browser/React history state.
 - `app/error.tsx` uses a hard-document retry for non-chunk failures. If the same route fails again immediately, recovery falls back through `/` so the server selects a safe authenticated or login entry point rather than repeatedly resetting the same broken tree.
 - Login/auth/private responses remain no-store. Same-origin/CSRF protections remain mandatory on logout. Tenant identity, role, and redirect authority remain server controlled.
@@ -115,13 +115,57 @@ PR #127 (`fix/auth-navigation-recovery`) permanently hardens logout, browser Bac
 - `verify:auth-navigation-cache` is part of `test:critical`; the normal MySQL CI production smoke/browser stage runs the real Chromium regression.
 - No Prisma schema/migration, finance authority, payroll confidentiality, complaint/grievance privacy, document/template workflow, AI governance, tenant isolation, or RBAC scope is changed by this hotfix.
 
-### Release State — 2026-08-19
+### Release State — 2026-08-20
 
-- User has explicitly authorized PR #127 to merge and deploy to production after the exact documented head passes the required release gates.
-- Pre-Agent implementation/test head `0e6fb05e2b65e9d09a22295d0c1196625c0d1cb3`: Canva Visual Parity #24 passed; HOAHub MySQL CI #776 had passed dependency integrity, lint, Prisma validation/generation/migration, seed, unit tests, integration tests, critical verification, typecheck, production build, and controlled Chromium preparation, with the final production smoke/browser step still executing when this Agent record was written.
-- This `Agent.md` commit changes the candidate head. Therefore PR #127 must not merge until the **new exact documented head** passes the required HOAHub MySQL CI and applicable visual-parity workflow.
-- Production completion may be reported only after the merged `main` commit passes the main verification/deploy workflow, Hostinger serves the expected 12-character short SHA at `/release.txt`, and `/api/health` succeeds.
-- Rollback is application-level: revert the PR #127 merge if needed. No destructive data rollback is required because this hotfix has no database schema migration.
+- PR #127 is merged; Premium Admin V2 started from the resulting `main` baseline `a0965d49bab5c475a75864b4e8cea5594b5a9a00`.
+- The Premium Admin branch discovered a browser regression in the inherited logout implementation: CI could click the visible logout control yet remain on `/admin/dashboard`. The follow-up fix removes manual submit interception and restores the browser-native form path while retaining server same-origin/configured-origin validation and the HTTP 303 authority.
+- `tests/e2e/auth-navigation-recovery.mjs` remains the release gate for this follow-up; the regression must be green on the exact Premium Admin candidate before that candidate merges.
+- Rollback remains application-level. No destructive data rollback is required for the auth-navigation changes because there is no database schema migration.
+
+# Active Initiative: Premium Admin UI V2 — PR #130
+
+Approved Canva design: `DAHSu6LXZUk` — HOAHub Premium Admin UI V2 — 42 Route Redesign.
+Tracking issue: #128.
+Implementation branch: `feature/premium-admin-ui-v2`.
+Implementation/traceability record: `docs/ui/HOAHUB_PREMIUM_ADMIN_UI_V2_IMPLEMENTATION.md`.
+
+## Premium Admin V2 Architecture
+
+- The Admin UI preserves the existing authenticated server layout as the tenant/RBAC/module/entitlement authority. Visual redesign must not make the browser authoritative for tenant, role, module, payroll, AI, document, finance, complaint, or workflow decisions.
+- `components/page-header.tsx` is the canonical workspace PageHeader and accepts the legacy `action` alias plus premium `actions` and `context`. `components/ui/page-header.tsx` re-exports it; do not create another competing PageHeader visual implementation.
+- `app/admin/layout.tsx` applies `premium-admin-workspace` at the common content boundary. `app/canva-parity.css` owns shared premium card, table, field, filter, pagination and responsive surface treatment so the 42-route scope can be aligned without rewriting each route's business actions.
+- The Admin command catalog is built server-side from the full authorized route definitions, then filtered by role, enabled tenant modules, Document Management entitlement, AI use/manage permission, and payroll access before it is passed to `ShellCommandSearch`.
+- `ShellCommandSearch` supports authorized route/section/path terms, deduplication, `Ctrl/Cmd + K`, Arrow Up/Down, Enter, Escape and combobox/listbox semantics. Never add an inaccessible route to the serialized command catalog merely for discoverability.
+- Homeowner directory search remains under authenticated `user.tenantId`. `lib/homeowner-admin-search.ts` parses explicit Block/Lot phrases such as `block 1 lot 2` into property constraints while retaining residual name/email/account search terms.
+- Mock data from Canva is never production data. Existing Prisma records, server actions, finance ledgers, document state, complaint/grievance controls, payroll confidentiality and AI governance remain authoritative.
+- Production Gate Pass / Move In-Out templates and official document output are not recreated or replaced by this UI initiative.
+- No Prisma schema migration is introduced by Premium Admin V2.
+
+## Premium Admin V2 Scope and Responsive Contract
+
+- The tracked 42-route inventory spans Settings/Account, Dashboard/Onboarding/Residents, Finance/Payments/Reports/Data, Document Operations/Repository, Complaints, AI, Chat, Attendance and Payroll. `/admin/documents` is intentionally represented both as the base workspace and through its query-string sections in the original inventory.
+- All scoped routes inherit the shared premium workspace boundary and canonical PageHeader presentation while retaining route-specific data/actions.
+- Tables remain contained within their operational scroll surface instead of causing page-level horizontal overflow.
+- Essential Admin actions must remain reachable at desktop/tablet/mobile widths; touch targets are at least 44px in the shared Admin mobile treatment where the component does not already provide a larger target.
+- Visual-parity evidence is expanded across every implementation wave: desktop captures cover Settings, Onboarding, Homeowners, Action Center, Billing, Payment Requests, Reports, Data, Documents, Document Repository, Complaints, Chat and Workforce; tablet captures cover Homeowners, Payment Review and Documents; mobile captures cover Onboarding and Complaints.
+
+## Premium Admin V2 Search Release Gate
+
+- Search is a release blocker, not decorative UI.
+- `tests/unit/homeowner-admin-search.test.ts` covers structured Block/Lot parsing and generated Prisma conditions.
+- `tests/e2e/admin-premium-search.mjs` logs in with the seeded Admin, uses keyboard command search to navigate to Homeowners, performs a real combined Block/Lot lookup against a seeded tenant homeowner, and verifies the empty-result state.
+- The Premium Admin browser search regression is included in `test:e2e`; do not remove it to obtain green CI.
+- Existing route-level search controls remain server/tenant scoped and must preserve reset/pagination semantics.
+
+## Premium Admin V2 Release State — 2026-08-20
+
+- PR #130 remains draft until the exact head passes both HOAHub MySQL CI and HOAHub Canva Visual Parity.
+- A previous candidate passed lint, Prisma validation/generation/migration/seed, unit, finance integration, critical verification, typecheck and production build but failed the final browser suite on logout navigation. That root cause was corrected rather than bypassed.
+- Pre-Agent candidate `1ce6a48e0dc6c0e636e315ea7522f8af426a05f1` includes the canonical PageHeader, authorized full-route command search, Block/Lot parser and browser regression, shared Premium Admin workspace treatment, expanded visual-parity capture and implementation documentation.
+- This `Agent.md` update changes the exact candidate head again. Therefore PR #130 must not leave draft or merge until the new exact documented head is green in both required workflows.
+- After exact-head green, the user has explicitly authorized marking PR #130 ready, merging the verified head to `main`, and proceeding through the existing Hostinger managed deployment without another approval prompt.
+- Production completion requires the merged `main` verification/deploy workflow to pass, Hostinger to serve the expected 12-character merge SHA at `/release.txt`, `/api/health` to succeed, and the applicable production UI/search smoke evidence to pass.
+- Rollback is application-level: revert the PR #130 merge if necessary. Preserve all business data; there is no Premium Admin V2 schema rollback.
 
 ## Resident Messaging Privacy and Message Requests
 
@@ -490,7 +534,9 @@ For the Canva visual-parity remediation, the code release was validated on head 
 
 For the Canva content-aside scope hotfix, PR #126 is authorized for automatic merge/deploy only after the exact documented head passes both HOAHub MySQL CI and Canva Visual Parity. Production completion requires the merged main short SHA from that release to be served at `/release.txt` and `/api/health` to pass.
 
-For the authentication navigation recovery hotfix, PR #127 is authorized for merge/deploy only after its exact documented head passes the required PR workflows. Production completion requires the resulting merged main short SHA at `/release.txt`, successful `/api/health`, and a green main `deploy-production` job.
+For the authentication navigation recovery hotfix, PR #127 is merged and is the baseline for Premium Admin V2. Any follow-up auth-navigation correction in PR #130 remains subject to the same real-browser regression and production release-marker/health gates.
+
+For Premium Admin V2, PR #130 is authorized for automatic ready/merge/deploy only after its exact head passes HOAHub MySQL CI and Canva Visual Parity. Production completion requires the merged `main` short SHA at `/release.txt`, successful `/api/health`, a green main `deploy-production` job, and applicable authenticated UI/search smoke evidence.
 
 ## CI Browser Gate Recovery
 

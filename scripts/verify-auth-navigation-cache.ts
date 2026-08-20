@@ -16,7 +16,6 @@ async function main() {
   const authActions = read("lib/actions/auth.ts");
   const authButtons = read("components/auth-navigation-buttons.tsx");
   const logoutTransitionRoute = read("app/api/auth/logout-transition/route.ts");
-  const logoutTransitionScript = read("public/logout-transition.js");
   const logoutRoute = read("app/api/auth/logout/route.ts");
   const authLogout = read("lib/auth-logout.ts");
   const sidebar = read("components/sidebar.tsx");
@@ -54,9 +53,10 @@ async function main() {
   assert(logoutTransitionRoute.includes('request.headers.get("sec-fetch-site") === "same-origin"') && logoutTransitionRoute.includes('request.headers.get("sec-fetch-mode") === "navigate"') && logoutTransitionRoute.includes('request.headers.get("sec-fetch-dest") === "document"'), "Logout transition must require browser-controlled same-origin top-level navigation when referrer proof is unavailable.");
   assert(logoutTransitionRoute.includes("allowedOrigins()") && logoutTransitionRoute.includes("new URL(referer).origin === new URL(request.url).origin"), "Logout transition must accept only exact or explicitly configured application origins.");
   assert(logoutTransitionRoute.includes('action="/api/auth/logout"') && logoutTransitionRoute.includes('method="post"') && logoutTransitionRoute.includes('name="scope"'), "Logout transition document must submit scope to the authoritative POST route.");
-  assert(logoutTransitionRoute.includes('script src="/logout-transition.js" defer'), "Logout transition document must use the external same-origin submitter instead of inline script.");
-  assert(logoutTransitionRoute.includes("privateNoStoreHeaders") && logoutTransitionRoute.includes("form-action 'self'") && logoutTransitionRoute.includes("frame-ancestors 'none'"), "Logout transition document must be private/no-store and CSP-restricted to same-origin form submission without framing.");
-  assert(logoutTransitionScript.includes('form[data-hoahub-logout-transition="true"]') && logoutTransitionScript.includes("HTMLFormElement.prototype.submit.call(form)"), "The isolated transition document must perform the native POST outside React's event system.");
+  assert(logoutTransitionRoute.includes('const nonce = randomBytes(16).toString("hex")') && logoutTransitionRoute.includes('script nonce="${nonce}"'), "Logout transition must use a per-response nonce for its isolated submitter.");
+  assert(logoutTransitionRoute.includes('form[data-hoahub-logout-transition="true"]') && logoutTransitionRoute.includes("HTMLFormElement.prototype.submit.call(form)"), "The isolated transition document must perform the native POST outside React's event system.");
+  assert(logoutTransitionRoute.includes("privateNoStoreHeaders") && logoutTransitionRoute.includes("script-src 'nonce-${nonce}'") && logoutTransitionRoute.includes("form-action 'self'") && logoutTransitionRoute.includes("frame-ancestors 'none'"), "Logout transition document must be private/no-store and CSP-restricted to its nonce-scoped submitter and same-origin form action.");
+  assert(!logoutTransitionRoute.includes('/logout-transition.js'), "Logout transition must be self-contained so logout cannot stall on a secondary static asset request.");
 
   assert(authNavigationE2e.includes('a[data-hoahub-logout-button=\\"true\\"][data-hoahub-logout-scope=\\"current\\"]') || authNavigationE2e.includes('a[data-hoahub-logout-button="true"][data-hoahub-logout-scope="current"]'), "Auth browser regression must locate the visible current-session logout link directly.");
   assert(authNavigationE2e.includes("await logoutButton.click()"), "Auth browser regression must exercise logout through the visible control.");

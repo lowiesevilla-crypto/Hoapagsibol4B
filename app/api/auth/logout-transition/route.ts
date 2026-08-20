@@ -70,15 +70,16 @@ export async function GET(request: Request) {
         if (inFlight) return;
         inFlight = true;
         if (retryButton instanceof HTMLButtonElement) retryButton.hidden = true;
-        document.documentElement.dataset.hoahubLogoutTransition = "posting";
+        document.documentElement.dataset.hoahubLogoutTransition = "revoking";
 
         const scope = document.body.dataset.hoahubLogoutScope === "all" ? "all" : "current";
         try {
-          // Create a fresh browser request from this isolated non-React document.
-          // This deliberately avoids carrying stale Next Server Action transport state
-          // from the protected App Router tree while preserving same-origin POST authority.
+          // Next.js reserves POST requests carrying stale Next-Action transport state for
+          // Server Action dispatch before the Route Handler can answer. This isolated
+          // same-origin DELETE uses the same server-side logout authority while avoiding
+          // that framework-only POST dispatch path.
           const response = await fetch("/api/auth/logout", {
-            method: "POST",
+            method: "DELETE",
             credentials: "same-origin",
             cache: "no-store",
             redirect: "follow",
@@ -91,7 +92,7 @@ export async function GET(request: Request) {
           if (!safeLoginDestination(destination)) throw new Error("unsafe-logout-destination");
 
           // The server remains redirect authority: navigate only to the same-origin
-          // login URL obtained by following the POST route's HTTP 303 response.
+          // login URL obtained by following the logout route's HTTP 303 response.
           document.documentElement.dataset.hoahubLogoutTransition = "navigating";
           window.location.replace(destination.href);
         } catch {

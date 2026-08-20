@@ -58,11 +58,11 @@ No inaccessible route is intentionally added to the client command catalog.
 
 The Premium Admin branch exposed an inherited logout race where React/Next could classify a protected-page form POST as a Server Action. The final architecture removes POST submission from the protected React tree entirely. `components/auth-navigation-buttons.tsx` exposes an ordinary same-origin anchor to `/api/auth/logout-transition?scope=current|all`.
 
-`GET /api/auth/logout-transition` returns a private/no-store raw HTML transition document outside React. It accepts only trusted same-origin/configured navigation evidence, contains an ordinary URL-encoded form targeting `POST /api/auth/logout`, and uses a per-response CSP nonce for a self-contained inline submitter that invokes `HTMLFormElement.prototype.submit.call(form)`. No secondary static script request is required, preventing the transition from stalling on a cache/service-worker/static-asset dependency.
+`GET /api/auth/logout-transition` returns a private/no-store raw HTML transition document outside React. It accepts only trusted same-origin/configured navigation evidence, contains an ordinary URL-encoded form targeting `POST /api/auth/logout`, and uses a per-response CSP nonce for a self-contained inline submitter. The submitter waits for `DOMContentLoaded` before invoking `HTMLFormElement.prototype.submit.call(form)` so Chromium has committed the transition document before the second navigation begins. A bounded 250 ms same-document retry covers a browser that suppresses the first submit during navigation commit. Both attempts target the same server-authoritative POST; no client-side logout mutation or redirect authority is added.
 
 The browser remains non-authoritative: the server validates same-origin authority, revokes the session, clears browser session state and returns the authoritative private/no-store HTTP 303 destination. Client `fetch`, `useActionState`, `requestSubmit`, client redirect authority, and GET-based session mutation remain prohibited.
 
-`tests/e2e/auth-navigation-recovery.mjs` exercises the real visible logout control for Tenant Admin, Platform Admin and Homeowner, requires final login navigation, and verifies Browser Back cannot revive a protected interactive document. `verify:auth-navigation-cache` locks the transition document, nonce/CSP, native prototype submission, server POST/303, and no-client-authority contract. Existing homeowner PWA/hardening verifiers continue to protect no-store/network-only logout behavior.
+`tests/e2e/auth-navigation-recovery.mjs` exercises the real visible logout control for Tenant Admin, Platform Admin and Homeowner, requires final login navigation, and verifies Browser Back cannot revive a protected interactive document. It now emits only safe method/path/status diagnostics for the two logout endpoints and, on timeout, reports transition readiness, a non-sensitive marker, form presence, and script count. It does not log cookies, credentials, auth headers, tenant data, or bypass the UI. `verify:auth-navigation-cache` locks the transition document, nonce/CSP, native prototype submission, server POST/303, and no-client-authority contract. Existing homeowner PWA/hardening verifiers continue to protect no-store/network-only logout behavior.
 
 ## 42-route implementation scope
 
@@ -135,19 +135,20 @@ The approved design remains a visual and hierarchy reference. Production data va
 - `tests/unit/premium-admin-ux-surface.test.ts` — shell, canonical PageHeader, command search keyboard contract and dashboard composition.
 - `tests/unit/homeowner-admin-search.test.ts` — structured Block/Lot parsing and Prisma filter construction.
 - `tests/e2e/admin-premium-search.mjs` — real Admin command navigation, combined Block/Lot lookup and empty-result behavior.
-- `tests/e2e/auth-navigation-recovery.mjs` — real visible logout control, cross-shell logout and Browser Back security regression.
+- `tests/e2e/auth-navigation-recovery.mjs` — real visible logout control, cross-shell logout, Browser Back security regression, and safe transition diagnostics.
 - `tests/e2e/document-workflow.mjs` — homeowner document submission success remains observable before server-rendered history refresh.
 - `tests/e2e/ui-canva-visual-parity.mjs` — expanded desktop/tablet/mobile workspace evidence.
 - `package.json` — Premium Admin search browser regression is included in `test:e2e`.
 
 ## Validation evidence
 
-Before the final self-contained transition correction, the Premium Admin implementation had already demonstrated stability across the rest of the release gate:
-- HOAHub Canva Visual Parity completed successfully on preceding candidates, including expanded Admin/tablet/mobile browser screenshot capture.
-- HOAHub MySQL CI passed dependency integrity, lint, Prisma validation/generation/migration/seed, 295 unit tests, 30 integration tests, all critical static verifiers, typecheck, production build, production smoke, critical business browser flow, onboarding, document workflow, Document Management, RBAC stale-session, AI assistant, and Premium Admin command/Block-Lot search regression.
-- Repeated CI runs isolated the remaining deterministic failure to the final logout navigation path. Earlier failures showed protected-page form submission entering Next Server Action handling; after isolating submission into a raw route-handler transition document, a subsequent run showed the transition page could remain loaded before final login navigation.
-- The final correction makes that transition document self-contained with a per-response nonce and direct native prototype submission while keeping the authoritative mutation in `POST /api/auth/logout`.
-- `Agent.md`, the static auth verifier, and the real-browser test comments are aligned to this final architecture. Final release still requires both workflows to pass on the resulting exact branch head.
+The Premium Admin implementation has demonstrated stability across the release gate except for the final logout/history browser correction still being revalidated on the resulting exact head:
+- HOAHub Canva Visual Parity #117 completed successfully on exact candidate `95c8a9f55df21ff56f2046a4a83898a30701417b`, including expanded Admin/tablet/mobile browser screenshot capture.
+- HOAHub MySQL CI #871 on that same candidate passed dependency integrity, lint, Prisma validation/generation/migration/seed, 297 unit tests, 30 integration tests, all critical static/business verifiers, typecheck, production build, production smoke, critical business browser flow, onboarding, document workflow, Document Management, RBAC stale-session, AI assistant, and Premium Admin command/Block-Lot search regression.
+- CI #871 isolated the only remaining failure to the real logout/history browser path: after the visible logout control navigated to the raw transition document, Chromium remained on `/api/auth/logout-transition?scope=current` instead of completing the final login navigation.
+- Earlier failures showed protected-page form submission entering Next Server Action handling; later failures proved that moving the POST outside React was necessary but not sufficient. The current correction starts native submission only after `DOMContentLoaded` and adds one bounded same-document retry while preserving the authoritative mutation in `POST /api/auth/logout`.
+- Safe E2E diagnostics were added without changing success criteria. The test still requires one visible logout activation, actual server revocation/303 navigation, and safe Browser Back behavior; it does not bypass the UI or relax the security assertions.
+- `Agent.md`, the static verifier expectations, and this traceability record are aligned to the current architecture. Final release requires both workflows to pass on the resulting exact branch head.
 
 ## Release gates
 

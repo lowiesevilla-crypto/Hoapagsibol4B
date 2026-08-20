@@ -1,8 +1,18 @@
 import { NextResponse } from "next/server";
 import { assertSameOrigin, privateNoStoreHeaders } from "@/lib/anonymous-request-security";
+import { allowedOrigins } from "@/lib/app-url";
 import { performLogout, type LogoutScope } from "@/lib/auth-logout";
 
 export const dynamic = "force-dynamic";
+
+function trustedConfiguredSource(value: string | null) {
+  if (!value || value === "null") return false;
+  try {
+    return allowedOrigins().has(new URL(value).origin);
+  } catch {
+    return false;
+  }
+}
 
 function isTrustedLogoutPost(request: Request) {
   const origin = request.headers.get("origin");
@@ -13,13 +23,17 @@ function isTrustedLogoutPost(request: Request) {
       assertSameOrigin(request);
       return true;
     } catch {
-      return false;
+      // Reverse proxies can present the route handler with a canonical request URL
+      // while the browser legitimately posts from another explicitly configured app
+      // origin. Keep the stronger exact-origin check first, then accept only a source
+      // that is present in the server's allow-list. Never trust an arbitrary Host.
+      if (trustedConfiguredSource(origin) || trustedConfiguredSource(referer)) return true;
     }
   }
 
-  // Native document form submissions can legitimately arrive without Origin or
-  // Referer under restrictive browser/privacy policies. In that case require
-  // browser Fetch Metadata proving this is a same-origin top-level navigation.
+  // Native document form submissions can legitimately arrive without usable Origin
+  // or Referer headers under restrictive browser/privacy policies. In that case rely
+  // on browser-controlled Fetch Metadata proving a same-origin top-level navigation.
   return (
     request.headers.get("sec-fetch-site") === "same-origin" &&
     request.headers.get("sec-fetch-mode") === "navigate" &&

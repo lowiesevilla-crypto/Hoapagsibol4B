@@ -46,6 +46,7 @@ export type PortalHouseholdMember = {
 };
 
 const initialSubmissionState: DocumentRequestSubmissionState = { status: "idle", message: "", requestId: null, duplicate: false };
+const SUCCESS_REFRESH_DELAY_MS = 750;
 
 export function DocumentRequestForm({ configs, members, disabled = false }: { configs: PortalDocumentConfig[]; members: PortalHouseholdMember[]; disabled?: boolean }) {
   const router = useRouter();
@@ -64,15 +65,20 @@ export function DocumentRequestForm({ configs, members, disabled = false }: { co
     setSubmissionKey(randomKey);
   }, []);
   useEffect(() => {
-    if (submissionState.status === "success" && submissionState.requestId) {
-      formRef.current?.reset();
-      setSubjectType("SELF");
-      setSubjectMemberId("");
-      setMemberSectionOpen(false);
-      setConfigurationId(configs[0]?.id || "");
-      setSubmissionKey(globalThis.crypto?.randomUUID?.() || `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`);
-      router.refresh();
-    }
+    if (submissionState.status !== "success" || !submissionState.requestId) return;
+
+    formRef.current?.reset();
+    setSubjectType("SELF");
+    setSubjectMemberId("");
+    setMemberSectionOpen(false);
+    setConfigurationId(configs[0]?.id || "");
+    setSubmissionKey(globalThis.crypto?.randomUUID?.() || `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`);
+
+    // Keep the action confirmation rendered long enough for assistive technology and
+    // the homeowner to receive it before refreshing the server-rendered request history.
+    // The server action remains the source of truth; this only defers the read refresh.
+    const refreshTimer = window.setTimeout(() => router.refresh(), SUCCESS_REFRESH_DELAY_MS);
+    return () => window.clearTimeout(refreshTimer);
   }, [configs, router, submissionState.requestId, submissionState.status]);
   useEffect(() => {
     if (submissionState.status !== "error" || !submissionState.values) return;

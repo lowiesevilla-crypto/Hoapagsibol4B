@@ -62,8 +62,32 @@ export async function GET(request: Request) {
   </main>
   <script nonce="${nonce}">
     (() => {
-      const form = document.querySelector('form[data-hoahub-logout-transition="true"]');
-      if (form instanceof HTMLFormElement) HTMLFormElement.prototype.submit.call(form);
+      let submitted = false;
+      const submitLogout = () => {
+        if (submitted) return;
+        const form = document.querySelector('form[data-hoahub-logout-transition="true"]');
+        if (!(form instanceof HTMLFormElement)) {
+          document.documentElement.dataset.hoahubLogoutTransition = "form-missing";
+          return;
+        }
+        submitted = true;
+        document.documentElement.dataset.hoahubLogoutTransition = "submitting";
+        HTMLFormElement.prototype.submit.call(form);
+      };
+
+      // Do not initiate a second navigation while Chromium is still committing the
+      // transition document. Waiting for DOMContentLoaded makes the native POST
+      // deterministic while keeping the mutation outside the protected React tree.
+      if (document.readyState === "loading") {
+        document.addEventListener("DOMContentLoaded", submitLogout, { once: true });
+      } else {
+        submitLogout();
+      }
+
+      // A delayed same-document fallback covers browsers that suppress a submit
+      // during the first navigation-commit task. It preserves the exact same POST
+      // authority and does not introduce a client-side logout mutation path.
+      window.setTimeout(submitLogout, 250);
     })();
   </script>
 </body>

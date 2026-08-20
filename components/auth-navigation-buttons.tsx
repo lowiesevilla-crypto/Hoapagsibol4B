@@ -29,10 +29,9 @@ function submitNativeLogout(scope: "current" | "all") {
   form.append(scopeInput);
   document.body.append(form);
 
-  // This form is created outside React's managed tree, so Next/React cannot attach
-  // Server Action metadata or delegated submit semantics to it. The native browser
-  // submission performs one full-document same-origin POST; the route handler remains
-  // authoritative for session revocation, cookie clearing, and the HTTP 303 redirect.
+  // Submit a detached, browser-created form rather than the React-managed wrapper.
+  // This keeps the visible semantic contract stable while preventing React/Next from
+  // attaching Server Action metadata or delegated submit semantics to the actual POST.
   HTMLFormElement.prototype.submit.call(form);
 }
 
@@ -40,7 +39,15 @@ export function LogoutButton({ allSessions = false, className = "btn-secondary w
   const scope = allSessions ? "all" : "current";
 
   return (
-    <span className={formClassName} data-hoahub-logout-control="true">
+    <form
+      action="/api/auth/logout"
+      method="post"
+      encType={LOGOUT_ENCODING}
+      target="_self"
+      className={formClassName}
+      data-hoahub-native-logout="true"
+    >
+      <input type="hidden" name="scope" value={allSessions ? "all" : "current"} />
       <button
         className={className}
         type="button"
@@ -57,6 +64,6 @@ export function LogoutButton({ allSessions = false, className = "btn-secondary w
       >
         <LogOut className="size-4" /> {label || (allSessions ? "Log out all sessions" : "Log out")}
       </button>
-    </span>
+    </form>
   );
 }

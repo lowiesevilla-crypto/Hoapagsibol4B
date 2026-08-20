@@ -88,27 +88,31 @@ PR #127 hardened logout, Browser Back/Forward restoration, and global error reco
 
 ### Auth Navigation Architecture
 
-- Shared logout uses same-origin `POST /api/auth/logout` with server-side session revocation, verified-login-choice cleanup, private/no-store responses, and a server-authoritative login destination.
-- `components/auth-navigation-buttons.tsx` keeps an ordinary HTML POST form, but its visible logout control is intentionally `type="button"`, not a submit button. The click handler invokes `HTMLFormElement.prototype.submit.call(form)` directly. This avoids any default submit activation that React/Next could reinterpret as a Server Action while still performing exactly one native full-document POST.
-- Do not replace the shared logout path with client `fetch`, `useActionState`, `requestSubmit()`, `form.submit()`, a submit-button default activation, or client redirect authority.
+- Shared logout authority remains same-origin `POST /api/auth/logout` with server-side session revocation, verified-login-choice cleanup, private/no-store responses, and a server-authoritative login destination.
+- Protected React pages no longer submit the logout POST. `components/auth-navigation-buttons.tsx` exposes an ordinary same-origin anchor to `/api/auth/logout-transition?scope=...`, with the scope limited to `current` or `all`. It does not use a React form, client `fetch`, React action state, manual client redirect authority, or a Server Action for revocation.
+- `GET /api/auth/logout-transition` is a non-mutating, private/no-store transition document outside the protected React tree. It accepts only exact/configured application referrers or browser-controlled same-origin top-level navigation metadata. Its CSP restricts form submission to self and blocks framing. The document references an external same-origin `/logout-transition.js` submitter rather than inline script.
+- `public/logout-transition.js` submits the transition document's ordinary HTML form with `HTMLFormElement.prototype.submit.call(form)`. Because this form exists in a raw route-handler document rather than the React/Next protected page, React Server Action form interception cannot reinterpret the POST.
 - `app/api/auth/logout/route.ts` remains authoritative: exact same-origin validation is attempted first; only explicitly configured app-origin fallback is accepted for reverse-proxy/canonical URL mismatch; browser Fetch Metadata fallback is allowed only for same-origin top-level document navigation when usable Origin/Referer headers are absent. Session state is revoked before the private/no-store HTTP 303 response.
+- Do not collapse this back into a React-managed form or direct protected-page POST. Do not replace the path with client `fetch`, `useActionState`, `requestSubmit()`, client redirect authority, or GET-based session mutation.
 - Protected-route recovery listens to `pageshow` and `popstate` restoration for `/admin`, `/platform`, `/portal`, and `/employee`. Restored protected documents are reloaded so current server session/RBAC authority is re-established.
 - `app/error.tsx` uses hard-document recovery for non-chunk failures and a guarded safe-entry fallback instead of repeatedly resetting the same broken React tree.
 - Login/auth/private responses remain no-store. Same-origin/CSRF protections remain mandatory on logout. Tenant identity, role, and redirect authority remain server controlled.
 
 ### Permanent Regression Contract
 
-- `tests/e2e/auth-navigation-recovery.mjs` signs in as Tenant Admin, Platform Admin, and Homeowner, exercises authenticated history navigation, clicks the real visible non-submit logout control, requires the server 303/login navigation, then verifies Browser Back cannot revive an interactive protected document or global error state.
+- `tests/e2e/auth-navigation-recovery.mjs` signs in as Tenant Admin, Platform Admin, and Homeowner, exercises authenticated history navigation, clicks the real visible logout link, requires the transition POST to complete through the server 303/login navigation, then verifies Browser Back cannot revive an interactive protected document or global error state.
 - The E2E selector may track the explicit `data-hoahub-logout-button` control, but the test must not bypass the UI with a direct API call.
-- `verify:auth-navigation-cache` and `verify:homeowner-pwa` require the non-submit + native-prototype submission contract and reject delegated/default submit, client fetch/action-state, and client redirect authority.
+- `verify:auth-navigation-cache`, `verify:homeowner-mobile-hardening`, and `verify:homeowner-pwa` validate the isolated transition-document architecture, same-origin/navigation proof, private/no-store/CSP boundary, external native submitter, final POST same-origin validation, and HTTP 303 redirect. They reject protected-page React form submission, client fetch/action-state, and client redirect authority.
+- Critical CI verifiers are intentionally split into named workflow steps for diagnosability; this changes observability only, not the verification contract or release threshold.
 - No Prisma schema/migration, finance authority, payroll confidentiality, complaint/grievance privacy, document/template workflow, AI governance, tenant isolation, or RBAC scope is changed by this correction.
 
 ### Auth Follow-up Release State — 2026-08-20
 
 - PR #127 is merged; Premium Admin V2 started from main baseline `a0965d49bab5c475a75864b4e8cea5594b5a9a00`.
-- Repeated PR #130 MySQL CI runs reproduced a Tenant Admin logout timeout while preceding business/static/browser stages were green; server logs showed the route-handler POST being interpreted as an unknown Server Action.
-- Pre-Agent runtime candidate `2c4add899024f1a48fadbe8c322e0936cfb3811c` removes default submit activation, updates the real-browser selector without weakening its postconditions, and updates both static logout contracts.
-- That pre-Agent candidate entered exact-head MySQL CI and Canva Visual Parity validation. This `Agent.md` maintenance commit changes the branch head, so the resulting exact head must pass both required workflows again before PR #130 leaves draft or merges.
+- Repeated PR #130 MySQL CI runs reproduced a Tenant Admin logout timeout while dependency integrity, lint, Prisma, unit/integration, business verifiers, production build/smoke, and the preceding browser suites remained green.
+- The failed browser evidence showed a protected-page logout POST still being interpreted by Next as an unknown Server Action. The current architecture therefore removes POST submission from the protected React document entirely and performs it only from the isolated route-handler transition document described above.
+- The real-browser security postconditions are unchanged: the user must exercise the visible control, session revocation remains server authoritative, the final navigation must reach the server-approved login surface, and Browser Back must not revive protected content.
+- The exact documented branch head must pass both HOAHub MySQL CI and HOAHub Canva Visual Parity before PR #130 leaves draft or merges. A passing older head is not sufficient.
 - Rollback is application-level; there is no database migration for this auth-navigation change.
 
 # Active Initiative: Premium Admin UI V2 — PR #130
@@ -149,8 +153,8 @@ Implementation/traceability record: `docs/ui/HOAHUB_PREMIUM_ADMIN_UI_V2_IMPLEMEN
 ## Premium Admin V2 Release State — 2026-08-20
 
 - Implementation is complete. PR #130 remains draft until its exact final branch head passes both HOAHub MySQL CI and HOAHub Canva Visual Parity.
-- Before the final logout correction, CI had already proven dependency integrity, lint, Prisma validate/generate/migrate/seed, 295 unit tests, 30 integration tests, critical verifiers, typecheck, production build/smoke, core business browser flow, onboarding, document workflow, Document Management, RBAC stale-session, AI assistant, and Premium Admin command/combined Block-Lot search. The remaining blocker was the final real-browser logout navigation assertion.
-- The logout correction is intentionally narrow: non-submit visible control + native form prototype submission; server CSRF/session/303 authority is unchanged; the real-browser security postconditions remain unchanged.
+- CI has already proven dependency integrity, lint, Prisma validate/generate/migrate/seed, 295 unit tests, 30 integration tests, critical business verifiers, typecheck, production build/smoke, core business browser flow, onboarding, document workflow, Document Management, RBAC stale-session, AI assistant, and Premium Admin command/combined Block-Lot search. The remaining release proof is the corrected real-browser logout/history path on the exact documented head.
+- The logout correction is intentionally narrow: protected React pages perform only a same-origin navigation to an isolated no-store transition document; that document performs the native POST; server CSRF/session/303 authority and the real-browser security postconditions remain unchanged.
 - `docs/ui/HOAHUB_PREMIUM_ADMIN_UI_V2_IMPLEMENTATION.md` records route waves, visual evidence, search coverage, and release gates.
 - After exact-head green, the user has authorized marking PR #130 ready, merging the verified head to `main`, and proceeding through the existing Hostinger managed deployment without another approval prompt.
 - Production completion requires the merged `main` verification/deploy workflow to pass, Hostinger to serve the expected 12-character merge SHA at `/release.txt`, `/api/health` to succeed, and applicable production UI/search smoke evidence to pass.
@@ -290,6 +294,8 @@ Before merge/deploy of runtime changes, the exact candidate must pass the applic
 - controlled Chromium preparation
 - production smoke and critical browser/E2E tests
 - Canva Visual Parity for UI initiatives
+
+The critical/static verification stage is split into named CI substeps so failures identify the affected contract quickly; each verifier remains mandatory and a later step is never a substitute for a failed earlier one.
 
 Do not merge a known failure merely to trigger deployment. Fix the defect or update a brittle source-contract assertion only when the revised assertion continues to protect the intended security/business invariant.
 

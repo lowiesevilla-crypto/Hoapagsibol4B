@@ -96,33 +96,41 @@ record("cache recovery removes HOAHub /sw.js only in local development", hasAll(
 record("cache recovery removes only HOAHub-owned development caches", hasAll(cacheRecovery, ["shouldRemoveDevelopmentHoaHubCache", "DEVELOPMENT_HOAHUB_CACHE_PREFIX", "cacheName.startsWith(DEVELOPMENT_HOAHUB_CACHE_PREFIX)"]));
 
 const authButtons = readProjectFile("components/auth-navigation-buttons.tsx");
+const logoutTransitionRoute = readProjectFile("app/api/auth/logout-transition/route.ts");
+const logoutTransitionScript = readProjectFile("public/logout-transition.js");
 const logoutRoute = readProjectFile("app/api/auth/logout/route.ts");
 const authLogout = readProjectFile("lib/auth-logout.ts");
 const profilePage = readProjectFile("app/portal/profile/page.tsx");
 const morePage = readProjectFile("app/portal/more/page.tsx");
 record(
-  "logout buttons use a detached browser-native full-document POST outside the React form tree",
+  "logout buttons use an isolated same-origin transition document before the authoritative POST",
   hasAll(authButtons, [
-    'const LOGOUT_ENDPOINT = "/api/auth/logout"',
-    'document.createElement("form")',
-    'form.method = "post"',
-    "form.action = LOGOUT_ENDPOINT",
-    'type="button"',
+    'const LOGOUT_TRANSITION_ENDPOINT = "/api/auth/logout-transition"',
+    "href={href}",
+    'rel="nofollow"',
     'data-hoahub-logout-button="true"',
     'data-hoahub-logout-scope={scope}',
-    'scopeInput.name = "scope"',
-    "scopeInput.value = scope",
-    "document.body.append(form)",
-    "HTMLFormElement.prototype.submit.call(form)",
   ])
-    && !authButtons.includes("<form")
-    && !authButtons.includes('type="submit"')
-    && !authButtons.includes("event.preventDefault()")
-    && !authButtons.includes("form.submit()")
-    && !authButtons.includes("requestSubmit(")
+    && !authButtons.includes("document.createElement(\"form\")")
     && !authButtons.includes("useActionState")
-    && !authButtons.includes("fetch(form.action")
-    && !authButtons.includes("location.replace"),
+    && !authButtons.includes("fetch(")
+    && !authButtons.includes("location.replace")
+    && hasAll(logoutTransitionRoute, [
+      'request.headers.get("sec-fetch-site") === "same-origin"',
+      'request.headers.get("sec-fetch-mode") === "navigate"',
+      'request.headers.get("sec-fetch-dest") === "document"',
+      'action="/api/auth/logout"',
+      'method="post"',
+      'name="scope"',
+      'script src="/logout-transition.js" defer',
+      "privateNoStoreHeaders",
+      "form-action 'self'",
+      "frame-ancestors 'none'",
+    ])
+    && hasAll(logoutTransitionScript, [
+      'form[data-hoahub-logout-transition="true"]',
+      "HTMLFormElement.prototype.submit.call(form)",
+    ]),
 );
 record("logout endpoint enforces same-origin private 303 redirect", hasAll(logoutRoute, ["assertSameOrigin(request)", "privateNoStoreHeaders", "NextResponse.redirect(destination, 303)"]));
 record("profile and more contain no inline logout action", hasAll(profilePage, ["LogoutButton"]) && hasAll(morePage, ["LogoutButton"]) && !profilePage.includes("logoutAction") && !morePage.includes("logoutAction") && !profilePage.includes("form action={async") && !morePage.includes("form action={async"));

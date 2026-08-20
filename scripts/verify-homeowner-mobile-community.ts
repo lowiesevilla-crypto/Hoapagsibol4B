@@ -90,7 +90,7 @@ record("private chat is not service-worker cached", hasAll(serviceWorker, ["/api
 record("offline chat mutations are not queued", !/syncManager|background sync|queueMutation|mutation queue/i.test(serviceWorker + chatMessenger) && hasAll(chatMessenger, ["navigator.onLine", "Messages and attachments are not queued"]));
 record("profile data belongs to authenticated homeowner", hasAll(profilePage, ["requireHomeownerProfile", "profile.tenantId", "profile.id", "PasskeyEnrollmentPanel"]));
 record("vehicle data belongs to authenticated homeowner", hasAll(vehiclesPage, ["requireHomeownerProfile", "tenantId: profile.tenantId", "homeownerId: profile.id", "take: 30"]));
-record("logout uses stable named Server Actions", hasAll(morePage + profilePage, ["LogoutButton", "allSessions"]));
+record("logout uses the shared safe logout control", hasAll(morePage + profilePage, ["LogoutButton", "allSessions"]));
 record(
   "resident AI is explicit, server-authorized, and hidden unless entitlement and governance gates pass",
   hasAll(portalLayout, [

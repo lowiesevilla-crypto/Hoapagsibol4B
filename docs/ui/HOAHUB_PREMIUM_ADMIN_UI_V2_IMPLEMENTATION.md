@@ -52,13 +52,15 @@ No inaccessible route is intentionally added to the client command catalog.
 
 ### Homeowner Block/Lot search
 
-`lib/homeowner-admin-search.ts` adds structured parsing for common property searches such as `block 1 lot 2`, `blk 1 lot 2`, and labeled block/lot forms while retaining residual name/email/account search terms. The page still composes this search predicate beneath the existing `tenantId` constraint, preserving tenant isolation. Unit regression coverage validates parser and query construction, and the critical browser suite now exercises a real seeded Block/Lot lookup and empty-result state.
+`lib/homeowner-admin-search.ts` adds structured parsing for common property searches such as `block 1 lot 2`, `blk 1 lot 2`, and labeled block/lot forms while retaining residual name/email/account search terms. The page still composes this search predicate beneath the existing `tenantId` constraint, preserving tenant isolation. Unit regression coverage validates parser and query construction, and the critical browser suite exercises a real seeded Block/Lot lookup and empty-result state.
 
 ### Logout/browser regression recovery
 
-The Premium Admin branch exposed an inherited logout race where React/Next could classify the Route Handler POST as a Server Action and leave a Tenant Admin on `/admin/dashboard`. The shared logout control now prevents the delegated default submit event and invokes `HTMLFormElement.prototype.submit.call(form)` to perform exactly one normal same-origin document POST to `/api/auth/logout`. The browser remains non-authoritative: the server validates same-origin/configured-origin or browser Fetch Metadata, revokes the session, clears browser session state and returns the authoritative private/no-store HTTP 303 destination. Client `fetch`, `useActionState`, `requestSubmit`, `form.submit()` and client redirect authority remain prohibited for logout.
+The Premium Admin branch exposed an inherited logout race where React/Next could classify the Route Handler POST as a Server Action and leave a Tenant Admin on `/admin/dashboard`. The shared logout form now uses a visible `type="button"` control rather than a submit button. Its click handler invokes `HTMLFormElement.prototype.submit.call(form)` directly, so there is no default submit activation for React/Next to reinterpret while the browser still performs exactly one normal same-origin full-document POST to `/api/auth/logout`.
 
-`tests/e2e/auth-navigation-recovery.mjs` remains unchanged as the real-browser gate. `verify:auth-navigation-cache` now locks the single native submission contract instead of accepting a duplicate delegated/default submission path.
+The browser remains non-authoritative: the server validates exact same-origin first, permits only configured app-origin fallback for reverse-proxy/canonical URL mismatch or browser Fetch Metadata for a same-origin top-level document navigation when usable Origin/Referer is absent, revokes session state, clears browser session state and returns the authoritative private/no-store HTTP 303 destination. Client `fetch`, `useActionState`, submit-button default activation, `requestSubmit`, `form.submit()` and client redirect authority remain prohibited for logout.
+
+`tests/e2e/auth-navigation-recovery.mjs` still exercises the real visible UI control and keeps the same required security postconditions: successful login navigation after logout and Browser Back must not revive a protected document. Its selector was updated only to target the explicit non-submit logout control. `verify:auth-navigation-cache` and `verify:homeowner-pwa` now lock the non-submit + native-prototype submission contract.
 
 ## 42-route implementation scope
 
@@ -122,7 +124,7 @@ The original issue inventory contains 42 entries because `/admin/documents` appe
 
 ## Canva parity coverage
 
-The visual-parity browser suite retains the dashboard/platform/homeowner baseline and expands Admin evidence across every implementation wave. Desktop captures now include Action Center, Settings, Onboarding, Homeowners, Billing, Payment Requests, Reports, Data Management, Document Operations, Document Repository, Complaints, Chat and Workforce. Tablet captures cover Homeowners, Payment Review and Documents; mobile captures cover Onboarding and Complaints. Every capture asserts no page-level horizontal overflow.
+The visual-parity browser suite retains the dashboard/platform/homeowner baseline and expands Admin evidence across every implementation wave. Desktop captures include Action Center, Settings, Onboarding, Homeowners, Billing, Payment Requests, Reports, Data Management, Document Operations, Document Repository, Complaints, Chat and Workforce. Tablet captures cover Homeowners, Payment Review and Documents; mobile captures cover Onboarding and Complaints. Every capture asserts no page-level horizontal overflow.
 
 The approved design remains a visual and hierarchy reference. Production data values and workflow states remain authoritative and can intentionally differ from Canva sample values.
 
@@ -131,18 +133,19 @@ The approved design remains a visual and hierarchy reference. Production data va
 - `tests/unit/premium-admin-ux-surface.test.ts` — shell, canonical PageHeader, command search keyboard contract and dashboard composition.
 - `tests/unit/homeowner-admin-search.test.ts` — structured Block/Lot parsing and Prisma filter construction.
 - `tests/e2e/admin-premium-search.mjs` — real Admin command navigation, combined Block/Lot lookup and empty-result behavior.
-- `tests/e2e/auth-navigation-recovery.mjs` — cross-shell logout/Back regression remains a critical gate and was not weakened for this release.
+- `tests/e2e/auth-navigation-recovery.mjs` — real visible non-submit logout control, cross-shell logout and Browser Back security regression.
 - `tests/e2e/document-workflow.mjs` — homeowner document submission success remains observable before server-rendered history refresh.
 - `tests/e2e/ui-canva-visual-parity.mjs` — expanded desktop/tablet/mobile workspace evidence.
 - `package.json` — Premium Admin search browser regression is included in `test:e2e`.
 
 ## Validation evidence
 
-The candidate immediately before the final logout correction demonstrated that the Premium Admin implementation itself is stable:
-- HOAHub Canva Visual Parity #71 completed successfully, including browser screenshot capture across the expanded Admin/tablet/mobile matrix.
-- HOAHub MySQL CI #825 passed dependency integrity, lint, Prisma validation/generation/migration/seed, 295 unit tests, 30 integration tests, all critical static verifiers, typecheck, production build, production smoke, critical business browser flow, onboarding, document workflow, Document Management, RBAC stale-session, AI assistant, and Premium Admin command/Block-Lot search regression.
-- CI #825 failed only at the final Tenant Admin logout navigation assertion in `auth-navigation-recovery.mjs`; the server log showed the duplicate/delegated POST being interpreted as an unknown Server Action.
-- That root cause is now addressed by the single native prototype submission contract above. Final release still requires both workflows to pass on the exact documented head after this record and `Agent.md` are current.
+Before the final logout activation correction, the Premium Admin implementation had already demonstrated stability across the rest of the release gate:
+- HOAHub Canva Visual Parity completed successfully on the preceding candidates, including expanded Admin/tablet/mobile browser screenshot capture.
+- HOAHub MySQL CI passed dependency integrity, lint, Prisma validation/generation/migration/seed, 295 unit tests, 30 integration tests, all critical static verifiers, typecheck, production build, production smoke, critical business browser flow, onboarding, document workflow, Document Management, RBAC stale-session, AI assistant, and Premium Admin command/Block-Lot search regression.
+- Repeated CI runs isolated the remaining deterministic failure to the final Tenant Admin logout assertion; server logs showed the logout interaction being interpreted through the Server Action path rather than committing the Route Handler navigation.
+- Pre-Agent runtime candidate `2c4add899024f1a48fadbe8c322e0936cfb3811c` removes default submit activation, updates the real-browser selector without weakening its postconditions, and updates both static logout contracts.
+- `Agent.md` is now aligned to that architecture. This traceability update changes the branch head again, so final release still requires both workflows to pass on the resulting exact head.
 
 ## Release gates
 
@@ -156,7 +159,7 @@ PR #130 must remain draft until the final branch head satisfies all of the follo
 - production build;
 - controlled Chromium production smoke and complete E2E suite, including Premium Admin search and auth navigation recovery;
 - Canva Visual Parity workflow on the same exact head;
-- current `Agent.md`.
+- current `Agent.md` and this traceability record.
 
 Failures must be fixed at root cause and rerun. Tests, tenant scoping, RBAC, permission gates or release checks must not be weakened to produce green status.
 

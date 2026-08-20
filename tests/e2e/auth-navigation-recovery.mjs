@@ -179,9 +179,9 @@ async function exerciseLogoutAndBack(page, identity) {
   const logoutButton = await currentLogoutButton(page);
   assert.ok(logoutButton, `${identity.label}: visible current-session logout form was not found`);
 
-  // Interactive logout intentionally performs a same-origin fetch first and only then
-  // replaces the protected document. Observe the browser URL from Puppeteer/Node rather
-  // than attaching a WaitTask to the document that location.replace() destroys.
+  // The UI forces the browser's native HTMLFormElement.submit() path so React/Next
+  // delegated form handling cannot strand a stale authenticated document. Observe
+  // the resulting server 303/login navigation from Puppeteer/Node.
   await logoutButton.click();
   await waitForObservedUrl(page, (url) => isLoginPath(url.pathname), `${identity.label} logout`);
   await page.waitForNetworkIdle({ idleTime: 300, timeout }).catch(() => undefined);

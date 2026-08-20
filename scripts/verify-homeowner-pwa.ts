@@ -101,10 +101,16 @@ const authLogout = readProjectFile("lib/auth-logout.ts");
 const profilePage = readProjectFile("app/portal/profile/page.tsx");
 const morePage = readProjectFile("app/portal/more/page.tsx");
 record(
-  "logout buttons use the browser-native full-document POST",
-  hasAll(authButtons, ['action="/api/auth/logout"', 'method="post"', 'type="submit"', 'name="scope"'])
-    && !authButtons.includes("event.preventDefault()")
-    && !authButtons.includes("HTMLFormElement.prototype.submit")
+  "logout buttons use one browser-native full-document POST",
+  hasAll(authButtons, [
+    'action="/api/auth/logout"',
+    'method="post"',
+    'type="submit"',
+    'name="scope"',
+    "event.preventDefault()",
+    "HTMLFormElement.prototype.submit.call(form)",
+  ])
+    && !authButtons.includes("form.submit()")
     && !authButtons.includes("requestSubmit(")
     && !authButtons.includes("useActionState")
     && !authButtons.includes("fetch(form.action")

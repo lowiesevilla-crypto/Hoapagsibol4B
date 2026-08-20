@@ -58,10 +58,11 @@ export default async function PortalLayout({ children }: { children: React.React
     aiAvailable && { href: "/portal/ai", label: "Association Assistant", icon: "chat" as const, section: "Resident Services", description: "Tenant-scoped answers from approved HOA knowledge" },
   ].filter(Boolean) as Array<{ href: string; label: string; icon: "documents" | "chat"; section: string; description: string }>;
   const links = [...navigation.sidebarLinks, ...extraLinks];
+  const mobileRouteTitles = links.map(({ href, label }) => ({ href, label }));
 
   return <div className="canva-portal-shell min-h-screen">
     <Sidebar user={user} links={links} roleLabel="Homeowner" association={association} initialChatUnreadCount={initialChatUnreadCount} desktopOnly />
-    <PortalMobileHeader association={association} user={user} unreadCount={initialChatUnreadCount} showChat={navigation.hasChat} />
+    <PortalMobileHeader association={association} user={user} unreadCount={initialChatUnreadCount} routeTitles={mobileRouteTitles} showChat={navigation.hasChat} />
     <Suspense><TransactionFeedback /></Suspense>
     <main className="mx-auto min-w-0 max-w-[1800px] px-4 pb-[calc(10.25rem+env(safe-area-inset-bottom))] pt-5 sm:px-7 lg:ml-[300px] lg:px-10 lg:py-9">{children}</main>
     {aiAvailable && <AiFloatingShortcut />}

@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useRef } from "react";
 import { LogOut } from "lucide-react";
 
 type LogoutButtonProps = {
@@ -13,8 +14,27 @@ type LogoutButtonProps = {
 const LOGOUT_ENCODING = "application/x-www-form-urlencoded";
 
 export function LogoutButton({ allSessions = false, className = "btn-secondary w-full", formClassName, label, onClick }: LogoutButtonProps) {
+  const formRef = useRef<HTMLFormElement>(null);
+
+  useEffect(() => {
+    const form = formRef.current;
+    if (!form) return;
+
+    // React/Next delegates submit handling from the application root. This logout
+    // is intentionally a normal document POST to a Route Handler, not a Server
+    // Action. Stop the submit event before it reaches the delegated handler while
+    // leaving the browser default action untouched (no preventDefault/manual submit).
+    const keepNativeDocumentSubmit = (event: SubmitEvent) => {
+      event.stopImmediatePropagation();
+    };
+
+    form.addEventListener("submit", keepNativeDocumentSubmit);
+    return () => form.removeEventListener("submit", keepNativeDocumentSubmit);
+  }, []);
+
   return (
     <form
+      ref={formRef}
       action="/api/auth/logout"
       method="post"
       encType={LOGOUT_ENCODING}

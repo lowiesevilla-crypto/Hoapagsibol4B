@@ -177,8 +177,8 @@ async function exerciseLogoutAndBack(page, identity) {
   assert.ok(logoutButton, `${identity.label}: visible current-session logout control was not found`);
 
   // The protected React tree exposes only an ordinary same-origin navigation link.
-  // That GET reaches a no-store route-handler transition document outside the React
-  // tree; its external same-origin script submits the real POST /api/auth/logout.
+  // That GET reaches a no-store route-handler transition document outside React;
+  // its nonce-scoped inline submitter performs the native POST /api/auth/logout.
   // The POST route remains authoritative for session revocation and the HTTP 303.
   await logoutButton.click();
   await waitForObservedUrl(page, (url) => isLoginPath(url.pathname), `${identity.label} logout`);

@@ -107,10 +107,37 @@ async function runAdmin(browser) {
     assert.equal(cardBarCount, 0, "Metric cards must not use the rejected colored side-strip treatment");
     await screenshot(page, "01-tenant-dashboard.png");
 
-    await captureRoute(page, "/admin/actions", "/admin/actions", "05-action-center.png", ".canva-tenant-shell");
-    await captureRoute(page, "/admin/billing", "/admin/billing", "06-billing-workspace.png", ".canva-tenant-shell");
-    await captureRoute(page, "/admin/documents", "/admin/documents", "07-documents-workspace.png", ".canva-tenant-shell");
-    await captureRoute(page, "/admin/workforce", "/admin/workforce", "08-workforce-command-center.png", ".canva-tenant-shell");
+    // Desktop coverage spans every Premium Admin V2 implementation wave while
+    // preserving the existing route-specific business logic and data fixtures.
+    const desktopRoutes = [
+      ["/admin/actions", "/admin/actions", "05-action-center.png"],
+      ["/admin/settings", "/admin/settings", "06a-settings-account-center.png"],
+      ["/admin/onboarding", "/admin/onboarding", "06b-guided-onboarding.png"],
+      ["/admin/homeowners", "/admin/homeowners", "06c-homeowners-360.png"],
+      ["/admin/billing", "/admin/billing", "07-finance-command-center.png"],
+      ["/admin/payments/requests", "/admin/payments/requests", "07b-payment-review-workspace.png"],
+      ["/admin/reports", "/admin/reports", "07c-reports-intelligence.png"],
+      ["/admin/data", "/admin/data", "07d-data-management.png"],
+      ["/admin/documents", "/admin/documents", "08-document-operations.png"],
+      ["/admin/document-management", "/admin/document-management", "08b-document-repository.png"],
+      ["/admin/complaints", "/admin/complaints", "08c-complaint-command-center.png"],
+      ["/admin/chat", "/admin/chat", "08d-admin-chat.png"],
+      ["/admin/workforce", "/admin/workforce", "09-workforce-command-center.png"],
+    ];
+    for (const [route, expected, fileName] of desktopRoutes) {
+      await captureRoute(page, route, expected, fileName, ".canva-tenant-shell");
+    }
+
+    // Responsive parity checkpoints exercise high-density and workflow-heavy pages
+    // at tablet/mobile sizes, where the approved design requires zero page overflow.
+    await page.setViewport({ width: 900, height: 1100, deviceScaleFactor: 1 });
+    await captureRoute(page, "/admin/homeowners", "/admin/homeowners", "20-tablet-homeowners.png", ".canva-tenant-shell");
+    await captureRoute(page, "/admin/payments/requests", "/admin/payments/requests", "21-tablet-payment-review.png", ".canva-tenant-shell");
+    await captureRoute(page, "/admin/documents", "/admin/documents", "22-tablet-documents.png", ".canva-tenant-shell");
+
+    await page.setViewport({ width: 390, height: 844, deviceScaleFactor: 1 });
+    await captureRoute(page, "/admin/onboarding", "/admin/onboarding", "23-mobile-onboarding.png", ".canva-tenant-shell");
+    await captureRoute(page, "/admin/complaints", "/admin/complaints", "24-mobile-complaints.png", ".canva-tenant-shell");
   } finally { await context.close(); }
 }
 
@@ -133,8 +160,8 @@ async function runPlatform(browser) {
     await assertNoOverflow(page, "Tenant 360");
     await screenshot(page, "03-tenant-360.png");
 
-    await captureRoute(page, "/platform/tenants", "/platform/tenants", "09-platform-tenant-list.png", ".canva-platform-shell");
-    await captureRoute(page, "/platform/audit", "/platform/audit", "10-platform-audit-security.png", ".canva-platform-shell");
+    await captureRoute(page, "/platform/tenants", "/platform/tenants", "10-platform-tenant-list.png", ".canva-platform-shell");
+    await captureRoute(page, "/platform/audit", "/platform/audit", "11-platform-audit-security.png", ".canva-platform-shell");
   } finally { await context.close(); }
 }
 
@@ -154,8 +181,8 @@ async function runHomeowner(browser) {
     assert.ok(mobileBody.includes("Resident Shortcuts"), "Homeowner dashboard should render compact Canva resident shortcuts");
     await screenshot(page, "04-homeowner-pwa-dashboard.png");
 
-    await captureRoute(page, "/portal/pay", "/portal/pay", "11-homeowner-payment-center.png", ".canva-portal-shell");
-    await captureRoute(page, "/portal/documents", "/portal/documents", "12-homeowner-documents.png", ".canva-portal-shell");
+    await captureRoute(page, "/portal/pay", "/portal/pay", "12-homeowner-payment-center.png", ".canva-portal-shell");
+    await captureRoute(page, "/portal/documents", "/portal/documents", "13-homeowner-documents.png", ".canva-portal-shell");
   } finally { await context.close(); }
 }
 

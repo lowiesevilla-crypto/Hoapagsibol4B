@@ -125,8 +125,9 @@ async function exerciseAuthenticatedBack(page, identity) {
 }
 
 async function currentLogoutButton(page) {
-  await page.waitForSelector('button[data-hoahub-logout-button="true"][data-hoahub-logout-scope="current"]', { timeout });
-  const buttons = await page.$$('button[data-hoahub-logout-button="true"][data-hoahub-logout-scope="current"]');
+  const selector = 'a[data-hoahub-logout-button="true"][data-hoahub-logout-scope="current"]';
+  await page.waitForSelector(selector, { timeout });
+  const buttons = await page.$$(selector);
   for (const button of buttons) {
     const visible = await button.evaluate((node) => {
       const style = getComputedStyle(node);
@@ -175,10 +176,10 @@ async function exerciseLogoutAndBack(page, identity) {
   const logoutButton = await currentLogoutButton(page);
   assert.ok(logoutButton, `${identity.label}: visible current-session logout control was not found`);
 
-  // The React tree contains only the visible type=button control. Clicking it creates
-  // a detached browser form outside React and performs the same-origin POST natively,
-  // so Next cannot reinterpret the logout request as a Server Action. Observe the
-  // server 303/login navigation from Puppeteer/Node.
+  // The protected React tree exposes only an ordinary same-origin navigation link.
+  // That GET reaches a no-store route-handler transition document outside the React
+  // tree; its external same-origin script submits the real POST /api/auth/logout.
+  // The POST route remains authoritative for session revocation and the HTTP 303.
   await logoutButton.click();
   await waitForObservedUrl(page, (url) => isLoginPath(url.pathname), `${identity.label} logout`);
   await page.waitForNetworkIdle({ idleTime: 300, timeout }).catch(() => undefined);

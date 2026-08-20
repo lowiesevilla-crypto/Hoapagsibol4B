@@ -5,7 +5,7 @@ import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { AdminTopbar } from "@/components/admin-topbar";
 import { Sidebar } from "@/components/sidebar";
-import { adminLinks, adminShellLinks, platformLinks, systemAdminLinks, systemAdminShellLinks } from "@/components/sidebar-links";
+import { adminLinks, adminShellLinks, platformLinks, systemAdminLinks, systemAdminShellLinks, type LinkItem } from "@/components/sidebar-links";
 import { TransactionFeedback } from "@/components/transaction-feedback";
 import { resolveAiAssistanceEntitlement } from "@/lib/ai-assistance/entitlement";
 import { requireUser } from "@/lib/auth";
@@ -63,13 +63,30 @@ export default async function AdminLayout({ children }: { children: React.ReactN
   const isSystemAdmin = user.roles.includes(Role.SYSTEM_ADMIN) || user.roles.includes(Role.SUPER_ADMIN);
   const roleLabel = isSystemAdmin ? "System Administrator" : "Administrator";
   const canAccessPayroll = user.permissions.includes(Permission.PAYROLL_MANAGE) || await userCanAccessPayroll(user.id, user.role);
+
+  function authorizedAdminLinks(items: LinkItem[]) {
+    return filterAdminLinksByRole(filterLinksByModules(items, enabledModules), user.roles)
+      .filter((item) => documentManagementEntitlement.enabled || !item.href.startsWith("/admin/document-management"))
+      .filter((item) => (aiAssistanceEntitlement.enabled && canManageAi) || !item.href.startsWith("/admin/ai-assistance"))
+      .filter((item) => (aiAssistanceEntitlement.enabled && canUseAi) || !item.href.startsWith("/admin/ai-copilot"))
+      .filter((item) => canAccessPayroll || !["/admin/employees", "/admin/attendance", "/admin/payroll"].includes(item.href));
+  }
+
   const baseLinks = isSystemAdmin ? systemAdminShellLinks : adminShellLinks;
   const linksWithPlatform = user.roles.includes(Role.SUPER_ADMIN) ? [...baseLinks, ...platformLinks] : baseLinks;
-  const links = filterAdminLinksByRole(filterLinksByModules(linksWithPlatform, enabledModules), user.roles)
-    .filter((item) => documentManagementEntitlement.enabled || !item.href.startsWith("/admin/document-management"))
-    .filter((item) => aiAssistanceEntitlement.enabled && canManageAi || !item.href.startsWith("/admin/ai-assistance"))
-    .filter((item) => aiAssistanceEntitlement.enabled && canUseAi || !item.href.startsWith("/admin/ai-copilot"))
-    .filter((item) => canAccessPayroll || !["/admin/employees", "/admin/attendance", "/admin/payroll"].includes(item.href));
+  const links = authorizedAdminLinks(linksWithPlatform);
+
+  // Command search receives the full authorized route catalog, not merely the
+  // intentionally compact sidebar. This keeps hidden/inaccessible modules out of
+  // search while making every permitted Admin workspace discoverable by keyboard.
+  const commandBaseLinks = isSystemAdmin ? systemAdminLinks : adminLinks;
+  const commandLinksWithPlatform = user.roles.includes(Role.SUPER_ADMIN) ? [...commandBaseLinks, ...platformLinks] : commandBaseLinks;
+  const searchLinks = authorizedAdminLinks(commandLinksWithPlatform).map((item) => ({
+    label: item.label,
+    href: item.href,
+    section: item.section,
+    keywords: `${item.section} ${item.label} ${item.href.replaceAll("/", " ").replaceAll("-", " ")}`,
+  }));
 
   const requestBadgeHref = "/admin/documents";
   const showDocumentRequestBadge = links.some((item) => item.href === requestBadgeHref);
@@ -91,9 +108,9 @@ export default async function AdminLayout({ children }: { children: React.ReactN
     <Suspense><TransactionFeedback /></Suspense>
     <div className="min-w-0 lg:ml-[300px] print:ml-0">
       <div className="print:hidden">
-        <AdminTopbar associationName={association.name} roleLabel={roleLabel} userName={user.name} />
+        <AdminTopbar associationName={association.name} roleLabel={roleLabel} userName={user.name} searchLinks={searchLinks} />
       </div>
-      <main className="mx-auto min-w-0 max-w-[1680px] px-4 py-6 sm:px-7 lg:px-9 lg:py-8 print:max-w-none print:p-0">
+      <main className="premium-admin-workspace mx-auto min-w-0 max-w-[1680px] px-4 py-6 sm:px-7 lg:px-9 lg:py-8 print:max-w-none print:p-0">
         {children}
       </main>
     </div>

@@ -273,13 +273,13 @@ Deferred grievance scope remains notice/proof-of-service, mediation/hearing reco
 
 ## Flexible Collection Payers — PR #137
 
-- `CollectionType.OTHER` may be recorded for `HOMEOWNER`, `CONTRACTOR`, `RENTER`, or `OTHER` business payer categories. Renter/Other requires a bounded free-text payer name and must not require or fabricate a homeowner/contractor profile.
-- Construction Bond remains Homeowner-only and Contractor Bond remains Contractor-only. Renter/Other must never be accepted for refundable bond flows.
-- The existing Prisma `PayerType` enum remains a legacy storage compatibility field for existing writers. Migration `20260821234500_flexible_collection_payers` adds nullable `Collection.payerCategory` and `Collection.payerName`; `payerCategory`, when present, is authoritative for display/audit business semantics. Readers fall back to legacy `payerType` for older/unmodified rows.
-- `payerCategory` intentionally remains nullable because other established collection writers do not know about the compatibility columns. Do not make it NOT NULL until all collection write paths have been migrated to a first-class Prisma model change.
-- Flexible payer writes must set `payerCategory`/`payerName` in the same tenant-scoped transaction as the Collection and receipt audit. Never trust a browser-supplied tenant ID.
-- Collection history/search, HTML receipts, PDF receipts, audit metadata, and finance CSV export must preserve the external payer name/category. Existing homeowner and contractor behavior remains unchanged.
-- `components/collection-form.tsx`, `lib/actions/collections.ts`, `lib/collection-payer.ts`, `app/admin/collections/page.tsx`, `app/receipts/[kind]/[id]/page.tsx`, `app/receipts/[kind]/[id]/pdf/route.ts`, `app/admin/reports/export/route.ts`, and `tests/unit/flexible-collection-payers-surface.test.ts` are the principal regression surface.
+- Prisma `PayerType` is the single payer authority and supports `HOMEOWNER`, `CONTRACTOR`, `RENTER`, and `OTHER`. Do not introduce a parallel payer category column or raw-SQL compatibility authority.
+- `Collection.payerName` is nullable and stores the bounded free-text payer identity only for `RENTER` and `OTHER`; do not fabricate Homeowner, User, or Contractor records for external payers.
+- External payer types are allowed only for `CollectionType.OTHER`. Construction Bond remains Homeowner-only and Contractor Bond remains Contractor-only.
+- Existing homeowner/contractor selectors, tenant-scoped existence checks, receipt numbering, finance treatment, bond liabilities, refunds, forfeitures, and audit controls remain unchanged.
+- Collection history/search, HTML receipt, PDF receipt, finance CSV export, and receipt audit metadata must display/preserve the external payer name and first-class payer type.
+- Migration `20260821234500_flexible_collection_payers` expands the existing MySQL `payerType` enum in place and adds nullable `payerName`, preserving existing HOMEOWNER/CONTRACTOR rows.
+- `prisma/schema.prisma`, `lib/validation.ts`, `components/collection-form.tsx`, `lib/actions/collections.ts`, `app/admin/collections/page.tsx`, receipt HTML/PDF routes, finance export, migration, and `tests/unit/flexible-collection-payers-surface.test.ts` are the principal regression surface.
 
 ## Hostinger Production Deployment Model
 

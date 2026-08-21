@@ -1,6 +1,5 @@
 import { Role } from "@prisma/client";
 import { requireUser } from "@/lib/auth";
-import { getCollectionPayerMetadata } from "@/lib/collection-payer";
 import { prisma } from "@/lib/db";
 import { paymentAllocationCoverageDisplay } from "@/lib/payment-coverage";
 import { paymentAppliedAmount, paymentUnappliedCredit } from "@/lib/payment-credit";
@@ -9,7 +8,7 @@ import { collectionLabel } from "@/lib/utils";
 function cell(value: unknown) { return `"${String(value ?? "").replaceAll('"', '""')}"`; }
 
 export async function GET() {
-  const user = await requireUser(Role.ADMIN);
+  await requireUser(Role.ADMIN);
   const [payments, collections, refunds, expenses, payrolls, employeeLoans, employeeLoanRepayments] = await Promise.all([
     prisma.payment.findMany({ where: { status: "ACTIVE" }, include: { homeowner: { include: { user: true } }, bill: true, allocations: { include: { bill: true }, orderBy: { bill: { billingMonth: "asc" } } } }, orderBy: { paymentDate: "desc" } }),
     prisma.collection.findMany({ include: { homeowner: { include: { user: true } }, contractor: true }, orderBy: { collectionDate: "desc" } }),
@@ -19,12 +18,7 @@ export async function GET() {
     prisma.employeeLoan.findMany({ where: { status: { not: "CANCELLED" } }, include: { employee: true }, orderBy: { issuedDate: "desc" } }),
     prisma.payrollDeduction.findMany({ where: { employeeLoanId: { not: null }, payroll: { status: "PAID" } }, include: { employee: true, employeeLoan: true, payroll: true }, orderBy: { createdAt: "desc" } }),
   ]);
-  const payerMetadata = await getCollectionPayerMetadata(user.tenantId, collections.map((item) => item.id));
-  const collectionPayerName = (item: (typeof collections)[number]) => {
-    const metadata = payerMetadata.get(item.id);
-    if ((metadata?.payerCategory === "RENTER" || metadata?.payerCategory === "OTHER") && metadata.payerName) return metadata.payerName;
-    return item.homeowner?.user.name ?? item.contractor?.companyName ?? "Unknown";
-  };
+  const collectionPayerName = (item: (typeof collections)[number]) => item.payerName || item.homeowner?.user.name || item.contractor?.companyName || "Unknown";
   const header = ["Transaction ID", "Document No.", "Transaction", "Category", "Party", "Date", "Method", "Reference", "Amount", "Payment Coverage", "Accounting treatment"];
   const rows = [
     header,

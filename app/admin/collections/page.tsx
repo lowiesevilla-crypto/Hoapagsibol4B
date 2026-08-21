@@ -7,34 +7,25 @@ import { StatCard } from "@/components/stat-card";
 import { StatusBadge } from "@/components/status-badge";
 import { DeleteButton, SearchInput, SubmitButton } from "@/components/ui";
 import { deleteCollectionAction, forfeitBondAction } from "@/lib/actions/collections";
-import { requireUser } from "@/lib/auth";
-import { getCollectionPayerMetadata } from "@/lib/collection-payer";
 import { prisma } from "@/lib/db";
 import { collectionLabel, inputDate, money, shortDate } from "@/lib/utils";
 
 export default async function CollectionsPage() {
-  const user = await requireUser();
   const [homeowners, contractors, collections, refunds] = await Promise.all([
     prisma.homeownerProfile.findMany({ where: { status: "ACTIVE" }, include: { user: true }, orderBy: { user: { name: "asc" } } }),
     prisma.contractorProfile.findMany({ where: { status: "ACTIVE" }, orderBy: { companyName: "asc" } }),
     prisma.collection.findMany({ include: { homeowner: { include: { user: true } }, contractor: true, refunds: true }, orderBy: [{ collectionDate: "desc" }, { createdAt: "desc" }] }),
     prisma.bondRefund.findMany({ take: 10, include: { collection: { include: { homeowner: { include: { user: true } }, contractor: true } }, processedBy: true }, orderBy: [{ refundDate: "desc" }, { createdAt: "desc" }] }),
   ]);
-  const payerMetadata = await getCollectionPayerMetadata(user.tenantId, collections.map((item) => item.id));
   const feeIncome = collections.filter((item) => !item.refundable).reduce((sum, item) => sum + Number(item.amount), 0);
   const forfeitedIncome = collections.reduce((sum, item) => sum + Number(item.amountForfeited), 0);
   const refunded = collections.reduce((sum, item) => sum + Number(item.amountRefunded), 0);
   const bondsHeld = collections.filter((item) => item.refundable).reduce((sum, item) => sum + Number(item.amount) - Number(item.amountRefunded) - Number(item.amountForfeited), 0);
   const openBonds = collections.filter((item) => item.refundable && Number(item.amount) - Number(item.amountRefunded) - Number(item.amountForfeited) > 0);
-  const payerInfo = (item: (typeof collections)[number]) => {
-    const metadata = payerMetadata.get(item.id);
-    const category = metadata?.payerCategory ?? item.payerType;
-    const externalName = category === "RENTER" || category === "OTHER" ? metadata?.payerName : null;
-    return {
-      name: externalName || item.homeowner?.user.name || item.contractor?.companyName || "Unknown payer",
-      category,
-    };
-  };
+  const payerInfo = (item: (typeof collections)[number]) => ({
+    name: item.payerName || item.homeowner?.user.name || item.contractor?.companyName || "Unknown payer",
+    category: item.payerType,
+  });
 
   return <><PageHeader eyebrow="Income and liabilities" title="Other collections & bonds" description="Record association income separately from refundable homeowner and contractor bonds." />
     <section className="mb-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-4"><StatCard label="Fee income" value={money(feeIncome)} note="Gate passes, stickers, memberships and other" icon={Banknote} /><StatCard label="Forfeited bond income" value={money(forfeitedIncome)} note="Recognized after a recorded violation" icon={Landmark} /><StatCard label="Refundable bonds held" value={money(bondsHeld)} note={`${openBonds.length} open bond${openBonds.length === 1 ? "" : "s"}`} icon={HandCoins} /><StatCard label="Bonds refunded" value={money(refunded)} note="All processed bond returns" icon={RotateCcw} /></section>

@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test from "node:test";
 import {
+  ONBOARDING_HOMEOWNER_BATCH_SIZE,
   ONBOARDING_HOMEOWNER_COLUMNS,
   onboardingErrorCsv,
   onboardingHomeownerTemplateCsv,
@@ -70,6 +72,24 @@ test("CSV dry run rejects missing fields, duplicate identities, invalid money, a
   assert.ok(parsed.errors.some((error) => error.field === "monthlyDuesAmount"));
   assert.ok(parsed.errors.some((error) => error.field === "accountNumber"));
   assert.ok(parsed.errors.some((error) => error.field === "openingBalanceAsOf"));
+});
+
+test("large onboarding files are directed to consecutive safe batches", () => {
+  assert.equal(ONBOARDING_HOMEOWNER_BATCH_SIZE, 500);
+  const rows = Array.from({ length: ONBOARDING_HOMEOWNER_BATCH_SIZE + 1 }, (_, index) =>
+    `Homeowner ${index + 1},,09${String(index).padStart(9, "0")},Address ${index + 1},B${index + 1},L${index + 1},,,,ACTIVE,500,,0,`,
+  );
+  const parsed = parseOnboardingHomeownerCsv([ONBOARDING_HOMEOWNER_COLUMNS.join(","), ...rows].join("\n"));
+  assert.equal(parsed.rows.length, 0);
+  assert.ok(parsed.errors.some((error) => error.rowNumber === null && /500 homeowner rows/.test(error.message) && /multiple batches/.test(error.message)));
+});
+
+test("onboarding UI explains how to continue after an applied batch", () => {
+  const page = readFileSync("app/admin/onboarding/page.tsx", "utf8");
+  assert.match(page, /Large community import: use consecutive safe batches/);
+  assert.match(page, /500 \+ 500 \+ 500 \+ 500 \+ 50/);
+  assert.match(page, /successful prior batches stay saved/);
+  assert.match(page, /homeownerProfile\.count/);
 });
 
 test("error export escapes spreadsheet-sensitive CSV content safely", () => {

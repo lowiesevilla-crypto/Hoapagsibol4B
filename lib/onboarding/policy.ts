@@ -33,13 +33,8 @@ export type TenantOnboardingState = {
     validRows: number;
     errors: OnboardingImportError[];
     appliedAt?: string;
-    lastAppliedAt?: string;
     importedRows?: number;
     openingBalancesPosted?: number;
-    batchesApplied?: number;
-    lastBatchImportedRows?: number;
-    lastBatchOpeningBalancesPosted?: number;
-    currentBatchApplied?: boolean;
   };
   billing?: {
     completedAt: string;
@@ -67,10 +62,6 @@ export function emptyTenantOnboardingState(): TenantOnboardingState {
   return { version: TENANT_ONBOARDING_VERSION, updatedAt: new Date(0).toISOString() };
 }
 
-export function currentOnboardingImportIsApplied(state: TenantOnboardingState) {
-  return Boolean(state.import?.appliedAt) && state.import?.currentBatchApplied !== false;
-}
-
 export function onboardingPrerequisites(state: TenantOnboardingState) {
   return {
     profile: Boolean(state.profile),
@@ -79,7 +70,7 @@ export function onboardingPrerequisites(state: TenantOnboardingState) {
       state.privacy.secureHandlingAccepted &&
       state.privacy.importAuthorizationAccepted,
     ),
-    import: currentOnboardingImportIsApplied(state),
+    import: Boolean(state.import?.appliedAt),
     billing: Boolean(state.billing),
     preview: Boolean(state.preview),
   };

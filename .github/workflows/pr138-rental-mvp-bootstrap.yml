@@ -1,0 +1,835 @@
+name: PR138 Rental Management MVP Bootstrap
+
+on:
+  push:
+    branches:
+      - feature/rental-management-mvp
+
+permissions:
+  contents: write
+
+jobs:
+  bootstrap:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feature/rental-management-mvp
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Implement rental management MVP
+        shell: bash
+        run: |
+          python3 <<'PY'
+          from pathlib import Path
+
+          def replace_once(path: str, old: str, new: str):
+              p = Path(path)
+              text = p.read_text()
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f"{path}: expected one match, found {count}: {old[:80]!r}")
+              p.write_text(text.replace(old, new))
+
+          # Prisma enums and models.
+          replace_once(
+              "prisma/schema.prisma",
+              "enum PayerType {\n  HOMEOWNER\n  CONTRACTOR\n  RENTER\n  OTHER\n}\n",
+              "enum PayerType {\n  HOMEOWNER\n  CONTRACTOR\n  RENTER\n  OTHER\n}\n\nenum RentalAssetType {\n  STALL\n  PARKING\n  SPACE\n  OTHER\n}\n\nenum RentalAssetStatus {\n  AVAILABLE\n  OCCUPIED\n  INACTIVE\n}\n\nenum RenterStatus {\n  ACTIVE\n  INACTIVE\n}\n\nenum RentalAgreementStatus {\n  ACTIVE\n  ENDED\n  CANCELLED\n}\n\nenum RentalInvoiceStatus {\n  OPEN\n  PARTIAL\n  PAID\n  OVERDUE\n  VOID\n}\n\nenum RentalChargeType {\n  RENT\n  SECURITY_DEPOSIT\n  OTHER\n}\n"
+          )
+          replace_once(
+              "prisma/schema.prisma",
+              "  householdMembers    HouseholdMember[]\n  complaints          Complaint[]",
+              "  householdMembers    HouseholdMember[]\n  renterProfiles      Renter[]\n  complaints          Complaint[]"
+          )
+          replace_once(
+              "prisma/schema.prisma",
+              "  paymentRequest  PaymentRequest?\n  createdAt       DateTime           @default(now())",
+              "  paymentRequest  PaymentRequest?\n  rentalAllocations RentalPaymentAllocation[]\n  createdAt       DateTime           @default(now())"
+          )
+          replace_once(
+              "prisma/schema.prisma",
+              "  @@unique([tenantId, receiptNumber])\n  @@index([type, collectionDate])",
+              "  @@unique([tenantId, receiptNumber])\n  @@unique([tenantId, id])\n  @@index([type, collectionDate])"
+          )
+          rental_models = r'''
+model RentalAsset {
+  tenantId    String            @default("tenant_pagsibol4b_default")
+  id          String            @id @default(cuid())
+  code        String            @db.VarChar(60)
+  name        String
+  type        RentalAssetType
+  location    String?
+  defaultRate Decimal           @default(0) @db.Decimal(12, 2)
+  status      RentalAssetStatus @default(AVAILABLE)
+  notes       String?           @db.Text
+  agreements  RentalAgreement[]
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+
+  @@unique([tenantId, id])
+  @@unique([tenantId, code])
+  @@index([tenantId, status, type])
+}
+
+model Renter {
+  tenantId    String           @default("tenant_pagsibol4b_default")
+  id          String           @id @default(cuid())
+  homeownerId String?
+  homeowner   HomeownerProfile? @relation(fields: [tenantId, homeownerId], references: [tenantId, id], onDelete: Restrict, onUpdate: Cascade)
+  fullName    String
+  email       String?
+  phone       String?
+  address     String?          @db.Text
+  status      RenterStatus     @default(ACTIVE)
+  agreements  RentalAgreement[]
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+
+  @@unique([tenantId, id])
+  @@index([tenantId, status, fullName])
+  @@index([tenantId, homeownerId])
+}
+
+model RentalAgreement {
+  tenantId       String                @default("tenant_pagsibol4b_default")
+  id             String                @id @default(cuid())
+  assetId        String
+  asset          RentalAsset           @relation(fields: [tenantId, assetId], references: [tenantId, id], onDelete: Restrict, onUpdate: Cascade)
+  renterId       String
+  renter         Renter                @relation(fields: [tenantId, renterId], references: [tenantId, id], onDelete: Restrict, onUpdate: Cascade)
+  startDate      DateTime              @db.Date
+  endDate        DateTime?             @db.Date
+  monthlyRate    Decimal               @db.Decimal(12, 2)
+  billingDay     Int                   @default(1)
+  dueDay         Int                   @default(5)
+  securityDeposit Decimal              @default(0) @db.Decimal(12, 2)
+  status         RentalAgreementStatus @default(ACTIVE)
+  notes          String?               @db.Text
+  invoices       RentalInvoice[]
+  createdAt      DateTime              @default(now())
+  updatedAt      DateTime              @updatedAt
+
+  @@unique([tenantId, id])
+  @@index([tenantId, assetId, status])
+  @@index([tenantId, renterId, status])
+  @@index([tenantId, startDate, endDate])
+}
+
+model RentalInvoice {
+  tenantId     String              @default("tenant_pagsibol4b_default")
+  id           String              @id @default(cuid())
+  agreementId  String
+  agreement    RentalAgreement     @relation(fields: [tenantId, agreementId], references: [tenantId, id], onDelete: Restrict, onUpdate: Cascade)
+  invoiceNumber String             @db.VarChar(80)
+  chargeType   RentalChargeType    @default(RENT)
+  periodStart  DateTime            @db.Date
+  periodEnd    DateTime            @db.Date
+  dueDate      DateTime            @db.Date
+  amount       Decimal             @db.Decimal(12, 2)
+  amountPaid   Decimal             @default(0) @db.Decimal(12, 2)
+  balance      Decimal             @db.Decimal(12, 2)
+  status       RentalInvoiceStatus @default(OPEN)
+  notes        String?             @db.Text
+  allocations  RentalPaymentAllocation[]
+  createdAt    DateTime            @default(now())
+  updatedAt    DateTime            @updatedAt
+
+  @@unique([tenantId, id])
+  @@unique([tenantId, invoiceNumber])
+  @@unique([tenantId, agreementId, chargeType, periodStart])
+  @@index([tenantId, status, dueDate])
+  @@index([tenantId, agreementId, periodStart])
+}
+
+model RentalPaymentAllocation {
+  tenantId    String        @default("tenant_pagsibol4b_default")
+  id          String        @id @default(cuid())
+  invoiceId   String
+  invoice     RentalInvoice @relation(fields: [tenantId, invoiceId], references: [tenantId, id], onDelete: Restrict, onUpdate: Cascade)
+  collectionId String
+  collection  Collection    @relation(fields: [tenantId, collectionId], references: [tenantId, id], onDelete: Restrict, onUpdate: Cascade)
+  amount      Decimal       @db.Decimal(12, 2)
+  createdById String
+  createdAt   DateTime      @default(now())
+
+  @@unique([tenantId, id])
+  @@unique([tenantId, invoiceId, collectionId])
+  @@index([tenantId, invoiceId, createdAt])
+  @@index([tenantId, collectionId])
+}
+
+'''
+          replace_once("prisma/schema.prisma", "model Vehicle {", rental_models + "model Vehicle {")
+
+          # Permissions.
+          replace_once(
+              "lib/authorization/permissions.ts",
+              '  COLLECTIONS_FORFEIT: "collections.forfeit",\n  RECEIPTS_ISSUE: "receipts.issue",',
+              '  COLLECTIONS_FORFEIT: "collections.forfeit",\n  RENTALS_READ: "rentals.read",\n  RENTALS_MANAGE: "rentals.manage",\n  RECEIPTS_ISSUE: "receipts.issue",'
+          )
+          p = Path("lib/authorization/permissions.ts")
+          text = p.read_text()
+          needle = "  Permission.COLLECTIONS_FORFEIT,\n  Permission.RECEIPTS_ISSUE,"
+          if text.count(needle) != 2:
+              raise SystemExit(f"permissions arrays expected two matches, found {text.count(needle)}")
+          text = text.replace(needle, "  Permission.COLLECTIONS_FORFEIT,\n  Permission.RENTALS_READ,\n  Permission.RENTALS_MANAGE,\n  Permission.RECEIPTS_ISSUE,")
+          p.write_text(text)
+
+          # Navigation in both full and premium shell lists.
+          p = Path("components/sidebar-links.ts")
+          text = p.read_text()
+          full = '  { href: "/admin/collections", label: "Other collections", icon: "collections", section: "Finance" },\n  { href: "/admin/expenses",'
+          if text.count(full) != 1:
+              raise SystemExit("full rental nav insertion point not found")
+          text = text.replace(full, '  { href: "/admin/collections", label: "Other collections", icon: "collections", section: "Finance" },\n  { href: "/admin/rentals", label: "Rentals", icon: "collections", section: "Finance" },\n  { href: "/admin/expenses",')
+          shell = '  { href: "/admin/collections", label: "Collections", icon: "collections", section: "Finance" },\n  { href: "/admin/expenses",'
+          if text.count(shell) != 1:
+              raise SystemExit("shell rental nav insertion point not found")
+          text = text.replace(shell, '  { href: "/admin/collections", label: "Collections", icon: "collections", section: "Finance" },\n  { href: "/admin/rentals", label: "Rentals", icon: "collections", section: "Finance" },\n  { href: "/admin/expenses",')
+          p.write_text(text)
+
+          # Finance export: collection remains the cash authority; rental allocations refine accounting treatment.
+          p = Path("app/admin/reports/export/route.ts")
+          text = p.read_text()
+          old_query = '    prisma.collection.findMany({ include: { homeowner: { include: { user: true } }, contractor: true }, orderBy: { collectionDate: "desc" } }),'
+          new_query = '    prisma.collection.findMany({ include: { homeowner: { include: { user: true } }, contractor: true, rentalAllocations: { include: { invoice: true } } }, orderBy: { collectionDate: "desc" } }),'
+          if text.count(old_query) != 1:
+              raise SystemExit("finance export collection query not found")
+          text = text.replace(old_query, new_query)
+          old_helper = '  const collectionPayerName = (item: (typeof collections)[number]) => item.payerName || item.homeowner?.user.name || item.contractor?.companyName || "Unknown";\n'
+          new_helper = old_helper + '  const collectionAccountingTreatment = (item: (typeof collections)[number]) => {\n    if (item.refundable) return "Refundable liability";\n    if (!item.rentalAllocations.length) return "Income";\n    const chargeTypes = new Set(item.rentalAllocations.map((allocation) => allocation.invoice.chargeType));\n    return chargeTypes.size === 1 && chargeTypes.has("SECURITY_DEPOSIT") ? "Refundable rental deposit liability" : "Rental income";\n  };\n'
+          if text.count(old_helper) != 1:
+              raise SystemExit("finance export helper insertion point not found")
+          text = text.replace(old_helper, new_helper)
+          old_map = '    ...collections.map((item) => [item.id, item.receiptNumber ?? "", "Collection", collectionLabel(item.type, item.description), collectionPayerName(item), item.collectionDate.toISOString().slice(0, 10), item.method, item.referenceNumber ?? "", item.amount.toString(), "", item.refundable ? "Refundable liability" : "Income"]),'
+          new_map = '    ...collections.map((item) => [item.id, item.receiptNumber ?? "", "Collection", collectionLabel(item.type, item.description), collectionPayerName(item), item.collectionDate.toISOString().slice(0, 10), item.method, item.referenceNumber ?? "", item.amount.toString(), item.rentalAllocations.map((allocation) => allocation.invoice.invoiceNumber).join("; "), collectionAccountingTreatment(item)]),'
+          if text.count(old_map) != 1:
+              raise SystemExit("finance export map not found")
+          text = text.replace(old_map, new_map)
+          p.write_text(text)
+
+          # Agent contract.
+          p = Path("Agent.md")
+          text = p.read_text()
+          marker = "## Hostinger Production Deployment Model\n"
+          if text.count(marker) != 1:
+              raise SystemExit("Agent Hostinger marker not found")
+          rental_contract = '''## Rental Management MVP — PR #138
+
+- Rental management is a tenant-scoped finance domain for stalls, parking slots, commercial/common-area spaces, and other rentable assets. It must not fabricate Homeowner or User identities for outside renters.
+- `Renter.homeownerId` is optional: existing homeowners may be linked, while external renters remain standalone tenant-scoped renter records.
+- `RentalAsset` tracks rentable inventory and availability; `RentalAgreement` binds one renter to one asset with monthly rate, billing/due days, term, and refundable security-deposit amount.
+- `RentalInvoice` is the rental receivable authority with `OPEN`, `PARTIAL`, `PAID`, `OVERDUE`, and `VOID` status. `RENT` and `SECURITY_DEPOSIT` are distinct charge types; security deposits remain liabilities and must never be reported as rental income.
+- `RentalPaymentAllocation` links an existing tenant `Collection` receipt to a rental invoice. The collection remains the cash/receipt authority; allocation updates rental A/R status and provides finance reconciliation without duplicating cash.
+- Only non-refundable `CollectionType.OTHER` receipts may be allocated to rental invoices. Allocation must fail closed on tenant mismatch, invoice overpayment, or collection over-allocation.
+- Monthly rental invoice generation is idempotent per tenant/agreement/charge type/period. Ending an agreement releases the asset for future use while preserving all invoice/allocation history.
+- Tenant Admin and Billing Manager receive `rentals.read`/`rentals.manage`; other roles do not gain rental finance authority implicitly.
+- `/admin/rentals`, `lib/actions/rentals.ts`, Prisma rental models/migration, finance export classification, sidebar navigation, permissions, and `tests/unit/rental-management-mvp.test.ts` are the principal regression surface.
+- Future PayMongo renter links may settle into the same Collection + RentalPaymentAllocation model using the existing tenant child-account architecture. Do not introduce live-money gateway behavior without verified webhook authority, idempotency, and tenant checks.
+
+'''
+          text = text.replace(marker, rental_contract + marker)
+          p.write_text(text)
+          PY
+
+          mkdir -p prisma/migrations/20260822070000_rental_management_mvp
+          cat > prisma/migrations/20260822070000_rental_management_mvp/migration.sql <<'SQL'
+          -- Tenant-scoped rental inventory, agreements, receivables, and collection reconciliation.
+          CREATE UNIQUE INDEX `Collection_tenantId_id_key` ON `Collection`(`tenantId`, `id`);
+
+          CREATE TABLE `RentalAsset` (
+            `tenantId` VARCHAR(191) NOT NULL,
+            `id` VARCHAR(191) NOT NULL,
+            `code` VARCHAR(60) NOT NULL,
+            `name` VARCHAR(191) NOT NULL,
+            `type` ENUM('STALL','PARKING','SPACE','OTHER') NOT NULL,
+            `location` VARCHAR(191) NULL,
+            `defaultRate` DECIMAL(12,2) NOT NULL DEFAULT 0,
+            `status` ENUM('AVAILABLE','OCCUPIED','INACTIVE') NOT NULL DEFAULT 'AVAILABLE',
+            `notes` TEXT NULL,
+            `createdAt` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+            `updatedAt` DATETIME(3) NOT NULL,
+            PRIMARY KEY (`id`),
+            UNIQUE INDEX `RentalAsset_tenantId_id_key`(`tenantId`,`id`),
+            UNIQUE INDEX `RentalAsset_tenantId_code_key`(`tenantId`,`code`),
+            INDEX `RentalAsset_tenantId_status_type_idx`(`tenantId`,`status`,`type`)
+          ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+
+          CREATE TABLE `Renter` (
+            `tenantId` VARCHAR(191) NOT NULL,
+            `id` VARCHAR(191) NOT NULL,
+            `homeownerId` VARCHAR(191) NULL,
+            `fullName` VARCHAR(191) NOT NULL,
+            `email` VARCHAR(191) NULL,
+            `phone` VARCHAR(191) NULL,
+            `address` TEXT NULL,
+            `status` ENUM('ACTIVE','INACTIVE') NOT NULL DEFAULT 'ACTIVE',
+            `createdAt` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+            `updatedAt` DATETIME(3) NOT NULL,
+            PRIMARY KEY (`id`),
+            UNIQUE INDEX `Renter_tenantId_id_key`(`tenantId`,`id`),
+            INDEX `Renter_tenantId_status_fullName_idx`(`tenantId`,`status`,`fullName`),
+            INDEX `Renter_tenantId_homeownerId_idx`(`tenantId`,`homeownerId`),
+            CONSTRAINT `Renter_tenantId_homeownerId_fkey` FOREIGN KEY (`tenantId`,`homeownerId`) REFERENCES `HomeownerProfile`(`tenantId`,`id`) ON DELETE RESTRICT ON UPDATE CASCADE
+          ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+
+          CREATE TABLE `RentalAgreement` (
+            `tenantId` VARCHAR(191) NOT NULL,
+            `id` VARCHAR(191) NOT NULL,
+            `assetId` VARCHAR(191) NOT NULL,
+            `renterId` VARCHAR(191) NOT NULL,
+            `startDate` DATE NOT NULL,
+            `endDate` DATE NULL,
+            `monthlyRate` DECIMAL(12,2) NOT NULL,
+            `billingDay` INTEGER NOT NULL DEFAULT 1,
+            `dueDay` INTEGER NOT NULL DEFAULT 5,
+            `securityDeposit` DECIMAL(12,2) NOT NULL DEFAULT 0,
+            `status` ENUM('ACTIVE','ENDED','CANCELLED') NOT NULL DEFAULT 'ACTIVE',
+            `notes` TEXT NULL,
+            `createdAt` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+            `updatedAt` DATETIME(3) NOT NULL,
+            PRIMARY KEY (`id`),
+            UNIQUE INDEX `RentalAgreement_tenantId_id_key`(`tenantId`,`id`),
+            INDEX `RentalAgreement_tenantId_assetId_status_idx`(`tenantId`,`assetId`,`status`),
+            INDEX `RentalAgreement_tenantId_renterId_status_idx`(`tenantId`,`renterId`,`status`),
+            INDEX `RentalAgreement_tenantId_startDate_endDate_idx`(`tenantId`,`startDate`,`endDate`),
+            CONSTRAINT `RentalAgreement_tenantId_assetId_fkey` FOREIGN KEY (`tenantId`,`assetId`) REFERENCES `RentalAsset`(`tenantId`,`id`) ON DELETE RESTRICT ON UPDATE CASCADE,
+            CONSTRAINT `RentalAgreement_tenantId_renterId_fkey` FOREIGN KEY (`tenantId`,`renterId`) REFERENCES `Renter`(`tenantId`,`id`) ON DELETE RESTRICT ON UPDATE CASCADE
+          ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+
+          CREATE TABLE `RentalInvoice` (
+            `tenantId` VARCHAR(191) NOT NULL,
+            `id` VARCHAR(191) NOT NULL,
+            `agreementId` VARCHAR(191) NOT NULL,
+            `invoiceNumber` VARCHAR(80) NOT NULL,
+            `chargeType` ENUM('RENT','SECURITY_DEPOSIT','OTHER') NOT NULL DEFAULT 'RENT',
+            `periodStart` DATE NOT NULL,
+            `periodEnd` DATE NOT NULL,
+            `dueDate` DATE NOT NULL,
+            `amount` DECIMAL(12,2) NOT NULL,
+            `amountPaid` DECIMAL(12,2) NOT NULL DEFAULT 0,
+            `balance` DECIMAL(12,2) NOT NULL,
+            `status` ENUM('OPEN','PARTIAL','PAID','OVERDUE','VOID') NOT NULL DEFAULT 'OPEN',
+            `notes` TEXT NULL,
+            `createdAt` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+            `updatedAt` DATETIME(3) NOT NULL,
+            PRIMARY KEY (`id`),
+            UNIQUE INDEX `RentalInvoice_tenantId_id_key`(`tenantId`,`id`),
+            UNIQUE INDEX `RentalInvoice_tenantId_invoiceNumber_key`(`tenantId`,`invoiceNumber`),
+            UNIQUE INDEX `RentalInvoice_tenantId_agreementId_chargeType_periodStart_key`(`tenantId`,`agreementId`,`chargeType`,`periodStart`),
+            INDEX `RentalInvoice_tenantId_status_dueDate_idx`(`tenantId`,`status`,`dueDate`),
+            INDEX `RentalInvoice_tenantId_agreementId_periodStart_idx`(`tenantId`,`agreementId`,`periodStart`),
+            CONSTRAINT `RentalInvoice_tenantId_agreementId_fkey` FOREIGN KEY (`tenantId`,`agreementId`) REFERENCES `RentalAgreement`(`tenantId`,`id`) ON DELETE RESTRICT ON UPDATE CASCADE
+          ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+
+          CREATE TABLE `RentalPaymentAllocation` (
+            `tenantId` VARCHAR(191) NOT NULL,
+            `id` VARCHAR(191) NOT NULL,
+            `invoiceId` VARCHAR(191) NOT NULL,
+            `collectionId` VARCHAR(191) NOT NULL,
+            `amount` DECIMAL(12,2) NOT NULL,
+            `createdById` VARCHAR(191) NOT NULL,
+            `createdAt` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+            PRIMARY KEY (`id`),
+            UNIQUE INDEX `RentalPaymentAllocation_tenantId_id_key`(`tenantId`,`id`),
+            UNIQUE INDEX `RentalPaymentAllocation_tenantId_invoiceId_collectionId_key`(`tenantId`,`invoiceId`,`collectionId`),
+            INDEX `RentalPaymentAllocation_tenantId_invoiceId_createdAt_idx`(`tenantId`,`invoiceId`,`createdAt`),
+            INDEX `RentalPaymentAllocation_tenantId_collectionId_idx`(`tenantId`,`collectionId`),
+            CONSTRAINT `RentalPaymentAllocation_tenantId_invoiceId_fkey` FOREIGN KEY (`tenantId`,`invoiceId`) REFERENCES `RentalInvoice`(`tenantId`,`id`) ON DELETE RESTRICT ON UPDATE CASCADE,
+            CONSTRAINT `RentalPaymentAllocation_tenantId_collectionId_fkey` FOREIGN KEY (`tenantId`,`collectionId`) REFERENCES `Collection`(`tenantId`,`id`) ON DELETE RESTRICT ON UPDATE CASCADE
+          ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+          SQL
+
+          cat > lib/actions/rentals.ts <<'TS'
+          "use server";
+
+          import { CollectionType, Prisma, RentalAgreementStatus, RentalAssetStatus, RentalAssetType, RentalChargeType, RentalInvoiceStatus, RenterStatus } from "@prisma/client";
+          import { revalidatePath } from "next/cache";
+          import { redirect } from "next/navigation";
+          import { requirePermission } from "@/lib/authorization/guards";
+          import { Permission } from "@/lib/authorization/permissions";
+          import { prisma } from "@/lib/db";
+
+          function text(formData: FormData, key: string) {
+            return String(formData.get(key) || "").trim();
+          }
+
+          function requiredText(formData: FormData, key: string, label: string, max = 191) {
+            const value = text(formData, key);
+            if (!value) throw new Error(`${label} is required.`);
+            if (value.length > max) throw new Error(`${label} must not exceed ${max} characters.`);
+            return value;
+          }
+
+          function amount(formData: FormData, key: string, label: string, allowZero = false) {
+            const value = Number(formData.get(key));
+            if (!Number.isFinite(value) || (allowZero ? value < 0 : value <= 0)) throw new Error(`Enter a valid ${label}.`);
+            return Math.round(value * 100) / 100;
+          }
+
+          function integer(formData: FormData, key: string, label: string, min: number, max: number) {
+            const value = Number(formData.get(key));
+            if (!Number.isInteger(value) || value < min || value > max) throw new Error(`${label} must be between ${min} and ${max}.`);
+            return value;
+          }
+
+          function dateValue(value: string, label: string) {
+            if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) throw new Error(`Choose a valid ${label}.`);
+            return new Date(`${value}T00:00:00.000Z`);
+          }
+
+          function monthBounds(period: string) {
+            if (!/^\d{4}-\d{2}$/.test(period)) throw new Error("Choose a valid billing month.");
+            const [year, month] = period.split("-").map(Number);
+            const start = new Date(Date.UTC(year, month - 1, 1));
+            const end = new Date(Date.UTC(year, month, 0));
+            return { start, end, year, month };
+          }
+
+          function dateWithDay(year: number, month: number, day: number) {
+            const maxDay = new Date(Date.UTC(year, month, 0)).getUTCDate();
+            return new Date(Date.UTC(year, month - 1, Math.min(day, maxDay)));
+          }
+
+          function invoiceNumber(agreementId: string, year: number, month: number, chargeType: RentalChargeType) {
+            const period = `${year}${String(month).padStart(2, "0")}`;
+            const suffix = chargeType === RentalChargeType.SECURITY_DEPOSIT ? "DEP" : chargeType === RentalChargeType.RENT ? "RNT" : "OTH";
+            return `R-${period}-${agreementId.slice(-8).toUpperCase()}-${suffix}`;
+          }
+
+          export async function saveRentalAssetAction(formData: FormData) {
+            const admin = await requirePermission(Permission.RENTALS_MANAGE);
+            const code = requiredText(formData, "code", "Asset code", 60).toUpperCase();
+            const name = requiredText(formData, "name", "Asset name");
+            const typeRaw = text(formData, "type");
+            if (!Object.values(RentalAssetType).includes(typeRaw as RentalAssetType)) throw new Error("Choose a valid asset type.");
+            const defaultRate = amount(formData, "defaultRate", "default monthly rate", true);
+            await prisma.rentalAsset.create({ data: {
+              tenantId: admin.tenantId,
+              code,
+              name,
+              type: typeRaw as RentalAssetType,
+              location: text(formData, "location") || null,
+              defaultRate,
+              notes: text(formData, "notes") || null,
+            } });
+            revalidateRentals();
+            redirect("/admin/rentals?success=asset");
+          }
+
+          export async function saveRenterAction(formData: FormData) {
+            const admin = await requirePermission(Permission.RENTALS_MANAGE);
+            const homeownerId = text(formData, "homeownerId") || null;
+            if (homeownerId) {
+              const homeowner = await prisma.homeownerProfile.findFirst({ where: { id: homeownerId, tenantId: admin.tenantId }, select: { id: true } });
+              if (!homeowner) throw new Error("Linked homeowner was not found in this tenant.");
+            }
+            await prisma.renter.create({ data: {
+              tenantId: admin.tenantId,
+              homeownerId,
+              fullName: requiredText(formData, "fullName", "Renter name"),
+              email: text(formData, "email") || null,
+              phone: text(formData, "phone") || null,
+              address: text(formData, "address") || null,
+              status: RenterStatus.ACTIVE,
+            } });
+            revalidateRentals();
+            redirect("/admin/rentals?success=renter");
+          }
+
+          export async function saveRentalAgreementAction(formData: FormData) {
+            const admin = await requirePermission(Permission.RENTALS_MANAGE);
+            const assetId = requiredText(formData, "assetId", "Rental asset");
+            const renterId = requiredText(formData, "renterId", "Renter");
+            const startDate = dateValue(requiredText(formData, "startDate", "Start date"), "start date");
+            const monthlyRate = amount(formData, "monthlyRate", "monthly rate");
+            const securityDeposit = amount(formData, "securityDeposit", "security deposit", true);
+            const billingDay = integer(formData, "billingDay", "Billing day", 1, 28);
+            const dueDay = integer(formData, "dueDay", "Due day", 1, 28);
+
+            await prisma.$transaction(async (tx) => {
+              const [asset, renter, activeAgreement] = await Promise.all([
+                tx.rentalAsset.findFirst({ where: { id: assetId, tenantId: admin.tenantId, status: { not: RentalAssetStatus.INACTIVE } } }),
+                tx.renter.findFirst({ where: { id: renterId, tenantId: admin.tenantId, status: RenterStatus.ACTIVE } }),
+                tx.rentalAgreement.findFirst({ where: { tenantId: admin.tenantId, assetId, status: RentalAgreementStatus.ACTIVE } }),
+              ]);
+              if (!asset) throw new Error("Rental asset was not found or is inactive.");
+              if (!renter) throw new Error("Renter was not found or is inactive.");
+              if (activeAgreement) throw new Error("This asset already has an active rental agreement.");
+
+              const agreement = await tx.rentalAgreement.create({ data: {
+                tenantId: admin.tenantId,
+                assetId,
+                renterId,
+                startDate,
+                monthlyRate,
+                billingDay,
+                dueDay,
+                securityDeposit,
+                status: RentalAgreementStatus.ACTIVE,
+                notes: text(formData, "notes") || null,
+              } });
+              await tx.rentalAsset.update({ where: { id: assetId }, data: { status: RentalAssetStatus.OCCUPIED } });
+              await tx.auditLog.create({ data: {
+                tenantId: admin.tenantId,
+                actorId: admin.id,
+                module: "RENTALS",
+                action: "CREATE_RENTAL_AGREEMENT",
+                entityType: "RentalAgreement",
+                entityId: agreement.id,
+                metadata: { assetId, renterId, monthlyRate, securityDeposit, startDate: startDate.toISOString() },
+              } });
+            }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+
+            revalidateRentals();
+            redirect("/admin/rentals?success=agreement");
+          }
+
+          export async function endRentalAgreementAction(formData: FormData) {
+            const admin = await requirePermission(Permission.RENTALS_MANAGE);
+            const agreementId = requiredText(formData, "agreementId", "Agreement");
+            const endDate = text(formData, "endDate") ? dateValue(text(formData, "endDate"), "end date") : new Date();
+            endDate.setUTCHours(0, 0, 0, 0);
+            await prisma.$transaction(async (tx) => {
+              const agreement = await tx.rentalAgreement.findFirst({ where: { id: agreementId, tenantId: admin.tenantId, status: RentalAgreementStatus.ACTIVE } });
+              if (!agreement) throw new Error("Active rental agreement not found.");
+              await tx.rentalAgreement.update({ where: { id: agreement.id }, data: { status: RentalAgreementStatus.ENDED, endDate } });
+              await tx.rentalAsset.update({ where: { id: agreement.assetId }, data: { status: RentalAssetStatus.AVAILABLE } });
+              await tx.auditLog.create({ data: { tenantId: admin.tenantId, actorId: admin.id, module: "RENTALS", action: "END_RENTAL_AGREEMENT", entityType: "RentalAgreement", entityId: agreement.id, metadata: { assetId: agreement.assetId, endDate: endDate.toISOString() } } });
+            }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+            revalidateRentals();
+            redirect("/admin/rentals?success=ended");
+          }
+
+          export async function generateRentalInvoicesAction(formData: FormData) {
+            const admin = await requirePermission(Permission.RENTALS_MANAGE);
+            const period = requiredText(formData, "period", "Billing month");
+            const { start, end, year, month } = monthBounds(period);
+            let created = 0;
+
+            await prisma.$transaction(async (tx) => {
+              const today = new Date();
+              today.setUTCHours(0, 0, 0, 0);
+              await tx.rentalInvoice.updateMany({
+                where: { tenantId: admin.tenantId, balance: { gt: 0 }, dueDate: { lt: today }, status: { in: [RentalInvoiceStatus.OPEN, RentalInvoiceStatus.PARTIAL] } },
+                data: { status: RentalInvoiceStatus.OVERDUE },
+              });
+
+              const agreements = await tx.rentalAgreement.findMany({
+                where: {
+                  tenantId: admin.tenantId,
+                  status: RentalAgreementStatus.ACTIVE,
+                  startDate: { lte: end },
+                  OR: [{ endDate: null }, { endDate: { gte: start } }],
+                },
+              });
+
+              for (const agreement of agreements) {
+                const existingRent = await tx.rentalInvoice.findFirst({ where: { tenantId: admin.tenantId, agreementId: agreement.id, chargeType: RentalChargeType.RENT, periodStart: start } });
+                if (!existingRent) {
+                  const dueDate = dateWithDay(year, month, agreement.dueDay);
+                  const overdue = dueDate < today;
+                  await tx.rentalInvoice.create({ data: {
+                    tenantId: admin.tenantId,
+                    agreementId: agreement.id,
+                    invoiceNumber: invoiceNumber(agreement.id, year, month, RentalChargeType.RENT),
+                    chargeType: RentalChargeType.RENT,
+                    periodStart: start,
+                    periodEnd: end,
+                    dueDate,
+                    amount: agreement.monthlyRate,
+                    balance: agreement.monthlyRate,
+                    status: overdue ? RentalInvoiceStatus.OVERDUE : RentalInvoiceStatus.OPEN,
+                  } });
+                  created += 1;
+                }
+
+                if (Number(agreement.securityDeposit) > 0) {
+                  const existingDeposit = await tx.rentalInvoice.findFirst({ where: { tenantId: admin.tenantId, agreementId: agreement.id, chargeType: RentalChargeType.SECURITY_DEPOSIT } });
+                  if (!existingDeposit) {
+                    const depositYear = agreement.startDate.getUTCFullYear();
+                    const depositMonth = agreement.startDate.getUTCMonth() + 1;
+                    const depositStart = new Date(Date.UTC(depositYear, depositMonth - 1, 1));
+                    const depositEnd = new Date(Date.UTC(depositYear, depositMonth, 0));
+                    await tx.rentalInvoice.create({ data: {
+                      tenantId: admin.tenantId,
+                      agreementId: agreement.id,
+                      invoiceNumber: invoiceNumber(agreement.id, depositYear, depositMonth, RentalChargeType.SECURITY_DEPOSIT),
+                      chargeType: RentalChargeType.SECURITY_DEPOSIT,
+                      periodStart: depositStart,
+                      periodEnd: depositEnd,
+                      dueDate: agreement.startDate,
+                      amount: agreement.securityDeposit,
+                      balance: agreement.securityDeposit,
+                      status: agreement.startDate < today ? RentalInvoiceStatus.OVERDUE : RentalInvoiceStatus.OPEN,
+                      notes: "Refundable rental security deposit liability",
+                    } });
+                    created += 1;
+                  }
+                }
+              }
+
+              await tx.auditLog.create({ data: { tenantId: admin.tenantId, actorId: admin.id, module: "RENTALS", action: "GENERATE_RENTAL_INVOICES", entityType: "RentalInvoice", metadata: { period, created } } });
+            }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable, maxWait: 10_000, timeout: 120_000 });
+
+            revalidateRentals();
+            redirect(`/admin/rentals?success=generated&count=${created}`);
+          }
+
+          export async function allocateRentalPaymentAction(formData: FormData) {
+            const admin = await requirePermission(Permission.RENTALS_MANAGE);
+            const invoiceId = requiredText(formData, "invoiceId", "Rental invoice");
+            const collectionId = requiredText(formData, "collectionId", "Collection receipt");
+            const allocationAmount = amount(formData, "amount", "allocation amount");
+
+            await prisma.$transaction(async (tx) => {
+              const invoice = await tx.rentalInvoice.findFirst({
+                where: { id: invoiceId, tenantId: admin.tenantId, status: { notIn: [RentalInvoiceStatus.PAID, RentalInvoiceStatus.VOID] } },
+                include: { agreement: { include: { renter: true, asset: true } } },
+              });
+              if (!invoice) throw new Error("Open rental invoice not found.");
+              const collection = await tx.collection.findFirst({
+                where: { id: collectionId, tenantId: admin.tenantId, type: CollectionType.OTHER, refundable: false },
+                include: { rentalAllocations: true },
+              });
+              if (!collection) throw new Error("Eligible Other Income collection receipt not found.");
+
+              const collectionAllocated = collection.rentalAllocations.reduce((sum, item) => sum + Number(item.amount), 0);
+              const collectionRemaining = Number(collection.amount) - collectionAllocated;
+              const invoiceRemaining = Number(invoice.balance);
+              if (allocationAmount > collectionRemaining + 0.0001) throw new Error("Allocation exceeds the remaining amount on this collection receipt.");
+              if (allocationAmount > invoiceRemaining + 0.0001) throw new Error("Allocation exceeds the rental invoice balance.");
+
+              await tx.rentalPaymentAllocation.create({ data: { tenantId: admin.tenantId, invoiceId: invoice.id, collectionId: collection.id, amount: allocationAmount, createdById: admin.id } });
+              const nextPaid = Number(invoice.amountPaid) + allocationAmount;
+              const nextBalance = Math.max(0, Number(invoice.amount) - nextPaid);
+              const today = new Date();
+              today.setUTCHours(0, 0, 0, 0);
+              const nextStatus = nextBalance <= 0.0001
+                ? RentalInvoiceStatus.PAID
+                : invoice.dueDate < today
+                  ? RentalInvoiceStatus.OVERDUE
+                  : RentalInvoiceStatus.PARTIAL;
+              await tx.rentalInvoice.update({ where: { id: invoice.id }, data: { amountPaid: nextPaid, balance: nextBalance, status: nextStatus } });
+              await tx.auditLog.create({ data: {
+                tenantId: admin.tenantId,
+                actorId: admin.id,
+                module: "RENTALS",
+                action: "ALLOCATE_RENTAL_COLLECTION",
+                entityType: "RentalInvoice",
+                entityId: invoice.id,
+                metadata: {
+                  invoiceNumber: invoice.invoiceNumber,
+                  receiptNumber: collection.receiptNumber,
+                  collectionId: collection.id,
+                  renter: invoice.agreement.renter.fullName,
+                  asset: invoice.agreement.asset.code,
+                  amount: allocationAmount,
+                  chargeType: invoice.chargeType,
+                },
+              } });
+            }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+
+            revalidateRentals();
+            revalidatePath("/admin/collections");
+            revalidatePath("/admin/reports");
+            redirect("/admin/rentals?success=allocated");
+          }
+
+          function revalidateRentals() {
+            revalidatePath("/admin/rentals");
+            revalidatePath("/admin/dashboard");
+            revalidatePath("/admin/reports");
+          }
+          TS
+
+          mkdir -p app/admin/rentals
+          cat > app/admin/rentals/page.tsx <<'TSX'
+          import Link from "next/link";
+          import { Building2, CircleDollarSign, ReceiptText, UsersRound } from "lucide-react";
+          import { PageHeader } from "@/components/page-header";
+          import { StatCard } from "@/components/stat-card";
+          import { StatusBadge } from "@/components/status-badge";
+          import { SubmitButton } from "@/components/ui";
+          import { allocateRentalPaymentAction, endRentalAgreementAction, generateRentalInvoicesAction, saveRentalAgreementAction, saveRentalAssetAction, saveRenterAction } from "@/lib/actions/rentals";
+          import { requirePermission } from "@/lib/authorization/guards";
+          import { Permission } from "@/lib/authorization/permissions";
+          import { prisma } from "@/lib/db";
+          import { inputDate, money, shortDate } from "@/lib/utils";
+
+          export default async function RentalsPage() {
+            const user = await requirePermission(Permission.RENTALS_READ);
+            const [assets, renters, agreements, invoices, collections, allocations] = await Promise.all([
+              prisma.rentalAsset.findMany({ where: { tenantId: user.tenantId }, orderBy: [{ status: "asc" }, { code: "asc" }] }),
+              prisma.renter.findMany({ where: { tenantId: user.tenantId }, include: { homeowner: { include: { user: true } } }, orderBy: { fullName: "asc" } }),
+              prisma.rentalAgreement.findMany({ where: { tenantId: user.tenantId }, include: { asset: true, renter: true }, orderBy: [{ status: "asc" }, { startDate: "desc" }] }),
+              prisma.rentalInvoice.findMany({ where: { tenantId: user.tenantId }, include: { agreement: { include: { asset: true, renter: true } }, allocations: { include: { collection: true } } }, orderBy: [{ dueDate: "desc" }, { createdAt: "desc" }] }),
+              prisma.collection.findMany({ where: { tenantId: user.tenantId, type: "OTHER", refundable: false }, include: { rentalAllocations: true }, orderBy: [{ collectionDate: "desc" }, { createdAt: "desc" }] }),
+              prisma.rentalPaymentAllocation.findMany({ where: { tenantId: user.tenantId }, include: { invoice: { include: { agreement: { include: { renter: true, asset: true } } } }, collection: true }, orderBy: { createdAt: "desc" }, take: 20 }),
+            ]);
+
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
+            const occupied = assets.filter((asset) => asset.status === "OCCUPIED").length;
+            const outstandingRent = invoices.filter((invoice) => invoice.chargeType === "RENT" && Number(invoice.balance) > 0).reduce((sum, invoice) => sum + Number(invoice.balance), 0);
+            const overdue = invoices.filter((invoice) => Number(invoice.balance) > 0 && invoice.dueDate < today).length;
+            const activeAgreements = agreements.filter((agreement) => agreement.status === "ACTIVE");
+            const openInvoices = invoices.filter((invoice) => invoice.status !== "PAID" && invoice.status !== "VOID" && Number(invoice.balance) > 0);
+            const availableAssets = assets.filter((asset) => asset.status === "AVAILABLE");
+            const activeRenters = renters.filter((renter) => renter.status === "ACTIVE");
+            const eligibleCollections = collections.map((collection) => ({ ...collection, remaining: Number(collection.amount) - collection.rentalAllocations.reduce((sum, allocation) => sum + Number(allocation.amount), 0) })).filter((collection) => collection.remaining > 0.0001);
+            const currentMonth = new Date().toISOString().slice(0, 7);
+
+            return <>
+              <PageHeader eyebrow="Rental receivables" title="Rental Management" description="Manage stalls, parking, rentable spaces, renters, monthly invoices, and finance reconciliation." />
+
+              <section className="mb-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+                <StatCard label="Rental assets" value={assets.length} note={`${occupied} occupied · ${availableAssets.length} available`} icon={Building2} />
+                <StatCard label="Active renters" value={activeRenters.length} note={`${activeAgreements.length} active agreement(s)`} icon={UsersRound} />
+                <StatCard label="Outstanding rent" value={money(outstandingRent)} note={`${openInvoices.length} open invoice(s)`} icon={CircleDollarSign} />
+                <StatCard label="Overdue invoices" value={overdue} note="Past due with remaining balance" icon={ReceiptText} />
+              </section>
+
+              <section className="mb-6 grid gap-5 xl:grid-cols-3">
+                <form action={saveRentalAssetAction} className="card space-y-3">
+                  <div><h2 className="text-lg font-black">Add rental asset</h2><p className="text-sm text-slate-500">Stall, parking slot, common-area space, or other rentable inventory.</p></div>
+                  <div className="grid gap-3 sm:grid-cols-2"><div><label className="label">Asset code</label><input className="field" name="code" placeholder="STALL-01" maxLength={60} required /></div><div><label className="label">Type</label><select className="field" name="type"><option value="STALL">Stall</option><option value="PARKING">Parking</option><option value="SPACE">Space</option><option value="OTHER">Other</option></select></div></div>
+                  <div><label className="label">Name</label><input className="field" name="name" placeholder="Market Stall 01" required /></div>
+                  <div><label className="label">Location</label><input className="field" name="location" placeholder="Clubhouse frontage" /></div>
+                  <div><label className="label">Default monthly rate</label><input className="field" name="defaultRate" type="number" min="0" step="0.01" defaultValue="0" required /></div>
+                  <div><label className="label">Notes</label><textarea className="field min-h-20" name="notes" /></div>
+                  <SubmitButton className="btn-primary w-full">Save asset</SubmitButton>
+                </form>
+
+                <form action={saveRenterAction} className="card space-y-3">
+                  <div><h2 className="text-lg font-black">Add renter</h2><p className="text-sm text-slate-500">Outside renters do not need a HOAHub User profile.</p></div>
+                  <div><label className="label">Renter name</label><input className="field" name="fullName" required /></div>
+                  <div><label className="label">Link existing homeowner (optional)</label><select className="field" name="homeownerId"><option value="">External renter / no homeowner profile</option>{renters.length >= 0 && (await prisma.homeownerProfile.findMany({ where: { tenantId: user.tenantId, status: "ACTIVE" }, include: { user: true }, orderBy: { user: { name: "asc" } } })).map((homeowner) => <option key={homeowner.id} value={homeowner.id}>{homeowner.user.name} · Block {homeowner.block} Lot {homeowner.lot}</option>)}</select></div>
+                  <div className="grid gap-3 sm:grid-cols-2"><div><label className="label">Email</label><input className="field" name="email" type="email" /></div><div><label className="label">Phone</label><input className="field" name="phone" /></div></div>
+                  <div><label className="label">Address</label><textarea className="field min-h-20" name="address" /></div>
+                  <SubmitButton className="btn-primary w-full">Save renter</SubmitButton>
+                </form>
+
+                <form action={saveRentalAgreementAction} className="card space-y-3">
+                  <div><h2 className="text-lg font-black">Create rental agreement</h2><p className="text-sm text-slate-500">One active renter per rental asset.</p></div>
+                  <div><label className="label">Available asset</label><select className="field" name="assetId" required><option value="">Choose asset</option>{availableAssets.map((asset) => <option key={asset.id} value={asset.id}>{asset.code} · {asset.name}</option>)}</select></div>
+                  <div><label className="label">Renter</label><select className="field" name="renterId" required><option value="">Choose renter</option>{activeRenters.map((renter) => <option key={renter.id} value={renter.id}>{renter.fullName}</option>)}</select></div>
+                  <div className="grid gap-3 sm:grid-cols-2"><div><label className="label">Start date</label><input className="field" name="startDate" type="date" defaultValue={inputDate(new Date())} required /></div><div><label className="label">Monthly rate</label><input className="field" name="monthlyRate" type="number" min="0.01" step="0.01" required /></div></div>
+                  <div className="grid gap-3 sm:grid-cols-3"><div><label className="label">Billing day</label><input className="field" name="billingDay" type="number" min="1" max="28" defaultValue="1" required /></div><div><label className="label">Due day</label><input className="field" name="dueDay" type="number" min="1" max="28" defaultValue="5" required /></div><div><label className="label">Security deposit</label><input className="field" name="securityDeposit" type="number" min="0" step="0.01" defaultValue="0" required /></div></div>
+                  <div><label className="label">Notes</label><textarea className="field min-h-20" name="notes" /></div>
+                  <SubmitButton className="btn-primary w-full" disabled={!availableAssets.length || !activeRenters.length}>Create agreement</SubmitButton>
+                </form>
+              </section>
+
+              <section className="card mb-6">
+                <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between"><div><h2 className="text-lg font-black">Monthly rental billing</h2><p className="text-sm text-slate-500">Idempotently generate rent invoices for all active agreements. Security-deposit invoices are created once and tracked as liabilities.</p></div><form action={generateRentalInvoicesAction} className="flex gap-2"><div><label className="label">Billing month</label><input className="field" type="month" name="period" defaultValue={currentMonth} required /></div><SubmitButton className="btn-primary self-end">Generate invoices</SubmitButton></form></div>
+              </section>
+
+              <section className="card mb-6">
+                <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between"><div><h2 className="text-lg font-black">Allocate collection receipt</h2><p className="text-sm text-slate-500">Record the cash first in Other Collections, then allocate it here to reconcile the rental receivable.</p></div><Link href="/admin/collections" className="btn-secondary">Record Other Income</Link></div>
+                <form action={allocateRentalPaymentAction} className="grid gap-3 lg:grid-cols-[2fr_2fr_1fr_auto] lg:items-end">
+                  <div><label className="label">Open rental invoice</label><select className="field" name="invoiceId" required><option value="">Choose invoice</option>{openInvoices.map((invoice) => <option key={invoice.id} value={invoice.id}>{invoice.invoiceNumber} · {invoice.agreement.renter.fullName} · {invoice.agreement.asset.code} · {invoice.chargeType.replaceAll("_", " ")} · {money(invoice.balance)} due</option>)}</select></div>
+                  <div><label className="label">Unallocated collection receipt</label><select className="field" name="collectionId" required><option value="">Choose receipt</option>{eligibleCollections.map((collection) => <option key={collection.id} value={collection.id}>{collection.receiptNumber || collection.id.slice(-8)} · {collection.payerName || "Profile payer"} · {money(collection.remaining)} available</option>)}</select></div>
+                  <div><label className="label">Amount</label><input className="field" name="amount" type="number" min="0.01" step="0.01" required /></div>
+                  <SubmitButton className="btn-primary" disabled={!openInvoices.length || !eligibleCollections.length}>Allocate</SubmitButton>
+                </form>
+              </section>
+
+              <section className="mb-6 grid gap-5 xl:grid-cols-2">
+                <div className="card"><h2 className="mb-3 text-lg font-black">Rental assets</h2><div className="table-wrap shadow-none"><table className="data-table"><thead><tr><th>Asset</th><th>Type</th><th>Rate</th><th>Status</th></tr></thead><tbody>{assets.map((asset) => <tr key={asset.id}><td><p className="font-bold">{asset.code}</p><p className="text-xs text-slate-500">{asset.name}{asset.location ? ` · ${asset.location}` : ""}</p></td><td>{asset.type}</td><td>{money(asset.defaultRate)}</td><td><StatusBadge status={asset.status} /></td></tr>)}{!assets.length && <tr><td colSpan={4} className="py-8 text-center text-slate-500">No rental assets yet.</td></tr>}</tbody></table></div></div>
+                <div className="card"><h2 className="mb-3 text-lg font-black">Renters</h2><div className="table-wrap shadow-none"><table className="data-table"><thead><tr><th>Renter</th><th>Contact</th><th>HOA link</th><th>Status</th></tr></thead><tbody>{renters.map((renter) => <tr key={renter.id}><td className="font-bold">{renter.fullName}</td><td><p>{renter.phone || "-"}</p><p className="text-xs text-slate-500">{renter.email || ""}</p></td><td>{renter.homeowner?.user.name || "External"}</td><td><StatusBadge status={renter.status} /></td></tr>)}{!renters.length && <tr><td colSpan={4} className="py-8 text-center text-slate-500">No renters yet.</td></tr>}</tbody></table></div></div>
+              </section>
+
+              <section className="card mb-6"><h2 className="mb-3 text-lg font-black">Rental agreements</h2><div className="table-wrap shadow-none"><table className="data-table"><thead><tr><th>Asset</th><th>Renter</th><th>Term</th><th>Monthly rate</th><th>Deposit</th><th>Status</th><th></th></tr></thead><tbody>{agreements.map((agreement) => <tr key={agreement.id}><td className="font-bold">{agreement.asset.code}</td><td>{agreement.renter.fullName}</td><td>{shortDate(agreement.startDate)}{agreement.endDate ? ` – ${shortDate(agreement.endDate)}` : " – ongoing"}</td><td>{money(agreement.monthlyRate)}</td><td>{money(agreement.securityDeposit)}</td><td><StatusBadge status={agreement.status} /></td><td>{agreement.status === "ACTIVE" && <form action={endRentalAgreementAction} className="flex gap-2"><input type="hidden" name="agreementId" value={agreement.id} /><input className="field min-w-36" type="date" name="endDate" defaultValue={inputDate(new Date())} /><SubmitButton className="btn-secondary">End</SubmitButton></form>}</td></tr>)}{!agreements.length && <tr><td colSpan={7} className="py-8 text-center text-slate-500">No rental agreements yet.</td></tr>}</tbody></table></div></section>
+
+              <section className="card mb-6"><h2 className="mb-3 text-lg font-black">Rental invoices</h2><div className="table-wrap shadow-none"><table className="data-table"><thead><tr><th>Invoice</th><th>Renter / asset</th><th>Charge</th><th>Due</th><th>Amount</th><th>Paid</th><th>Balance</th><th>Status</th></tr></thead><tbody>{invoices.map((invoice) => { const effectiveStatus = Number(invoice.balance) > 0 && invoice.dueDate < today && invoice.status !== "VOID" ? "OVERDUE" : invoice.status; return <tr key={invoice.id}><td className="font-bold">{invoice.invoiceNumber}</td><td><p>{invoice.agreement.renter.fullName}</p><p className="text-xs text-slate-500">{invoice.agreement.asset.code} · {invoice.agreement.asset.name}</p></td><td>{invoice.chargeType.replaceAll("_", " ")}</td><td>{shortDate(invoice.dueDate)}</td><td>{money(invoice.amount)}</td><td>{money(invoice.amountPaid)}</td><td className="font-black">{money(invoice.balance)}</td><td><StatusBadge status={effectiveStatus} /></td></tr>; })}{!invoices.length && <tr><td colSpan={8} className="py-8 text-center text-slate-500">No rental invoices yet.</td></tr>}</tbody></table></div></section>
+
+              <section className="card"><h2 className="mb-1 text-lg font-black">Recent rental payment reconciliation</h2><p className="mb-3 text-sm text-slate-500">Each row links an existing HOAHub collection receipt to a rental receivable.</p><div className="table-wrap shadow-none"><table className="data-table"><thead><tr><th>Receipt</th><th>Invoice</th><th>Renter</th><th>Asset</th><th>Charge</th><th>Amount</th><th>Date</th></tr></thead><tbody>{allocations.map((allocation) => <tr key={allocation.id}><td className="font-bold">{allocation.collection.receiptNumber || allocation.collection.id.slice(-8)}</td><td>{allocation.invoice.invoiceNumber}</td><td>{allocation.invoice.agreement.renter.fullName}</td><td>{allocation.invoice.agreement.asset.code}</td><td>{allocation.invoice.chargeType.replaceAll("_", " ")}</td><td className="font-black">{money(allocation.amount)}</td><td>{shortDate(allocation.createdAt)}</td></tr>)}{!allocations.length && <tr><td colSpan={7} className="py-8 text-center text-slate-500">No rental allocations yet.</td></tr>}</tbody></table></div></section>
+            </>;
+          }
+          TSX
+
+          mkdir -p tests/unit
+          cat > tests/unit/rental-management-mvp.test.ts <<'TS'
+          import assert from "node:assert/strict";
+          import { readFile } from "node:fs/promises";
+          import test from "node:test";
+
+          const schemaPath = new URL("../../prisma/schema.prisma", import.meta.url);
+          const migrationPath = new URL("../../prisma/migrations/20260822070000_rental_management_mvp/migration.sql", import.meta.url);
+          const actionsPath = new URL("../../lib/actions/rentals.ts", import.meta.url);
+          const pagePath = new URL("../../app/admin/rentals/page.tsx", import.meta.url);
+          const permissionsPath = new URL("../../lib/authorization/permissions.ts", import.meta.url);
+          const sidebarPath = new URL("../../components/sidebar-links.ts", import.meta.url);
+          const exportPath = new URL("../../app/admin/reports/export/route.ts", import.meta.url);
+          const agentPath = new URL("../../Agent.md", import.meta.url);
+
+          test("rental domain keeps external renters profile-optional and tenant-scoped", async () => {
+            const [schema, migration] = await Promise.all([readFile(schemaPath, "utf8"), readFile(migrationPath, "utf8")]);
+            for (const model of ["RentalAsset", "Renter", "RentalAgreement", "RentalInvoice", "RentalPaymentAllocation"]) assert.match(schema, new RegExp(`model ${model} \\{`));
+            assert.match(schema, /homeownerId String\?/);
+            assert.match(schema, /enum RentalInvoiceStatus \{[\s\S]*OPEN[\s\S]*PARTIAL[\s\S]*PAID[\s\S]*OVERDUE/);
+            assert.match(schema, /enum RentalChargeType \{[\s\S]*RENT[\s\S]*SECURITY_DEPOSIT/);
+            assert.match(schema, /collection\s+Collection\s+@relation\(fields: \[tenantId, collectionId\]/);
+            assert.match(migration, /FOREIGN KEY \(`tenantId`,`collectionId`\) REFERENCES `Collection`\(`tenantId`,`id`\)/);
+          });
+
+          test("rental payment allocation reconciles existing collections without duplicating cash", async () => {
+            const [actions, report] = await Promise.all([readFile(actionsPath, "utf8"), readFile(exportPath, "utf8")]);
+            assert.match(actions, /type: CollectionType\.OTHER, refundable: false/);
+            assert.match(actions, /Allocation exceeds the remaining amount on this collection receipt/);
+            assert.match(actions, /Allocation exceeds the rental invoice balance/);
+            assert.match(actions, /rentalPaymentAllocation\.create/);
+            assert.match(actions, /RentalInvoiceStatus\.PAID/);
+            assert.match(report, /Refundable rental deposit liability/);
+            assert.match(report, /Rental income/);
+          });
+
+          test("rental UI, permissions, navigation, and Agent contract are wired", async () => {
+            const [page, permissions, sidebar, agent] = await Promise.all([readFile(pagePath, "utf8"), readFile(permissionsPath, "utf8"), readFile(sidebarPath, "utf8"), readFile(agentPath, "utf8")]);
+            assert.match(page, /title="Rental Management"/);
+            assert.match(page, /Monthly rental billing/);
+            assert.match(page, /Allocate collection receipt/);
+            assert.match(permissions, /RENTALS_READ: "rentals\.read"/);
+            assert.match(permissions, /RENTALS_MANAGE: "rentals\.manage"/);
+            assert.match(sidebar, /href: "\/admin\/rentals"/);
+            assert.match(agent, /## Rental Management MVP — PR #138/);
+            assert.match(agent, /security deposits remain liabilities/);
+          });
+          TS
+
+          rm -f .github/workflows/pr138-rental-mvp-bootstrap.yml
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Prisma validate
+        run: npx prisma validate
+
+      - name: Prisma generate
+        run: npx prisma generate
+
+      - name: Focused rental tests
+        run: node --import tsx --test tests/unit/rental-management-mvp.test.ts
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Commit implementation
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          if git diff --cached --quiet; then
+            echo "No rental MVP changes to commit."
+            exit 0
+          fi
+          git commit -m "feat(rentals): add rental management MVP"
+          git push origin HEAD:feature/rental-management-mvp

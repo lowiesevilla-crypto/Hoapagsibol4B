@@ -107,6 +107,10 @@ export async function applyOnboardingImport(input: {
   if (validation.errors.length) throw new Error("The CSV has validation errors. No homeowner records were imported.");
   if (!validation.rows.length) throw new Error("The CSV does not contain homeowner rows.");
 
+  // Imported accounts cannot authenticate with this internal placeholder. A single high-entropy
+  // batch hash avoids thousands of redundant bcrypt operations before a large transactional import;
+  // real activation credentials remain unique and are created separately for rows with email.
+  const batchPlaceholderPasswordHash = await hash(`activation-only-${randomUUID()}`, 12);
   const prepared = [] as Array<{
     row: OnboardingHomeownerRow;
     accountNumber: string;
@@ -122,7 +126,7 @@ export async function applyOnboardingImport(input: {
     prepared.push({
       row,
       accountNumber,
-      passwordHash: await hash(`activation-only-${randomUUID()}`, 12),
+      passwordHash: batchPlaceholderPasswordHash,
     });
   }
 

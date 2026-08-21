@@ -18,10 +18,14 @@ import {
   type OnboardingImportError,
 } from "@/lib/onboarding/csv";
 import { updateTenantOnboardingState } from "@/lib/onboarding/state";
-import { generateUniqueHomeownerAccountNumber } from "@/lib/services/homeowner-account-number";
+import { generateHomeownerAccountNumberCandidate } from "@/lib/services/homeowner-account-number";
 import { homeownerNoEmailAddress } from "@/lib/services/homeowner-digital-activation";
 import { createHomeownerActivationCredential, sendHomeownerActivationEmail } from "@/lib/services/homeowner-activation";
 import { runWithTenant } from "@/lib/tenant-context";
+
+export const ONBOARDING_INLINE_ACTIVATION_MAX_ROWS = 25;
+export const ONBOARDING_IMPORT_TRANSACTION_TIMEOUT_MS = 300_000;
+const ONBOARDING_IMPORT_WRITE_BATCH_SIZE = 500;
 
 export type OnboardingImportValidation = {
   fileHash: string;
@@ -36,6 +40,7 @@ export type OnboardingImportResult = {
   importedRows: number;
   openingBalancesPosted: number;
   activationEmailsAttempted: number;
+  activationInvitationsDeferred: number;
 };
 
 export async function validateOnboardingImport(tenantId: string, csv: string): Promise<OnboardingImportValidation> {
@@ -107,28 +112,26 @@ export async function applyOnboardingImport(input: {
   if (validation.errors.length) throw new Error("The CSV has validation errors. No homeowner records were imported.");
   if (!validation.rows.length) throw new Error("The CSV does not contain homeowner rows.");
 
+  const deferActivationInvitations = validation.rows.length > ONBOARDING_INLINE_ACTIVATION_MAX_ROWS;
+  const activationInvitationsDeferred = deferActivationInvitations
+    ? validation.rows.filter((row) => Boolean(row.email)).length
+    : 0;
+
   // Imported accounts cannot authenticate with this internal placeholder. A single high-entropy
   // batch hash avoids thousands of redundant bcrypt operations before a large transactional import;
-  // real activation credentials remain unique and are created separately for rows with email.
+  // real activation credentials remain unique when an invitation is actually issued.
   const batchPlaceholderPasswordHash = await hash(`activation-only-${randomUUID()}`, 12);
-  const prepared = [] as Array<{
-    row: OnboardingHomeownerRow;
-    accountNumber: string;
-    passwordHash: string;
-  }>;
-  const batchAccountNumbers = new Set<string>();
-  for (const row of validation.rows) {
-    let accountNumber = row.accountNumber;
-    while (!accountNumber || batchAccountNumbers.has(accountNumber)) {
-      accountNumber = await generateUniqueHomeownerAccountNumber();
-    }
-    batchAccountNumbers.add(accountNumber);
-    prepared.push({
-      row,
-      accountNumber,
-      passwordHash: batchPlaceholderPasswordHash,
-    });
-  }
+  const suppliedAccountNumbers = new Set(
+    validation.rows.map((row) => row.accountNumber).filter((value): value is string => Boolean(value)),
+  );
+  const missingAccountCount = validation.rows.reduce((count, row) => count + (row.accountNumber ? 0 : 1), 0);
+  const generatedAccountNumbers = await allocateUniqueHomeownerAccountNumbers(missingAccountCount, suppliedAccountNumbers);
+  let generatedAccountIndex = 0;
+  const prepared = validation.rows.map((row) => ({
+    row,
+    accountNumber: row.accountNumber ?? generatedAccountNumbers[generatedAccountIndex++],
+    passwordHash: batchPlaceholderPasswordHash,
+  }));
 
   const activationJobs = await runWithTenant(
     input.tenantId,
@@ -155,10 +158,26 @@ export async function applyOnboardingImport(input: {
         emailVerificationToken: string;
         expiresAt: Date;
       }> = [];
+      const reservationRows: Array<{
+        tenantId: string;
+        homeownerId: string;
+        accountNumber: string;
+        reason: string;
+      }> = [];
+      const homeownerAuditRows: Array<{
+        tenantId: string;
+        actorId: string;
+        module: string;
+        action: string;
+        entityType: string;
+        entityId: string;
+        metadata: Prisma.InputJsonValue;
+      }> = [];
       let openingBalancesPosted = 0;
 
       for (const item of prepared) {
         const emailProvided = Boolean(item.row.email);
+        const inlineActivation = emailProvided && !deferActivationInvitations;
         const storedEmail = item.row.email || homeownerNoEmailAddress(item.accountNumber);
         const user = await tx.user.create({
           data: {
@@ -180,9 +199,9 @@ export async function applyOnboardingImport(input: {
                 occupancyStatus: item.row.occupancyStatus,
                 accountNumber: item.accountNumber,
                 status: item.row.status,
-                activationStatus: emailProvided ? HomeownerActivationStatus.INVITATION_SENT : HomeownerActivationStatus.NOT_INVITED,
+                activationStatus: inlineActivation ? HomeownerActivationStatus.INVITATION_SENT : HomeownerActivationStatus.NOT_INVITED,
                 emailStatus: HomeownerEmailVerificationStatus.UNVERIFIED,
-                activationSentAt: emailProvided ? new Date() : null,
+                activationSentAt: inlineActivation ? new Date() : null,
                 monthlyDuesAmount: item.row.monthlyDuesAmount,
               },
             },
@@ -200,16 +219,14 @@ export async function applyOnboardingImport(input: {
         const homeowner = user.homeownerProfile;
         if (!homeowner) throw new Error(`Homeowner profile was not created for row ${item.row.rowNumber}.`);
 
-        await tx.homeownerAccountNumberReservation.create({
-          data: {
-            tenantId: input.tenantId,
-            homeownerId: homeowner.id,
-            accountNumber: item.accountNumber,
-            reason: "ONBOARDING_IMPORT",
-          },
+        reservationRows.push({
+          tenantId: input.tenantId,
+          homeownerId: homeowner.id,
+          accountNumber: item.accountNumber,
+          reason: "ONBOARDING_IMPORT",
         });
 
-        const activation = emailProvided
+        const activation = inlineActivation
           ? await createHomeownerActivationCredential({
               tenantId: input.tenantId,
               userId: user.id,
@@ -268,15 +285,20 @@ export async function applyOnboardingImport(input: {
           openingBalancesPosted++;
         }
 
-        await tx.auditLog.create({
-          data: {
-            tenantId: input.tenantId,
-            actorId: input.actorId,
-            module: "ONBOARDING",
-            action: "HOMEOWNER_IMPORTED",
-            entityType: "HomeownerProfile",
-            entityId: homeowner.id,
-            metadata: { fileHash: validation.fileHash, rowNumber: item.row.rowNumber, openingBalance: item.row.openingBalance > 0, accountNumberProvided: Boolean(item.row.accountNumber), emailProvided },
+        homeownerAuditRows.push({
+          tenantId: input.tenantId,
+          actorId: input.actorId,
+          module: "ONBOARDING",
+          action: "HOMEOWNER_IMPORTED",
+          entityType: "HomeownerProfile",
+          entityId: homeowner.id,
+          metadata: {
+            fileHash: validation.fileHash,
+            rowNumber: item.row.rowNumber,
+            openingBalance: item.row.openingBalance > 0,
+            accountNumberProvided: Boolean(item.row.accountNumber),
+            emailProvided,
+            activationDeferred: emailProvided && deferActivationInvitations,
           },
         });
 
@@ -291,6 +313,17 @@ export async function applyOnboardingImport(input: {
         }
       }
 
+      for (let index = 0; index < reservationRows.length; index += ONBOARDING_IMPORT_WRITE_BATCH_SIZE) {
+        await tx.homeownerAccountNumberReservation.createMany({
+          data: reservationRows.slice(index, index + ONBOARDING_IMPORT_WRITE_BATCH_SIZE),
+        });
+      }
+      for (let index = 0; index < homeownerAuditRows.length; index += ONBOARDING_IMPORT_WRITE_BATCH_SIZE) {
+        await tx.auditLog.createMany({
+          data: homeownerAuditRows.slice(index, index + ONBOARDING_IMPORT_WRITE_BATCH_SIZE),
+        });
+      }
+
       await updateTenantOnboardingState(input.tenantId, input.actorId, (state) => ({
         ...state,
         import: {
@@ -303,6 +336,7 @@ export async function applyOnboardingImport(input: {
           appliedAt: new Date().toISOString(),
           importedRows: validation.rows.length,
           openingBalancesPosted,
+          activationInvitationsDeferred,
         },
       }), tx);
 
@@ -314,12 +348,24 @@ export async function applyOnboardingImport(input: {
           action: "HOMEOWNER_IMPORT_APPLIED",
           entityType: "Tenant",
           entityId: input.tenantId,
-          metadata: { fileHash: validation.fileHash, templateVersion: validation.templateVersion, importedRows: validation.rows.length, openingBalancesPosted, activationEmailsAttempted: jobs.length },
+          metadata: {
+            fileHash: validation.fileHash,
+            templateVersion: validation.templateVersion,
+            importedRows: validation.rows.length,
+            openingBalancesPosted,
+            activationEmailsAttempted: jobs.length,
+            activationInvitationsDeferred,
+            activationMode: deferActivationInvitations ? "DEFERRED_CLIENT_SCALE" : "INLINE_SMALL_IMPORT",
+          },
         },
       });
 
       return { jobs, openingBalancesPosted };
-    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable }),
+    }, {
+      isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
+      maxWait: 10_000,
+      timeout: ONBOARDING_IMPORT_TRANSACTION_TIMEOUT_MS,
+    }),
     { role: Role.HOA_ADMIN },
   );
 
@@ -340,7 +386,48 @@ export async function applyOnboardingImport(input: {
     importedRows: validation.rows.length,
     openingBalancesPosted: activationJobs.openingBalancesPosted,
     activationEmailsAttempted: activationJobs.jobs.length,
+    activationInvitationsDeferred,
   };
+}
+
+async function allocateUniqueHomeownerAccountNumbers(count: number, blockedAccountNumbers: Set<string>) {
+  if (count <= 0) return [];
+  const allocated: string[] = [];
+  const seen = new Set(blockedAccountNumbers);
+
+  while (allocated.length < count) {
+    const remaining = count - allocated.length;
+    const candidates: string[] = [];
+    const targetCandidateCount = Math.min(remaining + Math.max(8, Math.ceil(remaining * 0.02)), 5_000);
+    while (candidates.length < targetCandidateCount) {
+      const candidate = generateHomeownerAccountNumberCandidate();
+      if (seen.has(candidate)) continue;
+      seen.add(candidate);
+      candidates.push(candidate);
+    }
+
+    const [existingProfiles, existingReservations] = await Promise.all([
+      platformPrisma.homeownerProfile.findMany({
+        where: { accountNumber: { in: candidates } },
+        select: { accountNumber: true },
+      }),
+      platformPrisma.homeownerAccountNumberReservation.findMany({
+        where: { accountNumber: { in: candidates } },
+        select: { accountNumber: true },
+      }),
+    ]);
+    const unavailable = new Set([
+      ...existingProfiles.map((profile) => profile.accountNumber).filter((value): value is string => Boolean(value)),
+      ...existingReservations.map((reservation) => reservation.accountNumber),
+    ]);
+    for (const candidate of candidates) {
+      if (unavailable.has(candidate)) continue;
+      allocated.push(candidate);
+      if (allocated.length === count) break;
+    }
+  }
+
+  return allocated;
 }
 
 function startOfTodayUtc() {

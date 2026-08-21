@@ -257,6 +257,17 @@ Mandatory architecture rule: Complaint remains the intake/operational case layer
 
 Deferred grievance scope remains notice/proof-of-service, mediation/hearing records, witness/exhibit/minutes management, evidence vault/provenance, formal board vote/quorum/recusal/decision, appeal/reconsideration, resolution agreement/e-signature, regulatory dossier export, retention/legal hold automation, advanced redaction/notifications, and real malware-scanner integration unless the BRD is revised.
 
+## Tenant Onboarding Homeowner Import Batching
+
+- `/admin/onboarding` intentionally limits each synchronous homeowner CSV batch to 500 data rows. The cap protects the existing per-row account-number allocation, bcrypt/activation work, audit writes, opening-balance posting, and serializable transaction from long-running requests.
+- Large communities must use consecutive batches, not one oversized synchronous request. A 2,050-homeowner roster is five batches: 500 + 500 + 500 + 500 + 50, with the same template header in every file.
+- For every batch, dry-run the CSV first, then re-upload that exact unchanged file to apply it. After a successful apply, the records are committed and remain in the tenant database; validating a new batch prepares the next apply and does not remove earlier homeowners.
+- Tenant-scoped validation continues to reject existing email, block/lot, and supplied account-number conflicts across previously applied batches. The file hash continues to protect the validate/apply handoff for each batch.
+- The onboarding page displays the tenant-scoped current `HomeownerProfile` count as operational progress for large rosters. The count is informational only and does not weaken import authorization or validation.
+- Raw CSV content remains request-scoped and is not retained by this batching hotfix. No Prisma schema migration is introduced.
+- Do not raise the synchronous row cap to thousands merely to accept a single file. If one-file bulk ingestion is required later, implement durable staged/resumable processing with explicit idempotency and row progress (the existing `TenantImportBatch` / `TenantImportRow` schema is the intended direction) rather than one oversized interactive transaction.
+- Principal regression surfaces are `lib/onboarding/csv.ts`, `app/admin/onboarding/page.tsx`, `lib/actions/onboarding.ts`, `lib/onboarding/import.ts`, and `tests/unit/onboarding-csv.test.ts`.
+
 ## Hostinger Production Deployment Model
 
 The authoritative production path is the Hostinger managed Node.js application connected to GitHub `main`.

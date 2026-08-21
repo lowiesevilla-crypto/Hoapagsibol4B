@@ -158,6 +158,14 @@ Implementation/traceability record: `docs/ui/HOAHUB_PREMIUM_ADMIN_UI_V2_IMPLEMEN
 - Applicable authenticated production UI/search smoke should be performed when an authorized production session is available. Do not fabricate live authenticated sign-off if production credentials/session access are unavailable.
 - Rollback is application-level; revert the PR #130 merge if necessary while preserving business data.
 
+## Tenant Onboarding Bulk Homeowner Import
+
+- `/admin/onboarding` supports client-scale homeowner CSV dry-run validation and apply while preserving the same tenant-scoped permissions, exact-file hash revalidation, duplicate/property/account-number validation, privacy acknowledgement, audit evidence, and transactional apply authority.
+- The parser's operational ceiling is `ONBOARDING_HOMEOWNER_MAX_ROWS = 5000`; this intentionally supports HOA communities above 2,050 homeowners while retaining a bounded single-upload limit.
+- The existing CSV byte-size guard remains independent of the row ceiling. Raising the row ceiling must not weaken file-size validation, authorization, tenant isolation, exact-file validation, or duplicate detection.
+- `lib/onboarding/csv.ts` and `tests/unit/onboarding-csv.test.ts` are the principal regression surface. Tests must prove a valid 2,051-row file is accepted and a file above the configured ceiling is rejected.
+- Do not reintroduce a hard-coded 500-row ceiling in UI, parser, validation, or apply paths. If operational scale requirements exceed 5,000 rows, redesign the import around bounded batching/background execution rather than silently making the single-request ceiling unbounded.
+
 ## Resident Messaging Privacy and Message Requests
 
 - Resident directory discovery is same-tenant active-homeowner only.

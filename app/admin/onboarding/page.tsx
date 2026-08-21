@@ -11,6 +11,7 @@ import {
   saveOnboardingProfileAction,
   validateOnboardingImportAction,
 } from "@/lib/actions/onboarding";
+import { ONBOARDING_HOMEOWNER_BATCH_SIZE } from "@/lib/onboarding/csv";
 import { getTenantOnboardingState, onboardingPrerequisites } from "@/lib/onboarding/state";
 import { PageHeader } from "@/components/page-header";
 
@@ -21,11 +22,12 @@ export default async function TenantOnboardingPage({ searchParams }: { searchPar
     Permission.BILLING_CONFIGURE,
     Permission.BILLING_PREVIEW,
   ]);
-  const [tenant, state, params, initialAdmins] = await Promise.all([
+  const [tenant, state, params, initialAdmins, homeownerCount] = await Promise.all([
     prisma.tenant.findFirst({ where: { id: actor.tenantId }, select: { id: true, name: true, shortName: true, slug: true, address: true, email: true, contactNumber: true } }),
     getTenantOnboardingState(actor.tenantId),
     searchParams,
     prisma.user.count({ where: { tenantId: actor.tenantId, active: true, userRoleAssignments: { some: { active: true, role: { in: ["HOA_ADMIN", "ADMIN", "SYSTEM_ADMIN"] } } } } }),
+    prisma.homeownerProfile.count({ where: { tenantId: actor.tenantId } }),
   ]);
   if (!tenant) throw new Error("Tenant not found.");
   const prerequisites = onboardingPrerequisites(state);
@@ -81,10 +83,16 @@ export default async function TenantOnboardingPage({ searchParams }: { searchPar
           <Link className="btn-secondary" href="/admin/onboarding/template">Download CSV template v2.0</Link>
           {state.import?.errors.length ? <Link className="btn-secondary" href="/admin/onboarding/errors">Download validation errors</Link> : null}
         </div>
-        <p className="mb-4 text-sm text-slate-600">The template never accepts passwords. Imported homeowners receive unique account numbers and expiring activation credentials. Raw CSV content is not retained after each request.</p>
+        <div className="mb-4 rounded-xl border border-sky-200 bg-sky-50 p-4 text-sm text-sky-950">
+          <p className="font-semibold">Large community import: use consecutive safe batches.</p>
+          <p className="mt-1">Each CSV may contain up to <strong>{ONBOARDING_HOMEOWNER_BATCH_SIZE} homeowners</strong>. After a batch is validated and applied, return to A and validate the next batch. Applied homeowners remain saved. For 2,050 homeowners, use five files: 500 + 500 + 500 + 500 + 50.</p>
+          <p className="mt-2">Homeowner records currently in HOAHub for this tenant: <strong>{homeownerCount}</strong>.</p>
+        </div>
+        <p className="mb-4 text-sm text-slate-600">The template never accepts passwords. Imported homeowners receive unique account numbers and expiring activation credentials. Raw CSV content is not retained after each request. The per-batch limit protects the transactional import and activation workflow from long-running requests; do not combine multiple batches into one file.</p>
         <div className="grid gap-6 lg:grid-cols-2">
           <form action={validateOnboardingImportAction} className="space-y-3 rounded-xl border border-slate-200 p-4">
             <h3 className="font-semibold">A. Dry-run validation</h3>
+            <p className="text-xs text-slate-500">Validate one batch (maximum {ONBOARDING_HOMEOWNER_BATCH_SIZE} rows). You can start the next batch here immediately after applying the previous one.</p>
             <input className="input" type="file" name="file" accept=".csv,text/csv" required />
             <button className="btn-primary" type="submit">Validate without writing</button>
           </form>
@@ -95,7 +103,7 @@ export default async function TenantOnboardingPage({ searchParams }: { searchPar
             <input className="input" type="file" name="file" accept=".csv,text/csv" required disabled={!state.import || state.import.errors.length > 0 || Boolean(state.import.appliedAt)} />
             <Check name="confirmApply" disabled={!state.import || state.import.errors.length > 0 || Boolean(state.import.appliedAt)}>I confirm this is the exact validated file and authorize transactional creation of activation-only accounts and any declared opening balances.</Check>
             <button className="btn-primary" type="submit" disabled={!state.import || state.import.errors.length > 0 || Boolean(state.import.appliedAt)}>Apply import</button>
-            {state.import?.appliedAt ? <p className="text-sm font-medium text-emerald-700">Applied {state.import.importedRows} rows; {state.import.openingBalancesPosted} opening balances.</p> : null}
+            {state.import?.appliedAt ? <div className="space-y-1 text-sm font-medium text-emerald-700"><p>Applied {state.import.importedRows} rows; {state.import.openingBalancesPosted} opening balances.</p><p>This batch is complete. Upload the next batch in A; successful prior batches stay saved.</p></div> : null}
           </form>
         </div>
         {state.import?.errors.length ? <div className="mt-4 max-h-64 overflow-auto rounded-xl bg-rose-50 p-4 text-sm text-rose-900"><ul className="space-y-1">{state.import.errors.slice(0, 20).map((error, index) => <li key={`${error.rowNumber}-${error.field}-${index}`}>Row {error.rowNumber ?? "file"}{error.field ? `, ${error.field}` : ""}: {error.message}</li>)}</ul>{state.import.errors.length > 20 ? <p className="mt-2">Download the error CSV for the complete list.</p> : null}</div> : null}

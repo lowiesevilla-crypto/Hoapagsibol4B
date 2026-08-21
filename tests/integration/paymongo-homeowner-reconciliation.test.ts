@@ -9,41 +9,55 @@ const runId = `paymongo-it-${process.pid}`;
 const tenantId = `${runId}-tenant`;
 const homeownerUserId = `${runId}-user`;
 const homeownerId = `${runId}-homeowner`;
+const linkedAccountId = `org_${runId}`;
 const originalSecret = process.env.PAYMONGO_HOMEOWNER_SECRET_KEY;
 const originalFetch = globalThis.fetch;
-
 const checkoutPayloads = new Map<string, unknown>();
 
-function checkoutId(month: number) {
-  return `cs_${runId}_${month}`;
-}
+function checkoutId(month: number) { return `cs_${runId}_${month}`; }
+function requestId(month: number) { return `${runId}-request-${month}`; }
+function billId(month: number) { return `${runId}-bill-${month}`; }
 
-function requestId(month: number) {
-  return `${runId}-request-${month}`;
-}
-
-function billId(month: number) {
-  return `${runId}-bill-${month}`;
-}
-
-function baseCheckout(month: number) {
-  return {
-    id: checkoutId(month),
-    attributes: {
-      status: "active",
-      reference_number: `HOP-${requestId(month)}`,
-      metadata: {
-        tenantId,
-        homeownerId,
-        paymentRequestId: requestId(month),
-        principalAmountCentavos: "100000",
-        platformFeeCentavos: "0",
-        baseChargeCentavos: "100000",
-        passOnProcessingFees: "false",
-      },
-      payments: [],
+function checkoutFixture(month: number, options: {
+  checkoutStatus?: "active" | "expired";
+  paymentIntentStatus?: "awaiting_payment_method" | "awaiting_next_action" | "processing" | "succeeded";
+  lastPaymentError?: unknown;
+  paid?: boolean;
+  referenceNumber?: string;
+}) {
+  const attributes: Record<string, unknown> = {
+    status: options.checkoutStatus || "active",
+    reference_number: options.referenceNumber || `HOP-${requestId(month)}`,
+    metadata: {
+      tenantId,
+      homeownerId,
+      paymentRequestId: requestId(month),
+      principalAmountCentavos: "100000",
+      platformFeeCentavos: "0",
+      baseChargeCentavos: "100000",
+      passOnProcessingFees: "false",
     },
+    payments: options.paid ? [{
+      id: `pay_${runId}_${month}`,
+      attributes: {
+        status: "paid",
+        amount: 100000,
+        currency: "PHP",
+        paid_at: 1768435200,
+        source: { type: "gcash" },
+      },
+    }] : [],
   };
+  if (options.paymentIntentStatus) {
+    attributes.payment_intent = {
+      id: `pi_${runId}_${month}`,
+      attributes: {
+        status: options.paymentIntentStatus,
+        last_payment_error: options.lastPaymentError ?? null,
+      },
+    };
+  }
+  return { id: checkoutId(month), attributes };
 }
 
 async function createAttempt(month: number) {
@@ -51,43 +65,27 @@ async function createAttempt(month: number) {
   const dueDate = new Date(Date.UTC(2026, month - 1, 15));
   await platformPrisma.bill.create({
     data: {
-      id: billId(month),
-      tenantId,
-      homeownerId,
-      billingMonth,
-      coverageYear: 2026,
-      coverageMonth: month,
-      amount: 1000,
-      totalAmount: 1000,
-      balance: 1000,
-      dueDate,
+      id: billId(month), tenantId, homeownerId, billingMonth,
+      coverageYear: 2026, coverageMonth: month,
+      amount: 1000, totalAmount: 1000, balance: 1000, dueDate,
     },
   });
   await platformPrisma.paymentRequest.create({
     data: {
-      id: requestId(month),
-      tenantId,
-      homeownerId,
-      billId: billId(month),
+      id: requestId(month), tenantId, homeownerId, billId: billId(month),
       type: PaymentRequestType.MONTHLY_DUES,
-      amount: 1000,
-      paymentDate: billingMonth,
-      method: PaymentMethod.OTHER,
+      amount: 1000, paymentDate: billingMonth, method: PaymentMethod.OTHER,
       referenceNumber: `HOP-${requestId(month)}`,
-      proofFileName: `org_${runId}`,
+      proofFileName: linkedAccountId,
       proofContentType: PAYMONGO_PAYMENT_REQUEST_MARKER,
       payerNotes: "PayMongo Online checkout",
     },
   });
   await platformPrisma.auditLog.create({
     data: {
-      tenantId,
-      actorId: homeownerUserId,
-      module: "PAYMENTS",
+      tenantId, actorId: homeownerUserId, module: "PAYMENTS",
       action: "CREATE_PAYMONGO_HOMEOWNER_CHECKOUT",
-      entityType: "PaymentRequest",
-      entityId: requestId(month),
-      correlationId: checkoutId(month),
+      entityType: "PaymentRequest", entityId: requestId(month), correlationId: checkoutId(month),
     },
   });
 }
@@ -120,24 +118,15 @@ before(async () => {
   await platformPrisma.tenant.create({ data: { id: tenantId, name: "PayMongo Integration HOA", shortName: "PM-IT", slug: `${runId}-hoa` } });
   await platformPrisma.user.create({
     data: {
-      id: homeownerUserId,
-      tenantId,
-      name: "PayMongo Test Homeowner",
-      email: `${runId}@example.invalid`,
-      passwordHash: "integration-test-only",
-      role: Role.HOMEOWNER,
+      id: homeownerUserId, tenantId, name: "PayMongo Test Homeowner",
+      email: `${runId}@example.invalid`, passwordHash: "integration-test-only", role: Role.HOMEOWNER,
     },
   });
   await platformPrisma.homeownerProfile.create({
     data: {
-      id: homeownerId,
-      tenantId,
-      userId: homeownerUserId,
-      address: "Integration Test Property",
-      block: "PM",
-      lot: "001",
-      phone: "09000000001",
-      monthlyDuesAmount: 1000,
+      id: homeownerId, tenantId, userId: homeownerUserId,
+      address: "Integration Test Property", block: "PM", lot: "001",
+      phone: "09000000001", monthlyDuesAmount: 1000,
     },
   });
 });
@@ -153,19 +142,7 @@ after(async () => {
 test("successful PayMongo payment automatically posts receipt and reconciles the bill exactly once", async () => {
   const month = 1;
   await createAttempt(month);
-  const payload = baseCheckout(month);
-  payload.attributes.payment_intent = { id: `pi_${runId}_paid`, attributes: { status: "succeeded", last_payment_error: null } };
-  payload.attributes.payments = [{
-    id: `pay_${runId}_paid`,
-    attributes: {
-      status: "paid",
-      amount: 100000,
-      currency: "PHP",
-      paid_at: 1768435200,
-      source: { type: "gcash" },
-    },
-  }];
-  checkoutPayloads.set(checkoutId(month), payload);
+  checkoutPayloads.set(checkoutId(month), checkoutFixture(month, { paymentIntentStatus: "succeeded", paid: true }));
 
   const first = await reconcileHomeownerPayMongoCheckout({ requestId: requestId(month), tenantId, homeownerId });
   assert.equal(first.state, "PAID");
@@ -192,9 +169,7 @@ test("successful PayMongo payment automatically posts receipt and reconciles the
 test("processing PayMongo payment remains pending and never posts finance", async () => {
   const month = 2;
   await createAttempt(month);
-  const payload = baseCheckout(month);
-  payload.attributes.payment_intent = { id: `pi_${runId}_processing`, attributes: { status: "processing", last_payment_error: null } };
-  checkoutPayloads.set(checkoutId(month), payload);
+  checkoutPayloads.set(checkoutId(month), checkoutFixture(month, { paymentIntentStatus: "processing" }));
 
   const result = await reconcileHomeownerPayMongoCheckout({ requestId: requestId(month), tenantId, homeownerId });
   assert.equal(result.state, "PROCESSING");
@@ -205,15 +180,13 @@ test("processing PayMongo payment remains pending and never posts finance", asyn
   assert.equal(await platformPrisma.payment.count({ where: { tenantId, billId: billId(month) } }), 0);
 });
 
-test("failed PayMongo attempt is shown as retryable while active and does not post finance", async () => {
+test("failed PayMongo attempt is retryable while checkout remains active and does not post finance", async () => {
   const month = 3;
   await createAttempt(month);
-  const payload = baseCheckout(month);
-  payload.attributes.payment_intent = {
-    id: `pi_${runId}_failed`,
-    attributes: { status: "awaiting_payment_method", last_payment_error: { failed_message: "declined" } },
-  };
-  checkoutPayloads.set(checkoutId(month), payload);
+  checkoutPayloads.set(checkoutId(month), checkoutFixture(month, {
+    paymentIntentStatus: "awaiting_payment_method",
+    lastPaymentError: { failed_message: "declined" },
+  }));
 
   const result = await reconcileHomeownerPayMongoCheckout({ requestId: requestId(month), tenantId, homeownerId });
   assert.equal(result.state, "FAILED_RETRYABLE");
@@ -228,9 +201,7 @@ test("failed PayMongo attempt is shown as retryable while active and does not po
 test("expired PayMongo checkout becomes rejected and cannot create a finance payment", async () => {
   const month = 4;
   await createAttempt(month);
-  const payload = baseCheckout(month);
-  payload.attributes.status = "expired";
-  checkoutPayloads.set(checkoutId(month), payload);
+  checkoutPayloads.set(checkoutId(month), checkoutFixture(month, { checkoutStatus: "expired" }));
 
   const result = await reconcileHomeownerPayMongoCheckout({ requestId: requestId(month), tenantId, homeownerId });
   assert.equal(result.state, "EXPIRED");
@@ -241,14 +212,12 @@ test("expired PayMongo checkout becomes rejected and cannot create a finance pay
   assert.equal(await platformPrisma.payment.count({ where: { tenantId, billId: billId(month) } }), 0);
 });
 
-test("PayMongo tenant, homeowner, reference and amount mismatches fail closed", async () => {
+test("PayMongo reference mismatch fails closed without finance posting", async () => {
   const month = 5;
   await createAttempt(month);
-  const payload = baseCheckout(month);
-  payload.attributes.reference_number = "HOP-wrong-request";
-  payload.attributes.payment_intent = { id: `pi_${runId}_mismatch`, attributes: { status: "succeeded", last_payment_error: null } };
-  payload.attributes.payments = [{ id: `pay_${runId}_mismatch`, attributes: { status: "paid", amount: 100000, currency: "PHP", paid_at: 1768435200, source: { type: "gcash" } } }];
-  checkoutPayloads.set(checkoutId(month), payload);
+  checkoutPayloads.set(checkoutId(month), checkoutFixture(month, {
+    paymentIntentStatus: "succeeded", paid: true, referenceNumber: "HOP-wrong-request",
+  }));
 
   await assert.rejects(
     () => reconcileHomeownerPayMongoCheckout({ requestId: requestId(month), tenantId, homeownerId }),

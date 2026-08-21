@@ -5,6 +5,7 @@ import { notFound, redirect } from "next/navigation";
 import { AssociationLogo } from "@/components/association-logo";
 import { PrintButton } from "@/components/print-button";
 import { requireUser } from "@/lib/auth";
+import { getSingleCollectionPayerMetadata } from "@/lib/collection-payer";
 import { prisma } from "@/lib/db";
 import { homeownerAccountNumber, homeownerPropertyLabel } from "@/lib/homeowner-account";
 import { getPaymentReceiptData } from "@/lib/services/payment-receipt";
@@ -54,16 +55,19 @@ export default async function ReceiptPage({ params }: { params: Promise<{ kind: 
       include: { homeowner: { include: { user: true } }, contractor: true, createdBy: true },
     });
     if (item) {
+      const metadata = await getSingleCollectionPayerMetadata(user.tenantId, item.id);
+      const category = metadata?.payerCategory ?? item.payerType;
+      const external = category === "RENTER" || category === "OTHER";
       const purpose = collectionLabel(item.type, item.description);
       receipt = {
         association: await getAssociationSettings(item.tenantId),
         number: item.receiptNumber || `AR-${item.id.slice(-8).toUpperCase()}`,
         date: item.collectionDate,
-        payer: item.homeowner?.user.name ?? item.contractor?.companyName ?? "Unknown payer",
+        payer: external ? metadata?.payerName || "Unknown payer" : item.homeowner?.user.name ?? item.contractor?.companyName ?? "Unknown payer",
         homeownerId: item.homeownerId,
-        address: item.homeowner?.address ?? item.contractor?.address ?? "",
-        property: item.homeowner ? homeownerPropertyLabel(item.homeowner) : "Contractor account",
-        account: item.homeowner ? homeownerAccountNumber(item.homeowner) : item.contractor?.companyName ?? "Not applicable",
+        address: external ? "" : item.homeowner?.address ?? item.contractor?.address ?? "",
+        property: external ? `${category === "RENTER" ? "Renter" : "Other"} payer` : item.homeowner ? homeownerPropertyLabel(item.homeowner) : "Contractor account",
+        account: external ? "Not applicable" : item.homeowner ? homeownerAccountNumber(item.homeowner) : item.contractor?.companyName ?? "Not applicable",
         purpose,
         amount: Number(item.amount),
         method: item.method.replaceAll("_", " "),

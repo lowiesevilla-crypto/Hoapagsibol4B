@@ -30,7 +30,7 @@ export async function reconcileOnlinePaymentAction(formData: FormData) {
     }
 
     const result = await reconcileHomeownerPayMongoCheckout({ requestId: request.id, tenantId: admin.tenantId });
-    if (result.state === "paid") redirect(`/admin/payments/requests/${request.id}?success=PayMongo%20confirmed%20the%20payment.%20HOAHub%20posted%20the%20receipt%20and%20financial%20records%20automatically.`);
+    if (result.state === "PAID") redirect(`/admin/payments/requests/${request.id}?success=PayMongo%20confirmed%20the%20payment.%20HOAHub%20posted%20the%20receipt%20and%20financial%20records%20automatically.`);
     redirect(`/admin/payments/requests/${request.id}?success=PayMongo%20has%20not%20reported%20a%20paid%20payment%20for%20this%20checkout%20yet.%20No%20manual%20approval%20is%20required.`);
   } catch (error) {
     if (error && typeof error === "object" && "digest" in error && String((error as { digest?: unknown }).digest || "").startsWith("NEXT_REDIRECT")) throw error;

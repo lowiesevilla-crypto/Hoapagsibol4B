@@ -17,6 +17,7 @@ const checkoutPayloads = new Map<string, unknown>();
 function checkoutId(month: number) { return `cs_${runId}_${month}`; }
 function requestId(month: number) { return `${runId}-request-${month}`; }
 function billId(month: number) { return `${runId}-bill-${month}`; }
+function paymentIdempotencyKey(month: number) { return `payment-request:${requestId(month)}`; }
 
 function checkoutFixture(month: number, options: {
   checkoutStatus?: "active" | "expired";
@@ -148,22 +149,28 @@ test("successful PayMongo payment automatically posts receipt and reconciles the
   assert.equal(first.state, "PAID");
   assert.equal(first.financeStatus, "RECONCILED");
 
-  const [request, payment, bill] = await Promise.all([
-    platformPrisma.paymentRequest.findUniqueOrThrow({ where: { id: requestId(month) } }),
-    platformPrisma.payment.findFirstOrThrow({ where: { tenantId, homeownerId, billId: billId(month) } }),
+  const request = await platformPrisma.paymentRequest.findUniqueOrThrow({ where: { id: requestId(month) } });
+  assert.equal(request.status, PaymentRequestStatus.APPROVED);
+  assert.ok(request.paymentId, "approved PayMongo request must point to its canonical HOAHub payment");
+
+  const [payment, allocation, bill] = await Promise.all([
+    platformPrisma.payment.findUniqueOrThrow({ where: { id: request.paymentId! } }),
+    platformPrisma.paymentAllocation.findFirstOrThrow({ where: { tenantId, paymentId: request.paymentId!, billId: billId(month) } }),
     platformPrisma.bill.findUniqueOrThrow({ where: { id: billId(month) } }),
   ]);
-  assert.equal(request.status, PaymentRequestStatus.APPROVED);
-  assert.equal(request.paymentId, payment.id);
+  assert.equal(payment.billId, null, "monthly-dues payments use PaymentAllocation rather than a direct Payment.billId link");
+  assert.equal(payment.idempotencyKey, paymentIdempotencyKey(month));
   assert.equal(payment.method, PaymentMethod.GCASH);
   assert.ok(payment.receiptNumber, "a reconciled PayMongo payment must have an HOAHub receipt number");
+  assert.equal(Number(allocation.amount), 1000);
   assert.equal(Number(bill.amountPaid), 1000);
   assert.equal(Number(bill.balance), 0);
   assert.equal(bill.status, "PAID");
 
   const repeated = await reconcileHomeownerPayMongoCheckout({ requestId: requestId(month), tenantId, homeownerId });
   assert.equal(repeated.state, "PAID");
-  assert.equal(await platformPrisma.payment.count({ where: { tenantId, homeownerId, billId: billId(month) } }), 1);
+  assert.equal(await platformPrisma.payment.count({ where: { tenantId, idempotencyKey: paymentIdempotencyKey(month) } }), 1);
+  assert.equal(await platformPrisma.paymentAllocation.count({ where: { tenantId, paymentId: payment.id, billId: billId(month) } }), 1);
 });
 
 test("processing PayMongo payment remains pending and never posts finance", async () => {
@@ -177,7 +184,8 @@ test("processing PayMongo payment remains pending and never posts finance", asyn
   const request = await platformPrisma.paymentRequest.findUniqueOrThrow({ where: { id: requestId(month) } });
   assert.equal(request.status, PaymentRequestStatus.PENDING_REVIEW);
   assert.equal(request.reviewRemarks, "PAYMONGO_GATEWAY_STATE:PROCESSING");
-  assert.equal(await platformPrisma.payment.count({ where: { tenantId, billId: billId(month) } }), 0);
+  assert.equal(await platformPrisma.payment.count({ where: { tenantId, idempotencyKey: paymentIdempotencyKey(month) } }), 0);
+  assert.equal(await platformPrisma.paymentAllocation.count({ where: { tenantId, billId: billId(month) } }), 0);
 });
 
 test("failed PayMongo attempt is retryable while checkout remains active and does not post finance", async () => {
@@ -195,7 +203,8 @@ test("failed PayMongo attempt is retryable while checkout remains active and doe
   const request = await platformPrisma.paymentRequest.findUniqueOrThrow({ where: { id: requestId(month) } });
   assert.equal(request.status, PaymentRequestStatus.PENDING_REVIEW);
   assert.equal(request.reviewRemarks, "PAYMONGO_GATEWAY_STATE:FAILED_RETRYABLE");
-  assert.equal(await platformPrisma.payment.count({ where: { tenantId, billId: billId(month) } }), 0);
+  assert.equal(await platformPrisma.payment.count({ where: { tenantId, idempotencyKey: paymentIdempotencyKey(month) } }), 0);
+  assert.equal(await platformPrisma.paymentAllocation.count({ where: { tenantId, billId: billId(month) } }), 0);
 });
 
 test("expired PayMongo checkout becomes rejected and cannot create a finance payment", async () => {
@@ -209,7 +218,8 @@ test("expired PayMongo checkout becomes rejected and cannot create a finance pay
   const request = await platformPrisma.paymentRequest.findUniqueOrThrow({ where: { id: requestId(month) } });
   assert.equal(request.status, PaymentRequestStatus.REJECTED);
   assert.equal(request.reviewRemarks, "PAYMONGO_GATEWAY_STATE:EXPIRED");
-  assert.equal(await platformPrisma.payment.count({ where: { tenantId, billId: billId(month) } }), 0);
+  assert.equal(await platformPrisma.payment.count({ where: { tenantId, idempotencyKey: paymentIdempotencyKey(month) } }), 0);
+  assert.equal(await platformPrisma.paymentAllocation.count({ where: { tenantId, billId: billId(month) } }), 0);
 });
 
 test("PayMongo reference mismatch fails closed without finance posting", async () => {
@@ -223,7 +233,8 @@ test("PayMongo reference mismatch fails closed without finance posting", async (
     () => reconcileHomeownerPayMongoCheckout({ requestId: requestId(month), tenantId, homeownerId }),
     /reference does not match/,
   );
-  assert.equal(await platformPrisma.payment.count({ where: { tenantId, billId: billId(month) } }), 0);
+  assert.equal(await platformPrisma.payment.count({ where: { tenantId, idempotencyKey: paymentIdempotencyKey(month) } }), 0);
+  assert.equal(await platformPrisma.paymentAllocation.count({ where: { tenantId, billId: billId(month) } }), 0);
   const request = await platformPrisma.paymentRequest.findUniqueOrThrow({ where: { id: requestId(month) } });
   assert.equal(request.status, PaymentRequestStatus.PENDING_REVIEW);
 });

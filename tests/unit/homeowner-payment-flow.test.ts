@@ -140,3 +140,13 @@ test("the homeowner portal renders a single flow based on tenant configuration",
   assert.match(page, /isPayMongoFlow \? <PayMongoHomeownerForm/);
   assert.match(page, /<PayByQrForm/);
 });
+
+test("tenant payment setup remains visible and platform PayMongo secrets stay centrally managed", () => {
+  const links = source("components/sidebar-links.ts");
+  const settingsPage = source("app/admin/settings/payments/page.tsx");
+  assert.match(links, /href: "\/admin\/settings\/payments", label: "Payment setup"/);
+  assert.match(settingsPage, /Choose the payment method homeowners will use/);
+  assert.match(settingsPage, /Tenant admins do not enter or manage the HOAHub PayMongo secret API key here/);
+  assert.match(settingsPage, /PAYMONGO|PayMongo/);
+  assert.doesNotMatch(settingsPage, /name="paymongoSecretKey"/);
+});

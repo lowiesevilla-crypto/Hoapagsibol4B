@@ -83,6 +83,7 @@ export const adminShellLinks: LinkItem[] = [
   { href: "/admin/contractors", label: "Contractors", icon: "contractors", section: "Residents" },
   { href: "/admin/vehicles", label: "Vehicles", icon: "vehicles", section: "Residents" },
   { href: "/admin/billing", label: "Billing", icon: "billing", section: "Finance" },
+  { href: "/admin/settings/payments", label: "Payment setup", icon: "settings", section: "Finance" },
   { href: "/admin/payments/requests", label: "Payments", icon: "payments", section: "Finance" },
   { href: "/admin/collections", label: "Collections", icon: "collections", section: "Finance" },
   { href: "/admin/expenses", label: "Expenses", icon: "expenses", section: "Finance" },

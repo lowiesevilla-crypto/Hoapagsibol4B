@@ -1,0 +1,235 @@
+name: PR137 Domain Model Correction
+
+on:
+  push:
+    branches:
+      - fix/collections-flexible-payers
+
+permissions:
+  contents: write
+
+jobs:
+  correct-domain-model:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/collections-flexible-payers
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Correct PR 137 payer model
+        shell: bash
+        run: |
+          node <<'NODE'
+          const fs = require('fs');
+
+          function read(path) { return fs.readFileSync(path, 'utf8'); }
+          function write(path, text) { fs.writeFileSync(path, text.endsWith('\n') ? text : text + '\n'); }
+          function replaceOnce(text, from, to, label) {
+            const count = text.split(from).length - 1;
+            if (count !== 1) throw new Error(`${label}: expected exactly one match, found ${count}`);
+            return text.replace(from, to);
+          }
+
+          // Prisma is the single payer authority: expand PayerType and persist payerName directly.
+          {
+            const path = 'prisma/schema.prisma';
+            let s = read(path);
+            s = replaceOnce(s,
+`enum PayerType {
+  HOMEOWNER
+  CONTRACTOR
+}`,
+`enum PayerType {
+  HOMEOWNER
+  CONTRACTOR
+  RENTER
+  OTHER
+}`,
+              'expand PayerType');
+            s = replaceOnce(s,
+`  payerType       PayerType
+  homeownerId     String?`,
+`  payerType       PayerType
+  payerName       String?            @db.VarChar(191)
+  homeownerId     String?`,
+              'add Collection.payerName');
+            s = replaceOnce(s,
+`  @@index([contractorId, collectionDate])
+  @@index([refundable, refundStatus])`,
+`  @@index([contractorId, collectionDate])
+  @@index([tenantId, payerType, collectionDate])
+  @@index([refundable, refundStatus])`,
+              'add payer index');
+            write(path, s);
+          }
+
+          // Validation accepts first-class PayerType values and a bounded external payer name.
+          {
+            const path = 'lib/validation.ts';
+            let s = read(path);
+            s = replaceOnce(s,
+`  payerType: z.enum(["HOMEOWNER", "CONTRACTOR"]),
+  homeownerId: z.string().optional(),`,
+`  payerType: z.enum(["HOMEOWNER", "CONTRACTOR", "RENTER", "OTHER"]),
+  payerName: z.string().trim().max(150).optional(),
+  homeownerId: z.string().optional(),`,
+              'collection schema payer fields');
+            write(path, s);
+          }
+
+          // Collection action: remove compatibility metadata/raw SQL and use Prisma PayerType directly.
+          {
+            const path = 'lib/actions/collections.ts';
+            let s = read(path);
+            s = s.replace('import { isCollectionPayerCategory, isExternalCollectionPayer } from "@/lib/collection-payer";\n', '');
+
+            const start = s.indexOf('  const submitted = Object.fromEntries(formData.entries());');
+            const end = s.indexOf('  if (!parsed.success)', start);
+            if (start < 0 || end < 0) throw new Error('collection action parse compatibility block not found');
+            s = s.slice(0, start) +
+`  const parsed = collectionSchema.safeParse(Object.fromEntries(formData.entries()));
+` + s.slice(end);
+
+            s = replaceOnce(s,
+`  const data = parsed.data;
+  const refundable = refundableTypes.has(data.type);`,
+`  const data = parsed.data;
+  const refundable = refundableTypes.has(data.type);
+  const externalPayer = data.payerType === PayerType.RENTER || data.payerType === PayerType.OTHER;
+  const payerName = data.payerName?.trim() ?? "";`,
+              'payer action locals');
+
+            s = s.replaceAll('requestedPayerType !== "HOMEOWNER"', 'data.payerType !== PayerType.HOMEOWNER');
+            s = s.replaceAll('requestedPayerType !== "CONTRACTOR"', 'data.payerType !== PayerType.CONTRACTOR');
+            s = s.replaceAll('requestedPayerType === "HOMEOWNER"', 'data.payerType === PayerType.HOMEOWNER');
+            s = s.replaceAll('requestedPayerType === "CONTRACTOR"', 'data.payerType === PayerType.CONTRACTOR');
+
+            s = replaceOnce(s,
+`    const legacyPayerType = requestedPayerType === "CONTRACTOR" ? PayerType.CONTRACTOR : PayerType.HOMEOWNER;
+    const collection = await tx.collection.create({ data: {`,
+`    const collection = await tx.collection.create({ data: {`,
+              'remove legacy payer type');
+            s = s.replace('      payerType: legacyPayerType,\n', '      payerType: data.payerType,\n      payerName: externalPayer ? payerName : null,\n');
+
+            const rawStart = s.indexOf('    const updated = await tx.$executeRaw');
+            const auditStart = s.indexOf('    await tx.auditLog.create', rawStart);
+            if (rawStart < 0 || auditStart < 0) throw new Error('raw payer metadata update block not found');
+            s = s.slice(0, rawStart) + s.slice(auditStart);
+            s = s.replace('metadata: { receiptNumber, amount: data.amount, payerType: requestedPayerType, payerName: externalPayer ? payerName : null }',
+                          'metadata: { receiptNumber, amount: data.amount, payerType: data.payerType, payerName: externalPayer ? payerName : null }');
+            if (s.includes('requestedPayerType') || s.includes('payerCategory') || s.includes('$executeRaw')) {
+              throw new Error('legacy payer compatibility code remains in collection action');
+            }
+            write(path, s);
+          }
+
+          // Admin collections page reads payerType/payerName directly from Prisma.
+          {
+            const path = 'app/admin/collections/page.tsx';
+            let s = read(path);
+            s = s.replace('import { requireUser } from "@/lib/auth";\n', '');
+            s = s.replace('import { getCollectionPayerMetadata } from "@/lib/collection-payer";\n', '');
+            s = s.replace('  const user = await requireUser();\n', '');
+            s = s.replace(/  const payerMetadata = await getCollectionPayerMetadata\([^\n]+\);\n/, '');
+            const oldFnStart = s.indexOf('  const payerInfo = (item:');
+            const oldFnEnd = s.indexOf('\n\n  return <>', oldFnStart);
+            if (oldFnStart < 0 || oldFnEnd < 0) throw new Error('collections payerInfo helper block not found');
+            const fn = `  const payerInfo = (item: (typeof collections)[number]) => ({\n    name: item.payerName || item.homeowner?.user.name || item.contractor?.companyName || "Unknown payer",\n    category: item.payerType,\n  });`;
+            s = s.slice(0, oldFnStart) + fn + s.slice(oldFnEnd);
+            if (s.includes('payerMetadata') || s.includes('payerCategory') || s.includes('collection-payer')) throw new Error('legacy payer metadata remains in collections page');
+            write(path, s);
+          }
+
+          // HTML receipt uses first-class fields.
+          {
+            const path = 'app/receipts/[kind]/[id]/page.tsx';
+            let s = read(path);
+            s = s.replace('import { getSingleCollectionPayerMetadata } from "@/lib/collection-payer";\n', '');
+            s = s.replace('      const metadata = await getSingleCollectionPayerMetadata(user.tenantId, item.id);\n      const category = metadata?.payerCategory ?? item.payerType;\n      const external = category === "RENTER" || category === "OTHER";\n',
+                          '      const category = item.payerType;\n      const external = category === "RENTER" || category === "OTHER";\n');
+            s = s.replace('payer: external ? metadata?.payerName || "Unknown payer" : item.homeowner?.user.name ?? item.contractor?.companyName ?? "Unknown payer",',
+                          'payer: external ? item.payerName || "Unknown payer" : item.homeowner?.user.name ?? item.contractor?.companyName ?? "Unknown payer",');
+            if (s.includes('metadata?.payer') || s.includes('collection-payer')) throw new Error('legacy payer metadata remains in HTML receipt');
+            write(path, s);
+          }
+
+          // PDF receipt uses first-class fields.
+          {
+            const path = 'app/receipts/[kind]/[id]/pdf/route.ts';
+            let s = read(path);
+            s = s.replace('import { getSingleCollectionPayerMetadata } from "@/lib/collection-payer";\n', '');
+            s = s.replace('    const metadata = await getSingleCollectionPayerMetadata(user.tenantId, item.id);\n    const category = metadata?.payerCategory ?? item.payerType;\n    const external = category === "RENTER" || category === "OTHER";\n',
+                          '    const category = item.payerType;\n    const external = category === "RENTER" || category === "OTHER";\n');
+            s = s.replace('payer: external ? metadata?.payerName || "Unknown payer" : item.homeowner?.user.name ?? item.contractor?.companyName ?? "Unknown payer",',
+                          'payer: external ? item.payerName || "Unknown payer" : item.homeowner?.user.name ?? item.contractor?.companyName ?? "Unknown payer",');
+            if (s.includes('metadata?.payer') || s.includes('collection-payer')) throw new Error('legacy payer metadata remains in PDF receipt');
+            write(path, s);
+          }
+
+          // Finance CSV export uses payerName directly.
+          {
+            const path = 'app/admin/reports/export/route.ts';
+            let s = read(path);
+            s = s.replace('import { getCollectionPayerMetadata } from "@/lib/collection-payer";\n', '');
+            s = s.replace('  const user = await requireUser(Role.ADMIN);\n', '  await requireUser(Role.ADMIN);\n');
+            const start = s.indexOf('  const payerMetadata = await getCollectionPayerMetadata');
+            const end = s.indexOf('  const header =', start);
+            if (start < 0 || end < 0) throw new Error('report payer metadata block not found');
+            const fn = `  const collectionPayerName = (item: (typeof collections)[number]) =>\n    item.payerName || item.homeowner?.user.name || item.contractor?.companyName || "Unknown";\n`;
+            s = s.slice(0, start) + fn + s.slice(end);
+            if (s.includes('payerMetadata') || s.includes('payerCategory') || s.includes('collection-payer')) throw new Error('legacy payer metadata remains in report export');
+            write(path, s);
+          }
+
+          // Migration expands the existing MySQL enum and adds only payerName.
+          write('prisma/migrations/20260821234500_flexible_collection_payers/migration.sql', `-- Extend Collection payer authority for renter and other external payers.\n-- Existing HOMEOWNER/CONTRACTOR values remain valid and unchanged.\nALTER TABLE \`Collection\`\n  MODIFY COLUMN \`payerType\` ENUM('HOMEOWNER','CONTRACTOR','RENTER','OTHER') NOT NULL,\n  ADD COLUMN \`payerName\` VARCHAR(191) NULL AFTER \`payerType\`;\n\nCREATE INDEX \`Collection_tenantId_payerType_collectionDate_idx\`\n  ON \`Collection\`(\`tenantId\`, \`payerType\`, \`collectionDate\`);\n`);
+
+          // Regression contract protects the first-class Prisma model and forbids compatibility metadata.
+          write('tests/unit/flexible-collection-payers-surface.test.ts', `import assert from "node:assert/strict";\nimport { readFile } from "node:fs/promises";\nimport test from "node:test";\n\nconst schemaPath = new URL("../../prisma/schema.prisma", import.meta.url);\nconst validationPath = new URL("../../lib/validation.ts", import.meta.url);\nconst formPath = new URL("../../components/collection-form.tsx", import.meta.url);\nconst actionPath = new URL("../../lib/actions/collections.ts", import.meta.url);\nconst pagePath = new URL("../../app/admin/collections/page.tsx", import.meta.url);\nconst receiptPath = new URL("../../app/receipts/[kind]/[id]/page.tsx", import.meta.url);\nconst pdfPath = new URL("../../app/receipts/[kind]/[id]/pdf/route.ts", import.meta.url);\nconst exportPath = new URL("../../app/admin/reports/export/route.ts", import.meta.url);\nconst migrationPath = new URL("../../prisma/migrations/20260821234500_flexible_collection_payers/migration.sql", import.meta.url);\n\ntest("Prisma PayerType is the single authority for flexible collection payers", async () => {\n  const [schema, validation, migration] = await Promise.all([readFile(schemaPath, "utf8"), readFile(validationPath, "utf8"), readFile(migrationPath, "utf8")]);\n  assert.match(schema, /enum PayerType \\{[\\s\\S]*HOMEOWNER[\\s\\S]*CONTRACTOR[\\s\\S]*RENTER[\\s\\S]*OTHER[\\s\\S]*\\}/);\n  assert.match(schema, /payerName\\s+String\\?/);\n  assert.doesNotMatch(schema, /payerCategory/);\n  assert.match(validation, /payerType: z\\.enum\\(\\["HOMEOWNER", "CONTRACTOR", "RENTER", "OTHER"\\]\\)/);\n  assert.match(validation, /payerName: z\\.string\\(\\)\\.trim\\(\\)\\.max\\(150\\)\\.optional\\(\\)/);\n  assert.match(migration, /ENUM\\('HOMEOWNER','CONTRACTOR','RENTER','OTHER'\\)/);\n  assert.match(migration, /ADD COLUMN \\`payerName\\` VARCHAR\\(191\\) NULL/);\n  assert.doesNotMatch(migration, /payerCategory/);\n});\n\ntest("Other income accepts renter and other names while bonds stay profile-bound", async () => {\n  const [form, action] = await Promise.all([readFile(formPath, "utf8"), readFile(actionPath, "utf8")]);\n  assert.match(form, /<option value="RENTER">Renter<\\/option>/);\n  assert.match(form, /<option value="OTHER">Others<\\/option>/);\n  assert.match(form, /name="payerName"/);\n  assert.match(action, /PayerType\\.RENTER/);\n  assert.match(action, /PayerType\\.OTHER/);\n  assert.match(action, /CONSTRUCTION_BOND[\\s\\S]*PayerType\\.HOMEOWNER/);\n  assert.match(action, /CONTRACTOR_BOND[\\s\\S]*PayerType\\.CONTRACTOR/);\n  assert.match(action, /if \\(externalPayer && !payerName\\)/);\n  assert.doesNotMatch(action, /payerCategory|\\$executeRaw/);\n});\n\ntest("External payer identity is preserved across history receipts audit and finance export", async () => {\n  const [action, page, receipt, pdf, report] = await Promise.all([readFile(actionPath, "utf8"), readFile(pagePath, "utf8"), readFile(receiptPath, "utf8"), readFile(pdfPath, "utf8"), readFile(exportPath, "utf8")]);\n  assert.match(action, /payerName: externalPayer \\? payerName : null/);\n  assert.match(action, /payerType: data\\.payerType/);\n  assert.match(page, /item\\.payerName/);\n  assert.match(receipt, /item\\.payerName/);\n  assert.match(pdf, /item\\.payerName/);\n  assert.match(report, /item\\.payerName/);\n  for (const source of [page, receipt, pdf, report]) assert.doesNotMatch(source, /payerCategory|collection-payer/);\n});\n`);
+
+          // Update Agent.md contract from compatibility model to first-class Prisma model.
+          {
+            const path = 'Agent.md';
+            let s = read(path);
+            const start = s.indexOf('## Flexible Collection Payers — PR #137');
+            const end = s.indexOf('\n## Hostinger Production Deployment Model', start);
+            if (start < 0 || end < 0) throw new Error('Agent.md PR137 block not found');
+            const block = `## Flexible Collection Payers — PR #137\n\n- Prisma \\`PayerType\\` is the single payer authority and supports \\`HOMEOWNER\\`, \\`CONTRACTOR\\`, \\`RENTER\\`, and \\`OTHER\\`. Do not introduce a parallel payer category column or raw-SQL compatibility authority.\n- \\`Collection.payerName\\` is nullable and stores the bounded free-text payer identity only for \\`RENTER\\` and \\`OTHER\\`; do not fabricate Homeowner, User, or Contractor records for external payers.\n- External payer types are allowed only for \\`CollectionType.OTHER\\`. Construction Bond remains Homeowner-only and Contractor Bond remains Contractor-only.\n- Existing homeowner/contractor selectors, tenant-scoped existence checks, receipt numbering, finance treatment, bond liabilities, refunds, forfeitures, and audit controls remain unchanged.\n- Collection history/search, HTML receipt, PDF receipt, finance CSV export, and receipt audit metadata must display/preserve the external payer name and first-class payer type.\n- Migration \\`20260821234500_flexible_collection_payers\\` expands the existing MySQL \\`payerType\\` enum in place and adds nullable \\`payerName\\`, preserving existing HOMEOWNER/CONTRACTOR rows.\n- \\`prisma/schema.prisma\\`, \\`lib/validation.ts\\`, \\`components/collection-form.tsx\\`, \\`lib/actions/collections.ts\\`, \\`app/admin/collections/page.tsx\\`, receipt HTML/PDF routes, finance export, migration, and \\`tests/unit/flexible-collection-payers-surface.test.ts\\` are the principal regression surface.\n`;
+            s = s.slice(0, start) + block + s.slice(end);
+            write(path, s);
+          }
+
+          if (fs.existsSync('lib/collection-payer.ts')) fs.unlinkSync('lib/collection-payer.ts');
+          if (fs.existsSync('.github/workflows/pr137-domain-model-correction.yml')) fs.unlinkSync('.github/workflows/pr137-domain-model-correction.yml');
+          NODE
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Prisma validate
+        run: npx prisma validate
+
+      - name: Focused PR 137 regression
+        run: node --import tsx --test tests/unit/flexible-collection-payers-surface.test.ts
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Commit corrected implementation
+        shell: bash
+        run: |
+          if git diff --quiet; then
+            echo "No correction needed."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "fix(collections): use first-class flexible payer model"
+          git push origin HEAD:fix/collections-flexible-payers

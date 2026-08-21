@@ -28,8 +28,8 @@ const largeImportRows = Array.from({ length: 26 }, (_, index) => {
     "ACTIVE",
     "500.00",
     "",
-    "0.00",
-    "",
+    ordinal === 1 ? "1250.00" : "0.00",
+    ordinal === 1 ? "2026-07-31" : "",
   ];
 });
 const largeImportCsv = csvRows(largeImportRows);
@@ -74,7 +74,7 @@ after(async () => {
   await platformPrisma.$disconnect();
 });
 
-test("client-scale apply batches records and defers activation invitations", async () => {
+test("client-scale apply batches records, opening balances, and deferred activation invitations", async () => {
   const validation = await validateOnboardingImport(tenantId, largeImportCsv);
   assert.equal(validation.validRows, 26);
   assert.deepEqual(validation.errors, []);
@@ -88,7 +88,7 @@ test("client-scale apply batches records and defers activation invitations", asy
   });
 
   assert.equal(result.importedRows, 26);
-  assert.equal(result.openingBalancesPosted, 0);
+  assert.equal(result.openingBalancesPosted, 1);
   assert.equal(result.activationEmailsAttempted, 0);
   assert.equal(result.activationInvitationsDeferred, 26);
 
@@ -106,13 +106,18 @@ test("client-scale apply batches records and defers activation invitations", asy
   assert.equal(await platformPrisma.homeownerActivationCredential.count({ where: { tenantId } }), 0);
   assert.equal(await platformPrisma.homeownerEmailVerificationToken.count({ where: { tenantId } }), 0);
   assert.equal(await platformPrisma.notificationLog.count({ where: { tenantId } }), 0);
+  assert.equal(await platformPrisma.bill.count({ where: { tenantId } }), 1);
+  assert.equal(await platformPrisma.dataMigration.count({ where: { tenantId } }), 1);
 
   const setting = await platformPrisma.systemSetting.findFirstOrThrow({ where: { tenantId, key: "TENANT_ONBOARDING_V1" } });
-  const state = JSON.parse(setting.value ?? "{}") as { import?: { appliedAt?: string; importedRows?: number; activationInvitationsDeferred?: number } };
+  const state = JSON.parse(setting.value ?? "{}") as { import?: { appliedAt?: string; importedRows?: number; openingBalancesPosted?: number; activationInvitationsDeferred?: number } };
   assert.ok(state.import?.appliedAt);
   assert.equal(state.import?.importedRows, 26);
+  assert.equal(state.import?.openingBalancesPosted, 1);
   assert.equal(state.import?.activationInvitationsDeferred, 26);
 
   const importAudits = await platformPrisma.auditLog.count({ where: { tenantId, module: "ONBOARDING", action: "HOMEOWNER_IMPORTED" } });
+  const migrationAudits = await platformPrisma.auditLog.count({ where: { tenantId, module: "DATA_MIGRATION", action: "POST_DUES_OPENING_BALANCE" } });
   assert.equal(importAudits, 26);
+  assert.equal(migrationAudits, 1);
 });

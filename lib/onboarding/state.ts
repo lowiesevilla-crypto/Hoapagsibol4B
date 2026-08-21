@@ -1,6 +1,6 @@
 import "server-only";
 
-import { SystemSettingCategory } from "@prisma/client";
+import { Prisma, SystemSettingCategory } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import {
   emptyTenantOnboardingState,
@@ -11,7 +11,7 @@ import {
 
 export const TENANT_ONBOARDING_SETTING_KEY = "TENANT_ONBOARDING_V1";
 
-type OnboardingStateDb = Pick<typeof prisma, "systemSetting">;
+type OnboardingStateTx = Pick<Prisma.TransactionClient, "systemSetting">;
 
 export {
   emptyTenantOnboardingState,
@@ -43,17 +43,26 @@ export async function updateTenantOnboardingState(
   tenantId: string,
   actorId: string,
   updater: (current: TenantOnboardingState) => TenantOnboardingState,
-  tx?: OnboardingStateDb,
+  tx?: OnboardingStateTx,
 ) {
-  const db: OnboardingStateDb = tx ?? prisma;
-  const setting = await db.systemSetting.findFirst({
-    where: {
-      tenantId,
-      category: SystemSettingCategory.ASSOCIATION,
-      key: TENANT_ONBOARDING_SETTING_KEY,
-    },
-    select: { id: true, value: true },
-  });
+  const setting = tx
+    ? await tx.systemSetting.findFirst({
+        where: {
+          tenantId,
+          category: SystemSettingCategory.ASSOCIATION,
+          key: TENANT_ONBOARDING_SETTING_KEY,
+        },
+        select: { id: true, value: true },
+      })
+    : await prisma.systemSetting.findFirst({
+        where: {
+          tenantId,
+          category: SystemSettingCategory.ASSOCIATION,
+          key: TENANT_ONBOARDING_SETTING_KEY,
+        },
+        select: { id: true, value: true },
+      });
+
   let current = emptyTenantOnboardingState();
   if (setting?.value) {
     try {
@@ -63,19 +72,23 @@ export async function updateTenantOnboardingState(
       current = emptyTenantOnboardingState();
     }
   }
+
   const next: TenantOnboardingState = {
     ...updater(current),
     version: TENANT_ONBOARDING_VERSION,
     updatedAt: new Date().toISOString(),
   };
   const value = JSON.stringify(next);
+
   if (setting) {
-    await db.systemSetting.update({
+    const args = {
       where: { id: setting.id },
       data: { value, updatedById: actorId },
-    });
+    };
+    if (tx) await tx.systemSetting.update(args);
+    else await prisma.systemSetting.update(args);
   } else {
-    await db.systemSetting.create({
+    const args = {
       data: {
         tenantId,
         category: SystemSettingCategory.ASSOCIATION,
@@ -85,7 +98,10 @@ export async function updateTenantOnboardingState(
         isSecret: false,
         updatedById: actorId,
       },
-    });
+    };
+    if (tx) await tx.systemSetting.create(args);
+    else await prisma.systemSetting.create(args);
   }
+
   return next;
 }

@@ -81,13 +81,15 @@ export async function GET(_request: Request, { params }: { params: Promise<{ kin
     if (user.role === Role.HOMEOWNER && user.homeownerProfile?.id !== item.homeownerId) {
       return NextResponse.json({ error: "Receipt access denied." }, { status: 403 });
     }
+    const category = item.payerType;
+    const external = category === "RENTER" || category === "OTHER";
     const purpose = collectionLabel(item.type, item.description);
     receipt = {
       association: await getAssociationSettings(item.tenantId),
       number: item.receiptNumber || `AR-${item.id.slice(-8).toUpperCase()}`,
       date: item.collectionDate,
-      payer: item.homeowner?.user.name ?? item.contractor?.companyName ?? "Unknown payer",
-      address: item.homeowner ? `${item.homeowner.address} | ${homeownerPropertyLabel(item.homeowner)} | Account ${homeownerAccountNumber(item.homeowner)}` : item.contractor?.address ?? "",
+      payer: external ? item.payerName || "Unknown payer" : item.homeowner?.user.name ?? item.contractor?.companyName ?? "Unknown payer",
+      address: external ? `${category === "RENTER" ? "Renter" : "Other"} payer` : item.homeowner ? `${item.homeowner.address} | ${homeownerPropertyLabel(item.homeowner)} | Account ${homeownerAccountNumber(item.homeowner)}` : item.contractor?.address ?? "",
       paymentFor: purpose,
       amount: Number(item.amount),
       method: item.method.replaceAll("_", " "),

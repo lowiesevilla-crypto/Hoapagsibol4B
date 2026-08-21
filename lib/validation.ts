@@ -223,7 +223,8 @@ export const contractorSchema = z.object({
 export const collectionSchema = z.object({
   type: z.enum(["GATE_PASS", "STICKER", "MEMBERSHIP", "CONSTRUCTION_BOND", "CONTRACTOR_BOND", "OTHER"]),
   description: z.string().trim().max(150).optional(),
-  payerType: z.enum(["HOMEOWNER", "CONTRACTOR"]),
+  payerType: z.enum(["HOMEOWNER", "CONTRACTOR", "RENTER", "OTHER"]),
+  payerName: z.string().trim().max(150).optional(),
   homeownerId: z.string().optional(),
   contractorId: z.string().optional(),
   amount: currency.positive(),

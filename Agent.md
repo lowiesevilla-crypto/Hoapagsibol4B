@@ -271,6 +271,16 @@ Mandatory architecture rule: Complaint remains the intake/operational case layer
 
 Deferred grievance scope remains notice/proof-of-service, mediation/hearing records, witness/exhibit/minutes management, evidence vault/provenance, formal board vote/quorum/recusal/decision, appeal/reconsideration, resolution agreement/e-signature, regulatory dossier export, retention/legal hold automation, advanced redaction/notifications, and real malware-scanner integration unless the BRD is revised.
 
+## Flexible Collection Payers — PR #137
+
+- Prisma `PayerType` is the single payer authority and supports `HOMEOWNER`, `CONTRACTOR`, `RENTER`, and `OTHER`. Do not introduce a parallel payer category column or raw-SQL compatibility authority.
+- `Collection.payerName` is nullable and stores the bounded free-text payer identity only for `RENTER` and `OTHER`; do not fabricate Homeowner, User, or Contractor records for external payers.
+- External payer types are allowed only for `CollectionType.OTHER`. Construction Bond remains Homeowner-only and Contractor Bond remains Contractor-only.
+- Existing homeowner/contractor selectors, tenant-scoped existence checks, receipt numbering, finance treatment, bond liabilities, refunds, forfeitures, and audit controls remain unchanged.
+- Collection history/search, HTML receipt, PDF receipt, finance CSV export, and receipt audit metadata must display/preserve the external payer name and first-class payer type.
+- Migration `20260821234500_flexible_collection_payers` expands the existing MySQL `payerType` enum in place and adds nullable `payerName`, preserving existing HOMEOWNER/CONTRACTOR rows.
+- `prisma/schema.prisma`, `lib/validation.ts`, `components/collection-form.tsx`, `lib/actions/collections.ts`, `app/admin/collections/page.tsx`, receipt HTML/PDF routes, finance export, migration, and `tests/unit/flexible-collection-payers-surface.test.ts` are the principal regression surface.
+
 ## Hostinger Production Deployment Model
 
 The authoritative production path is the Hostinger managed Node.js application connected to GitHub `main`.

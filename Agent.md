@@ -202,6 +202,19 @@ Implementation/traceability record: `docs/ui/HOAHUB_PREMIUM_ADMIN_UI_V2_IMPLEMEN
 - HOAHub convenience-fee split routing remains platform-controlled and uses `PAYMONGO_HOMEOWNER_PARENT_ACCOUNT_ID` when enabled. Tenant admins cannot alter the platform fee from homeowner payment setup.
 - `components/sidebar-links.ts`, `app/admin/settings/payments/page.tsx`, `lib/actions/homeowner-payment-settings.ts`, `lib/services/homeowner-payment-config.ts`, `lib/services/homeowner-paymongo.ts`, and `tests/unit/homeowner-payment-flow.test.ts` are the principal regression surface for this contract.
 
+### PayMongo Gateway Status and Finance Reconciliation
+
+- A browser success/cancel redirect is presentation only. Financial posting authority is either the verified child-scoped PayMongo webhook or authenticated server-to-server Checkout Session retrieval using the platform homeowner secret plus the snapshotted tenant `Account-ID`.
+- Server reconciliation must validate the expected tenant, homeowner, linked child account, HOAHub `HOP-...` reference, checkout/payment identifiers, PHP currency, and paid amount/fee metadata before invoking finance posting.
+- An active PayMongo Checkout Session can contain multiple payment attempts. `awaiting_payment_method` with `last_payment_error` is a retryable unsuccessful attempt, not a terminal HOAHub rejection. It remains `PENDING_REVIEW`, remains unposted to finance, and may resume the same Checkout Session.
+- `awaiting_next_action` maps to Awaiting Customer Action; `processing` maps to Processing. Both remain non-financial pending states until PayMongo exposes a paid Payment resource.
+- Only a verified paid Payment resource may transition the HOAHub request to the normal `approvePaymentRequest(..., { allowGatewayConfirmation: true })` path. Successful posting must create/reuse the official receipt/payment or collection, update bill allocations/balances, and remain idempotent on webhook/retrieval retries.
+- Checkout `expired` and homeowner cancellation are terminal non-financial states. Cancellation must first reconcile with PayMongo so an already-paid provider transaction cannot be locally cancelled by a late browser action.
+- `/api/homeowner-payments/paymongo/status` is a same-origin authenticated POST. Tenant/homeowner scope comes only from the authenticated session; no browser-supplied tenant, homeowner, child account, amount, or payment status is accepted as authority.
+- The homeowner PayMongo UI may poll the authenticated status endpoint to display Awaiting Payment, Awaiting Customer Action, Processing, Payment Unsuccessful — Retry Available, Paid & Reconciled, Payment Cancelled, Checkout Expired, or Status Temporarily Unavailable. A UI status refresh may trigger server reconciliation but cannot manufacture a financial state.
+- `/admin/payments/online` is the Tenant Admin operational monitor for gateway state versus finance state. It remains tenant scoped and does not create a manual approval bypass for PayMongo-origin requests.
+- `lib/paymongo-gateway-status.ts`, `lib/services/homeowner-paymongo-reconciliation.ts`, `app/api/homeowner-payments/paymongo/status/route.ts`, `components/paymongo-payment-status-sync.tsx`, `app/admin/payments/online/page.tsx`, `app/portal/pay/paymongo-cancel/route.ts`, `tests/unit/paymongo-gateway-status.test.ts`, and `tests/integration/paymongo-homeowner-reconciliation.test.ts` are the principal regression surface for the end-to-end status/reconciliation contract.
+
 ## Community Intelligence UI System — Phase 3 Baseline
 
 - Existing `pine`, `leaf`, `ink`, `sand`, `.card`, `.field`, `.btn-*`, `.table-wrap`, and `.data-table` remain supported; do not introduce a parallel design framework without an approved migration.

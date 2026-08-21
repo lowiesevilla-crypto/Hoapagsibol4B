@@ -3,6 +3,7 @@ import { requireUser } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { PAYMONGO_CANCELLED_REMARK, PAYMONGO_PAYMENT_REQUEST_MARKER } from "@/lib/homeowner-payment-flow";
 import { expireHomeownerPayMongoCheckout } from "@/lib/services/homeowner-paymongo";
+import { reconcileHomeownerPayMongoCheckout } from "@/lib/services/homeowner-paymongo-reconciliation";
 
 export async function GET(request: Request) {
   const user = await requireUser(Role.HOMEOWNER);
@@ -33,6 +34,22 @@ export async function GET(request: Request) {
   }
 
   try {
+    const current = await reconcileHomeownerPayMongoCheckout({
+      requestId: ownedRequest.id,
+      tenantId: user.tenantId,
+      homeownerId: user.homeownerProfile.id,
+    });
+    if (current.state === "PAID") {
+      destination.searchParams.set("online", "confirmed");
+      destination.hash = "qr-payment";
+      return Response.redirect(destination, 303);
+    }
+    if (current.state === "EXPIRED" || current.state === "CANCELLED") {
+      destination.searchParams.set("online", "cancelled");
+      destination.hash = "qr-payment";
+      return Response.redirect(destination, 303);
+    }
+
     const expired = await expireHomeownerPayMongoCheckout(ownedRequest.id, user.tenantId);
     await prisma.paymentRequest.updateMany({
       where: {

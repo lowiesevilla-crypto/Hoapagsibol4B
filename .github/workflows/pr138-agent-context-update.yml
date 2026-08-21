@@ -1,0 +1,41 @@
+name: PR138 Agent Context Update
+
+on:
+  push:
+    branches:
+      - feature/rental-management-mvp
+
+permissions:
+  contents: write
+
+jobs:
+  update-agent-context:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feature/rental-management-mvp
+          fetch-depth: 0
+      - name: Update Agent.md rental contract
+        shell: bash
+        run: |
+          python3 <<'PY'
+          from pathlib import Path
+          p = Path('Agent.md')
+          text = p.read_text()
+          text = text.replace('Last updated: 2026-08-21', 'Last updated: 2026-08-22', 1)
+          marker = '## Hostinger Production Deployment Model\n'
+          section = '''## Rental Management MVP — PR #138\n\n- Rental management is tenant-scoped and covers rentable assets, renters, agreements, rental receivables, and allocation of existing Collection receipts.\n- Outside renters remain standalone renter records. Do not create fake User or Homeowner records; `homeownerId` is optional and only links a same-tenant existing homeowner.\n- Collection remains the cash and receipt authority. RentalPaymentAllocation is reconciliation only and must not duplicate cash, overpay an invoice, over-allocate a receipt, or cross tenant boundaries.\n- Only eligible non-refundable `CollectionType.OTHER` receipts may be allocated to rental invoices. Payer compatibility must be validated before allocation.\n- Rental security deposits are refundable liabilities and must never be reported as rental income. Rent charges are rental income when collected.\n- Rental finance writes remain under existing `BILLING_MANAGE` authority for this MVP. Do not broaden RBAC implicitly.\n- Rental SQL access must include explicit `tenantId` predicates and state-changing agreement/invoice/allocation workflows use serializable transactions where concurrent balance or occupancy changes matter.\n- Monthly invoice generation is idempotent per tenant/agreement/charge type/period. Ending an agreement releases the asset without deleting historical invoices or allocations.\n- Principal regression surface: `app/admin/rentals/page.tsx`, `lib/actions/rentals.ts`, `prisma/migrations/20260822071500_rental_management_mvp/migration.sql`, `app/admin/reports/export/route.ts`, `components/sidebar-links.ts`, and `tests/unit/rental-management-mvp.test.ts`.\n- Future PayMongo renter payment flows may settle through the existing Collection + RentalPaymentAllocation model only after live webhook authority, idempotency, and tenant isolation are separately verified.\n\n'''
+          if section.strip() not in text:
+              if marker not in text:
+                  raise SystemExit('Hostinger marker not found in Agent.md')
+              text = text.replace(marker, section + marker, 1)
+          p.write_text(text)
+          PY
+          rm .github/workflows/pr138-agent-context-update.yml
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add Agent.md .github/workflows/pr138-agent-context-update.yml
+          git commit -m "docs: record PR138 rental management contract"
+          git push origin HEAD:feature/rental-management-mvp

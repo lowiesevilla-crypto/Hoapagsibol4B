@@ -1,6 +1,6 @@
 import "server-only";
 
-import { Prisma, SystemSettingCategory } from "@prisma/client";
+import { SystemSettingCategory } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import {
   emptyTenantOnboardingState,
@@ -11,7 +11,33 @@ import {
 
 export const TENANT_ONBOARDING_SETTING_KEY = "TENANT_ONBOARDING_V1";
 
-type OnboardingStateTx = Pick<Prisma.TransactionClient, "systemSetting">;
+type OnboardingStateTx = {
+  systemSetting: {
+    findFirst(args: {
+      where: {
+        tenantId: string;
+        category: SystemSettingCategory;
+        key: string;
+      };
+      select: { id: true; value: true };
+    }): Promise<{ id: string; value: string | null } | null>;
+    update(args: {
+      where: { id: string };
+      data: { value: string; updatedById: string };
+    }): Promise<unknown>;
+    create(args: {
+      data: {
+        tenantId: string;
+        category: SystemSettingCategory;
+        key: string;
+        label: string;
+        value: string;
+        isSecret: boolean;
+        updatedById: string;
+      };
+    }): Promise<unknown>;
+  };
+};
 
 export {
   emptyTenantOnboardingState,

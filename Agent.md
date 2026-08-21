@@ -1,6 +1,6 @@
 # HOAHub Agent Context
 
-Last updated: 2026-08-20
+Last updated: 2026-08-21
 
 ## Purpose
 
@@ -188,6 +188,19 @@ Implementation/traceability record: `docs/ui/HOAHUB_PREMIUM_ADMIN_UI_V2_IMPLEMEN
 - Historical failed attempts remain audit history but do not override settled current status.
 - PayMongo posting occurs only from verified gateway processing and the normal transactional ledger/receipt path.
 - Browser redirects/query parameters cannot create receipts or financial postings.
+
+## Tenant Homeowner Payment Choice and PayMongo Linked Accounts
+
+- Tenant admins with `TENANT_SETTINGS_MANAGE` must have discoverable access to `/admin/settings/payments`; Premium Admin navigation changes must not hide this operational setup route.
+- Each tenant selects exactly one flow for new homeowner payment attempts: `MANUAL_QR` or `PAYMONGO`. Existing tenants fail safely to `MANUAL_QR` when no setting is present.
+- Manual QR remains tenant-owned configuration and uses the existing GCash QR/proof-verification workflow. PayMongo-origin requests remain gateway-controlled and cannot be manually approved/rejected before verified gateway confirmation.
+- HOAHub uses PayMongo's platform/Linked Accounts model for homeowner online collections. The platform credential is `PAYMONGO_HOMEOWNER_SECRET_KEY` and remains a deployment secret; tenant admins do not enter, view, store, or receive that API key.
+- The tenant-specific PayMongo value stored by HOAHub is the linked child merchant organization ID (`org_...`) under `PAYMONGO_LINKED_ACCOUNT_ID`. This is not a secret, but it is resolved from authenticated tenant context and never accepted from the homeowner browser as authority.
+- HOAHub creates homeowner Checkout Sessions with the platform credential plus `Account-ID: <tenant org_...>`. When PayMongo Online is enabled, HOAHub creates/enables the child-scoped `checkout_session.payment.paid` webhook and stores that child webhook's ID/signing secret as tenant-scoped settings.
+- The current child webhook signing secret must be verified before processing payment data. Tenant, child organization ID, payment request, amount, currency, and immutable gateway identifiers must match before ledger/receipt posting.
+- HOAHub SaaS subscription billing remains isolated and continues to use `PAYMONGO_SECRET_KEY` / `PAYMONGO_WEBHOOK_SECRET`; do not reuse those credentials for homeowner collections.
+- HOAHub convenience-fee split routing remains platform-controlled and uses `PAYMONGO_HOMEOWNER_PARENT_ACCOUNT_ID` when enabled. Tenant admins cannot alter the platform fee from homeowner payment setup.
+- `components/sidebar-links.ts`, `app/admin/settings/payments/page.tsx`, `lib/actions/homeowner-payment-settings.ts`, `lib/services/homeowner-payment-config.ts`, `lib/services/homeowner-paymongo.ts`, and `tests/unit/homeowner-payment-flow.test.ts` are the principal regression surface for this contract.
 
 ## Community Intelligence UI System — Phase 3 Baseline
 

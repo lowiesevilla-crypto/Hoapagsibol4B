@@ -3,6 +3,7 @@ import { HomeownerStatus } from "@prisma/client";
 import { HOMEOWNER_ACCOUNT_NUMBER_PATTERN } from "@/lib/services/homeowner-account-number";
 
 export const ONBOARDING_HOMEOWNER_TEMPLATE_VERSION = "2.0";
+export const ONBOARDING_HOMEOWNER_MAX_ROWS = 5000;
 export const ONBOARDING_HOMEOWNER_COLUMNS = [
   "name",
   "email",
@@ -88,7 +89,7 @@ export function parseOnboardingHomeownerCsv(input: string): ParsedOnboardingCsv 
   const missing = ONBOARDING_HOMEOWNER_COLUMNS.filter((column) => !headers.includes(column));
   for (const column of missing) errors.push({ rowNumber: null, field: column, message: `Missing required column: ${column}.` });
   if (!matrix.length) errors.push({ rowNumber: null, field: null, message: "CSV file does not contain data rows." });
-  if (matrix.length > 500) errors.push({ rowNumber: null, field: null, message: "A single onboarding import is limited to 500 homeowner rows." });
+  if (matrix.length > ONBOARDING_HOMEOWNER_MAX_ROWS) errors.push({ rowNumber: null, field: null, message: `A single onboarding import is limited to ${ONBOARDING_HOMEOWNER_MAX_ROWS} homeowner rows.` });
   if (errors.length) return { templateVersion: ONBOARDING_HOMEOWNER_TEMPLATE_VERSION, fileHash, headers, rows: [], errors };
 
   const parsedRows: OnboardingHomeownerRow[] = [];

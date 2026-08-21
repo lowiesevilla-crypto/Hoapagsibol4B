@@ -1,6 +1,6 @@
 # HOAHub Agent Context
 
-Last updated: 2026-08-21
+Last updated: 2026-08-22
 
 ## Purpose
 
@@ -280,6 +280,19 @@ Deferred grievance scope remains notice/proof-of-service, mediation/hearing reco
 - Collection history/search, HTML receipt, PDF receipt, finance CSV export, and receipt audit metadata must display/preserve the external payer name and first-class payer type.
 - Migration `20260821234500_flexible_collection_payers` expands the existing MySQL `payerType` enum in place and adds nullable `payerName`, preserving existing HOMEOWNER/CONTRACTOR rows.
 - `prisma/schema.prisma`, `lib/validation.ts`, `components/collection-form.tsx`, `lib/actions/collections.ts`, `app/admin/collections/page.tsx`, receipt HTML/PDF routes, finance export, migration, and `tests/unit/flexible-collection-payers-surface.test.ts` are the principal regression surface.
+
+## Rental Management MVP — PR #138
+
+- Rental management is tenant-scoped and covers rentable assets, renters, agreements, rental receivables, and allocation of existing Collection receipts.
+- Outside renters remain standalone renter records. Do not create fake User or Homeowner records; `homeownerId` is optional and only links a same-tenant existing homeowner.
+- Collection remains the cash and receipt authority. RentalPaymentAllocation is reconciliation only and must not duplicate cash, overpay an invoice, over-allocate a receipt, or cross tenant boundaries.
+- Only eligible non-refundable `CollectionType.OTHER` receipts may be allocated to rental invoices. Payer compatibility must be validated before allocation.
+- Rental security deposits are refundable liabilities and must never be reported as rental income. Rent charges are rental income when collected.
+- Rental finance writes remain under existing `BILLING_MANAGE` authority for this MVP. Do not broaden RBAC implicitly.
+- Rental SQL access must include explicit `tenantId` predicates and state-changing agreement/invoice/allocation workflows use serializable transactions where concurrent balance or occupancy changes matter.
+- Monthly invoice generation is idempotent per tenant/agreement/charge type/period. Ending an agreement releases the asset without deleting historical invoices or allocations.
+- Principal regression surface: `app/admin/rentals/page.tsx`, `lib/actions/rentals.ts`, `prisma/migrations/20260822071500_rental_management_mvp/migration.sql`, `app/admin/reports/export/route.ts`, `components/sidebar-links.ts`, and `tests/unit/rental-management-mvp.test.ts`.
+- Future PayMongo renter payment flows may settle through the existing Collection + RentalPaymentAllocation model only after live webhook authority, idempotency, and tenant isolation are separately verified.
 
 ## Hostinger Production Deployment Model
 

@@ -18,24 +18,32 @@ jobs:
           ref: fix/collections-flexible-payers
           fetch-depth: 0
 
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.9.0
+
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
+          cache: pnpm
 
       - name: Apply first-class flexible payer correction
         run: python3 scripts/pr137-correct.py
 
       - name: Install dependencies
-        run: npm ci
+        run: pnpm install --frozen-lockfile
 
       - name: Validate Prisma schema
-        run: npx prisma validate
+        run: pnpm exec prisma validate
+
+      - name: Generate Prisma client
+        run: pnpm exec prisma generate
 
       - name: Focused PR137 regression
-        run: node --import tsx --test tests/unit/flexible-collection-payers-surface.test.ts
+        run: pnpm exec tsx --test tests/unit/flexible-collection-payers-surface.test.ts
 
       - name: Typecheck
-        run: npm run typecheck
+        run: pnpm typecheck
 
       - name: Commit corrected implementation
         run: |

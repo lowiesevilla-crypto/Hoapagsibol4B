@@ -51,7 +51,7 @@ test("admin reconciliation also releases expired sessions without manual approva
 test("PayMongo return path releases expired awaiting sessions", () => {
   const route = source("app/portal/pay/paymongo-confirm/route.ts");
   assert.match(route, /releaseExpiredHomeownerPayMongoCheckout/);
-  assert.match(route, /item\.state === "awaiting_payment"/);
+  assert.match(route, /item\.state === "AWAITING_PAYMENT"/);
   assert.match(route, /online", "expired"/);
   assert.match(route, /billing items were released/);
 });

@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   ONBOARDING_HOMEOWNER_COLUMNS,
+  ONBOARDING_HOMEOWNER_MAX_ROWS,
   onboardingErrorCsv,
   onboardingHomeownerTemplateCsv,
   parseOnboardingHomeownerCsv,
@@ -47,6 +48,35 @@ test("blank homeowner email is accepted for later tenant-admin registration", ()
   assert.equal(parsed.rows.length, 1);
   assert.equal(parsed.rows[0].email, "");
   assert.equal(parsed.rows[0].accountNumber, null);
+});
+
+test("onboarding accepts a client-scale file above 2,050 homeowners and keeps a bounded ceiling", () => {
+  const makeRow = (index: number) => [
+    `Homeowner ${index}`,
+    `owner${index}@example.com`,
+    `09${String(index).padStart(9, "0").slice(-9)}`,
+    `${index} Main Street`,
+    String(Math.floor(index / 100) + 1),
+    String(index),
+    "Phase 1",
+    "HOUSE_AND_LOT",
+    "OWNER_OCCUPIED",
+    "ACTIVE",
+    "500.00",
+    "",
+    "0.00",
+    "",
+  ].join(",");
+
+  const clientScaleCsv = [ONBOARDING_HOMEOWNER_COLUMNS.join(","), ...Array.from({ length: 2051 }, (_, index) => makeRow(index + 1))].join("\n");
+  const clientScale = parseOnboardingHomeownerCsv(clientScaleCsv);
+  assert.deepEqual(clientScale.errors, []);
+  assert.equal(clientScale.rows.length, 2051);
+
+  const overLimitCsv = [ONBOARDING_HOMEOWNER_COLUMNS.join(","), ...Array.from({ length: ONBOARDING_HOMEOWNER_MAX_ROWS + 1 }, (_, index) => makeRow(index + 1))].join("\n");
+  const overLimit = parseOnboardingHomeownerCsv(overLimitCsv);
+  assert.equal(overLimit.rows.length, 0);
+  assert.ok(overLimit.errors.some((error) => error.message.includes(`${ONBOARDING_HOMEOWNER_MAX_ROWS} homeowner rows`)));
 });
 
 test("internal no-email addresses are never treated or displayed as contact emails", () => {

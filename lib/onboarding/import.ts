@@ -25,7 +25,7 @@ import { runWithTenant } from "@/lib/tenant-context";
 
 export const ONBOARDING_INLINE_ACTIVATION_MAX_ROWS = 25;
 export const ONBOARDING_IMPORT_TRANSACTION_TIMEOUT_MS = 300_000;
-const ONBOARDING_IMPORT_WRITE_BATCH_SIZE = 500;
+const ONBOARDING_IMPORT_WRITE_BATCH_SIZE = 250;
 
 export type OnboardingImportValidation = {
   fileHash: string;
@@ -41,6 +41,24 @@ export type OnboardingImportResult = {
   openingBalancesPosted: number;
   activationEmailsAttempted: number;
   activationInvitationsDeferred: number;
+};
+
+type PreparedOnboardingRow = {
+  row: OnboardingHomeownerRow;
+  accountNumber: string;
+  passwordHash: string;
+  userId: string;
+  homeownerId: string;
+};
+
+type ActivationJob = {
+  userId: string;
+  name: string;
+  email: string;
+  accountNumber: string;
+  temporaryPassword: string;
+  emailVerificationToken: string;
+  expiresAt: Date;
 };
 
 export async function validateOnboardingImport(tenantId: string, csv: string): Promise<OnboardingImportValidation> {
@@ -118,8 +136,7 @@ export async function applyOnboardingImport(input: {
     : 0;
 
   // Imported accounts cannot authenticate with this internal placeholder. A single high-entropy
-  // batch hash avoids thousands of redundant bcrypt operations before a large transactional import;
-  // real activation credentials remain unique when an invitation is actually issued.
+  // batch hash is used only until each homeowner completes the separately authorized activation flow.
   const batchPlaceholderPasswordHash = await hash(`activation-only-${randomUUID()}`, 12);
   const suppliedAccountNumbers = new Set(
     validation.rows.map((row) => row.accountNumber).filter((value): value is string => Boolean(value)),
@@ -127,202 +144,27 @@ export async function applyOnboardingImport(input: {
   const missingAccountCount = validation.rows.reduce((count, row) => count + (row.accountNumber ? 0 : 1), 0);
   const generatedAccountNumbers = await allocateUniqueHomeownerAccountNumbers(missingAccountCount, suppliedAccountNumbers);
   let generatedAccountIndex = 0;
-  const prepared = validation.rows.map((row) => ({
-    row,
-    accountNumber: row.accountNumber ?? generatedAccountNumbers[generatedAccountIndex++],
-    passwordHash: batchPlaceholderPasswordHash,
-  }));
+  const prepared: PreparedOnboardingRow[] = validation.rows.map((row) => {
+    const generatedAccountNumber = row.accountNumber ? null : generatedAccountNumbers[generatedAccountIndex++];
+    const accountNumber = row.accountNumber ?? generatedAccountNumber;
+    if (!accountNumber) throw new Error(`Unable to allocate an account number for row ${row.rowNumber}.`);
+    return {
+      row,
+      accountNumber,
+      passwordHash: batchPlaceholderPasswordHash,
+      userId: randomUUID(),
+      homeownerId: randomUUID(),
+    };
+  });
 
   const activationJobs = await runWithTenant(
     input.tenantId,
     async () => await prisma.$transaction(async (tx) => {
-      const currentStateSetting = await tx.systemSetting.findFirst({
-        where: { tenantId: input.tenantId, category: "ASSOCIATION", key: "TENANT_ONBOARDING_V1" },
-        select: { value: true },
-      });
-      if (currentStateSetting?.value) {
-        try {
-          const state = JSON.parse(currentStateSetting.value) as { import?: { appliedAt?: string; fileHash?: string } };
-          if (state.import?.appliedAt && state.import.fileHash === validation.fileHash) throw new Error("This onboarding file has already been applied.");
-        } catch (error) {
-          if (error instanceof Error && error.message.includes("already been applied")) throw error;
-        }
-      }
+      await assertImportNotAlreadyApplied(tx, input.tenantId, validation.fileHash);
 
-      const jobs: Array<{
-        userId: string;
-        name: string;
-        email: string;
-        accountNumber: string;
-        temporaryPassword: string;
-        emailVerificationToken: string;
-        expiresAt: Date;
-      }> = [];
-      const reservationRows: Array<{
-        tenantId: string;
-        homeownerId: string;
-        accountNumber: string;
-        reason: string;
-      }> = [];
-      const homeownerAuditRows: Array<{
-        tenantId: string;
-        actorId: string;
-        module: string;
-        action: string;
-        entityType: string;
-        entityId: string;
-        metadata: Prisma.InputJsonValue;
-      }> = [];
-      let openingBalancesPosted = 0;
-
-      for (const item of prepared) {
-        const emailProvided = Boolean(item.row.email);
-        const inlineActivation = emailProvided && !deferActivationInvitations;
-        const storedEmail = item.row.email || homeownerNoEmailAddress(item.accountNumber);
-        const user = await tx.user.create({
-          data: {
-            tenantId: input.tenantId,
-            name: item.row.name,
-            email: storedEmail,
-            passwordHash: item.passwordHash,
-            role: Role.HOMEOWNER,
-            active: true,
-            homeownerProfile: {
-              create: {
-                tenantId: input.tenantId,
-                phone: item.row.phone,
-                address: item.row.address,
-                block: item.row.block,
-                lot: item.row.lot,
-                phase: item.row.phase,
-                propertyType: item.row.propertyType,
-                occupancyStatus: item.row.occupancyStatus,
-                accountNumber: item.accountNumber,
-                status: item.row.status,
-                activationStatus: inlineActivation ? HomeownerActivationStatus.INVITATION_SENT : HomeownerActivationStatus.NOT_INVITED,
-                emailStatus: HomeownerEmailVerificationStatus.UNVERIFIED,
-                activationSentAt: inlineActivation ? new Date() : null,
-                monthlyDuesAmount: item.row.monthlyDuesAmount,
-              },
-            },
-            userRoleAssignments: {
-              create: {
-                tenantId: input.tenantId,
-                role: Role.HOMEOWNER,
-                assignedBy: input.actorId,
-                active: true,
-              },
-            },
-          },
-          include: { homeownerProfile: true },
-        });
-        const homeowner = user.homeownerProfile;
-        if (!homeowner) throw new Error(`Homeowner profile was not created for row ${item.row.rowNumber}.`);
-
-        reservationRows.push({
-          tenantId: input.tenantId,
-          homeownerId: homeowner.id,
-          accountNumber: item.accountNumber,
-          reason: "ONBOARDING_IMPORT",
-        });
-
-        const activation = inlineActivation
-          ? await createHomeownerActivationCredential({
-              tenantId: input.tenantId,
-              userId: user.id,
-              createdById: input.actorId,
-              tx,
-            })
-          : null;
-
-        if (item.row.openingBalance > 0 && item.row.openingBalanceAsOf) {
-          const period = new Date(Date.UTC(item.row.openingBalanceAsOf.getUTCFullYear(), item.row.openingBalanceAsOf.getUTCMonth(), 1));
-          const dueDate = new Date(Date.UTC(period.getUTCFullYear(), period.getUTCMonth() + 1, 0));
-          const bill = await tx.bill.create({
-            data: {
-              tenantId: input.tenantId,
-              homeowner: { connect: { id: homeowner.id } },
-              billingMonth: period,
-              coverageYear: period.getUTCFullYear(),
-              coverageMonth: period.getUTCMonth() + 1,
-              amount: item.row.openingBalance,
-              penalty: 0,
-              totalAmount: item.row.openingBalance,
-              amountPaid: 0,
-              balance: item.row.openingBalance,
-              dueDate,
-              status: dueDate < startOfTodayUtc() ? BillStatus.OVERDUE : BillStatus.UNPAID,
-              notes: `[MIGRATED][OPENING_BALANCE] Tenant onboarding import ${validation.fileHash.slice(0, 12)}`,
-            },
-          });
-          const dedupeKey = `ONBOARDING|${validation.fileHash}|${item.row.rowNumber}|DUES_OPENING_BALANCE`;
-          const migration = await tx.dataMigration.create({
-            data: {
-              tenantId: input.tenantId,
-              kind: DataMigrationKind.DUES_OPENING_BALANCE,
-              tag: DataMigrationTag.OPENING_BALANCE,
-              homeowner: { connect: { id: homeowner.id } },
-              period,
-              amount: item.row.openingBalance,
-              remarks: `Tenant onboarding opening balance from ${input.fileName}`,
-              postedRecordType: "Bill",
-              postedRecordId: bill.id,
-              dedupeKey,
-              createdBy: { connect: { id: input.actorId } },
-            },
-          });
-          await tx.auditLog.create({
-            data: {
-              tenantId: input.tenantId,
-              actorId: input.actorId,
-              module: "DATA_MIGRATION",
-              action: "POST_DUES_OPENING_BALANCE",
-              entityType: "DataMigration",
-              entityId: migration.id,
-              metadata: { source: "TENANT_ONBOARDING", fileHash: validation.fileHash, rowNumber: item.row.rowNumber, amount: item.row.openingBalance, billId: bill.id },
-            },
-          });
-          openingBalancesPosted++;
-        }
-
-        homeownerAuditRows.push({
-          tenantId: input.tenantId,
-          actorId: input.actorId,
-          module: "ONBOARDING",
-          action: "HOMEOWNER_IMPORTED",
-          entityType: "HomeownerProfile",
-          entityId: homeowner.id,
-          metadata: {
-            fileHash: validation.fileHash,
-            rowNumber: item.row.rowNumber,
-            openingBalance: item.row.openingBalance > 0,
-            accountNumberProvided: Boolean(item.row.accountNumber),
-            emailProvided,
-            activationDeferred: emailProvided && deferActivationInvitations,
-          },
-        });
-
-        if (activation) {
-          jobs.push({
-            userId: user.id,
-            name: user.name,
-            email: item.row.email,
-            accountNumber: item.accountNumber,
-            ...activation,
-          });
-        }
-      }
-
-      for (let index = 0; index < reservationRows.length; index += ONBOARDING_IMPORT_WRITE_BATCH_SIZE) {
-        await tx.homeownerAccountNumberReservation.createMany({
-          data: reservationRows.slice(index, index + ONBOARDING_IMPORT_WRITE_BATCH_SIZE),
-        });
-      }
-      for (let index = 0; index < homeownerAuditRows.length; index += ONBOARDING_IMPORT_WRITE_BATCH_SIZE) {
-        await tx.auditLog.createMany({
-          data: homeownerAuditRows.slice(index, index + ONBOARDING_IMPORT_WRITE_BATCH_SIZE),
-        });
-      }
+      const applied = deferActivationInvitations
+        ? await applyClientScaleRows(tx, input, validation, prepared)
+        : await applyInlineRows(tx, input, validation, prepared);
 
       await updateTenantOnboardingState(input.tenantId, input.actorId, (state) => ({
         ...state,
@@ -335,7 +177,7 @@ export async function applyOnboardingImport(input: {
           errors: [],
           appliedAt: new Date().toISOString(),
           importedRows: validation.rows.length,
-          openingBalancesPosted,
+          openingBalancesPosted: applied.openingBalancesPosted,
           activationInvitationsDeferred,
         },
       }), tx);
@@ -352,15 +194,15 @@ export async function applyOnboardingImport(input: {
             fileHash: validation.fileHash,
             templateVersion: validation.templateVersion,
             importedRows: validation.rows.length,
-            openingBalancesPosted,
-            activationEmailsAttempted: jobs.length,
+            openingBalancesPosted: applied.openingBalancesPosted,
+            activationEmailsAttempted: applied.jobs.length,
             activationInvitationsDeferred,
             activationMode: deferActivationInvitations ? "DEFERRED_CLIENT_SCALE" : "INLINE_SMALL_IMPORT",
           },
         },
       });
 
-      return { jobs, openingBalancesPosted };
+      return applied;
     }, {
       isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
       maxWait: 10_000,
@@ -388,6 +230,319 @@ export async function applyOnboardingImport(input: {
     activationEmailsAttempted: activationJobs.jobs.length,
     activationInvitationsDeferred,
   };
+}
+
+async function assertImportNotAlreadyApplied(tx: Prisma.TransactionClient, tenantId: string, fileHash: string) {
+  const currentStateSetting = await tx.systemSetting.findFirst({
+    where: { tenantId, category: "ASSOCIATION", key: "TENANT_ONBOARDING_V1" },
+    select: { value: true },
+  });
+  if (!currentStateSetting?.value) return;
+  try {
+    const state = JSON.parse(currentStateSetting.value) as { import?: { appliedAt?: string; fileHash?: string } };
+    if (state.import?.appliedAt && state.import.fileHash === fileHash) throw new Error("This onboarding file has already been applied.");
+  } catch (error) {
+    if (error instanceof Error && error.message.includes("already been applied")) throw error;
+  }
+}
+
+async function applyClientScaleRows(
+  tx: Prisma.TransactionClient,
+  input: { tenantId: string; actorId: string; fileName: string },
+  validation: OnboardingImportValidation,
+  prepared: PreparedOnboardingRow[],
+) {
+  const userRows: Prisma.UserCreateManyInput[] = [];
+  const profileRows: Prisma.HomeownerProfileCreateManyInput[] = [];
+  const roleRows: Prisma.UserRoleAssignmentCreateManyInput[] = [];
+  const reservationRows: Prisma.HomeownerAccountNumberReservationCreateManyInput[] = [];
+  const billRows: Prisma.BillCreateManyInput[] = [];
+  const migrationRows: Prisma.DataMigrationCreateManyInput[] = [];
+  const auditRows: Prisma.AuditLogCreateManyInput[] = [];
+  const today = startOfTodayUtc();
+
+  for (const item of prepared) {
+    const emailProvided = Boolean(item.row.email);
+    const storedEmail = item.row.email || homeownerNoEmailAddress(item.accountNumber);
+    userRows.push({
+      id: item.userId,
+      tenantId: input.tenantId,
+      name: item.row.name,
+      email: storedEmail,
+      passwordHash: item.passwordHash,
+      role: Role.HOMEOWNER,
+      active: true,
+    });
+    profileRows.push({
+      id: item.homeownerId,
+      tenantId: input.tenantId,
+      userId: item.userId,
+      phone: item.row.phone,
+      address: item.row.address,
+      block: item.row.block,
+      lot: item.row.lot,
+      phase: item.row.phase,
+      propertyType: item.row.propertyType,
+      occupancyStatus: item.row.occupancyStatus,
+      accountNumber: item.accountNumber,
+      status: item.row.status,
+      activationStatus: HomeownerActivationStatus.NOT_INVITED,
+      emailStatus: HomeownerEmailVerificationStatus.UNVERIFIED,
+      activationSentAt: null,
+      monthlyDuesAmount: item.row.monthlyDuesAmount,
+    });
+    roleRows.push({
+      tenantId: input.tenantId,
+      userId: item.userId,
+      role: Role.HOMEOWNER,
+      assignedBy: input.actorId,
+      active: true,
+    });
+    reservationRows.push({
+      tenantId: input.tenantId,
+      homeownerId: item.homeownerId,
+      accountNumber: item.accountNumber,
+      reason: "ONBOARDING_IMPORT",
+    });
+    auditRows.push({
+      tenantId: input.tenantId,
+      actorId: input.actorId,
+      module: "ONBOARDING",
+      action: "HOMEOWNER_IMPORTED",
+      entityType: "HomeownerProfile",
+      entityId: item.homeownerId,
+      metadata: {
+        fileHash: validation.fileHash,
+        rowNumber: item.row.rowNumber,
+        openingBalance: item.row.openingBalance > 0,
+        accountNumberProvided: Boolean(item.row.accountNumber),
+        emailProvided,
+        activationDeferred: emailProvided,
+      },
+    });
+
+    if (item.row.openingBalance > 0 && item.row.openingBalanceAsOf) {
+      const period = new Date(Date.UTC(item.row.openingBalanceAsOf.getUTCFullYear(), item.row.openingBalanceAsOf.getUTCMonth(), 1));
+      const dueDate = new Date(Date.UTC(period.getUTCFullYear(), period.getUTCMonth() + 1, 0));
+      const billId = randomUUID();
+      const migrationId = randomUUID();
+      billRows.push({
+        id: billId,
+        tenantId: input.tenantId,
+        homeownerId: item.homeownerId,
+        billingMonth: period,
+        coverageYear: period.getUTCFullYear(),
+        coverageMonth: period.getUTCMonth() + 1,
+        amount: item.row.openingBalance,
+        penalty: 0,
+        totalAmount: item.row.openingBalance,
+        amountPaid: 0,
+        balance: item.row.openingBalance,
+        dueDate,
+        status: dueDate < today ? BillStatus.OVERDUE : BillStatus.UNPAID,
+        notes: `[MIGRATED][OPENING_BALANCE] Tenant onboarding import ${validation.fileHash.slice(0, 12)}`,
+      });
+      migrationRows.push({
+        id: migrationId,
+        tenantId: input.tenantId,
+        kind: DataMigrationKind.DUES_OPENING_BALANCE,
+        tag: DataMigrationTag.OPENING_BALANCE,
+        homeownerId: item.homeownerId,
+        period,
+        amount: item.row.openingBalance,
+        remarks: `Tenant onboarding opening balance from ${input.fileName}`,
+        postedRecordType: "Bill",
+        postedRecordId: billId,
+        dedupeKey: `ONBOARDING|${validation.fileHash}|${item.row.rowNumber}|DUES_OPENING_BALANCE`,
+        createdById: input.actorId,
+      });
+      auditRows.push({
+        tenantId: input.tenantId,
+        actorId: input.actorId,
+        module: "DATA_MIGRATION",
+        action: "POST_DUES_OPENING_BALANCE",
+        entityType: "DataMigration",
+        entityId: migrationId,
+        metadata: {
+          source: "TENANT_ONBOARDING",
+          fileHash: validation.fileHash,
+          rowNumber: item.row.rowNumber,
+          amount: item.row.openingBalance,
+          billId,
+        },
+      });
+    }
+  }
+
+  await createManyInBatches(userRows, (data) => tx.user.createMany({ data }));
+  await createManyInBatches(profileRows, (data) => tx.homeownerProfile.createMany({ data }));
+  await createManyInBatches(roleRows, (data) => tx.userRoleAssignment.createMany({ data }));
+  await createManyInBatches(reservationRows, (data) => tx.homeownerAccountNumberReservation.createMany({ data }));
+  await createManyInBatches(billRows, (data) => tx.bill.createMany({ data }));
+  await createManyInBatches(migrationRows, (data) => tx.dataMigration.createMany({ data }));
+  await createManyInBatches(auditRows, (data) => tx.auditLog.createMany({ data }));
+
+  return { jobs: [] as ActivationJob[], openingBalancesPosted: billRows.length };
+}
+
+async function applyInlineRows(
+  tx: Prisma.TransactionClient,
+  input: { tenantId: string; actorId: string; fileName: string },
+  validation: OnboardingImportValidation,
+  prepared: PreparedOnboardingRow[],
+) {
+  const jobs: ActivationJob[] = [];
+  let openingBalancesPosted = 0;
+
+  for (const item of prepared) {
+    const emailProvided = Boolean(item.row.email);
+    const storedEmail = item.row.email || homeownerNoEmailAddress(item.accountNumber);
+    const user = await tx.user.create({
+      data: {
+        id: item.userId,
+        tenantId: input.tenantId,
+        name: item.row.name,
+        email: storedEmail,
+        passwordHash: item.passwordHash,
+        role: Role.HOMEOWNER,
+        active: true,
+        homeownerProfile: {
+          create: {
+            id: item.homeownerId,
+            tenantId: input.tenantId,
+            phone: item.row.phone,
+            address: item.row.address,
+            block: item.row.block,
+            lot: item.row.lot,
+            phase: item.row.phase,
+            propertyType: item.row.propertyType,
+            occupancyStatus: item.row.occupancyStatus,
+            accountNumber: item.accountNumber,
+            status: item.row.status,
+            activationStatus: emailProvided ? HomeownerActivationStatus.INVITATION_SENT : HomeownerActivationStatus.NOT_INVITED,
+            emailStatus: HomeownerEmailVerificationStatus.UNVERIFIED,
+            activationSentAt: emailProvided ? new Date() : null,
+            monthlyDuesAmount: item.row.monthlyDuesAmount,
+          },
+        },
+        userRoleAssignments: {
+          create: {
+            tenantId: input.tenantId,
+            role: Role.HOMEOWNER,
+            assignedBy: input.actorId,
+            active: true,
+          },
+        },
+      },
+      include: { homeownerProfile: true },
+    });
+    const homeowner = user.homeownerProfile;
+    if (!homeowner) throw new Error(`Homeowner profile was not created for row ${item.row.rowNumber}.`);
+
+    await tx.homeownerAccountNumberReservation.create({
+      data: {
+        tenantId: input.tenantId,
+        homeownerId: homeowner.id,
+        accountNumber: item.accountNumber,
+        reason: "ONBOARDING_IMPORT",
+      },
+    });
+
+    const activation = emailProvided
+      ? await createHomeownerActivationCredential({
+          tenantId: input.tenantId,
+          userId: user.id,
+          createdById: input.actorId,
+          tx,
+        })
+      : null;
+
+    if (item.row.openingBalance > 0 && item.row.openingBalanceAsOf) {
+      const period = new Date(Date.UTC(item.row.openingBalanceAsOf.getUTCFullYear(), item.row.openingBalanceAsOf.getUTCMonth(), 1));
+      const dueDate = new Date(Date.UTC(period.getUTCFullYear(), period.getUTCMonth() + 1, 0));
+      const bill = await tx.bill.create({
+        data: {
+          tenantId: input.tenantId,
+          homeowner: { connect: { id: homeowner.id } },
+          billingMonth: period,
+          coverageYear: period.getUTCFullYear(),
+          coverageMonth: period.getUTCMonth() + 1,
+          amount: item.row.openingBalance,
+          penalty: 0,
+          totalAmount: item.row.openingBalance,
+          amountPaid: 0,
+          balance: item.row.openingBalance,
+          dueDate,
+          status: dueDate < startOfTodayUtc() ? BillStatus.OVERDUE : BillStatus.UNPAID,
+          notes: `[MIGRATED][OPENING_BALANCE] Tenant onboarding import ${validation.fileHash.slice(0, 12)}`,
+        },
+      });
+      const migration = await tx.dataMigration.create({
+        data: {
+          tenantId: input.tenantId,
+          kind: DataMigrationKind.DUES_OPENING_BALANCE,
+          tag: DataMigrationTag.OPENING_BALANCE,
+          homeowner: { connect: { id: homeowner.id } },
+          period,
+          amount: item.row.openingBalance,
+          remarks: `Tenant onboarding opening balance from ${input.fileName}`,
+          postedRecordType: "Bill",
+          postedRecordId: bill.id,
+          dedupeKey: `ONBOARDING|${validation.fileHash}|${item.row.rowNumber}|DUES_OPENING_BALANCE`,
+          createdBy: { connect: { id: input.actorId } },
+        },
+      });
+      await tx.auditLog.create({
+        data: {
+          tenantId: input.tenantId,
+          actorId: input.actorId,
+          module: "DATA_MIGRATION",
+          action: "POST_DUES_OPENING_BALANCE",
+          entityType: "DataMigration",
+          entityId: migration.id,
+          metadata: { source: "TENANT_ONBOARDING", fileHash: validation.fileHash, rowNumber: item.row.rowNumber, amount: item.row.openingBalance, billId: bill.id },
+        },
+      });
+      openingBalancesPosted++;
+    }
+
+    await tx.auditLog.create({
+      data: {
+        tenantId: input.tenantId,
+        actorId: input.actorId,
+        module: "ONBOARDING",
+        action: "HOMEOWNER_IMPORTED",
+        entityType: "HomeownerProfile",
+        entityId: homeowner.id,
+        metadata: {
+          fileHash: validation.fileHash,
+          rowNumber: item.row.rowNumber,
+          openingBalance: item.row.openingBalance > 0,
+          accountNumberProvided: Boolean(item.row.accountNumber),
+          emailProvided,
+          activationDeferred: false,
+        },
+      },
+    });
+
+    if (activation) {
+      jobs.push({
+        userId: user.id,
+        name: user.name,
+        email: item.row.email,
+        accountNumber: item.accountNumber,
+        ...activation,
+      });
+    }
+  }
+
+  return { jobs, openingBalancesPosted };
+}
+
+async function createManyInBatches<T>(rows: T[], create: (batch: T[]) => Promise<unknown>) {
+  for (let index = 0; index < rows.length; index += ONBOARDING_IMPORT_WRITE_BATCH_SIZE) {
+    await create(rows.slice(index, index + ONBOARDING_IMPORT_WRITE_BATCH_SIZE));
+  }
 }
 
 async function allocateUniqueHomeownerAccountNumbers(count: number, blockedAccountNumbers: Set<string>) {

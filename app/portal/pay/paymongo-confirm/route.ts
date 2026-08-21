@@ -17,12 +17,12 @@ export async function GET(request: Request) {
     tenantId: user.tenantId,
     homeownerId: user.homeownerProfile.id,
   });
-  if (results.some((result) => result.state === "paid")) {
+  if (results.some((result) => result.state === "PAID")) {
     destination.searchParams.set("online", "paid");
     destination.searchParams.set("message", "Online payment confirmed. Your HOA records and receipt were updated automatically.");
   } else {
     let releasedExpired = false;
-    for (const result of results.filter((item) => item.state === "awaiting_payment")) {
+    for (const result of results.filter((item) => item.state === "AWAITING_PAYMENT")) {
       try {
         const expiry = await releaseExpiredHomeownerPayMongoCheckout({
           requestId: result.requestId,
@@ -38,16 +38,14 @@ export async function GET(request: Request) {
     if (releasedExpired) {
       destination.searchParams.set("online", "expired");
       destination.searchParams.set("message", "The previous PayMongo checkout expired. Its billing items were released and can be selected for a new payment.");
-    } else if (results.some((result) => result.state === "awaiting_payment")) {
+    } else if (results.some((result) => result.state === "AWAITING_PAYMENT")) {
       destination.searchParams.set("online", "awaiting");
       destination.searchParams.set("message", "Payment confirmation is still being verified. No manual approval is required for online payment.");
+    } else if (results.some((result) => result.state === "UNAVAILABLE")) {
+      destination.searchParams.set("error", "PayMongo status is temporarily unavailable. No payment was posted unless the gateway confirms it as paid.");
     } else {
-      const failure = results.find((result) => result.state === "error");
-      if (failure && "message" in failure) destination.searchParams.set("error", failure.message);
-      else {
-        destination.searchParams.set("online", "awaiting");
-        destination.searchParams.set("message", "Payment confirmation is still being verified. No manual approval is required for online payment.");
-      }
+      destination.searchParams.set("online", "awaiting");
+      destination.searchParams.set("message", "Payment confirmation is still being verified. No manual approval is required for online payment.");
     }
   }
   destination.hash = destination.searchParams.get("online") === "expired" ? "qr-payment" : "payment-status";

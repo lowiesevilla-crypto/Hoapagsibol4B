@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { CreditCard, QrCode, ShieldCheck } from "lucide-react";
 import { PageHeader } from "@/components/page-header";
 import { SubmitButton } from "@/components/ui";
@@ -15,6 +16,7 @@ export default async function HomeownerPaymentSettingsPage({ searchParams }: { s
       eyebrow="Tenant payment settings"
       title="Homeowner payment setup"
       description="Choose the payment method homeowners will use for this tenant: PayMongo Online or Manual QR. HOAHub's PayMongo platform API credential remains managed centrally; tenant admins configure only their payment choice and linked child merchant account."
+      action={<Link className="btn-secondary" href="/admin/payments/online">Online payment status</Link>}
     />
     {query.error && <div role="alert" className="mb-5 rounded-2xl border border-rose-200 bg-rose-50 p-4 text-sm font-semibold text-rose-800">{query.error}</div>}
     {query.success && <div role="status" className="mb-5 rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-sm font-semibold text-emerald-800">{query.message || "Payment settings saved."}</div>}

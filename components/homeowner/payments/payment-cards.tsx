@@ -1,6 +1,7 @@
 import Link from "next/link";
 import type { LucideIcon } from "lucide-react";
 import { AlertCircle, CheckCircle2, ChevronRight, Clock3, CreditCard, FileText, Printer, QrCode, ReceiptText, ShieldCheck, WalletCards } from "lucide-react";
+import { paymongoGatewayPresentation, paymongoGatewayStateFromRemark } from "@/lib/paymongo-gateway-status";
 
 export type PaymentTone = "default" | "success" | "warning" | "danger" | "info";
 
@@ -59,13 +60,17 @@ export function UnpaidBillingCard({ title, coverage, dueDate, originalAmount, pa
 
 export function PaymentRequestStatusCard({ title, amount, status, statusTone, meta, reference, method, remarks, proofLabel }: { title: string; amount: string; status: string; statusTone: PaymentTone; meta: string; reference: string; method: string; remarks?: string | null; proofLabel?: string }) {
   const online = method === "PayMongo Online";
+  const gatewayState = online ? paymongoGatewayStateFromRemark(remarks) : null;
+  const gateway = gatewayState ? paymongoGatewayPresentation(gatewayState) : null;
   const awaitingPayment = online && (status === "Awaiting PayMongo" || status === "Awaiting Payment");
   const rejectedOnline = online && status === "REJECTED";
   const cancelledOnline = rejectedOnline && /cancel/i.test(remarks || "");
-  const displayStatus = awaitingPayment ? "Awaiting Payment" : rejectedOnline ? cancelledOnline ? "Payment Cancelled" : "Payment Unsuccessful" : status;
+  const displayStatus = gateway?.label || (awaitingPayment ? "Awaiting Payment" : rejectedOnline ? cancelledOnline ? "Payment Cancelled" : "Payment Unsuccessful" : status);
+  const displayTone = (gateway?.tone || statusTone) as PaymentTone;
   const requestId = reference.startsWith("HOP-") ? reference.slice(4) : "";
-  const safeRemarks = remarks?.startsWith("PAYMONGO_CHECKOUT_SESSION:") ? null : remarks;
-  return <article className="rounded-2xl border border-slate-100 bg-white p-3.5 shadow-[0_4px_16px_rgba(15,23,42,.04)]"><div className="flex items-start gap-3"><span className="grid size-10 shrink-0 place-items-center rounded-2xl bg-pine-50 text-pine-700"><Clock3 className="size-[18px]" aria-hidden="true" /></span><div className="min-w-0 flex-1"><div className="flex items-start justify-between gap-2"><div className="min-w-0"><h3 className="truncate text-sm font-black text-ink">{title}</h3><p className="mt-0.5 truncate text-[10px] font-bold text-slate-400">{meta}</p></div><StatusPill label={displayStatus} tone={statusTone} /></div><div className="mt-3 flex flex-wrap items-center gap-1.5"><MetaChip>{amount}</MetaChip><MetaChip>{online ? "Online Payment" : method}</MetaChip><MetaChip>{reference}</MetaChip>{proofLabel && <MetaChip>{proofLabel}</MetaChip>}</div>{safeRemarks && <p className="mt-2 line-clamp-2 text-xs font-semibold text-slate-500">{safeRemarks}</p>}{awaitingPayment && requestId && <Link href={`/portal/pay/paymongo-resume?requestId=${encodeURIComponent(requestId)}`} className="mt-3 inline-flex min-h-10 items-center rounded-xl bg-blue-700 px-3 text-xs font-black text-white">Continue Payment</Link>}{rejectedOnline && <Link href="/portal/pay#qr-payment" className="mt-3 inline-flex min-h-10 items-center rounded-xl bg-pine-700 px-3 text-xs font-black text-white">New Payment</Link>}</div></div></article>;
+  const safeRemarks = remarks?.startsWith("PAYMONGO_CHECKOUT_SESSION:") || gatewayState ? null : remarks;
+  const canResume = Boolean(requestId && (gateway ? gateway.canResume : awaitingPayment));
+  return <article className="rounded-2xl border border-slate-100 bg-white p-3.5 shadow-[0_4px_16px_rgba(15,23,42,.04)]"><div className="flex items-start gap-3"><span className="grid size-10 shrink-0 place-items-center rounded-2xl bg-pine-50 text-pine-700"><Clock3 className="size-[18px]" aria-hidden="true" /></span><div className="min-w-0 flex-1"><div className="flex items-start justify-between gap-2"><div className="min-w-0"><h3 className="truncate text-sm font-black text-ink">{title}</h3><p className="mt-0.5 truncate text-[10px] font-bold text-slate-400">{meta}</p></div><StatusPill label={displayStatus} tone={displayTone} /></div><div className="mt-3 flex flex-wrap items-center gap-1.5"><MetaChip>{amount}</MetaChip><MetaChip>{online ? "Online Payment" : method}</MetaChip><MetaChip>{reference}</MetaChip>{proofLabel && <MetaChip>{proofLabel}</MetaChip>}</div>{safeRemarks && <p className="mt-2 line-clamp-2 text-xs font-semibold text-slate-500">{safeRemarks}</p>}{canResume && <Link href={`/portal/pay/paymongo-resume?requestId=${encodeURIComponent(requestId)}`} className="mt-3 inline-flex min-h-10 items-center rounded-xl bg-blue-700 px-3 text-xs font-black text-white">Continue / Retry Payment</Link>}{rejectedOnline && !canResume && <Link href="/portal/pay#qr-payment" className="mt-3 inline-flex min-h-10 items-center rounded-xl bg-pine-700 px-3 text-xs font-black text-white">New Payment</Link>}</div></div></article>;
 }
 
 export function PaymentHistoryCard({ href, receipt, amount, date, method, reference, coverage, status }: { href?: string; receipt: string; amount: string; date: string; method: string; reference: string; coverage: string; status: string }) {

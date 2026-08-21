@@ -52,7 +52,7 @@ export async function GET(request: Request) {
       tenantId: user.tenantId,
       homeownerId: user.homeownerProfile.id,
     });
-    if (reconciled.state === "paid") {
+    if (reconciled.state === "PAID") {
       destination.searchParams.set("online", "paid");
       destination.searchParams.set("message", "Online payment confirmed. Your receipt and account balances were updated automatically.");
       destination.hash = "payment-status";

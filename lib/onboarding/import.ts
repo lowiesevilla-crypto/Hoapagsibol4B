@@ -160,11 +160,14 @@ export async function applyOnboardingImport(input: {
   const activationJobs = await runWithTenant(
     input.tenantId,
     async () => await prisma.$transaction(async (tx) => {
-      await assertImportNotAlreadyApplied(tx, input.tenantId, validation.fileHash);
+      // The tenant-boundary extension remains active at runtime. The cast only restores the
+      // canonical Prisma transaction surface expected by shared onboarding helpers.
+      const transaction = tx as unknown as Prisma.TransactionClient;
+      await assertImportNotAlreadyApplied(transaction, input.tenantId, validation.fileHash);
 
       const applied = deferActivationInvitations
-        ? await applyClientScaleRows(tx, input, validation, prepared)
-        : await applyInlineRows(tx, input, validation, prepared);
+        ? await applyClientScaleRows(transaction, input, validation, prepared)
+        : await applyInlineRows(transaction, input, validation, prepared);
 
       await updateTenantOnboardingState(input.tenantId, input.actorId, (state) => ({
         ...state,
@@ -180,7 +183,7 @@ export async function applyOnboardingImport(input: {
           openingBalancesPosted: applied.openingBalancesPosted,
           activationInvitationsDeferred,
         },
-      }), tx);
+      }), transaction);
 
       await tx.auditLog.create({
         data: {

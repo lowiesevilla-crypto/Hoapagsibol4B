@@ -2,7 +2,7 @@ import { PageHeader } from "@/components/page-header";
 import { requirePermission } from "@/lib/authorization/guards";
 import { Permission } from "@/lib/authorization/permissions";
 import { reconcileRecentTenantPayMongoPayments } from "@/lib/services/homeowner-paymongo-reconciliation";
-import { formatCurrency, shortDate } from "@/lib/utils";
+import { money, shortDate } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
 
@@ -40,7 +40,7 @@ export default async function OnlinePaymentStatusPage() {
         <tbody>{payments.map((payment) => <tr key={payment.requestId}>
           <td><p className="font-bold text-ink">{payment.homeownerName}</p><p className="text-xs text-slate-500">{payment.property}</p></td>
           <td className="font-mono text-xs">{payment.referenceNumber}</td>
-          <td className="font-bold tabular-nums">{formatCurrency(payment.amount)}</td>
+          <td className="font-bold tabular-nums">{money(payment.amount)}</td>
           <td><span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-black ${toneClass[payment.tone]}`}>{payment.label}</span></td>
           <td><span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-black ${payment.financeStatus === "RECONCILED" ? "bg-emerald-100 text-emerald-800" : "bg-slate-100 text-slate-700"}`}>{payment.financeStatus === "RECONCILED" ? "Posted & reconciled" : "Not posted"}</span></td>
           <td>{shortDate(new Date(payment.createdAt))}</td>

@@ -35,6 +35,7 @@ export type TenantOnboardingState = {
     appliedAt?: string;
     importedRows?: number;
     openingBalancesPosted?: number;
+    activationInvitationsDeferred?: number;
   };
   billing?: {
     completedAt: string;

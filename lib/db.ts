@@ -107,6 +107,9 @@ const modelModules: Partial<Record<string, TenantModule>> = {
   ComplaintIdentityAccessGrant: TenantModule.COMPLAINTS,
 };
 
+const createdTenantRelations = new WeakMap<object, Set<string>>();
+const validatedTenantRelations = new WeakMap<object, Set<string>>();
+
 function asRecord(value: unknown): MutableRecord | undefined {
   return value && typeof value === "object" && !Array.isArray(value) ? value as MutableRecord : undefined;
 }
@@ -191,6 +194,52 @@ function delegateFor(model: string) {
   return (basePrisma as unknown as Record<string, DynamicDelegate>)[key];
 }
 
+function relationCacheKey(targetModel: string, fromFields: readonly string[], toFields: readonly string[], data: MutableRecord) {
+  const pairs: Array<[string, string | number | boolean]> = [];
+  for (let index = 0; index < fromFields.length; index++) {
+    const value = data[fromFields[index]];
+    if (typeof value !== "string" && typeof value !== "number" && typeof value !== "boolean") return null;
+    pairs.push([toFields[index] || "id", value]);
+  }
+  return `${targetModel}:${JSON.stringify(pairs)}`;
+}
+
+function currentTenantRelationSet(store: WeakMap<object, Set<string>>, tenantId: string, create = false) {
+  const context = currentTenantContext();
+  if (!context || context.platform || context.tenantId !== tenantId) return null;
+  let relations = store.get(context);
+  if (!relations && create) {
+    relations = new Set<string>();
+    store.set(context, relations);
+  }
+  return relations ?? null;
+}
+
+function relationAlreadyTrusted(key: string | null, tenantId: string) {
+  if (!key) return false;
+  return Boolean(
+    currentTenantRelationSet(createdTenantRelations, tenantId)?.has(key) ||
+    currentTenantRelationSet(validatedTenantRelations, tenantId)?.has(key),
+  );
+}
+
+function rememberValidatedRelation(key: string | null, tenantId: string) {
+  if (!key) return;
+  currentTenantRelationSet(validatedTenantRelations, tenantId, true)?.add(key);
+}
+
+function rememberCreatedRows(model: string, value: unknown, tenantId: string) {
+  const rows = Array.isArray(value) ? value : [value];
+  const relations = currentTenantRelationSet(createdTenantRelations, tenantId, true);
+  if (!relations) return;
+  for (const entry of rows) {
+    const data = asRecord(entry);
+    const id = data?.id;
+    if (typeof id !== "string" && typeof id !== "number") continue;
+    relations.add(`${model}:${JSON.stringify([["id", id]])}`);
+  }
+}
+
 async function validateRelationEnvelope(targetModel: string, value: unknown, tenantId: string): Promise<void> {
   const envelope = asRecord(value);
   if (!envelope) return;
@@ -240,6 +289,8 @@ async function validateWriteData(model: string, value: unknown, tenantId: string
         // invisible to the base client outside this interactive transaction.
         continue;
       }
+      const cacheKey = relationCacheKey(field.type, fromFields, toFields, data);
+      if (relationAlreadyTrusted(cacheKey, tenantId)) continue;
       const where: MutableRecord = { tenantId };
       fromFields.forEach((name, index) => { where[toFields[index] || "id"] = data[name]; });
       const related = await delegateFor(field.type)?.findFirst({ where, select: { tenantId: true } });
@@ -250,6 +301,7 @@ async function validateWriteData(model: string, value: unknown, tenantId: string
         logTenantMismatch(entityType, tenantId, actual?.tenantId ?? "not-found");
         throw new Error(`Cross-tenant relation blocked for ${entityType}.`);
       }
+      rememberValidatedRelation(cacheKey, tenantId);
     }
     if (field.name in data) await validateRelationEnvelope(field.type, data[field.name], tenantId);
   }
@@ -291,7 +343,11 @@ export const prisma = basePrisma.$extends({
         if (scoped.data) await validateWriteData(model, scoped.data, context.tenantId);
         if (scoped.create) await validateWriteData(model, scoped.create, context.tenantId);
         if (scoped.update) await validateWriteData(model, scoped.update, context.tenantId);
-        return query(scoped as typeof args);
+        const result = await query(scoped as typeof args);
+        if (operation === "createMany" && scoped.skipDuplicates !== true) {
+          rememberCreatedRows(model, scoped.data, context.tenantId);
+        }
+        return result;
       },
     },
   },

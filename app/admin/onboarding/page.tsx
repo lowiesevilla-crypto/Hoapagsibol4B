@@ -36,7 +36,7 @@ export default async function TenantOnboardingPage({ searchParams }: { searchPar
     <PageHeader
       eyebrow="Tenant setup"
       title="Onboarding and first billing preview"
-      description="Configure the HOA, acknowledge data responsibilities, import activation-only homeowner accounts, define monthly dues, and preview the first billing cycle. Billing generation is always a separate authorized action."
+      description="Configure the HOA, acknowledge data responsibilities, import activation-ready homeowner accounts, define monthly dues, and preview the first billing cycle. Billing generation is always a separate authorized action."
       action={<Link className="btn-secondary" href="/admin">Back to dashboard</Link>}
     />
 
@@ -81,7 +81,7 @@ export default async function TenantOnboardingPage({ searchParams }: { searchPar
           <Link className="btn-secondary" href="/admin/onboarding/template">Download CSV template v2.0</Link>
           {state.import?.errors.length ? <Link className="btn-secondary" href="/admin/onboarding/errors">Download validation errors</Link> : null}
         </div>
-        <p className="mb-4 text-sm text-slate-600">The template never accepts passwords. Imported homeowners receive unique account numbers and expiring activation credentials. Raw CSV content is not retained after each request.</p>
+        <p className="mb-4 text-sm text-slate-600">The template never accepts passwords. Imported homeowners receive unique account numbers. Small imports can issue activation invitations immediately; client-scale imports create activation-ready accounts first so the import can finish safely, then invitations are sent from the Homeowners activation workflow. Raw CSV content is not retained after each request.</p>
         <div className="grid gap-6 lg:grid-cols-2">
           <form action={validateOnboardingImportAction} className="space-y-3 rounded-xl border border-slate-200 p-4">
             <h3 className="font-semibold">A. Dry-run validation</h3>
@@ -93,9 +93,9 @@ export default async function TenantOnboardingPage({ searchParams }: { searchPar
             <p className="text-sm text-slate-600">Validated rows: <strong>{state.import?.validRows ?? 0}</strong>. Errors: <strong>{state.import?.errors.length ?? 0}</strong>.</p>
             <input type="hidden" name="expectedFileHash" value={state.import?.errors.length ? "" : state.import?.fileHash ?? ""} />
             <input className="input" type="file" name="file" accept=".csv,text/csv" required disabled={!state.import || state.import.errors.length > 0 || Boolean(state.import.appliedAt)} />
-            <Check name="confirmApply" disabled={!state.import || state.import.errors.length > 0 || Boolean(state.import.appliedAt)}>I confirm this is the exact validated file and authorize transactional creation of activation-only accounts and any declared opening balances.</Check>
+            <Check name="confirmApply" disabled={!state.import || state.import.errors.length > 0 || Boolean(state.import.appliedAt)}>I confirm this is the exact validated file and authorize transactional creation of activation-ready accounts and any declared opening balances.</Check>
             <button className="btn-primary" type="submit" disabled={!state.import || state.import.errors.length > 0 || Boolean(state.import.appliedAt)}>Apply import</button>
-            {state.import?.appliedAt ? <p className="text-sm font-medium text-emerald-700">Applied {state.import.importedRows} rows; {state.import.openingBalancesPosted} opening balances.</p> : null}
+            {state.import?.appliedAt ? <div className="space-y-1 text-sm font-medium text-emerald-700"><p>Applied {state.import.importedRows} rows; {state.import.openingBalancesPosted} opening balances.</p>{state.import.activationInvitationsDeferred ? <p>{state.import.activationInvitationsDeferred} activation invitation{state.import.activationInvitationsDeferred === 1 ? "" : "s"} are ready to send from <Link className="underline" href="/admin/homeowners?digital=eligible">Homeowners</Link>.</p> : null}</div> : null}
           </form>
         </div>
         {state.import?.errors.length ? <div className="mt-4 max-h-64 overflow-auto rounded-xl bg-rose-50 p-4 text-sm text-rose-900"><ul className="space-y-1">{state.import.errors.slice(0, 20).map((error, index) => <li key={`${error.rowNumber}-${error.field}-${index}`}>Row {error.rowNumber ?? "file"}{error.field ? `, ${error.field}` : ""}: {error.message}</li>)}</ul>{state.import.errors.length > 20 ? <p className="mt-2">Download the error CSV for the complete list.</p> : null}</div> : null}

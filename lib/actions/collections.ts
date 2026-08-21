@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { requirePermission, requirePermissions } from "@/lib/authorization/guards";
 import { Permission } from "@/lib/authorization/permissions";
+import { isCollectionPayerCategory, isExternalCollectionPayer } from "@/lib/collection-payer";
 import { prisma } from "@/lib/db";
 import { recordBondRefund } from "@/lib/services/bond-refund";
 import { allocateReceiptNumber, collectionReceiptSeries } from "@/lib/services/receipt";
@@ -17,27 +18,44 @@ export async function recordCollectionAction(formData: FormData) {
     Permission.COLLECTIONS_RECORD,
     Permission.RECEIPTS_ISSUE,
   ]);
-  const parsed = collectionSchema.safeParse(Object.fromEntries(formData.entries()));
+
+  const submitted = Object.fromEntries(formData.entries());
+  const requestedPayerType = String(submitted.payerType || "").trim().toUpperCase();
+  if (!isCollectionPayerCategory(requestedPayerType)) throw new Error("Select a valid payer type.");
+  const externalPayer = isExternalCollectionPayer(requestedPayerType);
+  const payerName = String(submitted.payerName || "").trim();
+
+  // The legacy Prisma enum remains HOMEOWNER/CONTRACTOR for backward compatibility.
+  // Flexible payer categories are validated here and persisted to Collection.payerCategory.
+  const parsed = collectionSchema.safeParse({
+    ...submitted,
+    payerType: externalPayer ? "HOMEOWNER" : requestedPayerType,
+  });
   if (!parsed.success) throw new Error(parsed.error.issues[0]?.message || "Invalid collection details.");
   const data = parsed.data;
   const refundable = refundableTypes.has(data.type);
 
-  if (data.type === CollectionType.CONSTRUCTION_BOND && data.payerType !== PayerType.HOMEOWNER) {
+  if (data.type === CollectionType.CONSTRUCTION_BOND && requestedPayerType !== "HOMEOWNER") {
     throw new Error("A construction bond must be assigned to a homeowner.");
   }
-  if (data.type === CollectionType.CONTRACTOR_BOND && data.payerType !== PayerType.CONTRACTOR) {
+  if (data.type === CollectionType.CONTRACTOR_BOND && requestedPayerType !== "CONTRACTOR") {
     throw new Error("A contractor bond must be assigned to a contractor profile.");
   }
+  if (externalPayer && data.type !== CollectionType.OTHER) {
+    throw new Error("Renter and other payers are available only for Other income collections.");
+  }
   if (data.type === CollectionType.OTHER && !data.description) throw new Error("Enter a name for the other collection type.");
-  if (data.payerType === PayerType.HOMEOWNER && !data.homeownerId) throw new Error("Select a homeowner.");
-  if (data.payerType === PayerType.CONTRACTOR && !data.contractorId) throw new Error("Select a contractor.");
+  if (externalPayer && !payerName) throw new Error("Enter the payer name.");
+  if (payerName.length > 150) throw new Error("Payer name must not exceed 150 characters.");
+  if (requestedPayerType === "HOMEOWNER" && !data.homeownerId) throw new Error("Select a homeowner.");
+  if (requestedPayerType === "CONTRACTOR" && !data.contractorId) throw new Error("Select a contractor.");
 
-  if (data.payerType === PayerType.HOMEOWNER) {
+  if (requestedPayerType === "HOMEOWNER") {
     const exists = await prisma.homeownerProfile.count({
       where: { id: data.homeownerId, tenantId: admin.tenantId },
     });
     if (!exists) throw new Error("Homeowner not found.");
-  } else {
+  } else if (requestedPayerType === "CONTRACTOR") {
     const exists = await prisma.contractorProfile.count({
       where: { id: data.contractorId, tenantId: admin.tenantId },
     });
@@ -48,12 +66,13 @@ export async function recordCollectionAction(formData: FormData) {
     const collectionDate = new Date(`${data.collectionDate}T00:00:00.000Z`);
     const series = collectionReceiptSeries(data.type);
     const receiptNumber = await allocateReceiptNumber(tx as unknown as Prisma.TransactionClient, admin.tenantId, collectionDate, series);
+    const legacyPayerType = requestedPayerType === "CONTRACTOR" ? PayerType.CONTRACTOR : PayerType.HOMEOWNER;
     const collection = await tx.collection.create({ data: {
       type: data.type,
       description: data.description || null,
-      payerType: data.payerType,
-      homeownerId: data.payerType === PayerType.HOMEOWNER ? data.homeownerId : null,
-      contractorId: data.payerType === PayerType.CONTRACTOR ? data.contractorId : null,
+      payerType: legacyPayerType,
+      homeownerId: requestedPayerType === "HOMEOWNER" ? data.homeownerId : null,
+      contractorId: requestedPayerType === "CONTRACTOR" ? data.contractorId : null,
       amount: data.amount,
       collectionDate,
       method: data.method,
@@ -64,7 +83,22 @@ export async function recordCollectionAction(formData: FormData) {
       refundStatus: refundable ? RefundStatus.HELD : RefundStatus.NOT_APPLICABLE,
       createdById: admin.id,
     } });
-    await tx.auditLog.create({ data: { actorId: admin.id, module: "RECEIPTS", action: `GENERATE_${series}_RECEIPT`, entityType: "Collection", entityId: collection.id, metadata: { receiptNumber, amount: data.amount, payerType: data.payerType } } });
+
+    const updated = await tx.$executeRaw(Prisma.sql`
+      UPDATE Collection
+      SET payerCategory = ${requestedPayerType}, payerName = ${externalPayer ? payerName : null}
+      WHERE id = ${collection.id} AND tenantId = ${admin.tenantId}
+    `);
+    if (updated !== 1) throw new Error("Unable to persist the collection payer metadata.");
+
+    await tx.auditLog.create({ data: {
+      actorId: admin.id,
+      module: "RECEIPTS",
+      action: `GENERATE_${series}_RECEIPT`,
+      entityType: "Collection",
+      entityId: collection.id,
+      metadata: { receiptNumber, amount: data.amount, payerType: requestedPayerType, payerName: externalPayer ? payerName : null },
+    } });
   }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
 
   revalidateCollectionPages();

@@ -1,6 +1,7 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
-import { BillingGenerationMode, BillingPenaltyFrequency, BillingPenaltyType, BillingFrequency, RecurringChargeType } from "@prisma/client";
+import { BillingPenaltyFrequency, BillingPenaltyType, BillingFrequency, RecurringChargeType } from "@prisma/client";
+import { BillingAutomationToggle } from "@/components/billing-automation-toggle";
 import { PageHeader } from "@/components/page-header";
 import { ConfirmSubmitButton, SubmitButton } from "@/components/ui";
 import { deactivateBillingRuleAction, saveBillingRuleAction } from "@/lib/actions/billing-rules";
@@ -36,7 +37,7 @@ export default async function BillingRulesPage({ searchParams }: { searchParams:
   const fieldError = (name: string) => query.field === name ? query.fieldMessage || query.error : undefined;
 
   return <>
-    <PageHeader eyebrow="Finance settings" title="Billing rules" description="Manage resolution-based monthly dues rates. Automatic mode is stored for Phase 2.2B; current generation remains manual." action={<Link className="btn-secondary" href="/admin/settings/billing-exemptions">Billing exemptions</Link>} />
+    <PageHeader eyebrow="Finance settings" title="Billing rules" description="Manage resolution-based monthly dues rates and automatic billing. When enabled, Monthly Dues run on the rule billing day and active rentals run on each agreement billing day." action={<Link className="btn-secondary" href="/admin/settings/billing-exemptions">Billing exemptions</Link>} />
 
     <section className="card mb-6 border-pine-100 bg-pine-50/40">
       <p className="text-xs font-black uppercase tracking-[.16em] text-pine-700">Current effective rule</p>
@@ -44,7 +45,7 @@ export default async function BillingRulesPage({ searchParams }: { searchParams:
         <Info label="Amount" value={money(currentRule.amount)} />
         <Info label="Resolution" value={currentRule.resolutionReference} />
         <Info label="Effective period" value={periodLabel(currentRule)} />
-        <Info label="Generation" value={`${currentRule.generationMode} (scheduler deferred)`} />
+        <Info label="Automatic billing" value={currentRule.generationMode === "AUTOMATIC" ? `ON · Dues day ${currentRule.billingDay}` : "OFF · Manual generation"} />
       </div> : <p className="mt-3 text-sm font-semibold text-amber-800">No active monthly dues rule covers the current month. Add a rule before generating billing.</p>}
     </section>
 
@@ -52,14 +53,13 @@ export default async function BillingRulesPage({ searchParams }: { searchParams:
       <input type="hidden" name="id" value={editRule?.id ?? ""} />
       <input type="hidden" name="recurringChargeType" value="MONTHLY_DUES" />
       <div className="mb-5 flex flex-col justify-between gap-3 sm:flex-row sm:items-start">
-        <div><h2 className="text-lg font-black">{editRule ? "Edit billing rule" : "Add monthly dues rule"}</h2><p className="text-sm leading-6 text-slate-500">Overlapping active periods are blocked. Historical bills keep their saved resolved rate and rule snapshot.</p></div>
+        <div><h2 className="text-lg font-black">{editRule ? "Edit billing rule" : "Add monthly dues rule"}</h2><p className="text-sm leading-6 text-slate-500">Overlapping active periods are blocked. Historical bills keep their saved resolved rate and rule snapshot. Automatic generation is idempotent and safe to retry.</p></div>
         {editRule && <Link className="btn-secondary min-h-9 px-3 py-1.5 text-xs" href="/admin/settings/billing-rules">Cancel edit</Link>}
       </div>
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         <Field label="Amount" error={fieldError("amount")}><input className="field" name="amount" type="number" min="0.01" step="0.01" defaultValue={editRule ? String(editRule.amount) : ""} required /></Field>
         <Field label="Frequency" error={fieldError("billingFrequency")}><select className="field" name="billingFrequency" defaultValue={editRule?.billingFrequency ?? BillingFrequency.MONTHLY}>{Object.values(BillingFrequency).map((item) => <option key={item} value={item}>{label(item)}</option>)}</select></Field>
-        <Field label="Generation mode" error={fieldError("generationMode")}><select className="field" name="generationMode" defaultValue={editRule?.generationMode ?? BillingGenerationMode.MANUAL}>{Object.values(BillingGenerationMode).map((item) => <option key={item} value={item}>{label(item)}{item === "AUTOMATIC" ? " (Phase 2.2B)" : ""}</option>)}</select></Field>
-        <Field label="Billing day" error={fieldError("billingDay")}><input className="field" name="billingDay" type="number" min="1" max="28" defaultValue={editRule?.billingDay ?? 1} required /></Field>
+        <BillingAutomationToggle defaultAutomatic={editRule?.generationMode === "AUTOMATIC"} defaultBillingDay={editRule?.billingDay ?? 1} modeError={fieldError("generationMode")} dayError={fieldError("billingDay")} />
         <Field label="Due day" error={fieldError("dueDay")}><input className="field" name="dueDay" type="number" min="1" max="31" defaultValue={editRule?.dueDay ?? 15} required /></Field>
         <Field label="Grace days" error={fieldError("gracePeriodDays")}><input className="field" name="gracePeriodDays" type="number" min="0" max="365" defaultValue={editRule?.gracePeriodDays ?? 0} required /></Field>
         <Field label="Penalty type" error={fieldError("penaltyType")}><select className="field" name="penaltyType" defaultValue={editRule?.penaltyType ?? BillingPenaltyType.NONE}>{Object.values(BillingPenaltyType).map((item) => <option key={item} value={item}>{label(item)}</option>)}</select></Field>
@@ -77,7 +77,7 @@ export default async function BillingRulesPage({ searchParams }: { searchParams:
       <div className="mt-5"><SubmitButton>{editRule ? "Save rule" : "Add rule"}</SubmitButton></div>
     </form>
 
-    <section className="card p-0 sm:p-0"><div className="table-wrap rounded-none shadow-none"><table className="data-table min-w-[1100px]"><thead><tr><th>Effective period</th><th>Amount</th><th>Frequency</th><th>Generation</th><th>Penalty</th><th>Resolution</th><th>Status</th><th>Updated</th><th></th></tr></thead><tbody>{rules.map((rule) => <tr key={rule.id}><td className="font-bold">{periodLabel(rule)}</td><td>{money(rule.amount)}</td><td>{label(rule.billingFrequency)}</td><td>{label(rule.generationMode)}{rule.generationMode === "AUTOMATIC" && <span className="block text-xs text-amber-700">Scheduler deferred</span>}</td><td>{label(rule.penaltyType)} {Number(rule.penaltyValue) > 0 ? money(rule.penaltyValue) : ""}</td><td><p className="font-semibold">{rule.resolutionReference}</p>{rule.resolutionDate && <p className="text-xs text-slate-400">{shortDate(rule.resolutionDate)}</p>}</td><td>{rule.active ? "Active" : "Inactive"}</td><td><p>{shortDate(rule.updatedAt)}</p><p className="text-xs text-slate-400">{rule.updatedBy?.name || rule.createdBy?.name || "System"}</p></td><td><div className="flex justify-end gap-2"><Link className="btn-secondary min-h-8 px-3 py-1 text-xs" href={`/admin/settings/billing-rules?edit=${rule.id}`}>Edit</Link>{rule.active && <form action={deactivateBillingRuleAction}><input type="hidden" name="id" value={rule.id} /><ConfirmSubmitButton className="btn-danger min-h-8 px-3 py-1 text-xs" message="Deactivate this billing rule? Historical bills will remain unchanged.">Deactivate</ConfirmSubmitButton></form>}</div></td></tr>)}{!rules.length && <tr><td colSpan={9} className="py-12 text-center text-slate-500">No billing rules configured.</td></tr>}</tbody></table></div></section>
+    <section className="card p-0 sm:p-0"><div className="table-wrap rounded-none shadow-none"><table className="data-table min-w-[1100px]"><thead><tr><th>Effective period</th><th>Amount</th><th>Frequency</th><th>Generation</th><th>Penalty</th><th>Resolution</th><th>Status</th><th>Updated</th><th></th></tr></thead><tbody>{rules.map((rule) => <tr key={rule.id}><td className="font-bold">{periodLabel(rule)}</td><td>{money(rule.amount)}</td><td>{label(rule.billingFrequency)}</td><td>{rule.generationMode === "AUTOMATIC" ? <><span className="font-bold text-emerald-700">Automatic</span><span className="block text-xs text-slate-500">Dues day {rule.billingDay}</span></> : "Manual"}</td><td>{label(rule.penaltyType)} {Number(rule.penaltyValue) > 0 ? money(rule.penaltyValue) : ""}</td><td><p className="font-semibold">{rule.resolutionReference}</p>{rule.resolutionDate && <p className="text-xs text-slate-400">{shortDate(rule.resolutionDate)}</p>}</td><td>{rule.active ? "Active" : "Inactive"}</td><td><p>{shortDate(rule.updatedAt)}</p><p className="text-xs text-slate-400">{rule.updatedBy?.name || rule.createdBy?.name || "System"}</p></td><td><div className="flex justify-end gap-2"><Link className="btn-secondary min-h-8 px-3 py-1 text-xs" href={`/admin/settings/billing-rules?edit=${rule.id}`}>Edit</Link>{rule.active && <form action={deactivateBillingRuleAction}><input type="hidden" name="id" value={rule.id} /><ConfirmSubmitButton className="btn-danger min-h-8 px-3 py-1 text-xs" message="Deactivate this billing rule? Historical bills will remain unchanged.">Deactivate</ConfirmSubmitButton></form>}</div></td></tr>)}{!rules.length && <tr><td colSpan={9} className="py-12 text-center text-slate-500">No billing rules configured.</td></tr>}</tbody></table></div></section>
   </>;
 }
 

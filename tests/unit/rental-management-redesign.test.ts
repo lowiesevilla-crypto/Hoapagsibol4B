@@ -4,6 +4,8 @@ import { test } from "node:test";
 
 const page = readFileSync("app/admin/rentals/page.tsx", "utf8");
 const paymentControls = readFileSync("components/rental-payment-workflow.tsx", "utf8");
+const collectionForm = readFileSync("components/collection-form.tsx", "utf8");
+const collectionActions = readFileSync("lib/actions/collections.ts", "utf8");
 
 test("rental management is organized around the approved operational workflow", () => {
   for (const section of ["Overview", "Assets", "Renters", "Agreements", "Billing", "Payments", "Reconciliation"]) {
@@ -41,7 +43,19 @@ test("billing payments and reconciliation are separated without duplicating cash
   assert.match(page, /Invoices & payment reconciliation/);
   assert.match(page, /Apply existing receipt/);
   assert.match(page, /Matched · reconciled/);
-  assert.match(paymentControls, /official HOAHub receipt/);
+  assert.match(paymentControls, /official Collection receipt/);
   assert.match(paymentControls, /Record as advance payment/);
   assert.match(paymentControls, /Auto reconcile credits/);
+});
+
+test("rental payments have one authoritative posting entry point", () => {
+  assert.match(collectionForm, /Rental payments have one posting workflow/);
+  assert.match(collectionForm, /Rental Payment → Rental Management/);
+  assert.match(collectionForm, /Renter → Rental Management/);
+  assert.match(collectionForm, /\/admin\/rentals\?view=payments&source=collections/);
+  assert.match(collectionActions, /requestedType === "RENTAL_PAYMENT"/);
+  assert.match(collectionActions, /requestedPayerType === PayerType\.RENTER/);
+  assert.match(page, /Rental payment entry opened from Collections/);
+  assert.match(page, /View Collection Ledger/);
+  assert.doesNotMatch(page, />Open Collections</);
 });

@@ -1,10 +1,13 @@
+import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { paymentAllocationCoverageLabel } from "@/lib/payment-coverage";
 import { recognizedCollectionAmount, summarizeRentalSecurityDeposits } from "@/lib/rental-accounting";
 import { paymentAppliedAmount, paymentUnappliedCredit } from "@/lib/payment-credit";
 import { collectionLabel, inputDate } from "@/lib/utils";
 
-export async function getFinancialReport(fromInput?: string | null, toInput?: string | null) {
+type RentalAllocationAccountingRow = { collectionId: string; amount: Prisma.Decimal | number | string; chargeType: string };
+
+export async function getFinancialReport(tenantId: string, fromInput?: string | null, toInput?: string | null) {
   const now = new Date();
   const fromText = /^\d{4}-\d{2}-\d{2}$/.test(fromInput ?? "") ? fromInput! : `${now.getUTCFullYear()}-01-01`;
   const toText = /^\d{4}-\d{2}-\d{2}$/.test(toInput ?? "") ? toInput! : inputDate(now);
@@ -28,13 +31,20 @@ export async function getFinancialReport(fromInput?: string | null, toInput?: st
     prisma.bill.aggregate({ _sum: { totalAmount: true, balance: true } }),
     prisma.bill.groupBy({ by: ["status"], _count: true, _sum: { balance: true } }),
     prisma.collection.aggregate({ _sum: { amount: true, amountRefunded: true, amountForfeited: true }, where: { refundable: true } }),
-    prisma.rentalPaymentAllocation.findMany({ where: { collection: { collectionDate: range } }, include: { invoice: true }, take: 5000 }),
+    prisma.$queryRaw<RentalAllocationAccountingRow[]>(Prisma.sql`
+      SELECT a.collectionId,a.amount,i.chargeType
+      FROM RentalPaymentAllocation a
+      JOIN RentalInvoice i ON i.tenantId=a.tenantId AND i.id=a.invoiceId
+      JOIN Collection c ON c.tenantId=a.tenantId AND c.id=a.collectionId
+      WHERE a.tenantId=${tenantId} AND c.collectionDate>=${from} AND c.collectionDate<=${to}
+      LIMIT 5000
+    `),
   ]);
   const duesIncome = payments.reduce((sum, item) => sum + paymentAppliedAmount(item), 0);
   const paymentCashReceived = payments.reduce((sum, item) => sum + Number(item.amount), 0);
   const unappliedCredits = payments.reduce((sum, item) => sum + paymentUnappliedCredit(item), 0);
   const feeCollections = collections.filter((item) => !item.refundable && item.collectionDate >= from && item.collectionDate <= to);
-  const rentalDepositSummary = summarizeRentalSecurityDeposits(rentalAllocations.map((item) => ({ collectionId: item.collectionId, amount: item.amount, chargeType: item.invoice.chargeType })));
+  const rentalDepositSummary = summarizeRentalSecurityDeposits(rentalAllocations.map((item) => ({ collectionId: item.collectionId, amount: item.amount, chargeType: item.chargeType })));
   const rentalSecurityDepositsReceived = rentalDepositSummary.total;
   const feeIncome = feeCollections.reduce((sum, item) => sum + recognizedCollectionAmount(item.amount, rentalDepositSummary.byCollection.get(item.id) ?? 0), 0);
   const forfeitedIncome = collections.filter((item) => item.forfeitedAt && item.forfeitedAt >= from && item.forfeitedAt <= to).reduce((sum, item) => sum + Number(item.amountForfeited), 0);

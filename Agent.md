@@ -6,6 +6,9 @@ Last updated: 2026-08-22
 
 Repository-level operating context for AI coding agents and maintainers working on HOAHub. Production safety, tenant isolation, authentication integrity, mobile/PWA usability, auditable deployment, and repository-context maintenance are release gates.
 
+
+- PR #139 rental report hotfix uses explicit tenant-scoped raw SQL for RentalPaymentAllocation because rental MVP tables are migration-backed and not Prisma model delegates; financial report callers pass authenticated tenantId.
+
 ## Mandatory Agent.md Maintenance
 
 `Agent.md` must be reviewed and updated for every repository change before merge or deployment.

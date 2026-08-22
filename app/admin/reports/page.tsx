@@ -1,5 +1,7 @@
 import { Download, FileText, HandCoins, ReceiptText, TrendingUp, WalletCards } from "lucide-react";
+import { Prisma, Role } from "@prisma/client";
 import { PageHeader } from "@/components/page-header";
+import { requireUser } from "@/lib/auth";
 import { StatCard } from "@/components/stat-card";
 import { StatusBadge } from "@/components/status-badge";
 import { prisma } from "@/lib/db";
@@ -8,7 +10,10 @@ import { recognizedCollectionAmount, summarizeRentalSecurityDeposits } from "@/l
 import { paymentAppliedAmount, paymentUnappliedCredit } from "@/lib/payment-credit";
 import { collectionLabel, inputDate, money, monthLabel, shortDate } from "@/lib/utils";
 
+type RentalAllocationAccountingRow = { collectionId: string; amount: Prisma.Decimal | number | string; chargeType: string };
+
 export default async function ReportsPage({ searchParams }: { searchParams: Promise<{ from?: string; to?: string }> }) {
+  const user = await requireUser(Role.ADMIN);
   const filters = await searchParams;
   const now = new Date();
   const fromText = /^\d{4}-\d{2}-\d{2}$/.test(filters.from ?? "") ? filters.from! : `${now.getUTCFullYear()}-01-01`;
@@ -32,14 +37,21 @@ export default async function ReportsPage({ searchParams }: { searchParams: Prom
     prisma.bill.groupBy({ by: ["status"], _count: true, _sum: { balance: true } }),
     prisma.bill.groupBy({ by: ["billingMonth"], _sum: { totalAmount: true, amountPaid: true, balance: true }, orderBy: { billingMonth: "desc" }, take: 12 }),
     prisma.collection.aggregate({ _sum: { amount: true, amountRefunded: true, amountForfeited: true }, where: { refundable: true } }),
-    prisma.rentalPaymentAllocation.findMany({ where: { collection: { collectionDate: range } }, include: { invoice: true }, take: 5000 }),
+    prisma.$queryRaw<RentalAllocationAccountingRow[]>(Prisma.sql`
+      SELECT a.collectionId,a.amount,i.chargeType
+      FROM RentalPaymentAllocation a
+      JOIN RentalInvoice i ON i.tenantId=a.tenantId AND i.id=a.invoiceId
+      JOIN Collection c ON c.tenantId=a.tenantId AND c.id=a.collectionId
+      WHERE a.tenantId=${user.tenantId} AND c.collectionDate>=${from} AND c.collectionDate<=${to}
+      LIMIT 5000
+    `),
   ]);
 
   const duesIncome = payments.reduce((sum, item) => sum + paymentAppliedAmount(item), 0);
   const paymentCashReceived = payments.reduce((sum, item) => sum + Number(item.amount), 0);
   const unappliedCredits = payments.reduce((sum, item) => sum + paymentUnappliedCredit(item), 0);
   const feeCollections = collections.filter((item) => !item.refundable && item.collectionDate >= from && item.collectionDate <= to);
-  const rentalDepositSummary = summarizeRentalSecurityDeposits(rentalAllocations.map((item) => ({ collectionId: item.collectionId, amount: item.amount, chargeType: item.invoice.chargeType })));
+  const rentalDepositSummary = summarizeRentalSecurityDeposits(rentalAllocations.map((item) => ({ collectionId: item.collectionId, amount: item.amount, chargeType: item.chargeType })));
   const rentalSecurityDepositsReceived = rentalDepositSummary.total;
   const feeIncome = feeCollections.reduce((sum, item) => sum + recognizedCollectionAmount(item.amount, rentalDepositSummary.byCollection.get(item.id) ?? 0), 0);
   const forfeitedIncome = collections.filter((item) => item.forfeitedAt && item.forfeitedAt >= from && item.forfeitedAt <= to).reduce((sum, item) => sum + Number(item.amountForfeited), 0);

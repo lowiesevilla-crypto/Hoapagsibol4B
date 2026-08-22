@@ -6,7 +6,7 @@ const page = readFileSync("app/admin/rentals/page.tsx", "utf8");
 
 test("rental management is organized around the approved operational workflow", () => {
   for (const section of ["Overview", "Assets", "Renters", "Agreements", "Billing", "Payments", "Reconciliation"]) {
-    assert.match(page, new RegExp(`label: \\"${section}\\"`));
+    assert.ok(page.includes(`label: "${section}"`), `missing Rental Management section: ${section}`);
   }
   assert.match(page, /Step 1/);
   assert.match(page, /Step 6/);

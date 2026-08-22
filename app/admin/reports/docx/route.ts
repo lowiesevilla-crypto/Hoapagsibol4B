@@ -32,7 +32,7 @@ export async function GET(request: Request) {
     ]),
     sectionHeading("Statement of Cash Receipts and Disbursements"),
     financialTable([
-      ["Monthly dues cash received", report.paymentCashReceived], ["Other fee collections", report.feeIncome], ["Refundable bonds received", report.bondsReceived], ["Total cash receipts", report.cashInflows, true],
+      ["Monthly dues cash received", report.paymentCashReceived], ["Other fee collections", report.feeIncome], ["Rental security deposits received (liability)", report.rentalSecurityDepositsReceived], ["Refundable bonds received", report.bondsReceived], ["Total cash receipts", report.cashInflows, true],
       ["Operating expenses", -report.operatingExpenses], ["Employee payroll", -report.payrollExpense], ["Employee loans / cash advances issued", -report.employeeLoansIssued], ["Bond refunds", -report.bondsRefunded], ["Total cash disbursements", -report.cashOutflows, true], ["NET CASH MOVEMENT", report.netCashMovement, true],
     ]),
     sectionHeading("Payment Allocation Memorandum"),

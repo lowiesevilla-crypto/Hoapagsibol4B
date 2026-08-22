@@ -38,6 +38,7 @@ export async function GET(request: Request) {
   section("STATEMENT OF CASH RECEIPTS AND DISBURSEMENTS");
   row("Monthly dues cash received", report.paymentCashReceived);
   row("Other fee collections", report.feeIncome);
+  row("Rental security deposits received (liability)", report.rentalSecurityDepositsReceived);
   row("Refundable bonds received", report.bondsReceived);
   row("Total cash receipts", report.cashInflows, true);
   section("PAYMENT ALLOCATION MEMORANDUM");

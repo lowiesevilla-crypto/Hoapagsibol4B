@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/db";
 import { paymentAllocationCoverageLabel } from "@/lib/payment-coverage";
+import { recognizedCollectionAmount, summarizeRentalSecurityDeposits } from "@/lib/rental-accounting";
 import { paymentAppliedAmount, paymentUnappliedCredit } from "@/lib/payment-credit";
 import { collectionLabel, inputDate } from "@/lib/utils";
 
@@ -11,7 +12,7 @@ export async function getFinancialReport(fromInput?: string | null, toInput?: st
   const to = new Date(`${toText}T23:59:59.999Z`);
   if (from > to) throw new Error("Report start date must be on or before the end date.");
   const range = { gte: from, lte: to };
-  const [payments, collections, refunds, expenses, payrolls, employeeLoanIssuances, employeeLoanRepaymentRowsRaw, allEmployeeLoanTotals, billSummary, statusCounts, allBondTotals] = await Promise.all([
+  const [payments, collections, refunds, expenses, payrolls, employeeLoanIssuances, employeeLoanRepaymentRowsRaw, allEmployeeLoanTotals, billSummary, statusCounts, allBondTotals, rentalAllocations] = await Promise.all([
     prisma.payment.findMany({ where: { status: "ACTIVE", paymentDate: range }, include: { homeowner: { include: { user: true } }, bill: true, allocations: { include: { bill: true }, orderBy: { bill: { billingMonth: "asc" } } } }, orderBy: [{ paymentDate: "desc" }, { createdAt: "desc" }] }),
     prisma.collection.findMany({ where: { OR: [{ collectionDate: range }, { forfeitedAt: range }] } }),
     prisma.bondRefund.findMany({ where: { refundDate: range } }),
@@ -27,12 +28,15 @@ export async function getFinancialReport(fromInput?: string | null, toInput?: st
     prisma.bill.aggregate({ _sum: { totalAmount: true, balance: true } }),
     prisma.bill.groupBy({ by: ["status"], _count: true, _sum: { balance: true } }),
     prisma.collection.aggregate({ _sum: { amount: true, amountRefunded: true, amountForfeited: true }, where: { refundable: true } }),
+    prisma.rentalPaymentAllocation.findMany({ where: { collection: { collectionDate: range } }, include: { invoice: true }, take: 5000 }),
   ]);
   const duesIncome = payments.reduce((sum, item) => sum + paymentAppliedAmount(item), 0);
   const paymentCashReceived = payments.reduce((sum, item) => sum + Number(item.amount), 0);
   const unappliedCredits = payments.reduce((sum, item) => sum + paymentUnappliedCredit(item), 0);
   const feeCollections = collections.filter((item) => !item.refundable && item.collectionDate >= from && item.collectionDate <= to);
-  const feeIncome = feeCollections.reduce((sum, item) => sum + Number(item.amount), 0);
+  const rentalDepositSummary = summarizeRentalSecurityDeposits(rentalAllocations.map((item) => ({ collectionId: item.collectionId, amount: item.amount, chargeType: item.invoice.chargeType })));
+  const rentalSecurityDepositsReceived = rentalDepositSummary.total;
+  const feeIncome = feeCollections.reduce((sum, item) => sum + recognizedCollectionAmount(item.amount, rentalDepositSummary.byCollection.get(item.id) ?? 0), 0);
   const forfeitedIncome = collections.filter((item) => item.forfeitedAt && item.forfeitedAt >= from && item.forfeitedAt <= to).reduce((sum, item) => sum + Number(item.amountForfeited), 0);
   const operatingExpenses = expenses.reduce((sum, item) => sum + Number(item.amount), 0);
   const payrollExpense = payrolls.flatMap((period) => period.payslips).reduce((sum, item) => sum + Number(item.netPay), 0);
@@ -42,16 +46,16 @@ export async function getFinancialReport(fromInput?: string | null, toInput?: st
   const bondsRefunded = refunds.reduce((sum, item) => sum + Number(item.amount), 0);
   const recognizedIncome = duesIncome + feeIncome + forfeitedIncome;
   const totalExpenses = operatingExpenses + payrollExpense;
-  const cashInflows = paymentCashReceived + feeIncome + bondsReceived;
+  const cashInflows = paymentCashReceived + feeIncome + rentalSecurityDepositsReceived + bondsReceived;
   const cashOutflows = operatingExpenses + payrollExpense + bondsRefunded + employeeLoansIssued;
   const bondsHeld = Number(allBondTotals._sum.amount ?? 0) - Number(allBondTotals._sum.amountRefunded ?? 0) - Number(allBondTotals._sum.amountForfeited ?? 0);
   const feeMap = new Map<string, number>();
-  for (const item of feeCollections) feeMap.set(collectionLabel(item.type, item.description), (feeMap.get(collectionLabel(item.type, item.description)) ?? 0) + Number(item.amount));
+  for (const item of feeCollections) { const value = recognizedCollectionAmount(item.amount, rentalDepositSummary.byCollection.get(item.id) ?? 0); if (value > 0) feeMap.set(collectionLabel(item.type, item.description), (feeMap.get(collectionLabel(item.type, item.description)) ?? 0) + value); }
   const expenseMap = new Map<string, number>();
   for (const item of expenses) expenseMap.set(item.category.name, (expenseMap.get(item.category.name) ?? 0) + Number(item.amount));
   return {
     from, to, fromText, toText,
-    duesIncome, paymentCashReceived, unappliedCredits, feeIncome, forfeitedIncome, recognizedIncome,
+    duesIncome, paymentCashReceived, unappliedCredits, feeIncome, rentalSecurityDepositsReceived, forfeitedIncome, recognizedIncome,
     operatingExpenses, payrollExpense, totalExpenses, operatingSurplus: recognizedIncome - totalExpenses,
     bondsReceived, bondsRefunded, bondsHeld, cashInflows, cashOutflows, netCashMovement: cashInflows - cashOutflows,
     employeeLoansIssued,

@@ -1,8 +1,8 @@
 "use client";
 
 import { Check, Search, UserRound } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
-import { recordPaymentAction } from "@/lib/actions/payments";
+import { useEffect, useState } from "react";
+import { recordHomeownerPaymentAction } from "@/lib/actions/advance-payments";
 import { SubmitButton } from "@/components/ui";
 import { paymentCoverageMonths } from "@/lib/payment-coverage";
 import { paymentMethodRequiresReference } from "@/lib/payment-methods";
@@ -130,7 +130,7 @@ export function RecordPaymentAdvanceForm({ today, submissionKey }: { today: stri
     setSelectedIds((current) => current.includes(bill.id) ? current.filter((id) => id !== bill.id) : [...current, bill.id]);
   }
 
-  return <form action={recordPaymentAction} className="card mb-6">
+  return <form action={recordHomeownerPaymentAction} className="card mb-6">
     <input type="hidden" name="idempotencyKey" value={submissionKey} />
     <input type="hidden" name="homeownerId" value={selectedHomeowner?.id ?? ""} />
     {selectedIds.map((id) => <input key={id} type="hidden" name="billIds" value={id} />)}

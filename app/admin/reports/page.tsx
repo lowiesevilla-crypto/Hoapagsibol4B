@@ -1,13 +1,19 @@
 import { Download, FileText, HandCoins, ReceiptText, TrendingUp, WalletCards } from "lucide-react";
+import { Prisma, Role } from "@prisma/client";
 import { PageHeader } from "@/components/page-header";
+import { requireUser } from "@/lib/auth";
 import { StatCard } from "@/components/stat-card";
 import { StatusBadge } from "@/components/status-badge";
 import { prisma } from "@/lib/db";
 import { paymentAllocationCoverageLabel } from "@/lib/payment-coverage";
+import { recognizedCollectionAmount, summarizeRentalSecurityDeposits } from "@/lib/rental-accounting";
 import { paymentAppliedAmount, paymentUnappliedCredit } from "@/lib/payment-credit";
 import { collectionLabel, inputDate, money, monthLabel, shortDate } from "@/lib/utils";
 
+type RentalAllocationAccountingRow = { collectionId: string; amount: Prisma.Decimal | number | string; chargeType: string };
+
 export default async function ReportsPage({ searchParams }: { searchParams: Promise<{ from?: string; to?: string }> }) {
+  const user = await requireUser(Role.ADMIN);
   const filters = await searchParams;
   const now = new Date();
   const fromText = /^\d{4}-\d{2}-\d{2}$/.test(filters.from ?? "") ? filters.from! : `${now.getUTCFullYear()}-01-01`;
@@ -17,7 +23,7 @@ export default async function ReportsPage({ searchParams }: { searchParams: Prom
   if (from > to) throw new Error("Report start date must be on or before the end date.");
   const range = { gte: from, lte: to };
 
-  const [payments, collections, refunds, expenses, payrolls, employeeLoanIssuances, employeeLoanRepaymentRows, allEmployeeLoanTotals, employeeLoanBalances, billSummary, statusCounts, monthly, allBondTotals] = await Promise.all([
+  const [payments, collections, refunds, expenses, payrolls, employeeLoanIssuances, employeeLoanRepaymentRows, allEmployeeLoanTotals, employeeLoanBalances, billSummary, statusCounts, monthly, allBondTotals, rentalAllocations] = await Promise.all([
     prisma.payment.findMany({ where: { status: "ACTIVE", paymentDate: range }, include: { homeowner: { include: { user: true } }, bill: true, allocations: { include: { bill: true }, orderBy: { bill: { billingMonth: "asc" } } } }, orderBy: [{ paymentDate: "desc" }, { createdAt: "desc" }] }),
     prisma.collection.findMany({ where: { OR: [{ collectionDate: range }, { forfeitedAt: range }] } }),
     prisma.bondRefund.findMany({ where: { refundDate: range } }),
@@ -31,13 +37,23 @@ export default async function ReportsPage({ searchParams }: { searchParams: Prom
     prisma.bill.groupBy({ by: ["status"], _count: true, _sum: { balance: true } }),
     prisma.bill.groupBy({ by: ["billingMonth"], _sum: { totalAmount: true, amountPaid: true, balance: true }, orderBy: { billingMonth: "desc" }, take: 12 }),
     prisma.collection.aggregate({ _sum: { amount: true, amountRefunded: true, amountForfeited: true }, where: { refundable: true } }),
+    prisma.$queryRaw<RentalAllocationAccountingRow[]>(Prisma.sql`
+      SELECT a.collectionId,a.amount,i.chargeType
+      FROM RentalPaymentAllocation a
+      JOIN RentalInvoice i ON i.tenantId=a.tenantId AND i.id=a.invoiceId
+      JOIN Collection c ON c.tenantId=a.tenantId AND c.id=a.collectionId
+      WHERE a.tenantId=${user.tenantId} AND c.collectionDate>=${from} AND c.collectionDate<=${to}
+      LIMIT 5000
+    `),
   ]);
 
   const duesIncome = payments.reduce((sum, item) => sum + paymentAppliedAmount(item), 0);
   const paymentCashReceived = payments.reduce((sum, item) => sum + Number(item.amount), 0);
   const unappliedCredits = payments.reduce((sum, item) => sum + paymentUnappliedCredit(item), 0);
   const feeCollections = collections.filter((item) => !item.refundable && item.collectionDate >= from && item.collectionDate <= to);
-  const feeIncome = feeCollections.reduce((sum, item) => sum + Number(item.amount), 0);
+  const rentalDepositSummary = summarizeRentalSecurityDeposits(rentalAllocations.map((item) => ({ collectionId: item.collectionId, amount: item.amount, chargeType: item.chargeType })));
+  const rentalSecurityDepositsReceived = rentalDepositSummary.total;
+  const feeIncome = feeCollections.reduce((sum, item) => sum + recognizedCollectionAmount(item.amount, rentalDepositSummary.byCollection.get(item.id) ?? 0), 0);
   const forfeitedIncome = collections.filter((item) => item.forfeitedAt && item.forfeitedAt >= from && item.forfeitedAt <= to).reduce((sum, item) => sum + Number(item.amountForfeited), 0);
   const recognizedIncome = duesIncome + feeIncome + forfeitedIncome;
   const operatingExpenses = expenses.reduce((sum, item) => sum + Number(item.amount), 0);
@@ -49,13 +65,13 @@ export default async function ReportsPage({ searchParams }: { searchParams: Prom
   const operatingSurplus = recognizedIncome - totalExpenses;
   const bondsReceived = collections.filter((item) => item.refundable && item.collectionDate >= from && item.collectionDate <= to).reduce((sum, item) => sum + Number(item.amount), 0);
   const bondsRefunded = refunds.reduce((sum, item) => sum + Number(item.amount), 0);
-  const cashInflows = paymentCashReceived + feeIncome + bondsReceived;
+  const cashInflows = paymentCashReceived + feeIncome + rentalSecurityDepositsReceived + bondsReceived;
   const cashOutflows = operatingExpenses + payrollExpense + bondsRefunded + employeeLoansIssued;
   const netCashMovement = cashInflows - cashOutflows;
   const bondsHeld = Number(allBondTotals._sum.amount ?? 0) - Number(allBondTotals._sum.amountRefunded ?? 0) - Number(allBondTotals._sum.amountForfeited ?? 0);
 
   const feeBreakdown = new Map<string, number>();
-  for (const item of feeCollections) feeBreakdown.set(collectionLabel(item.type, item.description), (feeBreakdown.get(collectionLabel(item.type, item.description)) ?? 0) + Number(item.amount));
+  for (const item of feeCollections) { const value = recognizedCollectionAmount(item.amount, rentalDepositSummary.byCollection.get(item.id) ?? 0); if (value > 0) feeBreakdown.set(collectionLabel(item.type, item.description), (feeBreakdown.get(collectionLabel(item.type, item.description)) ?? 0) + value); }
   const expenseBreakdown = new Map<string, number>();
   for (const item of expenses) expenseBreakdown.set(item.category.name, (expenseBreakdown.get(item.category.name) ?? 0) + Number(item.amount));
 
@@ -65,7 +81,7 @@ export default async function ReportsPage({ searchParams }: { searchParams: Prom
     <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5"><StatCard label="Recognized income" value={money(recognizedIncome)} note="Dues, fees and forfeitures" icon={ReceiptText} /><StatCard label="Operating expenses" value={money(totalExpenses)} note="Expenses plus finalized payroll" icon={WalletCards} /><StatCard label="Operating surplus" value={money(operatingSurplus)} note="Income less operating expenses" icon={TrendingUp} /><StatCard label="Refundable bonds held" value={money(bondsHeld)} note="Ending liability, all periods" icon={HandCoins} /><StatCard label="Employee loan balance" value={money(employeeLoanOutstanding)} note="Cash advances and loans receivable" icon={HandCoins} /></section>
 
     <section className="mt-6 grid gap-6 xl:grid-cols-2"><Statement title="Statement of Income and Expenses" subtitle={`${shortDate(from)} to ${shortDate(to)}`}><SectionLabel text="REVENUE" /><Row label="Homeowner monthly dues" value={duesIncome} />{[...feeBreakdown.entries()].map(([label, value]) => <Row key={label} label={label} value={value} />)}<Row label="Forfeited bond income" value={forfeitedIncome} /><Row label="Total revenue" value={recognizedIncome} total /><SectionLabel text="OPERATING EXPENSES" />{[...expenseBreakdown.entries()].map(([label, value]) => <Row key={label} label={label} value={value} />)}<Row label="Employee payroll" value={payrollExpense} /><Row label="Total operating expenses" value={totalExpenses} total /><Row label="NET OPERATING SURPLUS / (DEFICIT)" value={operatingSurplus} grand /></Statement>
-      <Statement title="Statement of Cash Receipts and Disbursements" subtitle={`${shortDate(from)} to ${shortDate(to)}`}><SectionLabel text="CASH RECEIPTS" /><Row label="Monthly dues cash received" value={paymentCashReceived} /><Row label="Other fee collections" value={feeIncome} /><Row label="Refundable bonds received" value={bondsReceived} /><Row label="Total cash receipts" value={cashInflows} total /><SectionLabel text="PAYMENT ALLOCATION MEMORANDUM" /><Row label="Amount applied to dues" value={duesIncome} /><Row label="Unapplied homeowner credits" value={unappliedCredits} /><SectionLabel text="CASH DISBURSEMENTS" /><Row label="Operating expenses" value={operatingExpenses} /><Row label="Employee payroll" value={payrollExpense} /><Row label="Employee loans / cash advances issued" value={employeeLoansIssued} /><Row label="Bond refunds" value={bondsRefunded} /><Row label="Total cash disbursements" value={cashOutflows} total /><Row label="NET CASH MOVEMENT" value={netCashMovement} grand /></Statement></section>
+      <Statement title="Statement of Cash Receipts and Disbursements" subtitle={`${shortDate(from)} to ${shortDate(to)}`}><SectionLabel text="CASH RECEIPTS" /><Row label="Monthly dues cash received" value={paymentCashReceived} /><Row label="Other fee collections" value={feeIncome} /><Row label="Rental security deposits received (liability)" value={rentalSecurityDepositsReceived} /><Row label="Refundable bonds received" value={bondsReceived} /><Row label="Total cash receipts" value={cashInflows} total /><SectionLabel text="PAYMENT ALLOCATION MEMORANDUM" /><Row label="Amount applied to dues" value={duesIncome} /><Row label="Unapplied homeowner credits" value={unappliedCredits} /><SectionLabel text="CASH DISBURSEMENTS" /><Row label="Operating expenses" value={operatingExpenses} /><Row label="Employee payroll" value={payrollExpense} /><Row label="Employee loans / cash advances issued" value={employeeLoansIssued} /><Row label="Bond refunds" value={bondsRefunded} /><Row label="Total cash disbursements" value={cashOutflows} total /><Row label="NET CASH MOVEMENT" value={netCashMovement} grand /></Statement></section>
 
     <section className="card mt-6"><h2 className="text-lg font-black">Monthly dues collection summary</h2><p className="mb-4 text-sm text-slate-500">Receipt-level cash, applied dues, and unapplied homeowner credit.</p><div className="table-wrap shadow-none"><table className="data-table"><thead><tr><th>Receipt</th><th>Homeowner</th><th>Payment date</th><th>Payment Coverage</th><th className="text-right">Received</th><th className="text-right">Applied</th><th className="text-right">Credit</th></tr></thead><tbody>{payments.map((payment) => <tr key={payment.id}><td className="font-mono text-xs font-bold text-pine-700">{payment.receiptNumber || "Legacy receipt"}</td><td className="font-bold">{payment.homeowner.user.name}</td><td>{shortDate(payment.paymentDate)}</td><td>{paymentAllocationCoverageLabel(payment)}</td><td className="text-right font-black">{money(payment.amount)}</td><td className="text-right">{money(paymentAppliedAmount(payment))}</td><td className="text-right">{money(paymentUnappliedCredit(payment))}</td></tr>)}{!payments.length && <tr><td colSpan={7} className="py-10 text-center text-slate-500">No monthly dues collections in this reporting period.</td></tr>}</tbody></table></div></section>
 

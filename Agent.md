@@ -6,6 +6,9 @@ Last updated: 2026-08-22
 
 Repository-level operating context for AI coding agents and maintainers working on HOAHub. Production safety, tenant isolation, authentication integrity, mobile/PWA usability, auditable deployment, and repository-context maintenance are release gates.
 
+
+- PR #139 rental report hotfix uses explicit tenant-scoped raw SQL for RentalPaymentAllocation because rental MVP tables are migration-backed and not Prisma model delegates; financial report callers pass authenticated tenantId.
+
 ## Mandatory Agent.md Maintenance
 
 `Agent.md` must be reviewed and updated for every repository change before merge or deployment.
@@ -293,6 +296,15 @@ Deferred grievance scope remains notice/proof-of-service, mediation/hearing reco
 - Monthly invoice generation is idempotent per tenant/agreement/charge type/period. Ending an agreement releases the asset without deleting historical invoices or allocations.
 - Principal regression surface: `app/admin/rentals/page.tsx`, `lib/actions/rentals.ts`, `prisma/migrations/20260822071500_rental_management_mvp/migration.sql`, `app/admin/reports/export/route.ts`, `components/sidebar-links.ts`, and `tests/unit/rental-management-mvp.test.ts`.
 - Future PayMongo renter payment flows may settle through the existing Collection + RentalPaymentAllocation model only after live webhook authority, idempotency, and tenant isolation are separately verified.
+
+## Rental Accounting & Search UX Hotfix — PR #139
+
+- Refundable rental security deposits are cash receipts/liabilities, not recognized income. Financial web/PDF/DOCX reports must subtract only `SECURITY_DEPOSIT`-allocated amounts from Other Income revenue while keeping those amounts in cash receipts as `Rental security deposits received (liability)`.
+- Partial or mixed rental receipts are accounted by allocation amount, not by classifying the whole Collection row.
+- Rental renter onboarding must provide searchable homeowner linking and support the client-scale homeowner directory up to the existing 5,000-row onboarding ceiling.
+- Rental invoice reconciliation must provide a searchable existing-receipt selector, filter eligible receipts to the invoice renter/homeowner before display, and keep server-side payer/tenant/over-allocation validation authoritative.
+- `Record renter payment` is the cash-receipt step; `Apply existing receipt` is reconciliation to an existing rental invoice. Do not collapse these concepts in labels or accounting.
+- `lib/rental-accounting.ts`, `lib/services/financial-report.ts`, `app/admin/reports/page.tsx`, PDF/DOCX report routes, `app/admin/rentals/page.tsx`, and `tests/unit/rental-management-mvp.test.ts` are the principal regression surface for this hotfix.
 
 ## Hostinger Production Deployment Model
 

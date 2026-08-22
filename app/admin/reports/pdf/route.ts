@@ -14,7 +14,7 @@ const gray = rgb(0.35, 0.42, 0.47);
 export async function GET(request: Request) {
   const user = await requireUser(Role.ADMIN);
   const url = new URL(request.url);
-  const [report, association] = await Promise.all([getFinancialReport(url.searchParams.get("from"), url.searchParams.get("to")), getAssociationSettings(user.tenantId)]);
+  const [report, association] = await Promise.all([getFinancialReport(user.tenantId, url.searchParams.get("from"), url.searchParams.get("to")), getAssociationSettings(user.tenantId)]);
   const document = await PDFDocument.create();
   const regular = await document.embedFont(StandardFonts.Helvetica);
   const bold = await document.embedFont(StandardFonts.HelveticaBold);
@@ -38,6 +38,7 @@ export async function GET(request: Request) {
   section("STATEMENT OF CASH RECEIPTS AND DISBURSEMENTS");
   row("Monthly dues cash received", report.paymentCashReceived);
   row("Other fee collections", report.feeIncome);
+  row("Rental security deposits received (liability)", report.rentalSecurityDepositsReceived);
   row("Refundable bonds received", report.bondsReceived);
   row("Total cash receipts", report.cashInflows, true);
   section("PAYMENT ALLOCATION MEMORANDUM");

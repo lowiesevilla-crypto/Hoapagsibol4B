@@ -1,15 +1,12 @@
+import Link from "next/link";
 import { SearchableHomeownerSelect, type SearchableHomeownerOption } from "@/components/searchable-homeowner-select";
 import { DeleteButton, SubmitButton } from "@/components/ui";
 import {
-  deleteRentalAgreementAction,
   deleteRentalAssetAction,
   deleteRenterAction,
-  updateRentalAgreementAction,
   updateRentalAssetAction,
   updateRenterAction,
 } from "@/lib/actions/rental-maintenance";
-import { endRentalAgreementAction } from "@/lib/actions/rentals";
-import { inputDate } from "@/lib/utils";
 
 type AssetActionRecord = {
   id: string;
@@ -83,21 +80,9 @@ export function RenterRecordActions({ renter, homeowners }: { renter: RenterActi
   </div>;
 }
 
-export function RentalAgreementActions({ agreement, today }: { agreement: AgreementActionRecord; today: string }) {
-  return <div className="flex min-w-56 flex-col gap-2">
-    {agreement.status === "ACTIVE" && <form action={endRentalAgreementAction} className="flex gap-2"><input type="hidden" name="agreementId" value={agreement.id} /><input className="field" type="date" name="endDate" defaultValue={today} required /><SubmitButton className="btn-secondary">End</SubmitButton></form>}
-    <details>
-      <summary className="cursor-pointer text-xs font-bold text-sky-700">Edit agreement</summary>
-      <form action={updateRentalAgreementAction} className="mt-2 min-w-72 space-y-2 rounded-xl border border-slate-200 bg-white p-3 shadow-lg">
-        <input type="hidden" name="agreementId" value={agreement.id} />
-        <label className="label">Monthly rate<input className="field" type="number" min="0.01" step="0.01" name="monthlyRate" defaultValue={agreement.monthlyRate.toFixed(2)} required /></label>
-        <label className="label">End date<input className="field" type="date" name="endDate" defaultValue={agreement.endDate ? inputDate(agreement.endDate) : ""} min={inputDate(agreement.startDate)} /></label>
-        <div className="grid grid-cols-2 gap-2"><label className="label">Billing day<input className="field" type="number" min="1" max="28" name="billingDay" defaultValue={agreement.billingDay} required /></label><label className="label">Due day<input className="field" type="number" min="1" max="28" name="dueDay" defaultValue={agreement.dueDay} required /></label></div>
-        <label className="label">Notes<textarea className="field min-h-16" name="notes" defaultValue={agreement.notes ?? ""} /></label>
-        <p className="text-xs text-slate-500">Changes apply to the agreement and future billing. Existing invoices and security deposits are not rewritten.</p>
-        <SubmitButton className="btn-primary w-full">Save agreement</SubmitButton>
-      </form>
-    </details>
-    {agreement.canDelete ? <form action={deleteRentalAgreementAction}><input type="hidden" name="agreementId" value={agreement.id} /><DeleteButton label="Delete agreement" /></form> : <span className="text-[11px] font-semibold text-slate-400">Invoice/deposit history protected</span>}
+export function RentalAgreementActions({ agreement }: { agreement: AgreementActionRecord; today: string }) {
+  return <div className="flex min-w-32 flex-col gap-2">
+    <Link className="btn-secondary min-h-8 px-3 py-1 text-xs" href={`/admin/rentals/agreements/${agreement.id}`}>View / Edit</Link>
+    <span className="text-[11px] font-semibold text-slate-400">Agreement controls open in a focused view.</span>
   </div>;
 }

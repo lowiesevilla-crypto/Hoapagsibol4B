@@ -4,6 +4,7 @@ import { getAppUrl } from "@/lib/app-url";
 import { authorizeCron } from "@/lib/cron-auth";
 import { platformPrisma, prisma } from "@/lib/db";
 import { runAutomaticBillingForTenant } from "@/lib/services/automatic-billing";
+import { applyHomeownerAdvanceCreditToOpenBills } from "@/lib/services/homeowner-credit";
 import { runPlatformBillingCycle } from "@/lib/services/platform-billing";
 import { sendPlatformInvoiceEmail } from "@/lib/services/platform-invoice-email";
 import { sendEmailNotification } from "@/lib/services/notifications";
@@ -31,12 +32,7 @@ export async function POST(request: Request) {
     platformBilling = { error: error instanceof Error ? error.message : "Platform billing cycle failed." };
   }
 
-  // Privacy retention is independent of subscription status. Expired AI
-  // conversations are removed even for suspended, inactive, or cancelled tenants;
-  // AiMessage rows cascade with their parent conversation.
-  const expiredAiConversations = await platformPrisma.aiConversation.deleteMany({
-    where: { expiresAt: { lt: new Date() } },
-  });
+  const expiredAiConversations = await platformPrisma.aiConversation.deleteMany({ where: { expiresAt: { lt: new Date() } } });
 
   const tenants = await platformPrisma.tenant.findMany({
     where: { status: "ACTIVE", subscriptionStatus: { not: "CANCELLED" } },
@@ -89,6 +85,13 @@ async function maintainTenant(tenantId: string, tenantSlug: string, billingEnabl
     automaticBilling = { error: error instanceof Error ? error.message : "Automatic tenant billing failed." };
   }
 
+  let advanceCredits: Awaited<ReturnType<typeof applyHomeownerAdvanceCreditToOpenBills>> | { error: string };
+  try {
+    advanceCredits = await applyHomeownerAdvanceCreditToOpenBills({ tenantId });
+  } catch (error) {
+    advanceCredits = { error: error instanceof Error ? error.message : "Homeowner advance credit reconciliation failed." };
+  }
+
   const today = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
   const reminderWindow = new Date(today);
   reminderWindow.setUTCDate(reminderWindow.getUTCDate() + 3);
@@ -105,6 +108,6 @@ async function maintainTenant(tenantId: string, tenantSlug: string, billingEnabl
     await sendEmailNotification({ tenantId, recipientId: homeowner.id, email: homeowner.email, subject: "HOA monthly dues reminder", heading: bill.status === BillStatus.OVERDUE ? "Overdue account reminder" : "Upcoming due date", message: `Hello ${homeowner.name},\nYour outstanding HOA balance is PHP ${Number(bill.balance).toFixed(2)}. The due date is ${bill.dueDate.toLocaleDateString("en-PH", { timeZone: "UTC" })}.`, type: NotificationType.BILL_REMINDER, actionLabel: "Open HOA portal", actionUrl: `${getAppUrl()}/${tenantSlug}/login` });
     sent.add(homeowner.id);
   }
-  await prisma.auditLog.create({ data: { tenantId, module: "CRON", action: "DAILY_MAINTENANCE", entityType: "System", metadata: { automaticBilling, overdueUpdated: overdue.count, remindersAttempted: sent.size, resetAttemptsDeleted: attempts.count, resetTokensDeleted: tokens.count } } });
-  return { automaticBilling, overdueUpdated: overdue.count, remindersAttempted: sent.size, resetAttemptsDeleted: attempts.count, resetTokensDeleted: tokens.count };
+  await prisma.auditLog.create({ data: { tenantId, module: "CRON", action: "DAILY_MAINTENANCE", entityType: "System", metadata: { automaticBilling, advanceCredits, overdueUpdated: overdue.count, remindersAttempted: sent.size, resetAttemptsDeleted: attempts.count, resetTokensDeleted: tokens.count } } });
+  return { automaticBilling, advanceCredits, overdueUpdated: overdue.count, remindersAttempted: sent.size, resetAttemptsDeleted: attempts.count, resetTokensDeleted: tokens.count };
 }

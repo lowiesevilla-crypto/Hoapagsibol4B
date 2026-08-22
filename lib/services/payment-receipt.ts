@@ -93,11 +93,11 @@ export async function getPaymentReceiptData(id: string, authorizedTenantId: stri
     }),
     prisma.payment.findMany({
       where: { tenantId: payment.tenantId, homeownerId: payment.homeownerId, status: "ACTIVE" },
-      select: { amount: true, allocations: { select: { amount: true } } },
+      select: { amount: true, billId: true, allocations: { select: { amount: true } } },
     }),
     getAssociationSettings(payment.tenantId),
     prisma.auditLog.findFirst({
-      where: { tenantId: payment.tenantId, entityId: payment.id, action: "RECORD_PAYMENT_TRANSACTION" },
+      where: { tenantId: payment.tenantId, entityId: payment.id, action: { in: ["RECORD_PAYMENT_TRANSACTION", "RECORD_ADVANCE_MONTHLY_DUES_PAYMENT"] } },
       orderBy: { createdAt: "asc" },
       select: { metadata: true, createdAt: true },
     }),

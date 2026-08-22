@@ -83,6 +83,7 @@ async function main() {
     assert(Boolean(updateAudit) && auditMetadata?.previousAmount === 400 && auditMetadata?.newAmount === 1250 && Boolean(auditMetadata?.updatedBy) && Boolean(auditMetadata?.updatedAt) && Boolean(auditMetadata?.reason), "payment amount update writes a complete audit log");
 
     const voided = await voidPaymentLedger({ paymentId: payment.id, actor, reason: `${marker} void verification` });
+    if (!voided.archiveId) throw new Error("FAILED: voiding a billed payment must create a transaction archive");
     archiveId = voided.archiveId;
     const [voidedPayment, archive, recalculatedBill] = await Promise.all([
       prisma.payment.findUniqueOrThrow({ where: { id: payment.id } }),

@@ -24,7 +24,34 @@ export async function updatePaymentAmountLedger({ paymentId, amount, actor, reas
       : payment.bill
         ? [{ bill: payment.bill, amount: previousAmount }]
         : [];
-    if (!currentAllocations.length) throw new Error("Payment allocations are missing and the transaction cannot be edited safely.");
+
+    if (!currentAllocations.length) {
+      await tx.payment.update({ where: { id: paymentId }, data: { amount } });
+      await tx.auditLog.create({
+        data: {
+          tenantId: actor.tenantId,
+          actorId: actor.id,
+          module: "PAYMENTS",
+          action: "UPDATE_ADVANCE_PAYMENT_AMOUNT",
+          entityType: "Payment",
+          entityId: payment.id,
+          metadata: {
+            previousAmount,
+            newAmount: amount,
+            previousAppliedAmount: 0,
+            newAppliedAmount: 0,
+            previousUnappliedCredit,
+            newUnappliedCredit: roundMoney(amount),
+            updatedBy: { id: actor.id, name: actor.name, email: actor.email },
+            updatedAt: new Date().toISOString(),
+            reason: reason || null,
+            homeowner: payment.homeowner.user.name,
+            recalculated: [],
+          },
+        },
+      });
+      return { paymentId: payment.id, billIds: [], previousAmount, newAmount: amount, recalculated: [] };
+    }
 
     const allocationPlan = redistributeAmount(currentAllocations, amount);
     const newAppliedAmount = roundMoney(allocationPlan.reduce((sum, allocation) => sum + allocation.amount, 0));
@@ -90,12 +117,11 @@ export async function voidPaymentLedger({ paymentId, actor, reason }: { paymentI
       : payment.bill
         ? [{ bill: payment.bill, amount: Number(payment.amount) }]
         : [];
-    if (!allocations.length) throw new Error("Payment allocations are missing and the transaction cannot be voided safely.");
     const affectedBills = uniqueBills(allocations.map((allocation) => allocation.bill));
     const primaryBill = affectedBills[0];
     const voidedAt = new Date();
 
-    const archive = await tx.paymentArchive.create({
+    const archive = primaryBill ? await tx.paymentArchive.create({
       data: {
         tenantId: actor.tenantId,
         originalPaymentId: payment.id,
@@ -129,7 +155,8 @@ export async function voidPaymentLedger({ paymentId, actor, reason }: { paymentI
         voidedAt,
         voidReason: reason || null,
       },
-    });
+    }) : null;
+
     await tx.payment.update({ where: { id: paymentId }, data: { status: "VOIDED", voidedAt, voidedById: actor.id, voidReason: reason || null } });
     if (payment.paymentRequest) {
       await tx.paymentRequest.update({
@@ -145,9 +172,9 @@ export async function voidPaymentLedger({ paymentId, actor, reason }: { paymentI
         tenantId: actor.tenantId,
         actorId: actor.id,
         module: "PAYMENTS",
-        action: "VOID_PAYMENT_TRANSACTION",
-        entityType: "PaymentArchive",
-        entityId: archive.id,
+        action: allocations.length ? "VOID_PAYMENT_TRANSACTION" : "VOID_ADVANCE_PAYMENT_TRANSACTION",
+        entityType: archive ? "PaymentArchive" : "Payment",
+        entityId: archive?.id ?? payment.id,
         metadata: {
           originalPaymentId: payment.id,
           receiptNumber: payment.receiptNumber,
@@ -164,7 +191,7 @@ export async function voidPaymentLedger({ paymentId, actor, reason }: { paymentI
         },
       },
     });
-    return { paymentId: payment.id, homeownerId: payment.homeownerId, archiveId: archive.id, billIds: affectedBills.map((bill) => bill.id), recalculated };
+    return { paymentId: payment.id, homeownerId: payment.homeownerId, archiveId: archive?.id ?? null, billIds: affectedBills.map((bill) => bill.id), recalculated };
   }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
 }
 

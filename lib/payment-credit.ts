@@ -2,12 +2,14 @@ type AllocationAmount = { amount: unknown };
 
 type PaymentAmountSource = {
   amount: unknown;
+  billId?: unknown;
   allocations?: AllocationAmount[];
 };
 
 export function paymentAppliedAmount(payment: PaymentAmountSource) {
-  if (!payment.allocations?.length) return roundMoney(Number(payment.amount));
-  return roundMoney(payment.allocations.reduce((sum, allocation) => sum + Number(allocation.amount), 0));
+  if (payment.allocations?.length) return roundMoney(payment.allocations.reduce((sum, allocation) => sum + Number(allocation.amount), 0));
+  const explicitlyUnlinked = Object.prototype.hasOwnProperty.call(payment, "billId") && !payment.billId;
+  return explicitlyUnlinked ? 0 : roundMoney(Number(payment.amount));
 }
 
 export function paymentUnappliedCredit(payment: PaymentAmountSource) {

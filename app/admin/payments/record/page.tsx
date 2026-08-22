@@ -1,16 +1,18 @@
+import { randomUUID } from "node:crypto";
 import { Role } from "@prisma/client";
 import { PageHeader } from "@/components/page-header";
-import { PaymentsNav, RecordPaymentView } from "@/components/admin-payment-sections";
+import { PaymentsNav } from "@/components/admin-payment-sections";
+import { RecordPaymentAdvanceForm } from "@/components/record-payment-advance-form";
 import { requireUser } from "@/lib/auth";
-import { getRecordPaymentData, type PaymentQuery } from "@/lib/services/admin-payments";
+import { inputDate } from "@/lib/utils";
 
-export default async function RecordPaymentPage({ searchParams }: { searchParams: Promise<PaymentQuery> }) {
-  const admin = await requireUser(Role.ADMIN);
+export default async function RecordPaymentPage({ searchParams }: { searchParams: Promise<{ error?: string }> }) {
+  await requireUser(Role.ADMIN);
   const query = await searchParams;
-  const data = await getRecordPaymentData(admin, query);
   return <>
-    <PageHeader eyebrow="Payments" title="Record payment" description="Search tenant-scoped open balances and post monthly dues payments through the existing receipt workflow." />
+    <PageHeader eyebrow="Payments" title="Record payment" description="Search all active homeowners, record current Monthly Dues payments, or accept advance payments even when the homeowner has zero balance." />
     <PaymentsNav />
-    <RecordPaymentView data={data} query={query} />
+    {query.error && <div role="alert" className="mb-4 rounded-2xl border border-rose-200 bg-rose-50 p-4 text-sm font-semibold text-rose-800">{query.error}</div>}
+    <RecordPaymentAdvanceForm today={inputDate(new Date())} submissionKey={randomUUID()} />
   </>;
 }

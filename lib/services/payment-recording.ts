@@ -9,7 +9,7 @@ import { monthLabel } from "@/lib/utils";
 
 type RecordMonthlyDuesInput = {
   actor: { id: string; tenantId: string; name: string; email: string };
-  homeownerId: string;
+  homeownerId?: string;
   billIds: string[];
   amount: number;
   paymentDate: Date;
@@ -21,7 +21,7 @@ type RecordMonthlyDuesInput = {
 
 export async function recordMonthlyDuesPayment(tx: Prisma.TransactionClient, input: RecordMonthlyDuesInput) {
   const requestedBillIds = [...new Set(input.billIds.filter(Boolean))];
-  if (!input.homeownerId) throw new Error("Select a homeowner.");
+  if (!input.homeownerId && !requestedBillIds.length) throw new Error("Select a homeowner.");
   if (!Number.isFinite(input.amount) || input.amount <= 0) throw new Error("Payment amount must be greater than zero.");
   if (!input.idempotencyKey || input.idempotencyKey.length > 100) throw new Error("Payment submission token is invalid. Refresh the form and try again.");
 
@@ -31,11 +31,11 @@ export async function recordMonthlyDuesPayment(tx: Prisma.TransactionClient, inp
   });
   if (existing) return buildPaymentConfirmation(existing, true);
 
-  const homeowner = await tx.homeownerProfile.findFirst({
+  let homeowner = input.homeownerId ? await tx.homeownerProfile.findFirst({
     where: { id: input.homeownerId, tenantId: input.actor.tenantId, status: HomeownerStatus.ACTIVE },
     include: { user: true },
-  });
-  if (!homeowner) throw new Error("Homeowner not found or is not active in this tenant.");
+  }) : null;
+  if (input.homeownerId && !homeowner) throw new Error("Homeowner not found or is not active in this tenant.");
 
   const referenceNumber = normalizePaymentReference(input.method, input.referenceNumber);
   if (referenceNumber) {
@@ -45,18 +45,29 @@ export async function recordMonthlyDuesPayment(tx: Prisma.TransactionClient, inp
     if (duplicateRequest) throw new Error("This reference number is already attached to a QR/GCash payment request.");
   }
 
-  const bills = requestedBillIds.length
-    ? await tx.bill.findMany({
-        where: { tenantId: input.actor.tenantId, homeownerId: homeowner.id, id: { in: requestedBillIds }, balance: { gt: 0 }, archivedAt: null, recurringChargeType: RecurringChargeType.MONTHLY_DUES },
-        include: { homeowner: { include: { user: true } } },
-        orderBy: [{ billingMonth: "asc" }, { dueDate: "asc" }],
-      })
-    : await tx.bill.findMany({
-        where: { tenantId: input.actor.tenantId, homeownerId: homeowner.id, balance: { gt: 0 }, archivedAt: null, recurringChargeType: RecurringChargeType.MONTHLY_DUES },
-        include: { homeowner: { include: { user: true } } },
-        orderBy: [{ billingMonth: "asc" }, { dueDate: "asc" }],
-      });
+  let bills;
+  if (homeowner) {
+    bills = requestedBillIds.length
+      ? await tx.bill.findMany({
+          where: { tenantId: input.actor.tenantId, homeownerId: homeowner.id, id: { in: requestedBillIds }, balance: { gt: 0 }, archivedAt: null, recurringChargeType: RecurringChargeType.MONTHLY_DUES },
+          include: { homeowner: { include: { user: true } } },
+          orderBy: [{ billingMonth: "asc" }, { dueDate: "asc" }],
+        })
+      : await tx.bill.findMany({
+          where: { tenantId: input.actor.tenantId, homeownerId: homeowner.id, balance: { gt: 0 }, archivedAt: null, recurringChargeType: RecurringChargeType.MONTHLY_DUES },
+          include: { homeowner: { include: { user: true } } },
+          orderBy: [{ billingMonth: "asc" }, { dueDate: "asc" }],
+        });
+  } else {
+    bills = await tx.bill.findMany({
+      where: { tenantId: input.actor.tenantId, id: { in: requestedBillIds }, balance: { gt: 0 }, archivedAt: null, recurringChargeType: RecurringChargeType.MONTHLY_DUES },
+      include: { homeowner: { include: { user: true } } },
+      orderBy: [{ billingMonth: "asc" }, { dueDate: "asc" }],
+    });
+    if (bills.length && new Set(bills.map((bill) => bill.homeownerId)).size === 1) homeowner = bills[0].homeowner;
+  }
 
+  if (!homeowner) throw new Error("Homeowner could not be resolved from the selected billing items.");
   if (requestedBillIds.length && bills.length !== requestedBillIds.length) throw new Error("One or more selected billings are no longer open.");
   if (bills.some((bill) => bill.homeownerId !== homeowner.id || bill.tenantId !== input.actor.tenantId)) {
     throw new Error("One or more selected billings do not belong to the selected homeowner and tenant.");

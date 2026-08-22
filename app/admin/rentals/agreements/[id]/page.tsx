@@ -36,7 +36,7 @@ type AgreementDetail = {
 };
 
 export default async function RentalAgreementPage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ success?: string }> }) {
-  const admin = await requirePermission(Permission.BILLING_READ);
+  const admin = await requirePermission(Permission.BILLING_MANAGE);
   const { id } = await params;
   const query = await searchParams;
   const rows = await prisma.$queryRaw<AgreementDetail[]>(Prisma.sql`
@@ -56,7 +56,6 @@ export default async function RentalAgreementPage({ params, searchParams }: { pa
   `);
   const agreement = rows[0];
   if (!agreement) notFound();
-  const canManage = admin.permissions?.includes?.(Permission.BILLING_MANAGE) ?? true;
   const canDelete = Number(agreement.invoiceCount) === 0;
   const today = inputDate(new Date());
 
@@ -78,19 +77,19 @@ export default async function RentalAgreementPage({ params, searchParams }: { pa
         <input type="hidden" name="returnToAgreement" value="1" />
         <div><p className="eyebrow">Agreement terms</p><h2 className="text-xl font-black">Edit agreement</h2><p className="mt-1 text-sm text-slate-500">Changes affect the agreement and future billing only. Existing invoices, receipts and deposit accounting remain intact.</p></div>
         <div className="grid gap-4 sm:grid-cols-2">
-          <label className="label">Monthly rate<input className="field" type="number" min="0.01" step="0.01" name="monthlyRate" defaultValue={Number(agreement.monthlyRate).toFixed(2)} required disabled={!canManage} /></label>
-          <label className="label">End date (optional)<input className="field" type="date" name="endDate" min={inputDate(agreement.startDate)} defaultValue={agreement.endDate ? inputDate(agreement.endDate) : ""} disabled={!canManage} /></label>
-          <label className="label">Billing day<input className="field" type="number" min="1" max="28" name="billingDay" defaultValue={agreement.billingDay} required disabled={!canManage} /><span className="mt-1 block text-xs font-semibold text-slate-500">Automatic rent billing uses this day each month.</span></label>
-          <label className="label">Due day<input className="field" type="number" min="1" max="28" name="dueDay" defaultValue={agreement.dueDay} required disabled={!canManage} /></label>
+          <label className="label">Monthly rate<input className="field" type="number" min="0.01" step="0.01" name="monthlyRate" defaultValue={Number(agreement.monthlyRate).toFixed(2)} required /></label>
+          <label className="label">End date (optional)<input className="field" type="date" name="endDate" min={inputDate(agreement.startDate)} defaultValue={agreement.endDate ? inputDate(agreement.endDate) : ""} /></label>
+          <label className="label">Billing day<input className="field" type="number" min="1" max="28" name="billingDay" defaultValue={agreement.billingDay} required /><span className="mt-1 block text-xs font-semibold text-slate-500">Automatic rent billing uses this day each month.</span></label>
+          <label className="label">Due day<input className="field" type="number" min="1" max="28" name="dueDay" defaultValue={agreement.dueDay} required /></label>
         </div>
-        <label className="label">Notes<textarea className="field min-h-28" name="notes" defaultValue={agreement.notes ?? ""} disabled={!canManage} /></label>
-        {canManage && <SubmitButton className="btn-primary">Save agreement changes</SubmitButton>}
+        <label className="label">Notes<textarea className="field min-h-28" name="notes" defaultValue={agreement.notes ?? ""} /></label>
+        <SubmitButton className="btn-primary">Save agreement changes</SubmitButton>
       </form>
 
       <aside className="space-y-5">
         <div className="card"><p className="eyebrow">Financial terms</p><dl className="mt-3 space-y-3 text-sm"><Row label="Monthly rent" value={money(agreement.monthlyRate)} /><Row label="Security deposit" value={money(agreement.securityDeposit)} /><Row label="Billing day" value={`Day ${agreement.billingDay}`} /><Row label="Due day" value={`Day ${agreement.dueDay}`} /></dl></div>
-        {canManage && agreement.status === "ACTIVE" && <form action={endRentalAgreementAction} className="card space-y-3"><input type="hidden" name="agreementId" value={agreement.id} /><input type="hidden" name="returnToAgreement" value="1" /><div><p className="eyebrow">Close occupancy</p><h2 className="font-black">End agreement</h2><p className="text-sm text-slate-500">Ending releases the asset back to Available while preserving all financial history.</p></div><label className="label">End date<input className="field" type="date" name="endDate" min={inputDate(agreement.startDate)} defaultValue={today} required /></label><SubmitButton className="btn-secondary w-full">End agreement</SubmitButton></form>}
-        {canManage && <div className="card"><p className="eyebrow">Record protection</p>{canDelete ? <form action={deleteRentalAgreementAction} className="mt-3"><input type="hidden" name="agreementId" value={agreement.id} /><DeleteButton label="Delete agreement" /></form> : <p className="mt-2 text-sm font-semibold text-slate-500">This agreement has invoice/deposit history and cannot be deleted. End it instead to preserve the audit trail.</p>}</div>}
+        {agreement.status === "ACTIVE" && <form action={endRentalAgreementAction} className="card space-y-3"><input type="hidden" name="agreementId" value={agreement.id} /><input type="hidden" name="returnToAgreement" value="1" /><div><p className="eyebrow">Close occupancy</p><h2 className="font-black">End agreement</h2><p className="text-sm text-slate-500">Ending releases the asset back to Available while preserving all financial history.</p></div><label className="label">End date<input className="field" type="date" name="endDate" min={inputDate(agreement.startDate)} defaultValue={today} required /></label><SubmitButton className="btn-secondary w-full">End agreement</SubmitButton></form>}
+        <div className="card"><p className="eyebrow">Record protection</p>{canDelete ? <form action={deleteRentalAgreementAction} className="mt-3"><input type="hidden" name="agreementId" value={agreement.id} /><DeleteButton label="Delete agreement" /></form> : <p className="mt-2 text-sm font-semibold text-slate-500">This agreement has invoice/deposit history and cannot be deleted. End it instead to preserve the audit trail.</p>}</div>
       </aside>
     </section>
   </>;

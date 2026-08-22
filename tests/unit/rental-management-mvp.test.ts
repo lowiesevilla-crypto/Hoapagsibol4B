@@ -20,11 +20,16 @@ test("rental domain keeps outsider renters separate from homeowner accounts", ()
 
 test("rental collections reconcile to invoices without duplicating cash", () => {
   assert.match(migration, /CREATE TABLE `RentalPaymentAllocation`/);
-  assert.match(actions, /Only non-refundable Other Income collection receipts/);
+  assert.match(actions, /Only Other collection receipts can settle rental invoices/);
   assert.match(actions, /Allocation exceeds the rental invoice balance/);
   assert.match(actions, /Allocation exceeds the unallocated amount on this collection receipt/);
   assert.match(actions, /collection\.payerType === PayerType\.RENTER/);
   assert.match(actions, /collection\.payerType === PayerType\.HOMEOWNER/);
+  assert.match(actions, /invoice\.chargeType === "SECURITY_DEPOSIT"/);
+  assert.match(actions, /A refunded or forfeited receipt cannot be applied to a rental security deposit/);
+  assert.match(actions, /Allocate the receipt's full unused amount when applying an income receipt to a rental security deposit/);
+  assert.match(actions, /refundable=TRUE,refundStatus='HELD',description='Rental security deposit'/);
+  assert.match(actions, /A refundable rental security deposit receipt cannot be applied to rent income/);
   assert.match(exportRoute, /Refundable rental deposit liability/);
   assert.match(exportRoute, /Rental income/);
 });
@@ -62,12 +67,12 @@ test("rental deposits stay out of recognized income while remaining cash receipt
 });
 
 test("rental homeowner and receipt selectors are searchable at client scale", () => {
-  assert.match(page, /SearchableSelect name="homeownerId"/);
-  assert.match(page, /Search homeowner name, block or lot/);
+  assert.match(page, /SearchableHomeownerSelect name="homeownerId"/);
+  assert.match(page, /searchEndpoint="\/api\/admin\/homeowners\/search"/);
+  assert.match(page, /Search homeowner name, block, lot, account, or email/);
   assert.match(page, /SearchableSelect name="collectionId"/);
   assert.match(page, /Search receipt number, renter or amount/);
   assert.match(page, /LIMIT 5000/);
-  assert.match(page, /take: 5000/);
   assert.match(page, /collection\.payerType === "RENTER"/);
   assert.match(page, /collection\.payerType === "HOMEOWNER"/);
 });

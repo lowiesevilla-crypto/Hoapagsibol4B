@@ -40,6 +40,7 @@ type CollectionLockRow = {
   payerType: PayerType;
   payerName: string | null;
   homeownerId: string | null;
+  homeownerName: string | null;
   type: CollectionType;
   refundable: boolean;
 };
@@ -94,6 +95,15 @@ function dayInMonth(year: number, month: number, day: number) {
 function invoiceNumber(prefix: string, period: Date, identity: string) {
   const ym = period.toISOString().slice(0, 7).replace("-", "");
   return `${prefix}-${ym}-${identity.replace(/[^A-Za-z0-9]/g, "").slice(-12).toUpperCase()}`;
+}
+
+function normalizePersonName(value: string | null | undefined) {
+  return (value || "")
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLocaleLowerCase("en-PH")
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
 }
 
 function revalidateRentalPages() {
@@ -254,15 +264,22 @@ export async function allocateRentalPaymentAction(formData: FormData) {
     if (!invoice) throw new Error("Rental invoice was not found in this association.");
     if (["PAID", "VOID"].includes(invoice.status)) throw new Error("This rental invoice cannot accept another payment.");
     const collections = await db.$queryRaw<CollectionLockRow[]>(Prisma.sql`
-      SELECT id,amount,payerType,payerName,homeownerId,type,refundable FROM Collection
-      WHERE tenantId=${admin.tenantId} AND id=${collectionId} FOR UPDATE
+      SELECT c.id,c.amount,c.payerType,c.payerName,c.homeownerId,c.type,c.refundable,u.name AS homeownerName
+      FROM Collection c
+      LEFT JOIN HomeownerProfile h ON h.tenantId=c.tenantId AND h.id=c.homeownerId
+      LEFT JOIN User u ON u.id=h.userId
+      WHERE c.tenantId=${admin.tenantId} AND c.id=${collectionId} FOR UPDATE
     `);
     const collection = collections[0];
     if (!collection) throw new Error("Collection receipt was not found in this association.");
     if (collection.type !== CollectionType.OTHER || collection.refundable) throw new Error("Only non-refundable Other Income collection receipts can settle rental invoices.");
-    const externalMatches = collection.payerType === PayerType.RENTER && collection.payerName?.trim().toLocaleLowerCase("en-PH") === invoice.renterName.trim().toLocaleLowerCase("en-PH");
-    const homeownerMatches = Boolean(invoice.homeownerId && collection.payerType === PayerType.HOMEOWNER && collection.homeownerId === invoice.homeownerId);
-    if (!externalMatches && !homeownerMatches) throw new Error("The collection payer does not match this invoice renter.");
+
+    const renterNameKey = normalizePersonName(invoice.renterName);
+    const externalMatches = collection.payerType === PayerType.RENTER && normalizePersonName(collection.payerName) === renterNameKey;
+    const homeownerIdMatches = Boolean(invoice.homeownerId && collection.payerType === PayerType.HOMEOWNER && collection.homeownerId === invoice.homeownerId);
+    const homeownerNameMatches = Boolean(!invoice.homeownerId && collection.payerType === PayerType.HOMEOWNER && collection.homeownerId && normalizePersonName(collection.homeownerName) === renterNameKey);
+    const payerMatch = externalMatches ? "RENTER_NAME" : homeownerIdMatches ? "HOMEOWNER_ID" : homeownerNameMatches ? "HOMEOWNER_NAME_FALLBACK" : null;
+    if (!payerMatch) throw new Error("The collection payer does not match this invoice renter. Link the renter to the homeowner or use a receipt recorded for the same renter.");
 
     const allocationTotal = await db.$queryRaw<SumRow[]>(Prisma.sql`SELECT COALESCE(SUM(amount),0) AS total FROM RentalPaymentAllocation WHERE tenantId=${admin.tenantId} AND collectionId=${collectionId}`);
     const collectionAvailable = Number(collection.amount) - Number(allocationTotal[0]?.total ?? 0);
@@ -278,7 +295,7 @@ export async function allocateRentalPaymentAction(formData: FormData) {
     const balance = Math.max(0, invoiceBalance - amount);
     const status = balance <= 0.0001 ? "PAID" : paid > 0 ? "PARTIAL" : invoice.status;
     await db.$executeRaw(Prisma.sql`UPDATE RentalInvoice SET amountPaid=${paid},balance=${balance},status=${status},updatedAt=NOW(3) WHERE tenantId=${admin.tenantId} AND id=${invoiceId}`);
-    await db.auditLog.create({ data: { tenantId: admin.tenantId, actorId: admin.id, module: "RENTALS", action: "ALLOCATE_RENTAL_COLLECTION", entityType: "RentalInvoice", entityId: invoiceId, metadata: { collectionId, amount, renterId: invoice.renterId, status, balance } } });
+    await db.auditLog.create({ data: { tenantId: admin.tenantId, actorId: admin.id, module: "RENTALS", action: "ALLOCATE_RENTAL_COLLECTION", entityType: "RentalInvoice", entityId: invoiceId, metadata: { collectionId, amount, renterId: invoice.renterId, status, balance, payerMatch } } });
   }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
 
   revalidateRentalPages();

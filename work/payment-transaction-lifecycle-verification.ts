@@ -42,6 +42,7 @@ async function main() {
   check(await raw.auditLog.count({ where: { tenantId: actor.tenantId, entityId: payment.id, action: "UPDATE_PAYMENT_AMOUNT" } }) === 1, "payment edit writes one audit event");
 
   const voided = await runWithTenant(actor.tenantId, () => voidPaymentLedger({ paymentId: payment.id, actor: actorInput, reason: marker }), { role: actor.role, enabledModules: [TenantModule.BILLING] });
+  if (!voided.archiveId) throw new Error("FAILED: voiding an allocated payment must create a transaction archive");
   ids.archive = voided.archiveId;
   const voidedPayment = await raw.payment.findUniqueOrThrow({ where: { id: payment.id }, include: { allocations: true } });
   const restoredBills = await raw.bill.findMany({ where: { id: { in: ids.bills } }, orderBy: { coverageMonth: "asc" } });

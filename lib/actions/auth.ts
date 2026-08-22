@@ -254,7 +254,6 @@ async function resolveLoginUser(input: {
       tenant: { include: { advisories: { where: { active: true }, orderBy: { createdAt: "desc" }, take: 1 }, moduleEntitlements: true } },
     },
     orderBy: [{ tenant: { name: "asc" } }, { name: "asc" }],
-    take: 50,
   });
   const authorized = users.filter((candidate) => {
     if (!tenantCanSignIn(candidate.tenant)) return false;

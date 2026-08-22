@@ -26,7 +26,7 @@ test("asset and renter masters remain searchable and operationally clear", () =>
 test("agreement workflow explicitly supports fixed and open contracts", () => {
   assert.match(page, /Create rental agreement/);
   assert.match(page, /Open Contract/);
-  assert.match(page, /leave End date blank/);
+  assert.match(page, /Leave End date blank/);
   assert.match(page, /Fixed term/);
   assert.match(page, /One active agreement may occupy an asset at a time/);
 });

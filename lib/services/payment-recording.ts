@@ -67,8 +67,10 @@ export async function recordMonthlyDuesPayment(tx: Prisma.TransactionClient, inp
     if (bills.length && new Set(bills.map((bill) => bill.homeownerId)).size === 1) homeowner = bills[0].homeowner;
   }
 
+  if (requestedBillIds.length && bills.length !== requestedBillIds.length) {
+    throw new Error("One or more selected billings are no longer open or are outside the authenticated tenant.");
+  }
   if (!homeowner) throw new Error("Homeowner could not be resolved from the selected billing items.");
-  if (requestedBillIds.length && bills.length !== requestedBillIds.length) throw new Error("One or more selected billings are no longer open.");
   if (bills.some((bill) => bill.homeownerId !== homeowner.id || bill.tenantId !== input.actor.tenantId)) {
     throw new Error("One or more selected billings do not belong to the selected homeowner and tenant.");
   }

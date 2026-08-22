@@ -1,9 +1,48 @@
-import { Prisma } from "@prisma/client";
+import { Prisma, RecurringChargeType } from "@prisma/client";
+import { prisma } from "@/lib/db";
 import { recalculateBillFromActivePayments } from "@/lib/services/payment-ledger";
 import { monthLabel } from "@/lib/utils";
 
 function roundMoney(value: number) {
   return Math.round((value + Number.EPSILON) * 100) / 100;
+}
+
+export async function applyHomeownerAdvanceCreditToOpenBills({ tenantId, homeownerIds }: { tenantId: string; homeownerIds?: string[] }) {
+  const bills = await prisma.bill.findMany({
+    where: {
+      tenantId,
+      archivedAt: null,
+      recurringChargeType: RecurringChargeType.MONTHLY_DUES,
+      balance: { gt: 0 },
+      ...(homeownerIds?.length ? { homeownerId: { in: homeownerIds } } : {}),
+    },
+    select: {
+      id: true,
+      tenantId: true,
+      homeownerId: true,
+      totalAmount: true,
+      balance: true,
+      dueDate: true,
+      billingMonth: true,
+      coverageYear: true,
+      coverageMonth: true,
+    },
+    orderBy: [{ homeownerId: "asc" }, { billingMonth: "asc" }, { dueDate: "asc" }],
+  });
+
+  let appliedAmount = 0;
+  let billsUpdated = 0;
+  for (const bill of bills) {
+    const result = await prisma.$transaction(
+      (tx) => applyHomeownerAdvanceCreditToBill(tx as unknown as Prisma.TransactionClient, bill),
+      { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+    );
+    if (result.appliedAmount > 0) {
+      appliedAmount = roundMoney(appliedAmount + result.appliedAmount);
+      billsUpdated += 1;
+    }
+  }
+  return { appliedAmount, billsUpdated };
 }
 
 export async function applyHomeownerAdvanceCreditToBill(

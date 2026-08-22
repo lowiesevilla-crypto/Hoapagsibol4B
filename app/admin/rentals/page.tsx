@@ -58,11 +58,12 @@ function receiptMatchesRenterRecord(collection: CollectionRow, renter: RenterRow
 }
 function viewHref(view: RentalView) { return `/admin/rentals?view=${view}`; }
 
-export default async function RentalsPage({ searchParams }: { searchParams: Promise<{ view?: string }> }) {
+export default async function RentalsPage({ searchParams }: { searchParams: Promise<{ view?: string; source?: string }> }) {
   const admin = await requirePermission(Permission.BILLING_READ);
   const params = await searchParams;
   const requestedView = params.view as RentalView | undefined;
   const view: RentalView = rentalViews.some((item) => item.key === requestedView) ? requestedView! : "overview";
+  const openedFromCollections = params.source === "collections";
   const today = inputDate(new Date());
 
   const [assets, renters, agreements, invoices, collections, homeowners] = await Promise.all([
@@ -134,6 +135,8 @@ export default async function RentalsPage({ searchParams }: { searchParams: Prom
       {rentalViews.map((item) => <Link key={item.key} href={viewHref(item.key)} className={`min-w-fit rounded-xl px-4 py-3 text-sm font-black transition ${view === item.key ? "bg-pine-700 text-white shadow-sm" : "text-slate-600 hover:bg-slate-100 hover:text-slate-950"}`}>{item.label}</Link>)}
     </div><p className="px-3 pb-1 pt-2 text-xs text-slate-500">{rentalViews.find((item) => item.key === view)?.description}</p></nav>
 
+    {view === "payments" && openedFromCollections && <div className="mb-5 rounded-xl border border-sky-200 bg-sky-50 p-4 text-sm text-sky-950"><strong>Rental payment entry opened from Collections.</strong> Select the renter and record the payment here. HOAHub will create the official Collection receipt automatically and reconcile it to rental billing or advance credit.</div>}
+
     {view === "overview" && <>
       <section className="mb-6 grid gap-4 lg:grid-cols-3">
         {[
@@ -173,7 +176,7 @@ export default async function RentalsPage({ searchParams }: { searchParams: Prom
 
     {view === "payments" && <section className="grid gap-6 xl:grid-cols-[430px_1fr]">
       <RentalPaymentForm renters={paymentRenterOptions} today={today} />
-      <div><div className="mb-3 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between"><div><p className="eyebrow">Rental cash & credit</p><h2 className="text-xl font-black">Unapplied rental receipt balances</h2><p className="text-sm text-slate-500">Direct rental payments remain here as advance credit until allocated. Security deposits stay separately classified as refundable liabilities.</p></div><div className="flex gap-2"><Link href="/admin/collections" className="btn-secondary">Open Collections</Link><SearchInput placeholder="Search receipt, payer or amount" /></div></div><div className="table-wrap"><table className="data-table"><thead><tr><th>Receipt</th><th>Payer</th><th>Classification</th><th>Received</th><th>Allocated</th><th>Available</th></tr></thead><tbody>{collections.map((collection) => { const payer = collection.payerName || collection.homeownerName || "Unknown payer"; const classification = collection.refundable ? "Refundable deposit liability" : collection.description === "Rental payment" ? "Advance rental credit" : "Income / rental receipt"; return <tr key={collection.id} data-search={`${collection.receiptNumber} ${payer} ${collection.payerType} ${classification} ${Number(collection.available).toFixed(2)}`.toLowerCase()}><td className="font-bold">{collection.receiptNumber}</td><td><p className="font-bold">{payer}</p><p className="text-xs text-slate-400">{label(collection.payerType)}</p></td><td className={collection.description === "Rental payment" && !collection.refundable ? "font-bold text-pine-700" : "font-bold"}>{classification}</td><td className="font-black">{money(collection.amount)}</td><td>{money(collection.allocated)}</td><td className="font-black text-pine-700">{money(collection.available)}</td></tr>; })}{!collections.length && <tr><td colSpan={6} className="py-10 text-center text-slate-500">No available renter or homeowner receipts.</td></tr>}</tbody></table></div></div>
+      <div><div className="mb-3 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between"><div><p className="eyebrow">Rental cash & credit</p><h2 className="text-xl font-black">Unapplied rental receipt balances</h2><p className="text-sm text-slate-500">Direct rental payments remain here as advance credit until allocated. Security deposits stay separately classified as refundable liabilities.</p></div><div className="flex gap-2"><Link href="/admin/collections" className="btn-secondary">View Collection Ledger</Link><SearchInput placeholder="Search receipt, payer or amount" /></div></div><div className="table-wrap"><table className="data-table"><thead><tr><th>Receipt</th><th>Payer</th><th>Classification</th><th>Received</th><th>Allocated</th><th>Available</th></tr></thead><tbody>{collections.map((collection) => { const payer = collection.payerName || collection.homeownerName || "Unknown payer"; const classification = collection.refundable ? "Refundable deposit liability" : collection.description === "Rental payment" ? "Advance rental credit" : "Income / rental receipt"; return <tr key={collection.id} data-search={`${collection.receiptNumber} ${payer} ${collection.payerType} ${classification} ${Number(collection.available).toFixed(2)}`.toLowerCase()}><td className="font-bold">{collection.receiptNumber}</td><td><p className="font-bold">{payer}</p><p className="text-xs text-slate-400">{label(collection.payerType)}</p></td><td className={collection.description === "Rental payment" && !collection.refundable ? "font-bold text-pine-700" : "font-bold"}>{classification}</td><td className="font-black">{money(collection.amount)}</td><td>{money(collection.allocated)}</td><td className="font-black text-pine-700">{money(collection.available)}</td></tr>; })}{!collections.length && <tr><td colSpan={6} className="py-10 text-center text-slate-500">No available renter or homeowner receipts.</td></tr>}</tbody></table></div></div>
     </section>}
 
     {view === "reconciliation" && <section className="space-y-5">

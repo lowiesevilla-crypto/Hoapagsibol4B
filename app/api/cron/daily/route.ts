@@ -3,12 +3,14 @@ import { NextResponse } from "next/server";
 import { getAppUrl } from "@/lib/app-url";
 import { authorizeCron } from "@/lib/cron-auth";
 import { platformPrisma, prisma } from "@/lib/db";
+import { runAutomaticBillingForTenant } from "@/lib/services/automatic-billing";
 import { runPlatformBillingCycle } from "@/lib/services/platform-billing";
 import { sendPlatformInvoiceEmail } from "@/lib/services/platform-invoice-email";
 import { sendEmailNotification } from "@/lib/services/notifications";
 import { runWithTenant } from "@/lib/tenant-context";
 
 export const runtime = "nodejs";
+export const maxDuration = 300;
 
 export async function POST(request: Request) {
   if (!authorizeCron(request)) return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
@@ -79,6 +81,14 @@ async function maintainTenant(tenantId: string, tenantSlug: string, billingEnabl
     await prisma.auditLog.create({ data: { tenantId, module: "CRON", action: "DAILY_MAINTENANCE", entityType: "System", metadata: { billingSkipped: true, resetAttemptsDeleted: attempts.count, resetTokensDeleted: tokens.count } } });
     return { billingSkipped: true, resetAttemptsDeleted: attempts.count, resetTokensDeleted: tokens.count };
   }
+
+  let automaticBilling: Awaited<ReturnType<typeof runAutomaticBillingForTenant>> | { error: string };
+  try {
+    automaticBilling = await runAutomaticBillingForTenant(tenantId, now);
+  } catch (error) {
+    automaticBilling = { error: error instanceof Error ? error.message : "Automatic tenant billing failed." };
+  }
+
   const today = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
   const reminderWindow = new Date(today);
   reminderWindow.setUTCDate(reminderWindow.getUTCDate() + 3);
@@ -95,6 +105,6 @@ async function maintainTenant(tenantId: string, tenantSlug: string, billingEnabl
     await sendEmailNotification({ tenantId, recipientId: homeowner.id, email: homeowner.email, subject: "HOA monthly dues reminder", heading: bill.status === BillStatus.OVERDUE ? "Overdue account reminder" : "Upcoming due date", message: `Hello ${homeowner.name},\nYour outstanding HOA balance is PHP ${Number(bill.balance).toFixed(2)}. The due date is ${bill.dueDate.toLocaleDateString("en-PH", { timeZone: "UTC" })}.`, type: NotificationType.BILL_REMINDER, actionLabel: "Open HOA portal", actionUrl: `${getAppUrl()}/${tenantSlug}/login` });
     sent.add(homeowner.id);
   }
-  await prisma.auditLog.create({ data: { tenantId, module: "CRON", action: "DAILY_MAINTENANCE", entityType: "System", metadata: { overdueUpdated: overdue.count, remindersAttempted: sent.size, resetAttemptsDeleted: attempts.count, resetTokensDeleted: tokens.count } } });
-  return { overdueUpdated: overdue.count, remindersAttempted: sent.size, resetAttemptsDeleted: attempts.count, resetTokensDeleted: tokens.count };
+  await prisma.auditLog.create({ data: { tenantId, module: "CRON", action: "DAILY_MAINTENANCE", entityType: "System", metadata: { automaticBilling, overdueUpdated: overdue.count, remindersAttempted: sent.size, resetAttemptsDeleted: attempts.count, resetTokensDeleted: tokens.count } } });
+  return { automaticBilling, overdueUpdated: overdue.count, remindersAttempted: sent.size, resetAttemptsDeleted: attempts.count, resetTokensDeleted: tokens.count };
 }

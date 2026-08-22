@@ -24,9 +24,10 @@ export async function PlatformInvoiceMaintenancePanel({ tenantId }: { tenantId: 
     if (!current || period > current.period) latestBySubscription.set(invoice.subscriptionId, { id: invoice.id, period });
   }
 
-  return <details className="mt-4 rounded-2xl border border-sky-200 bg-sky-50/50 p-4">
-    <summary className="cursor-pointer font-black text-sky-900">Invoice maintenance · Edit / Delete</summary>
-    <p className="mt-2 text-sm text-slate-600">Edit is limited to invoices without payment history. Delete is limited to the latest unpaid invoice so the subscription billing schedule can be restored safely.</p>
+  return <details id="invoice-maintenance" open className="mt-4 scroll-mt-4 rounded-2xl border-2 border-sky-300 bg-sky-50/70 p-4 shadow-sm">
+    <summary className="cursor-pointer text-base font-black text-sky-950">Platform Invoice Actions · Edit / Delete</summary>
+    <p className="mt-2 text-sm font-semibold text-slate-700">Platform Admin and Super Admin can edit unpaid invoices here. Click <span className="font-black text-blue-700">Edit invoice</span> on the invoice row below.</p>
+    <p className="mt-1 text-xs text-slate-500">Edit is limited to invoices without payment history. Delete is limited to the latest unpaid invoice so the subscription billing schedule can be restored safely.</p>
     <div className="mt-4 overflow-auto rounded-xl border bg-white">
       <table className="min-w-[1120px] w-full text-sm">
         <thead className="bg-slate-50 text-left"><tr><th className="p-3">Invoice</th><th className="p-3">Coverage</th><th className="p-3">Total</th><th className="p-3">Paid</th><th className="p-3">Status</th><th className="p-3">Actions</th></tr></thead>
@@ -44,7 +45,7 @@ export async function PlatformInvoiceMaintenancePanel({ tenantId }: { tenantId: 
             <td className="p-3">
               {editable ? <div className="flex min-w-80 flex-col gap-2">
                 <details>
-                  <summary className="cursor-pointer text-xs font-black text-blue-700">Edit invoice</summary>
+                  <summary className="inline-flex cursor-pointer rounded-lg bg-blue-700 px-3 py-2 text-xs font-black text-white shadow-sm hover:bg-blue-800">Edit invoice</summary>
                   <form action={updatePlatformInvoiceAction} className="mt-2 grid min-w-[430px] gap-2 rounded-xl border bg-white p-3 shadow-lg sm:grid-cols-2">
                     <input type="hidden" name="tenantId" value={tenantId} />
                     <input type="hidden" name="invoiceId" value={invoice.id} />

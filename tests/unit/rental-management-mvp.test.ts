@@ -74,5 +74,5 @@ test("rental homeowner and receipt selectors are searchable at client scale", ()
   assert.match(page, /Search receipt number, renter or amount/);
   assert.match(page, /LIMIT 5000/);
   assert.match(page, /collection\.payerType === "RENTER"/);
-  assert.match(page, /collection\.payerType === "HOMEOWNER"/);
+  assert.match(page, /collection\.payerType !== "HOMEOWNER"/);
 });

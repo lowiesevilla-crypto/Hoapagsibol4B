@@ -77,6 +77,14 @@ A credential identity matching multiple active HOA/tenant accounts authenticates
 - Session/audit/last-login persistence occurs through server authority before issuing the browser session cookie.
 - Tenant isolation remains mandatory after account selection.
 
+### Post-Demo P0 Login and Tenant Agreement Regression — PR #140
+
+- `https://hoahub.tech/login` remains the universal login entry point. Cross-tenant email identity discovery must not impose a hidden fixed record cap that can omit an otherwise authorized linked account.
+- Removing the discovery cap does not relax homeowner eligibility: tenant availability, active user state, HOMEOWNER role/profile rules, verified email, digital activation, password verification, signed account-choice state, and selected-tenant session isolation remain mandatory.
+- If one eligible account is resolved, login opens that tenant. If multiple eligible accounts are resolved, the verified identity chooses from the complete authorized account set without re-entering credentials.
+- Tenant Admin Account navigation must keep `/admin/subscription` and `/admin/agreement` discoverable in the visible sidebar for roles already authorized by server-side route/role controls.
+- Regression coverage: `tests/unit/p0-login-agreement-regression.test.ts`, plus the existing multi-account authentication tests. Do not fix a login symptom by bypassing activation or tenant-status policy.
+
 ### Post-Login Brand Handoff
 
 `hoahub.login.handoff.v1` is a short-lived browser presentation marker written only after successful credential/passkey authentication. It contains a local timestamp only and never identity, tenant, session, or credential data. Browser-storage failure must not affect authentication or navigation.
@@ -289,8 +297,8 @@ Deferred grievance scope remains notice/proof-of-service, mediation/hearing reco
 - Rental management is tenant-scoped and covers rentable assets, renters, agreements, rental receivables, and allocation of existing Collection receipts.
 - Outside renters remain standalone renter records. Do not create fake User or Homeowner records; `homeownerId` is optional and only links a same-tenant existing homeowner.
 - Collection remains the cash and receipt authority. RentalPaymentAllocation is reconciliation only and must not duplicate cash, overpay an invoice, over-allocate a receipt, or cross tenant boundaries.
-- Only eligible non-refundable `CollectionType.OTHER` receipts may be allocated to rental invoices. Payer compatibility must be validated before allocation.
-- Rental security deposits are refundable liabilities and must never be reported as rental income. Rent charges are rental income when collected.
+- Only `CollectionType.OTHER` receipts may settle rental invoices, and payer compatibility remains mandatory. For normal RENT invoices the receipt must be non-refundable. For SECURITY_DEPOSIT invoices, an eligible matching receipt may be refundable already or may be reclassified from income to a refundable liability only when it has no prior rental allocation and the full unused receipt amount is allocated; refunded or forfeited receipts are ineligible.
+- Rental security deposits are refundable liabilities and must never be reported as rental income. A receipt reclassified for a security deposit must remain separate from rent income and cannot later be applied to a normal rent invoice.
 - Rental finance writes remain under existing `BILLING_MANAGE` authority for this MVP. Do not broaden RBAC implicitly.
 - Rental SQL access must include explicit `tenantId` predicates and state-changing agreement/invoice/allocation workflows use serializable transactions where concurrent balance or occupancy changes matter.
 - Monthly invoice generation is idempotent per tenant/agreement/charge type/period. Ending an agreement releases the asset without deleting historical invoices or allocations.
@@ -301,7 +309,7 @@ Deferred grievance scope remains notice/proof-of-service, mediation/hearing reco
 
 - Refundable rental security deposits are cash receipts/liabilities, not recognized income. Financial web/PDF/DOCX reports must subtract only `SECURITY_DEPOSIT`-allocated amounts from Other Income revenue while keeping those amounts in cash receipts as `Rental security deposits received (liability)`.
 - Partial or mixed rental receipts are accounted by allocation amount, not by classifying the whole Collection row.
-- Rental renter onboarding must provide searchable homeowner linking and support the client-scale homeowner directory up to the existing 5,000-row onboarding ceiling.
+- Rental renter onboarding uses the tenant-scoped `SearchableHomeownerSelect` backed by `/api/admin/homeowners/search`; do not regress to a client-only fixed homeowner option list. The initial page list may remain bounded for rendering, but homeowner discovery must be database-backed.
 - Rental invoice reconciliation must provide a searchable existing-receipt selector, filter eligible receipts to the invoice renter/homeowner before display, and keep server-side payer/tenant/over-allocation validation authoritative.
 - `Record renter payment` is the cash-receipt step; `Apply existing receipt` is reconciliation to an existing rental invoice. Do not collapse these concepts in labels or accounting.
 - `lib/rental-accounting.ts`, `lib/services/financial-report.ts`, `app/admin/reports/page.tsx`, PDF/DOCX report routes, `app/admin/rentals/page.tsx`, and `tests/unit/rental-management-mvp.test.ts` are the principal regression surface for this hotfix.

@@ -1,4 +1,5 @@
 import type { Bill, HomeownerProfile, User } from "@prisma/client";
+import { BillingAutomationFormLock } from "@/components/billing-automation-form-lock";
 import { SearchableHomeownerSelect } from "@/components/searchable-homeowner-select";
 import { saveBillAction } from "@/lib/actions/billing";
 import { inputDate } from "@/lib/utils";
@@ -35,7 +36,8 @@ function IndividualBillingPreviewForm({ homeowners }: { homeowners: Homeowner[] 
   return <form method="get" action="/admin/billing" className="card">
     <input type="hidden" name="preview" value="1" />
     <input type="hidden" name="scope" value="HOMEOWNER" />
-    <div className="mb-5"><h2 className="text-lg font-black">Create individual bill</h2><p className="text-sm text-slate-500">Preview one homeowner through the Billing Rules engine before generating a bill.</p></div>
+    <BillingAutomationFormLock />
+    <div className="mb-5"><h2 className="text-lg font-black">Create individual bill</h2><p className="text-sm text-slate-500">Preview one homeowner through the Billing Rules engine before generating a bill. Manual creation is disabled while Automatic Billing is ON.</p></div>
     <div className="grid gap-4 sm:grid-cols-2">
       <div className="sm:col-span-2"><SearchableHomeownerSelect name="homeownerId" label="Homeowner" homeowners={options} required searchEndpoint="/api/admin/homeowners/search" /></div>
       <div><label className="label">Coverage month</label><select className="field" name="coverageMonth" defaultValue={now.getUTCMonth() + 1}>{Array.from({ length: 12 }, (_, index) => <option key={index + 1} value={index + 1}>{monthName(index + 1)}</option>)}</select></div>

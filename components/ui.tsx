@@ -2,9 +2,9 @@
 
 import { useFormStatus } from "react-dom";
 
-export function SubmitButton({ children, className = "btn-primary" }: { children: React.ReactNode; className?: string }) {
+export function SubmitButton({ children, className = "btn-primary", disabled = false }: { children: React.ReactNode; className?: string; disabled?: boolean }) {
   const { pending } = useFormStatus();
-  return <button type="submit" className={className} disabled={pending}>{pending ? "Working..." : children}</button>;
+  return <button type="submit" className={className} disabled={pending || disabled}>{pending ? "Working..." : children}</button>;
 }
 
 export function DeleteButton({ label = "Delete" }: { label?: string }) {

@@ -2,12 +2,13 @@ type AllocationAmount = { amount: unknown };
 
 type PaymentAmountSource = {
   amount: unknown;
+  billId?: unknown;
   allocations?: AllocationAmount[];
 };
 
 export function paymentAppliedAmount(payment: PaymentAmountSource) {
-  if (!payment.allocations?.length) return roundMoney(Number(payment.amount));
-  return roundMoney(payment.allocations.reduce((sum, allocation) => sum + Number(allocation.amount), 0));
+  if (payment.allocations?.length) return roundMoney(payment.allocations.reduce((sum, allocation) => sum + Number(allocation.amount), 0));
+  return payment.billId ? roundMoney(Number(payment.amount)) : 0;
 }
 
 export function paymentUnappliedCredit(payment: PaymentAmountSource) {

@@ -13,8 +13,9 @@ export function RentalPaymentForm({ renters, today }: { renters: RentalPaymentRe
     <div>
       <p className="eyebrow">Rental cash receipt</p>
       <h2 className="text-lg font-black">Record rental payment</h2>
-      <p className="mt-1 text-sm text-slate-500">Issue the official HOAHub receipt here. Apply it immediately to the renter&apos;s oldest open rental dues or keep it as advance rental credit.</p>
+      <p className="mt-1 text-sm text-slate-500">This is the authoritative rental-payment entry point. HOAHub issues one official Collection receipt here, then applies it to the renter&apos;s oldest open rental dues or keeps it as advance rental credit.</p>
     </div>
+    <div className="rounded-xl border border-sky-200 bg-sky-50 p-3 text-xs text-sky-950"><strong>One payment, one receipt:</strong> Collections is the central cash and receipt ledger. Do not post the same rental payment again from Collections.</div>
     <label className="label">Renter
       <select className="field" name="renterId" required defaultValue="">
         <option value="" disabled>Select renter</option>

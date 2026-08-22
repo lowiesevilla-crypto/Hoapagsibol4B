@@ -11,12 +11,20 @@ import { allocateReceiptNumber, collectionReceiptSeries } from "@/lib/services/r
 import { bondRefundSchema, collectionSchema } from "@/lib/validation";
 
 const refundableTypes = new Set<CollectionType>([CollectionType.CONSTRUCTION_BOND, CollectionType.CONTRACTOR_BOND]);
+const rentalPaymentsHref = "/admin/rentals?view=payments&source=collections";
 
 export async function recordCollectionAction(formData: FormData) {
   const admin = await requirePermissions([
     Permission.COLLECTIONS_RECORD,
     Permission.RECEIPTS_ISSUE,
   ]);
+
+  const requestedType = String(formData.get("type") || "");
+  const requestedPayerType = String(formData.get("payerType") || "");
+  if (requestedType === "RENTAL_PAYMENT" || (requestedType === CollectionType.OTHER && requestedPayerType === PayerType.RENTER)) {
+    redirect(rentalPaymentsHref);
+  }
+
   const parsed = collectionSchema.safeParse(Object.fromEntries(formData.entries()));
   if (!parsed.success) throw new Error(parsed.error.issues[0]?.message || "Invalid collection details.");
   const data = parsed.data;

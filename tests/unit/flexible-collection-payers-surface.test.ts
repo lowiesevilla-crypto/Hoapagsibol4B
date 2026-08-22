@@ -26,14 +26,16 @@ test("Prisma PayerType is the single flexible payer authority", async () => {
 
 test("External payers are Other-income-only and bonds stay profile-bound", async () => {
   const [form, action] = await Promise.all([readFile(formPath, "utf8"), readFile(actionPath, "utf8")]);
-  assert.match(form, /<option value="RENTER">Renter<\/option>/);
+  assert.match(form, /<option value="RENTER">Renter → Rental Management<\/option>/);
   assert.match(form, /<option value="OTHER">Others<\/option>/);
   assert.match(form, /name="payerName"/);
   assert.match(action, /PayerType\.RENTER/);
   assert.match(action, /PayerType\.OTHER/);
+  assert.match(action, /requestedPayerType === PayerType\.RENTER/);
+  assert.match(action, /redirect\(rentalPaymentsHref\)/);
   assert.match(action, /CONSTRUCTION_BOND[\s\S]*PayerType\.HOMEOWNER/);
   assert.match(action, /CONTRACTOR_BOND[\s\S]*PayerType\.CONTRACTOR/);
-  assert.doesNotMatch(action, /payerCategory|\$executeRaw|legacyPayerType|requestedPayerType/);
+  assert.doesNotMatch(action, /payerCategory|\$executeRaw|legacyPayerType/);
 });
 
 test("External payer identity reaches history receipts audit and finance export", async () => {

@@ -37,7 +37,7 @@ function IndividualBillingPreviewForm({ homeowners }: { homeowners: Homeowner[] 
     <input type="hidden" name="scope" value="HOMEOWNER" />
     <div className="mb-5"><h2 className="text-lg font-black">Create individual bill</h2><p className="text-sm text-slate-500">Preview one homeowner through the Billing Rules engine before generating a bill.</p></div>
     <div className="grid gap-4 sm:grid-cols-2">
-      <div className="sm:col-span-2"><SearchableHomeownerSelect name="homeownerId" label="Homeowner" homeowners={options} required /></div>
+      <div className="sm:col-span-2"><SearchableHomeownerSelect name="homeownerId" label="Homeowner" homeowners={options} required searchEndpoint="/api/admin/homeowners/search" /></div>
       <div><label className="label">Coverage month</label><select className="field" name="coverageMonth" defaultValue={now.getUTCMonth() + 1}>{Array.from({ length: 12 }, (_, index) => <option key={index + 1} value={index + 1}>{monthName(index + 1)}</option>)}</select></div>
       <div><label className="label">Coverage year</label><input className="field" name="coverageYear" type="number" min="1900" max="2200" defaultValue={now.getUTCFullYear()} required /></div>
     </div>

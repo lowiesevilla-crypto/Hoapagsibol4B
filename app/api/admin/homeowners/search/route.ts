@@ -1,12 +1,13 @@
-import { HomeownerStatus, Prisma, Role } from "@prisma/client";
+import { HomeownerStatus, Prisma } from "@prisma/client";
 import { NextResponse } from "next/server";
-import { requireUser } from "@/lib/auth";
+import { requirePermission } from "@/lib/authorization/guards";
+import { Permission } from "@/lib/authorization/permissions";
 import { prisma } from "@/lib/db";
 import { homeownerAccountNumber } from "@/lib/homeowner-account";
 import { homeownerSearchWhere } from "@/lib/homeowner-admin-search";
 
 export async function GET(request: Request) {
-  const user = await requireUser(Role.ADMIN);
+  const user = await requirePermission(Permission.HOMEOWNERS_READ);
   const url = new URL(request.url);
   const q = (url.searchParams.get("q") || "").trim();
   const requestedLimit = Number(url.searchParams.get("limit") || 50);

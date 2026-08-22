@@ -103,6 +103,8 @@ export const adminShellLinks: LinkItem[] = [
   { href: "/admin/data", label: "Data & Imports", icon: "data", section: "Insights & Data" },
   { href: "/admin/ai-copilot", label: "AI Staff Copilot", icon: "chat", section: "AI & Knowledge" },
   { href: "/admin/profile", label: "My Profile", icon: "profile", section: "Account" },
+  { href: "/admin/subscription", label: "HOAHub Subscription", icon: "subscriptions", section: "Account" },
+  { href: "/admin/agreement", label: "HOAHub Agreement", icon: "documents", section: "Account" },
 ];
 
 export const systemAdminLinks: LinkItem[] = [

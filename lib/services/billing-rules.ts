@@ -5,6 +5,10 @@ import { prisma } from "@/lib/db";
 type Actor = { id: string; tenantId: string; name: string; email: string };
 type HomeownerCandidate = Prisma.HomeownerProfileGetPayload<{ include: { user: true } }>;
 
+const billingWriteBatchSize = 20;
+const billingAuditBatchSize = 50;
+const billingNotificationBatchSize = 50;
+
 export const billingGenerationScopes = ["ALL", "HOMEOWNER", "SELECTED", "BLOCK", "PHASE"] as const;
 export type BillingGenerationScope = (typeof billingGenerationScopes)[number];
 
@@ -218,8 +222,8 @@ async function buildBillingGeneration(input: BillingGenerationInput, options: { 
   });
 
   if (options.persist && rule && dueDate) {
-    for (const row of rows) {
-      if (row.action !== "CREATE") continue;
+    const createRows = rows.filter((row) => row.action === "CREATE");
+    await processInBatches(createRows, billingWriteBatchSize, async (row) => {
       try {
         await prisma.$transaction(async (tx) => {
           const duplicate = await tx.bill.findFirst({
@@ -230,7 +234,6 @@ async function buildBillingGeneration(input: BillingGenerationInput, options: { 
             row.action = "SKIP_DUPLICATE";
             row.duplicateStatus = "Duplicate exists";
             row.message = "A bill already exists for this homeowner, charge type, and coverage period.";
-            await tx.auditLog.create({ data: { tenantId: input.actor.tenantId, actorId: input.actor.id, module: "BILLING", action: "DUPLICATE_BILLING_PREVENTED", entityType: "HomeownerProfile", entityId: row.homeownerId, metadata: generationAuditMetadata(input, rule, { homeownerName: row.homeownerName }) } });
             return;
           }
           const bill = await tx.bill.create({
@@ -259,7 +262,7 @@ async function buildBillingGeneration(input: BillingGenerationInput, options: { 
         row.action = "ERROR";
         row.message = error instanceof Error ? error.message : "Billing record could not be created.";
       }
-    }
+    });
     await recordGenerationRowAudits(input, rule, rows);
     await prisma.auditLog.create({
       data: {
@@ -397,16 +400,23 @@ function penaltyConfigurationLabel(rule: NonNullable<Awaited<ReturnType<typeof f
   return `${rule.penaltyType.replaceAll("_", " ")} ${amount} ${rule.penaltyFrequency === "NONE" ? "" : rule.penaltyFrequency.replaceAll("_", " ").toLowerCase()}`.trim();
 }
 
+async function processInBatches<T>(items: T[], batchSize: number, worker: (item: T) => Promise<void>) {
+  for (let index = 0; index < items.length; index += batchSize) {
+    await Promise.all(items.slice(index, index + batchSize).map(worker));
+  }
+}
+
 async function recordGenerationRowAudits(input: BillingGenerationInput, rule: NonNullable<Awaited<ReturnType<typeof findEffectiveBillingRule>>>, rows: BillingGenerationRow[]) {
-  for (const row of rows) {
+  const auditableRows = rows.filter((row) => row.action === "SKIP_EXEMPT" || row.action === "SKIP_DUPLICATE" || row.action === "ERROR");
+  await processInBatches(auditableRows, billingAuditBatchSize, async (row) => {
     if (row.action === "SKIP_EXEMPT") {
       await prisma.auditLog.create({ data: { tenantId: input.actor.tenantId, actorId: input.actor.id, module: "BILLING", action: "BILLING_SKIPPED_EXEMPTION", entityType: "DuesExemption", entityId: row.exemptionId, metadata: generationAuditMetadata(input, rule, { homeownerId: row.homeownerId, homeownerName: row.homeownerName, reason: row.exemptionStatus }) } });
     } else if (row.action === "SKIP_DUPLICATE") {
       await prisma.auditLog.create({ data: { tenantId: input.actor.tenantId, actorId: input.actor.id, module: "BILLING", action: "DUPLICATE_BILLING_PREVENTED", entityType: "HomeownerProfile", entityId: row.homeownerId, metadata: generationAuditMetadata(input, rule, { homeownerName: row.homeownerName, duplicateStatus: row.duplicateStatus }) } });
-    } else if (row.action === "ERROR") {
+    } else {
       await prisma.auditLog.create({ data: { tenantId: input.actor.tenantId, actorId: input.actor.id, module: "BILLING", action: "BILLING_GENERATION_ROW_FAILED", entityType: "HomeownerProfile", entityId: row.homeownerId, metadata: generationAuditMetadata(input, rule, { homeownerName: row.homeownerName, error: row.message }) } });
     }
-  }
+  });
 }
 
 async function sendBillingNotifications(homeowners: Array<{ homeownerId: string; homeownerName: string; amount: number }>, tenantId: string, billingMonth: Date, dueDate: Date) {
@@ -419,17 +429,23 @@ async function sendBillingNotifications(homeowners: Array<{ homeownerId: string;
   }
   const profiles = await prisma.homeownerProfile.findMany({ where: { tenantId, id: { in: homeowners.map((item) => item.homeownerId) } }, include: { user: true } });
   const amountByHomeowner = new Map(homeowners.map((item) => [item.homeownerId, item.amount]));
-  await Promise.allSettled(profiles.map((homeowner) => sendEmailNotification({
-    tenantId,
-    recipientId: homeowner.userId,
-    email: homeowner.user.email,
-    subject: `HOA billing notice - ${billingMonth.toLocaleDateString("en-PH", { month: "long", year: "numeric" })}`,
-    heading: "Monthly dues billing",
-    message: `Hello ${homeowner.user.name},\nYour monthly HOA dues of PHP ${(amountByHomeowner.get(homeowner.id) ?? 0).toFixed(2)} has been posted. Payment is due ${dueDate.toLocaleDateString("en-PH")}.`,
-    type: NotificationType.BILLING_NOTIFICATION,
-    actionLabel: "View my billing",
-    actionUrl: `${getAppUrl()}/portal/billing`,
-  })));
+  await processInBatches(profiles, billingNotificationBatchSize, async (homeowner) => {
+    try {
+      await sendEmailNotification({
+        tenantId,
+        recipientId: homeowner.userId,
+        email: homeowner.user.email,
+        subject: `HOA billing notice - ${billingMonth.toLocaleDateString("en-PH", { month: "long", year: "numeric" })}`,
+        heading: "Monthly dues billing",
+        message: `Hello ${homeowner.user.name},\nYour monthly HOA dues of PHP ${(amountByHomeowner.get(homeowner.id) ?? 0).toFixed(2)} has been posted. Payment is due ${dueDate.toLocaleDateString("en-PH")}.`,
+        type: NotificationType.BILLING_NOTIFICATION,
+        actionLabel: "View my billing",
+        actionUrl: `${getAppUrl()}/portal/billing`,
+      });
+    } catch {
+      // Billing persistence must not fail because an email provider is unavailable.
+    }
+  });
 }
 
 function ruleSnapshot(rule: NonNullable<Awaited<ReturnType<typeof findEffectiveBillingRule>>>) {

@@ -12,10 +12,13 @@ export async function GET(request: Request) {
   const q = (url.searchParams.get("q") || "").trim();
   const requestedLimit = Number(url.searchParams.get("limit") || 50);
   const limit = Number.isFinite(requestedLimit) ? Math.min(100, Math.max(10, Math.trunc(requestedLimit))) : 50;
+  const requestedStatus = (url.searchParams.get("status") || "active").trim().toLowerCase();
 
   const baseWhere: Prisma.HomeownerProfileWhereInput = {
     tenantId: user.tenantId,
-    status: HomeownerStatus.ACTIVE,
+    ...(requestedStatus === "all"
+      ? {}
+      : { status: requestedStatus === "inactive" ? HomeownerStatus.INACTIVE : HomeownerStatus.ACTIVE }),
   };
   const searchWhere = homeownerSearchWhere(q);
   const where: Prisma.HomeownerProfileWhereInput = Object.keys(searchWhere).length
@@ -32,6 +35,7 @@ export async function GET(request: Request) {
         block: true,
         lot: true,
         phase: true,
+        status: true,
         user: { select: { name: true, email: true } },
       },
       orderBy: [{ user: { name: "asc" } }, { block: "asc" }, { lot: "asc" }],
@@ -42,11 +46,12 @@ export async function GET(request: Request) {
   return NextResponse.json({
     homeowners: homeowners.map((homeowner) => {
       const accountNumber = homeownerAccountNumber(homeowner);
-      const label = `${homeowner.user.name} - Block ${homeowner.block}, Lot ${homeowner.lot}`;
+      const statusSuffix = requestedStatus === "all" && homeowner.status !== HomeownerStatus.ACTIVE ? ` - ${homeowner.status}` : "";
+      const label = `${homeowner.user.name} - Block ${homeowner.block}, Lot ${homeowner.lot}${statusSuffix}`;
       return {
         id: homeowner.id,
         label,
-        search: `${homeowner.user.name} ${homeowner.user.email} ${accountNumber} block ${homeowner.block} lot ${homeowner.lot} ${homeowner.phase ?? ""} account ${homeowner.id}`.toLowerCase(),
+        search: `${homeowner.user.name} ${homeowner.user.email} ${accountNumber} block ${homeowner.block} lot ${homeowner.lot} ${homeowner.phase ?? ""} account ${homeowner.id} ${homeowner.status}`.toLowerCase(),
       };
     }),
     total,

@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
+import { recognizedCollectionAmount, summarizeRentalSecurityDeposits } from "../../lib/rental-accounting";
 
 const actions = readFileSync("lib/actions/rentals.ts", "utf8");
 const page = readFileSync("app/admin/rentals/page.tsx", "utf8");
@@ -13,7 +14,7 @@ const reportPage = readFileSync("app/admin/reports/page.tsx", "utf8");
 test("rental domain keeps outsider renters separate from homeowner accounts", () => {
   assert.match(migration, /CREATE TABLE `Renter`/);
   assert.match(migration, /`homeownerId` VARCHAR\(191\) NULL/);
-  assert.match(page, /Outside renter — no HOAHub profile/);
+  assert.match(page, /Existing homeowner link \(optional\)/);
   assert.doesNotMatch(actions, /user\.create|homeownerProfile\.create/);
 });
 
@@ -46,10 +47,16 @@ test("rental finance writes remain explicitly tenant scoped and audited", () => 
   assert.match(migration, /UNIQUE INDEX `RentalAsset_tenantId_code_key`/);
 });
 
-
 test("rental deposits stay out of recognized income while remaining cash receipts", () => {
-  assert.match(financialReport, /summarizeRentalSecurityDeposits/);
-  assert.match(financialReport, /recognizedCollectionAmount/);
+  const summary = summarizeRentalSecurityDeposits([
+    { collectionId: "receipt-1", amount: 200, chargeType: "SECURITY_DEPOSIT" },
+    { collectionId: "receipt-1", amount: 300, chargeType: "RENT" },
+    { collectionId: "receipt-2", amount: 50, chargeType: "SECURITY_DEPOSIT" },
+  ]);
+  assert.equal(summary.total, 250);
+  assert.equal(summary.byCollection.get("receipt-1"), 200);
+  assert.equal(recognizedCollectionAmount(500, summary.byCollection.get("receipt-1") ?? 0), 300);
+  assert.equal(recognizedCollectionAmount(200, 200), 0);
   assert.match(financialReport, /rentalSecurityDepositsReceived/);
   assert.match(reportPage, /Rental security deposits received \(liability\)/);
 });

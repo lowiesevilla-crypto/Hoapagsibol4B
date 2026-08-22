@@ -14,7 +14,7 @@ const reportPage = readFileSync("app/admin/reports/page.tsx", "utf8");
 test("rental domain keeps outsider renters separate from homeowner accounts", () => {
   assert.match(migration, /CREATE TABLE `Renter`/);
   assert.match(migration, /`homeownerId` VARCHAR\(191\) NULL/);
-  assert.match(page, /Existing homeowner link \(optional\)/);
+  assert.match(page, /Homeowner link \(optional\)/);
   assert.doesNotMatch(actions, /user\.create|homeownerProfile\.create/);
 });
 

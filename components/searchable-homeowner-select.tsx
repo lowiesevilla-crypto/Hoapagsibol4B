@@ -59,7 +59,8 @@ export function SearchableHomeownerSelect({
       setLoading(true);
       setRemoteReady(false);
       try {
-        const response = await fetch(`${searchEndpoint}?q=${encodeURIComponent(term)}&limit=100`, {
+        const separator = searchEndpoint.includes("?") ? "&" : "?";
+        const response = await fetch(`${searchEndpoint}${separator}q=${encodeURIComponent(term)}&limit=100`, {
           signal: controller.signal,
           headers: { Accept: "application/json" },
         });
@@ -97,7 +98,7 @@ export function SearchableHomeownerSelect({
       <option value="">Select homeowner</option>
       {matches.map((homeowner) => <option key={homeowner.id} value={homeowner.id}>{homeowner.label}</option>)}
     </select>
-    {loading && <p className="mt-1 text-xs font-semibold text-slate-500">Searching all active homeowners in this tenant...</p>}
+    {loading && <p className="mt-1 text-xs font-semibold text-slate-500">Searching all homeowners in this tenant...</p>}
     {!loading && remoteSearchActive && remoteReady && remoteTotal !== null && remoteTotal > matches.length && <p className="mt-1 text-xs font-semibold text-slate-500">Showing {matches.length} of {remoteTotal} matches. Keep typing to narrow the result.</p>}
     {!loading && !matches.length && <p className="mt-1 text-xs font-bold text-rose-700">No homeowner found.</p>}
   </div>;

@@ -9,7 +9,7 @@ import { getAppUrl } from "@/lib/app-url";
 import { prisma } from "@/lib/db";
 import { billSchema } from "@/lib/validation";
 import { sendEmailNotification } from "@/lib/services/notifications";
-import { billingGenerationScopes, generateBillingFromRules, generateMonthlyDuesFromRules, periodFromDate, type BillingGenerationScope } from "@/lib/services/billing-rules";
+import { billingGenerationScopes, findEffectiveBillingRule, generateBillingFromRules, generateMonthlyDuesFromRules, periodFromDate, type BillingGenerationScope } from "@/lib/services/billing-rules";
 
 function normalizedMonth(value: string) {
   return new Date(`${value.slice(0, 7)}-01T00:00:00.000Z`);
@@ -75,6 +75,8 @@ export async function generateMonthlyBillsAction(formData: FormData) {
   const dueDate = new Date(`${due}T00:00:00.000Z`);
   let result: Awaited<ReturnType<typeof generateMonthlyDuesFromRules>>;
   try {
+    const period = periodFromDate(billingMonth);
+    await assertManualGenerationAllowed(admin.tenantId, period.year, period.month);
     result = await generateMonthlyDuesFromRules({ actor: admin, billingMonth, dueDate });
   } catch (error) {
     redirect(`/admin/billing?error=${encodeURIComponent(error instanceof Error ? error.message : "Monthly bills could not be generated.")}`);
@@ -89,6 +91,7 @@ export async function generateBillingFromPreviewAction(formData: FormData) {
   let redirectUrl = "/admin/billing?success=generated";
   try {
     const input = parseGenerationForm(admin, formData);
+    await assertManualGenerationAllowed(admin.tenantId, input.coverageYear, input.coverageMonth);
     const result = await generateBillingFromRules(input);
     const ruleLabel = result.rule?.resolutionReference ?? "no rule";
     const message = `${result.createdCount} bill(s) generated for ${periodLabel(input.coverageYear, input.coverageMonth)} from ${ruleLabel}. ${result.exemptCount} exempt, ${result.duplicateCount} duplicate, ${result.failedCount} failed.`;
@@ -108,6 +111,12 @@ export async function generateBillingFromPreviewAction(formData: FormData) {
     redirect(`/admin/billing?error=${encodeURIComponent(error instanceof Error ? error.message : "Billing generation failed.")}`);
   }
   redirect(redirectUrl);
+}
+
+async function assertManualGenerationAllowed(tenantId: string, coverageYear: number, coverageMonth: number) {
+  const rule = await findEffectiveBillingRule(tenantId, RecurringChargeType.MONTHLY_DUES, coverageYear, coverageMonth);
+  if (rule?.generationMode !== "AUTOMATIC") return;
+  throw new Error(`Automatic billing is ON for ${periodLabel(coverageYear, coverageMonth)}. Manual billing generation is disabled to prevent duplicate or partial billing. Turn Automatic Billing OFF in Billing Rules before generating manually.`);
 }
 
 function parseGenerationForm(admin: Awaited<ReturnType<typeof requirePermission>>, formData: FormData) {

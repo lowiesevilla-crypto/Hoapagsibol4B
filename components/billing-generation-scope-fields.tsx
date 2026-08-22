@@ -2,6 +2,7 @@
 
 import { Search } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
+import { BillingAutomationFormLock } from "@/components/billing-automation-form-lock";
 import type { BillingGenerationScope } from "@/lib/services/billing-rules";
 
 type HomeownerOption = {
@@ -92,6 +93,7 @@ export function BillingGenerationScopeFields({
   const matches = remoteSearchActive && remoteReady ? remoteMatches : localMatches;
 
   return <>
+    <BillingAutomationFormLock scope="section" updateSectionDescription />
     <div>
       <label className="label">Generation scope</label>
       <select className="field" name="scope" value={scope} onChange={(event) => setScope(event.target.value as BillingGenerationScope)}>

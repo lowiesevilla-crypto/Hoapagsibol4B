@@ -203,28 +203,31 @@ export async function deletePlatformInvoiceAction(formData: FormData) {
       });
 
       if (!remainingOutstanding) {
-        await tx.tenantSubscription.updateMany({
-          where: {
-            tenantId,
-            status: { in: [TenantSubscriptionStatus.PAST_DUE, TenantSubscriptionStatus.GRACE, TenantSubscriptionStatus.RESTRICTED] },
-          },
-          data: { status: TenantSubscriptionStatus.ACTIVE },
+        const activeSubscription = await tx.tenantSubscription.findFirst({
+          where: { tenantId, status: { notIn: [TenantSubscriptionStatus.CANCELLED, TenantSubscriptionStatus.EXPIRED] } },
+          orderBy: { createdAt: "desc" },
+          select: { id: true, status: true },
         });
-
         const activeSuspensions = await tx.tenantSuspensionRecord.findMany({
           where: { tenantId, reinstatedAt: null },
           select: { id: true, reason: true },
         });
         const nonPaymentOnly = activeSuspensions.length > 0 && activeSuspensions.every((item) => item.reason === TenantSuspensionReason.NON_PAYMENT);
-        if (nonPaymentOnly) {
-          const now = new Date();
-          await tx.tenantSuspensionRecord.updateMany({
-            where: { tenantId, reinstatedAt: null, reason: TenantSuspensionReason.NON_PAYMENT },
-            data: { reinstatedAt: now, reinstatedById: actor.id },
-          });
-          await tx.tenant.update({ where: { id: tenantId }, data: { status: TenantStatus.ACTIVE, subscriptionStatus: TenantSubscriptionStatus.ACTIVE } });
-        } else {
-          await tx.tenant.update({ where: { id: tenantId }, data: { subscriptionStatus: TenantSubscriptionStatus.ACTIVE } });
+        const delinquencyStatus = activeSubscription && [TenantSubscriptionStatus.PAST_DUE, TenantSubscriptionStatus.GRACE, TenantSubscriptionStatus.RESTRICTED].includes(activeSubscription.status);
+        const nonPaymentSuspended = activeSubscription?.status === TenantSubscriptionStatus.SUSPENDED && nonPaymentOnly;
+
+        if (activeSubscription?.id === invoice.subscriptionId && (delinquencyStatus || nonPaymentSuspended)) {
+          await tx.tenantSubscription.update({ where: { id: activeSubscription.id }, data: { status: TenantSubscriptionStatus.ACTIVE } });
+          if (nonPaymentOnly) {
+            const now = new Date();
+            await tx.tenantSuspensionRecord.updateMany({
+              where: { tenantId, reinstatedAt: null, reason: TenantSuspensionReason.NON_PAYMENT },
+              data: { reinstatedAt: now, reinstatedById: actor.id },
+            });
+            await tx.tenant.update({ where: { id: tenantId }, data: { status: TenantStatus.ACTIVE, subscriptionStatus: TenantSubscriptionStatus.ACTIVE } });
+          } else {
+            await tx.tenant.update({ where: { id: tenantId }, data: { subscriptionStatus: TenantSubscriptionStatus.ACTIVE } });
+          }
         }
       }
 

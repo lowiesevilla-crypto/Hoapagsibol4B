@@ -27,6 +27,7 @@ type AgreementInvoiceRow = {
 type InvoiceLockRow = {
   id: string;
   agreementId: string;
+  chargeType: string;
   balance: Prisma.Decimal | number | string;
   amountPaid: Prisma.Decimal | number | string;
   status: string;
@@ -42,7 +43,10 @@ type CollectionLockRow = {
   homeownerId: string | null;
   homeownerName: string | null;
   type: CollectionType;
+  description: string | null;
   refundable: boolean;
+  amountRefunded: Prisma.Decimal | number | string;
+  amountForfeited: Prisma.Decimal | number | string;
 };
 type SumRow = { total: Prisma.Decimal | number | string | null };
 
@@ -255,7 +259,7 @@ export async function allocateRentalPaymentAction(formData: FormData) {
   await prisma.$transaction(async (tx) => {
     const db = tx as unknown as Prisma.TransactionClient;
     const invoices = await db.$queryRaw<InvoiceLockRow[]>(Prisma.sql`
-      SELECT i.id,i.agreementId,i.balance,i.amountPaid,i.status,a.renterId,r.fullName AS renterName,r.homeownerId
+      SELECT i.id,i.agreementId,i.chargeType,i.balance,i.amountPaid,i.status,a.renterId,r.fullName AS renterName,r.homeownerId
       FROM RentalInvoice i JOIN RentalAgreement a ON a.tenantId=i.tenantId AND a.id=i.agreementId
       JOIN Renter r ON r.tenantId=a.tenantId AND r.id=a.renterId
       WHERE i.tenantId=${admin.tenantId} AND i.id=${invoiceId} FOR UPDATE
@@ -264,7 +268,7 @@ export async function allocateRentalPaymentAction(formData: FormData) {
     if (!invoice) throw new Error("Rental invoice was not found in this association.");
     if (["PAID", "VOID"].includes(invoice.status)) throw new Error("This rental invoice cannot accept another payment.");
     const collections = await db.$queryRaw<CollectionLockRow[]>(Prisma.sql`
-      SELECT c.id,c.amount,c.payerType,c.payerName,c.homeownerId,c.type,c.refundable,u.name AS homeownerName
+      SELECT c.id,c.amount,c.payerType,c.payerName,c.homeownerId,c.type,c.description,c.refundable,c.amountRefunded,c.amountForfeited,u.name AS homeownerName
       FROM Collection c
       LEFT JOIN HomeownerProfile h ON h.tenantId=c.tenantId AND h.id=c.homeownerId
       LEFT JOIN User u ON u.id=h.userId
@@ -272,7 +276,7 @@ export async function allocateRentalPaymentAction(formData: FormData) {
     `);
     const collection = collections[0];
     if (!collection) throw new Error("Collection receipt was not found in this association.");
-    if (collection.type !== CollectionType.OTHER || collection.refundable) throw new Error("Only non-refundable Other Income collection receipts can settle rental invoices.");
+    if (collection.type !== CollectionType.OTHER) throw new Error("Only Other collection receipts can settle rental invoices.");
 
     const renterNameKey = normalizePersonName(invoice.renterName);
     const externalMatches = collection.payerType === PayerType.RENTER && normalizePersonName(collection.payerName) === renterNameKey;
@@ -282,10 +286,34 @@ export async function allocateRentalPaymentAction(formData: FormData) {
     if (!payerMatch) throw new Error("The collection payer does not match this invoice renter. Link the renter to the homeowner or use a receipt recorded for the same renter.");
 
     const allocationTotal = await db.$queryRaw<SumRow[]>(Prisma.sql`SELECT COALESCE(SUM(amount),0) AS total FROM RentalPaymentAllocation WHERE tenantId=${admin.tenantId} AND collectionId=${collectionId}`);
-    const collectionAvailable = Number(collection.amount) - Number(allocationTotal[0]?.total ?? 0);
+    const allocatedBefore = Number(allocationTotal[0]?.total ?? 0);
+    const collectionAvailable = Number(collection.amount) - allocatedBefore;
     const invoiceBalance = Number(invoice.balance);
     if (amount > invoiceBalance + 0.0001) throw new Error("Allocation exceeds the rental invoice balance.");
     if (amount > collectionAvailable + 0.0001) throw new Error("Allocation exceeds the unallocated amount on this collection receipt.");
+
+    let receiptReclassified = false;
+    if (invoice.chargeType === "SECURITY_DEPOSIT") {
+      if (Number(collection.amountRefunded) > 0 || Number(collection.amountForfeited) > 0) {
+        throw new Error("A refunded or forfeited receipt cannot be applied to a rental security deposit.");
+      }
+      if (!collection.refundable) {
+        if (allocatedBefore > 0.0001) {
+          throw new Error("This receipt is already allocated as income and cannot be converted to a rental security deposit liability. Use a separate receipt.");
+        }
+        if (Math.abs(amount - collectionAvailable) > 0.0001) {
+          throw new Error("Allocate the receipt's full unused amount when applying an income receipt to a rental security deposit. Use a separate receipt if the payment covers both rent and deposit.");
+        }
+        await db.$executeRaw(Prisma.sql`
+          UPDATE Collection SET refundable=TRUE,refundStatus='HELD',description='Rental security deposit',updatedAt=NOW(3)
+          WHERE tenantId=${admin.tenantId} AND id=${collection.id}
+        `);
+        await db.auditLog.create({ data: { tenantId: admin.tenantId, actorId: admin.id, module: "RENTALS", action: "RECLASSIFY_RENTAL_SECURITY_DEPOSIT_RECEIPT", entityType: "Collection", entityId: collection.id, metadata: { invoiceId, priorDescription: collection.description, amount: Number(collection.amount), renterId: invoice.renterId, payerMatch } } });
+        receiptReclassified = true;
+      }
+    } else if (collection.refundable) {
+      throw new Error("A refundable rental security deposit receipt cannot be applied to rent income.");
+    }
 
     await db.$executeRaw(Prisma.sql`
       INSERT INTO RentalPaymentAllocation (tenantId,id,invoiceId,collectionId,amount,createdById,createdAt)
@@ -295,7 +323,7 @@ export async function allocateRentalPaymentAction(formData: FormData) {
     const balance = Math.max(0, invoiceBalance - amount);
     const status = balance <= 0.0001 ? "PAID" : paid > 0 ? "PARTIAL" : invoice.status;
     await db.$executeRaw(Prisma.sql`UPDATE RentalInvoice SET amountPaid=${paid},balance=${balance},status=${status},updatedAt=NOW(3) WHERE tenantId=${admin.tenantId} AND id=${invoiceId}`);
-    await db.auditLog.create({ data: { tenantId: admin.tenantId, actorId: admin.id, module: "RENTALS", action: "ALLOCATE_RENTAL_COLLECTION", entityType: "RentalInvoice", entityId: invoiceId, metadata: { collectionId, amount, renterId: invoice.renterId, status, balance, payerMatch } } });
+    await db.auditLog.create({ data: { tenantId: admin.tenantId, actorId: admin.id, module: "RENTALS", action: "ALLOCATE_RENTAL_COLLECTION", entityType: "RentalInvoice", entityId: invoiceId, metadata: { collectionId, amount, renterId: invoice.renterId, chargeType: invoice.chargeType, status, balance, payerMatch, receiptReclassified } } });
   }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
 
   revalidateRentalPages();

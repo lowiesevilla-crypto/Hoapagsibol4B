@@ -1,1 +1,1 @@
-export * from "@/lib/services/platform-document-template-catalog-approved";
+export * from "@/lib/services/platform-document-template-catalog-a4-ph-v3";

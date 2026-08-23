@@ -76,8 +76,8 @@ export function resolveDocumentDownloadAccess(input: {
 }) {
   const { request, currentOutstandingBalance, viewerRole } = input;
   const policy = policyForDocumentRequest(request);
-  const paymentLocked = request.paymentRequiredSnapshot && request.paymentRequest?.status !== PaymentRequestStatus.APPROVED;
   const staffWalkIn = request.origin === "ADMIN" && Boolean(viewerRole) && viewerRole !== Role.HOMEOWNER;
+  const paymentLocked = !staffWalkIn && request.paymentRequiredSnapshot && request.paymentRequest?.status !== PaymentRequestStatus.APPROVED;
   const hasBalance = currentOutstandingBalance > 0.009;
   const balanceLocked = !staffWalkIn && hasBalance && (
     policy === DocumentOutstandingBalancePolicy.BLOCK_DOWNLOAD ||

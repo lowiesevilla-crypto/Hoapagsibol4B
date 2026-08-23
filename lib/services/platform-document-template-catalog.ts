@@ -105,7 +105,7 @@ const workPermitFields = (): FreeDocumentTemplateField[] => [
   { key: "representativeName", label: "Contractor / work lead", fieldType: DocumentFieldType.TEXT, required: true },
   { key: "destination", label: "Work location / area", fieldType: DocumentFieldType.TEXT, required: true },
   { key: "vehicleDetails", label: "Vehicle details", fieldType: DocumentFieldType.TEXTAREA, required: false },
-  { key: "itemsSummary", label: "Tools / materials summary", fieldType: DocumentFieldType.TEXTAREA, required: false },
+  { key: "items", label: "Tools / materials summary", fieldType: DocumentFieldType.TEXTAREA, required: false },
   { key: "remarks", label: "Permit conditions / additional remarks", fieldType: DocumentFieldType.TEXTAREA, required: false },
 ];
 
@@ -820,7 +820,7 @@ function approvedPassTemplate(kind: "GATE" | "MOVE_IN" | "MOVE_OUT"): DocumentTe
   const replacements: Array<[string, string]> = kind === "MOVE_IN"
     ? [["MOVE-IN / MOVE-OUT PASS", "MOVE-IN PASS"], ["MOVE-IN / MOVE-OUT", "MOVE-IN"]]
     : kind === "MOVE_OUT"
-      ? [["MOVE-IN / MOVE-OUT PASS", "MOVE-OUT PASS"], ["MOVE-IN / MOVE-OUT", "MOVE-OUT"]]
+      ? [["MOVE-IN / MOVE-OUT PASS", "MOVE-OUT PASS"], ["MOVE-IN / MOVE-OUT", "MOVE_OUT"]]
       : [];
   const template = cloneTemplate(replaceStringsDeep(source, replacements));
   template.meta = {
@@ -896,7 +896,7 @@ const blueprints: FreeDocumentTemplateBlueprint[] = [
       { key: "scheduledDate", label: "Scheduled date", fieldType: DocumentFieldType.DATE, required: true },
       { key: "startTime", label: "Start time", fieldType: DocumentFieldType.TEXT, required: true },
       { key: "endTime", label: "End time", fieldType: DocumentFieldType.TEXT, required: true },
-      { key: "driverName", label: "Driver / representative", fieldType: DocumentFieldType.TEXT, required: false },
+      { key: "representativeName", label: "Driver / representative", fieldType: DocumentFieldType.TEXT, required: false },
       { key: "vehicleDetails", label: "Vehicle details", fieldType: DocumentFieldType.TEXTAREA, required: false },
       { key: "destination", label: "Destination / gate", fieldType: DocumentFieldType.TEXT, required: false },
       { key: "remarks", label: "Remarks", fieldType: DocumentFieldType.TEXTAREA, required: false },
@@ -915,10 +915,9 @@ const blueprints: FreeDocumentTemplateBlueprint[] = [
       { key: "startTime", label: "Start time", fieldType: DocumentFieldType.TEXT, required: true },
       { key: "endTime", label: "End time", fieldType: DocumentFieldType.TEXT, required: true },
       { key: "representativeName", label: "Representative", fieldType: DocumentFieldType.TEXT, required: false },
-      { key: "movingCompany", label: "Moving company", fieldType: DocumentFieldType.TEXT, required: false },
-      { key: "serviceProvider", label: "Service provider", fieldType: DocumentFieldType.TEXT, required: false },
+      { key: "contractorDetails", label: "Moving company / service provider", fieldType: DocumentFieldType.TEXT, required: false },
       { key: "vehicleDetails", label: "Vehicle details", fieldType: DocumentFieldType.TEXTAREA, required: false },
-      { key: "itemsSummary", label: "Items / materials summary", fieldType: DocumentFieldType.TEXTAREA, required: true },
+      { key: "items", label: "Items / materials summary", fieldType: DocumentFieldType.TEXTAREA, required: true },
       { key: "remarks", label: "Remarks", fieldType: DocumentFieldType.TEXTAREA, required: false },
     ],
     template: approvedPassTemplate("MOVE_IN"),
@@ -935,10 +934,9 @@ const blueprints: FreeDocumentTemplateBlueprint[] = [
       { key: "startTime", label: "Start time", fieldType: DocumentFieldType.TEXT, required: true },
       { key: "endTime", label: "End time", fieldType: DocumentFieldType.TEXT, required: true },
       { key: "representativeName", label: "Representative", fieldType: DocumentFieldType.TEXT, required: false },
-      { key: "movingCompany", label: "Moving company", fieldType: DocumentFieldType.TEXT, required: false },
-      { key: "serviceProvider", label: "Service provider", fieldType: DocumentFieldType.TEXT, required: false },
+      { key: "contractorDetails", label: "Moving company / service provider", fieldType: DocumentFieldType.TEXT, required: false },
       { key: "vehicleDetails", label: "Vehicle details", fieldType: DocumentFieldType.TEXTAREA, required: false },
-      { key: "itemsSummary", label: "Items / materials summary", fieldType: DocumentFieldType.TEXTAREA, required: true },
+      { key: "items", label: "Items / materials summary", fieldType: DocumentFieldType.TEXTAREA, required: true },
       { key: "remarks", label: "Remarks", fieldType: DocumentFieldType.TEXTAREA, required: false },
     ],
     template: approvedPassTemplate("MOVE_OUT"),

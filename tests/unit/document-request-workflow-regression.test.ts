@@ -28,7 +28,9 @@ test("tenant admin office issuance bypasses resident approval and payment gates 
   assert.ok(directIssue >= 0, "admin direct issuance branch must exist");
   assert.ok(residentPaymentGate > directIssue, "admin direct issuance must run before the resident payment gate");
   assert.match(executor.slice(directIssue, residentPaymentGate), /ensureDocumentFeePaymentRequest/);
+  assert.match(executor.slice(directIssue, residentPaymentGate), /persistAdminOfficeApprovalBypass/);
   assert.match(executor.slice(directIssue, residentPaymentGate), /issueOfficialDocument/);
+  assert.match(executor, /approvalRequiredSnapshot: false/);
   assert.match(executor, /action: "ADMIN_OFFICE_DIRECT_ISSUANCE"/);
 
   assert.match(eligibility, /const adminOfficeIssue = request\.origin === "ADMIN" && context\.role !== Role\.HOMEOWNER/);
@@ -48,6 +50,35 @@ test("document fee collection can be recorded after admin issuance while issued 
   assert.match(paymentRequests, /description: "Document Fee"/);
   assert.match(paymentRequests, /financeClassification: "DOCUMENT_FEE"/);
   assert.match(executor, /issuedStatuses\.has\(request\.status\) \|\| request\.currentVersion > 0/);
+});
+
+test("admin can print an office-issued document before fee posting while homeowner access stays gated", async () => {
+  const access = await source("lib/services/document-balance-policy.ts");
+  const adminPage = await source("app/admin/documents/[id]/page.tsx");
+
+  assert.match(access, /const staffWalkIn = request\.origin === "ADMIN"/);
+  assert.match(access, /const paymentLocked = !staffWalkIn && request\.paymentRequiredSnapshot/);
+  assert.match(access, /const balanceLocked = !staffWalkIn && hasBalance/);
+  assert.match(adminPage, /viewerRole: user\.role/);
+  assert.match(adminPage, />Print document<\/a>/);
+  assert.match(adminPage, /No homeowner approval is required/);
+});
+
+test("admin records the actual document fee method, date, reference and returns to the issued document", async () => {
+  const adminPage = await source("app/admin/documents/[id]/page.tsx");
+  const actions = await source("lib/actions/payment-requests.ts");
+
+  assert.match(adminPage, /Record Document Fee Payment/);
+  assert.match(adminPage, /name="paymentDate"/);
+  assert.match(adminPage, /name="paymentMethod"/);
+  assert.match(adminPage, /name="referenceNumber"/);
+  assert.match(adminPage, /Record Payment & Generate Receipt/);
+  assert.match(adminPage, /Collection type/);
+  assert.match(adminPage, /value="Document Fee"/);
+  assert.match(actions, /normalizePaymentReference/);
+  assert.match(actions, /Select a valid payment method/);
+  assert.match(actions, /Payment could not be recorded/);
+  assert.match(actions, /Document Fee payment recorded\. Collection and official receipt were generated/);
 });
 
 test("custom workflow delivery mode keeps payment and approval switches synchronized", async () => {

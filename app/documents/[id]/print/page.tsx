@@ -13,7 +13,7 @@ export default async function PrintDocumentPage({ params }: { params: Promise<{ 
   const { id } = await params;
   const { user, request } = await getAccessibleGeneratedDocument(id, { requireDownload: true });
   const currentVersion = request.versions[0] ?? null;
-  if (currentVersion?.rendererName === "hoahub-safe-html") {
+  if (currentVersion && (request.definition || currentVersion.rendererName === "hoahub-safe-html") && currentVersion.generatedContent.trim()) {
     const source = await getIssuedDocumentRenderSource(id, { requireDownload: true });
     return <DocumentOnlyPrint html={renderIssuedDocumentPrintHtml(source)} />;
   }

@@ -4,6 +4,7 @@ import QRCode from "qrcode";
 import { DocumentOutputFormat } from "@prisma/client";
 import { type DocumentRenderBlock, type DocumentRenderMode, type DocumentRenderModel } from "@/lib/services/document-render-model";
 import { defaultQrConfig, type DocumentRichText, type DocumentTextMarks } from "@/lib/services/document-template-builder";
+import { resolveDocumentSignatureAsset } from "@/lib/services/document-signatory";
 
 /**
  * Label shown on QR blocks in PREVIEW mode.
@@ -17,6 +18,8 @@ const previewQrLabel = "PREVIEW QR — NOT VALID FOR VERIFICATION";
 
 /** Sentinel URL embedded in QR for template designer preview. Never a real token. */
 const PREVIEW_QR_PAYLOAD = "preview://hoahub/document-verification";
+
+type ResolvedSignatureAsset = Awaited<ReturnType<typeof resolveDocumentSignatureAsset>>;
 
 export type DocumentRenderResult = {
   outputFormat: DocumentOutputFormat;
@@ -56,10 +59,14 @@ export const htmlDocumentRenderer: DocumentRenderer = {
     if (errors.length) throw new Error(errors.join(" "));
     const preview = model.renderMode.mode === "preview";
     const qrPayload = preview ? PREVIEW_QR_PAYLOAD : model.renderMode.verificationUrl;
+    const signatureAsset = await resolveSignatureForModel(model);
+    if (!preview && hasRequiredSignatureBlock(model) && !signatureAsset?.signatureUrl) {
+      throw new Error("The authorized signatory must have an uploaded electronic signature before this official document can be issued.");
+    }
     const sections = await Promise.all([
-      renderSection(model.sections.header, "header", qrPayload, model.visualLayout, model.renderMode.mode),
-      renderSection(model.sections.body, "body", qrPayload, model.visualLayout, model.renderMode.mode),
-      renderSection(model.sections.footer, "footer", qrPayload, model.visualLayout, model.renderMode.mode),
+      renderSection(model.sections.header, "header", qrPayload, model.visualLayout, model.renderMode.mode, signatureAsset),
+      renderSection(model.sections.body, "body", qrPayload, model.visualLayout, model.renderMode.mode, signatureAsset),
+      renderSection(model.sections.footer, "footer", qrPayload, model.visualLayout, model.renderMode.mode, signatureAsset),
     ]);
     const html = `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${escapeHtml(model.metadata.title)}</title><style>${documentCss(model)}</style></head><body>${preview ? '<div class="preview-banner">PREVIEW ONLY - NOT AN OFFICIAL DOCUMENT</div>' : ""}<main class="document-page${preview ? " preview" : ""}${model.visualLayout ? " visual-layout" : ""}">${renderWatermark(model)}${sections.join("")}</main></body></html>`;
     return { outputFormat: DocumentOutputFormat.HTML, contentType: "text/html; charset=utf-8", content: html, outputSize: Buffer.byteLength(html, "utf8"), pageCount: null, rendererName: this.name, rendererVersion: this.version, warnings: model.warnings };
@@ -71,12 +78,25 @@ export function getDocumentRenderer(format: DocumentOutputFormat) {
   throw new Error(`Unsupported document output format: ${format}.`);
 }
 
-async function renderSection(blocks: DocumentRenderBlock[], name: string, qrPayload: string | null, visualLayout: boolean, renderMode: DocumentRenderMode["mode"]) {
-  const content = await Promise.all(blocks.filter((block) => block.visible).map((block) => renderBlock(block, qrPayload, visualLayout, renderMode)));
+async function resolveSignatureForModel(model: DocumentRenderModel) {
+  const signatureBlock = [model.sections.header, model.sections.body, model.sections.footer]
+    .flat()
+    .find((block) => block.visible && block.type === "signature" && block.signatureData);
+  return signatureBlock?.signatureData ? resolveDocumentSignatureAsset(signatureBlock.signatureData) : null;
+}
+
+function hasRequiredSignatureBlock(model: DocumentRenderModel) {
+  return [model.sections.header, model.sections.body, model.sections.footer]
+    .flat()
+    .some((block) => block.visible && block.type === "signature" && block.required !== false);
+}
+
+async function renderSection(blocks: DocumentRenderBlock[], name: string, qrPayload: string | null, visualLayout: boolean, renderMode: DocumentRenderMode["mode"], signatureAsset: ResolvedSignatureAsset) {
+  const content = await Promise.all(blocks.filter((block) => block.visible).map((block) => renderBlock(block, qrPayload, visualLayout, renderMode, signatureAsset)));
   return `<section class="section section-${name}${visualLayout ? " visual-section" : ""}">${content.join("")}</section>`;
 }
 
-async function renderBlock(block: DocumentRenderBlock, qrPayload: string | null, visualLayout: boolean, renderMode: DocumentRenderMode["mode"]) {
+async function renderBlock(block: DocumentRenderBlock, qrPayload: string | null, visualLayout: boolean, renderMode: DocumentRenderMode["mode"], signatureAsset: ResolvedSignatureAsset) {
   const style = blockStyle(block, visualLayout);
   const preview = renderMode === "preview";
   if (block.type === "pageBreak") return '<div class="page-break" aria-hidden="true"></div>';
@@ -86,12 +106,27 @@ async function renderBlock(block: DocumentRenderBlock, qrPayload: string | null,
   // FIX: Pass qrPayload into renderQr so it can distinguish real vs preview URLs.
   if (block.type === "qrVerification") return qrPayload ? renderQr(block, await QRCode.toDataURL(qrPayload, { width: 240, margin: block.qr?.quietZone || 1, errorCorrectionLevel: "M" }), style, renderMode) : "";
   if (block.type === "officerList") return renderOfficerList(block, style);
+  if (block.type === "signature") return renderSignatureBlock(block, signatureAsset, style, preview);
   const imageSource = safeText(block.image?.src) || (block.type === "logo" ? safeText(block.content) : "");
   if ((block.type === "logo" || block.type === "image") && imageSource) return `<div class="image-element" style="${style}"><img src="${escapeAttribute(imageSource)}" alt="${escapeAttribute(block.image?.alt ?? block.label ?? "Document image")}" style="${imageStyle(block)}"></div>`;
   if (block.table?.rows?.length) return `<table style="${style}"><tbody>${block.table.rows.map((row) => `<tr>${row.map((cell) => `<td>${escapeHtml(cell)}</td>`).join("")}</tr>`).join("")}</tbody></table>`;
   const tag = ["documentTitle", "tenantName", "heading"].includes(block.type) ? "h1" : "div";
   const content = safeText(block.content);
   return `<${tag} class="block block-${escapeAttribute(block.type)}" style="${style}">${block.richText ? renderRichText(block.richText, preview) : escapeHtml(preview ? previewSafeText(content) : content).replaceAll("\n", "<br>")}</${tag}>`;
+}
+
+function renderSignatureBlock(block: DocumentRenderBlock, signatureAsset: ResolvedSignatureAsset, style: string, preview: boolean) {
+  const name = safeText(block.signatureData?.name || signatureAsset?.fullName).trim();
+  const position = safeText(block.signatureData?.position || signatureAsset?.position).trim();
+  const signatureUrl = safeText(signatureAsset?.signatureUrl).trim();
+  const align = block.style?.align === "left" ? "flex-start" : block.style?.align === "right" ? "flex-end" : "center";
+  const image = signatureUrl
+    ? `<img src="${escapeAttribute(signatureUrl)}" alt="${escapeAttribute(`${name || "Authorized signatory"} electronic signature`)}" style="display:block;max-width:92%;max-height:62%;object-fit:contain;object-position:center;margin:0 auto 2px;">`
+    : preview
+      ? '<div style="display:grid;min-height:45%;place-items:center;width:92%;border-bottom:1px solid #94a3b8;color:#94a3b8;font-size:7pt;font-style:italic;">Electronic signature preview</div>'
+      : "";
+  const caption = `<figcaption style="display:flex;flex-direction:column;align-items:${align};width:100%;line-height:1.15;"><strong>${escapeHtml(name || "Authorized HOA Officer")}</strong><span style="font-size:.82em;text-transform:uppercase;">${escapeHtml(position || "Authorized Signatory")}</span></figcaption>`;
+  return `<figure class="signature-block" style="${style};display:flex;flex-direction:column;align-items:${align};justify-content:flex-end;gap:1px;margin:0;">${image}${caption}</figure>`;
 }
 
 /**

@@ -446,7 +446,18 @@ function validateCatalogOrThrow() {
 }
 
 function hashDefinition(value: unknown) {
-  return `sha256:${crypto.createHash("sha256").update(JSON.stringify(value)).digest("hex")}`;
+  return `sha256:${crypto.createHash("sha256").update(stableJsonStringify(value)).digest("hex")}`;
+}
+
+function stableJsonStringify(value: unknown): string {
+  if (value === null) return "null";
+  if (Array.isArray(value)) return `[${value.map((item) => stableJsonStringify(item)).join(",")}]`;
+  if (typeof value === "object") {
+    const record = value as Record<string, unknown>;
+    return `{${Object.keys(record).sort().map((key) => `${JSON.stringify(key)}:${stableJsonStringify(record[key])}`).join(",")}}`;
+  }
+  if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") return JSON.stringify(value);
+  return "null";
 }
 
 function jsonObject(value: Prisma.JsonValue | null | undefined): Record<string, Prisma.JsonValue> | null {

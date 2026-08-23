@@ -2,6 +2,7 @@
 
 import { useRef, useState } from "react";
 import { useFormStatus } from "react-dom";
+import { reissueGeneratedDocumentAction } from "@/lib/actions/document-reissue";
 
 export function DocumentReviewActions({ generated = false }: { generated?: boolean }) {
   const operation = useRef<HTMLInputElement>(null);
@@ -21,7 +22,7 @@ export function DocumentReviewActions({ generated = false }: { generated?: boole
   };
   return <div className="space-y-3">
     <input ref={operation} type="hidden" name="operation" defaultValue={generated ? "regenerate" : "review"} />
-    {generated ? <div className="flex flex-wrap gap-2"><button type="submit" className="btn-primary" disabled={pending} onClick={choose("regenerate", "Save these changes and regenerate the active document? The current version will remain archived.")}>{pending ? "Working..." : "Save & regenerate"}</button></div> : <>
+    {generated ? <div className="flex flex-wrap gap-2"><button type="submit" formAction={reissueGeneratedDocumentAction} className="btn-primary" disabled={pending} onClick={choose("regenerate", "Save these changes and reissue the document from its captured published visual template? The current immutable version will remain preserved.")}>{pending ? "Working..." : "Save & reissue using template"}</button></div> : <>
       <div className="flex flex-wrap gap-2">
         <button type="submit" className="btn-secondary" disabled={pending} onClick={choose("review")}>{pending ? "Working..." : "Save review"}</button>
         <button type="submit" className="btn-primary" disabled={pending} onClick={choose("approve", "Approve and generate this official document now?")}>{pending ? "Working..." : "Approve & generate"}</button>

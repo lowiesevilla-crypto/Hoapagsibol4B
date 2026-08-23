@@ -35,7 +35,7 @@ export async function reissueGeneratedDocumentAction(formData: FormData) {
       : "/admin/documents";
   const fail = (message: string): never => redirect(`${returnPath}?error=${encodeURIComponent(message)}`);
 
-  if (!id) fail("Document request is required.");
+  if (!id) redirect(`${returnPath}?error=${encodeURIComponent("Document request is required.")}`);
 
   const request = await prisma.documentRequest.findFirst({
     where: { id, tenantId: admin.tenantId },
@@ -45,7 +45,7 @@ export async function reissueGeneratedDocumentAction(formData: FormData) {
       versions: { orderBy: { version: "desc" }, take: 1 },
     },
   });
-  if (!request) fail("Document request not found.");
+  if (!request) redirect(`${returnPath}?error=${encodeURIComponent("Document request not found.")}`);
 
   // Preserve legacy documents on their existing compatibility path. The defect
   // being fixed here is specific to definition-backed WYSIWYG templates.
@@ -56,10 +56,10 @@ export async function reissueGeneratedDocumentAction(formData: FormData) {
 
   const currentVersion = request.versions[0] ?? null;
   if (!currentVersion || !request.generatedContent || !request.documentNumber || request.archivedAt) {
-    fail("Only active issued documents with an immutable version can be reissued.");
+    redirect(`${returnPath}?error=${encodeURIComponent("Only active issued documents with an immutable version can be reissued.")}`);
   }
   if (!request.definition.allowRegeneration) {
-    fail("This document definition does not allow reissue. Enable regeneration/reissue in the Document Definition first.");
+    redirect(`${returnPath}?error=${encodeURIComponent("This document definition does not allow reissue. Enable regeneration/reissue in the Document Definition first.")}`);
   }
 
   const purpose = clean(formData.get("purpose")) ?? request.purpose;

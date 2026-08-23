@@ -165,7 +165,9 @@ Implementation branch: `feat/platform-free-document-template-library-20260823`. 
 
 Platform route: `/platform/document-management/templates`.
 
-The platform library provides these professional starting documents:
+Library package version: `v2`.
+
+The platform library provides these eleven professional starting documents:
 
 - Certificate of Residency
 - Certificate of Indigency
@@ -177,11 +179,21 @@ The platform library provides these professional starting documents:
 - Gate Pass
 - Move-In Pass
 - Move-Out Pass
+- Work Permit
+
+Approved visual/functional standard:
+
+- Certificate of Residency, Certificate of Indigency, Certificate of Good Standing, Clearance Certificate, Payment Certification, Construction Bond Certification, and Contractor Bond Certification use formal legal/institutional A4 layouts with a restrained navy/gold identity, structured information/status panels, official numbering, signature area, security text, watermarking, and QR validation.
+- Certificate typography prioritizes print readability: legal headings use Georgia/Times New Roman where appropriate, operational labels use Arial, the library enforces a 7pt minimum for intentionally rendered legal/permit text, and principal body/certification text is generally 10.5pt or larger.
+- Good Standing and Clearance use prominent status bands; Payment Certification has an account/payment-detail panel; construction/contractor bond certifications have structured compliance-record panels.
+- Gate Pass, Move-In Pass, and Move-Out Pass reuse the reviewed professional two-copy A4 operational layouts for Security/Holder use and QR validation.
+- Work Permit is an operational A4 authorization containing permit number, property/requestor, contractor/work lead, approved date/time, approved work scope/location, vehicle/tools/material information, permit conditions, authorization/signatory, and QR validation.
+- Library field keys must map to the existing generation runtime. Gate driver/representative uses `representativeName`; Move-In/Move-Out provider data uses `contractorDetails`; item/material text uses `items` so the runtime resolves `request.itemsSummary` correctly.
 
 Assignment contract:
 
 1. Platform Admin explicitly selects the target tenant. Cross-tenant bulk assignment without explicit target is prohibited.
-2. Templates are professional A4 layouts with official document numbering and QR verification. Gate/Move passes reuse the reviewed two-copy A4 pass layouts.
+2. Templates are professional A4 layouts with official document numbering and QR verification. Gate/Move passes use the reviewed two-copy A4 pass layouts; Work Permit uses a dedicated operational authorization layout.
 3. Library assignments use `DocumentTemplateOwnership.TENANT` and an editable `DocumentTemplateSet`. They are **not** immutable CERTIFIED templates. This is intentional: after assignment, authorized tenant administrators may continue configuring the Document Definition, workflow, approver, fee/payment settings, policies, signatory, fields, and create/edit later tenant template versions.
 4. The Platform Admin UI offers `Apply recommended workflow`. When checked, the library installs/refreshes the recommended Approval Required starting workflow. When cleared, an existing tenant workflow is preserved. If the definition has no usable workflow, a safe approval workflow is still created so assignment does not leave an incomplete request path.
 5. Existing tenant fields are preserved. Library assignment adds only missing recommended fields; it does not delete tenant fields or historical field evidence.
@@ -192,6 +204,7 @@ Assignment contract:
 10. All assignment/upgrade operations are audited with source, library version, template version, workflow choice, retired version, and field additions.
 11. Default library workflow has zero document fee, but the tenant may later configure the definition/workflow according to normal tenant authority. Platform assignment is a starting configuration, not permanent ownership of tenant policy.
 12. Template packages must validate through `validateTemplateDefinition`; QR-enabled definitions require sequence-based numbering. Library templates avoid mandatory preconfigured signatory dependency so assignment does not fail for a tenant that has not yet configured officers; tenant signatory can be configured afterward.
+13. Do not reduce font sizes merely to force content to fit. Preserve the approved readability floor, use layout/spacing changes instead, and keep body text suitable for printed A4 output.
 
 Primary regression surface:
 

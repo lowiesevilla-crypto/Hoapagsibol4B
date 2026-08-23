@@ -820,7 +820,7 @@ function approvedPassTemplate(kind: "GATE" | "MOVE_IN" | "MOVE_OUT"): DocumentTe
   const replacements: Array<[string, string]> = kind === "MOVE_IN"
     ? [["MOVE-IN / MOVE-OUT PASS", "MOVE-IN PASS"], ["MOVE-IN / MOVE-OUT", "MOVE-IN"]]
     : kind === "MOVE_OUT"
-      ? [["MOVE-IN / MOVE-OUT PASS", "MOVE-OUT PASS"], ["MOVE-IN / MOVE-OUT", "MOVE_OUT"]]
+      ? [["MOVE-IN / MOVE-OUT PASS", "MOVE-OUT PASS"], ["MOVE-IN / MOVE-OUT", "MOVE-OUT"]]
       : [];
   const template = cloneTemplate(replaceStringsDeep(source, replacements));
   template.meta = {

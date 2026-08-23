@@ -20,6 +20,11 @@ export type DocumentRenderBlock = Omit<DocumentTemplateBlock, "content" | "text"
   content: string;
   table?: { rows: string[][] };
   richText?: DocumentRichText;
+  signatureData?: {
+    tenantId: string;
+    name: string;
+    position: string;
+  } | null;
   officerListData?: {
     heading: string;
     term: string | null;
@@ -161,7 +166,8 @@ export function buildDocumentRenderModel(input: {
     if (!omit) collect(result);
     const table = block.table ? { rows: block.table.rows.map((row) => row.map((cell) => { const cellResult = resolveText(cell); collect(cellResult); return cellResult.resolvedContent; })) } : undefined;
     const imageSource = resolveImageSource(block, input.placeholderContext);
-    return { ...block, image: imageSource ? { ...block.image, src: imageSource } : block.image, visible: block.visible && !omit, content: omit ? "" : result.resolvedContent, richText: richTextResult?.richText, table };
+    const signatureData = block.type === "signature" ? resolveSignatureData(input.placeholderContext) : undefined;
+    return { ...block, image: imageSource ? { ...block.image, src: imageSource } : block.image, visible: block.visible && !omit, content: omit ? "" : result.resolvedContent, richText: richTextResult?.richText, table, signatureData };
   });
   const page = input.mode === "PREVIEW"
     ? { ...template.page, watermark: { ...template.page.watermark, enabled: true, text: "PREVIEW - NOT VALID FOR ISSUANCE", opacity: 0.14 } }
@@ -235,6 +241,13 @@ function resolveImageSource(block: DocumentTemplateBlock, context: PlaceholderRe
   const source = block.image?.src || block.content || (block.type === "logo" && block.binding ? `{{${block.binding}}}` : "");
   if (source === "{{tenant.logo}}" || (!block.image?.src && (block.binding === "tenant.logo" || block.type === "logo"))) return context.tenant?.logo || undefined;
   return block.image?.src;
+}
+
+function resolveSignatureData(context: PlaceholderResolutionContext) {
+  const tenantId = safeText(context.tenantId).trim();
+  const name = safeText(context.signatory?.name).trim();
+  const position = safeText(context.signatory?.position).trim();
+  return tenantId && name && position ? { tenantId, name, position } : null;
 }
 
 function resolveOfficerList(config: NonNullable<DocumentTemplateBlock["officerList"]>, context: PlaceholderResolutionContext) {

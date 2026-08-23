@@ -59,7 +59,9 @@ export const htmlDocumentRenderer: DocumentRenderer = {
     if (errors.length) throw new Error(errors.join(" "));
     const preview = model.renderMode.mode === "preview";
     const qrPayload = preview ? PREVIEW_QR_PAYLOAD : model.renderMode.verificationUrl;
-    const signatureAsset = await resolveSignatureForModel(model);
+    // Never expose a stored officer signature in a preview. The real electronic
+    // signature is resolved only while rendering an official issued document.
+    const signatureAsset = preview ? null : await resolveSignatureForModel(model);
     if (!preview && hasRequiredSignatureBlock(model) && !signatureAsset?.signatureUrl) {
       throw new Error("The authorized signatory must have an uploaded electronic signature before this official document can be issued.");
     }
@@ -120,10 +122,10 @@ function renderSignatureBlock(block: DocumentRenderBlock, signatureAsset: Resolv
   const position = safeText(block.signatureData?.position || signatureAsset?.position).trim();
   const signatureUrl = safeText(signatureAsset?.signatureUrl).trim();
   const align = block.style?.align === "left" ? "flex-start" : block.style?.align === "right" ? "flex-end" : "center";
-  const image = signatureUrl
-    ? `<img src="${escapeAttribute(signatureUrl)}" alt="${escapeAttribute(`${name || "Authorized signatory"} electronic signature`)}" style="display:block;max-width:92%;max-height:62%;object-fit:contain;object-position:center;margin:0 auto 2px;">`
-    : preview
-      ? '<div style="display:grid;min-height:45%;place-items:center;width:92%;border-bottom:1px solid #94a3b8;color:#94a3b8;font-size:7pt;font-style:italic;">Electronic signature preview</div>'
+  const image = preview
+    ? '<div style="display:grid;min-height:45%;place-items:center;width:92%;border-bottom:1px solid #94a3b8;color:#94a3b8;font-size:7pt;font-style:italic;">Electronic signature appears only on the issued document</div>'
+    : signatureUrl
+      ? `<img src="${escapeAttribute(signatureUrl)}" alt="${escapeAttribute(`${name || "Authorized signatory"} electronic signature`)}" style="display:block;max-width:92%;max-height:62%;object-fit:contain;object-position:center;margin:0 auto 2px;">`
       : "";
   const caption = `<figcaption style="display:flex;flex-direction:column;align-items:${align};width:100%;line-height:1.15;"><strong>${escapeHtml(name || "Authorized HOA Officer")}</strong><span style="font-size:.82em;text-transform:uppercase;">${escapeHtml(position || "Authorized Signatory")}</span></figcaption>`;
   return `<figure class="signature-block" style="${style};display:flex;flex-direction:column;align-items:${align};justify-content:flex-end;gap:1px;margin:0;">${image}${caption}</figure>`;

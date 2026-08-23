@@ -12,10 +12,13 @@ test("documents without an explicit signatory default to the active tenant presi
 
   assert.match(eligibility, /findDefaultDocumentPresident/);
   assert.match(eligibility, /request\.definition && !request\.definition\.signatoryOfficer/);
-  assert.match(eligibility, /request\.definition\.signatoryOfficer = await findDefaultDocumentPresident\(context\.tenantId\)/);
+  assert.match(eligibility, /if \(president\) request\.definition\.signatoryOfficer = president/);
+  assert.match(eligibility, /templateRequiresDocumentSignature/);
+  assert.match(eligibility, /no active President configured for the current term/);
   assert.match(signatory, /isPresidentPosition/);
   assert.match(signatory, /vice\|past\|former\|assistant/);
   assert.match(signatory, /homeowners association president/);
+  assert.match(signatory, /templateRequiresDocumentSignature/);
 });
 
 test("signature blocks resolve the selected officer identity and render the uploaded signature image", async () => {

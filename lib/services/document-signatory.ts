@@ -26,6 +26,18 @@ export function selectDefaultDocumentPresident<T extends Pick<OrganizationOffice
     .find((officer) => isPresidentPosition(officer.position)) ?? null;
 }
 
+export function templateRequiresDocumentSignature(value: unknown) {
+  const template = record(value);
+  if (record(template.meta).requiresSignatory === true) return true;
+  const directBlocks = Array.isArray(template.blocks) ? template.blocks : [];
+  const sections = record(template.sections);
+  const sectionBlocks = [sections.header, sections.body, sections.footer].flatMap((items) => Array.isArray(items) ? items : []);
+  return [...directBlocks, ...sectionBlocks].some((candidate) => {
+    const block = record(candidate);
+    return block.type === "signature" && block.visible !== false && block.required !== false;
+  });
+}
+
 export async function findDefaultDocumentPresident(tenantId: string, at = new Date()) {
   const officers = await platformPrisma.organizationOfficer.findMany({
     where: {
@@ -70,4 +82,8 @@ function normalizePosition(value: string) {
     .replace(/[^a-z0-9]+/g, " ")
     .replace(/\s+/g, " ")
     .trim();
+}
+
+function record(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
 }

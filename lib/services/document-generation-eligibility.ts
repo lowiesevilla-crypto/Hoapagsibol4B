@@ -42,7 +42,7 @@ export async function loadGenerationRequest(context: DocumentExecutionContext, r
     const president = await findDefaultDocumentPresident(context.tenantId);
     if (president) request.definition.signatoryOfficer = president;
     else if (templateRequiresDocumentSignature(request.definition.assignedTemplateVersion?.definitionJson)) {
-      throw new DocumentRuntimeError("SIGNATORY_MISSING", "A required signature document cannot be generated because this tenant has no active President configured for the current term.");
+      throw new DocumentRuntimeError("REQUEST_INCOMPLETE", "A required signature document cannot be generated because this tenant has no active President configured for the current term.");
     }
   }
   return request;

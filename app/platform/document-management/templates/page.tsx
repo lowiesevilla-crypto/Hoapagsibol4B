@@ -55,7 +55,7 @@ export default async function PlatformFreeDocumentTemplateLibraryPage({ searchPa
       </div>
 
       <aside className="card border-pine-100 bg-pine-50/40">
-        <div className="flex items-start gap-3"><span className="grid size-11 shrink-0 place-items-center rounded-2xl bg-white text-pine-700"><SlidersHorizontal className="size-5" /></span><div><h2 className="font-black text-slate-950">Tenant remains in control</h2><p className="mt-1 text-sm leading-6 text-slate-600">The assigned template is tenant-owned and editable. After assignment, authorized tenant administrators can still change the document definition, fields, workflow, approver, fee/payment policy, validity, signatory, and create their own template versions.</p></div></div>
+        <div className="flex items-start gap-3"><span className="grid size-11 shrink-0 place-items-center rounded-2xl bg-white text-pine-700"><SlidersHorizontal className="size-5" /></span><div><h2 className="font-black text-slate-950">Tenant remains in control</h2><p className="mt-1 text-sm leading-6 text-slate-600">The assigned template is tenant-owned and editable. Tenant administrators can still change the document definition, fields, workflow, approver, fee/payment policy, validity, signatory, and create their own template versions when authorized.</p></div></div>
       </aside>
     </section>
 

@@ -107,3 +107,12 @@ test("assignment creates tenant-editable versions, retires the previously assign
   assert.match(page, /Tenant administrators can still change the document definition/);
   assert.match(page, /Clear to preserve an existing tenant workflow/);
 });
+
+test("free template assignment validates the stored template payload instead of trusting preview metadata alone", async () => {
+  const service = await readFile(servicePath, "utf8");
+  assert.match(service, /definitionJson: asJson\(blueprint\.template\)/);
+  assert.match(service, /hashDefinition\(definition\.assignedTemplateVersion\.definitionJson\)/);
+  assert.match(service, /hashDefinition\(assigned\.definitionJson\)/);
+  assert.match(service, /assignedContentHash === contentHash/);
+  assert.match(service, /repairedContentMismatch: repairingContentMismatch/);
+});

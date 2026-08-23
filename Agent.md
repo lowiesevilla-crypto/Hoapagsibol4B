@@ -1,6 +1,6 @@
 # HOAHub Agent Context
 
-Last updated: 2026-08-23
+Last updated: 2026-08-24
 
 ## Purpose
 
@@ -225,6 +225,18 @@ Complaint remains the intake/operational layer; formal grievance, verification, 
 
 Payroll, salary, deductions, loans/cash advances, corrections, and payslips are confidential tenant data. Employee portal access does not imply payroll administration. Finalization/paid state remains server-authoritative and auditable.
 
+### Payroll Requirement Traceability
+
+- Canonical human-readable requirements: `docs/payroll/PAYROLL_REQUIREMENTS.md`.
+- Canonical machine-readable implementation ledger: `docs/payroll/PAYROLL_IMPLEMENTATION_STATUS.json`.
+- Controlled statuses are `NOT_STARTED`, `IN_PROGRESS`, `BLOCKED`, `IMPLEMENTED`, `VERIFIED`, and `DEFERRED`. Only `VERIFIED` means the requirement is complete with linked exact-head acceptance evidence.
+- Every payroll implementation task and every payroll function added or materially changed by the payroll initiative must map to stable `PAY-*` requirement IDs. Changed payroll functions must include nearby `@requirement` and `@status` tags.
+- AI agents must read and update the payroll implementation ledger in the same change whenever implementation status, blockers, code paths, or evidence change. Never infer `VERIFIED` from code presence alone.
+- Payroll records created by Server Actions must explicitly carry the authenticated tenant ID where the schema permits it; do not rely on static/default tenant values for new payroll, payslip, overtime, loan, deduction, access, calendar, schedule, or archive data.
+- Opaque payroll/employee/attendance/loan/deduction/schedule IDs must be resolved under authenticated tenant scope before mutation.
+- `LEGACY_COMPATIBILITY_POLICY` in `lib/services/payroll.ts` exists only to preserve pre-existing behavior while effective-dated policies are being implemented. Its values are not an assertion of current Philippine statutory law.
+- Effective-dated employee compensation/pay-frequency/attendance policy persistence, expanded lifecycle/corrections, effective-dated statutory tables, and idempotent Financial Engine posting/outbox remain incomplete until their registry entries become `VERIFIED`.
+
 ## AI Governance
 
 AI is commercially/governance/permission controlled. Staff Copilot is tenant scoped and permission scoped; homeowner AI may use approved knowledge plus only that homeowner's authorized data. AI may draft/explain but is not final approval, publication, payment, or grievance authority unless a separately authorized workflow explicitly exists.
@@ -271,4 +283,5 @@ Unless a later merged change updates this file, these remain pending:
 - Homeowner self-service advance Monthly Dues by selecting future From/To months with server-calculated effective Billing Rules.
 - Detailed finance reporting by successful payment posting path/provider rail.
 - Homeowner rental asset browsing/reservation with concurrency-safe ownership and Admin reserved-homeowner visibility.
+- Payroll effective-dated compensation/pay-frequency/attendance policy persistence, expanded correction/revision lifecycle, verified statutory rule sets, and idempotent Financial Engine posting/outbox while their payroll registry entries are not `VERIFIED`.
 - Any issue/task/old-PR requirement not present in current `main` merely because it exists in documentation or conversation.

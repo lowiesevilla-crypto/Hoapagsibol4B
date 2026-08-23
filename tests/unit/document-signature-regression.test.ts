@@ -21,7 +21,7 @@ test("documents without an explicit signatory default to the active tenant presi
   assert.match(signatory, /templateRequiresDocumentSignature/);
 });
 
-test("signature blocks resolve the selected officer identity and render the uploaded signature image", async () => {
+test("signature blocks resolve the selected officer identity and render the uploaded signature image only on official documents", async () => {
   const model = await source("lib/services/document-render-model.ts");
   const renderer = await source("lib/services/document-renderers.ts");
 
@@ -30,6 +30,8 @@ test("signature blocks resolve the selected officer identity and render the uplo
   assert.match(renderer, /resolveDocumentSignatureAsset/);
   assert.match(renderer, /block\.type === "signature"/);
   assert.match(renderer, /signatureAsset\?\.signatureUrl/);
+  assert.match(renderer, /const signatureAsset = preview \? null : await resolveSignatureForModel\(model\)/);
+  assert.match(renderer, /Electronic signature appears only on the issued document/);
   assert.match(renderer, /electronic signature before this official document can be issued/);
 });
 

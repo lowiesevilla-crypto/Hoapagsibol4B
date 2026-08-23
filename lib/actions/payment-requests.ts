@@ -1,6 +1,6 @@
 "use server";
 
-import { CollectionType, DocumentDefinitionStatus, DocumentRequestStatus, NotificationType, PaymentRequestStatus, PaymentRequestType, Role } from "@prisma/client";
+import { CollectionType, DocumentDefinitionStatus, DocumentRequestStatus, NotificationType, PaymentMethod, PaymentRequestStatus, PaymentRequestType, Role } from "@prisma/client";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { requireUser } from "@/lib/auth";
@@ -192,6 +192,27 @@ export async function approvePaymentRequestAction(formData: FormData) {
   ]);
   const parsed = paymentReviewSchema.safeParse(Object.fromEntries(formData.entries()));
   if (!parsed.success) throw new Error(parsed.error.issues[0]?.message || "Invalid review details.");
+  const pending = await prisma.paymentRequest.findFirst({
+    where: { id: parsed.data.id, tenantId: admin.tenantId },
+    include: { documentRequest: { select: { id: true, origin: true } } },
+  });
+  if (!pending) throw new Error("Payment request not found.");
+  if (pending.type === PaymentRequestType.DOCUMENT_FEE && pending.documentRequest?.origin === "ADMIN") {
+    const methodText = String(formData.get("paymentMethod") || pending.method).trim();
+    const method = Object.values(PaymentMethod).includes(methodText as PaymentMethod) ? methodText as PaymentMethod : pending.method;
+    const referenceNumber = String(formData.get("referenceNumber") || "").trim() || null;
+    const paymentDateText = String(formData.get("paymentDate") || "").trim();
+    const paymentDate = /^\d{4}-\d{2}-\d{2}$/.test(paymentDateText) ? new Date(`${paymentDateText}T00:00:00.000Z`) : pending.paymentDate;
+    if (referenceNumber) {
+      const duplicatePayment = await prisma.payment.findFirst({ where: { tenantId: admin.tenantId, referenceNumber, status: "ACTIVE" }, select: { id: true } });
+      const duplicateCollection = await prisma.collection.findFirst({ where: { tenantId: admin.tenantId, referenceNumber }, select: { id: true } });
+      if (duplicatePayment || duplicateCollection) throw new Error("This payment reference number has already been recorded.");
+    }
+    await prisma.paymentRequest.update({
+      where: { id: pending.id },
+      data: { method, referenceNumber, paymentDate },
+    });
+  }
   await approvePaymentRequest(parsed.data.id, admin.id, parsed.data.reviewRemarks, admin.tenantId);
   const approved = await prisma.paymentRequest.findFirst({
     where: { id: parsed.data.id, tenantId: admin.tenantId },
@@ -204,7 +225,7 @@ export async function approvePaymentRequestAction(formData: FormData) {
     revalidatePath(`/documents/${approved.documentRequestId}`);
     revalidatePath(`/documents/${approved.documentRequestId}/print`);
   }
-  redirect("/admin/payments/requests?success=approved&message=QR%20payment%20approved%20and%20officially%20recorded.");
+  redirect("/admin/payments/requests?success=approved&message=Payment%20approved%20and%20officially%20recorded.");
 }
 
 export async function rejectPaymentRequestAction(formData: FormData) {

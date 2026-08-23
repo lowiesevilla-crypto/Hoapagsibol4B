@@ -34,18 +34,19 @@ type DefinitionChoice = {
 type HomeownerResult = { id: string; name: string; email: string; accountNumber: string; phone: string; block: string; lot: string; address: string };
 type HouseholdMemberResult = { id: string; fullName: string; relationship: string; birthDate: string | null; civilStatus: string | null; nationality: string | null; address: string | null };
 
-export function ManualDocumentForm({ officers, definitions }: { officers: Choice[]; definitions: DefinitionChoice[] }) {
+export function ManualDocumentForm({ officers: _officers, definitions }: { officers: Choice[]; definitions: DefinitionChoice[] }) {
   const [definitionId, setDefinitionId] = useState(definitions[0]?.id || "");
   const [query, setQuery] = useState("");
   const [homeowners, setHomeowners] = useState<HomeownerResult[]>([]);
   const [homeownerId, setHomeownerId] = useState("");
+  const [selectedHomeownerRecord, setSelectedHomeownerRecord] = useState<HomeownerResult | null>(null);
   const [members, setMembers] = useState<HouseholdMemberResult[]>([]);
   const [subjectType, setSubjectType] = useState<"SELF" | "HOUSEHOLD_MEMBER">("SELF");
   const [subjectMemberId, setSubjectMemberId] = useState("");
   const [loadingHomeowners, setLoadingHomeowners] = useState(false);
   const [loadingMembers, setLoadingMembers] = useState(false);
   const selected = definitions.find((definition) => definition.id === definitionId);
-  const selectedHomeowner = homeowners.find((homeowner) => homeowner.id === homeownerId);
+  const selectedHomeowner = selectedHomeownerRecord ?? homeowners.find((homeowner) => homeowner.id === homeownerId) ?? null;
   const canUseHouseholdMember = Boolean(selected?.householdMemberEnabled && members.length);
 
   useEffect(() => {
@@ -79,20 +80,21 @@ export function ManualDocumentForm({ officers, definitions }: { officers: Choice
 
   const selectedSummary = useMemo(() => selected ? [
     ["Document type", selected.label],
-    ["Workflow", selected.workflow],
+    ["Homeowner workflow", selected.workflow],
     ["Fee", selected.fee],
     ["Balance policy", selected.balancePolicy],
-    ["Approval", selected.approvalRequired ? "Required" : "Not required"],
+    ["Homeowner approval rule", selected.approvalRequired ? "Required for homeowner requests" : "Not required"],
+    ["Admin issuance", "Direct issue - no request approval"],
+    ["Admin fee handling", selected.fee === "Free" ? "No collection required" : "Issue/print first, then record linked Document Fee collection"],
     ["Household subjects", selected.householdMemberEnabled ? "Enabled" : "Disabled"],
     ["Template name", selected.templateName],
     ["Published template", selected.template],
     ["Template status", selected.templateStatus],
     ["Last published", selected.templatePublishedAt ? new Date(selected.templatePublishedAt).toLocaleDateString() : "Not recorded"],
-    ["Expected next step", selected.nextStep],
   ] : [], [selected]);
 
   return <form action={generateManualDocumentAction} className="card max-w-6xl">
-    <div className="mb-6"><h2 className="text-lg font-black">Walk-In / Office Request</h2><p className="text-sm text-slate-500">Create a tenant-scoped office-assisted request using the selected document definition and official workflow.</p></div>
+    <div className="mb-6"><h2 className="text-lg font-black">Tenant Admin Document Issuance</h2><p className="text-sm text-slate-500">Search and select a homeowner, choose any walk-in-enabled document definition, review or edit the populated information, then issue the official document directly. Tenant Admin issuance does not wait for the homeowner approval workflow.</p></div>
     {!definitions.length ? <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm font-bold text-amber-900">No walk-in document types are currently available. Review Document Type configuration, template publication, and Walk-In availability.</div> : <>
       <input type="hidden" name="homeownerId" value={homeownerId} />
       <input type="hidden" name="subjectType" value={subjectType} />
@@ -105,7 +107,7 @@ export function ManualDocumentForm({ officers, definitions }: { officers: Choice
             </div>
           </Field>
           <div className="max-h-72 overflow-auto rounded-xl border border-slate-200">
-            {homeowners.map((homeowner) => <button key={homeowner.id} type="button" onClick={() => setHomeownerId(homeowner.id)} className={`grid w-full gap-1 border-b border-slate-100 p-3 text-left last:border-b-0 hover:bg-pine-50 ${homeownerId === homeowner.id ? "bg-pine-50" : "bg-white"}`}>
+            {homeowners.map((homeowner) => <button key={homeowner.id} type="button" onClick={() => { setHomeownerId(homeowner.id); setSelectedHomeownerRecord(homeowner); }} className={`grid w-full gap-1 border-b border-slate-100 p-3 text-left last:border-b-0 hover:bg-pine-50 ${homeownerId === homeowner.id ? "bg-pine-50" : "bg-white"}`}>
               <span className="flex items-center justify-between gap-3 font-black"><span>{homeowner.name}</span>{homeownerId === homeowner.id && <Check className="size-4 text-pine-700" />}</span>
               <span className="font-mono text-xs font-bold text-slate-500">{homeowner.accountNumber}</span>
               <span className="text-xs text-slate-500">Block {homeowner.block}, Lot {homeowner.lot} · {homeowner.email} · {homeowner.phone}</span>
@@ -115,12 +117,10 @@ export function ManualDocumentForm({ officers, definitions }: { officers: Choice
           </div>
           <div className="grid gap-4 md:grid-cols-2">
             <Field label="Document type"><select className="field" name="definitionId" value={definitionId} onChange={(event) => setDefinitionId(event.target.value)} required>{definitions.map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}</select></Field>
-            <Field label="Office request reason"><input className="field" name="onBehalfReason" placeholder="Why the HOA office is creating this request" required /></Field>
-            <Officer label="Approving officer" name="approvedByOfficerId" officers={officers} />
-            <Officer label="Processed by" name="processedByOfficerId" officers={officers} />
+            <Field label="Office issuance reason"><input className="field" name="onBehalfReason" placeholder="Reason for office-assisted issuance" required /></Field>
           </div>
           <section className="rounded-xl border border-slate-200 bg-slate-50 p-3">
-            <div className="flex items-center gap-2 font-black"><UserRound className="size-4" /> Request subject</div>
+            <div className="flex items-center gap-2 font-black"><UserRound className="size-4" /> Document subject</div>
             <div className="mt-3 grid gap-2 sm:grid-cols-2">
               <label className="flex min-h-12 items-center gap-3 rounded-xl border border-slate-200 bg-white px-3 font-bold"><input type="radio" checked={subjectType === "SELF"} onChange={() => setSubjectType("SELF")} /> Homeowner</label>
               <label className="flex min-h-12 items-center gap-3 rounded-xl border border-slate-200 bg-white px-3 font-bold"><input type="radio" checked={subjectType === "HOUSEHOLD_MEMBER"} onChange={() => setSubjectType("HOUSEHOLD_MEMBER")} disabled={!canUseHouseholdMember} /> Household / family member</label>
@@ -129,22 +129,23 @@ export function ManualDocumentForm({ officers, definitions }: { officers: Choice
             {loadingMembers && <p className="mt-2 text-xs font-bold text-slate-500">Loading household members...</p>}
             {selectedHomeowner && !members.length && !loadingMembers && <p className="mt-2 text-xs font-bold text-slate-500">No validated and active household/family member is available for this homeowner.</p>}
           </section>
-          {selected?.fields.length ? <section className="grid gap-4 md:grid-cols-2">{selected.fields.map((field) => <ConfiguredField key={`${selected.id}-${field.key}`} field={field} />)}</section> : <p className="rounded-xl bg-amber-50 p-3 text-sm font-bold text-amber-900">This document has no active dynamic fields. Confirm the definition before submitting.</p>}
+          {selectedHomeowner && <div className="rounded-xl border border-blue-100 bg-blue-50 p-3 text-sm font-semibold text-blue-950">Known homeowner information is populated into matching document fields below. Review and edit any field before issuing; the submitted values are snapshotted into the official document request.</div>}
+          {selected?.fields.length ? <section className="grid gap-4 md:grid-cols-2">{selected.fields.map((field) => <ConfiguredField key={`${selected.id}-${homeownerId}-${field.key}`} field={field} homeowner={selectedHomeowner} />)}</section> : <p className="rounded-xl bg-amber-50 p-3 text-sm font-bold text-amber-900">This document has no active dynamic fields. Confirm the definition before submitting.</p>}
         </section>
         <aside className="space-y-4">
-          <section className="rounded-xl border border-pine-200 bg-pine-50 p-4" aria-live="polite"><h3 className="font-black">Request policy summary</h3><div className="mt-3 grid gap-3 text-sm">{selectedSummary.map(([label, value]) => <Summary key={label} label={label} value={value} />)}</div></section>
-          {selectedHomeowner && <section className="rounded-xl border border-slate-200 bg-white p-4"><h3 className="font-black">Selected homeowner</h3><dl className="mt-3 space-y-2 text-sm"><Summary label="Name" value={selectedHomeowner.name} /><Summary label="Account number" value={selectedHomeowner.accountNumber} /><Summary label="Property" value={`Block ${selectedHomeowner.block}, Lot ${selectedHomeowner.lot}`} /><Summary label="Address" value={selectedHomeowner.address} /></dl></section>}
+          <section className="rounded-xl border border-pine-200 bg-pine-50 p-4" aria-live="polite"><h3 className="font-black">Issuance policy summary</h3><div className="mt-3 grid gap-3 text-sm">{selectedSummary.map(([label, value]) => <Summary key={label} label={label} value={value} />)}</div></section>
+          {selectedHomeowner && <section className="rounded-xl border border-slate-200 bg-white p-4"><h3 className="font-black">Selected homeowner</h3><dl className="mt-3 space-y-2 text-sm"><Summary label="Name" value={selectedHomeowner.name} /><Summary label="Account number" value={selectedHomeowner.accountNumber} /><Summary label="Email" value={selectedHomeowner.email} /><Summary label="Phone" value={selectedHomeowner.phone} /><Summary label="Property" value={`Block ${selectedHomeowner.block}, Lot ${selectedHomeowner.lot}`} /><Summary label="Address" value={selectedHomeowner.address} /></dl></section>}
         </aside>
       </div>
-      <div className="mt-6"><SubmitButton>{selected?.nextStep || "Create request"}</SubmitButton></div>
+      <div className="mt-6"><SubmitButton>Issue Document</SubmitButton><p className="mt-2 text-xs font-semibold text-slate-500">The issued document can be viewed/printed immediately. If the definition has a fee, a linked Document Fee payment request remains available for collection recording and receipt generation.</p></div>
     </>}
   </form>;
 }
 
-function ConfiguredField({ field }: { field: WalkInField }) {
+function ConfiguredField({ field, homeowner }: { field: WalkInField; homeowner: HomeownerResult | null }) {
   const name = `field_${field.key}`;
   const span = field.fieldType === "TEXTAREA" ? "md:col-span-2" : "";
-  const defaultText = typeof field.defaultValue === "string" ? field.defaultValue : "";
+  const defaultText = homeownerFieldValue(field.key, homeowner) ?? (typeof field.defaultValue === "string" ? field.defaultValue : "");
   if (field.fieldType === "TEXTAREA") return <label className={span}><span className="label">{field.label}</span><textarea className="field min-h-24" name={name} minLength={field.validation.minLength} maxLength={field.validation.maxLength ?? (field.key === "purpose" ? 500 : 1000)} required={field.required} defaultValue={defaultText} /></label>;
   if (field.fieldType === "SELECT") return <label className={span}><span className="label">{field.label}</span><select className="field" name={name} required={field.required} defaultValue={defaultText}><option value="">Select</option>{field.options.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></label>;
   if (field.fieldType === "CHECKBOX") return <label className="flex min-h-12 items-center gap-3 rounded-xl border border-slate-200 px-3 font-bold"><input type="checkbox" name={name} defaultChecked={field.defaultValue === true} required={field.required} /> {field.label}</label>;
@@ -154,6 +155,19 @@ function ConfiguredField({ field }: { field: WalkInField }) {
   return <label className={span}><span className="label">{field.label}</span><input className="field" name={name} type={type} step={field.fieldType === "MONEY" ? "0.01" : undefined} min={min} max={max} minLength={type === "text" ? field.validation.minLength : undefined} maxLength={type === "text" ? field.validation.maxLength : undefined} pattern={type === "text" ? field.validation.pattern : undefined} required={field.required} defaultValue={defaultText} /></label>;
 }
 
+function homeownerFieldValue(key: string, homeowner: HomeownerResult | null) {
+  if (!homeowner) return null;
+  const normalized = key.toLowerCase().replace(/[^a-z0-9]/g, "");
+  if (["homeownername", "residentname", "fullname", "ownername", "name"].includes(normalized)) return homeowner.name;
+  if (["email", "emailaddress", "homeowneremail"].includes(normalized)) return homeowner.email;
+  if (["phone", "mobile", "mobilenumber", "contactnumber", "contactno", "homeownerphone"].includes(normalized)) return homeowner.phone;
+  if (["accountnumber", "accountno", "homeowneraccountnumber"].includes(normalized)) return homeowner.accountNumber;
+  if (normalized === "block") return homeowner.block;
+  if (normalized === "lot") return homeowner.lot;
+  if (["blocklot", "blockandlot", "propertylabel"].includes(normalized)) return `Block ${homeowner.block}, Lot ${homeowner.lot}`;
+  if (["address", "propertyaddress", "residenceaddress", "homeowneraddress", "propertydetails"].includes(normalized)) return homeowner.address;
+  return null;
+}
+
 function Field({ label, children }: { label: string; children: React.ReactNode }) { return <label className="block"><span className="label">{label}</span>{children}</label>; }
-function Officer({ label, name, officers }: { label: string; name: string; officers: Choice[] }) { return <Field label={label}><select className="field" name={name}><option value="">Current administrator</option>{officers.map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}</select></Field>; }
 function Summary({ label, value }: { label: string; value: string }) { return <div><p className="text-xs font-bold uppercase tracking-wide text-slate-500">{label}</p><p className="mt-1 break-words font-black text-slate-900">{value}</p></div>; }

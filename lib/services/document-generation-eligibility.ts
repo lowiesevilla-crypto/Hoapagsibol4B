@@ -48,6 +48,7 @@ export function validateGenerationEligibility(input: {
   const { context, request, capabilities, mode } = input;
   const issues: DocumentGenerationIssue[] = [];
   const block = (code: string, domain: DocumentGenerationIssue["domain"], message: string, remediation?: string, field?: string) => issues.push({ code, domain, severity: "ERROR", blocking: true, message, remediation, field });
+  const adminOfficeIssue = request.origin === "ADMIN" && context.role !== Role.HOMEOWNER;
   if (request.tenantId !== context.tenantId || request.homeowner.tenantId !== context.tenantId) block("CROSS_TENANT_REQUEST", "AUTHORIZATION", "Document request ownership does not match the authenticated tenant.");
   if (context.role === Role.HOMEOWNER && request.homeowner.userId !== context.authenticatedUserId) block("REQUEST_OWNER_MISMATCH", "AUTHORIZATION", "This document request does not belong to the authenticated homeowner.");
   if (!request.definition) block("DEFINITION_MISSING", "DEFINITION", "Document definition is missing.", "Assign an active document definition before generation.");
@@ -78,9 +79,9 @@ export function validateGenerationEligibility(input: {
   if ((mode === DocumentGenerationMode.ISSUE || mode === DocumentGenerationMode.VALIDATE) && request.versions.length) block("DUPLICATE_ISSUANCE", "ISSUANCE", "This request already has an issued document. Use reissue mode.");
   if (mode === DocumentGenerationMode.REISSUE && !request.versions.length) block("REISSUE_SOURCE_MISSING", "ISSUANCE", "Reissue requires an existing issued document.");
   if (mode === DocumentGenerationMode.REISSUE && !capabilities.supportsReissue) block("REISSUE_UNSUPPORTED", "DEFINITION", "This document definition does not allow reissue.");
-  if (validatesOfficialReadiness && request.paymentRequiredSnapshot && !documentPaymentConfirmed(request)) block("DOCUMENT_PAYMENT_PENDING", "REQUEST", "Document fee payment confirmation is required before issuance.", "Approve the linked document fee payment request before issuance.");
+  if (validatesOfficialReadiness && !adminOfficeIssue && request.paymentRequiredSnapshot && !documentPaymentConfirmed(request)) block("DOCUMENT_PAYMENT_PENDING", "REQUEST", "Document fee payment confirmation is required before issuance.", "Approve the linked document fee payment request before issuance.");
   const approvedStatus = approvedRequestStates.has(request.status);
-  if (validatesOfficialReadiness && request.approvalRequiredSnapshot && !request.approvedAt && !approvedStatus) block("APPROVAL_INCOMPLETE", "WORKFLOW", "Required approval is incomplete.");
+  if (validatesOfficialReadiness && !adminOfficeIssue && request.approvalRequiredSnapshot && !request.approvedAt && !approvedStatus) block("APPROVAL_INCOMPLETE", "WORKFLOW", "Required approval is incomplete.");
   return issues;
 }
 

@@ -1,6 +1,6 @@
 "use server";
 
-import { CollectionType, DocumentDefinitionStatus, DocumentRequestStatus, NotificationType, PaymentRequestStatus, PaymentRequestType, Role } from "@prisma/client";
+import { CollectionType, DocumentDefinitionStatus, DocumentRequestStatus, NotificationType, PaymentMethod, PaymentRequestStatus, PaymentRequestType, Role } from "@prisma/client";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { requireUser } from "@/lib/auth";
@@ -8,6 +8,7 @@ import { requirePermission, requirePermissions } from "@/lib/authorization/guard
 import { Permission } from "@/lib/authorization/permissions";
 import { getAppUrl } from "@/lib/app-url";
 import { prisma } from "@/lib/db";
+import { normalizePaymentReference } from "@/lib/payment-methods";
 import { savePaymentProof } from "@/lib/payment-proofs";
 import { documentFeePaymentPurpose, documentRequestPublicReference } from "@/lib/services/document-fee-payments";
 import { getHomeownerPaymentConfig } from "@/lib/services/homeowner-payment-config";
@@ -190,21 +191,55 @@ export async function approvePaymentRequestAction(formData: FormData) {
     Permission.PAYMENTS_RECORD,
     Permission.RECEIPTS_ISSUE,
   ]);
-  const parsed = paymentReviewSchema.safeParse(Object.fromEntries(formData.entries()));
-  if (!parsed.success) throw new Error(parsed.error.issues[0]?.message || "Invalid review details.");
-  await approvePaymentRequest(parsed.data.id, admin.id, parsed.data.reviewRemarks, admin.tenantId);
-  const approved = await prisma.paymentRequest.findFirst({
-    where: { id: parsed.data.id, tenantId: admin.tenantId },
-    include: { homeowner: { include: { user: true } }, payment: true, collection: true },
-  });
-  if (approved) await sendEmailNotification({ tenantId: admin.tenantId, recipientId: approved.homeowner.userId, email: approved.homeowner.user.email, subject: "HOA payment confirmed", heading: "Payment confirmation", message: `Hello ${approved.homeowner.user.name},\nYour payment of PHP ${Number(approved.amount).toFixed(2)} has been verified and approved.\nReference: ${approved.referenceNumber || "Not provided"}\nReceipt: ${approved.payment?.receiptNumber || approved.collection?.receiptNumber || "Available from the HOA office"}`, type: NotificationType.PAYMENT_CONFIRMATION, actionLabel: "View payment history", actionUrl: `${getAppUrl()}/portal/payments` }).catch(() => undefined);
-  revalidatePaymentPages();
-  if (approved?.documentRequestId) {
-    revalidatePath(`/admin/documents/${approved.documentRequestId}`);
-    revalidatePath(`/documents/${approved.documentRequestId}`);
-    revalidatePath(`/documents/${approved.documentRequestId}/print`);
+  const requestedReturnTo = String(formData.get("returnTo") || "").trim();
+  const returnTo = /^\/admin\/documents\/[A-Za-z0-9_-]+$/.test(requestedReturnTo) ? requestedReturnTo : null;
+  try {
+    const parsed = paymentReviewSchema.safeParse(Object.fromEntries(formData.entries()));
+    if (!parsed.success) throw new Error(parsed.error.issues[0]?.message || "Invalid review details.");
+    const pending = await prisma.paymentRequest.findFirst({
+      where: { id: parsed.data.id, tenantId: admin.tenantId },
+      include: { documentRequest: { select: { id: true, origin: true } } },
+    });
+    if (!pending) throw new Error("Payment request not found.");
+    if (pending.type === PaymentRequestType.DOCUMENT_FEE && pending.documentRequest?.origin === "ADMIN") {
+      const methodText = String(formData.get("paymentMethod") || pending.method).trim();
+      if (!Object.values(PaymentMethod).includes(methodText as PaymentMethod)) throw new Error("Select a valid payment method.");
+      const method = methodText as PaymentMethod;
+      const referenceNumber = normalizePaymentReference(method, String(formData.get("referenceNumber") || ""));
+      const paymentDateText = String(formData.get("paymentDate") || "").trim();
+      const paymentDate = paymentDateText
+        ? /^\d{4}-\d{2}-\d{2}$/.test(paymentDateText)
+          ? new Date(`${paymentDateText}T00:00:00.000Z`)
+          : (() => { throw new Error("Choose a valid payment date."); })()
+        : pending.paymentDate;
+      if (referenceNumber) {
+        const duplicatePayment = await prisma.payment.findFirst({ where: { tenantId: admin.tenantId, referenceNumber, status: "ACTIVE" }, select: { id: true } });
+        const duplicateCollection = await prisma.collection.findFirst({ where: { tenantId: admin.tenantId, referenceNumber }, select: { id: true } });
+        if (duplicatePayment || duplicateCollection) throw new Error("This payment reference number has already been recorded.");
+      }
+      await prisma.paymentRequest.update({
+        where: { id: pending.id },
+        data: { method, referenceNumber, paymentDate },
+      });
+    }
+    await approvePaymentRequest(parsed.data.id, admin.id, parsed.data.reviewRemarks, admin.tenantId);
+    const approved = await prisma.paymentRequest.findFirst({
+      where: { id: parsed.data.id, tenantId: admin.tenantId },
+      include: { homeowner: { include: { user: true } }, payment: true, collection: true },
+    });
+    if (approved) await sendEmailNotification({ tenantId: admin.tenantId, recipientId: approved.homeowner.userId, email: approved.homeowner.user.email, subject: "HOA payment confirmed", heading: "Payment confirmation", message: `Hello ${approved.homeowner.user.name},\nYour payment of PHP ${Number(approved.amount).toFixed(2)} has been verified and approved.\nReference: ${approved.referenceNumber || "Not provided"}\nReceipt: ${approved.payment?.receiptNumber || approved.collection?.receiptNumber || "Available from the HOA office"}`, type: NotificationType.PAYMENT_CONFIRMATION, actionLabel: "View payment history", actionUrl: `${getAppUrl()}/portal/payments` }).catch(() => undefined);
+    revalidatePaymentPages();
+    if (approved?.documentRequestId) {
+      revalidatePath(`/admin/documents/${approved.documentRequestId}`);
+      revalidatePath(`/documents/${approved.documentRequestId}`);
+      revalidatePath(`/documents/${approved.documentRequestId}/print`);
+    }
+  } catch (error) {
+    if (returnTo) redirect(`${returnTo}?error=${encodeURIComponent(error instanceof Error ? error.message : "Payment could not be recorded.")}`);
+    throw error;
   }
-  redirect("/admin/payments/requests?success=approved&message=QR%20payment%20approved%20and%20officially%20recorded.");
+  if (returnTo) redirect(`${returnTo}?success=payment&message=${encodeURIComponent("Document Fee payment recorded. Collection and official receipt were generated.")}`);
+  redirect("/admin/payments/requests?success=approved&message=Payment%20approved%20and%20officially%20recorded.");
 }
 
 export async function rejectPaymentRequestAction(formData: FormData) {

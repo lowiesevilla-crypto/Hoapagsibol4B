@@ -24,7 +24,7 @@ test("payment record search recognizes combined block and lot phrases", async ()
   assert.match(service, /homeowner: blockLot/);
 });
 
-test("staff-created walk-in documents bypass unrelated balances only for staff viewers", async () => {
+test("staff-created walk-in documents bypass unrelated balances and unpaid document fees only for staff viewers", async () => {
   const [policy, access, runtime] = await Promise.all([
     source("lib/services/document-balance-policy.ts"),
     source("lib/document-access.ts"),
@@ -33,7 +33,8 @@ test("staff-created walk-in documents bypass unrelated balances only for staff v
   assert.match(policy, /request\.origin === "ADMIN"/);
   assert.match(policy, /viewerRole !== Role\.HOMEOWNER/);
   assert.match(policy, /balanceLocked = !staffWalkIn/);
-  assert.match(policy, /paymentLocked = request\.paymentRequiredSnapshot/);
+  assert.match(policy, /paymentLocked = !staffWalkIn && request\.paymentRequiredSnapshot/);
+  assert.match(policy, /request\.paymentRequest\?\.status !== PaymentRequestStatus\.APPROVED/);
   assert.match(access, /viewerRole: user\.role/);
   assert.match(runtime, /role === Role\.STAFF/);
   assert.match(runtime, /"APPROVE_REQUESTS"/);

@@ -10,6 +10,12 @@ import { advanceDocumentWorkflowAfterPayment } from "@/lib/services/document-wor
 import { monthLabel } from "@/lib/utils";
 
 const refundableTypes = new Set<CollectionType>([CollectionType.CONSTRUCTION_BOND, CollectionType.CONTRACTOR_BOND]);
+const issuedDocumentStatuses = new Set<DocumentRequestStatus>([
+  DocumentRequestStatus.ISSUED,
+  DocumentRequestStatus.READY_FOR_DOWNLOAD,
+  DocumentRequestStatus.GENERATED,
+  DocumentRequestStatus.DOWNLOADED,
+]);
 
 type ApprovePaymentRequestOptions = {
   allowGatewayConfirmation?: boolean;
@@ -83,11 +89,11 @@ export async function approvePaymentRequest(requestId: string, reviewerId?: stri
 
     if (request.type === PaymentRequestType.DOCUMENT_FEE) {
       if (!request.documentRequestId) throw new Error("Document fee payment request is missing its document request.");
-      const documentRequest = await tx.documentRequest.findFirst({ where: { tenantId: request.tenantId, id: request.documentRequestId, homeownerId: request.homeownerId }, select: { id: true, paymentRequiredSnapshot: true, feeAmountSnapshot: true, status: true } });
+      const documentRequest = await tx.documentRequest.findFirst({ where: { tenantId: request.tenantId, id: request.documentRequestId, homeownerId: request.homeownerId }, select: { id: true, origin: true, paymentRequiredSnapshot: true, feeAmountSnapshot: true, status: true } });
       if (!documentRequest) throw new Error("Linked document request was not found for this tenant.");
       if (!documentRequest.paymentRequiredSnapshot) throw new Error("The linked document request does not require a document fee.");
-      const terminalDocumentStatuses: DocumentRequestStatus[] = [DocumentRequestStatus.CANCELLED, DocumentRequestStatus.REJECTED, DocumentRequestStatus.REVOKED, DocumentRequestStatus.ISSUED, DocumentRequestStatus.READY_FOR_DOWNLOAD, DocumentRequestStatus.GENERATED, DocumentRequestStatus.DOWNLOADED];
-      if (terminalDocumentStatuses.includes(documentRequest.status)) {
+      const blockedDocumentStatuses: DocumentRequestStatus[] = [DocumentRequestStatus.CANCELLED, DocumentRequestStatus.REJECTED, DocumentRequestStatus.REVOKED];
+      if (blockedDocumentStatuses.includes(documentRequest.status) || (documentRequest.origin !== "ADMIN" && issuedDocumentStatuses.has(documentRequest.status))) {
         throw new Error("The linked document request can no longer accept payment confirmation.");
       }
       if (Math.abs(Number(request.amount) - Number(documentRequest.feeAmountSnapshot)) > 0.009) throw new Error("Document fee payment amount does not match the saved document request fee.");
@@ -98,7 +104,7 @@ export async function approvePaymentRequest(requestId: string, reviewerId?: stri
         data: {
           tenantId: request.tenantId,
           type: CollectionType.OTHER,
-          description: request.description || "Document fee",
+          description: "Document Fee",
           payerType: PayerType.HOMEOWNER,
           homeownerId: request.homeownerId,
           amount: request.amount,
@@ -106,20 +112,23 @@ export async function approvePaymentRequest(requestId: string, reviewerId?: stri
           method: request.method,
           referenceNumber: request.referenceNumber,
           receiptNumber,
-          remarks: [request.payerNotes, reviewRemarks].filter(Boolean).join("\n") || null,
+          remarks: [request.description, request.payerNotes, reviewRemarks].filter(Boolean).join("\n") || null,
           refundable: false,
           refundStatus: RefundStatus.NOT_APPLICABLE,
           createdById: adminId,
         },
       });
-      await tx.auditLog.create({ data: { tenantId: request.tenantId, actorId: adminId, module: "RECEIPTS", action: "GENERATE_OC_RECEIPT", entityType: "Collection", entityId: collection.id, metadata: { receiptNumber, source: isPayMongoPaymentRequest(request) ? "PAYMONGO_DOCUMENT_FEE" : "DOCUMENT_FEE_PAYMENT_REQUEST", documentRequestId: request.documentRequestId } } });
-      const updatedDocument = await tx.documentRequest.update({ where: { id: documentRequest.id }, data: { status: DocumentRequestStatus.PAYMENT_CONFIRMED } });
-      await tx.documentRequestHistory.create({ data: { tenantId: request.tenantId, requestId: documentRequest.id, status: DocumentRequestStatus.PAYMENT_CONFIRMED, actorId: adminId, note: `Document fee confirmed with receipt ${receiptNumber}.` } });
+      await tx.auditLog.create({ data: { tenantId: request.tenantId, actorId: adminId, module: "RECEIPTS", action: "GENERATE_OC_RECEIPT", entityType: "Collection", entityId: collection.id, metadata: { receiptNumber, source: isPayMongoPaymentRequest(request) ? "PAYMONGO_DOCUMENT_FEE" : "DOCUMENT_FEE_PAYMENT_REQUEST", financeClassification: "DOCUMENT_FEE", documentRequestId: request.documentRequestId } } });
+      const preserveIssuedStatus = documentRequest.origin === "ADMIN" && issuedDocumentStatuses.has(documentRequest.status);
+      const updatedDocument = preserveIssuedStatus
+        ? documentRequest
+        : await tx.documentRequest.update({ where: { id: documentRequest.id }, data: { status: DocumentRequestStatus.PAYMENT_CONFIRMED } });
+      await tx.documentRequestHistory.create({ data: { tenantId: request.tenantId, requestId: documentRequest.id, status: preserveIssuedStatus ? documentRequest.status : DocumentRequestStatus.PAYMENT_CONFIRMED, actorId: adminId, note: `Document fee confirmed with receipt ${receiptNumber}.${preserveIssuedStatus ? " Issued document status was preserved." : ""}` } });
       const approved = await tx.paymentRequest.update({
         where: { id: request.id },
         data: { status: PaymentRequestStatus.APPROVED, reviewedById: reviewerId ?? null, reviewedAt: new Date(), reviewRemarks: reviewRemarks || null, collectionId: collection.id },
       });
-      await tx.auditLog.create({ data: { tenantId: request.tenantId, actorId: adminId, module: "PAYMENTS", action: "APPROVE_DOCUMENT_FEE_PAYMENT", entityType: "PaymentRequest", entityId: request.id, metadata: { oldValue: { status: request.status, documentStatus: documentRequest.status }, newValue: { status: "APPROVED", documentStatus: updatedDocument.status, collectionId: collection.id, receiptNumber }, documentRequestId: documentRequest.id, remarks: reviewRemarks, gatewayConfirmed: Boolean(options?.allowGatewayConfirmation) } } });
+      await tx.auditLog.create({ data: { tenantId: request.tenantId, actorId: adminId, module: "PAYMENTS", action: "APPROVE_DOCUMENT_FEE_PAYMENT", entityType: "PaymentRequest", entityId: request.id, metadata: { oldValue: { status: request.status, documentStatus: documentRequest.status }, newValue: { status: "APPROVED", documentStatus: updatedDocument.status, collectionId: collection.id, receiptNumber }, financeClassification: "DOCUMENT_FEE", documentRequestId: documentRequest.id, remarks: reviewRemarks, gatewayConfirmed: Boolean(options?.allowGatewayConfirmation), issuedStatusPreserved: preserveIssuedStatus } } });
       return approved;
     }
 

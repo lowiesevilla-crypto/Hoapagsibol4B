@@ -62,6 +62,7 @@ export async function startDocumentWorkflow(context: DocumentExecutionContext, r
   }
   const workflow = request?.definition?.workflowDefinition;
   if (!request || !workflow) return null;
+  if (request.origin === "ADMIN" && context.role !== Role.HOMEOWNER) return getWorkflowState(context, request.id);
   const prior = request.histories.find((item) => item.workflowVersion === workflow.version && item.workflowStepId);
   if (prior) return getWorkflowState(context, request.id);
   const firstStep = workflow.steps[0];
@@ -78,6 +79,15 @@ export async function getWorkflowState(context: DocumentExecutionContext, reques
   const workflow = request?.definition?.workflowDefinition;
   if (!request || !workflow) return null;
   const records = request.histories.filter((item) => item.workflowVersion === workflow.version && item.workflowStepId);
+  if (request.origin === "ADMIN" && context.role !== Role.HOMEOWNER) {
+    return {
+      workflowId: workflow.id,
+      workflowVersion: workflow.version,
+      completed: true,
+      currentStepIds: [],
+      timeline: records.map((item) => ({ stepId: item.workflowStepId, decision: item.decision, status: item.status, note: item.note, createdAt: item.createdAt })),
+    };
+  }
   const latestByStep = new Map<string, (typeof records)[number]>();
   for (const record of records) if (record.workflowStepId) latestByStep.set(record.workflowStepId, record);
   const approved = new Set([...latestByStep.values()].filter((item) => item.decision === DocumentApprovalDecision.APPROVED || item.decision === DocumentApprovalDecision.SKIPPED || item.decision === DocumentApprovalDecision.OVERRIDDEN).map((item) => item.workflowStepId));

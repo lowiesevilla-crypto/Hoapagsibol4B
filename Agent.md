@@ -4,441 +4,271 @@ Last updated: 2026-08-23
 
 ## Purpose
 
-This file is the repository-level operating contract for AI coding agents and maintainers working on HOAHub. It describes the current production structure, authority boundaries, release gates, and known deferred scope. Read this file before making any code, schema, workflow, payment, UI, deployment, or documentation change.
+Repository-level operating contract for AI coding agents and maintainers working on HOAHub. Read this before changing code, schema, workflows, payments, documents, permissions, UI, deployment, or product documentation.
 
 ## Current Production Baseline
 
 - Repository: `lowiesevilla-crypto/Hoapagsibol4B`.
 - Authoritative application branch: `main`.
-- Production hosting: Hostinger managed Node.js application connected to GitHub `main`.
-- Current production application baseline at this update: `1d8b1e665da75786d615e324148ffce1e2833b9c` (`feat: support homeowner advance monthly dues payments (#149)`).
-- Hostinger was visually confirmed `Running`, `Auto-deployment`, `Current`, and `Completed` on short commit `1d8b1e66` after PR #149.
-- Never assume an old feature branch, draft PR, closed PR, issue branch, local workspace, or previous AI branch is newer or safer than current `main`.
+- Hosting: Hostinger managed Node.js application connected to GitHub `main`.
+- Last user-confirmed runtime production baseline: `1d8b1e665da75786d615e324148ffce1e2833b9c` (`feat: support homeowner advance monthly dues payments (#149)`). Hostinger was shown `Running`, `Auto-deployment`, `Current`, and `Completed` on short commit `1d8b1e66`.
+- A later documentation-only commit on `main` is not evidence that a later runtime feature is deployed.
+- Always start new implementation from latest `main` unless the user explicitly identifies a different reviewed base.
 
-### Stale PR / Branch Safety
+### Stale PR Safety
 
-The following previously open PRs were intentionally closed without merge on 2026-08-23 and are historical only:
+PRs #134, #129, and #102 were intentionally closed without merge on 2026-08-23. They are historical only. Do not reopen, auto-merge, blindly cherry-pick, or use their heads as implementation bases. Re-evaluate any still-useful idea against current `main` and current tests.
 
-- PR #134 — `Clarify and support large-community onboarding batches` — closed, not merged.
-- PR #129 — `fix(auth): make logout recovery fail-safe across browser history` — closed, not merged.
-- PR #102 — `Fix stale Payment Rejected status after successful retry` — closed, not merged.
+## Mandatory Documentation Maintenance
 
-Agents MUST NOT reopen, merge, auto-merge, or use these PR heads as implementation bases unless the user explicitly requests a fresh review. Do not blindly cherry-pick them. If a historical idea is still relevant, re-evaluate it against current `main`, current tests, and this file, then implement from a new branch based on current `main`.
+`Agent.md` must be updated whenever repository behavior, architecture, permissions, operational rules, deployment behavior, or user-visible workflows change.
 
-For every new implementation, start from the latest `main` commit unless the user explicitly identifies another base.
+The tenant-facing HOAHub User Manual is also a controlled product artifact. For each deployed user-visible feature/fix/enhancement:
 
-## Mandatory Agent.md and User Manual Maintenance
+1. Update the affected procedures.
+2. Update the role/access matrix when permissions or visibility change.
+3. Replace obsolete screenshots and add screenshots for materially changed workflows when practical.
+4. Keep screenshots tenant-safe and free of secrets/unnecessary personal data.
+5. Update revision history and production baseline.
+6. Never describe deferred functionality as live.
 
-`Agent.md` must be reviewed and updated for every repository change before merge or deployment when the change affects architecture, workflows, permissions, deployment behavior, operational rules, or user-visible functionality.
+## Platform and Security Baseline
 
-The tenant-facing HOAHub User Manual is also a controlled product artifact. For each deployed user-visible feature, fix, enhancement, permission change, navigation change, or workflow change:
-
-1. Update the relevant User Manual procedure.
-2. Update the role/access matrix when permissions or role visibility change.
-3. Replace obsolete screenshots and add screenshots for new or materially changed workflows when practical.
-4. Keep screenshots tenant-safe and avoid exposing secrets or unnecessary personal information.
-5. Update the manual revision history and production baseline.
-6. Do not describe deferred or unimplemented features as live.
-
-## Product and Architecture Baseline
-
-- HOAHub is a multi-tenant community/homeowners-association SaaS platform.
-- Primary stack: Next.js App Router, React, TypeScript, Tailwind CSS, Prisma, MySQL.
-- Platform/commercial data and tenant operational data have separate authority boundaries.
+- HOAHub is a multi-tenant HOA/community SaaS using Next.js App Router, React, TypeScript, Tailwind CSS, Prisma, and MySQL.
 - Tenant-owned data must remain tenant-scoped at every UI, API, Server Action, service, cron/job, raw SQL query, cache, storage, export, report, webhook, and AI boundary.
-- Authenticated server-side session context is authoritative. Browser-supplied tenant IDs, roles, homeowner IDs, account owners, route parameters, return URLs, payment state, payment amount, gateway account IDs, or document ownership are never proof of authority.
-
-## Non-Negotiable Security Rules
-
-1. Preserve tenant isolation and fail closed when tenant/user authority is ambiguous.
-2. Preserve RBAC, granular permissions, module entitlements, and record-ownership checks on server-side operations.
-3. Do not weaken session validation, passkey verification, account-choice authorization, safe redirect logic, CSRF/same-origin protections, or authentication recovery controls.
-4. Never commit production secrets or expose them in logs, browser payloads, screenshots, AI/model payloads, docs, or test fixtures.
-5. Never expose raw database credentials or unrestricted query execution to browser or AI surfaces.
-6. Financial, approval, publication, refund, forfeiture, payroll, grievance, and destructive operations require server-side business validation and audit/history evidence.
-7. Security-sensitive and finance-sensitive behavior must remain covered by regression tests.
-8. CI passing is not equivalent to production deployment.
-9. A browser success redirect is never payment authority.
-10. Do not bypass a failing verifier or browser test by weakening its business/security invariant.
+- Authenticated server session context is authoritative. Browser-supplied tenant IDs, roles, account/homeowner IDs, payment state, gateway IDs, return URLs, document ownership, or workflow state are never proof of authority.
+- Preserve RBAC, granular permissions, module entitlements, record ownership, CSRF/same-origin checks, session validation, passkeys, account-choice authorization, and safe redirects.
+- State-changing financial, approval, publication, refund, forfeiture, payroll, grievance, template-assignment, and destructive operations require server-side validation plus audit/history evidence.
+- Never expose production secrets in source, logs, screenshots, browser payloads, AI payloads, docs, or fixtures.
+- CI passing is not equivalent to production deployment.
 
 ## Roles and Access Structure
 
-HOAHub uses role checks, granular permissions, enabled tenant modules, subscription entitlements, and record ownership. UI visibility is not the security boundary; server authorization is.
-
 ### Platform / Control Plane
 
-- `SUPER_ADMIN` — platform-wide authority plus allowed tenant/system surfaces. Use with care; tenant actions still must preserve tenant scope.
-- `PLATFORM_ADMIN` — platform commercial/operations authority according to platform route permissions.
-- Platform routes include tenants, subscriptions, plans/features, invoices, agreements, licenses, document usage, AI usage metadata, audit/security, and platform profile.
-- Platform roles do not automatically inherit tenant grievance, payroll, finance, or resident-record authority unless the server role/permission model explicitly grants it.
+- `SUPER_ADMIN` — platform-wide authority where explicitly permitted; tenant boundaries still apply.
+- `PLATFORM_ADMIN` — platform commercial/operations authority. Platform routes include tenants, plans/features, subscriptions, invoices, agreements, licenses, document usage/template distribution, AI usage metadata, audit/security, and platform profile.
+- Platform roles do not automatically inherit tenant payroll, grievance, finance, or resident-record authority.
 
 ### Tenant Administration
 
-- Tenant administrative users include system/association administrators and permission-scoped operational roles.
-- Important permission domains include Billing, Payments, Documents, Complaints, Payroll/Workforce, AI, Document Repository, and Tenant Settings.
-- `/admin/layout.tsx` and related authorization helpers are responsible for role filtering, enabled-module filtering, entitlement filtering, AI permission filtering, payroll access filtering, and tenant-scoped navigation/search serialization.
-- A user who can read a module is not automatically allowed to mutate it. Server actions must enforce the appropriate manage/approve permission.
+Tenant administrative access is permission/module scoped. Important domains include Billing, Payments, Documents, Complaints, Payroll/Workforce, AI, Document Repository, and Tenant Settings. UI visibility is not the security boundary; server actions must enforce read/manage/approve authority independently.
 
 ### Homeowner
 
-- Homeowners may access only their authenticated tenant and their own authorized account data plus tenant-public/community content.
-- Homeowner profile, billing, payment, SOA, document request, complaint, vehicle, and AI account queries must remain owner-scoped and tenant-scoped.
+Homeowners access only their authenticated tenant, their own authorized account data, and tenant-public/community content. Billing, payments, SOA, documents, complaints, vehicles, profile, and AI account data remain owner-scoped.
 
 ### Employee
 
-- Employee portal is separate from Tenant Admin payroll authority.
-- Employee-facing functions include own profile, clock in/out, attendance correction, attendance history, own payslips, and support/chat as enabled.
-- Employees must never gain administrative payroll visibility merely because they have an employee account.
+Employee portal is separate from Tenant Admin payroll authority. Employees may access only their own authorized profile, attendance/corrections, clocking, payslips, and enabled support/chat functions.
 
 ## Current Tenant Admin Functional Structure
 
-The authorized Admin command catalog is broader than the compact sidebar. Current major workspaces are:
+- `/admin/dashboard` — executive community/finance snapshot.
+- `/admin/actions` — Action Center aggregator; underlying modules remain authoritative.
+- `/admin/onboarding` — tenant onboarding and bulk homeowner import.
+- `/admin/homeowners` — homeowner master data and digital activation.
+- `/admin/contractors` — contractor records/bond context.
+- `/admin/vehicles` — vehicle/sticker monitoring.
+- `/admin/billing` — Monthly Dues billing records, maintenance, reminders, generation controls.
+- `/admin/settings/billing-rules` — effective dues rule and Automatic Billing controls.
+- `/admin/settings/billing-exemptions` — exemptions.
+- `/admin/settings/payments` — Manual QR vs PayMongo Online tenant payment configuration.
+- `/admin/payments/record` — homeowner-first Record Payment including zero-balance advance dues.
+- `/admin/payments/requests`, `/active`, `/history`, `/online` — payment review/ledger/gateway operations.
+- `/admin/receipts`, `/admin/collections` — receipt and Other Collection/bond authority.
+- `/admin/rentals` — Rental Management.
+- `/admin/expenses` — expenses/disbursements.
+- `/admin/reports`, `/admin/reports/dashboard` — finance reports.
+- `/admin/data`, `/admin/data/migrations` — bulk data and opening-balance migration.
+- `/admin/documents` — resident document service, request/approval/issue/archive workflows.
+- `/admin/settings/document-definitions` — tenant document definition/workflow configuration.
+- `/admin/document-management` — association repository, distinct from issued resident documents.
+- `/admin/complaints` — complaint operations with separate grievance/verification authority.
+- `/admin/announcements`, `/admin/events`, `/admin/chat` — community operations.
+- `/admin/workforce`, `/admin/employees`, `/admin/attendance`, `/admin/payroll` — protected workforce/payroll.
+- `/admin/ai-copilot`, `/admin/ai-assistance` — governed tenant AI assistance/settings.
 
-### Overview and Administration
+## Homeowner Portal
 
-- `/admin/dashboard` — executive tenant dashboard with active homeowners, current collections, open receivables, action queues, financial pulse, and recent activity.
-- `/admin/actions` — Action Center aggregator for authorized complaint, payment-review, overdue-account, document-request, and payroll queues. It does not replace the underlying authoritative workflows.
-- `/admin/onboarding` — tenant onboarding and homeowner bulk import.
-- `/admin/homeowners` — homeowner directory, filters, operational status, digital activation status, invitations, and profile maintenance.
-- `/admin/profile`, `/admin/subscription`, `/admin/agreement` — tenant admin account/commercial access according to role controls.
+Current major surfaces include `/portal/dashboard`, `/portal/pay`, `/portal/billing`, `/portal/soa`, `/portal/payments`, `/portal/collections`, `/portal/requests`, `/portal/documents`, `/portal/complaints`, `/portal/community`, `/portal/announcements`, `/portal/events`, `/portal/chat`, `/portal/organization`, `/portal/profile`, `/portal/vehicles`, and `/portal/ai` according to tenant modules/entitlements.
 
-### Residents and Security
+Homeowner UI is phone/PWA-first: safe areas, approximately 48px touch targets where practical, no page-level horizontal overflow, reduced-motion support, `100dvh` where appropriate, and private/no-store behavior for authenticated content.
 
-- `/admin/homeowners` — homeowner master data and account activation.
-- `/admin/contractors` — contractor directory and contractor-bond context.
-- `/admin/vehicles` — homeowner vehicles, HOA sticker monitoring, payment linkage, validity, and status.
+## Monthly Dues Billing
 
-### Finance
+- Effective Billing Rules are authoritative for dues amounts and periods; historical bills keep their resolved snapshots.
+- Automatic mode uses the tenant billing day and secured daily scheduler. Catch-up after a missed scheduler day is intentional.
+- Automatic generation is idempotent. Existing same-period Monthly Dues bills are skipped using tenant + homeowner + charge type + coverage year/month identity.
+- Exempt homeowners are skipped.
+- Large communities are processed in bounded batches.
+- While the effective rule is AUTOMATIC, manual bulk and individual generation are disabled in UI and blocked server-side. Existing bills may still be maintained through authorized maintenance actions.
 
-- `/admin/billing` — Monthly Dues billing records, bill maintenance, reminders, exemptions, and generation controls according to billing mode.
-- `/admin/settings/billing-rules` — effective Monthly Dues rule amount, frequency, effective period, resolution reference, penalties, due day, and automatic billing controls.
-- `/admin/settings/billing-exemptions` — billing exemption management.
-- `/admin/settings/payments` — tenant homeowner payment flow configuration: Manual QR or PayMongo Online, linked child account, and readiness status.
-- `/admin/payments/record` — homeowner-first Record Payment including zero-balance advance Monthly Dues support.
-- `/admin/payments/requests` — payment proof/payment request review queue.
-- `/admin/payments/active` — active posted payments.
-- `/admin/payments/history` — payment transaction history.
-- `/admin/payments/online` — PayMongo online-payment operational monitor when applicable.
-- `/admin/receipts` — receipt register.
-- `/admin/collections` — Other Collections, fees, refundable bonds, refunds, forfeitures, and central collection receipts.
-- `/admin/rentals` — Rental Management workspace.
-- `/admin/expenses` — expense categories and expense/disbursement records.
-- `/admin/reports` and `/admin/reports/dashboard` — financial reporting and finance dashboard.
-- `/admin/data` and `/admin/data/migrations` — bulk data, exports/imports, and previous-balance migration.
+## Admin Advance Monthly Dues
 
-### Resident Services and Documents
+- `/admin/payments/record` searches ACTIVE homeowners, including zero-balance homeowners, at database scale.
+- Current obligations are applied first; excess or pure advance payment remains unapplied homeowner credit.
+- `PaymentAllocation` is authoritative; do not assume one payment equals one bill.
+- Future eligible Monthly Dues consume advance credit oldest-due-first without double allocation.
+- Pure advances must remain correctable/voidable through ledger-safe handling.
 
-- `/admin/documents` — document definitions, templates, requests, walk-in/office requests, issued documents, workflow processing, and archive/operations views.
-- `/admin/document-management` — secure association document repository with categories, status, visibility, revision, quota, upload/download permissions, and homeowner-public publishing controls.
-- `/admin/complaints` — complaint intake/triage/assignment/status tracking with separate grievance and verification states where authorized.
+Homeowner self-service future From/To-month advance calculation/payment is still deferred unless a later merged change updates this file.
 
-### Community
+## Rental Management
 
-- `/admin/announcements` — create/edit, draft/publish/archive, image, email flag, and Facebook posting integration.
-- `/admin/events` — create/edit, publish/archive, schedule/location/image, and Facebook posting integration.
-- `/admin/chat` — tenant community/support messaging according to authorization and privacy policy.
+- Rental Management is the operational rental entry point; Collection remains cash/receipt authority.
+- Assets, renters, agreements, billing, payments, reconciliation, and advance rental credit are tenant scoped.
+- Outside renters remain standalone records; do not fabricate homeowner/user records.
+- Active agreements generate monthly RENT invoices on each agreement's billing day when tenant automatic billing is enabled.
+- Rental invoice generation is duplicate-safe. Advance rental credit applies oldest-due-first.
+- Security deposits are refundable liabilities, not rental income.
+- Agreement maintenance uses `/admin/rentals/agreements/[id]` rather than a broad inline edit form.
 
-### Workforce
+Homeowner rental asset reservation remains deferred unless a later merged change updates this file.
 
-- `/admin/workforce` — HRIS & Payroll command center.
-- `/admin/employees` — employee master data.
-- `/admin/attendance` — attendance operations and correction workflows.
-- `/admin/payroll` — protected payroll processing, deductions, loans/cash advances, payslips, and period state.
+## Collections and Reports
 
-### AI and Knowledge
+- Collection is authoritative for Other Collections and refundable bonds.
+- Refundable bonds remain liabilities until valid refund/forfeiture treatment.
+- `/admin/reports` supports tenant From/To date ranges and accounting for dues, credits, other income, expenses/payroll, cash movement, receivables, bonds, rental deposits, and employee loans.
+- PDF/DOCX/CSV exports must use the same tenant accounting authority.
+- Detailed payment-rail reporting (Admin Cash, PayMongo QR Ph/GCash/Maya, etc.) is still deferred; never infer an authoritative provider rail from a generic method field.
 
-- `/admin/ai-copilot` — Staff Copilot for authorized tenant-scoped finance, resident, document/policy, workflow, report, and drafting assistance.
-- `/admin/ai-assistance` — AI governance/configuration for authorized administrators.
-- AI may draft and explain but must not silently perform final approval, financial posting, publication, rejection, or other authoritative state change unless a separately authorized workflow explicitly exists.
+## PayMongo Homeowner Collections
 
-## Homeowner Portal Functional Structure
+- Each tenant uses either `MANUAL_QR` or `PAYMONGO` for new homeowner payment attempts.
+- PayMongo homeowner collections use the platform credential plus tenant Linked Account (`Account-ID`) routing. Tenant admins never see platform secret keys.
+- Verified child-scoped webhook or authenticated server-to-server reconciliation is payment authority; browser redirects are presentation only.
+- Tenant, homeowner, child account, reference, identifiers, currency, amount, and fee metadata must reconcile before posting.
+- HOAHub subscription billing credentials remain separate from homeowner-collection credentials.
+- Platform convenience fee routing is platform-controlled; tenant admins cannot alter it.
 
-Current homeowner navigation includes:
+## Document Platform Architecture
 
-- `/portal/dashboard` — homeowner overview.
-- `/portal/pay` — configured payment flow for dues/assessments and eligible document fees.
-- `/portal/billing` — homeowner billing history/current charges.
-- `/portal/soa` — Statement of Account.
-- `/portal/payments` — payment history/status.
-- `/portal/collections` — homeowner-visible collections and bonds.
-- `/portal/requests` — resident request hub.
-- `/portal/documents` — document requests/history when the Documents module is enabled.
-- `/portal/complaints` and `/portal/complaints/new` — homeowner complaint submission/tracking when enabled.
-- `/portal/community`, `/portal/announcements`, `/portal/events`, `/portal/chat`, `/portal/organization` — community information and communication according to enabled modules.
-- `/portal/profile` — own account/profile.
-- `/portal/vehicles` — own registered vehicles when enabled.
-- `/portal/ai` — Association Assistant when commercially/governance enabled.
+HOAHub has two distinct systems:
 
-Homeowner UI is mobile/PWA-first. Use safe-area insets, approximately 48px touch targets where practical, no page-level horizontal overflow, reduced-motion support, `100dvh` when appropriate, and private/no-store handling for authenticated content.
+1. Resident document service (`/admin/documents`) — `DocumentDefinition`, dynamic fields, workflow, template versions, requests, approvals, generation, verification, release/revocation, and homeowner/office requests.
+2. Association Document Repository (`/admin/document-management`) — governance/policy/community files, categories, visibility, revisions, quota, upload/download controls.
 
-## Monthly Dues Billing Authority
+Resident document invariants:
 
-### Billing Rules
+- `DocumentDefinition` is tenant scoped and is the authoritative configurable document rule.
+- `DocumentTemplateSet` and `DocumentTemplateVersion` are tenant scoped. Published versions are immutable historical artifacts; new edits occur through new versions.
+- Requests snapshot definition/template data so later template upgrades do not rewrite historical requests or issued `DocumentVersion` output.
+- A requestable definition must be active, complete, have a valid PUBLISHED assigned template, and satisfy numbering/QR/workflow requirements.
+- QR verification uses server-generated verification tokens/URLs/codes; browser input cannot manufacture validity.
+- Tenant admins may configure definition fields, workflow, approver, payment policy, balance/release policy, validity, signatory, and tenant template versions according to Document permissions.
 
-- Monthly Dues rates come from the effective tenant Billing Rule, not arbitrary browser-entered amounts.
-- Billing rules may define amount, billing frequency, billing day, due day, grace period, penalty configuration, effective start/end period, resolution reference/date, notes, and status.
-- Overlapping active effective periods are blocked.
-- Historical bills keep their resolved rate/rule snapshot.
+## Platform Free Professional Document Template Library
 
-### Automatic Billing
+Implementation branch: `feat/platform-free-document-template-library-20260823`. This section becomes production baseline only after the exact branch head is green, merged, and deployment is confirmed.
 
-Automatic billing is implemented and active in the application architecture.
+Platform route: `/platform/document-management/templates`.
 
-- Automatic Monthly Dues generation is controlled by the effective Billing Rule generation mode.
-- The tenant defines the Monthly Dues billing day.
-- The daily secured scheduler invokes tenant automatic-billing checks; the service decides whether a tenant is due.
-- Catch-up behavior is intentional: when the current Manila day is at or past the configured billing day, the current period may be generated if it has not already been completed.
-- Automatic generation is idempotent and retry-safe.
-- Existing same-period Monthly Dues bills are skipped. Duplicate authority is tenant + homeowner + recurring charge type + coverage year + coverage month.
-- Existing manually generated bills for the same current coverage period must therefore be skipped by automation rather than billed again.
-- Exempt homeowners are skipped according to effective exemption rules.
-- Large communities are processed in bounded homeowner ID batches; do not replace bounded batching with one unbounded write transaction.
-- Automatic-run audit evidence is required.
+Library package version: `v2`.
 
-### Manual Generation Lock
+The platform library provides these eleven professional starting documents:
 
-- When the effective Billing Rule is in `AUTOMATIC` mode for the selected coverage period, manual bulk generation and individual bill generation must be disabled in the Admin UI.
-- Server actions must also reject manual generation while Automatic Billing is authoritative. UI disabling alone is insufficient.
-- Editing/maintaining an already-created bill remains a separate maintenance operation and must keep its own authorization/history rules.
-- When automatic mode is OFF/MANUAL, authorized manual preview/generation may be used.
+- Certificate of Residency
+- Certificate of Indigency
+- Certificate of Good Standing
+- Clearance Certificate
+- Payment Certification
+- Construction Bond Certification
+- Contractor Bond Certification
+- Gate Pass
+- Move-In Pass
+- Move-Out Pass
+- Work Permit
 
-## Admin Record Payment and Advance Monthly Dues
+Approved visual/functional standard:
 
-The current production Record Payment workflow is homeowner-first.
+- Certificate of Residency, Certificate of Indigency, Certificate of Good Standing, Clearance Certificate, Payment Certification, Construction Bond Certification, and Contractor Bond Certification use formal legal/institutional A4 layouts with a restrained navy/gold identity, structured information/status panels, official numbering, signature area, security text, watermarking, and QR validation.
+- Certificate typography prioritizes print readability: legal headings use Georgia/Times New Roman where appropriate, operational labels use Arial, the library enforces a 7pt minimum for intentionally rendered legal/permit text, and principal body/certification text is generally 10.5pt or larger.
+- Good Standing and Clearance use prominent status bands; Payment Certification has an account/payment-detail panel; construction/contractor bond certifications have structured compliance-record panels.
+- Gate Pass, Move-In Pass, and Move-Out Pass reuse the reviewed professional two-copy A4 operational layouts for Security/Holder use and QR validation.
+- Work Permit is an operational A4 authorization containing permit number, property/requestor, contractor/work lead, approved date/time, approved work scope/location, vehicle/tools/material information, permit conditions, authorization/signatory, and QR validation.
+- Library field keys must map to the existing generation runtime. Gate driver/representative uses `representativeName`; Move-In/Move-Out provider data uses `contractorDetails`; item/material text uses `items` so the runtime resolves `request.itemsSummary` correctly.
 
-- `/admin/payments/record` searches ACTIVE homeowners, not only homeowners with open bills.
-- Search must work at database scale and support homeowner name, account number, block, lot, and email without requiring all homeowners to be loaded into the browser.
-- A homeowner with zero outstanding balance may still be selected.
-- Current open Monthly Dues obligations are applied first according to the ledger allocation rules.
-- A payment amount above current open Monthly Dues, or a pure zero-balance advance payment, creates unapplied homeowner credit.
-- Payment coverage metadata records the intended coverage period for audit/presentation.
-- Unapplied homeowner credit is automatically consumed by eligible future Monthly Dues oldest-due-first.
-- Allocation must remain idempotent; the same payment credit must never be allocated twice.
-- `PaymentAllocation` is the authoritative allocation relationship. Do not regress to assuming one payment equals one bill.
-- Pure advance payments must remain correctable/voidable through ledger-safe handling rather than assuming every active payment already has an allocation.
+Assignment contract:
 
-### Important Deferred Homeowner Self-Service Scope
+1. Platform Admin explicitly selects the target tenant. Cross-tenant bulk assignment without explicit target is prohibited.
+2. Templates are professional A4 layouts with official document numbering and QR verification. Gate/Move passes use the reviewed two-copy A4 pass layouts; Work Permit uses a dedicated operational authorization layout.
+3. Library assignments use `DocumentTemplateOwnership.TENANT` and an editable `DocumentTemplateSet`. They are **not** immutable CERTIFIED templates. This is intentional: after assignment, authorized tenant administrators may continue configuring the Document Definition, workflow, approver, fee/payment settings, policies, signatory, fields, and create/edit later tenant template versions.
+4. The Platform Admin UI offers `Apply recommended workflow`. When checked, the library installs/refreshes the recommended Approval Required starting workflow. When cleared, an existing tenant workflow is preserved. If the definition has no usable workflow, a safe approval workflow is still created so assignment does not leave an incomplete request path.
+5. Existing tenant fields are preserved. Library assignment adds only missing recommended fields; it does not delete tenant fields or historical field evidence.
+6. If the same document identity already exists, use that tenant definition rather than silently creating a duplicate. Ambiguous duplicate identity fails closed for manual resolution.
+7. On a real template upgrade, create a new PUBLISHED tenant-editable library version, atomically assign it, and retire only the previously assigned PUBLISHED template version. Do not delete old versions.
+8. Existing `DocumentRequest` and `DocumentVersion` records are never mass-rewritten during assignment. Their snapshots remain historical authority.
+9. Full-library assignment runs in one tenant-scoped Serializable transaction; any unsafe template/identity failure rolls back the entire all-template assignment.
+10. All assignment/upgrade operations are audited with source, library version, template version, workflow choice, retired version, and field additions.
+11. Default library workflow has zero document fee, but the tenant may later configure the definition/workflow according to normal tenant authority. Platform assignment is a starting configuration, not permanent ownership of tenant policy.
+12. Template packages must validate through `validateTemplateDefinition`; QR-enabled definitions require sequence-based numbering. Library templates avoid mandatory preconfigured signatory dependency so assignment does not fail for a tenant that has not yet configured officers; tenant signatory can be configured afterward.
+13. Do not reduce font sizes merely to force content to fit. Preserve the approved readability floor, use layout/spacing changes instead, and keep body text suitable for printed A4 output.
 
-The separate homeowner feature to select a future `From` month and `To` month in the portal, have the server calculate the exact future Monthly Dues amount from effective Billing Rules, and pay those not-yet-billed months as one homeowner-initiated advance transaction is NOT yet the confirmed production baseline as of this file update. Do not present or implement against it as if already live. It requires its own reviewed change.
+Primary regression surface:
 
-## Rental Management Current Architecture
+- `lib/services/platform-document-template-catalog.ts`
+- `lib/services/platform-document-template-library.ts`
+- `lib/actions/platform-document-template-library.ts`
+- `app/platform/document-management/templates/page.tsx`
+- `app/platform/document-management/page.tsx`
+- `tests/unit/platform-document-template-library.test.ts`
 
-Rental Management is the operational entry point for rental-specific activity, while Collection remains the authoritative cash/receipt ledger.
+Do not replace this safe clone/version model with shared mutable cross-tenant rows. Do not make assigned library templates read-only unless product requirements explicitly change.
 
-Current `/admin/rentals` sections:
+## Complaint / Grievance
 
-- Overview — rental operational snapshot.
-- Assets — parking, stalls, spaces, and other rentable inventory.
-- Renters — homeowner-linked or external renter records.
-- Agreements — asset assignment, contract terms, monthly rate, security deposit, billing day, due day, and status.
-- Billing — rental invoices/receivables.
-- Payments — rental payment entry and advance rental credits.
-- Reconciliation — apply/reconcile eligible receipts to rental invoices.
+Complaint remains the intake/operational layer; formal grievance, verification, committee/identity, deadlines, and evidence controls remain separate. Anonymous/confidential data must preserve privacy and tenant boundaries. Platform roles do not automatically inherit tenant grievance authority.
 
-Rules:
+## Workforce / Payroll
 
-- Outside renters remain standalone renter records. Do not create fake Homeowner/User records.
-- Rental payment entry should occur through Rental Management; HOAHub creates the official Collection receipt and then reconciles it to rental billing or advance rental credit.
-- Collection remains cash/receipt authority. `RentalPaymentAllocation` is reconciliation authority and must not duplicate cash or cross tenant boundaries.
-- Normal RENT receipts must not be treated as refundable security-deposit liabilities.
-- Rental security deposits are liabilities until valid refund/forfeiture treatment; they are not rental income.
-- Excess rental payment may remain as advance rental credit.
-- Advance rental credit is automatically consumed against eligible RENT invoices oldest-due-first.
-- Active Rental Agreements generate recurring rental invoices according to their own agreement billing day when tenant automatic billing is enabled.
-- Monthly rental invoice creation is duplicate-safe/idempotent per tenant/agreement/charge type/period.
-- Agreement End Date/status governs whether recurring billing continues. Open-ended agreements continue until ended.
-- Ending an agreement releases the asset while preserving historical invoices, receipts, and allocations.
-- Agreement maintenance uses the focused agreement page `/admin/rentals/agreements/[id]`; do not reintroduce the full edit form inline inside the broad agreements table.
-
-### Deferred Rental Reservation Scope
-
-Homeowner self-service browsing/reservation of available rental assets, with admin-side reserved-homeowner visibility and concurrency-safe one-active-reservation-per-asset rules, is NOT yet the confirmed production baseline as of this update. Do not assume it exists without a new reviewed implementation.
-
-## Other Collections, Bonds, and Expenses
-
-- `/admin/collections` separates association income from refundable liabilities.
-- Supported payer authority uses explicit payer type; external renter/other payer names remain bounded free text and must not fabricate Homeowner/User records.
-- Construction/contractor bonds preserve their payer restrictions.
-- Refundable bonds remain liabilities until refunded or validly forfeited.
-- Forfeiture must be explicit, reasoned, authorized, and auditable.
-- Rental security-deposit allocation must not inflate recognized income.
-- `/admin/expenses` uses administrator-defined expense categories and records date, description, payee, amount, method, reference, voucher, and remarks for financial reporting.
-
-## Financial Reports
-
-- `/admin/reports` accepts tenant-scoped From/To date filters.
-- Current reporting includes recognized income, operating expenses, operating surplus/deficit, cash receipts/disbursements, Monthly Dues received/applied/unapplied credit, refundable-bond accountability, rental security-deposit liability treatment, employee loan/cash-advance activity, receivables, and monthly billing summaries.
-- PDF, DOCX, and CSV exports must use the same tenant-scoped accounting authority as the screen.
-- Raw SQL involving rental MVP tables must include explicit authenticated tenant predicates.
-
-### Deferred Payment-Channel Reporting
-
-Detailed financial-report breakdown by posting path/payment rail such as Admin Cash, Admin GCash, PayMongo QR Ph, PayMongo GCash, PayMongo Maya, etc. is NOT yet the confirmed production baseline as of this update. Do not fabricate gateway-rail classification from generic payment method fields. If implemented, persist/derive the successful provider rail from authoritative gateway data and keep reporting consistent across screen/PDF/DOCX/CSV.
-
-## Homeowner Payment Choice and PayMongo Linked Accounts
-
-- Each tenant selects exactly one flow for new homeowner payment attempts: `MANUAL_QR` or `PAYMONGO`.
-- Manual QR uses the tenant's official QR/proof-verification workflow.
-- PayMongo Online uses HOAHub's centrally managed homeowner platform credential; tenant admins must never enter or view the secret key.
-- Tenant configuration stores/uses the linked child merchant organization ID (`org_...`) under authenticated tenant authority.
-- HOAHub creates checkout on behalf of the tenant child account using server-side `Account-ID` routing.
-- The verified child-scoped webhook or authenticated server-to-server PayMongo reconciliation is financial authority; browser redirect/query state is presentation only.
-- Tenant, homeowner, child account, reference, checkout/payment identifiers, currency, amount, and fee metadata must reconcile before posting.
-- Successful gateway confirmation must use the normal idempotent ledger/receipt posting path.
-- HOAHub SaaS subscription billing credentials are separate from homeowner payment credentials.
-- HOAHub convenience fee is platform-controlled. The tenant HOA principal and HOAHub platform fee must remain separately accounted/routed according to the verified PayMongo split policy.
-- Tenant admins cannot change the platform convenience fee from the tenant payment settings page.
-
-## Homeowner Statement of Account and Payment Status
-
-- SOA is the authoritative homeowner account presentation over tenant-scoped ledger data.
-- Current balance must be derived from authoritative posted billing/payment state, not from an old failed attempt.
-- Historical rejected/cancelled payment attempts remain audit history but must not override a later successfully settled account state.
-- Browser redirects cannot manufacture a receipt, approval, or paid state.
-
-## Homeowner Onboarding and Scale
-
-- `/admin/onboarding` supports CSV dry-run and apply with tenant-scoped validation, duplicate/property/account-number checks, exact-file/replay safety, privacy acknowledgement, opening-balance authority, and audit evidence.
-- Operational single-upload ceiling remains 5,000 homeowner rows unless a separately reviewed architecture changes it.
-- Large imports use bounded/batched database operations rather than per-row unbounded work.
-- Large imports defer mass activation credential/email generation rather than performing thousands of synchronous bcrypt/email operations inside one request.
-- Deferred homeowner invitations are issued later through the authenticated Homeowners activation workflow.
-- Do not reintroduce a 500-row hard cap as the production assumption.
-
-## Document Requests and Document Repository
-
-Two related but distinct systems exist:
-
-1. Resident document-service workflow (`/admin/documents`) — document definitions, templates, request processing, approvals, issue/output lifecycle, homeowner requestability, and office/walk-in requests.
-2. Association Document Repository (`/admin/document-management`) — governance/policy/compliance/community files with category, status, visibility, revision, quota, and download/upload permissions.
-
-Rules:
-
-- Tenant-public repository documents are intentionally published; internal/restricted records must never appear to homeowners.
-- Published official document templates and generated output remain governed by the document workflow, not ad hoc UI text.
-- Homeowner document access must enforce same-tenant ownership/visibility and document-balance policy.
-- Repository downloads must enforce repository permissions and never expose internal storage paths.
-
-## Complaint and Grievance Architecture
-
-- Complaint is the intake/operational case layer.
-- Formal grievance/compliance/verification remains a separate domain; do not collapse it into one oversized ComplaintStatus state machine.
-- Anonymous complaint access must expose only public-safe information and preserve anonymous token/privacy rules.
-- Confidential identity reveal, verification, grievance authority, committee access, deadlines, and formal transitions require separate authorization/audit controls.
-- Platform roles do not automatically inherit tenant grievance authority.
-- Do not weaken complaint/grievance privacy to simplify reporting or AI access.
-
-## Workforce and Payroll
-
-- `/admin/workforce`, `/admin/employees`, `/admin/attendance`, and `/admin/payroll` are protected by payroll/workforce access rules.
-- Salary, payroll, deductions, loans/cash advances, corrections, and payslips are confidential tenant data.
-- Employees may see only their own authorized employment/payroll data in the employee portal.
-- Finalization/paid state must remain server-authoritative and auditable.
-- Employee loans/cash advances are receivables; payroll repayments reduce the balance only through the authoritative paid-payroll workflow.
+Payroll, salary, deductions, loans/cash advances, corrections, and payslips are confidential tenant data. Employee portal access does not imply payroll administration. Finalization/paid state remains server-authoritative and auditable.
 
 ## AI Governance
 
-- AI assistance is commercially/tenant governed and permission controlled.
-- Staff Copilot answers only within the authenticated tenant and the user's permitted data domains.
-- Homeowner Association Assistant may use approved tenant knowledge plus only the homeowner's own authorized account records.
-- AI must not receive raw secrets, unrestricted database access, confidential payroll data outside permission, confidential complaint identity outside permission, or another tenant's data.
-- AI-generated drafts remain drafts for human review. AI does not become approval/publishing/payment authority merely because it can draft content.
+AI is commercially/governance/permission controlled. Staff Copilot is tenant scoped and permission scoped; homeowner AI may use approved knowledge plus only that homeowner's authorized data. AI may draft/explain but is not final approval, publication, payment, or grievance authority unless a separately authorized workflow explicitly exists.
 
 ## Authentication and Protected Navigation
 
-- `https://hoahub.tech/login` remains the universal login boundary.
-- Multi-account credential identities must resolve the complete set of eligible active accounts and use signed short-lived server-controlled account-choice state.
-- A selected account must be revalidated active and authorized before session creation.
-- Protected Admin, Platform, Homeowner, and Employee surfaces must re-establish server session/RBAC authority after browser history restoration.
+- `https://hoahub.tech/login` is the universal login boundary.
+- Multi-account identities use signed, short-lived server-controlled account-choice state and revalidation before session creation.
+- Protected Admin/Platform/Homeowner/Employee surfaces re-establish server authority after history restoration.
 - Logout remains server-authoritative; GET must not mutate session state.
-- Private/authenticated pages and sensitive responses remain no-store.
-- Do not restore historical unmerged auth PR logic simply because a stale branch appears to contain a "fix". Compare against current main and current regression tests first.
+- Sensitive authenticated content remains private/no-store.
 
-## Homeowner Mobile and PWA Requirements
+## Hostinger Production Deployment
 
-- Homeowner changes are phone/PWA-first.
-- Use `100dvh` where full-height layout is appropriate.
-- Respect safe-area insets.
-- Keep important touch targets approximately 48px where practical.
-- Avoid hover-only workflows and page-level horizontal overflow.
-- Use shrink-safe `min-w-0` / `max-w-full` patterns.
-- Honor `prefers-reduced-motion` for non-essential animation.
-- Critical forms must remain usable above the mobile keyboard and bottom navigation.
-- Preserve passkey support.
-- Root layout owns the PWA install provider; do not duplicate providers inside the portal layout.
-- Authenticated portal HTML, payments, receipts, documents, uploads, Server Actions, RSC, and router-prefetch traffic remain private/network-only/no-store according to the reviewed cache policy.
+- Feature branches are not production targets.
+- Runtime changes merge to `main` only after exact-head applicable CI passes.
+- Hostinger managed GitHub deployment is authoritative; Node.js production runtime is 22.x.
+- `public/release.txt` is the release marker when stamped by the managed pipeline.
+- Never expose production `.env` values.
+- Production is confirmed separately from CI. A user screenshot showing expected commit `Current` + `Completed` is valid deployment evidence, but not authenticated UAT unless the workflow was actually exercised.
 
-## UI and Navigation System
+## Standard Exact-Head Release Gate
 
-- Existing HOAHub visual tokens (`pine`, `leaf`, `ink`, `sand`, card/field/button/table patterns) remain the approved design system baseline unless a separately approved migration replaces them.
-- Platform control-plane identity uses HOAHub branding; tenant workspaces use tenant identity where appropriate.
-- Admin command search must serialize only authorized routes after role/module/entitlement filtering.
-- Tables should scroll inside contained operational surfaces rather than causing page-level horizontal overflow.
-- Functional UI controls must connect to real routes/actions. Canva/mock sample values are never production data.
-- Official generated document output and production template formatting are not casually altered by general UI redesign work.
-
-## Hostinger Production Deployment Model
-
-The authoritative production path is the Hostinger managed Node.js application connected to GitHub `main`.
-
-- Feature branches are not production deployment targets.
-- Approved changes land on `main` through a reviewed merge or an explicitly authorized direct documentation commit.
-- Push/merge to `main` may run repository verification and trigger Hostinger connected-GitHub auto-deployment.
-- Node.js production runtime is 22.x.
-- `public/release.txt` is used as the production release marker when the managed pipeline stamps the current Git revision.
-- Never expose or print production `.env` contents.
-- Legacy PM2/SSH activation is not the authoritative managed-web-app deployment path.
-
-### Production Release Identification
-
-A runtime release is considered deployed only when the expected merged `main` candidate is verified and Hostinger reports/publishes that release successfully. When available, confirm the expected release marker and `/api/health`. A Hostinger screenshot showing `Current` + `Completed` on the expected commit is valid deployment evidence for the user-facing deployment status, but do not claim authenticated functional UAT that was not actually performed.
-
-## Standard Exact-Head Validation Gate
-
-Before merge/deploy of runtime changes, the exact candidate should pass all applicable gates:
-
-- dependency install with lockfile
-- lint
-- Prisma validate/generate/migrate on CI MySQL when applicable
-- database seed
-- unit tests
-- integration/finance/security tests
-- critical/static verification
-- typecheck
-- production build
-- controlled Chromium preparation
-- production smoke and critical browser/E2E tests
-- Canva Visual Parity for UI initiatives
-
-A passing older branch SHA is not evidence for a changed head. Do not merge a known failing candidate merely to trigger deployment.
-
-Documentation-only changes may use a narrower validation path when they do not alter runtime code, schema, workflow, package configuration, build configuration, or deployment logic; however, documentation must remain factually aligned with current `main`.
+Applicable runtime candidates should pass dependency install/lockfile, lint, Prisma validate/generate/migrate, seed, unit/integration/security/finance verification, typecheck, production build, controlled Chromium, production smoke/critical browser tests, and Canva Visual Parity for UI initiatives. A passing older SHA is not evidence for a changed head.
 
 ## Change Discipline
 
-For every repository change:
+1. Fetch latest `main` before implementation.
+2. Read this file.
+3. Review authorization, tenant scope, accounting, workflow, and historical-data boundaries relevant to the change.
+4. Never use stale closed PR branches as base.
+5. Add/update regression tests.
+6. Preserve finance/document idempotency and audit evidence.
+7. Update `Agent.md` and the User Manual for user-visible deployed changes.
+8. Run exact-head CI.
+9. Merge only a passing candidate.
+10. Verify production separately.
+11. Never report deferred functionality as live.
 
-1. Fetch latest `main` and confirm the base SHA before implementation.
-2. Read `Agent.md` before editing.
-3. Review the implementation, tests, authorization boundary, accounting boundary, and tenant scope relevant to the change.
-4. Do not use stale closed PR branches as the base.
-5. Add/update regression coverage when behavior changes.
-6. Preserve homeowner mobile/PWA acceptance for homeowner-facing changes.
-7. Preserve financial idempotency, receipt authority, audit evidence, and tenant isolation.
-8. Update `Agent.md` when the architecture or operating contract changes.
-9. Update the tenant User Manual for deployed user-visible changes, including access/role guidance and screenshots when applicable.
-10. Run exact-head CI appropriate to the change.
-11. Merge only a candidate that satisfies the applicable gates.
-12. Verify production deployment separately from CI.
-13. Never report a deferred feature as production-ready.
+## Current Deferred / Planned Scope
 
-## Current Deferred / Planned Scope Snapshot
+Unless a later merged change updates this file, these remain pending:
 
-As of 2026-08-23, agents must treat the following as planned/pending rather than already-live production behavior unless a later merged change updates this file:
-
-- Homeowner self-service advance Monthly Dues payment by selecting future From/To months with server-calculated effective-rule amount.
-- Detailed financial reporting broken down by posting path and successful online gateway rail/channel.
-- Homeowner browsing/reservation of rental assets with admin reservation visibility and concurrency-safe reservation ownership.
-- Any other issue/BRD requirement not present in current `main` merely because it exists in an issue, old PR, task file, or conversation.
-
-When one of these is implemented and deployed, move it out of this deferred section and update the corresponding production architecture section plus the User Manual.
+- Homeowner self-service advance Monthly Dues by selecting future From/To months with server-calculated effective Billing Rules.
+- Detailed finance reporting by successful payment posting path/provider rail.
+- Homeowner rental asset browsing/reservation with concurrency-safe ownership and Admin reserved-homeowner visibility.
+- Any issue/task/old-PR requirement not present in current `main` merely because it exists in documentation or conversation.

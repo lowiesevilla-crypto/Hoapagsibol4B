@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Database, FolderLock, HardDrive, TriangleAlert } from "lucide-react";
+import { Database, FolderLock, HardDrive, LibraryBig, TriangleAlert } from "lucide-react";
 import { PageHeader } from "@/components/page-header";
 import { formatRepositoryStorage } from "@/lib/document-repository/quota";
 import { listPlatformRepositoryUsage } from "@/lib/document-repository/platform-usage";
@@ -28,7 +28,7 @@ export default async function PlatformDocumentManagementPage() {
       eyebrow="Platform operations"
       title="Document Management usage"
       description="Commercial and storage visibility by tenant. This report reads tenant-scoped usage metadata only and does not expose document titles, file paths, content, or homeowner downloads."
-      action={<Link className="btn-secondary" href="/platform/plans">Manage plans</Link>}
+      action={<div className="flex flex-wrap gap-2"><Link className="btn-primary" href="/platform/document-management/templates"><LibraryBig className="size-4" /> Free template library</Link><Link className="btn-secondary" href="/platform/plans">Manage plans</Link></div>}
     />
 
     <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">

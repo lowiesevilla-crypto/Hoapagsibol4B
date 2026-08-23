@@ -13,6 +13,7 @@ import type { DocumentCapabilities } from "@/lib/services/document-capabilities"
 import { normalizeDocumentFields, validateDocumentRequestData } from "@/lib/services/document-field-validation";
 import type { DocumentGenerationIssue } from "@/lib/services/document-generation-types";
 import type { DocumentExecutionContext } from "@/lib/services/document-runtime-context";
+import { findDefaultDocumentPresident } from "@/lib/services/document-signatory";
 
 export const generationRequestInclude = {
   homeowner: { include: { user: true } },
@@ -36,6 +37,9 @@ export type GenerationRequestRecord = Prisma.DocumentRequestGetPayload<{ include
 export async function loadGenerationRequest(context: DocumentExecutionContext, requestId: string) {
   const request = await platformPrisma.documentRequest.findFirst({ where: { tenantId: context.tenantId, id: requestId }, include: generationRequestInclude });
   if (!request) return null;
+  if (request.definition && !request.definition.signatoryOfficer) {
+    request.definition.signatoryOfficer = await findDefaultDocumentPresident(context.tenantId);
+  }
   return request;
 }
 

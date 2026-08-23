@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 import {
+  FREE_DOCUMENT_LIBRARY_VERSION,
   freeDocumentTemplateBlueprints,
   validateFreeDocumentTemplateCatalog,
 } from "@/lib/services/platform-document-template-catalog";
@@ -20,17 +21,31 @@ const expectedCodes = [
   "GATE_PASS",
   "MOVE_IN_PASS",
   "MOVE_OUT_PASS",
+  "WORK_PERMIT",
 ];
 
-test("free document catalog contains the ten requested professional document types", () => {
+const approvedLegalCodes = new Set([
+  "CERTIFICATE_OF_RESIDENCY",
+  "CERTIFICATE_OF_INDIGENCY",
+  "CERTIFICATE_OF_GOOD_STANDING",
+  "CLEARANCE_CERTIFICATE",
+  "PAYMENT_CERTIFICATION",
+  "CONSTRUCTION_BOND_CERTIFICATION",
+  "CONTRACTOR_BOND_CERTIFICATION",
+  "WORK_PERMIT",
+]);
+
+test("free document catalog contains the eleven approved professional document types", () => {
   assert.equal(freeDocumentTemplateBlueprints.length, expectedCodes.length);
   assert.deepEqual(freeDocumentTemplateBlueprints.map((item) => item.code), expectedCodes);
+  assert.equal(FREE_DOCUMENT_LIBRARY_VERSION, 2);
   const validation = validateFreeDocumentTemplateCatalog();
   assert.equal(validation.valid, true, validation.errors.join("\n"));
 });
 
 test("every free template defaults to no document fee, sequence numbering, QR validation, and safe tenant installation", () => {
   for (const blueprint of freeDocumentTemplateBlueprints) {
+    assert.equal(blueprint.libraryVersion, FREE_DOCUMENT_LIBRARY_VERSION, blueprint.code);
     assert.equal(blueprint.workflow.paymentRequired, false, blueprint.code);
     assert.equal(blueprint.workflow.feeAmount, 0, blueprint.code);
     assert.match(blueprint.numberingFormat, /\{SEQUENCE/);
@@ -38,6 +53,29 @@ test("every free template defaults to no document fee, sequence numbering, QR va
     assert.ok(blocks.some((block) => block.type === "qrVerification"), `${blueprint.code} must have QR verification`);
     assert.notEqual(blueprint.template.meta.requiresSignatory, true, `${blueprint.code} must not fail installation when a tenant signatory is not configured yet`);
   }
+});
+
+test("approved legal certificates and work permit use readable professional typography", () => {
+  for (const blueprint of freeDocumentTemplateBlueprints.filter((item) => approvedLegalCodes.has(item.code))) {
+    const blocks = [...blueprint.template.sections.header, ...blueprint.template.sections.body, ...blueprint.template.sections.footer];
+    const textBlocks = blocks.filter((block) => block.visible && block.type !== "rectangle" && block.type !== "horizontalLine" && block.type !== "verticalLine" && block.type !== "qrVerification" && typeof block.style?.fontSize === "number");
+    assert.ok(textBlocks.length >= 5, `${blueprint.code} must have structured readable text blocks`);
+    for (const block of textBlocks) {
+      assert.ok((block.style?.fontSize ?? 0) >= 7, `${blueprint.code}:${block.id} font is below the 7pt readability floor`);
+    }
+    assert.ok(blocks.some((block) => block.style?.fontFamily === "Georgia" || block.style?.fontFamily === "Times New Roman"), `${blueprint.code} must retain formal legal typography`);
+  }
+});
+
+test("work permit is approval controlled and operationally complete", () => {
+  const permit = freeDocumentTemplateBlueprints.find((item) => item.code === "WORK_PERMIT");
+  assert.ok(permit);
+  assert.equal(permit.workflow.approvalRequired, true);
+  assert.equal(permit.workflow.releaseRequired, true);
+  assert.equal(permit.validityDays, 1);
+  assert.match(permit.numberingFormat, /^WP-/);
+  const keys = new Set(permit.fields.map((field) => field.key));
+  for (const key of ["purpose", "scheduledDate", "startTime", "endTime", "representativeName", "destination", "vehicleDetails", "itemsSummary", "remarks"]) assert.ok(keys.has(key), `WORK_PERMIT missing ${key}`);
 });
 
 test("assignment creates tenant-editable versions, retires the previously assigned published version, and preserves tenant customization controls", async () => {

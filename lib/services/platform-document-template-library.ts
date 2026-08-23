@@ -61,6 +61,10 @@ export async function getFreeDocumentTemplateTenantStatus(tenantId: string): Pro
     const matches = definitions.filter((definition) => definition.code === blueprint.code || Boolean(blueprint.legacyType && definition.legacyType === blueprint.legacyType));
     const definition = matches.find((item) => item.code === blueprint.code) ?? matches[0] ?? null;
     const metadata = jsonObject(definition?.assignedTemplateVersion?.previewMetadata);
+    const contentHash = hashDefinition(blueprint.template);
+    const assignedContentHash = definition?.assignedTemplateVersion
+      ? hashDefinition(definition.assignedTemplateVersion.definitionJson)
+      : null;
     const installedLibraryVersion = metadata?.source === FREE_DOCUMENT_LIBRARY_SOURCE && metadata.key === blueprint.key
       ? positiveInteger(metadata.libraryVersion)
       : null;
@@ -80,7 +84,8 @@ export async function getFreeDocumentTemplateTenantStatus(tenantId: string): Pro
         && definition.status === DocumentDefinitionStatus.ACTIVE
         && definition.assignedTemplateVersion?.status === DocumentTemplateVersionStatus.PUBLISHED
         && installedLibraryVersion === blueprint.libraryVersion
-        && metadata?.contentHash === hashDefinition(blueprint.template),
+        && metadata?.contentHash === contentHash
+        && assignedContentHash === contentHash,
       ),
       hasExistingDefinition: matches.length > 0,
     };
@@ -252,14 +257,20 @@ async function assignBlueprint(
   const contentHash = hashDefinition(blueprint.template);
   const assigned = definition.assignedTemplateVersion;
   const assignedMeta = jsonObject(assigned?.previewMetadata);
-  const alreadyCurrent = Boolean(
-    assigned
-    && assigned.status === DocumentTemplateVersionStatus.PUBLISHED
-    && assignedMeta?.source === FREE_DOCUMENT_LIBRARY_SOURCE
+  const assignedContentHash = assigned ? hashDefinition(assigned.definitionJson) : null;
+  const metadataClaimsCurrent = Boolean(
+    assignedMeta?.source === FREE_DOCUMENT_LIBRARY_SOURCE
     && assignedMeta.key === blueprint.key
     && positiveInteger(assignedMeta.libraryVersion) === blueprint.libraryVersion
     && assignedMeta.contentHash === contentHash,
   );
+  const alreadyCurrent = Boolean(
+    assigned
+    && assigned.status === DocumentTemplateVersionStatus.PUBLISHED
+    && metadataClaimsCurrent
+    && assignedContentHash === contentHash,
+  );
+  const repairingContentMismatch = Boolean(assigned && metadataClaimsCurrent && assignedContentHash !== contentHash);
 
   let version = assigned;
   let retiredVersionId: string | null = null;
@@ -321,6 +332,8 @@ async function assignBlueprint(
         addedFieldKeys,
         tenantEditable: true,
         historicalRequestsPreserved: true,
+        contentIntegrityVerified: true,
+        repairedContentMismatch: repairingContentMismatch,
       }),
     },
   });

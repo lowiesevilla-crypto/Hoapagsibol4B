@@ -9,6 +9,10 @@ import { payrollApprovalRoles, payrollManageRoles, payrollWriteRoles, requirePay
 import { calculatePayslip } from "@/lib/services/payroll";
 import { employeeLoanSchema, employeeScheduleRangeSchema, overtimeRecordSchema, payrollAccessSchema, payrollCalendarSchema, payrollDeductionSchema, payrollDeductionTypeSchema, payrollPeriodSchema } from "@/lib/validation";
 
+/**
+ * @requirement PAY-SEC-001 PAY-CALC-001
+ * @status IMPLEMENTED
+ */
 export async function generatePayrollAction(formData: FormData) {
   const { user: admin } = await requirePayrollAccess(payrollWriteRoles);
   const parsed = payrollPeriodSchema.safeParse(Object.fromEntries(formData.entries()));
@@ -22,10 +26,14 @@ export async function generatePayrollAction(formData: FormData) {
   redirect(`/admin/payroll?section=processing&period=${periodId}&success=calculated`);
 }
 
+/**
+ * @requirement PAY-SEC-001 PAY-RUN-003
+ * @status IMPLEMENTED
+ */
 export async function recalculatePayrollAction(formData: FormData) {
   const { user: admin } = await requirePayrollAccess(payrollWriteRoles);
   const id = String(formData.get("id") || "");
-  const period = await prisma.payrollPeriod.findUnique({ where: { id } });
+  const period = await prisma.payrollPeriod.findFirst({ where: { id, tenantId: admin.tenantId } });
   if (!period) throw new Error("Payroll period not found.");
   if (period.status === PayrollStatus.PAID) throw new Error("Paid payroll periods are locked and cannot be recalculated.");
   if (period.status === PayrollStatus.FINALIZED) throw new Error("Return this payroll period to draft before recalculating.");
@@ -34,6 +42,10 @@ export async function recalculatePayrollAction(formData: FormData) {
   redirect(`/admin/payroll?section=processing&period=${periodId}&success=recalculated`);
 }
 
+/**
+ * @requirement PAY-SEC-001 PAY-CALC-001
+ * @status IMPLEMENTED
+ */
 async function calculatePeriod(input: { startDate: Date; endDate: Date; payDate: Date; createdById: string }) {
   return prisma.$transaction(async (tx) => {
     const actor = await tx.user.findUniqueOrThrow({ where: { id: input.createdById }, select: { tenantId: true } });
@@ -42,23 +54,27 @@ async function calculatePeriod(input: { startDate: Date; endDate: Date; payDate:
     if (existing?.status === PayrollStatus.FINALIZED) throw new Error("Return this payroll period to draft before recalculating.");
     const period = existing
       ? await tx.payrollPeriod.update({ where: { id: existing.id }, data: { payDate: input.payDate } })
-      : await tx.payrollPeriod.create({ data: input });
+      : await tx.payrollPeriod.create({ data: { ...input, tenantId: actor.tenantId } });
     await refreshPeriodPayslips(tx as unknown as Prisma.TransactionClient, period);
     return period.id;
   }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
 }
 
-async function refreshPeriodPayslips(tx: Prisma.TransactionClient, period: { id: string; startDate: Date; endDate: Date }) {
+/**
+ * @requirement PAY-SEC-001 PAY-CALC-001 PAY-ATT-001 PAY-OT-001
+ * @status IMPLEMENTED
+ */
+async function refreshPeriodPayslips(tx: Prisma.TransactionClient, period: { id: string; tenantId: string; startDate: Date; endDate: Date }) {
   const employees = await tx.employeeProfile.findMany({
-    where: { status: "ACTIVE", hireDate: { lte: period.endDate } },
-    include: { attendance: { where: { date: { gte: period.startDate, lte: period.endDate } } } },
+    where: { tenantId: period.tenantId, status: "ACTIVE", hireDate: { lte: period.endDate } },
+    include: { attendance: { where: { tenantId: period.tenantId, date: { gte: period.startDate, lte: period.endDate } } } },
   });
   const assignedDeductions = await tx.payrollDeduction.findMany({
-    where: { payrollId: period.id },
+    where: { tenantId: period.tenantId, payrollId: period.id },
     select: { employeeId: true, amount: true },
   });
   const approvedOvertime = await tx.overtimeRecord.findMany({
-    where: { status: OvertimeStatus.APPROVED, date: { gte: period.startDate, lte: period.endDate } },
+    where: { tenantId: period.tenantId, status: OvertimeStatus.APPROVED, date: { gte: period.startDate, lte: period.endDate } },
     select: { employeeId: true, hours: true, source: true },
   });
   const deductionsByEmployee = new Map<string, { amount: Prisma.Decimal }[]>();
@@ -74,21 +90,25 @@ async function refreshPeriodPayslips(tx: Prisma.TransactionClient, period: { id:
     overtimeByEmployee.set(overtime.employeeId, employeeOvertime);
   }
   const activeIds = employees.map((employee) => employee.id);
-  await tx.payslip.deleteMany({ where: { payrollId: period.id, ...(activeIds.length ? { employeeId: { notIn: activeIds } } : {}) } });
+  await tx.payslip.deleteMany({ where: { tenantId: period.tenantId, payrollId: period.id, ...(activeIds.length ? { employeeId: { notIn: activeIds } } : {}) } });
   for (const employee of employees) {
     const values = calculatePayslip(employee, employee.attendance, deductionsByEmployee.get(employee.id) ?? [], overtimeByEmployee.get(employee.id) ?? []);
     await tx.payslip.upsert({
       where: { payrollId_employeeId: { payrollId: period.id, employeeId: employee.id } },
-      create: { payrollId: period.id, employeeId: employee.id, ...values },
+      create: { tenantId: period.tenantId, payrollId: period.id, employeeId: employee.id, ...values },
       update: values,
     });
   }
 }
 
+/**
+ * @requirement PAY-SEC-001 PAY-RUN-002
+ * @status IMPLEMENTED
+ */
 export async function finalizePayrollAction(formData: FormData) {
   const { user } = await requirePayrollAccess(payrollApprovalRoles);
   const id = String(formData.get("id") || "");
-  const period = await prisma.payrollPeriod.findUnique({ where: { id }, include: { _count: { select: { payslips: true } } } });
+  const period = await prisma.payrollPeriod.findFirst({ where: { id, tenantId: user.tenantId }, include: { _count: { select: { payslips: true } } } });
   if (!period || !period._count.payslips) throw new Error("Calculate at least one employee payslip before finalizing.");
   if (period.status !== PayrollStatus.DRAFT) throw new Error("Payroll is already finalized.");
   await prisma.payrollPeriod.update({ where: { id }, data: { status: PayrollStatus.FINALIZED } });
@@ -97,10 +117,15 @@ export async function finalizePayrollAction(formData: FormData) {
   redirect(`/admin/payroll?section=approval&period=${id}&success=finalized`);
 }
 
+/**
+ * @requirement PAY-SEC-001 PAY-RUN-003
+ * @status IMPLEMENTED
+ * @description Existing controlled reopen path; full immutable revision model remains IN_PROGRESS under PAY-RUN-003.
+ */
 export async function returnPayrollToDraftAction(formData: FormData) {
   const { user } = await requirePayrollAccess(payrollApprovalRoles);
   const id = String(formData.get("id") || "");
-  const period = await prisma.payrollPeriod.findUnique({ where: { id } });
+  const period = await prisma.payrollPeriod.findFirst({ where: { id, tenantId: user.tenantId } });
   if (!period) throw new Error("Payroll period not found.");
   if (period.status === PayrollStatus.PAID) throw new Error("Paid payroll periods are locked and cannot be returned to draft.");
   if (period.status === PayrollStatus.DRAFT) throw new Error("Payroll period is already in draft.");
@@ -110,18 +135,23 @@ export async function returnPayrollToDraftAction(formData: FormData) {
   redirect(`/admin/payroll?section=approval&period=${id}&success=reopened`);
 }
 
+/**
+ * @requirement PAY-SEC-001 PAY-LOAN-001
+ * @status IMPLEMENTED
+ */
 export async function markPayrollPaidAction(formData: FormData) {
   const { user } = await requirePayrollAccess(payrollApprovalRoles);
   const id = String(formData.get("id") || "");
   await prisma.$transaction(async (tx) => {
-    const period = await tx.payrollPeriod.findUnique({
-      where: { id },
-      include: { deductions: { where: { employeeLoanId: { not: null } }, include: { employeeLoan: true } } },
+    const period = await tx.payrollPeriod.findFirst({
+      where: { id, tenantId: user.tenantId },
+      include: { deductions: { where: { tenantId: user.tenantId, employeeLoanId: { not: null } }, include: { employeeLoan: true } } },
     });
     if (!period || period.status !== PayrollStatus.FINALIZED) throw new Error("Only finalized payroll can be marked paid.");
 
     for (const deduction of period.deductions) {
       if (!deduction.employeeLoan) continue;
+      if (deduction.employeeLoan.tenantId !== user.tenantId) throw new Error("Employee loan is outside the authenticated tenant.");
       const amount = Number(deduction.amount);
       const currentBalance = Number(deduction.employeeLoan.balance);
       if (deduction.employeeLoan.status !== EmployeeLoanStatus.OPEN) throw new Error(`Loan ${deduction.employeeLoan.description} is not open for repayment.`);
@@ -146,6 +176,11 @@ export async function markPayrollPaidAction(formData: FormData) {
   redirect(`/admin/payroll?section=approval&period=${id}&success=paid`);
 }
 
+/**
+ * @requirement PAY-SEC-001 PAY-RUN-003
+ * @status IN_PROGRESS
+ * @description Tenant-safe archive/delete behavior exists; immutable finalized correction/reversal replacement remains pending.
+ */
 export async function deletePayrollAction(formData: FormData) {
   const { user } = await requirePayrollAccess(payrollManageRoles);
   const id = String(formData.get("id") || "");
@@ -153,8 +188,8 @@ export async function deletePayrollAction(formData: FormData) {
   const acknowledged = formData.get("acknowledged") === "on";
   const deletionReason = String(formData.get("deletionReason") || "").trim();
   if (confirmation !== "DELETE" || !acknowledged) throw new Error("Acknowledge the archive notice and type DELETE to remove this payroll period from the active list.");
-  const period = await prisma.payrollPeriod.findUnique({
-    where: { id },
+  const period = await prisma.payrollPeriod.findFirst({
+    where: { id, tenantId: user.tenantId },
     include: {
       createdBy: { select: { id: true, name: true, email: true } },
       payslips: { include: { employee: true } },
@@ -165,11 +200,11 @@ export async function deletePayrollAction(formData: FormData) {
   const employeeIds = period.payslips.map((item) => item.employeeId);
   const [adjustments, overtimeRecords] = await Promise.all([
     prisma.attendanceAdjustment.findMany({
-      where: { attendance: { employeeId: { in: employeeIds }, date: { gte: period.startDate, lte: period.endDate } } },
+      where: { tenantId: user.tenantId, attendance: { employeeId: { in: employeeIds }, date: { gte: period.startDate, lte: period.endDate } } },
       include: { attendance: true, requestedBy: { select: { id: true, name: true } }, reviewedBy: { select: { id: true, name: true } } },
     }),
     prisma.overtimeRecord.findMany({
-      where: { employeeId: { in: employeeIds }, date: { gte: period.startDate, lte: period.endDate } },
+      where: { tenantId: user.tenantId, employeeId: { in: employeeIds }, date: { gte: period.startDate, lte: period.endDate } },
       include: { employee: true, createdBy: { select: { id: true, name: true } }, reviewedBy: { select: { id: true, name: true } } },
     }),
   ]);
@@ -177,6 +212,7 @@ export async function deletePayrollAction(formData: FormData) {
   const archive = await prisma.$transaction(async (tx) => {
     const archived = await tx.payrollArchive.create({
       data: {
+        tenantId: user.tenantId,
         originalPayrollId: period.id,
         status: period.status,
         startDate: period.startDate,
@@ -193,10 +229,10 @@ export async function deletePayrollAction(formData: FormData) {
       },
     });
     await tx.auditLog.create({
-      data: { actorId: user.id, module: "PAYROLL", action: "ARCHIVE_AND_DELETE_PAYROLL_PERIOD", entityType: "PayrollArchive", entityId: archived.id, metadata: { originalPayrollId: id, status: period.status, deletionReason: deletionReason || null } },
+      data: { tenantId: user.tenantId, actorId: user.id, module: "PAYROLL", action: "ARCHIVE_AND_DELETE_PAYROLL_PERIOD", entityType: "PayrollArchive", entityId: archived.id, metadata: { originalPayrollId: id, status: period.status, deletionReason: deletionReason || null } },
     });
-    await tx.payrollDeduction.deleteMany({ where: { payrollId: id } });
-    await tx.payslip.deleteMany({ where: { payrollId: id } });
+    await tx.payrollDeduction.deleteMany({ where: { tenantId: user.tenantId, payrollId: id } });
+    await tx.payslip.deleteMany({ where: { tenantId: user.tenantId, payrollId: id } });
     await tx.payrollPeriod.delete({ where: { id } });
     return archived;
   }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
@@ -205,6 +241,10 @@ export async function deletePayrollAction(formData: FormData) {
   redirect(`/admin/payroll/archive?success=archived&archive=${archive.id}`);
 }
 
+/**
+ * @requirement PAY-SEC-001 PAY-OT-001
+ * @status IMPLEMENTED
+ */
 export async function saveOvertimeRecordAction(formData: FormData) {
   const { user } = await requirePayrollAccess(payrollWriteRoles);
   const parsed = overtimeRecordSchema.safeParse(Object.fromEntries(formData.entries()));
@@ -214,9 +254,12 @@ export async function saveOvertimeRecordAction(formData: FormData) {
   const managerAdjustment = source === OvertimeSource.PAYROLL_MANAGER_ADJUSTMENT;
   if (managerAdjustment) await requirePayrollAccess(payrollManageRoles);
   const status = managerAdjustment ? OvertimeStatus.APPROVED : parsed.data.status as OvertimeStatus;
-  const attendance = await prisma.attendance.findUnique({ where: { employeeId_date: { employeeId: parsed.data.employeeId, date } } });
+  const employee = await prisma.employeeProfile.findFirst({ where: { id: parsed.data.employeeId, tenantId: user.tenantId } });
+  if (!employee) throw new Error("Employee not found.");
+  const attendance = await prisma.attendance.findFirst({ where: { tenantId: user.tenantId, employeeId: parsed.data.employeeId, date } });
   const record = await prisma.overtimeRecord.create({
     data: {
+      tenantId: user.tenantId,
       employeeId: parsed.data.employeeId,
       attendanceId: attendance?.id ?? null,
       date,
@@ -234,12 +277,16 @@ export async function saveOvertimeRecordAction(formData: FormData) {
   redirect("/admin/payroll?section=overtime&success=saved");
 }
 
+/**
+ * @requirement PAY-SEC-001 PAY-OT-001
+ * @status IMPLEMENTED
+ */
 export async function reviewOvertimeRecordAction(formData: FormData) {
   const { user } = await requirePayrollAccess(payrollManageRoles);
   const id = String(formData.get("id") || "");
   const decision = String(formData.get("decision") || "");
   if (decision !== OvertimeStatus.APPROVED && decision !== OvertimeStatus.REJECTED) throw new Error("Choose approve or reject.");
-  const existing = await prisma.overtimeRecord.findUnique({ where: { id } });
+  const existing = await prisma.overtimeRecord.findFirst({ where: { id, tenantId: user.tenantId } });
   if (!existing) throw new Error("Overtime record not found.");
   if (existing.status !== OvertimeStatus.PENDING) throw new Error("Only pending overtime requests can be reviewed.");
   await prisma.overtimeRecord.update({ where: { id }, data: { status: decision as OvertimeStatus, reviewedById: user.id, reviewedAt: new Date() } });
@@ -248,6 +295,10 @@ export async function reviewOvertimeRecordAction(formData: FormData) {
   redirect("/admin/payroll?section=overtime&success=reviewed");
 }
 
+/**
+ * @requirement PAY-SEC-001 PAY-LOAN-001
+ * @status IMPLEMENTED
+ */
 export async function saveEmployeeLoanAction(formData: FormData) {
   const { user } = await requirePayrollAccess(payrollWriteRoles);
   const parsed = employeeLoanSchema.safeParse(Object.fromEntries(formData.entries()));
@@ -256,12 +307,13 @@ export async function saveEmployeeLoanAction(formData: FormData) {
   const issued = new Date(`${issuedDate}T00:00:00.000Z`);
 
   await prisma.$transaction(async (tx) => {
-    const employee = await tx.employeeProfile.findUnique({ where: { id: employeeId } });
+    const employee = await tx.employeeProfile.findFirst({ where: { id: employeeId, tenantId: user.tenantId } });
     if (!employee) throw new Error("Employee not found.");
 
     if (!id) {
       await tx.employeeLoan.create({
         data: {
+          tenantId: user.tenantId,
           employeeId,
           type,
           description,
@@ -276,7 +328,7 @@ export async function saveEmployeeLoanAction(formData: FormData) {
       return;
     }
 
-    const existing = await tx.employeeLoan.findUnique({ where: { id }, include: { _count: { select: { payrollDeductions: true } } } });
+    const existing = await tx.employeeLoan.findFirst({ where: { id, tenantId: user.tenantId }, include: { _count: { select: { payrollDeductions: true } } } });
     if (!existing) throw new Error("Employee loan or cash advance not found.");
     if (existing._count.payrollDeductions > 0 && employeeId !== existing.employeeId) throw new Error("This loan already has payroll deductions, so the employee cannot be changed.");
     if (existing.status === EmployeeLoanStatus.CANCELLED) throw new Error("Cancelled loans cannot be edited.");
@@ -306,13 +358,17 @@ export async function saveEmployeeLoanAction(formData: FormData) {
   redirect(`/admin/payroll?section=loans&success=saved&message=${encodeURIComponent("Employee loan or cash advance has been saved successfully.")}`);
 }
 
+/**
+ * @requirement PAY-SEC-001 PAY-LOAN-001
+ * @status IMPLEMENTED
+ */
 export async function cancelEmployeeLoanAction(formData: FormData) {
   const { user } = await requirePayrollAccess(payrollManageRoles);
   const id = String(formData.get("id") || "");
   if (!id) throw new Error("Employee loan or cash advance not found.");
 
   await prisma.$transaction(async (tx) => {
-    const loan = await tx.employeeLoan.findUnique({ where: { id }, include: { _count: { select: { payrollDeductions: true } } } });
+    const loan = await tx.employeeLoan.findFirst({ where: { id, tenantId: user.tenantId }, include: { _count: { select: { payrollDeductions: true } } } });
     if (!loan) throw new Error("Employee loan or cash advance not found.");
     if (Number(loan.amountPaid) > 0 || loan._count.payrollDeductions > 0) throw new Error("Loans with repayments or payroll deductions cannot be cancelled. Keep them for audit trail.");
     await tx.employeeLoan.update({ where: { id }, data: { status: EmployeeLoanStatus.CANCELLED, balance: 0 } });
@@ -323,6 +379,10 @@ export async function cancelEmployeeLoanAction(formData: FormData) {
   redirect(`/admin/payroll?section=loans&success=cancelled&message=${encodeURIComponent("Employee loan or cash advance has been cancelled.")}`);
 }
 
+/**
+ * @requirement PAY-SEC-001 PAY-DED-001
+ * @status IMPLEMENTED
+ */
 export async function savePayrollDeductionTypeAction(formData: FormData) {
   const { user } = await requirePayrollAccess(payrollManageRoles);
   const parsed = payrollDeductionTypeSchema.safeParse({
@@ -333,16 +393,23 @@ export async function savePayrollDeductionTypeAction(formData: FormData) {
   });
   if (!parsed.success) throw new Error(parsed.error.issues[0]?.message || "Invalid payroll deduction type.");
   const { id, ...data } = parsed.data;
-  await prisma.payrollDeductionType.upsert({
-    where: { id: id || "__new_deduction_type__" },
-    create: data,
-    update: data,
-  });
-  await writeAuditLog({ actorId: user.id, module: "PAYROLL", action: parsed.data.id ? "UPDATE_DEDUCTION_TYPE" : "CREATE_DEDUCTION_TYPE", entityType: "PayrollDeductionType", entityId: parsed.data.id ?? null, metadata: { name: parsed.data.name, active: parsed.data.active } });
+  let record;
+  if (id) {
+    const existing = await prisma.payrollDeductionType.findFirst({ where: { id, tenantId: user.tenantId } });
+    if (!existing) throw new Error("Payroll deduction type not found.");
+    record = await prisma.payrollDeductionType.update({ where: { id }, data });
+  } else {
+    record = await prisma.payrollDeductionType.create({ data: { ...data, tenantId: user.tenantId } });
+  }
+  await writeAuditLog({ actorId: user.id, module: "PAYROLL", action: id ? "UPDATE_DEDUCTION_TYPE" : "CREATE_DEDUCTION_TYPE", entityType: "PayrollDeductionType", entityId: record.id, metadata: { name: data.name, active: data.active } });
   revalidatePayrollPages();
   redirect(`/admin/payroll?section=settings&success=saved&message=${encodeURIComponent("Payroll deduction type saved successfully. Assign it to specific employees and payroll periods when needed.")}`);
 }
 
+/**
+ * @requirement PAY-SEC-001 PAY-DED-001 PAY-LOAN-001
+ * @status IMPLEMENTED
+ */
 export async function savePayrollDeductionAction(formData: FormData) {
   const { user } = await requirePayrollAccess(payrollWriteRoles);
   const parsed = payrollDeductionSchema.safeParse(Object.fromEntries(formData.entries()));
@@ -351,9 +418,9 @@ export async function savePayrollDeductionAction(formData: FormData) {
 
   await prisma.$transaction(async (tx) => {
     const [period, employee, deductionType] = await Promise.all([
-      tx.payrollPeriod.findUnique({ where: { id: payrollId } }),
-      tx.employeeProfile.findUnique({ where: { id: employeeId } }),
-      tx.payrollDeductionType.findUnique({ where: { id: deductionTypeId } }),
+      tx.payrollPeriod.findFirst({ where: { id: payrollId, tenantId: user.tenantId } }),
+      tx.employeeProfile.findFirst({ where: { id: employeeId, tenantId: user.tenantId } }),
+      tx.payrollDeductionType.findFirst({ where: { id: deductionTypeId, tenantId: user.tenantId } }),
     ]);
     if (!period) throw new Error("Payroll period not found.");
     if (period.status === PayrollStatus.PAID) throw new Error("Paid payroll periods are locked and cannot be changed.");
@@ -364,18 +431,19 @@ export async function savePayrollDeductionAction(formData: FormData) {
     const appliesToEmployee = employee.salaryType === "MONTHLY" ? deductionType.applyToMonthly : deductionType.applyToDaily;
     if (!appliesToEmployee) throw new Error("This deduction type is not applicable to the selected employee salary type.");
 
-    const existingDeduction = await tx.payrollDeduction.findUnique({
-      where: { payrollId_employeeId_deductionTypeId: { payrollId, employeeId, deductionTypeId } },
+    const existingDeduction = await tx.payrollDeduction.findFirst({
+      where: { tenantId: user.tenantId, payrollId, employeeId, deductionTypeId },
     });
 
     if (employeeLoanId) {
-      const loan = await tx.employeeLoan.findUnique({ where: { id: employeeLoanId } });
+      const loan = await tx.employeeLoan.findFirst({ where: { id: employeeLoanId, tenantId: user.tenantId } });
       if (!loan) throw new Error("Employee loan or cash advance not found.");
       if (loan.employeeId !== employeeId) throw new Error("The selected loan belongs to a different employee.");
       if (loan.status !== EmployeeLoanStatus.OPEN) throw new Error("Only open loans or cash advances can receive payroll repayments.");
 
       const reservedRepayments = await tx.payrollDeduction.findMany({
         where: {
+          tenantId: user.tenantId,
           employeeLoanId,
           payroll: { status: { in: [PayrollStatus.DRAFT, PayrollStatus.FINALIZED] } },
           ...(existingDeduction ? { NOT: { id: existingDeduction.id } } : {}),
@@ -389,7 +457,7 @@ export async function savePayrollDeductionAction(formData: FormData) {
 
     await tx.payrollDeduction.upsert({
       where: { payrollId_employeeId_deductionTypeId: { payrollId, employeeId, deductionTypeId } },
-      create: { payrollId, employeeId, deductionTypeId, employeeLoanId, amount, remarks },
+      create: { tenantId: user.tenantId, payrollId, employeeId, deductionTypeId, employeeLoanId, amount, remarks },
       update: { employeeLoanId, amount, remarks },
     });
     await refreshPeriodPayslips(tx as unknown as Prisma.TransactionClient, period);
@@ -400,6 +468,10 @@ export async function savePayrollDeductionAction(formData: FormData) {
   redirect(`/admin/payroll?section=adjustments&period=${payrollId}&employee=${employeeId}&success=saved&message=${encodeURIComponent(employeeLoanId ? "Loan repayment deduction has been saved for this employee and cutoff period." : "Employee deduction has been saved for this cutoff period.")}`);
 }
 
+/**
+ * @requirement PAY-SEC-001 PAY-DED-001
+ * @status IMPLEMENTED
+ */
 export async function deletePayrollDeductionAction(formData: FormData) {
   const { user } = await requirePayrollAccess(payrollWriteRoles);
   const id = String(formData.get("id") || "");
@@ -408,11 +480,11 @@ export async function deletePayrollDeductionAction(formData: FormData) {
   if (!id || !payrollId) throw new Error("Payroll deduction not found.");
 
   await prisma.$transaction(async (tx) => {
-    const period = await tx.payrollPeriod.findUnique({ where: { id: payrollId } });
+    const period = await tx.payrollPeriod.findFirst({ where: { id: payrollId, tenantId: user.tenantId } });
     if (!period) throw new Error("Payroll period not found.");
     if (period.status === PayrollStatus.PAID) throw new Error("Paid payroll periods are locked and cannot be changed.");
     if (period.status === PayrollStatus.FINALIZED) throw new Error("Return this payroll period to draft before changing employee deductions.");
-    const deduction = await tx.payrollDeduction.findUnique({ where: { id }, select: { employeeId: true, payrollId: true } });
+    const deduction = await tx.payrollDeduction.findFirst({ where: { id, tenantId: user.tenantId }, select: { employeeId: true, payrollId: true } });
     if (!deduction || deduction.payrollId !== payrollId) throw new Error("Payroll deduction not found for this cutoff period.");
     employeeId = employeeId || deduction.employeeId;
     await tx.payrollDeduction.delete({ where: { id } });
@@ -424,25 +496,35 @@ export async function deletePayrollDeductionAction(formData: FormData) {
   redirect(`/admin/payroll?section=adjustments&period=${payrollId}${employeeId ? `&employee=${employeeId}` : ""}&success=deleted&message=${encodeURIComponent("Employee deduction has been removed from this cutoff period.")}`);
 }
 
+/**
+ * @requirement PAY-SEC-001 PAY-SEC-002
+ * @status IMPLEMENTED
+ */
 export async function savePayrollAccessAction(formData: FormData) {
   const { user } = await requirePayrollAccess(payrollManageRoles);
   const parsed = payrollAccessSchema.safeParse({ ...Object.fromEntries(formData.entries()), active: formData.get("active") === "on" });
   if (!parsed.success) throw new Error(parsed.error.issues[0]?.message || "Invalid payroll access assignment.");
   const { userId, role, active } = parsed.data;
+  const targetUser = await prisma.user.findFirst({ where: { id: userId, tenantId: user.tenantId } });
+  if (!targetUser) throw new Error("Payroll access user not found in the authenticated tenant.");
   await prisma.payrollAccess.upsert({
     where: { userId_role: { userId, role } },
-    create: { userId, role, active, grantedById: user.id },
-    update: { active, grantedById: user.id },
+    create: { tenantId: user.tenantId, userId, role, active, grantedById: user.id },
+    update: { tenantId: user.tenantId, active, grantedById: user.id },
   });
   await writeAuditLog({ actorId: user.id, module: "PAYROLL", action: "SAVE_PAYROLL_ACCESS", entityType: "User", entityId: userId, metadata: { role, active } });
   revalidatePayrollPages();
   redirect(`/admin/payroll?section=settings&success=saved&message=${encodeURIComponent("Payroll access has been updated.")}`);
 }
 
+/**
+ * @requirement PAY-SEC-001 PAY-SEC-002
+ * @status IMPLEMENTED
+ */
 export async function deletePayrollAccessAction(formData: FormData) {
   const { user } = await requirePayrollAccess(payrollManageRoles);
   const id = String(formData.get("id") || "");
-  const access = await prisma.payrollAccess.findUnique({ where: { id } });
+  const access = await prisma.payrollAccess.findFirst({ where: { id, tenantId: user.tenantId } });
   if (!access) throw new Error("Payroll access record not found.");
   if (access.userId === user.id && access.role === PayrollAccessRole.SYSTEM_ADMINISTRATOR) throw new Error("You cannot remove your own system payroll access.");
   await prisma.payrollAccess.delete({ where: { id } });
@@ -451,25 +533,42 @@ export async function deletePayrollAccessAction(formData: FormData) {
   redirect(`/admin/payroll?section=settings&success=deleted&message=${encodeURIComponent("Payroll access has been removed.")}`);
 }
 
+/**
+ * @requirement PAY-SEC-001 PAY-SHIFT-001
+ * @status IMPLEMENTED
+ */
 export async function savePayrollCalendarDayAction(formData: FormData) {
   const { user } = await requirePayrollAccess(payrollManageRoles);
   const parsed = payrollCalendarSchema.safeParse({ ...Object.fromEntries(formData.entries()), active: formData.get("active") === "on" });
   if (!parsed.success) throw new Error(parsed.error.issues[0]?.message || "Invalid payroll calendar day.");
   const { id, date, ...data } = parsed.data;
   const targetDate = new Date(`${date}T00:00:00.000Z`);
-  const record = id
-    ? await prisma.payrollCalendarDay.update({ where: { id }, data: { ...data, date: targetDate, createdById: user.id } })
-    : await prisma.payrollCalendarDay.upsert({ where: { tenantId_date: { tenantId: user.tenantId, date: targetDate } }, create: { ...data, tenantId: user.tenantId, date: targetDate, createdById: user.id }, update: { ...data, createdById: user.id } });
+  let record;
+  if (id) {
+    const existing = await prisma.payrollCalendarDay.findFirst({ where: { id, tenantId: user.tenantId } });
+    if (!existing) throw new Error("Payroll calendar day not found.");
+    record = await prisma.payrollCalendarDay.update({ where: { id }, data: { ...data, date: targetDate, createdById: user.id } });
+  } else {
+    record = await prisma.payrollCalendarDay.upsert({
+      where: { tenantId_date: { tenantId: user.tenantId, date: targetDate } },
+      create: { ...data, tenantId: user.tenantId, date: targetDate, createdById: user.id },
+      update: { ...data, createdById: user.id },
+    });
+  }
   await writeAuditLog({ actorId: user.id, module: "PAYROLL", action: id ? "UPDATE_CALENDAR_DAY" : "SAVE_CALENDAR_DAY", entityType: "PayrollCalendarDay", entityId: record.id, metadata: { date, type: data.type } });
   revalidatePayrollPages();
   revalidatePath("/admin/attendance");
   redirect(`/admin/payroll?section=calendar&success=saved&message=${encodeURIComponent("Payroll calendar day has been saved.")}`);
 }
 
+/**
+ * @requirement PAY-SEC-001 PAY-SHIFT-001
+ * @status IMPLEMENTED
+ */
 export async function deletePayrollCalendarDayAction(formData: FormData) {
   const { user } = await requirePayrollAccess(payrollManageRoles);
   const id = String(formData.get("id") || "");
-  const record = await prisma.payrollCalendarDay.findUnique({ where: { id } });
+  const record = await prisma.payrollCalendarDay.findFirst({ where: { id, tenantId: user.tenantId } });
   if (!record) throw new Error("Payroll calendar day not found.");
   await prisma.payrollCalendarDay.delete({ where: { id } });
   await writeAuditLog({ actorId: user.id, module: "PAYROLL", action: "DELETE_CALENDAR_DAY", entityType: "PayrollCalendarDay", entityId: id, metadata: { date: record.date, type: record.type } });
@@ -478,17 +577,24 @@ export async function deletePayrollCalendarDayAction(formData: FormData) {
   redirect(`/admin/payroll?section=calendar&success=deleted&message=${encodeURIComponent("Payroll calendar day has been deleted.")}`);
 }
 
+/**
+ * @requirement PAY-SEC-001 PAY-SHIFT-001
+ * @status IMPLEMENTED
+ */
 export async function saveEmployeeScheduleAction(formData: FormData) {
   const { user } = await requirePayrollAccess(payrollManageRoles);
   const parsed = employeeScheduleRangeSchema.safeParse({ ...Object.fromEntries(formData.entries()), restDays: formData.getAll("restDays").map(String) });
   if (!parsed.success) throw new Error(parsed.error.issues[0]?.message || "Invalid employee schedule.");
   const { effectiveFrom, effectiveTo, restDays = [], ...data } = parsed.data;
+  const employee = await prisma.employeeProfile.findFirst({ where: { id: data.employeeId, tenantId: user.tenantId } });
+  if (!employee) throw new Error("Employee not found.");
   const start = new Date(`${effectiveFrom}T00:00:00.000Z`);
   const end = effectiveTo ? new Date(`${effectiveTo}T00:00:00.000Z`) : null;
   const searchEnd = end ?? new Date("9999-12-31T00:00:00.000Z");
   const days = [0, 1, 2, 3, 4, 5, 6];
   const conflicts = await prisma.employeeSchedule.findMany({
     where: {
+      tenantId: user.tenantId,
       employeeId: data.employeeId,
       dayOfWeek: { in: days },
       effectiveFrom: { lte: searchEnd },
@@ -504,6 +610,7 @@ export async function saveEmployeeScheduleAction(formData: FormData) {
   const records = await prisma.$transaction(days.map((dayOfWeek) => prisma.employeeSchedule.create({
     data: {
       ...data,
+      tenantId: user.tenantId,
       dayOfWeek,
       restDay: restDaySet.has(dayOfWeek),
       effectiveFrom: start,
@@ -517,10 +624,14 @@ export async function saveEmployeeScheduleAction(formData: FormData) {
   redirect(`/admin/payroll?section=calendar&success=saved&message=${encodeURIComponent("Employee schedule range has been saved.")}`);
 }
 
+/**
+ * @requirement PAY-SEC-001 PAY-SHIFT-001
+ * @status IMPLEMENTED
+ */
 export async function deleteEmployeeScheduleAction(formData: FormData) {
   const { user } = await requirePayrollAccess(payrollManageRoles);
   const id = String(formData.get("id") || "");
-  const record = await prisma.employeeSchedule.findUnique({ where: { id } });
+  const record = await prisma.employeeSchedule.findFirst({ where: { id, tenantId: user.tenantId } });
   if (!record) throw new Error("Employee schedule not found.");
   await prisma.employeeSchedule.delete({ where: { id } });
   await writeAuditLog({ actorId: user.id, module: "PAYROLL", action: "DELETE_EMPLOYEE_SCHEDULE", entityType: "EmployeeSchedule", entityId: id, metadata: { employeeId: record.employeeId, dayOfWeek: record.dayOfWeek } });
@@ -529,6 +640,10 @@ export async function deleteEmployeeScheduleAction(formData: FormData) {
   redirect(`/admin/payroll?section=calendar&success=deleted&message=${encodeURIComponent("Employee schedule has been deleted.")}`);
 }
 
+/**
+ * @requirement PAY-REQ-001
+ * @status IMPLEMENTED
+ */
 function revalidatePayrollPages() {
   revalidatePath("/admin/payroll");
   revalidatePath("/admin/reports");
@@ -536,14 +651,26 @@ function revalidatePayrollPages() {
   revalidatePath("/employee/attendance");
 }
 
+/**
+ * @requirement PAY-CALC-003 PAY-LOAN-001
+ * @status IMPLEMENTED
+ */
 function roundMoney(value: number) {
   return Math.round((value + Number.EPSILON) * 100) / 100;
 }
 
+/**
+ * @requirement PAY-LOAN-001
+ * @status IMPLEMENTED
+ */
 function formatPeso(value: number) {
   return new Intl.NumberFormat("en-PH", { style: "currency", currency: "PHP" }).format(value);
 }
 
+/**
+ * @requirement PAY-RUN-003
+ * @status IMPLEMENTED
+ */
 function jsonValue(value: unknown): Prisma.InputJsonValue {
   return JSON.parse(JSON.stringify(value)) as Prisma.InputJsonValue;
 }

@@ -82,6 +82,30 @@ export async function executeDocumentWorkflowAfterSubmission(context: DocumentEx
     throw new DocumentRuntimeError("INVALID_STATE", "Cancelled, rejected, or revoked document requests cannot continue.");
   }
 
+  if (isAdminOfficeRequest(context, request)) {
+    const payment = request.paymentRequiredSnapshot ? await ensureDocumentFeePaymentRequest(context, request) : null;
+    await platformPrisma.auditLog.create({
+      data: {
+        tenantId: context.tenantId,
+        actorId: context.authenticatedUserId,
+        module: "DOCUMENTS",
+        action: "ADMIN_OFFICE_DIRECT_ISSUANCE",
+        entityType: "DocumentRequest",
+        entityId: request.id,
+        metadata: {
+          definitionId: request.definitionId,
+          definitionWorkflow: workflowLabel(request),
+          approvalBypassedForAdminIssuance: true,
+          paymentRequired: request.paymentRequiredSnapshot,
+          paymentRequestId: payment?.id ?? null,
+          paymentStatus: payment?.status ?? null,
+        },
+      },
+    });
+    const result = await issueOfficialDocument(context, request);
+    return payment ? { ...result, paymentRequestId: payment.id } : result;
+  }
+
   if (isRequestOnly(request)) {
     const updated = await ensureStatus(context, request, DocumentRequestStatus.SUBMITTED, "Request recorded for manual office processing.");
     return { requestId: request.id, status: updated.status, action: "REQUEST_ONLY" };
@@ -105,6 +129,9 @@ export async function executeDocumentWorkflowAfterSubmission(context: DocumentEx
 export async function advanceDocumentWorkflowAfterPayment(context: DocumentExecutionContext, requestId: string): Promise<DocumentWorkflowExecutorResult> {
   const request = await loadWorkflowRequest(context, requestId);
   await assertWorkflowRequest(context, request);
+  if (issuedStatuses.has(request.status) || request.currentVersion > 0) {
+    return { requestId: request.id, status: request.status, action: "NOOP", paymentRequestId: request.paymentRequest?.id ?? null, documentNumber: request.documentNumber };
+  }
   if (!request.paymentRequiredSnapshot) return executeDocumentWorkflowAfterSubmission(context, request.id);
   if (request.paymentRequest?.status !== PaymentRequestStatus.APPROVED) {
     throw new DocumentRuntimeError("INVALID_STATE", "Document fee payment has not been confirmed.");
@@ -245,14 +272,14 @@ async function ensureDocumentFeePaymentRequest(context: DocumentExecutionContext
         homeownerId: request.homeownerId,
         documentRequestId: request.id,
         collectionType: CollectionType.OTHER,
-        description: `Document fee - ${request.definition?.displayName ?? "Official HOA document"}`,
+        description: `Document Fee - ${request.definition?.displayName ?? "Official HOA document"}`,
         amount: request.feeAmountSnapshot,
         paymentDate: todayUtc(),
         method: PaymentMethod.GCASH,
-        payerNotes: `Payment required for document request ${request.id}.`,
+        payerNotes: `Document Fee for request ${request.id}.`,
       },
     });
-    await tx.auditLog.create({ data: { tenantId: context.tenantId, actorId: context.authenticatedUserId, module: "DOCUMENTS", action: "CREATE_DOCUMENT_FEE_PAYMENT_REQUEST", entityType: "PaymentRequest", entityId: created.id, metadata: { documentRequestId: request.id, amount: String(request.feeAmountSnapshot), workflow: workflowLabel(request) } } });
+    await tx.auditLog.create({ data: { tenantId: context.tenantId, actorId: context.authenticatedUserId, module: "DOCUMENTS", action: "CREATE_DOCUMENT_FEE_PAYMENT_REQUEST", entityType: "PaymentRequest", entityId: created.id, metadata: { documentRequestId: request.id, amount: String(request.feeAmountSnapshot), workflow: workflowLabel(request), financeClassification: "DOCUMENT_FEE" } } });
     return created;
   }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
 }
@@ -372,6 +399,10 @@ export function paymentConfirmedByStatus(status: DocumentRequestStatus | string)
 
 function isRequestOnly(request: WorkflowRequest) {
   return request.deliveryModeSnapshot === DocumentDeliveryMode.REQUEST_ONLY || request.definition?.deliveryMode === DocumentDeliveryMode.REQUEST_ONLY;
+}
+
+function isAdminOfficeRequest(context: DocumentExecutionContext, request: WorkflowRequest) {
+  return request.origin === "ADMIN" && context.role !== Role.HOMEOWNER;
 }
 
 function workflowLabel(request: WorkflowRequest) {

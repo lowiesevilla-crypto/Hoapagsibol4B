@@ -75,7 +75,20 @@ test("work permit is approval controlled and operationally complete", () => {
   assert.equal(permit.validityDays, 1);
   assert.match(permit.numberingFormat, /^WP-/);
   const keys = new Set(permit.fields.map((field) => field.key));
-  for (const key of ["purpose", "scheduledDate", "startTime", "endTime", "representativeName", "destination", "vehicleDetails", "itemsSummary", "remarks"]) assert.ok(keys.has(key), `WORK_PERMIT missing ${key}`);
+  for (const key of ["purpose", "scheduledDate", "startTime", "endTime", "representativeName", "destination", "vehicleDetails", "items", "remarks"]) assert.ok(keys.has(key), `WORK_PERMIT missing ${key}`);
+});
+
+test("gate and move pass library fields map to the existing generation runtime", () => {
+  const gate = freeDocumentTemplateBlueprints.find((item) => item.code === "GATE_PASS");
+  const moveIn = freeDocumentTemplateBlueprints.find((item) => item.code === "MOVE_IN_PASS");
+  const moveOut = freeDocumentTemplateBlueprints.find((item) => item.code === "MOVE_OUT_PASS");
+  assert.ok(gate && moveIn && moveOut);
+  assert.ok(gate.fields.some((field) => field.key === "representativeName"));
+  for (const pass of [moveIn, moveOut]) {
+    const keys = new Set(pass.fields.map((field) => field.key));
+    assert.ok(keys.has("contractorDetails"), `${pass.code} must collect service-provider data through the runtime-supported contractorDetails field`);
+    assert.ok(keys.has("items"), `${pass.code} must collect item rows through the runtime-supported items field`);
+  }
 });
 
 test("assignment creates tenant-editable versions, retires the previously assigned published version, and preserves tenant customization controls", async () => {

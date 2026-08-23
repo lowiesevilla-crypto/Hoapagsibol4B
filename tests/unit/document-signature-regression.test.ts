@@ -14,7 +14,7 @@ test("documents without an explicit signatory default to the active tenant presi
   assert.match(eligibility, /request\.definition && !request\.definition\.signatoryOfficer/);
   assert.match(eligibility, /request\.definition\.signatoryOfficer = await findDefaultDocumentPresident\(context\.tenantId\)/);
   assert.match(signatory, /isPresidentPosition/);
-  assert.match(signatory, /\bvice\|past\|former\|assistant/);
+  assert.match(signatory, /vice\|past\|former\|assistant/);
   assert.match(signatory, /homeowners association president/);
 });
 

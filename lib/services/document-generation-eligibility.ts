@@ -13,7 +13,8 @@ import type { DocumentCapabilities } from "@/lib/services/document-capabilities"
 import { normalizeDocumentFields, validateDocumentRequestData } from "@/lib/services/document-field-validation";
 import type { DocumentGenerationIssue } from "@/lib/services/document-generation-types";
 import type { DocumentExecutionContext } from "@/lib/services/document-runtime-context";
-import { findDefaultDocumentPresident } from "@/lib/services/document-signatory";
+import { DocumentRuntimeError } from "@/lib/services/document-runtime-errors";
+import { findDefaultDocumentPresident, templateRequiresDocumentSignature } from "@/lib/services/document-signatory";
 
 export const generationRequestInclude = {
   homeowner: { include: { user: true } },
@@ -38,7 +39,11 @@ export async function loadGenerationRequest(context: DocumentExecutionContext, r
   const request = await platformPrisma.documentRequest.findFirst({ where: { tenantId: context.tenantId, id: requestId }, include: generationRequestInclude });
   if (!request) return null;
   if (request.definition && !request.definition.signatoryOfficer) {
-    request.definition.signatoryOfficer = await findDefaultDocumentPresident(context.tenantId);
+    const president = await findDefaultDocumentPresident(context.tenantId);
+    if (president) request.definition.signatoryOfficer = president;
+    else if (templateRequiresDocumentSignature(request.definition.assignedTemplateVersion?.definitionJson)) {
+      throw new DocumentRuntimeError("SIGNATORY_MISSING", "A required signature document cannot be generated because this tenant has no active President configured for the current term.");
+    }
   }
   return request;
 }

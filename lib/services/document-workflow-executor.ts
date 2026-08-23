@@ -84,6 +84,7 @@ export async function executeDocumentWorkflowAfterSubmission(context: DocumentEx
 
   if (isAdminOfficeRequest(context, request)) {
     const payment = request.paymentRequiredSnapshot ? await ensureDocumentFeePaymentRequest(context, request) : null;
+    const issuanceRequest = await persistAdminOfficeApprovalBypass(context, request);
     await platformPrisma.auditLog.create({
       data: {
         tenantId: context.tenantId,
@@ -96,13 +97,15 @@ export async function executeDocumentWorkflowAfterSubmission(context: DocumentEx
           definitionId: request.definitionId,
           definitionWorkflow: workflowLabel(request),
           approvalBypassedForAdminIssuance: true,
+          configuredApprovalRequired: request.approvalRequiredSnapshot,
+          effectiveApprovalRequired: false,
           paymentRequired: request.paymentRequiredSnapshot,
           paymentRequestId: payment?.id ?? null,
           paymentStatus: payment?.status ?? null,
         },
       },
     });
-    const result = await issueOfficialDocument(context, request);
+    const result = await issueOfficialDocument(context, issuanceRequest);
     return payment ? { ...result, paymentRequestId: payment.id } : result;
   }
 
@@ -282,6 +285,15 @@ async function ensureDocumentFeePaymentRequest(context: DocumentExecutionContext
     await tx.auditLog.create({ data: { tenantId: context.tenantId, actorId: context.authenticatedUserId, module: "DOCUMENTS", action: "CREATE_DOCUMENT_FEE_PAYMENT_REQUEST", entityType: "PaymentRequest", entityId: created.id, metadata: { documentRequestId: request.id, amount: String(request.feeAmountSnapshot), workflow: workflowLabel(request), financeClassification: "DOCUMENT_FEE" } } });
     return created;
   }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+}
+
+async function persistAdminOfficeApprovalBypass(context: DocumentExecutionContext, request: WorkflowRequest): Promise<WorkflowRequest> {
+  if (!request.approvalRequiredSnapshot) return request;
+  await platformPrisma.$transaction(async (tx) => {
+    await tx.documentRequest.update({ where: { id: request.id }, data: { approvalRequiredSnapshot: false } });
+    await tx.documentRequestHistory.create({ data: { tenantId: context.tenantId, requestId: request.id, status: request.status, actorId: context.authenticatedUserId, note: "Tenant Admin direct issuance bypassed the homeowner approval requirement. Payment and other configured controls remain separately tracked." } });
+  });
+  return { ...request, approvalRequiredSnapshot: false };
 }
 
 async function ensureStatus(context: DocumentExecutionContext, request: WorkflowRequest, status: DocumentRequestStatus, note: string, metadata: Record<string, unknown> = {}) {

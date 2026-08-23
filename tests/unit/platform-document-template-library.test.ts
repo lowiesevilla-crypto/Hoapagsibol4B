@@ -35,12 +35,38 @@ const approvedLegalCodes = new Set([
   "WORK_PERMIT",
 ]);
 
+function allBlocks(code: string) {
+  const blueprint = freeDocumentTemplateBlueprints.find((item) => item.code === code);
+  assert.ok(blueprint, `Missing blueprint ${code}`);
+  return [...blueprint.template.sections.header, ...blueprint.template.sections.body, ...blueprint.template.sections.footer];
+}
+
+function allText(code: string) {
+  return allBlocks(code).map((block) => String(block.content || block.text || "")).join("\n");
+}
+
 test("free document catalog contains the eleven approved professional document types", () => {
   assert.equal(freeDocumentTemplateBlueprints.length, expectedCodes.length);
   assert.deepEqual(freeDocumentTemplateBlueprints.map((item) => item.code), expectedCodes);
-  assert.equal(FREE_DOCUMENT_LIBRARY_VERSION, 2);
+  assert.equal(FREE_DOCUMENT_LIBRARY_VERSION, 3);
   const validation = validateFreeDocumentTemplateCatalog();
   assert.equal(validation.valid, true, validation.errors.join("\n"));
+});
+
+test("every approved free template uses true A4 portrait geometry and complete tenant identity", () => {
+  for (const blueprint of freeDocumentTemplateBlueprints) {
+    assert.equal(blueprint.template.page.format, "A4", blueprint.code);
+    assert.equal(blueprint.template.page.orientation, "portrait", blueprint.code);
+    assert.equal(blueprint.template.page.widthMm, 210, blueprint.code);
+    assert.equal(blueprint.template.page.heightMm, 297, blueprint.code);
+    const blocks = [...blueprint.template.sections.header, ...blueprint.template.sections.body, ...blueprint.template.sections.footer];
+    const text = blocks.map((block) => String(block.content || "")).join("\n");
+    assert.ok(blocks.some((block) => block.binding === "tenant.logo"), `${blueprint.code} missing tenant logo`);
+    assert.match(text, /\{\{tenant\.name\}\}/, `${blueprint.code} missing tenant name`);
+    assert.match(text, /\{\{tenant\.address\}\}/, `${blueprint.code} missing tenant address`);
+    assert.match(text, /\{\{tenant\.tin\}\}/, `${blueprint.code} missing tenant TIN`);
+    assert.match(text, /\{\{tenant\.secRegistration\}\}/, `${blueprint.code} missing DHSUD\/SEC registration binding`);
+  }
 });
 
 test("every free template defaults to no document fee, sequence numbering, QR validation, and safe tenant installation", () => {
@@ -64,6 +90,28 @@ test("approved legal certificates and work permit use readable professional typo
       assert.ok((block.style?.fontSize ?? 0) >= 7, `${blueprint.code}:${block.id} font is below the 7pt readability floor`);
     }
     assert.ok(blocks.some((block) => block.style?.fontFamily === "Georgia" || block.style?.fontFamily === "Times New Roman"), `${blueprint.code} must retain formal legal typography`);
+  }
+});
+
+test("Philippine legal wording includes the approved private-association limitations", () => {
+  assert.match(allText("CERTIFICATE_OF_RESIDENCY"), /Barangay Certificate of Residency/);
+  assert.match(allText("CERTIFICATE_OF_INDIGENCY"), /Barangay Certificate of Indigency/);
+  assert.match(allText("CERTIFICATE_OF_GOOD_STANDING"), /due and demandable/);
+  assert.match(allText("CLEARANCE_CERTIFICATE"), /subject to final audit/i);
+  assert.match(allText("PAYMENT_CERTIFICATION"), /applicable BIR rules/);
+  assert.match(allText("CONSTRUCTION_BOND_CERTIFICATION"), /Local Government Unit/);
+  assert.match(allText("CONTRACTOR_BOND_CERTIFICATION"), /PCAB, DTI, SEC, LGU/);
+  assert.match(allText("WORK_PERMIT"), /does not replace any building, electrical, plumbing, sanitary, fire-safety, barangay, or LGU permit/);
+});
+
+test("Gate Pass, Move-In, Move-Out, and Work Permit are two-copy A4 operational documents", () => {
+  for (const code of ["GATE_PASS", "MOVE_IN_PASS", "MOVE_OUT_PASS", "WORK_PERMIT"]) {
+    const blocks = allBlocks(code);
+    assert.equal(blocks.filter((block) => block.type === "qrVerification").length, 2, `${code} must have a QR on each copy`);
+    assert.ok(blocks.some((block) => block.id === "cut-line"), `${code} must contain the A4 cut divider`);
+    const text = blocks.map((block) => String(block.content || "")).join("\n");
+    assert.match(text, /PRESENT TO SECURITY/, `${code} missing holder copy label`);
+    assert.match(text, /SECURITY \/ ADMIN COPY|SECURITY COPY/, `${code} missing security copy label`);
   }
 });
 

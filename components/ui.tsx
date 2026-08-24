@@ -16,7 +16,13 @@ export function ConfirmSubmitButton({ children, message, name, value, className 
 }
 
 export function SearchInput({ placeholder = "Search..." }: { placeholder?: string }) {
-  return <input className="field max-w-full sm:max-w-xs" type="search" name="q" placeholder={placeholder} onChange={(event) => { const terms = normalizeSearch(event.currentTarget.value).split(" ").filter(Boolean); document.querySelectorAll<HTMLElement>("[data-search]").forEach((row) => { const haystack = normalizeSearch(row.dataset.search || ""); row.hidden = terms.some((term) => !haystack.includes(term)); }); }} />;
+  return <input className="field max-w-full sm:max-w-xs" type="search" name="q" placeholder={placeholder} onChange={(event) => {
+    const terms = normalizeSearch(event.currentTarget.value).split(" ").filter(Boolean);
+    document.querySelectorAll<HTMLElement>("[data-search]").forEach((row) => {
+      const haystack = normalizeSearch(`${row.dataset.search || ""} ${row.textContent || ""}`);
+      row.hidden = terms.some((term) => !haystack.includes(term));
+    });
+  }} />;
 }
 
 function normalizeSearch(value: string) {

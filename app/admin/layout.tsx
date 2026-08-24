@@ -1,6 +1,6 @@
 import { Suspense } from "react";
 import type { Metadata } from "next";
-import { Role, TenantModule } from "@prisma/client";
+import { Role } from "@prisma/client";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { AdminTopbar } from "@/components/admin-topbar";
@@ -33,8 +33,11 @@ export default async function AdminLayout({ children }: { children: React.ReactN
   const pathname = (await headers()).get("x-hoa-pathname") || "/admin/dashboard";
   if (!canAccessAdminPath(user.roles, pathname)) redirect(`${adminHomeForRole(user.roles)}?error=You%20do%20not%20have%20access%20to%20this%20module.`);
 
-  const platform = user.roles.includes(Role.SUPER_ADMIN) || user.roles.includes(Role.PLATFORM_ADMIN);
-  const enabledModules = platform ? new Set(Object.values(TenantModule)) : await getEnabledTenantModules(user.tenantId);
+  // Every tenant-facing admin role, including SUPER_ADMIN/PLATFORM_ADMIN when
+  // entering the tenant shell, sees only capabilities granted by that tenant's
+  // current active plan. Platform authority is exercised in /platform, not by
+  // bypassing tenant commercial entitlements inside /admin.
+  const enabledModules = await getEnabledTenantModules(user.tenantId);
   const requestedModule = moduleForPath(pathname);
   if (requestedModule && !enabledModules.has(requestedModule)) redirect("/admin/dashboard?error=This%20module%20is%20not%20included%20in%20your%20active%20subscription%20plan.");
 

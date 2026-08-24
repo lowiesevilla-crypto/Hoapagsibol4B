@@ -1,6 +1,6 @@
 import { TenantModule } from "@prisma/client";
 import Link from "next/link";
-import { Bot, FolderLock, Layers3, Pencil, Plus, UsersRound } from "lucide-react";
+import { Bot, FolderLock, Layers3, Pencil, Plus, UsersRound, WalletCards } from "lucide-react";
 import { PageHeader } from "@/components/page-header";
 import { createSubscriptionPlanAction } from "@/lib/actions/platform-commercial-plans";
 import { toggleSubscriptionPlanAction } from "@/lib/actions/platform-billing";
@@ -15,7 +15,7 @@ export default async function PlatformPlansPage({ searchParams }: { searchParams
   const query = await searchParams;
   const plans = await listPlatformPlans();
   return <>
-    <PageHeader eyebrow="Platform revenue" title="Subscription plan catalog" description="Control pricing, commercial limits, modules, Document Management, and HOAHub AI Assistance as independently sellable capabilities." action={<Link className="btn-secondary" href="/platform/tenants">Back to tenants</Link>} />
+    <PageHeader eyebrow="Platform revenue" title="Subscription plan catalog" description="Control pricing, commercial limits, modules, Petty Cash Voucher, Document Management, and HOAHub AI Assistance as independently sellable capabilities." action={<Link className="btn-secondary" href="/platform/tenants">Back to tenants</Link>} />
     {query.success && <p className="mb-4 rounded-xl bg-emerald-50 p-3 text-sm font-semibold text-emerald-800">{query.success}</p>}
     {query.error && <p className="mb-4 rounded-xl bg-rose-50 p-3 text-sm font-semibold text-rose-800">{query.error}</p>}
 
@@ -62,7 +62,11 @@ export default async function PlatformPlansPage({ searchParams }: { searchParams
 
       <div className="mt-6 border-t pt-6"><span className="label">Included modules</span><div className="mt-2 grid gap-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">{Object.values(TenantModule).map((module) => <label key={module} className="flex min-h-12 items-center gap-3 rounded-xl border p-3 text-sm font-semibold"><input className="size-5" type="checkbox" name="modules" value={module} defaultChecked />{module.replaceAll("_", " ")}</label>)}</div></div>
 
-      <section className="mt-7 rounded-3xl border border-pine-100 bg-pine-50/35 p-5 sm:p-6">
+      <section className="mt-7 rounded-3xl border border-amber-100 bg-amber-50/40 p-5 sm:p-6">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between"><div className="flex items-start gap-3"><span className="grid size-11 place-items-center rounded-2xl bg-white text-amber-700"><WalletCards className="size-5" /></span><div><p className="text-xs font-black uppercase tracking-wider text-amber-700">Sellable capability</p><h3 className="text-xl font-black">Petty Cash Voucher</h3><p className="mt-1 max-w-2xl text-sm text-slate-600">Tenant expense-type vouchers, A5 printing, automatic expense-ledger posting, and employee cash-advance handoff. Billing is required; Employee Cash Advance also requires Payroll and Loans.</p></div></div><label className="flex min-h-12 items-center gap-3 rounded-2xl border bg-white px-4 py-3 text-sm font-black"><input className="size-5" type="checkbox" name="pettyCashEnabled" /> Include in plan</label></div>
+      </section>
+
+      <section className="mt-6 rounded-3xl border border-pine-100 bg-pine-50/35 p-5 sm:p-6">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between"><div className="flex items-start gap-3"><span className="grid size-11 place-items-center rounded-2xl bg-white text-pine-700"><FolderLock className="size-5" /></span><div><p className="text-xs font-black uppercase tracking-wider text-pine-700">Sellable capability</p><h3 className="text-xl font-black">Document Management</h3><p className="mt-1 text-sm text-slate-600">Private tenant repository and homeowner Document Library.</p></div></div><label className="flex min-h-12 items-center gap-3 rounded-2xl border bg-white px-4 py-3 text-sm font-black"><input className="size-5" type="checkbox" name="documentManagementEnabled" /> Include in plan</label></div>
         <div className="mt-5 grid gap-4 sm:grid-cols-2 xl:grid-cols-4"><label><span className="label">Repository storage (MB)</span><input className="field bg-white" name="documentStorageLimitMb" type="number" min="1" placeholder="Inherit overall storage" /></label><label><span className="label">Max file size (MB)</span><input className="field bg-white" name="documentMaxFileSizeMb" type="number" min="1" defaultValue="25" /></label><label className="flex min-h-20 items-center gap-3 rounded-2xl border bg-white p-4 text-sm font-semibold"><input className="size-5" type="checkbox" name="retainRevisionBinaries" /><span><strong className="block">Retain revision files</strong><span className="text-xs font-normal text-slate-500">Keep governed historical binaries.</span></span></label><label><span className="label">Max retained revisions</span><input className="field bg-white" name="maxRevisionBinaries" type="number" min="1" /></label></div>
       </section>

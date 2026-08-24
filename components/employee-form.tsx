@@ -1,4 +1,4 @@
-import { Role, type EmployeeProfile } from "@prisma/client";
+import { AttendancePolicy, CompensationBasis, PayFrequency, Role, type EmployeeCompensation, type EmployeeProfile } from "@prisma/client";
 import Link from "next/link";
 import { saveEmployeeAction } from "@/lib/actions/employees";
 import { SubmitButton } from "@/components/ui";
@@ -15,11 +15,16 @@ const primaryRoleOptions = [
   Role.EMPLOYEE,
 ] as const;
 
-export function EmployeeForm({
-  employee,
-}: {
-  employee?: EmployeeProfile & { user?: { email: string; role: Role } | null };
-}) {
+type EmployeeWithPayrollConfiguration = EmployeeProfile & {
+  user?: { email: string; role: Role } | null;
+  compensations?: EmployeeCompensation[];
+};
+
+export function EmployeeForm({ employee }: { employee?: EmployeeWithPayrollConfiguration }) {
+  const compensation = employee?.compensations?.[0];
+  const defaultBasis = compensation?.compensationBasis
+    ?? (employee?.salaryType === "DAILY" ? CompensationBasis.DAILY : CompensationBasis.MONTHLY);
+
   return (
     <form action={saveEmployeeAction} className="card max-w-4xl space-y-6">
       {employee && <input type="hidden" name="id" value={employee.id} />}
@@ -42,22 +47,41 @@ export function EmployeeForm({
       </div>
 
       <div className="border-t border-slate-100 pt-6">
-        <h2 className="text-lg font-black">Salary configuration</h2>
-        <p className="text-sm text-slate-500">Monthly rates are converted to a daily rate using standard workdays.</p>
+        <h2 className="text-lg font-black">Payroll configuration</h2>
+        <p className="text-sm text-slate-500">Compensation basis, pay frequency and attendance policy are independent and effective-dated. Changing payroll terms creates a new version instead of rewriting prior payroll history.</p>
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
         <div>
-          <label className="label">Salary type</label>
-          <select className="field" name="salaryType" defaultValue={employee?.salaryType ?? "MONTHLY"}>
-            <option value="MONTHLY">Monthly</option>
-            <option value="DAILY">Daily</option>
+          <label className="label">Compensation basis</label>
+          <select className="field" name="compensationBasis" defaultValue={defaultBasis}>
+            <option value={CompensationBasis.MONTHLY}>Monthly salary</option>
+            <option value={CompensationBasis.DAILY}>Daily rate</option>
+            <option value={CompensationBasis.HOURLY}>Hourly rate</option>
+            <option value={CompensationBasis.FIXED_PER_PERIOD}>Fixed per payroll period</option>
           </select>
         </div>
-        <Field label="Base rate (PHP)" name="baseRate" type="number" min="0.01" step="0.01" defaultValue={employee ? String(employee.baseRate) : "18000"} required />
-        <Field label="Standard workdays" name="standardWorkDays" type="number" min="1" max="31" defaultValue={employee?.standardWorkDays ?? 26} required />
-        <Field label="Fixed allowance" name="fixedAllowance" type="number" min="0" step="0.01" defaultValue={employee ? String(employee.fixedAllowance) : "0"} required />
-        <Field label="Fixed deduction" name="fixedDeduction" type="number" min="0" step="0.01" defaultValue={employee ? String(employee.fixedDeduction) : "0"} required />
+        <div>
+          <label className="label">Pay frequency</label>
+          <select className="field" name="payFrequency" defaultValue={compensation?.payFrequency ?? PayFrequency.SEMI_MONTHLY}>
+            <option value={PayFrequency.SEMI_MONTHLY}>Semi-monthly</option>
+            <option value={PayFrequency.MONTHLY}>Monthly</option>
+          </select>
+        </div>
+        <div>
+          <label className="label">Attendance policy</label>
+          <select className="field" name="attendancePolicy" defaultValue={compensation?.attendancePolicy ?? AttendancePolicy.REQUIRED}>
+            <option value={AttendancePolicy.REQUIRED}>Attendance required</option>
+            <option value={AttendancePolicy.EXCEPTION_ONLY}>Exception only</option>
+            <option value={AttendancePolicy.NOT_REQUIRED}>No clock required</option>
+          </select>
+        </div>
+        <Field label="Effective from" name="compensationEffectiveFrom" type="date" defaultValue={inputDate(new Date())} required />
+        <Field label="Rate (PHP)" name="rate" type="number" min="0.01" step="0.01" defaultValue={compensation ? String(compensation.rate) : employee ? String(employee.baseRate) : "18000"} required />
+        <Field label="Standard workdays / month" name="standardWorkDays" type="number" min="1" max="31" defaultValue={compensation?.standardWorkDays ?? employee?.standardWorkDays ?? 26} required />
+        <Field label="Standard hours / day" name="standardHoursPerDay" type="number" min="0.01" max="24" step="0.01" defaultValue={compensation ? String(compensation.standardHoursPerDay) : "8"} required />
+        <Field label="Fixed allowance" name="fixedAllowance" type="number" min="0" step="0.01" defaultValue={compensation ? String(compensation.fixedAllowance) : employee ? String(employee.fixedAllowance) : "0"} required />
+        <Field label="Fixed deduction" name="fixedDeduction" type="number" min="0" step="0.01" defaultValue={compensation ? String(compensation.fixedDeduction) : employee ? String(employee.fixedDeduction) : "0"} required />
         <div>
           <label className="label">Status</label>
           <select className="field" name="status" defaultValue={employee?.status ?? "ACTIVE"}>
@@ -65,6 +89,10 @@ export function EmployeeForm({
             <option value="INACTIVE">Inactive</option>
           </select>
         </div>
+      </div>
+
+      <div className="rounded-xl bg-amber-50 p-3 text-sm font-semibold text-amber-800">
+        For Daily or Hourly compensation, Attendance Required is mandatory. Backdated payroll-term changes are blocked when they would overlap finalized or paid payroll.
       </div>
 
       <div className="border-t border-slate-100 pt-6">
@@ -76,9 +104,7 @@ export function EmployeeForm({
         <label className="label">Primary role</label>
         <select className="field" name="primaryRole" defaultValue={employee?.user?.role ?? Role.EMPLOYEE}>
           {primaryRoleOptions.map((role) => (
-            <option key={role} value={role}>
-              {roleLabelMap[role] ?? role.replaceAll("_", " ")}
-            </option>
+            <option key={role} value={role}>{roleLabelMap[role] ?? role.replaceAll("_", " ")}</option>
           ))}
         </select>
       </div>
@@ -94,11 +120,16 @@ export function EmployeeForm({
           Enable login account
         </label>
         <Field label="Login email" name="loginEmail" type="email" defaultValue={employee?.user?.email ?? employee?.email ?? ""} />
-        <Field label="Temporary password" name="loginPassword" type="password" defaultValue="ChangeMe123!" autoComplete="new-password" />
+        <Field
+          label={employee?.userId ? "New password (optional)" : "Temporary password"}
+          name="loginPassword"
+          type="password"
+          defaultValue={employee ? "" : "ChangeMe123!"}
+          placeholder={employee?.userId ? "Leave blank to keep current password" : undefined}
+          autoComplete="new-password"
+        />
         {employee?.userId && (
-          <p className="rounded-xl bg-emerald-50 p-3 text-sm font-semibold text-emerald-700">
-            Login account is linked. Keep login enabled to synchronize this user&apos;s role.
-          </p>
+          <p className="rounded-xl bg-emerald-50 p-3 text-sm font-semibold text-emerald-700">Login account is linked. Leave the password blank to keep the existing password while synchronizing profile and role changes.</p>
         )}
       </div>
 

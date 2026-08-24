@@ -252,12 +252,23 @@ export const employeeSchema = z.object({
   phone: required.max(30),
   address: required.max(250),
   hireDate: z.string().date(),
-  salaryType: z.enum(["DAILY", "MONTHLY"]),
-  baseRate: currency.positive("Salary rate must be greater than zero."),
+  compensationBasis: z.enum(["MONTHLY", "DAILY", "HOURLY", "FIXED_PER_PERIOD"]),
+  payFrequency: z.enum(["SEMI_MONTHLY", "MONTHLY"]),
+  attendancePolicy: z.enum(["REQUIRED", "EXCEPTION_ONLY", "NOT_REQUIRED"]),
+  compensationEffectiveFrom: z.string().date(),
+  rate: currency.positive("Compensation rate must be greater than zero."),
   standardWorkDays: z.coerce.number().int().min(1).max(31),
+  standardHoursPerDay: z.coerce.number().finite().positive().max(24),
   fixedAllowance: currency,
   fixedDeduction: currency,
   status: z.enum(["ACTIVE", "INACTIVE"]),
+}).superRefine((data, context) => {
+  if (data.compensationEffectiveFrom < data.hireDate) {
+    context.addIssue({ code: "custom", path: ["compensationEffectiveFrom"], message: "Payroll configuration cannot take effect before the hire date." });
+  }
+  if (data.attendancePolicy !== "REQUIRED" && ["DAILY", "HOURLY"].includes(data.compensationBasis)) {
+    context.addIssue({ code: "custom", path: ["attendancePolicy"], message: "Daily and hourly compensation require attendance-based payroll." });
+  }
 });
 
 const optionalTime = z.union([z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/), z.literal("")]).optional();

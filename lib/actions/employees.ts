@@ -1,6 +1,6 @@
 "use server";
 
-import { Role } from "@prisma/client";
+import { AttendancePolicy, CompensationBasis, PayFrequency, PayrollStatus, Prisma, Role } from "@prisma/client";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { hash } from "bcryptjs";
@@ -34,6 +34,123 @@ function getPrimaryRole(formData: FormData): Role {
   return (legacy as Role) || Role.EMPLOYEE;
 }
 
+type PayrollConfigurationInput = {
+  effectiveFrom: Date;
+  compensationBasis: CompensationBasis;
+  payFrequency: PayFrequency;
+  attendancePolicy: AttendancePolicy;
+  rate: number;
+  standardWorkDays: number;
+  standardHoursPerDay: number;
+  fixedAllowance: number;
+  fixedDeduction: number;
+};
+
+type CompensationPersistenceClient = Pick<typeof prisma, "employeeCompensation" | "payrollPeriod">;
+
+function legacySalaryType(basis: CompensationBasis) {
+  return basis === CompensationBasis.DAILY || basis === CompensationBasis.HOURLY ? "DAILY" as const : "MONTHLY" as const;
+}
+
+function previousUtcDate(date: Date) {
+  const value = new Date(date);
+  value.setUTCDate(value.getUTCDate() - 1);
+  return value;
+}
+
+function samePayrollConfiguration(current: {
+  compensationBasis: CompensationBasis;
+  payFrequency: PayFrequency;
+  attendancePolicy: AttendancePolicy;
+  rate: Prisma.Decimal;
+  standardWorkDays: number;
+  standardHoursPerDay: Prisma.Decimal;
+  fixedAllowance: Prisma.Decimal;
+  fixedDeduction: Prisma.Decimal;
+}, next: PayrollConfigurationInput) {
+  return current.compensationBasis === next.compensationBasis
+    && current.payFrequency === next.payFrequency
+    && current.attendancePolicy === next.attendancePolicy
+    && Number(current.rate) === next.rate
+    && current.standardWorkDays === next.standardWorkDays
+    && Number(current.standardHoursPerDay) === next.standardHoursPerDay
+    && Number(current.fixedAllowance) === next.fixedAllowance
+    && Number(current.fixedDeduction) === next.fixedDeduction;
+}
+
+/**
+ * @requirement PAY-COMP-001 PAY-COMP-002 PAY-COMP-003 PAY-SEC-001
+ * @status IMPLEMENTED
+ * @description Create a new immutable effective-dated payroll configuration version, close the prior version, and reject retroactive changes that overlap finalized/paid payroll history.
+ */
+async function persistEmployeeCompensationVersion(
+  tx: CompensationPersistenceClient,
+  input: { tenantId: string; employeeId: string; hireDate: Date; actorId: string; configuration: PayrollConfigurationInput },
+) {
+  const { tenantId, employeeId, hireDate, actorId, configuration } = input;
+  if (configuration.effectiveFrom < hireDate) {
+    throw new Error("Payroll configuration cannot take effect before the employee hire date.");
+  }
+
+  const latest = await tx.employeeCompensation.findFirst({
+    where: { tenantId, employeeId },
+    orderBy: { effectiveFrom: "desc" },
+  });
+
+  if (latest && samePayrollConfiguration(latest, configuration)) {
+    return { id: latest.id, created: false };
+  }
+
+  const latestLockedPayroll = await tx.payrollPeriod.findFirst({
+    where: {
+      tenantId,
+      status: { in: [PayrollStatus.FINALIZED, PayrollStatus.PAID] },
+      endDate: { gte: configuration.effectiveFrom },
+      payslips: { some: { employeeId } },
+    },
+    orderBy: { endDate: "desc" },
+    select: { endDate: true },
+  });
+  if (latestLockedPayroll) {
+    throw new Error(`New payroll configuration must take effect after the latest finalized/paid payroll ending ${latestLockedPayroll.endDate.toISOString().slice(0, 10)}.`);
+  }
+
+  if (latest && configuration.effectiveFrom <= latest.effectiveFrom) {
+    throw new Error(`Choose an effective date after the latest payroll configuration (${latest.effectiveFrom.toISOString().slice(0, 10)}).`);
+  }
+
+  if (latest) {
+    await tx.employeeCompensation.update({
+      where: { id: latest.id },
+      data: { effectiveTo: previousUtcDate(configuration.effectiveFrom) },
+    });
+  }
+
+  const created = await tx.employeeCompensation.create({
+    data: {
+      tenantId,
+      employeeId,
+      effectiveFrom: configuration.effectiveFrom,
+      effectiveTo: null,
+      compensationBasis: configuration.compensationBasis,
+      payFrequency: configuration.payFrequency,
+      attendancePolicy: configuration.attendancePolicy,
+      rate: configuration.rate,
+      standardWorkDays: configuration.standardWorkDays,
+      standardHoursPerDay: configuration.standardHoursPerDay,
+      fixedAllowance: configuration.fixedAllowance,
+      fixedDeduction: configuration.fixedDeduction,
+      createdById: actorId,
+    },
+  });
+  return { id: created.id, created: true };
+}
+
+/**
+ * @requirement PAY-COMP-001 PAY-COMP-002 PAY-COMP-003 PAY-SEC-001
+ * @status IMPLEMENTED
+ * @description Save employee master data while versioning payroll configuration instead of rewriting historical compensation rows.
+ */
 export async function saveEmployeeAction(formData: FormData) {
   const { user } = await requirePayrollAccess(payrollWriteRoles);
   const parsed = employeeSchema.safeParse(Object.fromEntries(formData.entries()));
@@ -42,81 +159,98 @@ export async function saveEmployeeAction(formData: FormData) {
     throw new Error(parsed.error.issues[0]?.message || "Invalid employee details.");
   }
 
-  const { id, email, hireDate, ...data } = parsed.data;
+  const {
+    id, email, hireDate, compensationBasis, payFrequency, attendancePolicy, compensationEffectiveFrom,
+    rate, standardHoursPerDay, standardWorkDays, fixedAllowance, fixedDeduction,
+    ...identity
+  } = parsed.data;
   const primaryRole = getPrimaryRole(formData);
   const createEmployeeLogin = formData.get("createEmployeeLogin") === "on";
   const loginEmail = String(formData.get("loginEmail") || email || "").trim().toLowerCase();
-  const loginPassword = String(formData.get("loginPassword") || "ChangeMe123!");
+  const loginPassword = String(formData.get("loginPassword") || "");
 
   if ((createEmployeeLogin || primaryRole !== Role.EMPLOYEE) && !loginEmail) {
     throw new Error("Enter a login email before assigning system access.");
   }
-
-  if (createEmployeeLogin && loginPassword.length < 8) {
-    throw new Error("Temporary password must be at least 8 characters.");
+  if (primaryRole !== Role.EMPLOYEE && !createEmployeeLogin && !id) {
+    throw new Error("Enable login account before assigning an administrator role.");
   }
 
-  const values = {
-    ...data,
+  const employeeHireDate = new Date(`${hireDate}T00:00:00.000Z`);
+  const configuration: PayrollConfigurationInput = {
+    effectiveFrom: new Date(`${compensationEffectiveFrom}T00:00:00.000Z`),
+    compensationBasis: compensationBasis as CompensationBasis,
+    payFrequency: payFrequency as PayFrequency,
+    attendancePolicy: attendancePolicy as AttendancePolicy,
+    rate,
+    standardWorkDays,
+    standardHoursPerDay,
+    fixedAllowance,
+    fixedDeduction,
+  };
+  const profileValues = {
+    ...identity,
     email: email || null,
-    hireDate: new Date(`${hireDate}T00:00:00.000Z`),
+    hireDate: employeeHireDate,
+    salaryType: legacySalaryType(configuration.compensationBasis),
+    baseRate: configuration.rate,
+    standardWorkDays: configuration.standardWorkDays,
+    fixedAllowance: configuration.fixedAllowance,
+    fixedDeduction: configuration.fixedDeduction,
     tenantId: user.tenantId,
   };
 
-  let employeeId = id;
+  const result = await prisma.$transaction(async (tx) => {
+    if (id) {
+      const existing = await tx.employeeProfile.findFirst({ where: { id, tenantId: user.tenantId } });
+      if (!existing) throw new Error("Employee not found.");
+      if (createEmployeeLogin && !existing.userId && loginPassword.length < 8) {
+        throw new Error("Temporary password must be at least 8 characters when enabling a new login account.");
+      }
 
-  if (id) {
-    const existing = await prisma.employeeProfile.findUnique({
-      where: { id, tenantId: user.tenantId },
-    });
-
-    if (!existing) throw new Error("Employee not found.");
-
-    await prisma.employeeProfile.update({
-      where: { id },
-      data: values,
-    });
-
-    employeeId = existing.id;
-
-    if (existing.userId || createEmployeeLogin) {
-      await upsertEmployeeLogin(user.tenantId, employeeId, data.name, loginEmail, loginPassword, primaryRole, existing.userId);
+      // Resolve/version payroll terms before mutating the profile row. The tenant
+      // boundary validates related employee ownership using the base client; doing
+      // that after locking EmployeeProfile can make an otherwise simple update wait
+      // on its own interactive transaction until the request timeout is reached.
+      const version = await persistEmployeeCompensationVersion(tx, {
+        tenantId: user.tenantId, employeeId: id, hireDate: employeeHireDate, actorId: user.id, configuration,
+      });
+      await tx.employeeProfile.update({ where: { id }, data: profileValues });
+      return { employeeId: id, existingUserId: existing.userId, version };
     }
 
-    await writeAuditLog({
-      actorId: user.id,
-      module: "PAYROLL",
-      action: "UPDATE_EMPLOYEE_PROFILE",
-      entityType: "EmployeeProfile",
-      entityId: employeeId,
-      metadata: { tenantId: user.tenantId, primaryRole },
-    });
-  } else {
-    const employee = await prisma.employeeProfile.create({
-      data: values,
-    });
-
-    employeeId = employee.id;
-
-    if (primaryRole !== Role.EMPLOYEE && !createEmployeeLogin) {
-      throw new Error("Enable login account before assigning an administrator role.");
+    if (createEmployeeLogin && loginPassword.length < 8) {
+      throw new Error("Temporary password must be at least 8 characters when enabling a new login account.");
     }
 
-    if (createEmployeeLogin) {
-      await upsertEmployeeLogin(user.tenantId, employeeId, data.name, loginEmail, loginPassword, primaryRole);
-    }
-
-    await writeAuditLog({
-      actorId: user.id,
-      module: "PAYROLL",
-      action: "CREATE_EMPLOYEE_PROFILE",
-      entityType: "EmployeeProfile",
-      entityId: employeeId,
-      metadata: { tenantId: user.tenantId, primaryRole },
+    const employee = await tx.employeeProfile.create({ data: profileValues });
+    const version = await persistEmployeeCompensationVersion(tx, {
+      tenantId: user.tenantId, employeeId: employee.id, hireDate: employeeHireDate, actorId: user.id, configuration,
     });
+    return { employeeId: employee.id, existingUserId: null, version };
+  }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+
+  if (result.existingUserId || createEmployeeLogin) {
+    await upsertEmployeeLogin(user.tenantId, result.employeeId, identity.name, loginEmail, loginPassword, primaryRole, result.existingUserId);
   }
 
+  await writeAuditLog({
+    actorId: user.id,
+    module: "PAYROLL",
+    action: id ? "UPDATE_EMPLOYEE_PROFILE" : "CREATE_EMPLOYEE_PROFILE",
+    entityType: "EmployeeProfile",
+    entityId: result.employeeId,
+    metadata: {
+      tenantId: user.tenantId,
+      primaryRole,
+      compensationVersionId: result.version.id,
+      compensationVersionCreated: result.version.created,
+      compensationEffectiveFrom,
+    },
+  });
+
   revalidatePath("/admin/employees");
+  revalidatePath(`/admin/employees/${result.employeeId}`);
 
   redirect(
     id
@@ -129,7 +263,7 @@ export async function deleteEmployeeAction(formData: FormData) {
   const { user } = await requirePayrollAccess(payrollManageRoles);
   const id = String(formData.get("id") || "");
 
-  const employee = await prisma.employeeProfile.findUnique({
+  const employee = await prisma.employeeProfile.findFirst({
     where: { id, tenantId: user.tenantId },
     select: { _count: { select: { attendance: true, payslips: true } } },
   });
@@ -204,7 +338,11 @@ async function upsertEmployeeLogin(
       role: primaryRole,
     };
 
+    // Existing login credentials remain unchanged unless the administrator
+    // explicitly enters a replacement password. This avoids an unnecessary
+    // bcrypt operation on every ordinary employee edit.
     if (password) {
+      if (password.length < 8) throw new Error("Replacement password must be at least 8 characters.");
       data.passwordHash = await hash(password, 12);
     }
 
@@ -214,6 +352,10 @@ async function upsertEmployeeLogin(
     });
 
     return;
+  }
+
+  if (password.length < 8) {
+    throw new Error("Temporary password must be at least 8 characters when enabling a new login account.");
   }
 
   const user = await prisma.user.create({

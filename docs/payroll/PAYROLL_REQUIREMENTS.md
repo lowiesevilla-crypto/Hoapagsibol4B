@@ -72,10 +72,17 @@ The payroll domain must represent these as independent concepts rather than over
 Compatibility requirement: existing `SalaryType` behavior must continue until persisted configuration is migrated.
 
 #### PAY-COMP-002 — Effective-dated employee payroll configuration
-Changes to rate, compensation basis, workday divisor, fixed allowance/deduction, pay frequency, and attendance policy must be effective-dated. A payroll run resolves configuration applicable to the payroll coverage period and snapshots the resolved values.
+Changes to rate, compensation basis, workday divisor, standard hours/day, fixed allowance/deduction, pay frequency, and attendance policy must be effective-dated. A payroll run resolves the configuration effective on the payroll cutoff end date and snapshots the resolved values. Payroll-term changes create new versions and close the prior version rather than overwriting it.
+
+Acceptance criteria:
+- Existing legacy `EmployeeProfile` salary fields are backfilled into an initial effective-dated configuration at hire date.
+- New employee payroll terms are stored in `EmployeeCompensation`.
+- A later change creates a new version and closes the prior version.
+- Backdated configuration changes that would overlap finalized/paid payroll history are rejected.
+- The admin employee screen exposes effective-dated configuration history.
 
 #### PAY-COMP-003 — Historical configuration integrity
-Later employee master-data edits must not recalculate finalized historical payroll unless an authorized correction/revision workflow is explicitly executed.
+Later employee master-data edits must not recalculate finalized historical payroll unless an authorized correction/revision workflow is explicitly executed. Each newly calculated/recalculated payslip stores both the resolved `compensationId` and an immutable JSON snapshot of the payroll configuration effective on the cutoff end date. Pre-migration payslips remain legacy historical evidence and are not rewritten by the backfill migration.
 
 ### Shift / Attendance / Overtime
 

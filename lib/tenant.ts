@@ -6,6 +6,12 @@ import { prisma } from "@/lib/db";
 export const DEFAULT_TENANT_ID = "tenant_pagsibol4b_default";
 export const DEFAULT_TENANT_SLUG = "pagsibol4b";
 
+const blockedModuleSubscriptionStatuses = new Set<TenantSubscriptionStatus>([
+  TenantSubscriptionStatus.SUSPENDED,
+  TenantSubscriptionStatus.CANCELLED,
+  TenantSubscriptionStatus.EXPIRED,
+]);
+
 export async function resolveTenant(slug?: string | null) {
   const tenant = await prisma.tenant.findUnique({
     where: { slug: (slug || DEFAULT_TENANT_SLUG).trim().toLowerCase() },
@@ -18,20 +24,57 @@ export function tenantCanSignIn(tenant: Awaited<ReturnType<typeof resolveTenant>
   return Boolean(tenant && tenant.status === TenantStatus.ACTIVE && tenant.subscriptionStatus !== TenantSubscriptionStatus.CANCELLED);
 }
 
-export async function requireTenantModule(tenantId: string, module: TenantModule) {
-  const tenant = await prisma.tenant.findUnique({ where: { id: tenantId }, select: { status: true, subscriptionStatus: true } });
-  if (!tenant || tenant.status !== TenantStatus.ACTIVE || tenant.subscriptionStatus === TenantSubscriptionStatus.CANCELLED) {
-    throw new Error("This HOA account is not currently active.");
+async function resolvePlanModules(tenantId: string) {
+  const tenant = await prisma.tenant.findUnique({
+    where: { id: tenantId },
+    select: { status: true, subscriptionPlan: true, subscriptionStatus: true },
+  });
+  if (!tenant || tenant.status !== TenantStatus.ACTIVE) return new Set<TenantModule>();
+
+  const subscription = await prisma.tenantSubscription.findFirst({
+    where: { tenantId },
+    orderBy: [{ startedAt: "desc" }, { createdAt: "desc" }],
+    select: {
+      status: true,
+      plan: {
+        select: {
+          active: true,
+          modules: { where: { enabled: true }, select: { module: true } },
+        },
+      },
+    },
+  });
+
+  if (subscription) {
+    if (!subscription.plan.active || blockedModuleSubscriptionStatuses.has(subscription.status)) return new Set<TenantModule>();
+    return new Set(subscription.plan.modules.map((item) => item.module));
   }
-  const entitlement = await prisma.tenantModuleEntitlement.findUnique({ where: { tenantId_module: { tenantId, module } } });
-  if (!entitlement && module === TenantModule.COMPLAINTS) throw new Error("This module is not included in your subscription plan.");
-  if (entitlement && !entitlement.enabled) throw new Error("This module is not included in your subscription plan.");
+
+  // Legacy/fallback tenants may pre-date TenantSubscription records. Their saved
+  // plan code still resolves through the Platform Admin plan catalog so runtime
+  // module access never silently defaults to every HOAHub function.
+  if (blockedModuleSubscriptionStatuses.has(tenant.subscriptionStatus)) return new Set<TenantModule>();
+  const plan = await prisma.subscriptionPlan.findFirst({
+    where: { code: tenant.subscriptionPlan },
+    orderBy: { updatedAt: "desc" },
+    select: {
+      active: true,
+      modules: { where: { enabled: true }, select: { module: true } },
+    },
+  });
+  if (!plan?.active) return new Set<TenantModule>();
+  return new Set(plan.modules.map((item) => item.module));
+}
+
+export async function requireTenantModule(tenantId: string, module: TenantModule) {
+  const enabled = await resolvePlanModules(tenantId);
+  if (!enabled.has(module)) {
+    throw new Error("This module is not included in your active subscription plan.");
+  }
 }
 
 export async function getEnabledTenantModules(tenantId: string) {
-  const configured = await prisma.tenantModuleEntitlement.findMany({ where: { tenantId }, select: { module: true, enabled: true } });
-  const state = new Map(configured.map((item) => [item.module, item.enabled]));
-  return new Set(Object.values(TenantModule).filter((module) => module === TenantModule.COMPLAINTS ? state.get(module) === true : state.get(module) !== false));
+  return resolvePlanModules(tenantId);
 }
 
 export function tenantUploadRoot(slug: string) {

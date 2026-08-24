@@ -10,11 +10,20 @@ type AttendanceInput = {
   overtimeHours?: number;
 };
 
-export async function deriveAttendanceMetrics(input: AttendanceInput) {
+type TenantAttendanceInput = AttendanceInput & {
+  tenantId: string;
+};
+
+/**
+ * @requirement PAY-ATT-001 PAY-SEC-001
+ * @status IMPLEMENTED
+ */
+export async function deriveAttendanceMetrics(input: TenantAttendanceInput) {
   const dayOfWeek = input.date.getUTCDay();
   const [schedule, calendarDay] = await Promise.all([
     prisma.employeeSchedule.findFirst({
       where: {
+        tenantId: input.tenantId,
         employeeId: input.employeeId,
         dayOfWeek,
         effectiveFrom: { lte: input.date },
@@ -22,7 +31,9 @@ export async function deriveAttendanceMetrics(input: AttendanceInput) {
       },
       orderBy: { effectiveFrom: "desc" },
     }),
-    prisma.payrollCalendarDay.findFirst({ where: { date: input.date } }),
+    prisma.payrollCalendarDay.findFirst({
+      where: { tenantId: input.tenantId, date: input.date, active: true },
+    }),
   ]);
   return calculateAttendanceMetrics(input, schedule, calendarDay);
 }

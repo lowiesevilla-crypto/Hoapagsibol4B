@@ -62,7 +62,7 @@ export function AnnouncementMobileCard({ href, title, content, type, postedLabel
 export function EventMobileCard({ href, title, description, type, dateLabel, timeLabel, location, imageUrl, previous = false }: { href: string; title: string; description: string; type: string; dateLabel: string; timeLabel: string; location: string; imageUrl?: string | null; previous?: boolean }) {
   return (
     <Link href={href} className="block overflow-hidden rounded-2xl border border-slate-100 bg-white shadow-[0_4px_18px_rgba(15,23,42,.04)] focus-visible:outline focus-visible:outline-4 focus-visible:outline-pine-500/20">
-      {imageUrl ? <img src={imageUrl} alt={title} className="h-40 w-full bg-slate-50 object-cover" /> : <FallbackVisual icon={CalendarDays} label={previous ? "Previous Event" : "Event" />}
+      {imageUrl ? <img src={imageUrl} alt={title} className="h-40 w-full bg-slate-50 object-cover" /> : <FallbackVisual icon={CalendarDays} label={previous ? "Previous Event" : "Event"} />}
       <div className="p-4">
         <div className="flex flex-wrap gap-2"><StatusChip>{type.replaceAll("_", " ")}</StatusChip>{previous && <span className="rounded-full bg-slate-100 px-2.5 py-1 text-[10px] font-black text-slate-500">Previous</span>}</div>
         <h2 className="mt-2 line-clamp-2 text-base font-black text-ink">{title}</h2>
@@ -108,7 +108,7 @@ export function CommunityPageSkeleton() {
 }
 
 export function CommunityRouteError({ title = "Unable to load this page", description = "Refresh to try again. Your private HOAHub data was not cached." }: { title?: string; description?: string }) {
-  return <div className="rounded-2xl border border-rose-100 bg-rose-50 p-4 text-rose-900" role="alert"><p className="font-black">{title}</p><p className="mt-1 text-sm">{description}</p></div>;
+  return <div className="rounded-2xl border border-rose-100 bg-rose-50 p-4 text-rose-900" role="alert"><p className="font-black text-ink">{title}</p><p className="mt-1 text-sm">{description}</p></div>;
 }
 
 function Field({ label, value, mono = false }: { label: string; value: string; mono?: boolean }) {

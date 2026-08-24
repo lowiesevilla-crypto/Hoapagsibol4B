@@ -54,7 +54,7 @@ All payroll Server Actions and supporting queries must derive tenant scope from 
 
 Acceptance criteria:
 - Payroll period creation explicitly stores authenticated `tenantId` rather than relying on a static/default tenant value.
-- Payslip, overtime, loan, deduction, access, calendar, and schedule creation explicitly stores authenticated `tenantId`.
+- Payslip, overtime, loan, deduction, access, calendar, schedule, attendance, and archive creation explicitly stores authenticated `tenantId`.
 - Reads by opaque ID verify `tenantId` before mutation.
 - Payroll-period employee/attendance/overtime/deduction refresh is tenant-filtered.
 
@@ -86,7 +86,7 @@ Employee schedules must support effective start/end dates, rest days, and overla
 Payroll calculation must consume attendance records for payable days/hours, absence, lateness, undertime, approved leave, holiday/rest-day context, and night differential according to the resolved calculation policy.
 
 #### PAY-ATT-002 — Attendance corrections are auditable
-Attendance correction requests/manager adjustments must preserve original and adjusted values and approval evidence.
+Attendance correction requests/manager adjustments must preserve original and adjusted values and approval evidence. Direct attendance edits/deletes must be blocked once the employee/date is included in finalized or paid payroll.
 
 #### PAY-OT-001 — Only approved overtime is payable
 Payroll calculation must use approved overtime records or explicitly authorized payroll-manager adjustments. Pending/rejected overtime is excluded.
@@ -151,7 +151,24 @@ Payroll reports must remain tenant-scoped and support the agreed date/period fil
 An employee may view only their own released/authorized payslips and own attendance/correction information.
 
 #### PAY-EMP-002 — Employee mobile attendance UX
-Mobile attendance/clocking/correction UX must remain owner-scoped and must not expose other employees or payroll administration.
+Employees can use a mobile-friendly Time screen to Time In/Time Out using server-authoritative time, see assigned shift/today status, review their own timelogs, and request corrections while the relevant cutoff is not yet finalized or paid. Finalized/paid dates are locked from direct attendance mutation.
+
+#### PAY-EMP-003 — Employee overtime self-service
+Employees can file an overtime request for themselves, provide OT date/hours/reason, and track approval status. The employee cannot self-approve OT. Pending/rejected OT remains excluded from payroll.
+
+Acceptance criteria:
+- Employee identity and tenant are derived from the authenticated session.
+- Duplicate pending/approved OT requests for the same employee/date are rejected.
+- OT cannot be newly submitted directly into an already finalized/paid payroll period for that employee/date.
+- Payroll Manager review remains server-authoritative.
+
+#### PAY-EMP-004 — Employee loan/cash-advance self-service
+Employees can view only their own loans/cash advances, including principal, total paid/deducted, current outstanding balance, payroll deduction history, and deductions already scheduled in draft/finalized payroll.
+
+#### PAY-EMP-005 — Employee leave self-service
+Employees can file leave using a leave type configured by the tenant administrator and view leave-request status/balance where applicable. Statutory leave types must be protected from unsafe tenant formula overrides.
+
+Dependency note: the current payroll schema does not yet contain a tenant-configurable leave type/request/balance domain. This requirement remains blocked until that persistence and approval workflow are implemented.
 
 ## 5. Implementation Sequence
 
@@ -164,7 +181,7 @@ Foundation sequence:
 5. Lifecycle/correction model (`PAY-RUN-*`).
 6. Effective-dated statutory rules (`PAY-STAT-*`) after authoritative rule verification.
 7. Idempotent Finance Engine posting/outbox/reconciliation (`PAY-FIN-*`).
-8. Remaining admin UX, reporting, and employee self-service acceptance coverage.
+8. Remaining admin UX, reporting, and employee self-service acceptance coverage (`PAY-EMP-*`, `PAY-RPT-*`).
 
 ## 6. Definition of Done
 

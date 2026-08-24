@@ -4,8 +4,9 @@ import { homeownerModuleRules, moduleForHomeownerLink } from "@/lib/homeowner-na
 
 const rules: Array<[string, TenantModule]> = [
   ["/admin/documents", TenantModule.DOCUMENTS], ["/admin/document-templates", TenantModule.DOCUMENTS], ["/documents", TenantModule.DOCUMENTS],
-  ["/admin/payroll", TenantModule.PAYROLL], ["/admin/employees", TenantModule.PAYROLL], ["/admin/workforce", TenantModule.PAYROLL], ["/employee/payslips", TenantModule.PAYROLL],
+  ["/admin/payroll", TenantModule.PAYROLL], ["/admin/employees", TenantModule.PAYROLL], ["/admin/workforce", TenantModule.PAYROLL], ["/employee/payslips", TenantModule.PAYROLL], ["/employee/requests/overtime", TenantModule.PAYROLL],
   ["/admin/attendance", TenantModule.ATTENDANCE], ["/employee/attendance", TenantModule.ATTENDANCE],
+  ["/employee/loans", TenantModule.LOANS],
   ["/admin/reports", TenantModule.REPORTS],
   ["/admin/chat", TenantModule.CHAT], ["/employee/chat", TenantModule.CHAT], ["/api/chat", TenantModule.CHAT],
   ["/admin/complaints", TenantModule.COMPLAINTS], ["/complaints", TenantModule.COMPLAINTS], ["/api/complaints", TenantModule.COMPLAINTS],

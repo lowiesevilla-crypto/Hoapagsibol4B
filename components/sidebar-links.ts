@@ -133,9 +133,11 @@ export const portalLinks: LinkItem[] = homeownerSidebarLinks;
 
 export const employeeLinks: LinkItem[] = [
   { href: "/employee/profile", label: "My Profile", icon: "profile", section: "Account" },
-  { href: "/employee/attendance", label: "Clock in / out", icon: "attendance", section: "Employee" },
+  { href: "/employee/attendance", label: "Time", icon: "attendance", section: "Employee" },
+  { href: "/employee/attendance/history", label: "My timelogs", icon: "attendance", section: "Employee" },
   { href: "/employee/attendance/correction", label: "Attendance correction", icon: "attendance", section: "Employee" },
-  { href: "/employee/attendance/history", label: "Attendance history", icon: "attendance", section: "Employee" },
+  { href: "/employee/requests/overtime", label: "Overtime requests", icon: "attendance", section: "Employee" },
   { href: "/employee/payslips", label: "My payslips", icon: "payroll", section: "Employee" },
+  { href: "/employee/loans", label: "Loans & cash advances", icon: "payroll", section: "Employee" },
   { href: "/employee/chat", label: "Chat", icon: "chat", section: "Support" },
 ];

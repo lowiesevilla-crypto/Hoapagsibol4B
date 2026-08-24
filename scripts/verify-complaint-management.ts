@@ -166,7 +166,34 @@ async function main() {
 }
 
 async function createTenant(id: string, slug: string, complaintsEnabled: boolean) {
-  return platformPrisma.tenant.create({ data: { id, name: `Complaint Verify ${slug}`, shortName: "CM Verify", slug, status: "ACTIVE", subscriptionStatus: "ACTIVE", moduleEntitlements: complaintsEnabled ? { create: { module: TenantModule.COMPLAINTS, enabled: true } } : undefined } });
+  const planId = `plan_${id}`;
+  const planCode = `CM_${id}`;
+  await platformPrisma.subscriptionPlan.create({
+    data: {
+      id: planId,
+      code: planCode,
+      name: `Complaint Verify Plan ${slug}`,
+      active: true,
+      trialDays: 0,
+      modules: complaintsEnabled ? { create: { module: TenantModule.COMPLAINTS, enabled: true } } : undefined,
+    },
+  });
+  const tenant = await platformPrisma.tenant.create({
+    data: {
+      id,
+      name: `Complaint Verify ${slug}`,
+      shortName: "CM Verify",
+      slug,
+      status: "ACTIVE",
+      subscriptionPlan: planCode,
+      subscriptionStatus: "ACTIVE",
+      moduleEntitlements: complaintsEnabled ? { create: { module: TenantModule.COMPLAINTS, enabled: true } } : undefined,
+    },
+  });
+  await platformPrisma.tenantSubscription.create({
+    data: { tenantId: id, planId, status: "ACTIVE", startedAt: new Date(), currency: "PHP" },
+  });
+  return tenant;
 }
 
 function userContext(user: { id: string; tenantId: string; name: string; email: string; role: Role }, tenantSlug: string, homeownerProfile: { id: string } | null) {
@@ -234,7 +261,9 @@ async function cleanup() {
   await platformPrisma.user.deleteMany({ where: { tenantId: { in: tenantIds } } });
   await platformPrisma.tenantModuleEntitlement.deleteMany({ where: { tenantId: { in: tenantIds } } });
   await platformPrisma.tenantSequence.deleteMany({ where: { tenantId: { in: tenantIds } } });
+  await platformPrisma.tenantSubscription.deleteMany({ where: { tenantId: { in: tenantIds } } });
   await platformPrisma.tenant.deleteMany({ where: { id: { in: tenantIds } } });
+  await platformPrisma.subscriptionPlan.deleteMany({ where: { id: { startsWith: "plan_tenant_cm_" } } });
 }
 
 function assertSourceInvariant(file: string, needle: string) {

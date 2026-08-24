@@ -2,7 +2,7 @@
 
 Last updated: 2026-08-24
 Tasks: `PAY-TASK-006`, `PAY-TASK-007`, `PAY-TASK-009`
-Candidate status: `IMPLEMENTED`; exact-head CI is required before `VERIFIED` or merge.
+Verification status: `VERIFIED` by PR #166 HOAHub MySQL CI #1114 and Canva Visual Parity #302 at `f596c850a113bcd73d50d5a71116e9951685ffdb`; the documentation-only verification head must pass both checks before merge.
 
 ## Effective-dated Philippine rules
 

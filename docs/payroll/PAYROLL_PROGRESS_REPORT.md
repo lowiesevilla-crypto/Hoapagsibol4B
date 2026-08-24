@@ -3,22 +3,23 @@
 Last updated: 2026-08-24
 Source of truth: `docs/payroll/PAYROLL_IMPLEMENTATION_STATUS.json`
 Current candidate branch: `codex/payroll-completion-20260824`
+Current pull request: #166
 Current candidate tasks: `PAY-TASK-006`, `PAY-TASK-007`, `PAY-TASK-009`, and the remaining acceptance-evidence closure
 
 ## Executive status
 
 PR #165 is merged to `main` at `8b6f07f2b9139ee89d104414a3e17e94d6c1f366`. Its lifecycle requirements remain `VERIFIED` by exact-head HOAHub MySQL CI #1111 and Canva Visual Parity #300.
 
-The current candidate implements every previously pending payroll task:
+PR #166 completes and verifies every previously pending payroll task:
 
 - `PAY-TASK-006` — effective-dated Philippine statutory rules and immutable payroll evidence.
 - `PAY-TASK-007` — idempotent Financial Engine accrual/payment/reversal posting, durable outbox, retry, and reconciliation.
 - `PAY-TASK-009` — protected statutory/custom leave types, employee requests, balances/ledger, approval, and attendance/payroll integration.
 - Acceptance coverage for requirements that were already implemented but lacked direct requirement-tagged evidence.
 
-These candidate changes remain `IMPLEMENTED` until the complete exact-head PR gate passes. `VERIFIED` is not inferred from local code or focused tests.
+The implementation head `f596c850a113bcd73d50d5a71116e9951685ffdb` passed exact-head HOAHub MySQL CI #1114 and Canva Visual Parity #302. All payroll requirements and tasks in the machine-readable ledger are now `VERIFIED`; the documentation-only verification commit must rerun both required checks successfully before merge.
 
-## Current candidate implementation
+## Verified implementation
 
 ### Statutory calculation evidence
 
@@ -56,17 +57,16 @@ These candidate changes remain `IMPLEMENTED` until the complete exact-head PR ga
 - Prisma generate: passed.
 - TypeScript typecheck: passed.
 - ESLint with zero warnings: passed.
-- Full unit suite: 417/417 passed before the final acceptance/doc-only additions; focused new acceptance tests also pass.
-- A local clean MySQL migration/integration run was unavailable because local MySQL/Docker is not running. The required clean MySQL migration, seed, integration, build, smoke, and browser evidence remains the exact-head CI gate.
+- Full unit suite: 428/428 passed locally and in HOAHub MySQL CI #1114.
+- Production build passed locally and in both required workflows.
+- Clean MySQL migration, seed, database-finance integration, production smoke, critical browser, and Canva Visual Parity passed on PR #166 at `f596c850a113bcd73d50d5a71116e9951685ffdb`.
 
 ## Required release gate
 
-1. Keep `PAY-TASK-006`, `PAY-TASK-007`, `PAY-TASK-009`, and newly covered requirements at `IMPLEMENTED` until the PR number is known and documentation is prepared for that candidate.
-2. Run the full HOAHub MySQL CI and Canva Visual Parity workflows on the exact documented head.
-3. Move the candidate requirements/tasks to `VERIFIED` only on the documented exact head and only if every required check passes.
-4. Merge only that passing head.
-5. Verify Hostinger deployment separately; CI/merge alone is not production confirmation.
+1. Rerun the full HOAHub MySQL CI and Canva Visual Parity workflows on the documentation-only verification head.
+2. Merge only that passing head.
+3. Verify Hostinger deployment separately; CI/merge alone is not production confirmation.
 
 ## Remaining blockers
 
-No known implementation blocker remains. Verification and production deployment are separate gates, not implementation dependencies.
+No payroll implementation or verification blocker remains. Merge and production deployment confirmation are the remaining release operations.

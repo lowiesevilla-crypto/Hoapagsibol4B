@@ -2,6 +2,14 @@
   "schemaVersion": 1,
   "lastUpdated": "2026-08-24",
   "branch": "codex/payroll-completion-20260824",
+  "verificationEvidence": {
+    "pullRequest": 166,
+    "implementationHead": "f596c850a113bcd73d50d5a71116e9951685ffdb",
+    "mysqlCi": "HOAHub MySQL CI #1114 SUCCESS",
+    "visualParity": "HOAHub Canva Visual Parity #302 SUCCESS",
+    "scope": "Applies to every requirement and task marked VERIFIED in this ledger.",
+    "finalHeadPolicy": "The documentation-only verification head must rerun both required checks successfully before merge."
+  },
   "allowedStatuses": [
     "NOT_STARTED",
     "IN_PROGRESS",
@@ -14,7 +22,7 @@
     {
       "id": "PAY-REQ-001",
       "title": "Machine-readable implementation status",
-      "status": "IMPLEMENTED",
+      "status": "VERIFIED",
       "code": [
         "docs/payroll/PAYROLL_IMPLEMENTATION_STATUS.json",
         "tests/unit/payroll-requirement-status.test.ts"
@@ -28,7 +36,7 @@
     {
       "id": "PAY-REQ-002",
       "title": "Agent operating contract",
-      "status": "IMPLEMENTED",
+      "status": "VERIFIED",
       "code": [
         "Agent.md",
         "tests/unit/payroll-remaining-acceptance.test.ts"
@@ -41,7 +49,7 @@
     {
       "id": "PAY-SEC-001",
       "title": "Tenant-scoped payroll actions",
-      "status": "IMPLEMENTED",
+      "status": "VERIFIED",
       "code": [
         "lib/actions/payroll.ts",
         "lib/actions/attendance.ts",
@@ -57,7 +65,7 @@
     {
       "id": "PAY-SEC-002",
       "title": "Payroll RBAC remains server-authoritative",
-      "status": "IMPLEMENTED",
+      "status": "VERIFIED",
       "code": [
         "lib/payroll-access.ts",
         "lib/actions/payroll.ts",
@@ -129,7 +137,7 @@
     {
       "id": "PAY-SHIFT-001",
       "title": "Effective-dated schedules",
-      "status": "IMPLEMENTED",
+      "status": "VERIFIED",
       "code": [
         "prisma/schema.prisma",
         "lib/actions/payroll.ts",
@@ -143,7 +151,7 @@
     {
       "id": "PAY-ATT-001",
       "title": "Attendance-derived payable time",
-      "status": "IMPLEMENTED",
+      "status": "VERIFIED",
       "code": [
         "lib/services/payroll.ts",
         "lib/actions/attendance.ts",
@@ -157,7 +165,7 @@
     {
       "id": "PAY-ATT-002",
       "title": "Auditable attendance corrections",
-      "status": "IMPLEMENTED",
+      "status": "VERIFIED",
       "code": [
         "prisma/schema.prisma",
         "lib/actions/attendance.ts",
@@ -173,7 +181,7 @@
     {
       "id": "PAY-OT-001",
       "title": "Only approved overtime is payable",
-      "status": "IMPLEMENTED",
+      "status": "VERIFIED",
       "code": [
         "lib/actions/payroll.ts",
         "lib/actions/employee-payroll.ts",
@@ -188,7 +196,7 @@
     {
       "id": "PAY-CALC-001",
       "title": "Deterministic calculation engine",
-      "status": "IMPLEMENTED",
+      "status": "VERIFIED",
       "code": [
         "lib/services/payroll.ts",
         "tests/unit/payroll-calculation-policy.test.ts"
@@ -201,7 +209,7 @@
     {
       "id": "PAY-CALC-002",
       "title": "Explicit calculation policy",
-      "status": "IMPLEMENTED",
+      "status": "VERIFIED",
       "code": [
         "lib/services/payroll.ts",
         "lib/services/payroll-statutory.ts",
@@ -215,7 +223,7 @@
     {
       "id": "PAY-CALC-003",
       "title": "Non-negative rounded payroll totals",
-      "status": "IMPLEMENTED",
+      "status": "VERIFIED",
       "code": [
         "lib/services/payroll.ts",
         "tests/unit/payroll-calculation-policy.test.ts"
@@ -228,7 +236,7 @@
     {
       "id": "PAY-DED-001",
       "title": "Payroll-period deductions",
-      "status": "IMPLEMENTED",
+      "status": "VERIFIED",
       "code": [
         "lib/actions/payroll.ts",
         "prisma/schema.prisma",
@@ -242,7 +250,7 @@
     {
       "id": "PAY-LOAN-001",
       "title": "Loan/cash advance repayment integrity",
-      "status": "IMPLEMENTED",
+      "status": "VERIFIED",
       "code": [
         "lib/actions/payroll.ts",
         "lib/services/payroll-finance.ts",
@@ -277,7 +285,7 @@
     {
       "id": "PAY-RUN-002",
       "title": "Finalization validation",
-      "status": "IMPLEMENTED",
+      "status": "VERIFIED",
       "code": [
         "lib/actions/payroll.ts",
         "tests/unit/payroll-remaining-acceptance.test.ts"
@@ -310,7 +318,7 @@
     {
       "id": "PAY-STAT-001",
       "title": "Effective-dated Philippine statutory rule sets",
-      "status": "IMPLEMENTED",
+      "status": "VERIFIED",
       "code": [
         "prisma/schema.prisma",
         "prisma/migrations/20260824180000_payroll_statutory_rules/migration.sql",
@@ -327,7 +335,7 @@
     {
       "id": "PAY-STAT-002",
       "title": "Statutory rule snapshot",
-      "status": "IMPLEMENTED",
+      "status": "VERIFIED",
       "code": [
         "prisma/schema.prisma",
         "prisma/migrations/20260824180000_payroll_statutory_rules/migration.sql",
@@ -343,7 +351,7 @@
     {
       "id": "PAY-FIN-001",
       "title": "Idempotent payroll financial posting",
-      "status": "IMPLEMENTED",
+      "status": "VERIFIED",
       "code": [
         "prisma/schema.prisma",
         "prisma/migrations/20260824190000_payroll_financial_posting/migration.sql",
@@ -359,7 +367,7 @@
     {
       "id": "PAY-FIN-002",
       "title": "Payroll finance outbox/retry/reconciliation",
-      "status": "IMPLEMENTED",
+      "status": "VERIFIED",
       "code": [
         "prisma/schema.prisma",
         "prisma/migrations/20260824190000_payroll_financial_posting/migration.sql",
@@ -376,7 +384,7 @@
     {
       "id": "PAY-FIN-003",
       "title": "Payroll expense/liability traceability",
-      "status": "IMPLEMENTED",
+      "status": "VERIFIED",
       "code": [
         "prisma/schema.prisma",
         "prisma/migrations/20260824190000_payroll_financial_posting/migration.sql",
@@ -413,7 +421,7 @@
     {
       "id": "PAY-EMP-001",
       "title": "Employee payslip self-service",
-      "status": "IMPLEMENTED",
+      "status": "VERIFIED",
       "code": [
         "app/employee/payslips/page.tsx",
         "app/employee/payslips/[id]/page.tsx",
@@ -428,7 +436,7 @@
     {
       "id": "PAY-EMP-002",
       "title": "Employee mobile attendance UX",
-      "status": "IMPLEMENTED",
+      "status": "VERIFIED",
       "code": [
         "app/employee/attendance/page.tsx",
         "app/employee/attendance/history/page.tsx",
@@ -445,7 +453,7 @@
     {
       "id": "PAY-EMP-003",
       "title": "Employee overtime self-service",
-      "status": "IMPLEMENTED",
+      "status": "VERIFIED",
       "code": [
         "app/employee/requests/overtime/page.tsx",
         "lib/actions/employee-payroll.ts"
@@ -459,7 +467,7 @@
     {
       "id": "PAY-EMP-004",
       "title": "Employee loan/cash-advance self-service",
-      "status": "IMPLEMENTED",
+      "status": "VERIFIED",
       "code": [
         "app/employee/loans/page.tsx"
       ],
@@ -472,7 +480,7 @@
     {
       "id": "PAY-EMP-005",
       "title": "Employee leave self-service",
-      "status": "IMPLEMENTED",
+      "status": "VERIFIED",
       "code": [
         "prisma/schema.prisma",
         "prisma/migrations/20260824200000_employee_leave_management/migration.sql",
@@ -497,7 +505,7 @@
         "PAY-REQ-002"
       ],
       "title": "Install payroll traceability governance and validation",
-      "status": "IMPLEMENTED",
+      "status": "VERIFIED",
       "dependencies": [],
       "code": [
         "docs/payroll/PAYROLL_REQUIREMENTS.md",
@@ -513,7 +521,7 @@
         "PAY-SEC-002"
       ],
       "title": "Harden payroll actions for authenticated tenant isolation",
-      "status": "IMPLEMENTED",
+      "status": "VERIFIED",
       "dependencies": [],
       "code": [
         "lib/actions/payroll.ts",
@@ -534,7 +542,7 @@
         "PAY-OT-001"
       ],
       "title": "Add explicit deterministic payroll calculation policy",
-      "status": "IMPLEMENTED",
+      "status": "VERIFIED",
       "dependencies": [],
       "code": [
         "lib/services/payroll.ts",
@@ -593,7 +601,7 @@
         "PAY-STAT-002"
       ],
       "title": "Implement effective-dated statutory rules",
-      "status": "IMPLEMENTED",
+      "status": "VERIFIED",
       "dependencies": [],
       "code": [
         "prisma/schema.prisma",
@@ -613,7 +621,7 @@
         "PAY-FIN-003"
       ],
       "title": "Implement idempotent Financial Engine posting and outbox",
-      "status": "IMPLEMENTED",
+      "status": "VERIFIED",
       "dependencies": [],
       "code": [
         "prisma/schema.prisma",
@@ -637,7 +645,7 @@
         "PAY-SEC-001"
       ],
       "title": "Implement employee mobile Time, timelog correction, overtime and loan self-service",
-      "status": "IMPLEMENTED",
+      "status": "VERIFIED",
       "dependencies": [],
       "code": [
         "app/employee/attendance",
@@ -656,7 +664,7 @@
         "PAY-EMP-005"
       ],
       "title": "Implement tenant-configurable leave types and employee leave requests",
-      "status": "IMPLEMENTED",
+      "status": "VERIFIED",
       "dependencies": [],
       "code": [
         "prisma/schema.prisma",

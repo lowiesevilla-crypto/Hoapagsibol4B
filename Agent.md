@@ -237,7 +237,7 @@ Payroll, salary, deductions, loans/cash advances, corrections, and payslips are 
 - `LEGACY_COMPATIBILITY_POLICY` in `lib/services/payroll.ts` exists only to preserve pre-existing behavior while effective-dated policies are being implemented. Its values are not an assertion of current Philippine statutory law.
 - Effective-dated employee compensation/pay-frequency/attendance policy persistence passed exact-head PR #164 MySQL CI #1108 and Canva Visual Parity #298 and is `VERIFIED` in the payroll registry.
 - Expanded lifecycle/corrections passed exact-head PR #165 HOAHub MySQL CI #1111 and Canva Visual Parity #300 at `1743245f3d676f50fe026cf6831e9663ab8a666b`, merged to `main` at `8b6f07f2b9139ee89d104414a3e17e94d6c1f366`, and remains `VERIFIED`.
-- Current completion candidate `codex/payroll-completion-20260824` implements `PAY-TASK-006`, `PAY-TASK-007`, `PAY-TASK-009`, and remaining acceptance coverage. It remains `IMPLEMENTED`, not `VERIFIED` or production-live, until its exact-head MySQL CI/visual gate passes, it merges, and deployment is confirmed separately.
+- PR #166 on `codex/payroll-completion-20260824` completes `PAY-TASK-006`, `PAY-TASK-007`, `PAY-TASK-009`, and remaining acceptance coverage. The implementation head `f596c850a113bcd73d50d5a71116e9951685ffdb` passed HOAHub MySQL CI #1114 and Canva Visual Parity #302; the payroll registry is `VERIFIED`. Production availability still requires merge and separate deployment confirmation.
 
 ## AI Governance
 
@@ -300,7 +300,7 @@ Verification evidence: exact-head PR #164 HOAHub MySQL CI #1108 and Canva Visual
 - Payroll resolves the configuration effective on the cutoff end date and stores `Payslip.compensationId` plus `Payslip.compensationSnapshot`. Later master-data changes must not mutate that snapshot.
 - Pre-migration payslips are legacy historical evidence and are not mass-rewritten by the compensation backfill.
 - `NOT_REQUIRED` and `EXCEPTION_ONLY` attendance policies are supported only for monthly/fixed-per-period compensation in the current implementation; Daily and Hourly require attendance.
-- This configuration foundation is not a statutory-rate engine. `PAY-STAT-001` remains separately blocked until authoritative Philippine rule tables/effective dates are verified and persisted.
+- Effective-dated statutory rates are now a separate verified authority under `PAY-TASK-006`; compensation versions continue to own employee-specific terms only.
 
 ### Payroll Lifecycle and Immutable Revisions
 
@@ -311,30 +311,30 @@ Implementation task: `PAY-TASK-005`. PR #165 is merged to `main` at `8b6f07f2b91
 - `PayrollCalculationRevision` and `PayrollCalculationRevisionPayslip` are immutable historical authority for finalized calculations. Each revision carries tenant/payroll identity, monotonic revision number, type, actor, reason, parent/source revision, period/input snapshots, totals, and per-employee/aggregate deltas.
 - Controlled correction of finalized unpaid payroll requires a 10–500 character reason, preserves the source revision, returns working data to `CALCULATED`, and creates a new child revision on re-finalization.
 - Finalized/posted/paid evidence may receive one immutable reversal revision. Reversal evidence does not delete or overwrite the source payroll. Paid remains terminal.
-- On the current completion candidate, `POSTING`, `POSTED`, and `POST_FAILED` transition only through the durable `PayrollPostingOutbox`/`PayrollFinancialPosting` contract. Finalized payroll posts accrual before payment; net-pay disbursement is required before `PAID`.
+- `POSTING`, `POSTED`, and `POST_FAILED` transition only through the durable `PayrollPostingOutbox`/`PayrollFinancialPosting` contract. Finalized payroll posts accrual before payment; net-pay disbursement is required before `PAID`.
 - The legacy `PayrollArchive` pre-correction snapshot remains compatibility evidence; it does not replace first-class calculation revisions.
 
-### Statutory Payroll Rules Candidate
+### Statutory Payroll Rules
 
-Implementation task: `PAY-TASK-006`. Candidate status: `IMPLEMENTED`, pending exact-head verification.
+Implementation task: `PAY-TASK-006`. Status: `VERIFIED` by PR #166 HOAHub MySQL CI #1114 and Canva Visual Parity #302 at `f596c850a113bcd73d50d5a71116e9951685ffdb`.
 
 - `PayrollStatutoryRuleSet` is effective-dated legal evidence selected by jurisdiction and payroll pay date.
 - The first candidate rule set is `PH_STATUTORY_2025_2026_V1`, verified as of 2026-08-24 against official DOLE, BIR, SSS, PhilHealth, and Pag-IBIG publications recorded in its source snapshot.
 - Payroll stores rule-set identity and immutable calculation evidence on period, payslip, and finalized calculation revision. Historical legacy payroll is not relabeled.
 - Legal formula changes require a new effective-dated rule set and boundary tests; never update historical rule JSON in place.
 
-### Financial Engine Posting Candidate
+### Financial Engine Posting
 
-Implementation task: `PAY-TASK-007`. Candidate status: `IMPLEMENTED`, pending exact-head verification.
+Implementation task: `PAY-TASK-007`. Status: `VERIFIED` by PR #166 HOAHub MySQL CI #1114 and Canva Visual Parity #302 at `f596c850a113bcd73d50d5a71116e9951685ffdb`.
 
 - Posting identity is authenticated tenant + immutable payroll revision + event (`POST`, `PAYMENT`, or `REVERSAL`).
 - `PayrollPostingOutbox`, `PayrollFinancialPosting`, and `FinancialJournalEntry` preserve durable retry, idempotency, reconciliation, error, and source-revision evidence.
 - `POST` recognizes gross/employer payroll expense and liabilities; `PAYMENT` clears net-pay to cash and applies loan deductions once; `REVERSAL` references immutable reversal evidence and restores receivable evidence where required.
 - Repeating an already posted event returns its existing result. Never bypass the outbox with a direct payroll status or loan-balance mutation.
 
-### Employee Leave Candidate
+### Employee Leave
 
-Implementation task: `PAY-TASK-009`. Candidate status: `IMPLEMENTED`, pending exact-head verification.
+Implementation task: `PAY-TASK-009`. Status: `VERIFIED` by PR #166 HOAHub MySQL CI #1114 and Canva Visual Parity #302 at `f596c850a113bcd73d50d5a71116e9951685ffdb`.
 
 - `LeaveType`, `LeaveRequest`, `EmployeeLeaveBalance`, and `LeaveBalanceTransaction` are tenant-scoped payroll data.
 - Employees submit/cancel only their own requests. Payroll Manager, HR Admin, or System Administrator review remains server-authoritative.

@@ -1,7 +1,7 @@
 # PAGSIBOL VILLAGE PH2 4B EAST HOA Portal - User Manual
 
 Generated: June 24, 2026
-Last revised: August 24, 2026 (payroll completion candidate; production availability requires confirmed deployment)
+Last revised: August 24, 2026 (payroll completion verified in PR #166; production availability requires confirmed deployment)
 
 This manual explains how officers and homeowners use the portal. Screenshots were captured from the current clean database, so many tables show empty states until real homeowners, bills, payments, employees, and records are added.
 

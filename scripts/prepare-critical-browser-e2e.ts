@@ -113,6 +113,49 @@ async function ensureEntitlements(tenantId: string, modules: TenantModule[]) {
   }
 }
 
+async function ensurePlanEntitlements(tenantId: string, modules: TenantModule[]) {
+  const tenant = await prisma.tenant.findUniqueOrThrow({
+    where: { id: tenantId },
+    select: {
+      subscriptionPlan: true,
+      subscriptions: {
+        orderBy: [{ startedAt: "desc" }, { createdAt: "desc" }],
+        take: 1,
+        select: { id: true, planId: true },
+      },
+    },
+  });
+
+  let planId = tenant.subscriptions[0]?.planId;
+  if (!planId) {
+    const code = `E2E_${tenantId}`.slice(0, 60);
+    const plan = await prisma.subscriptionPlan.upsert({
+      where: { code },
+      update: { active: true },
+      create: { code, name: `E2E Plan ${tenantId}`, active: true, trialDays: 0 },
+      select: { id: true },
+    });
+    planId = plan.id;
+    await prisma.tenant.update({
+      where: { id: tenantId },
+      data: { subscriptionPlan: code, subscriptionStatus: "ACTIVE" },
+    });
+    await prisma.tenantSubscription.create({
+      data: { tenantId, planId, status: "ACTIVE", startedAt: new Date(), currency: "PHP" },
+    });
+  } else {
+    await prisma.subscriptionPlan.update({ where: { id: planId }, data: { active: true } });
+  }
+
+  for (const tenantModule of modules) {
+    await prisma.subscriptionPlanModule.upsert({
+      where: { planId_module: { planId, module: tenantModule } },
+      update: { enabled: true },
+      create: { planId, module: tenantModule, enabled: true },
+    });
+  }
+}
+
 async function ensureHomeowner(input: {
   tenantId: string;
   userId: string;
@@ -195,8 +238,12 @@ async function setup() {
     create: { id: secondaryTenantId, name: "E2E Isolation HOA", shortName: "E2E-B", slug: secondaryTenantSlug },
   });
 
-  await ensureEntitlements(primaryTenantId, [TenantModule.BILLING, TenantModule.DOCUMENTS, TenantModule.ANNOUNCEMENTS]);
-  await ensureEntitlements(secondaryTenantId, [TenantModule.ANNOUNCEMENTS]);
+  const primaryModules = [TenantModule.BILLING, TenantModule.DOCUMENTS, TenantModule.ANNOUNCEMENTS];
+  const secondaryModules = [TenantModule.ANNOUNCEMENTS];
+  await ensureEntitlements(primaryTenantId, primaryModules);
+  await ensureEntitlements(secondaryTenantId, secondaryModules);
+  await ensurePlanEntitlements(primaryTenantId, primaryModules);
+  await ensurePlanEntitlements(secondaryTenantId, secondaryModules);
 
   await ensureHomeowner({
     tenantId: primaryTenantId,

@@ -1,7 +1,8 @@
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, Pencil } from "lucide-react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { AssociationLogo } from "@/components/association-logo";
+import { PettyCashDeleteButton } from "@/components/petty-cash-delete-button";
 import { PrintButton } from "@/components/print-button";
 import { requirePermission } from "@/lib/authorization/guards";
 import { Permission } from "@/lib/authorization/permissions";
@@ -10,7 +11,7 @@ import { getPettyCashVoucher } from "@/lib/petty-cash/service";
 import { getAssociationSettings } from "@/lib/system-settings";
 import { amountInWords, money, shortDate } from "@/lib/utils";
 
-export default async function PettyCashVoucherPage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ success?: string }> }) {
+export default async function PettyCashVoucherPage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ success?: string; error?: string }> }) {
   const admin = await requirePermission(Permission.EXPENSES_MANAGE);
   await requirePettyCashFeature(admin.tenantId);
   const { id } = await params;
@@ -22,15 +23,39 @@ export default async function PettyCashVoucherPage({ params, searchParams }: { p
   const contactLine = [association.contactNumber, association.email].filter(Boolean).join(" · ");
 
   return <>
-    <style>{`@media print { @page { size: A5 portrait; margin: 5mm; } .petty-cash-print { width: 138mm !important; max-width: 138mm !important; margin: 0 !important; padding: 0 !important; font-size: 8pt !important; } .petty-cash-print section { box-shadow: none !important; } }`}</style>
-    <div className="petty-cash-print mx-auto max-w-[148mm]">
-      <div className="print-hidden mb-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+    <style>{`
+      @media print {
+        @page { size: A4 portrait; margin: 0; }
+        html, body { width: 210mm !important; min-width: 210mm !important; min-height: 297mm !important; margin: 0 !important; padding: 0 !important; background: #fff !important; }
+        .petty-cash-print { width: 210mm !important; max-width: 210mm !important; height: 148.5mm !important; max-height: 148.5mm !important; margin: 0 !important; padding: 3mm !important; overflow: hidden !important; box-sizing: border-box !important; font-size: 7.5pt !important; line-height: 1.1 !important; }
+        .petty-cash-print section { height: 142.5mm !important; max-height: 142.5mm !important; padding: 3mm !important; overflow: hidden !important; box-shadow: none !important; }
+        .petty-cash-print header { padding-bottom: 1.5mm !important; gap: 2mm !important; }
+        .petty-cash-print header > :first-child { width: 13mm !important; height: 13mm !important; }
+        .petty-cash-print .mt-3 { margin-top: 1.5mm !important; }
+        .petty-cash-print .mt-4 { margin-top: 2mm !important; }
+        .petty-cash-print .mt-5 { margin-top: 2.5mm !important; }
+        .petty-cash-print .mt-7 { margin-top: 4mm !important; }
+        .petty-cash-print .gap-8 { gap: 8mm !important; }
+        .petty-cash-print table { margin-top: 2mm !important; font-size: 7pt !important; line-height: 1.05 !important; }
+        .petty-cash-print th, .petty-cash-print td { padding: 0.8mm 1.2mm !important; }
+        .petty-cash-print footer { margin-top: 2mm !important; padding-top: 1mm !important; font-size: 5.5pt !important; line-height: 1.05 !important; }
+        .petty-cash-print h2 { font-size: 13pt !important; line-height: 1 !important; }
+        .petty-cash-print dl { gap: 0.8mm !important; }
+      }
+    `}</style>
+    <div className="petty-cash-print mx-auto max-w-[210mm]">
+      <div className="print-hidden mb-4 flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
         <Link className="btn-secondary inline-flex min-h-11 items-center justify-center gap-2" href="/admin/petty-cash"><ArrowLeft className="size-4" /> Voucher register</Link>
-        <PrintButton label="Print A5 Voucher" />
+        <div className="flex flex-col gap-2 sm:flex-row">
+          <Link className="btn-secondary inline-flex min-h-11 items-center justify-center gap-2" href={`/admin/petty-cash/${voucher.id}/edit`}><Pencil className="size-4" /> Edit</Link>
+          <PettyCashDeleteButton voucherId={voucher.id} />
+          <PrintButton label="Print Half-A4 Voucher" />
+        </div>
       </div>
-      {query.success && <div className="print-hidden mb-4 rounded-2xl border border-emerald-200 bg-emerald-50 p-3 text-sm font-semibold text-emerald-900">Voucher posted successfully. Expense entries were created automatically.</div>}
+      {query.success && <div className="print-hidden mb-4 rounded-2xl border border-emerald-200 bg-emerald-50 p-3 text-sm font-semibold text-emerald-900">{query.success === "updated" ? "Voucher updated successfully. Linked expense entries were synchronized." : "Voucher posted successfully. Expense entries were created automatically."}</div>}
+      {query.error && <div className="print-hidden mb-4 rounded-2xl border border-rose-200 bg-rose-50 p-3 text-sm font-semibold text-rose-900">{query.error}</div>}
 
-      <section className="border-2 border-slate-900 bg-white p-4 shadow-sm print:p-[4mm]">
+      <section className="border-2 border-slate-900 bg-white p-4 shadow-sm print:p-[3mm]">
         <header className="grid grid-cols-[16mm_minmax(0,1fr)] items-center gap-3 border-b-2 border-slate-900 pb-3">
           <AssociationLogo className="size-14" src={association.logoUrl} alt={`${association.name} logo`} />
           <div className="min-w-0 text-center">

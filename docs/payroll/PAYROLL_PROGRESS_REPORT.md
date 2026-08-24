@@ -26,7 +26,7 @@ The implementation head `f596c850a113bcd73d50d5a71116e9951685ffdb` passed exact-
 - `PAY-STAT-003` — effective-dated tenant defaults and employee overrides for the statutory master switch, SSS, PhilHealth, Pag-IBIG, and withholding-tax applicability. Official rules remain system-controlled.
 - `PAY-UX-001` — six primary admin payroll tasks, a visible run lifecycle, responsive navigation, schedule management, and read-only employee visibility.
 
-The four new requirements and `PAY-TASK-011` are `IMPLEMENTED`, not `VERIFIED`. PR #168 merged to `main` at `a1f2f05` and remains the owner of Petty Cash Voucher issuance/cash-advance source integration. This candidate was transplanted onto that exact main state and preserves both materializers; PR #167's billing work and PR #170's receipt-print work remain outside payroll scope.
+The four new requirements and `PAY-TASK-011` are `IMPLEMENTED`, not `VERIFIED`. PR #171's implementation head `c47416e83bc3c40d6bf317786bab264f7b757a15` passed exact-head HOAHub MySQL CI #1136 and Canva Visual Parity #321. PR #168 merged to `main` at `a1f2f05` and remains the owner of Petty Cash Voucher issuance/cash-advance source integration; this candidate preserves both materializers. PR #167's billing work and PR #170's receipt-print work remain outside payroll scope.
 
 ## Verified implementation
 
@@ -69,16 +69,16 @@ The four new requirements and `PAY-TASK-011` are `IMPLEMENTED`, not `VERIFIED`. 
 - Full unit suite: 442/442 passed locally on latest main.
 - Full ESLint with zero warnings: passed locally.
 - Next.js production build: passed locally on latest main, including all 48 routes and build-time lint/type validation.
-- Clean MySQL migration/seed and exact-head workflows remain pending for the current candidate.
+- PR #171 implementation head: clean MySQL migration/seed, full HOAHub MySQL CI #1136, production build/browser smoke, and Canva Visual Parity #321 passed.
 - The prior PR #166 clean migration, seed, finance, production smoke, critical browser, and visual evidence remains valid only for its exact tested head.
 
 ## Required release gate
 
 1. Keep draft PR #171 isolated from the user's unrelated dirty Prisma split-schema files and concurrent non-payroll work.
-2. Run clean MySQL migration/seed, full HOAHub MySQL CI, and the applicable visual/browser gate on the exact PR head.
+2. Preserve passing exact-head MySQL/browser and visual checks after any review change.
 3. Preserve merged PR #168's Petty Cash Voucher ownership and both payroll materializers through review.
 4. Merge only a passing exact head, then verify Hostinger deployment separately.
 
 ## Remaining blockers
 
-No implementation blocker is currently known. Exact-head PR checks, review, merge, and separate deployment confirmation remain.
+No implementation blocker is currently known. Review, merge, and separate deployment confirmation remain; any changed review head must rerun the exact-head checks.

@@ -120,9 +120,16 @@ export function EmployeeForm({ employee }: { employee?: EmployeeWithPayrollConfi
           Enable login account
         </label>
         <Field label="Login email" name="loginEmail" type="email" defaultValue={employee?.user?.email ?? employee?.email ?? ""} />
-        <Field label="Temporary password" name="loginPassword" type="password" defaultValue="ChangeMe123!" autoComplete="new-password" />
+        <Field
+          label={employee?.userId ? "New password (optional)" : "Temporary password"}
+          name="loginPassword"
+          type="password"
+          defaultValue={employee ? "" : "ChangeMe123!"}
+          placeholder={employee?.userId ? "Leave blank to keep current password" : undefined}
+          autoComplete="new-password"
+        />
         {employee?.userId && (
-          <p className="rounded-xl bg-emerald-50 p-3 text-sm font-semibold text-emerald-700">Login account is linked. Keep login enabled to synchronize this user&apos;s role.</p>
+          <p className="rounded-xl bg-emerald-50 p-3 text-sm font-semibold text-emerald-700">Login account is linked. Leave the password blank to keep the existing password while synchronizing profile and role changes.</p>
         )}
       </div>
 

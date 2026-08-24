@@ -3,7 +3,7 @@
 Last updated: 2026-08-24
 Source of truth: `docs/payroll/PAYROLL_IMPLEMENTATION_STATUS.json`
 Current candidate branch: `codex/payroll-schedules-controls-latest-20260824`
-Current pull request: not opened yet
+Current pull request: draft PR #171
 Current candidate task: `PAY-TASK-011`
 
 ## Executive status
@@ -74,7 +74,7 @@ The four new requirements and `PAY-TASK-011` are `IMPLEMENTED`, not `VERIFIED`. 
 
 ## Required release gate
 
-1. Open a PR from `codex/payroll-schedules-controls-latest-20260824` without including the user's unrelated dirty Prisma split-schema files.
+1. Keep draft PR #171 isolated from the user's unrelated dirty Prisma split-schema files and concurrent non-payroll work.
 2. Run clean MySQL migration/seed, full HOAHub MySQL CI, and the applicable visual/browser gate on the exact PR head.
 3. Preserve merged PR #168's Petty Cash Voucher ownership and both payroll materializers through review.
 4. Merge only a passing exact head, then verify Hostinger deployment separately.

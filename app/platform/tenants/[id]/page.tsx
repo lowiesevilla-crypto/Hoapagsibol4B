@@ -5,14 +5,17 @@ import { Activity, Building2, CreditCard, Layers3, ShieldCheck, UsersRound, Wall
 import { updateTenantAction } from "@/lib/actions/platform";
 import { updateTenantHomeownerConvenienceFeeAction } from "@/lib/actions/platform-homeowner-fee";
 import { updateTenantLogoAction } from "@/lib/actions/tenant-branding";
+import { resolveAiAssistanceEntitlement } from "@/lib/ai-assistance/entitlement";
 import { requireUser } from "@/lib/auth";
 import { prisma } from "@/lib/db";
+import { resolveDocumentManagementEntitlement } from "@/lib/document-repository/entitlement";
 import { PlatformTenantTabs } from "@/components/platform-tenant-tabs";
 import { AssociationLogo } from "@/components/association-logo";
 import { MetricCard } from "@/components/ui/metric-card";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { WorkspaceCard } from "@/components/ui/workspace-card";
 import { getHomeownerPaymentConfig } from "@/lib/services/homeowner-payment-config";
+import { getEnabledTenantModules } from "@/lib/tenant";
 import {
   DEFAULT_TENANT_LOGO_URL,
   tenantLogoFileField,
@@ -32,13 +35,12 @@ export default async function TenantDetailPage({
   const tenant = await prisma.tenant.findUnique({
     where: { id },
     include: {
-      moduleEntitlements: true,
       advisories: { where: { active: true }, take: 1 },
       _count: { select: { users: true } },
     },
   });
   if (!tenant) notFound();
-  const [homeownerPaymentConfig, recentActivity] = await Promise.all([
+  const [homeownerPaymentConfig, recentActivity, enabled, documentManagement, aiAssistance] = await Promise.all([
     getHomeownerPaymentConfig(tenant.id),
     prisma.auditLog.findMany({
       where: { tenantId: tenant.id },
@@ -46,6 +48,9 @@ export default async function TenantDetailPage({
       orderBy: { createdAt: "desc" },
       select: { id: true, module: true, action: true, entityType: true, createdAt: true },
     }),
+    getEnabledTenantModules(tenant.id),
+    resolveDocumentManagementEntitlement(tenant.id),
+    resolveAiAssistanceEntitlement(tenant.id),
   ]);
 
   await prisma.auditLog.create({
@@ -59,9 +64,6 @@ export default async function TenantDetailPage({
     },
   });
 
-  const enabled = new Set(
-    tenant.moduleEntitlements.filter((item) => item.enabled).map((item) => item.module),
-  );
   const enabledLabels = [...enabled].map(String);
   const logoUrl = tenant.logoUrl || DEFAULT_TENANT_LOGO_URL;
   const serviceHealthy = tenant.status === "ACTIVE";
@@ -72,7 +74,7 @@ export default async function TenantDetailPage({
 
   const capabilityGroups = [
     { title: "Finance & Billing", description: "Billing, payments, collections and receipts", terms: ["BILL", "PAYMENT", "COLLECTION", "FINANCE"] },
-    { title: "Resident Services", description: "Documents, complaints and resident requests", terms: ["DOCUMENT", "COMPLAINT", "REQUEST"] },
+    { title: "Resident Services", description: "Documents, repository, complaints and resident requests", terms: ["DOCUMENT", "COMPLAINT", "REQUEST"] },
     { title: "Community", description: "Announcements, events and chat", terms: ["ANNOUNCEMENT", "EVENT", "CHAT", "COMMUNITY"] },
     { title: "HRIS & Payroll", description: "Employees, attendance and payroll", terms: ["EMPLOYEE", "ATTENDANCE", "PAYROLL", "HRIS"] },
     { title: "Security & Access", description: "Vehicles, stickers, gate and move services", terms: ["VEHICLE", "STICKER", "GATE", "MOVE", "SECURITY"] },
@@ -106,15 +108,20 @@ export default async function TenantDetailPage({
       <section className="grid gap-[15px] sm:grid-cols-2 xl:grid-cols-4">
         <MetricCard label="Users" value={tenant._count.users} note="Current tenant user records" icon={UsersRound} tone="blue" href={`/platform/tenants/${tenant.id}/users`} />
         <MetricCard label="Subscription" value={tenant.subscriptionPlan.replaceAll("_", " ")} note={tenant.subscriptionStatus.replaceAll("_", " ")} icon={CreditCard} tone={subscriptionHealthy ? "green" : "amber"} href={`/platform/tenants/${tenant.id}/billing`} />
-        <MetricCard label="Modules enabled" value={enabled.size} note={`${Object.values(TenantModule).length} platform modules available`} icon={Layers3} tone="violet" href={`/platform/tenants/${tenant.id}/features`} />
+        <MetricCard label="Plan modules" value={enabled.size} note={`${Object.values(TenantModule).length} platform modules available`} icon={Layers3} tone="violet" href={`/platform/tenants/${tenant.id}/features`} />
         <MetricCard label="Payment routing" value={paymentRoutingReady ? "Ready" : "Review"} note="PayMongo parent + tenant child configuration" icon={WalletCards} tone={paymentRoutingReady ? "green" : "amber"} />
       </section>
 
       <section className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_390px]">
-        <WorkspaceCard title="Tenant capability map" description="Modules, entitlements and operating readiness for this HOA." action={<Link className="text-xs font-black text-[#0872ae] hover:underline" href={`/platform/tenants/${tenant.id}/features`}>Manage modules →</Link>}>
+        <WorkspaceCard title="Tenant capability map" description="Effective capabilities resolved from the active plan and Platform Admin restrictions." action={<Link className="text-xs font-black text-[#0872ae] hover:underline" href={`/platform/tenants/${tenant.id}/features`}>Feature controls →</Link>}>
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
             {capabilityGroups.map((group) => {
-              const enabledForTenant = enabledLabels.some((value) => group.terms.some((term) => value.includes(term)));
+              const moduleEnabled = enabledLabels.some((value) => group.terms.some((term) => value.includes(term)));
+              const enabledForTenant = group.title === "HOAHub AI"
+                ? aiAssistance.enabled
+                : group.title === "Resident Services"
+                  ? moduleEnabled || documentManagement.enabled
+                  : moduleEnabled;
               return <div key={group.title} className="rounded-[17px] border border-[#e3edf2] bg-[#f9fcfd] p-4"><div className="flex items-start justify-between gap-3"><div><h3 className="text-sm font-black text-[#153c50]">{group.title}</h3><p className="mt-1 text-xs leading-5 text-[#7c8d9b]">{group.description}</p></div><StatusBadge tone={enabledForTenant ? "success" : "neutral"}>{enabledForTenant ? "Enabled" : "Not enabled"}</StatusBadge></div></div>;
             })}
           </div>
@@ -170,10 +177,14 @@ export default async function TenantDetailPage({
 
       <form id="settings" action={updateTenantAction} className="space-y-6 rounded-[22px] border border-[#dbe7ee] bg-white p-5 shadow-[0_8px_24px_rgba(22,65,87,.04)] sm:p-7">
         <input type="hidden" name="tenantId" value={tenant.id} /><input type="hidden" name="status" value={tenant.status} /><input type="hidden" name="subscriptionStatus" value={tenant.subscriptionStatus} /><input type="hidden" name="subscriptionPlan" value={tenant.subscriptionPlan} />
-        <div><h2 className="text-xl font-black text-[#0d3349]">Tenant configuration</h2><p className="text-sm text-[#6f8294]">Commercial plan, subscription status, suspension, and reinstatement remain controlled through Subscription & Billing.</p></div>
+        <div><h2 className="text-xl font-black text-[#0d3349]">Tenant configuration</h2><p className="text-sm text-[#6f8294]">Commercial plan, subscription status, suspension, reinstatement, modules, AI, and Document Management are controlled by Platform Administration.</p></div>
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4"><label><span className="label">URL slug</span><input className="field" name="slug" defaultValue={tenant.slug} required pattern="[a-z0-9]+(?:-[a-z0-9]+)*" /></label><div className="rounded-xl bg-[#f7fbfd] p-4 text-sm"><p className="text-xs font-black uppercase tracking-wider text-slate-400">Commercial lifecycle</p><p className="mt-2 font-black text-slate-900">{tenant.subscriptionPlan} · {tenant.subscriptionStatus.replaceAll("_", " ")}</p><Link className="mt-2 inline-block font-black text-[#0872ae] hover:underline" href={`/platform/tenants/${tenant.id}/billing`}>Manage billing</Link></div></div>
         <label id="advisory" className="block scroll-mt-28"><span className="label">Tenant advisory message</span><textarea className="field min-h-28" name="advisory" defaultValue={tenant.advisories[0]?.message || ""} /></label>
-        <div id="modules" className="scroll-mt-28"><span className="label">Module access</span><div className="mt-2 grid gap-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">{Object.values(TenantModule).map((module) => <label key={module} className="flex min-h-12 items-center gap-3 rounded-xl border border-[#dbe7ee] p-3 text-sm"><input className="size-5" type="checkbox" name="modules" value={module} defaultChecked={enabled.has(module)} />{module.replaceAll("_", " ")}</label>)}</div></div>
+        <div id="modules" className="scroll-mt-28">
+          <div className="flex flex-wrap items-end justify-between gap-3"><div><span className="label">Effective plan modules</span><p className="mt-1 text-xs text-slate-500">Read-only here. Change module inclusion in Plans &amp; Features or assign another active plan.</p></div><Link className="btn-secondary" href="/platform/plans">Plans &amp; Features</Link></div>
+          <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">{Object.values(TenantModule).map((module) => <div key={module} className="flex min-h-12 items-center justify-between gap-3 rounded-xl border border-[#dbe7ee] p-3 text-sm"><span>{module.replaceAll("_", " ")}</span><StatusBadge tone={enabled.has(module) ? "success" : "neutral"}>{enabled.has(module) ? "Included" : "Excluded"}</StatusBadge></div>)}</div>
+        </div>
+        <div className="rounded-2xl border border-blue-100 bg-blue-50 p-4 text-sm leading-6 text-blue-900"><b>Platform authority:</b> Tenant roles and local settings cannot activate a module or sellable capability that is excluded from the active subscription plan. Document Management and HOAHub AI are additionally governed from the tenant Feature Controls page.</div>
         <button className="btn-primary min-h-12 w-full sm:w-auto">Save tenant configuration</button>
       </form>
     </div>

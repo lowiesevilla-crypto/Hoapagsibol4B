@@ -90,8 +90,10 @@ export async function listPlatformRepositoryUsage(): Promise<PlatformRepositoryU
     const override = overridesByTenant.get(tenant.id);
     const subscriptionStatus = latestSubscription?.status ?? tenant.subscriptionStatus;
     const planEnabled = feature?.enabled ?? false;
+    const tenantDisabled = override?.enabledOverride === false;
     const entitled = Boolean(
-      (override?.enabledOverride ?? planEnabled)
+      planEnabled
+      && !tenantDisabled
       && plan?.active
       && !blockedSubscriptionStatuses.has(subscriptionStatus),
     );
@@ -109,7 +111,7 @@ export async function listPlatformRepositoryUsage(): Promise<PlatformRepositoryU
       subscriptionStatus,
       planCode: plan?.code ?? tenant.subscriptionPlan,
       entitled,
-      enabledSource: override?.enabledOverride != null ? "TENANT_OVERRIDE" : planEnabled ? "PLAN" : "DISABLED",
+      enabledSource: tenantDisabled ? "TENANT_OVERRIDE" : planEnabled ? "PLAN" : "DISABLED",
       documentCount: documentUsage?._count._all ?? 0,
       currentDocumentBytes,
       retainedRevisionBytes,

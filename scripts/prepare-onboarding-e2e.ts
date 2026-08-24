@@ -1,4 +1,4 @@
-import { PrismaClient, Role, TenantModule } from "@prisma/client";
+import { PrismaClient, Role, TenantModule, TenantSubscriptionStatus } from "@prisma/client";
 import { hash } from "bcryptjs";
 
 const prisma = new PrismaClient();
@@ -7,6 +7,8 @@ const primaryTenantId = "e2e_onboarding_primary_tenant";
 const secondaryTenantId = "e2e_onboarding_secondary_tenant";
 const primaryTenantSlug = "ci-onboarding-primary";
 const secondaryTenantSlug = "ci-onboarding-secondary";
+const onboardingPlanId = "e2e_onboarding_subscription_plan";
+const onboardingPlanCode = "E2E_ONBOARDING_FULL_SUITE";
 const administratorId = "e2e_onboarding_administrator";
 const restrictedUserId = "e2e_onboarding_restricted_staff";
 const secondaryHomeownerUserId = "e2e_onboarding_secondary_homeowner_user";
@@ -50,7 +52,9 @@ async function removeFixtures() {
   await prisma.tenantModuleEntitlement.deleteMany({ where: { tenantId: { in: tenantIds } } });
   await prisma.user.deleteMany({ where: { tenantId: { in: tenantIds }, id: { in: fixtureUserIds } } });
   await prisma.user.deleteMany({ where: { tenantId: { in: tenantIds } } });
+  await prisma.tenantSubscription.deleteMany({ where: { tenantId: { in: tenantIds } } });
   await prisma.tenant.deleteMany({ where: { id: { in: tenantIds } } });
+  await prisma.subscriptionPlan.deleteMany({ where: { id: onboardingPlanId } });
 }
 
 async function setup() {
@@ -66,6 +70,8 @@ async function setup() {
         shortName: "E2E-ON-A",
         slug: primaryTenantSlug,
         address: "Primary Onboarding Address",
+        subscriptionPlan: onboardingPlanCode,
+        subscriptionStatus: TenantSubscriptionStatus.ACTIVE,
       },
       {
         id: secondaryTenantId,
@@ -73,14 +79,38 @@ async function setup() {
         shortName: "E2E-ON-B",
         slug: secondaryTenantSlug,
         address: "Secondary Onboarding Address",
+        subscriptionPlan: onboardingPlanCode,
+        subscriptionStatus: TenantSubscriptionStatus.ACTIVE,
       },
     ],
   });
 
-  await prisma.tenantModuleEntitlement.createMany({
-    data: tenantIds.flatMap((tenantId) =>
-      Object.values(TenantModule).map((module) => ({ tenantId, module, enabled: true })),
-    ),
+  await prisma.subscriptionPlan.create({
+    data: {
+      id: onboardingPlanId,
+      code: onboardingPlanCode,
+      name: "E2E Onboarding Full Suite",
+      description: "Disposable full-suite plan for tenant onboarding browser verification.",
+      active: true,
+      currency: "PHP",
+      monthlyPrice: 0,
+      setupFee: 0,
+      trialDays: 0,
+      modules: {
+        create: Object.values(TenantModule).map((module) => ({ module, enabled: true })),
+      },
+    },
+  });
+
+  await prisma.tenantSubscription.createMany({
+    data: tenantIds.map((tenantId) => ({
+      tenantId,
+      planId: onboardingPlanId,
+      status: TenantSubscriptionStatus.ACTIVE,
+      startedAt: new Date("2026-08-01T00:00:00.000Z"),
+      currency: "PHP",
+      agreedPrice: 0,
+    })),
   });
 
   await prisma.user.createMany({
@@ -137,7 +167,7 @@ async function setup() {
     },
   });
 
-  console.log("Tenant onboarding browser fixtures prepared.");
+  console.log("Tenant onboarding browser fixtures prepared with an authoritative active subscription plan.");
   console.log(`Primary tenant login: /${primaryTenantSlug}/login`);
   console.log(`Administrator: ${administratorEmail}`);
   console.log(`Restricted staff: ${restrictedEmail}`);

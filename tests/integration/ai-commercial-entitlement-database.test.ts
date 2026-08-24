@@ -9,9 +9,13 @@ import { runWithTenant } from "@/lib/tenant-context";
 const runId = `ai-commercial-it-${process.pid}`;
 const tenantAId = `${runId}-tenant-a`;
 const tenantBId = `${runId}-tenant-b`;
+const tenantCId = `${runId}-tenant-c`;
 const planId = `${runId}-plan`;
 const planCode = `${runId}-PLAN`;
-const tenantIds = [tenantAId, tenantBId];
+const excludedPlanId = `${runId}-excluded-plan`;
+const excludedPlanCode = `${runId}-EXCLUDED`;
+const tenantIds = [tenantAId, tenantBId, tenantCId];
+const planIds = [planId, excludedPlanId];
 
 function inTenant<T>(tenantId: string, callback: () => T) {
   return runWithTenant(tenantId, callback, { role: Role.HOA_ADMIN });
@@ -20,30 +24,49 @@ function inTenant<T>(tenantId: string, callback: () => T) {
 async function cleanup() {
   await platformPrisma.tenantFeatureEntitlement.deleteMany({ where: { tenantId: { in: tenantIds } } });
   await platformPrisma.tenantSubscription.deleteMany({ where: { tenantId: { in: tenantIds } } });
-  await platformPrisma.subscriptionPlanFeatureEntitlement.deleteMany({ where: { planId } });
-  await platformPrisma.subscriptionPlan.deleteMany({ where: { id: planId } });
+  await platformPrisma.subscriptionPlanFeatureEntitlement.deleteMany({ where: { planId: { in: planIds } } });
+  await platformPrisma.subscriptionPlan.deleteMany({ where: { id: { in: planIds } } });
   await platformPrisma.tenant.deleteMany({ where: { id: { in: tenantIds } } });
 }
 
 before(async () => {
   await cleanup();
-  await platformPrisma.subscriptionPlan.create({ data: { id: planId, code: planCode, name: "AI Commercial Integration Plan", active: true } });
+  await platformPrisma.subscriptionPlan.createMany({
+    data: [
+      { id: planId, code: planCode, name: "AI Commercial Integration Plan", active: true },
+      { id: excludedPlanId, code: excludedPlanCode, name: "AI Excluded Integration Plan", active: true },
+    ],
+  });
   await platformPrisma.tenant.createMany({ data: [
     { id: tenantAId, name: "AI Tenant A", shortName: "AI-A", slug: `${runId}-a`, subscriptionPlan: planCode },
     { id: tenantBId, name: "AI Tenant B", shortName: "AI-B", slug: `${runId}-b`, subscriptionPlan: planCode },
+    { id: tenantCId, name: "AI Tenant C", shortName: "AI-C", slug: `${runId}-c`, subscriptionPlan: excludedPlanCode },
   ] });
-  await platformPrisma.tenantSubscription.createMany({ data: tenantIds.map((tenantId) => ({ tenantId, planId, status: "ACTIVE" })) });
-  await platformPrisma.subscriptionPlanFeatureEntitlement.create({
-    data: {
+  await platformPrisma.tenantSubscription.createMany({ data: [
+    { tenantId: tenantAId, planId, status: "ACTIVE" },
+    { tenantId: tenantBId, planId, status: "ACTIVE" },
+    { tenantId: tenantCId, planId: excludedPlanId, status: "ACTIVE" },
+  ] });
+  await platformPrisma.subscriptionPlanFeatureEntitlement.createMany({ data: [
+    {
       planId,
       featureCode: AI_ASSISTANCE_FEATURE_CODE,
       enabled: true,
       configuration: { monthlyRequestLimit: 1000, requestsPerMinute: 10, modelTier: "STANDARD", overagePolicy: "HARD_STOP" },
     },
-  });
+    {
+      planId: excludedPlanId,
+      featureCode: AI_ASSISTANCE_FEATURE_CODE,
+      enabled: false,
+      configuration: { monthlyRequestLimit: 100, requestsPerMinute: 5, modelTier: "ECONOMY", overagePolicy: "HARD_STOP" },
+    },
+  ] });
   await platformPrisma.tenantFeatureEntitlement.createMany({ data: [
     { tenantId: tenantAId, featureCode: AI_ASSISTANCE_FEATURE_CODE, configurationOverride: { monthlyRequestLimit: 250 } },
     { tenantId: tenantBId, featureCode: AI_ASSISTANCE_FEATURE_CODE, enabledOverride: false },
+    // Simulate a legacy/manual true override. Runtime must still refuse elevation
+    // when the active plan excludes the capability.
+    { tenantId: tenantCId, featureCode: AI_ASSISTANCE_FEATURE_CODE, enabledOverride: true },
   ] });
 });
 
@@ -64,6 +87,14 @@ test("tenant-specific AI disablement cannot be bypassed by the plan", async () =
     const entitlement = await resolveAiAssistanceEntitlement();
     assert.equal(entitlement.enabled, false);
     assert.equal(entitlement.enabledSource, "TENANT_OVERRIDE");
+  });
+});
+
+test("tenant true override cannot elevate AI above an active plan that excludes it", async () => {
+  await inTenant(tenantCId, async () => {
+    const entitlement = await resolveAiAssistanceEntitlement();
+    assert.equal(entitlement.enabled, false);
+    assert.equal(entitlement.enabledSource, "DISABLED");
   });
 });
 

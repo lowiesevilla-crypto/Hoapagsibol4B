@@ -192,7 +192,7 @@ test("cross-tenant category and tag relationships are rejected", async () => {
   });
 });
 
-test("plan entitlement is inherited and tenant override can disable Document Management", async () => {
+test("plan entitlement is inherited and tenant restriction can disable Document Management", async () => {
   await inTenant(tenantAId, async () => {
     const entitlement = await resolveDocumentManagementEntitlement();
     assert.equal(entitlement.enabled, true);
@@ -210,19 +210,20 @@ test("plan entitlement is inherited and tenant override can disable Document Man
   });
 });
 
-test("tenant administrators retain repository governance access when commercial entitlement is disabled", async () => {
+test("tenant administrators cannot bypass a Platform Admin commercial restriction", async () => {
   await inTenant(
     tenantBId,
     async () => {
-      const resolved = await requireRepositoryPermission(Permission.DOCUMENT_REPOSITORY_READ);
-      assert.equal(resolved.context.tenantId, tenantBId);
-      assert.equal(resolved.entitlement.enabled, false);
+      await assert.rejects(
+        () => requireRepositoryPermission(Permission.DOCUMENT_REPOSITORY_READ),
+        /not included in this tenant subscription/i,
+      );
     },
     new Set([Permission.DOCUMENT_REPOSITORY_READ]),
   );
 });
 
-test("non-admin repository permission cannot bypass a disabled tenant feature", async () => {
+test("staff repository permission cannot bypass a disabled tenant feature", async () => {
   await inTenant(
     tenantBId,
     async () => {

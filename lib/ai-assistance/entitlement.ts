@@ -79,9 +79,13 @@ export async function resolveAiAssistanceEntitlement(tenantId?: string): Promise
     : null;
 
   const planEnabled = planFeature?.enabled ?? false;
-  const configuredEnabled = tenantOverride?.enabledOverride ?? planEnabled;
+  const tenantDisabled = tenantOverride?.enabledOverride === false;
+  // An active plan is the commercial ceiling: a tenant-level Platform Admin
+  // restriction can turn AI off, but an override cannot grant AI when the plan
+  // itself does not include the capability.
   const enabled = Boolean(
-    configuredEnabled
+    planEnabled
+    && !tenantDisabled
     && planState.planActive
     && !blockedSubscriptionStatuses.has(planState.subscriptionStatus),
   );
@@ -89,7 +93,7 @@ export async function resolveAiAssistanceEntitlement(tenantId?: string): Promise
   return {
     featureCode: AI_ASSISTANCE_FEATURE_CODE,
     enabled,
-    enabledSource: tenantOverride?.enabledOverride != null
+    enabledSource: tenantDisabled
       ? "TENANT_OVERRIDE"
       : planEnabled
         ? "PLAN"

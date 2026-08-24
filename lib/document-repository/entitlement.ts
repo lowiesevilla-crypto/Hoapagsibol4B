@@ -72,7 +72,7 @@ export async function resolveDocumentManagementEntitlement(tenantId?: string): P
   const context = currentTenantContext();
   const effectiveTenantId = tenantId ?? context?.tenantId;
   if (!effectiveTenantId) throw new Error("Tenant context is required for Document Management entitlement resolution.");
-  if (context && context.tenantId !== effectiveTenantId) throw new Error("Cross-tenant entitlement lookup blocked.");
+  if (context && !context.platform && context.tenantId !== effectiveTenantId) throw new Error("Cross-tenant entitlement lookup blocked.");
 
   const [planState, tenantOverride] = await Promise.all([
     resolvePlan(effectiveTenantId),
@@ -102,10 +102,13 @@ export async function resolveDocumentManagementEntitlement(tenantId?: string): P
     : null;
 
   const planEnabled = planFeature?.enabled ?? false;
-  const configuredEnabled = tenantOverride?.enabledOverride ?? planEnabled;
+  const tenantDisabled = tenantOverride?.enabledOverride === false;
   const subscriptionBlocked = blockedSubscriptionStatuses.has(planState.subscriptionStatus);
-  const enabled = Boolean(configuredEnabled && planState.planActive && !subscriptionBlocked);
-  const enabledSource = tenantOverride?.enabledOverride != null
+  // The active subscription plan is the commercial ceiling. Tenant-level platform
+  // controls may restrict an included feature, but can never grant a feature that
+  // the active plan does not include.
+  const enabled = Boolean(planEnabled && !tenantDisabled && planState.planActive && !subscriptionBlocked);
+  const enabledSource = tenantDisabled
     ? "TENANT_OVERRIDE"
     : planEnabled
       ? "PLAN"

@@ -3,8 +3,8 @@ import type { LinkItem } from "@/components/sidebar-links";
 import { homeownerModuleRules, moduleForHomeownerLink } from "@/lib/homeowner-navigation";
 
 const rules: Array<[string, TenantModule]> = [
-  ["/admin/document", TenantModule.DOCUMENTS], ["/documents", TenantModule.DOCUMENTS],
-  ["/admin/payroll", TenantModule.PAYROLL], ["/admin/employees", TenantModule.PAYROLL], ["/employee/payslips", TenantModule.PAYROLL],
+  ["/admin/documents", TenantModule.DOCUMENTS], ["/admin/document-templates", TenantModule.DOCUMENTS], ["/documents", TenantModule.DOCUMENTS],
+  ["/admin/payroll", TenantModule.PAYROLL], ["/admin/employees", TenantModule.PAYROLL], ["/admin/workforce", TenantModule.PAYROLL], ["/employee/payslips", TenantModule.PAYROLL],
   ["/admin/attendance", TenantModule.ATTENDANCE], ["/employee/attendance", TenantModule.ATTENDANCE],
   ["/admin/reports", TenantModule.REPORTS],
   ["/admin/chat", TenantModule.CHAT], ["/employee/chat", TenantModule.CHAT], ["/api/chat", TenantModule.CHAT],
@@ -13,7 +13,12 @@ const rules: Array<[string, TenantModule]> = [
   ["/admin/events", TenantModule.EVENTS],
   ["/admin/vehicles", TenantModule.VEHICLES],
   ["/admin/contractors", TenantModule.CONTRACTORS],
-  ["/admin/billing", TenantModule.BILLING], ["/admin/payments", TenantModule.BILLING], ["/admin/receipts", TenantModule.BILLING], ["/admin/collections", TenantModule.BILLING], ["/admin/expenses", TenantModule.BILLING], ["/admin/data", TenantModule.BILLING],
+  // Finance surfaces, including the Rental Management workspace, are governed by
+  // the plan's BILLING capability. This keeps every currently exposed finance
+  // function inside the Platform Admin commercial boundary without inventing a
+  // second overlapping rental entitlement.
+  ["/admin/settings/billing-rules", TenantModule.BILLING], ["/admin/settings/billing-exemptions", TenantModule.BILLING], ["/admin/settings/payments", TenantModule.BILLING],
+  ["/admin/billing", TenantModule.BILLING], ["/admin/payments", TenantModule.BILLING], ["/admin/receipts", TenantModule.BILLING], ["/admin/collections", TenantModule.BILLING], ["/admin/rentals", TenantModule.BILLING], ["/admin/expenses", TenantModule.BILLING], ["/admin/data", TenantModule.BILLING],
   ["/api/payments", TenantModule.BILLING],
   ...homeownerModuleRules,
 ];

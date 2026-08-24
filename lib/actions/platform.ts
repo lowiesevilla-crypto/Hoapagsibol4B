@@ -1,7 +1,7 @@
 "use server";
 
 import { hash } from "bcryptjs";
-import { Role, TenantModule, TenantStatus, TenantSubscriptionStatus } from "@prisma/client";
+import { Role, TenantSubscriptionStatus } from "@prisma/client";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { requireUser } from "@/lib/auth";
@@ -16,8 +16,13 @@ async function requirePlatformUser() {
 
 function clean(value: FormDataEntryValue | null) { return String(value || "").trim(); }
 const slugPattern = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
+
+function startOfUtcDay(value: Date) {
+  return new Date(Date.UTC(value.getUTCFullYear(), value.getUTCMonth(), value.getUTCDate()));
+}
+
 export async function createTenantAction(formData: FormData) {
-  await requirePlatformUser();
+  const actor = await requirePlatformUser();
   const name = clean(formData.get("name"));
   const shortName = clean(formData.get("shortName"));
   const slug = clean(formData.get("slug")).toLowerCase();
@@ -25,15 +30,77 @@ export async function createTenantAction(formData: FormData) {
   const adminEmail = clean(formData.get("adminEmail")).toLowerCase();
   const password = clean(formData.get("password"));
   const adminRole = clean(formData.get("adminRole")) as Role;
-  if (!name || !shortName || !slugPattern.test(slug) || !adminName || !adminEmail || password.length < 10 || !tenantAccessRoles.includes(adminRole)) redirect("/platform/tenants/new?error=Complete%20all%20required%20fields.%20Slug%20may%20contain%20lowercase%20letters,%20numbers,%20and%20single%20hyphens%20only.");
+  const planCode = clean(formData.get("subscriptionPlan"));
+  if (!name || !shortName || !slugPattern.test(slug) || !adminName || !adminEmail || password.length < 10 || !tenantAccessRoles.includes(adminRole) || !planCode) {
+    redirect("/platform/tenants/new?error=Complete%20all%20required%20fields%20and%20select%20an%20active%20subscription%20plan.%20Slug%20may%20contain%20lowercase%20letters,%20numbers,%20and%20single%20hyphens%20only.");
+  }
   if (await prisma.tenant.findUnique({ where: { slug } })) redirect("/platform/tenants/new?error=That%20tenant%20slug%20is%20already%20used.");
-  const modules = Object.values(TenantModule);
-  const actor = await requirePlatformUser();
+
+  const plan = await prisma.subscriptionPlan.findFirst({
+    where: { code: planCode, active: true },
+    select: { id: true, code: true, trialDays: true, monthlyPrice: true, currency: true },
+  });
+  if (!plan) redirect("/platform/tenants/new?error=Select%20a%20currently%20active%20subscription%20plan.");
+
+  const startedAt = new Date();
+  const trialEndsAt = plan.trialDays > 0
+    ? new Date(startedAt.getTime() + plan.trialDays * 24 * 60 * 60 * 1000)
+    : null;
+  const subscriptionStatus = plan.trialDays > 0
+    ? TenantSubscriptionStatus.TRIAL
+    : TenantSubscriptionStatus.ACTIVE;
+  const currentPeriodStart = startOfUtcDay(startedAt);
+  const nextBillingDate = trialEndsAt ? startOfUtcDay(trialEndsAt) : currentPeriodStart;
+
   const tenant = await prisma.$transaction(async (tx) => {
-    const created = await tx.tenant.create({ data: { name, shortName, slug, address: clean(formData.get("address")) || null, contactNumber: clean(formData.get("contactNumber")) || null, email: clean(formData.get("email")) || null, secRegistrationNumber: clean(formData.get("secRegistrationNumber")) || null, tinNumber: clean(formData.get("tinNumber")) || null, subscriptionPlan: clean(formData.get("subscriptionPlan")) || "STANDARD", subscriptionStatus: TenantSubscriptionStatus.TRIAL, moduleEntitlements: { create: modules.map((module) => ({ module, enabled: formData.getAll("modules").includes(module) })) } } });
+    const created = await tx.tenant.create({
+      data: {
+        name,
+        shortName,
+        slug,
+        address: clean(formData.get("address")) || null,
+        contactNumber: clean(formData.get("contactNumber")) || null,
+        email: clean(formData.get("email")) || null,
+        secRegistrationNumber: clean(formData.get("secRegistrationNumber")) || null,
+        tinNumber: clean(formData.get("tinNumber")) || null,
+        subscriptionPlan: plan.code,
+        subscriptionStatus,
+      },
+    });
+    await tx.tenantSubscription.create({
+      data: {
+        tenantId: created.id,
+        planId: plan.id,
+        status: subscriptionStatus,
+        startedAt,
+        trialEndsAt,
+        currentPeriodStart,
+        nextBillingDate,
+        agreedPrice: plan.monthlyPrice,
+        currency: plan.currency,
+      },
+    });
     const adminUser = await tx.user.create({ data: { tenantId: created.id, name: adminName, email: adminEmail, passwordHash: await hash(password, 12), role: adminRole } });
     await tx.userRoleAssignment.create({ data: { tenantId: created.id, userId: adminUser.id, role: adminRole, assignedBy: actor.id } });
-    await tx.auditLog.create({ data: { tenantId: created.id, actorId: actor.id, module: "PLATFORM", action: "TENANT_CREATED", entityType: "Tenant", entityId: created.id, metadata: { slug: created.slug, plan: created.subscriptionPlan, initialAdminRole: adminRole } } });
+    await tx.auditLog.create({
+      data: {
+        tenantId: created.id,
+        actorId: actor.id,
+        module: "PLATFORM",
+        action: "TENANT_CREATED",
+        entityType: "Tenant",
+        entityId: created.id,
+        metadata: {
+          slug: created.slug,
+          plan: plan.code,
+          planId: plan.id,
+          subscriptionStatus,
+          nextBillingDate: nextBillingDate.toISOString().slice(0, 10),
+          commercialPolicy: "ACTIVE_PLAN_IS_CAPABILITY_CEILING",
+          initialAdminRole: adminRole,
+        },
+      },
+    });
     return created;
   });
   redirect(`/platform/tenants/${tenant.id}?success=created&message=Tenant%20and%20its%20first%20administrator%20were%20created%20successfully.`);
@@ -66,24 +133,38 @@ export async function createTenantUserAction(formData: FormData) {
 export async function updateTenantAction(formData: FormData) {
   const actor = await requirePlatformUser();
   const tenantId = clean(formData.get("tenantId"));
-  const status = clean(formData.get("status")) as TenantStatus;
-  const subscriptionStatus = clean(formData.get("subscriptionStatus")) as TenantSubscriptionStatus;
   const slug = clean(formData.get("slug")).toLowerCase();
-  if (!tenantId || !Object.values(TenantStatus).includes(status) || !Object.values(TenantSubscriptionStatus).includes(subscriptionStatus)) throw new Error("Invalid tenant settings.");
+  if (!tenantId) throw new Error("Invalid tenant settings.");
   if (!slugPattern.test(slug)) redirect(`/platform/tenants/${tenantId}?error=Enter%20a%20valid%20URL-safe%20slug.`);
   const current = await prisma.tenant.findUnique({ where: { id: tenantId } });
   if (!current) redirect("/platform/tenants?error=Tenant%20not%20found.");
   const duplicate = await prisma.tenant.findFirst({ where: { slug, id: { not: tenantId } } });
   if (duplicate) redirect(`/platform/tenants/${tenantId}?error=That%20tenant%20slug%20is%20already%20used.`);
-  const enabled = new Set(formData.getAll("modules").map(String));
-  await prisma.$transaction([
-    prisma.tenant.update({ where: { id: tenantId }, data: { slug, status, subscriptionStatus, subscriptionPlan: clean(formData.get("subscriptionPlan")) || "STANDARD" } }),
-    ...Object.values(TenantModule).map((module) => prisma.tenantModuleEntitlement.upsert({ where: { tenantId_module: { tenantId, module } }, update: { enabled: enabled.has(module) }, create: { tenantId, module, enabled: enabled.has(module) } })),
-  ]);
+
+  // Commercial plan, subscription lifecycle, module inclusion, Document
+  // Management, and AI are intentionally NOT mutated from this generic tenant
+  // settings action. Those are Platform Admin controls in Subscription/Billing,
+  // Plans & Features, and tenant Feature Controls.
+  await prisma.tenant.update({ where: { id: tenantId }, data: { slug } });
   const advisory = clean(formData.get("advisory"));
   await prisma.tenantAdvisory.updateMany({ where: { tenantId, active: true }, data: { active: false } });
   if (advisory) await prisma.tenantAdvisory.create({ data: { tenantId, message: advisory } });
-  await prisma.auditLog.create({ data: { tenantId, actorId: actor.id, module: "PLATFORM", action: current.slug === slug ? "TENANT_UPDATED" : "TENANT_SLUG_UPDATED", entityType: "Tenant", entityId: tenantId, metadata: { oldSlug: current.slug, newSlug: slug, oldStatus: current.status, newStatus: status, advisoryUpdated: Boolean(advisory) } } });
+  await prisma.auditLog.create({
+    data: {
+      tenantId,
+      actorId: actor.id,
+      module: "PLATFORM",
+      action: current.slug === slug ? "TENANT_UPDATED" : "TENANT_SLUG_UPDATED",
+      entityType: "Tenant",
+      entityId: tenantId,
+      metadata: {
+        oldSlug: current.slug,
+        newSlug: slug,
+        advisoryUpdated: Boolean(advisory),
+        commercialSettingsUnaffected: true,
+      },
+    },
+  });
   revalidatePath(`/platform/tenants/${tenantId}`);
   redirect(`/platform/tenants/${tenantId}?success=Tenant%20settings%20updated.`);
 }

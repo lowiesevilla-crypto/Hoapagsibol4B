@@ -236,7 +236,7 @@ Payroll, salary, deductions, loans/cash advances, corrections, and payslips are 
 - Opaque payroll/employee/attendance/loan/deduction/schedule IDs must be resolved under authenticated tenant scope before mutation.
 - `LEGACY_COMPATIBILITY_POLICY` in `lib/services/payroll.ts` exists only to preserve pre-existing behavior while effective-dated policies are being implemented. Its values are not an assertion of current Philippine statutory law.
 - Effective-dated employee compensation/pay-frequency/attendance policy persistence passed exact-head PR #164 MySQL CI #1108 and Canva Visual Parity #298 and is `VERIFIED` in the payroll registry.
-- Expanded lifecycle/corrections are implemented on PR #165's branch but remain incomplete until exact-head acceptance evidence passes and the registry becomes `VERIFIED`. Effective-dated statutory tables and idempotent Financial Engine posting/outbox remain incomplete.
+- Expanded lifecycle/corrections passed exact-head PR #165 HOAHub MySQL CI #1111 and Canva Visual Parity #300 at `1743245f3d676f50fe026cf6831e9663ab8a666b` and are `VERIFIED` in the payroll registry. Effective-dated statutory tables and idempotent Financial Engine posting/outbox remain incomplete.
 
 ## AI Governance
 
@@ -284,7 +284,7 @@ Unless a later merged change updates this file, these remain pending:
 - Homeowner self-service advance Monthly Dues by selecting future From/To months with server-calculated effective Billing Rules.
 - Detailed finance reporting by successful payment posting path/provider rail.
 - Homeowner rental asset browsing/reservation with concurrency-safe ownership and Admin reserved-homeowner visibility.
-- Payroll expanded correction/revision lifecycle while `PAY-TASK-005` remains below `VERIFIED`, verified statutory rule sets, and idempotent Financial Engine posting/outbox.
+- Payroll verified statutory rule sets and idempotent Financial Engine posting/outbox.
 - Any issue/task/old-PR requirement not present in current `main` merely because it exists in documentation or conversation.
 
 ### Effective-Dated Employee Payroll Configuration
@@ -304,7 +304,7 @@ Verification evidence: exact-head PR #164 HOAHub MySQL CI #1108 and Canva Visual
 
 ### Payroll Lifecycle and Immutable Revisions
 
-Implementation task: `PAY-TASK-005`. Current delivery branch: `feat/payroll-lifecycle-revisions-20260824` / PR #165. Status: `IMPLEMENTED` pending exact-head verification.
+Implementation task: `PAY-TASK-005`. Current delivery branch: `feat/payroll-lifecycle-revisions-20260824` / PR #165. Status: `VERIFIED` by exact-head HOAHub MySQL CI #1111 and Canva Visual Parity #300 at `1743245f3d676f50fe026cf6831e9663ab8a666b`.
 
 - Persisted lifecycle states are `DRAFT`, `CALCULATED`, `FINALIZED`, `POSTING`, `POSTED`, `POST_FAILED`, and `PAID`.
 - Only `DRAFT` and `CALCULATED` working data is mutable. Finalized or later payroll must not be recalculated, have deductions/attendance changed directly, or be destructively deleted.

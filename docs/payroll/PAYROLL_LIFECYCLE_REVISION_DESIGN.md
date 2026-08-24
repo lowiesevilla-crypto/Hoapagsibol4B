@@ -1,12 +1,12 @@
 # Payroll Lifecycle and Revision Contract
 
-Status: **IMPLEMENTED — PENDING EXACT-HEAD VERIFICATION**
+Status: **VERIFIED**
 Task: `PAY-TASK-005`
 Requirements: `PAY-RUN-001`, `PAY-RUN-003`
 
 ## Purpose
 
-This document defines the lifecycle and immutable correction contract implemented by the persistence migration and payroll actions. The implementation must remain `IMPLEMENTED`, not `VERIFIED`, until the exact-head acceptance gate passes.
+This document defines the lifecycle and immutable correction contract implemented by the persistence migration and payroll actions. Exact-head PR #165 HOAHub MySQL CI #1111 and Canva Visual Parity #300 passed at `1743245f3d676f50fe026cf6831e9663ab8a666b`.
 
 ## Canonical run lifecycle
 

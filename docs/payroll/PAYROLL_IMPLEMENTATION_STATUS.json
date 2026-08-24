@@ -233,7 +233,7 @@
     {
       "id": "PAY-RUN-001",
       "title": "Expanded payroll lifecycle",
-      "status": "IMPLEMENTED",
+      "status": "VERIFIED",
       "code": [
         "prisma/schema.prisma",
         "prisma/migrations/20260824150000_payroll_lifecycle_revisions/migration.sql",
@@ -243,8 +243,11 @@
         "tests/unit/payroll-lifecycle-policy.test.ts",
         "tests/unit/payroll-lifecycle-revision-persistence.test.ts"
       ],
-      "evidence": [],
-      "notes": "DRAFT, CALCULATED, FINALIZED, POSTING, POSTED, POST_FAILED and PAID are persisted. Calculation/finalization/correction UI and actions are coordinated; finance posting transitions remain dormant until PAY-TASK-007 provides an idempotent posting contract. Exact-head CI is pending."
+      "evidence": [
+        "PR #165 exact-head HOAHub MySQL CI #1111 SUCCESS at 1743245f3d676f50fe026cf6831e9663ab8a666b",
+        "PR #165 exact-head HOAHub Canva Visual Parity #300 SUCCESS at 1743245f3d676f50fe026cf6831e9663ab8a666b"
+      ],
+      "notes": "DRAFT, CALCULATED, FINALIZED, POSTING, POSTED, POST_FAILED and PAID are persisted. Calculation/finalization/correction UI and actions are coordinated; finance posting transitions remain dormant until PAY-TASK-007 provides an idempotent posting contract. Exact-head PR #165 MySQL CI and visual parity passed."
     },
     {
       "id": "PAY-RUN-002",
@@ -259,7 +262,7 @@
     {
       "id": "PAY-RUN-003",
       "title": "Immutable finalized/paid evidence with correction path",
-      "status": "IMPLEMENTED",
+      "status": "VERIFIED",
       "code": [
         "prisma/schema.prisma",
         "prisma/migrations/20260824150000_payroll_lifecycle_revisions/migration.sql",
@@ -270,8 +273,11 @@
         "tests/unit/payroll-lifecycle-immutability.test.ts",
         "tests/unit/payroll-lifecycle-revision-persistence.test.ts"
       ],
-      "evidence": [],
-      "notes": "Finalization creates immutable tenant-scoped revision headers and per-employee snapshots with monotonic revision number, parent, actor, reason, totals and deltas. Controlled corrections preserve the source revision; finalized/paid evidence cannot be destructively deleted; reversal evidence is immutable. Exact-head CI is pending."
+      "evidence": [
+        "PR #165 exact-head HOAHub MySQL CI #1111 SUCCESS at 1743245f3d676f50fe026cf6831e9663ab8a666b",
+        "PR #165 exact-head HOAHub Canva Visual Parity #300 SUCCESS at 1743245f3d676f50fe026cf6831e9663ab8a666b"
+      ],
+      "notes": "Finalization creates immutable tenant-scoped revision headers and per-employee snapshots with monotonic revision number, parent, actor, reason, totals and deltas. Controlled corrections preserve the source revision; finalized/paid evidence cannot be destructively deleted; reversal evidence is immutable. Exact-head PR #165 MySQL CI and visual parity passed."
     },
     {
       "id": "PAY-STAT-001",
@@ -473,7 +479,7 @@
         "PAY-RUN-003"
       ],
       "title": "Implement expanded lifecycle and correction/revision records",
-      "status": "IMPLEMENTED",
+      "status": "VERIFIED",
       "dependencies": [],
       "code": [
         "prisma/schema.prisma",

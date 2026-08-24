@@ -12,11 +12,12 @@ The payroll enhancement continues incrementally over the existing HOAHub payroll
 
 PR #164 passed exact-head HOAHub MySQL CI #1108 and Canva Visual Parity #298 at `aafe4eef87454745064b4c52178b610087b78119` and was merged to `main` at `bb7588a524847b23f68430e92d92e48a6065e589`. `PAY-COMP-001`, `PAY-COMP-002`, `PAY-COMP-003`, and `PAY-TASK-004` are now `VERIFIED`.
 
-The active implementation is `PAY-TASK-005`: expanded payroll lifecycle and first-class immutable correction/revision/reversal evidence. Code is `IMPLEMENTED` on PR #165's branch and remains pending exact-head MySQL CI, migration, build, browser, and visual-parity evidence before any move to `VERIFIED`.
+`PAY-TASK-005` delivered expanded payroll lifecycle and first-class immutable correction/revision/reversal evidence. Exact-head HOAHub MySQL CI #1111 and Canva Visual Parity #300 passed at `1743245f3d676f50fe026cf6831e9663ab8a666b`; `PAY-RUN-001`, `PAY-RUN-003`, and `PAY-TASK-005` are `VERIFIED`.
 
 ## Completed / Verified
 
 - `PAY-COMP-001/002/003` / `PAY-TASK-004` — independent compensation basis, pay frequency and attendance policy; effective-dated employee compensation versions; payroll cutoff resolution; immutable payslip configuration snapshots; exact-head PR #164 CI passed and the candidate merged.
+- `PAY-RUN-001/003` / `PAY-TASK-005` — expanded persisted lifecycle, immutable calculation revisions and employee snapshots, controlled corrections, reversal evidence, migration/backfill, and tenant-scoped admin UX; exact-head PR #165 MySQL CI #1111 and Visual Parity #300 passed.
 - `PAY-RPT-001` / `PAY-TASK-010` — dedicated tenant-scoped payroll report, payout-date/status filters, employee breakdown, deterministic totals, print and CSV export; exact-head PR #163 CI passed.
 - Employee mobile Time/timelog correction/overtime/loan self-service from PR #161 remains implemented with exact-head CI evidence.
 - Finalized payroll pre-reopen snapshot and draft-only destructive deletion safeguards from PR #162 remain implemented with exact-head CI evidence.
@@ -56,10 +57,11 @@ The active implementation is `PAY-TASK-005`: expanded payroll lifecycle and firs
 - `tests/unit/payroll-lifecycle-immutability.test.ts` covers correction, finalization ordering, reversal evidence, tenant scope, and draft-only deletion.
 - `tests/unit/payroll-lifecycle-revision-persistence.test.ts` covers schema, migration/backfill, parent/reversal relations, deltas, tenant boundaries, and UI requirements.
 
-## In progress / pending verification
+## Verification evidence
 
-- `PAY-RUN-001`, `PAY-RUN-003`, `PAY-TASK-005` — `IMPLEMENTED`; exact-head MySQL migration/seed, full unit/integration suite, lint, typecheck, production build, browser smoke, and visual parity are still required before `VERIFIED`.
-- Docker was unavailable in the local desktop environment, so the new migration still requires the isolated MySQL CI job for execution evidence.
+- Exact-head PR #165 HOAHub MySQL CI #1111 passed migration, seed, full unit/integration verification, lint, typecheck, production build, controlled Chromium, production smoke, and critical browser tests.
+- Exact-head PR #165 Canva Visual Parity #300 passed and uploaded comparison renders.
+- Local validation also passed Prisma validate/generate, 401 unit tests, lint, typecheck, and production build.
 
 ## Pending / Not started
 
@@ -75,7 +77,7 @@ The active implementation is `PAY-TASK-005`: expanded payroll lifecycle and firs
 
 ## Next implementation sequence
 
-1. Pass exact-head CI for `PAY-TASK-005`; fix any migration, TypeScript, calculation, security, browser, or UI issue before merge.
+1. Merge PR #165 only while its exact reviewed head remains green; verify production separately.
 2. Implement verified effective-dated statutory rule sets and snapshots (`PAY-STAT-001/002`, `PAY-TASK-006`).
 3. Implement idempotent Financial Engine posting/outbox/reconciliation (`PAY-FIN-001/002/003`, `PAY-TASK-007`) using the persisted payroll revision identity.
 4. Implement tenant-configurable employee leave (`PAY-EMP-005`, `PAY-TASK-009`).

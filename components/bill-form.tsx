@@ -2,11 +2,11 @@ import type { Bill, HomeownerProfile, User } from "@prisma/client";
 import { BillingAutomationFormLock } from "@/components/billing-automation-form-lock";
 import { SearchableHomeownerSelect } from "@/components/searchable-homeowner-select";
 import { saveBillAction } from "@/lib/actions/billing";
+import { prisma } from "@/lib/db";
 import { inputDate } from "@/lib/utils";
 import { SubmitButton } from "@/components/ui";
 
 type Homeowner = HomeownerProfile & { user: Pick<User, "name" | "email"> };
-type EditableBill = Bill & { homeowner?: Homeowner };
 
 function homeownerOption(homeowner: Homeowner) {
   return {
@@ -16,12 +16,16 @@ function homeownerOption(homeowner: Homeowner) {
   };
 }
 
-export function BillForm({ homeowners, bill }: { homeowners: Homeowner[]; bill?: EditableBill }) {
+export async function BillForm({ homeowners, bill }: { homeowners: Homeowner[]; bill?: Bill }) {
   if (!bill) return <IndividualBillingPreviewForm homeowners={homeowners} />;
 
   const homeownerOptions = homeowners.map(homeownerOption);
-  if (bill.homeowner && !homeownerOptions.some((option) => option.id === bill.homeownerId)) {
-    homeownerOptions.unshift(homeownerOption(bill.homeowner));
+  if (!homeownerOptions.some((option) => option.id === bill.homeownerId)) {
+    const currentHomeowner = await prisma.homeownerProfile.findFirst({
+      where: { id: bill.homeownerId, tenantId: bill.tenantId },
+      include: { user: true },
+    });
+    if (currentHomeowner) homeownerOptions.unshift(homeownerOption(currentHomeowner));
   }
 
   return <form action={saveBillAction} className="card">

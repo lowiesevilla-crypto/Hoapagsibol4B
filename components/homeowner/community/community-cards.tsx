@@ -62,7 +62,7 @@ export function AnnouncementMobileCard({ href, title, content, type, postedLabel
 export function EventMobileCard({ href, title, description, type, dateLabel, timeLabel, location, imageUrl, previous = false }: { href: string; title: string; description: string; type: string; dateLabel: string; timeLabel: string; location: string; imageUrl?: string | null; previous?: boolean }) {
   return (
     <Link href={href} className="block overflow-hidden rounded-2xl border border-slate-100 bg-white shadow-[0_4px_18px_rgba(15,23,42,.04)] focus-visible:outline focus-visible:outline-4 focus-visible:outline-pine-500/20">
-      {imageUrl ? <img src={imageUrl} alt={title} className="h-40 w-full bg-slate-50 object-cover" /> : <FallbackVisual icon={CalendarDays} label={previous ? "Previous Event" : "Event"} />}
+      {imageUrl ? <img src={imageUrl} alt={title} className="h-40 w-full bg-slate-50 object-cover" /> : <FallbackVisual icon={CalendarDays} label={previous ? "Previous Event" : "Event" />}
       <div className="p-4">
         <div className="flex flex-wrap gap-2"><StatusChip>{type.replaceAll("_", " ")}</StatusChip>{previous && <span className="rounded-full bg-slate-100 px-2.5 py-1 text-[10px] font-black text-slate-500">Previous</span>}</div>
         <h2 className="mt-2 line-clamp-2 text-base font-black text-ink">{title}</h2>
@@ -73,14 +73,13 @@ export function EventMobileCard({ href, title, description, type, dateLabel, tim
   );
 }
 
-export function OfficerMobileCard({ name, position, committee, contact, email, photoUrl, signatureUrl }: { name: string; position: string; committee?: string | null; contact?: string | null; email?: string | null; photoUrl?: string | null; signatureUrl?: string | null }) {
+export function OfficerMobileCard({ name, position, committee, contact, email, photoUrl }: { name: string; position: string; committee?: string | null; contact?: string | null; email?: string | null; photoUrl?: string | null }) {
   return (
     <article className="rounded-2xl border border-slate-100 bg-white p-4 text-center shadow-[0_4px_18px_rgba(15,23,42,.04)]">
       <div className="mx-auto grid size-20 place-items-center overflow-hidden rounded-full bg-pine-50 text-2xl font-black text-pine-700"><ContentImage src={photoUrl} alt={name} className="size-full object-cover" fallbackText={name.slice(0, 1)} /></div>
       <h2 className="mt-3 text-base font-black text-ink">{name}</h2><p className="text-sm font-bold text-pine-700">{position}</p>
       {committee && <p className="mt-1 text-xs text-slate-400">{committee}</p>}
       {(contact || email) && <p className="mt-2 break-words text-xs text-slate-400">{[contact, email].filter(Boolean).join(" | ")}</p>}
-      {signatureUrl && <div className="mx-auto mt-3 grid h-12 max-w-36 place-items-center overflow-hidden rounded-xl border bg-white p-2"><ContentImage src={signatureUrl} alt={`${name} signature`} className="max-h-full max-w-full object-contain" fallbackText="Signature unavailable" /></div>}
     </article>
   );
 }

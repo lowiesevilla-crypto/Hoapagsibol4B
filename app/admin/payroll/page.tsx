@@ -678,7 +678,7 @@ function RunToolLink({ href, active, label }: { href: string; active: boolean; l
 
 /**
  * @requirement PAY-RUN-001 PAY-UX-001
- * @status IMPLEMENTED
+ * @status VERIFIED
  */
 function PayrollRunStepper({ status }: { status: string }) {
   const current = ({ DRAFT: 0, CALCULATED: 2, FINALIZED: 4, POSTING: 4, POST_FAILED: 4, POSTED: 5, PAID: 6 } as Record<string, number>)[status] ?? 0;

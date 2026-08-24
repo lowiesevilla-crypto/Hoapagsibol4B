@@ -36,7 +36,7 @@ type PayrollDeductionSchedulesPanelProps = {
 
 /**
  * @requirement PAY-DED-002 PAY-LOAN-002 PAY-UX-001
- * @status IMPLEMENTED
+ * @status VERIFIED
  */
 export function PayrollDeductionSchedulesPanel({ canWritePayroll, canManagePayroll, defaultStartDate, employees, deductionTypes, loans, schedules }: PayrollDeductionSchedulesPanelProps) {
   return <section className="space-y-5">

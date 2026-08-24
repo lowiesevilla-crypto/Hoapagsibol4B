@@ -97,7 +97,7 @@ function deductionLabel(deduction: { deductionType: { name: string }; employeeLo
 
 /**
  * @requirement PAY-STAT-003 PAY-EMP-001
- * @status IMPLEMENTED
+ * @status VERIFIED
  */
 function statutoryApplicabilityFromSnapshot(value: unknown) {
   if (!value || typeof value !== "object" || Array.isArray(value)) return null;

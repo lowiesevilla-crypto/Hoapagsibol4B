@@ -99,7 +99,7 @@ export const DEFAULT_STATUTORY_APPLICABILITY: StatutoryApplicability = Object.fr
 
 /**
  * @requirement PAY-STAT-003
- * @status IMPLEMENTED
+ * @status VERIFIED
  * @description Resolve tenant defaults and an optional employee override; the tenant master switch always remains authoritative.
  */
 export function resolveStatutoryApplicability(
@@ -176,7 +176,7 @@ export function payrollPolicyFromStatutoryRules(ruleCode: string, rules: Philipp
 
 /**
  * @requirement PAY-STAT-001 PAY-STAT-002 PAY-STAT-003
- * @status IMPLEMENTED
+ * @status VERIFIED
  * @description Calculate statutory employee deductions and employer liabilities from an explicit effective-dated rule snapshot.
  */
 export function calculateStatutoryContributions(input: {

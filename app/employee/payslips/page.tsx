@@ -12,7 +12,7 @@ export default async function EmployeePayslipsPage() {
   if (!user.employeeProfile) throw new Error("Employee profile not linked.");
 
   const payslips = await prisma.payslip.findMany({
-    where: { employeeId: user.employeeProfile.id, payroll: { status: PayrollStatus.PAID } },
+    where: { tenantId: user.tenantId, employeeId: user.employeeProfile.id, payroll: { status: PayrollStatus.PAID } },
     include: { payroll: true },
     orderBy: [{ payroll: { payDate: "desc" } }, { createdAt: "desc" }],
   });

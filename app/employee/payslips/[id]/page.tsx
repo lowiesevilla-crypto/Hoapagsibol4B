@@ -13,11 +13,11 @@ export default async function EmployeePayslipPrintPage({ params }: { params: Pro
   const user = await requireUser(Role.EMPLOYEE);
   if (!user.employeeProfile) notFound();
   const { id } = await params;
-  const slip = await prisma.payslip.findUnique({ where: { id }, include: { employee: true, payroll: true } });
+  const slip = await prisma.payslip.findFirst({ where: { id, tenantId: user.tenantId }, include: { employee: true, payroll: true } });
   if (!slip || slip.employeeId !== user.employeeProfile.id || slip.payroll.status !== PayrollStatus.PAID) notFound();
 
   const assignedDeductions = await prisma.payrollDeduction.findMany({
-    where: { payrollId: slip.payrollId, employeeId: slip.employeeId },
+    where: { tenantId: user.tenantId, payrollId: slip.payrollId, employeeId: slip.employeeId },
     include: { deductionType: true, employeeLoan: true },
     orderBy: { createdAt: "asc" },
   });
@@ -59,7 +59,11 @@ export default async function EmployeePayslipPrintPage({ params }: { params: Pro
           <h2 className="mb-3 border-b font-black uppercase">Deductions</h2>
           {Number(slip.employee.fixedDeduction) > 0 && <Line label="Employee fixed deduction" value={money(slip.employee.fixedDeduction)} />}
           {assignedDeductions.map((deduction) => <Line key={deduction.id} label={deductionLabel(deduction)} value={money(deduction.amount)} />)}
-          {!assignedDeductions.length && Number(slip.employee.fixedDeduction) <= 0 && <Line label="No assigned deductions" value={money(0)} />}
+          {Number(slip.sssEmployeeContribution) > 0 && <Line label="SSS employee contribution" value={money(slip.sssEmployeeContribution)} />}
+          {Number(slip.philHealthEmployeeContribution) > 0 && <Line label="PhilHealth employee contribution" value={money(slip.philHealthEmployeeContribution)} />}
+          {Number(slip.pagIbigEmployeeContribution) > 0 && <Line label="Pag-IBIG employee contribution" value={money(slip.pagIbigEmployeeContribution)} />}
+          {Number(slip.withholdingTax) > 0 && <Line label="Withholding tax" value={money(slip.withholdingTax)} />}
+          {!assignedDeductions.length && Number(slip.employee.fixedDeduction) <= 0 && Number(slip.statutoryDeduction) <= 0 && <Line label="No deductions" value={money(0)} />}
           <Line label="Total deductions" value={money(slip.deduction)} strong />
           <Line label="Absent days" value={String(slip.absentDays)} />
           <div className="mt-8 border-2 border-ink p-3"><Line label="NET PAY" value={money(slip.netPay)} strong /></div>

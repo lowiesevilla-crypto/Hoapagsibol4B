@@ -45,7 +45,7 @@ export async function GET(request: Request) {
   row("Amount applied to dues", report.duesIncome);
   row("Unapplied homeowner credits", report.unappliedCredits);
   row("Operating expenses", -report.operatingExpenses);
-  row("Employee payroll", -report.payrollExpense);
+  row("Employee payroll", -report.payrollCashDisbursements);
   row("Employee loans / cash advances issued", -report.employeeLoansIssued);
   row("Bond refunds", -report.bondsRefunded);
   row("Total cash disbursements", -report.cashOutflows, true);

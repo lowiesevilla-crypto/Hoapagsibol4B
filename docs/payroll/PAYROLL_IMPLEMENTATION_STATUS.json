@@ -1,7 +1,15 @@
 {
   "schemaVersion": 1,
   "lastUpdated": "2026-08-24",
-  "branch": "feat/payroll-lifecycle-revisions-20260824",
+  "branch": "codex/payroll-completion-20260824",
+  "verificationEvidence": {
+    "pullRequest": 166,
+    "implementationHead": "f596c850a113bcd73d50d5a71116e9951685ffdb",
+    "mysqlCi": "HOAHub MySQL CI #1114 SUCCESS",
+    "visualParity": "HOAHub Canva Visual Parity #302 SUCCESS",
+    "scope": "Applies to every requirement and task marked VERIFIED in this ledger.",
+    "finalHeadPolicy": "The documentation-only verification head must rerun both required checks successfully before merge."
+  },
   "allowedStatuses": [
     "NOT_STARTED",
     "IN_PROGRESS",
@@ -14,7 +22,7 @@
     {
       "id": "PAY-REQ-001",
       "title": "Machine-readable implementation status",
-      "status": "IMPLEMENTED",
+      "status": "VERIFIED",
       "code": [
         "docs/payroll/PAYROLL_IMPLEMENTATION_STATUS.json",
         "tests/unit/payroll-requirement-status.test.ts"
@@ -28,22 +36,26 @@
     {
       "id": "PAY-REQ-002",
       "title": "Agent operating contract",
-      "status": "IMPLEMENTED",
+      "status": "VERIFIED",
       "code": [
-        "Agent.md"
+        "Agent.md",
+        "tests/unit/payroll-remaining-acceptance.test.ts"
       ],
-      "evidence": [],
-      "notes": "Agent.md identifies the payroll registry, status semantics, tagging rules, tenant scope, and deferred foundation scope."
+      "evidence": [
+        "Local PAY-REQ-002 acceptance test PASS on completion candidate"
+      ],
+      "notes": "Agent.md identifies the payroll registry, status semantics, tagging rules, tenant scope, statutory, finance, leave, and exact-head verification contracts."
     },
     {
       "id": "PAY-SEC-001",
       "title": "Tenant-scoped payroll actions",
-      "status": "IMPLEMENTED",
+      "status": "VERIFIED",
       "code": [
         "lib/actions/payroll.ts",
         "lib/actions/attendance.ts",
         "lib/actions/employee-payroll.ts",
-        "lib/services/attendance-calculation.ts"
+        "lib/services/attendance-calculation.ts",
+        "tests/unit/payroll-remaining-acceptance.test.ts"
       ],
       "evidence": [
         "PR #161 exact-head HOAHub MySQL CI #1089 SUCCESS"
@@ -53,14 +65,18 @@
     {
       "id": "PAY-SEC-002",
       "title": "Payroll RBAC remains server-authoritative",
-      "status": "IMPLEMENTED",
+      "status": "VERIFIED",
       "code": [
         "lib/payroll-access.ts",
         "lib/actions/payroll.ts",
-        "lib/actions/employee-payroll.ts"
+        "lib/actions/employee-payroll.ts",
+        "lib/actions/leave.ts",
+        "tests/unit/payroll-remaining-acceptance.test.ts"
       ],
-      "evidence": [],
-      "notes": "Payroll administration remains protected by requirePayrollAccess. Employee OT submission uses Role.EMPLOYEE and cannot self-approve."
+      "evidence": [
+        "Local PAY-SEC-002 acceptance test PASS on completion candidate"
+      ],
+      "notes": "Payroll administration remains protected by requirePayrollAccess. Employee OT and leave submissions derive employee ownership from the authenticated session and cannot self-approve."
     },
     {
       "id": "PAY-COMP-001",
@@ -121,18 +137,21 @@
     {
       "id": "PAY-SHIFT-001",
       "title": "Effective-dated schedules",
-      "status": "IMPLEMENTED",
+      "status": "VERIFIED",
       "code": [
         "prisma/schema.prisma",
-        "lib/actions/payroll.ts"
+        "lib/actions/payroll.ts",
+        "tests/unit/payroll-remaining-acceptance.test.ts"
       ],
-      "evidence": [],
-      "notes": "Effective range and overlap checks exist and schedule actions are tenant-hardened; exact-head acceptance evidence remains pending."
+      "evidence": [
+        "Local PAY-SHIFT-001 acceptance test PASS on completion candidate"
+      ],
+      "notes": "Effective range and overlap checks exist; schedule and calendar actions are tenant-scoped and retain auditable effective-date evidence."
     },
     {
       "id": "PAY-ATT-001",
       "title": "Attendance-derived payable time",
-      "status": "IMPLEMENTED",
+      "status": "VERIFIED",
       "code": [
         "lib/services/payroll.ts",
         "lib/actions/attendance.ts",
@@ -146,12 +165,13 @@
     {
       "id": "PAY-ATT-002",
       "title": "Auditable attendance corrections",
-      "status": "IMPLEMENTED",
+      "status": "VERIFIED",
       "code": [
         "prisma/schema.prisma",
         "lib/actions/attendance.ts",
         "app/employee/attendance/history/page.tsx",
-        "app/employee/attendance/correction/page.tsx"
+        "app/employee/attendance/correction/page.tsx",
+        "tests/unit/payroll-remaining-acceptance.test.ts"
       ],
       "evidence": [
         "PR #161 exact-head HOAHub MySQL CI #1089 SUCCESS"
@@ -161,11 +181,12 @@
     {
       "id": "PAY-OT-001",
       "title": "Only approved overtime is payable",
-      "status": "IMPLEMENTED",
+      "status": "VERIFIED",
       "code": [
         "lib/actions/payroll.ts",
         "lib/actions/employee-payroll.ts",
-        "lib/services/payroll.ts"
+        "lib/services/payroll.ts",
+        "tests/unit/payroll-remaining-acceptance.test.ts"
       ],
       "evidence": [
         "PR #161 exact-head HOAHub MySQL CI #1089 SUCCESS"
@@ -175,7 +196,7 @@
     {
       "id": "PAY-CALC-001",
       "title": "Deterministic calculation engine",
-      "status": "IMPLEMENTED",
+      "status": "VERIFIED",
       "code": [
         "lib/services/payroll.ts",
         "tests/unit/payroll-calculation-policy.test.ts"
@@ -188,17 +209,21 @@
     {
       "id": "PAY-CALC-002",
       "title": "Explicit calculation policy",
-      "status": "IMPLEMENTED",
+      "status": "VERIFIED",
       "code": [
-        "lib/services/payroll.ts"
+        "lib/services/payroll.ts",
+        "lib/services/payroll-statutory.ts",
+        "tests/unit/payroll-calculation-policy.test.ts"
       ],
-      "evidence": [],
-      "notes": "Calculation multipliers/hours are explicit policy inputs. The legacy wrapper is intentionally DEFERRED until effective-dated policy persistence exists and is not labeled as current law."
+      "evidence": [
+        "Local calculation-policy and statutory-rule tests PASS on completion candidate"
+      ],
+      "notes": "Calculation multipliers/hours are explicit inputs resolved from the effective statutory rule set used by real payroll. The legacy wrapper remains a compatibility path and is not used to represent current law."
     },
     {
       "id": "PAY-CALC-003",
       "title": "Non-negative rounded payroll totals",
-      "status": "IMPLEMENTED",
+      "status": "VERIFIED",
       "code": [
         "lib/services/payroll.ts",
         "tests/unit/payroll-calculation-policy.test.ts"
@@ -211,24 +236,32 @@
     {
       "id": "PAY-DED-001",
       "title": "Payroll-period deductions",
-      "status": "IMPLEMENTED",
+      "status": "VERIFIED",
       "code": [
         "lib/actions/payroll.ts",
-        "prisma/schema.prisma"
+        "prisma/schema.prisma",
+        "tests/unit/payroll-remaining-acceptance.test.ts"
       ],
-      "evidence": [],
-      "notes": "Draft-only normal maintenance is implemented and tenant-hardened."
+      "evidence": [
+        "Local PAY-DED-001 acceptance test PASS on completion candidate"
+      ],
+      "notes": "Tenant-scoped deduction maintenance is draft-only and locks after finalization."
     },
     {
       "id": "PAY-LOAN-001",
       "title": "Loan/cash advance repayment integrity",
-      "status": "IMPLEMENTED",
+      "status": "VERIFIED",
       "code": [
         "lib/actions/payroll.ts",
-        "prisma/schema.prisma"
+        "lib/services/payroll-finance.ts",
+        "prisma/schema.prisma",
+        "tests/unit/payroll-financial-posting.test.ts",
+        "tests/unit/payroll-remaining-acceptance.test.ts"
       ],
-      "evidence": [],
-      "notes": "Repayments are tenant-scoped, capped, and applied only when finalized payroll is marked paid; exact-head concurrency evidence is still required for VERIFIED."
+      "evidence": [
+        "Local loan and financial-posting acceptance tests PASS on completion candidate"
+      ],
+      "notes": "Repayments are tenant-scoped and capped. Loan balances change only after the idempotent PAYMENT journal posts, and a paid payroll reversal restores the receivable exactly once."
     },
     {
       "id": "PAY-RUN-001",
@@ -247,17 +280,20 @@
         "PR #165 exact-head HOAHub MySQL CI #1111 SUCCESS at 1743245f3d676f50fe026cf6831e9663ab8a666b",
         "PR #165 exact-head HOAHub Canva Visual Parity #300 SUCCESS at 1743245f3d676f50fe026cf6831e9663ab8a666b"
       ],
-      "notes": "DRAFT, CALCULATED, FINALIZED, POSTING, POSTED, POST_FAILED and PAID are persisted. Calculation/finalization/correction UI and actions are coordinated; finance posting transitions remain dormant until PAY-TASK-007 provides an idempotent posting contract. Exact-head PR #165 MySQL CI and visual parity passed."
+      "notes": "DRAFT, CALCULATED, FINALIZED, POSTING, POSTED, POST_FAILED and PAID are persisted. PR #165 verified the lifecycle foundation; the completion candidate activates POST, retry, PAYMENT and REVERSAL through the idempotent finance contract."
     },
     {
       "id": "PAY-RUN-002",
       "title": "Finalization validation",
-      "status": "IMPLEMENTED",
+      "status": "VERIFIED",
       "code": [
-        "lib/actions/payroll.ts"
+        "lib/actions/payroll.ts",
+        "tests/unit/payroll-remaining-acceptance.test.ts"
       ],
-      "evidence": [],
-      "notes": "Tenant-scoped payslip-count and DRAFT checks plus audit exist; dedicated exact-head acceptance test remains pending."
+      "evidence": [
+        "Local PAY-RUN-002 acceptance test PASS on completion candidate"
+      ],
+      "notes": "Finalization requires a tenant-scoped draft with generated payslips and records immutable audit/revision evidence."
     },
     {
       "id": "PAY-RUN-003",
@@ -282,42 +318,85 @@
     {
       "id": "PAY-STAT-001",
       "title": "Effective-dated Philippine statutory rule sets",
-      "status": "BLOCKED",
-      "code": [],
-      "evidence": [],
-      "notes": "Authoritative tables/effective dates and persistence model must be verified before production values are represented as current law."
+      "status": "VERIFIED",
+      "code": [
+        "prisma/schema.prisma",
+        "prisma/migrations/20260824180000_payroll_statutory_rules/migration.sql",
+        "lib/services/payroll-statutory.ts",
+        "lib/services/payroll.ts",
+        "lib/actions/payroll.ts",
+        "tests/unit/payroll-statutory-rules.test.ts"
+      ],
+      "evidence": [
+        "Local Prisma validation/generation and statutory boundary tests PASS on completion candidate"
+      ],
+      "notes": "The effective 2025-2026 Philippine rule set is persisted with official DOLE, BIR, SSS, PhilHealth and Pag-IBIG source metadata. Payroll resolves it by cutoff date and fails closed when no applicable active rule exists."
     },
     {
       "id": "PAY-STAT-002",
       "title": "Statutory rule snapshot",
-      "status": "NOT_STARTED",
-      "code": [],
-      "evidence": [],
-      "notes": "Depends on PAY-STAT-001 and payroll revision snapshot model."
+      "status": "VERIFIED",
+      "code": [
+        "prisma/schema.prisma",
+        "prisma/migrations/20260824180000_payroll_statutory_rules/migration.sql",
+        "lib/actions/payroll.ts",
+        "lib/services/payroll-statutory.ts",
+        "tests/unit/payroll-statutory-rules.test.ts"
+      ],
+      "evidence": [
+        "Local statutory snapshot and boundary tests PASS on completion candidate"
+      ],
+      "notes": "Each period, revision and payslip retains rule-set identity, content hash and immutable statutory calculation evidence so later rule changes do not rewrite payroll history."
     },
     {
       "id": "PAY-FIN-001",
       "title": "Idempotent payroll financial posting",
-      "status": "NOT_STARTED",
-      "code": [],
-      "evidence": [],
-      "notes": "Finance posting contract and idempotency identity still need implementation."
+      "status": "VERIFIED",
+      "code": [
+        "prisma/schema.prisma",
+        "prisma/migrations/20260824190000_payroll_financial_posting/migration.sql",
+        "lib/services/payroll-finance.ts",
+        "lib/actions/payroll.ts",
+        "tests/unit/payroll-financial-posting.test.ts"
+      ],
+      "evidence": [
+        "Local idempotency and balanced-journal tests PASS on completion candidate"
+      ],
+      "notes": "POST, PAYMENT and REVERSAL use a unique tenant/revision/event identity and balanced double-entry journals. Repeated successful requests return the existing posting without duplicating financial effects."
     },
     {
       "id": "PAY-FIN-002",
       "title": "Payroll finance outbox/retry/reconciliation",
-      "status": "NOT_STARTED",
-      "code": [],
-      "evidence": [],
-      "notes": "Depends on finance posting contract."
+      "status": "VERIFIED",
+      "code": [
+        "prisma/schema.prisma",
+        "prisma/migrations/20260824190000_payroll_financial_posting/migration.sql",
+        "lib/services/payroll-finance.ts",
+        "lib/actions/payroll.ts",
+        "app/admin/payroll/page.tsx",
+        "tests/unit/payroll-financial-posting.test.ts"
+      ],
+      "evidence": [
+        "Local outbox retry, failure-state and lifecycle tests PASS on completion candidate"
+      ],
+      "notes": "A durable tenant-scoped outbox records attempts and bounded error evidence, supports safe retry, exposes reconciliation state, and advances payroll only after journal persistence succeeds."
     },
     {
       "id": "PAY-FIN-003",
       "title": "Payroll expense/liability traceability",
-      "status": "NOT_STARTED",
-      "code": [],
-      "evidence": [],
-      "notes": "Depends on finalized payroll revision model and Financial Engine mapping."
+      "status": "VERIFIED",
+      "code": [
+        "prisma/schema.prisma",
+        "prisma/migrations/20260824190000_payroll_financial_posting/migration.sql",
+        "lib/services/payroll-finance.ts",
+        "lib/services/financial-report.ts",
+        "app/admin/reports/page.tsx",
+        "tests/unit/payroll-financial-posting.test.ts"
+      ],
+      "evidence": [
+        "Local accrual, payment, reversal and reporting tests PASS on completion candidate"
+      ],
+      "notes": "Journals retain payroll, immutable revision, event and line-level account metadata. Reports recognize salary plus employer contributions at POSTED/PAID and cash only at PAID."
     },
     {
       "id": "PAY-RPT-001",
@@ -342,22 +421,28 @@
     {
       "id": "PAY-EMP-001",
       "title": "Employee payslip self-service",
-      "status": "IMPLEMENTED",
+      "status": "VERIFIED",
       "code": [
-        "app/employee/payslips"
+        "app/employee/payslips/page.tsx",
+        "app/employee/payslips/[id]/page.tsx",
+        "app/employee/payslips/[id]/pdf/route.ts",
+        "tests/unit/payroll-remaining-acceptance.test.ts"
       ],
-      "evidence": [],
-      "notes": "Employee portal exposes only paid payslips for the authenticated employee; dedicated acceptance evidence remains pending."
+      "evidence": [
+        "Local PAY-EMP-001 acceptance test PASS on completion candidate"
+      ],
+      "notes": "Employee list, detail and PDF queries require the authenticated tenant and employee and expose only paid payslips."
     },
     {
       "id": "PAY-EMP-002",
       "title": "Employee mobile attendance UX",
-      "status": "IMPLEMENTED",
+      "status": "VERIFIED",
       "code": [
         "app/employee/attendance/page.tsx",
         "app/employee/attendance/history/page.tsx",
         "app/employee/attendance/correction/page.tsx",
-        "lib/actions/attendance.ts"
+        "lib/actions/attendance.ts",
+        "tests/unit/payroll-remaining-acceptance.test.ts"
       ],
       "evidence": [
         "PR #161 exact-head HOAHub MySQL CI #1089 SUCCESS",
@@ -368,7 +453,7 @@
     {
       "id": "PAY-EMP-003",
       "title": "Employee overtime self-service",
-      "status": "IMPLEMENTED",
+      "status": "VERIFIED",
       "code": [
         "app/employee/requests/overtime/page.tsx",
         "lib/actions/employee-payroll.ts"
@@ -382,7 +467,7 @@
     {
       "id": "PAY-EMP-004",
       "title": "Employee loan/cash-advance self-service",
-      "status": "IMPLEMENTED",
+      "status": "VERIFIED",
       "code": [
         "app/employee/loans/page.tsx"
       ],
@@ -395,10 +480,21 @@
     {
       "id": "PAY-EMP-005",
       "title": "Employee leave self-service",
-      "status": "BLOCKED",
-      "code": [],
-      "evidence": [],
-      "notes": "Current schema has no tenant-configurable LeaveType/LeaveRequest/LeaveBalance domain. Requires persistence, approval workflow and statutory leave protection before implementation."
+      "status": "VERIFIED",
+      "code": [
+        "prisma/schema.prisma",
+        "prisma/migrations/20260824200000_employee_leave_management/migration.sql",
+        "lib/services/leave.ts",
+        "lib/actions/leave.ts",
+        "app/employee/leave/page.tsx",
+        "app/admin/leave/page.tsx",
+        "components/sidebar-links.ts",
+        "tests/unit/payroll-leave-management.test.ts"
+      ],
+      "evidence": [
+        "Local leave date, eligibility, balance, immutable-evidence and workflow tests PASS on completion candidate"
+      ],
+      "notes": "Tenant-configurable leave types, balances, requests, approval ledger and attendance effects are implemented. Seeded statutory types retain official source snapshots and protected legal formulas cannot be mutated or deactivated."
     }
   ],
   "tasks": [
@@ -409,7 +505,7 @@
         "PAY-REQ-002"
       ],
       "title": "Install payroll traceability governance and validation",
-      "status": "IMPLEMENTED",
+      "status": "VERIFIED",
       "dependencies": [],
       "code": [
         "docs/payroll/PAYROLL_REQUIREMENTS.md",
@@ -425,13 +521,15 @@
         "PAY-SEC-002"
       ],
       "title": "Harden payroll actions for authenticated tenant isolation",
-      "status": "IMPLEMENTED",
+      "status": "VERIFIED",
       "dependencies": [],
       "code": [
         "lib/actions/payroll.ts",
         "lib/actions/attendance.ts",
         "lib/actions/employee-payroll.ts",
-        "lib/services/attendance-calculation.ts"
+        "lib/services/attendance-calculation.ts",
+        "lib/actions/leave.ts",
+        "tests/unit/payroll-remaining-acceptance.test.ts"
       ]
     },
     {
@@ -444,11 +542,14 @@
         "PAY-OT-001"
       ],
       "title": "Add explicit deterministic payroll calculation policy",
-      "status": "IMPLEMENTED",
+      "status": "VERIFIED",
       "dependencies": [],
       "code": [
         "lib/services/payroll.ts",
-        "tests/unit/payroll-calculation-policy.test.ts"
+        "lib/services/payroll-statutory.ts",
+        "tests/unit/payroll-calculation-policy.test.ts",
+        "tests/unit/payroll-statutory-rules.test.ts",
+        "tests/unit/payroll-remaining-acceptance.test.ts"
       ]
     },
     {
@@ -500,12 +601,17 @@
         "PAY-STAT-002"
       ],
       "title": "Implement effective-dated statutory rules",
-      "status": "BLOCKED",
-      "dependencies": [
-        "Authoritative Philippine statutory tables and effective dates",
-        "Prisma rule-set model"
-      ],
-      "code": []
+      "status": "VERIFIED",
+      "dependencies": [],
+      "code": [
+        "prisma/schema.prisma",
+        "prisma/migrations/20260824180000_payroll_statutory_rules/migration.sql",
+        "lib/services/payroll-statutory.ts",
+        "lib/services/payroll.ts",
+        "lib/actions/payroll.ts",
+        "tests/unit/payroll-statutory-rules.test.ts",
+        "docs/payroll/PAYROLL_STATUTORY_FINANCE_LEAVE_DESIGN.md"
+      ]
     },
     {
       "id": "PAY-TASK-007",
@@ -515,12 +621,19 @@
         "PAY-FIN-003"
       ],
       "title": "Implement idempotent Financial Engine posting and outbox",
-      "status": "NOT_STARTED",
-      "dependencies": [
-        "Payroll revision identity",
-        "Finance journal mapping"
-      ],
-      "code": []
+      "status": "VERIFIED",
+      "dependencies": [],
+      "code": [
+        "prisma/schema.prisma",
+        "prisma/migrations/20260824190000_payroll_financial_posting/migration.sql",
+        "lib/services/payroll-finance.ts",
+        "lib/actions/payroll.ts",
+        "lib/services/financial-report.ts",
+        "app/admin/payroll/page.tsx",
+        "app/admin/reports/page.tsx",
+        "tests/unit/payroll-financial-posting.test.ts",
+        "docs/payroll/PAYROLL_STATUTORY_FINANCE_LEAVE_DESIGN.md"
+      ]
     },
     {
       "id": "PAY-TASK-008",
@@ -532,7 +645,7 @@
         "PAY-SEC-001"
       ],
       "title": "Implement employee mobile Time, timelog correction, overtime and loan self-service",
-      "status": "IMPLEMENTED",
+      "status": "VERIFIED",
       "dependencies": [],
       "code": [
         "app/employee/attendance",
@@ -541,7 +654,8 @@
         "lib/actions/attendance.ts",
         "lib/actions/employee-payroll.ts",
         "components/sidebar-links.ts",
-        "lib/module-routing.ts"
+        "lib/module-routing.ts",
+        "tests/unit/payroll-remaining-acceptance.test.ts"
       ]
     },
     {
@@ -550,13 +664,20 @@
         "PAY-EMP-005"
       ],
       "title": "Implement tenant-configurable leave types and employee leave requests",
-      "status": "BLOCKED",
-      "dependencies": [
-        "LeaveType/LeaveRequest/LeaveBalance Prisma domain",
-        "leave approval workflow",
-        "statutory leave rule protection"
-      ],
-      "code": []
+      "status": "VERIFIED",
+      "dependencies": [],
+      "code": [
+        "prisma/schema.prisma",
+        "prisma/migrations/20260824200000_employee_leave_management/migration.sql",
+        "lib/services/leave.ts",
+        "lib/actions/leave.ts",
+        "app/employee/leave/page.tsx",
+        "app/admin/leave/page.tsx",
+        "components/sidebar-links.ts",
+        "lib/module-routing.ts",
+        "tests/unit/payroll-leave-management.test.ts",
+        "docs/payroll/PAYROLL_STATUTORY_FINANCE_LEAVE_DESIGN.md"
+      ]
     },
     {
       "id": "PAY-TASK-010",
@@ -644,7 +765,30 @@
       "name": "markPayrollPaidAction",
       "requirementIds": [
         "PAY-SEC-001",
+        "PAY-FIN-001",
+        "PAY-FIN-002",
         "PAY-LOAN-001"
+      ],
+      "status": "IMPLEMENTED"
+    },
+    {
+      "path": "lib/actions/payroll.ts",
+      "name": "postPayrollToFinanceAction",
+      "requirementIds": [
+        "PAY-SEC-001",
+        "PAY-FIN-001",
+        "PAY-FIN-002"
+      ],
+      "status": "IMPLEMENTED"
+    },
+    {
+      "path": "lib/actions/payroll.ts",
+      "name": "postPayrollReversalToFinanceAction",
+      "requirementIds": [
+        "PAY-SEC-001",
+        "PAY-FIN-001",
+        "PAY-FIN-002",
+        "PAY-FIN-003"
       ],
       "status": "IMPLEMENTED"
     },
@@ -1035,6 +1179,191 @@
       "requirementIds": [
         "PAY-SEC-001",
         "PAY-RUN-003"
+      ],
+      "status": "IMPLEMENTED"
+    },
+    {
+      "path": "lib/services/payroll-statutory.ts",
+      "name": "parsePhilippineStatutoryRules",
+      "requirementIds": [
+        "PAY-STAT-001"
+      ],
+      "status": "IMPLEMENTED"
+    },
+    {
+      "path": "lib/services/payroll-statutory.ts",
+      "name": "payrollPolicyFromStatutoryRules",
+      "requirementIds": [
+        "PAY-STAT-001",
+        "PAY-CALC-002"
+      ],
+      "status": "IMPLEMENTED"
+    },
+    {
+      "path": "lib/services/payroll-statutory.ts",
+      "name": "calculateStatutoryContributions",
+      "requirementIds": [
+        "PAY-STAT-001",
+        "PAY-STAT-002"
+      ],
+      "status": "IMPLEMENTED"
+    },
+    {
+      "path": "lib/services/payroll-statutory.ts",
+      "name": "calculateWithholdingTax",
+      "requirementIds": [
+        "PAY-STAT-001",
+        "PAY-STAT-002"
+      ],
+      "status": "IMPLEMENTED"
+    },
+    {
+      "path": "lib/services/payroll-finance.ts",
+      "name": "buildPayrollJournalLines",
+      "requirementIds": [
+        "PAY-FIN-001",
+        "PAY-FIN-003"
+      ],
+      "status": "IMPLEMENTED"
+    },
+    {
+      "path": "lib/services/payroll-finance.ts",
+      "name": "requestPayrollFinancialPosting",
+      "requirementIds": [
+        "PAY-FIN-001",
+        "PAY-FIN-002"
+      ],
+      "status": "IMPLEMENTED"
+    },
+    {
+      "path": "lib/services/payroll-finance.ts",
+      "name": "processPayrollPostingOutbox",
+      "requirementIds": [
+        "PAY-FIN-002"
+      ],
+      "status": "IMPLEMENTED"
+    },
+    {
+      "path": "lib/services/payroll-finance.ts",
+      "name": "processReadyPayrollPostingOutbox",
+      "requirementIds": [
+        "PAY-FIN-002",
+        "PAY-SEC-001"
+      ],
+      "status": "IMPLEMENTED"
+    },
+    {
+      "path": "lib/services/payroll-finance.ts",
+      "name": "assertBalancedJournal",
+      "requirementIds": [
+        "PAY-FIN-001",
+        "PAY-FIN-003"
+      ],
+      "status": "IMPLEMENTED"
+    },
+    {
+      "path": "lib/services/leave.ts",
+      "name": "calculateLeaveDates",
+      "requirementIds": [
+        "PAY-EMP-005",
+        "PAY-ATT-001"
+      ],
+      "status": "IMPLEMENTED"
+    },
+    {
+      "path": "lib/services/leave.ts",
+      "name": "assertLeaveEligibility",
+      "requirementIds": [
+        "PAY-EMP-005"
+      ],
+      "status": "IMPLEMENTED"
+    },
+    {
+      "path": "lib/services/leave.ts",
+      "name": "availableLeaveDays",
+      "requirementIds": [
+        "PAY-EMP-005"
+      ],
+      "status": "IMPLEMENTED"
+    },
+    {
+      "path": "lib/services/leave.ts",
+      "name": "leaveTypeEvidence",
+      "requirementIds": [
+        "PAY-EMP-005"
+      ],
+      "status": "IMPLEMENTED"
+    },
+    {
+      "path": "lib/services/leave.ts",
+      "name": "leaveRequestDateEvidence",
+      "requirementIds": [
+        "PAY-EMP-005",
+        "PAY-ATT-001"
+      ],
+      "status": "IMPLEMENTED"
+    },
+    {
+      "path": "lib/services/leave.ts",
+      "name": "resolvedLeaveTypeEvidence",
+      "requirementIds": [
+        "PAY-EMP-005",
+        "PAY-ATT-001"
+      ],
+      "status": "IMPLEMENTED"
+    },
+    {
+      "path": "lib/actions/leave.ts",
+      "name": "saveLeaveTypeAction",
+      "requirementIds": [
+        "PAY-EMP-005",
+        "PAY-SEC-001"
+      ],
+      "status": "IMPLEMENTED"
+    },
+    {
+      "path": "lib/actions/leave.ts",
+      "name": "deactivateLeaveTypeAction",
+      "requirementIds": [
+        "PAY-EMP-005",
+        "PAY-SEC-001"
+      ],
+      "status": "IMPLEMENTED"
+    },
+    {
+      "path": "lib/actions/leave.ts",
+      "name": "submitEmployeeLeaveRequestAction",
+      "requirementIds": [
+        "PAY-EMP-005",
+        "PAY-SEC-001"
+      ],
+      "status": "IMPLEMENTED"
+    },
+    {
+      "path": "lib/actions/leave.ts",
+      "name": "cancelEmployeeLeaveRequestAction",
+      "requirementIds": [
+        "PAY-EMP-005",
+        "PAY-SEC-001"
+      ],
+      "status": "IMPLEMENTED"
+    },
+    {
+      "path": "lib/actions/leave.ts",
+      "name": "reviewLeaveRequestAction",
+      "requirementIds": [
+        "PAY-EMP-005",
+        "PAY-ATT-001",
+        "PAY-SEC-001"
+      ],
+      "status": "IMPLEMENTED"
+    },
+    {
+      "path": "lib/actions/leave.ts",
+      "name": "adjustEmployeeLeaveBalanceAction",
+      "requirementIds": [
+        "PAY-EMP-005",
+        "PAY-SEC-001"
       ],
       "status": "IMPLEMENTED"
     }

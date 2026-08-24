@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import test from "node:test";
-import { calculatePayslipWithPolicy, type PayrollCalculationPolicy } from "../../lib/services/payroll";
+import { calculatePayslipWithPolicy, LEGACY_COMPATIBILITY_POLICY, type PayrollCalculationPolicy } from "../../lib/services/payroll";
 
 const schema = readFileSync(resolve(process.cwd(), "prisma/schema.prisma"), "utf8");
 const migration = readFileSync(resolve(process.cwd(), "prisma/migrations/20260824130000_payroll_effective_compensation/migration.sql"), "utf8");
@@ -11,12 +11,8 @@ const payrollActions = readFileSync(resolve(process.cwd(), "lib/actions/payroll.
 const employeeForm = readFileSync(resolve(process.cwd(), "components/employee-form.tsx"), "utf8");
 
 const policy: PayrollCalculationPolicy = {
+  ...LEGACY_COMPATIBILITY_POLICY,
   key: "PAY_COMP_TEST",
-  standardHoursPerDay: 8,
-  overtimeMultiplier: 1.25,
-  nightDifferentialRate: 0.1,
-  restDayPremiumRate: 0.3,
-  holidayPremiumRate: 0.3,
 };
 
 function configured(overrides: Record<string, unknown> = {}) {

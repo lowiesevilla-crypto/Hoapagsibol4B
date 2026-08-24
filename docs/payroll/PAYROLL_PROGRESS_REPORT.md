@@ -3,6 +3,7 @@
 Last updated: 2026-08-24
 Source of truth: `docs/payroll/PAYROLL_IMPLEMENTATION_STATUS.json`
 Current delivery branch: `feat/payroll-effective-compensation-v2-20260824`
+Current delivery PR: #164
 Current delivery task: `PAY-TASK-004`
 
 ## Executive status
@@ -11,7 +12,7 @@ The payroll enhancement continues incrementally over the existing HOAHub payroll
 
 PR #161 (employee self-service) passed exact-head HOAHub MySQL CI #1089 and Canva Visual Parity #284 and was merged. PR #162 (finalized-payroll immutability safeguards) passed exact-head MySQL CI #1091 and Canva Visual Parity #285 and was merged. PR #163 (tenant-scoped payroll reporting) passed exact-head MySQL CI #1097 and Canva Visual Parity #290 and was merged to `main` at `a512ce45a73e7f6445e2d03406fdcff5bde9b5e4`; `PAY-RPT-001` is now `VERIFIED`.
 
-The active implementation is `PAY-TASK-004`: effective-dated employee compensation, pay frequency and attendance policy. Code is `IMPLEMENTED` on the delivery branch and remains unverified until exact-head CI and acceptance evidence pass.
+The active implementation is `PAY-TASK-004`: effective-dated employee compensation, pay frequency and attendance policy. Code is `IMPLEMENTED` in PR #164 and remains unverified until exact-head CI and acceptance evidence pass.
 
 ## Completed / Verified
 
@@ -53,6 +54,7 @@ The active implementation is `PAY-TASK-004`: effective-dated employee compensati
 - Prevented employee payroll-term edits from rewriting prior effective-dated versions.
 - Prevented retroactive configuration changes across finalized/paid payroll history.
 - Added explicit payslip configuration snapshots so later employee edits cannot silently change how a historical calculation is interpreted.
+- PR #164 first CI candidate reached Prisma validation and client generation successfully, then exposed MySQL error 1059 because the generated effective-date index identifier exceeded MySQL's identifier length limit. The index is now explicitly mapped to `EmpComp_scope_effective_idx` in both Prisma schema and migration. A fresh exact-head CI run is required after this fix.
 
 ## In progress / pending verification
 
@@ -74,7 +76,7 @@ The active implementation is `PAY-TASK-004`: effective-dated employee compensati
 
 ## Next implementation sequence
 
-1. Pass exact-head CI for `PAY-TASK-004`; fix any Prisma migration, TypeScript, calculation or UI issue before merge.
+1. Pass exact-head CI for `PAY-TASK-004`; fix any remaining Prisma migration, TypeScript, calculation or UI issue before merge.
 2. Complete first-class payroll lifecycle/revision/correction persistence (`PAY-RUN-001/003`, `PAY-TASK-005`).
 3. Implement verified effective-dated statutory rule sets and snapshots (`PAY-STAT-001/002`, `PAY-TASK-006`).
 4. Implement idempotent Financial Engine posting/outbox/reconciliation (`PAY-FIN-001/002/003`, `PAY-TASK-007`).

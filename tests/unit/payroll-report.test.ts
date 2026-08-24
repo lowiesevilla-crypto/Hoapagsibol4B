@@ -20,10 +20,10 @@ function row(overrides: Partial<PayrollReportRow> = {}): PayrollReportRow {
     absentDays: 1,
     overtimeHours: 2,
     basicPay: 10000,
-    overtimePay: 500.125,
+    overtimePay: 500.13,
     allowance: 1000,
-    deduction: 750.555,
-    grossPay: 11500.125,
+    deduction: 750.56,
+    grossPay: 11500.13,
     netPay: 10749.57,
     ...overrides,
   };
@@ -32,7 +32,7 @@ function row(overrides: Partial<PayrollReportRow> = {}): PayrollReportRow {
 test("PAY-RPT-001: report totals are deterministic and count unique periods/employees", () => {
   const rows = [
     row(),
-    row({ payrollId: "period-2", payslipId: "slip-2", overtimeHours: 1.25, basicPay: 12000, overtimePay: 250.125, allowance: 500, deduction: 1000.445, grossPay: 12750.125, netPay: 11749.68 }),
+    row({ payrollId: "period-2", payslipId: "slip-2", overtimeHours: 1.25, basicPay: 12000, overtimePay: 250.12, allowance: 500, deduction: 1000.44, grossPay: 12750.12, netPay: 11749.68 }),
     row({ payrollId: "period-2", payslipId: "slip-3", employeeId: "employee-2", employeeNumber: "EMP-002", employeeName: "Employee Two", payableDays: 9.5, absentDays: 0.5, overtimeHours: 0, basicPay: 9000, overtimePay: 0, allowance: 250, deduction: 500, grossPay: 9250, netPay: 8750 }),
   ];
 

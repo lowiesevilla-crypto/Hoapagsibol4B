@@ -97,8 +97,9 @@ export default async function ReceiptPage({ params }: { params: Promise<{ kind: 
   const contactLine = [association.contactNumber && `Contact: ${association.contactNumber}`, association.email && `Email: ${association.email}`].filter(Boolean).join(" | ");
   const registrationLine = [association.tinNumber && `TIN: ${association.tinNumber}`, association.secRegistrationNumber && `SEC Reg. No.: ${association.secRegistrationNumber}`].filter(Boolean).join(" | ");
 
-  return (
-    <main className="print-document mx-auto min-h-screen max-w-4xl bg-white p-4 sm:p-8">
+  return <>
+    <style>{`@media print { @page { size: A5 portrait; margin: 0; } .receipt-a5-print { width: 210mm !important; max-width: 210mm !important; min-height: 297mm !important; zoom: .7047619048; } }`}</style>
+    <main className="receipt-a5-print print-document mx-auto min-h-screen max-w-4xl bg-white p-4 sm:p-8">
       <div className="print-hidden mb-5 grid gap-2 sm:flex sm:flex-wrap sm:justify-end">
         {kind === "payment" && user.role !== Role.HOMEOWNER && <Link className="btn-secondary min-h-12" href="/admin/payments/record"><ArrowLeft className="size-4" /> Return to Record Payment</Link>}
         {kind === "payment" && user.role !== Role.HOMEOWNER && <Link className="btn-secondary min-h-12" href="/admin/payments/active"><List className="size-4" /> Return to Payments</Link>}
@@ -187,7 +188,7 @@ export default async function ReceiptPage({ params }: { params: Promise<{ kind: 
         </div>
       </section>
     </main>
-  );
+  </>;
 }
 
 function Field({ label, value }: { label: string; value: string }) {

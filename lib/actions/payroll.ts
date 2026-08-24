@@ -1,6 +1,6 @@
 "use server";
 
-import { EmployeeLoanStatus, OvertimeSource, OvertimeStatus, PayrollAccessRole, PayrollRevisionType, PayrollStatus, Prisma } from "@prisma/client";
+import { EmployeeLoanStatus, OvertimeSource, OvertimeStatus, PayrollAccessRole, PayrollDayType, PayrollPostingEventType, PayrollRevisionType, PayrollStatus, Prisma } from "@prisma/client";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { writeAuditLog } from "@/lib/audit";
@@ -8,6 +8,13 @@ import { prisma } from "@/lib/db";
 import { payrollApprovalRoles, payrollManageRoles, payrollWriteRoles, requirePayrollAccess } from "@/lib/payroll-access";
 import { normalizePayrollCorrectionReason } from "@/lib/payroll-lifecycle";
 import { calculatePayslip } from "@/lib/services/payroll";
+import { requestPayrollFinancialPosting } from "@/lib/services/payroll-finance";
+import {
+  calculateStatutoryContributions,
+  parsePhilippineStatutoryRules,
+  payrollPolicyFromStatutoryRules,
+  type PayrollStatutoryRuleRecord,
+} from "@/lib/services/payroll-statutory";
 import { employeeLoanSchema, employeeScheduleRangeSchema, overtimeRecordSchema, payrollAccessSchema, payrollCalendarSchema, payrollDeductionSchema, payrollDeductionTypeSchema, payrollPeriodSchema } from "@/lib/validation";
 
 const MUTABLE_PAYROLL_STATUSES: readonly PayrollStatus[] = [PayrollStatus.DRAFT, PayrollStatus.CALCULATED];
@@ -51,12 +58,23 @@ export async function recalculatePayrollAction(formData: FormData) {
 async function calculatePeriod(input: { startDate: Date; endDate: Date; payDate: Date; createdById: string }) {
   return prisma.$transaction(async (tx) => {
     const actor = await tx.user.findUniqueOrThrow({ where: { id: input.createdById }, select: { tenantId: true } });
+    const statutoryRuleSet = await tx.payrollStatutoryRuleSet.findFirst({
+      where: {
+        active: true,
+        jurisdiction: "PH",
+        effectiveFrom: { lte: input.payDate },
+        OR: [{ effectiveTo: null }, { effectiveTo: { gte: input.payDate } }],
+      },
+      orderBy: { effectiveFrom: "desc" },
+    });
+    if (!statutoryRuleSet) throw new Error("No verified Philippine statutory rule set applies to this payroll pay date.");
+    parsePhilippineStatutoryRules(statutoryRuleSet.rules);
     const existing = await tx.payrollPeriod.findUnique({ where: { tenantId_startDate_endDate: { tenantId: actor.tenantId, startDate: input.startDate, endDate: input.endDate } } });
     if (existing && !MUTABLE_PAYROLL_STATUSES.includes(existing.status)) throw new Error("Finalized or paid payroll requires a controlled correction before recalculation.");
     const period = existing
-      ? await tx.payrollPeriod.update({ where: { id: existing.id }, data: { payDate: input.payDate } })
-      : await tx.payrollPeriod.create({ data: { ...input, tenantId: actor.tenantId } });
-    await refreshPeriodPayslips(tx as unknown as Prisma.TransactionClient, period);
+      ? await tx.payrollPeriod.update({ where: { id: existing.id }, data: { payDate: input.payDate, statutoryRuleSetId: statutoryRuleSet.id } })
+      : await tx.payrollPeriod.create({ data: { ...input, tenantId: actor.tenantId, statutoryRuleSetId: statutoryRuleSet.id } });
+    await refreshPeriodPayslips(tx as unknown as Prisma.TransactionClient, period, statutoryRuleSet);
     await tx.payrollPeriod.update({ where: { id: period.id }, data: { status: PayrollStatus.CALCULATED } });
     return period.id;
   }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
@@ -67,7 +85,13 @@ async function calculatePeriod(input: { startDate: Date; endDate: Date; payDate:
  * @status IMPLEMENTED
  * @description Resolve the employee payroll configuration effective on the cutoff end date and persist an immutable configuration snapshot on the payslip.
  */
-async function refreshPeriodPayslips(tx: Prisma.TransactionClient, period: { id: string; tenantId: string; startDate: Date; endDate: Date }) {
+async function refreshPeriodPayslips(
+  tx: Prisma.TransactionClient,
+  period: { id: string; tenantId: string; startDate: Date; endDate: Date },
+  statutoryRuleSet: PayrollStatutoryRuleRecord,
+) {
+  const statutoryRules = parsePhilippineStatutoryRules(statutoryRuleSet.rules);
+  const calculationPolicy = payrollPolicyFromStatutoryRules(statutoryRuleSet.code, statutoryRules);
   const employees = await tx.employeeProfile.findMany({
     where: { tenantId: period.tenantId, status: "ACTIVE", hireDate: { lte: period.endDate } },
     include: {
@@ -89,7 +113,7 @@ async function refreshPeriodPayslips(tx: Prisma.TransactionClient, period: { id:
   });
   const approvedOvertime = await tx.overtimeRecord.findMany({
     where: { tenantId: period.tenantId, status: OvertimeStatus.APPROVED, date: { gte: period.startDate, lte: period.endDate } },
-    select: { employeeId: true, hours: true, source: true },
+    select: { employeeId: true, hours: true, source: true, date: true, attendance: { select: { isRestDay: true, holidayType: true } } },
   });
   const deductionsByEmployee = new Map<string, { amount: Prisma.Decimal }[]>();
   for (const deduction of assignedDeductions) {
@@ -97,10 +121,17 @@ async function refreshPeriodPayslips(tx: Prisma.TransactionClient, period: { id:
     employeeDeductions.push({ amount: deduction.amount });
     deductionsByEmployee.set(deduction.employeeId, employeeDeductions);
   }
-  const overtimeByEmployee = new Map<string, { hours: Prisma.Decimal; source: OvertimeSource }[]>();
+  const attendanceContext = new Map(
+    employees.flatMap((employee) => employee.attendance.map((attendance) => [
+      `${employee.id}:${attendance.date.toISOString().slice(0, 10)}`,
+      { isRestDay: attendance.isRestDay, holidayType: attendance.holidayType },
+    ] as const)),
+  );
+  const overtimeByEmployee = new Map<string, { hours: Prisma.Decimal; source: OvertimeSource; isRestDay: boolean; holidayType: PayrollDayType | null }[]>();
   for (const overtime of approvedOvertime) {
     const employeeOvertime = overtimeByEmployee.get(overtime.employeeId) ?? [];
-    employeeOvertime.push({ hours: overtime.hours, source: overtime.source });
+    const day = overtime.attendance ?? attendanceContext.get(`${overtime.employeeId}:${overtime.date.toISOString().slice(0, 10)}`);
+    employeeOvertime.push({ hours: overtime.hours, source: overtime.source, isRestDay: day?.isRestDay ?? false, holidayType: day?.holidayType ?? null });
     overtimeByEmployee.set(overtime.employeeId, employeeOvertime);
   }
   const activeIds = employees.map((employee) => employee.id);
@@ -124,7 +155,17 @@ async function refreshPeriodPayslips(tx: Prisma.TransactionClient, period: { id:
       employee.attendance,
       deductionsByEmployee.get(employee.id) ?? [],
       overtimeByEmployee.get(employee.id) ?? [],
+      calculationPolicy,
     );
+    const payFrequency = compensation?.payFrequency ?? "SEMI_MONTHLY";
+    const monthlyBasicSalary = resolveMonthlyBasicSalary({
+      compensationBasis: compensation?.compensationBasis ?? (employee.salaryType === "DAILY" ? "DAILY" : "MONTHLY"),
+      payFrequency,
+      rate: compensation?.rate ?? employee.baseRate,
+      standardWorkDays: compensation?.standardWorkDays ?? employee.standardWorkDays,
+      standardHoursPerDay: compensation?.standardHoursPerDay ?? calculationPolicy.standardHoursPerDay,
+    });
+    const statutory = calculateStatutoryContributions({ monthlyBasicSalary, grossPay: values.grossPay, payFrequency, rules: statutoryRules });
     const compensationSnapshot = compensation ? {
       source: "EMPLOYEE_COMPENSATION",
       compensationId: compensation.id,
@@ -148,7 +189,39 @@ async function refreshPeriodPayslips(tx: Prisma.TransactionClient, period: { id:
       fixedAllowance: employee.fixedAllowance.toString(),
       fixedDeduction: employee.fixedDeduction.toString(),
     };
-    const payslipValues = { ...values, compensationId: compensation?.id ?? null, compensationSnapshot };
+    const deduction = roundMoney(values.deduction + statutory.statutoryDeduction);
+    const payslipValues = {
+      ...values,
+      deduction,
+      netPay: roundMoney(Math.max(0, values.grossPay - deduction)),
+      compensationId: compensation?.id ?? null,
+      compensationSnapshot,
+      statutoryRuleSetId: statutoryRuleSet.id,
+      statutorySnapshot: jsonValue({
+        ruleSet: {
+          id: statutoryRuleSet.id,
+          code: statutoryRuleSet.code,
+          name: statutoryRuleSet.name,
+          jurisdiction: statutoryRuleSet.jurisdiction,
+          effectiveFrom: statutoryRuleSet.effectiveFrom,
+          effectiveTo: statutoryRuleSet.effectiveTo,
+          contentHash: statutoryRuleSet.contentHash,
+          sourceSnapshot: statutoryRuleSet.sourceSnapshot,
+          rules: statutoryRuleSet.rules,
+        },
+        calculation: statutory,
+      }),
+      sssEmployeeContribution: statutory.sssEmployeeContribution,
+      sssEmployerContribution: statutory.sssEmployerContribution,
+      employeeCompensationContribution: statutory.employeeCompensationContribution,
+      philHealthEmployeeContribution: statutory.philHealthEmployeeContribution,
+      philHealthEmployerContribution: statutory.philHealthEmployerContribution,
+      pagIbigEmployeeContribution: statutory.pagIbigEmployeeContribution,
+      pagIbigEmployerContribution: statutory.pagIbigEmployerContribution,
+      withholdingTax: statutory.withholdingTax,
+      statutoryDeduction: statutory.statutoryDeduction,
+      employerContribution: statutory.employerContribution,
+    };
 
     await tx.payslip.upsert({
       where: { payrollId_employeeId: { payrollId: period.id, employeeId: employee.id } },
@@ -169,11 +242,16 @@ async function createImmutablePayrollRevision(tx: Prisma.TransactionClient, inpu
     include: {
       payslips: { where: { tenantId: input.tenantId }, orderBy: { employeeId: "asc" } },
       deductions: { where: { tenantId: input.tenantId }, orderBy: { createdAt: "asc" } },
+      statutoryRuleSet: true,
     },
   });
   if (!period) throw new Error("Payroll period not found.");
   if (period.status !== PayrollStatus.CALCULATED) throw new Error("Only calculated payroll can be finalized.");
   if (!period.payslips.length) throw new Error("Calculate at least one employee payslip before finalizing.");
+  if (!period.statutoryRuleSet) throw new Error("Calculated payroll has no verified statutory rule-set evidence.");
+  if (period.payslips.some((payslip) => payslip.statutoryRuleSetId !== period.statutoryRuleSetId || !payslip.statutorySnapshot)) {
+    throw new Error("Every payslip must retain the statutory rule set used by this calculation before finalization.");
+  }
 
   const latestRevision = await tx.payrollCalculationRevision.findFirst({
     where: { tenantId: input.tenantId, payrollId: period.id },
@@ -235,10 +313,23 @@ async function createImmutablePayrollRevision(tx: Prisma.TransactionClient, inpu
         payDate: period.payDate,
         sourceStatus: period.status,
         finalizedStatus: PayrollStatus.FINALIZED,
+        statutoryRuleSetId: period.statutoryRuleSetId,
       }),
       deductionSnapshot: jsonValue(period.deductions),
       adjustmentSnapshot: jsonValue(adjustments),
       overtimeSnapshot: jsonValue(overtimeRecords),
+      statutoryRuleSetId: period.statutoryRuleSet.id,
+      statutoryRuleSnapshot: jsonValue({
+        id: period.statutoryRuleSet.id,
+        code: period.statutoryRuleSet.code,
+        name: period.statutoryRuleSet.name,
+        jurisdiction: period.statutoryRuleSet.jurisdiction,
+        effectiveFrom: period.statutoryRuleSet.effectiveFrom,
+        effectiveTo: period.statutoryRuleSet.effectiveTo,
+        contentHash: period.statutoryRuleSet.contentHash,
+        sourceSnapshot: period.statutoryRuleSet.sourceSnapshot,
+        rules: period.statutoryRuleSet.rules,
+      }),
       totalsSnapshot: jsonValue(totals),
       deltaSnapshot: jsonValue({
         grossPay: roundMoney(totals.grossPay - parentTotals.grossPay),
@@ -390,57 +481,48 @@ export async function returnPayrollToDraftAction(formData: FormData) {
 }
 
 /**
- * @requirement PAY-SEC-001 PAY-LOAN-001
+ * @requirement PAY-SEC-001 PAY-FIN-001 PAY-FIN-002
  * @status IMPLEMENTED
+ * @description Post the immutable finalized revision to the Financial Engine through the durable outbox.
+ */
+export async function postPayrollToFinanceAction(formData: FormData) {
+  const { user } = await requirePayrollAccess(payrollApprovalRoles);
+  const id = String(formData.get("id") || "");
+  await requestPayrollFinancialPosting({ tenantId: user.tenantId, payrollId: id, actorId: user.id, eventType: PayrollPostingEventType.POST });
+  revalidatePayrollPages();
+  redirect(`/admin/payroll?section=approval&period=${id}&success=posted`);
+}
+
+/**
+ * @requirement PAY-SEC-001 PAY-FIN-001 PAY-FIN-002 PAY-LOAN-001
+ * @status IMPLEMENTED
+ * @description Record net-pay disbursement only after accrual posting; loan repayments and PAID transition occur in the same idempotent processor.
  */
 export async function markPayrollPaidAction(formData: FormData) {
   const { user } = await requirePayrollAccess(payrollApprovalRoles);
   const id = String(formData.get("id") || "");
-  await prisma.$transaction(async (tx) => {
-    const period = await tx.payrollPeriod.findFirst({
-      where: { id, tenantId: user.tenantId },
-      include: { deductions: { where: { tenantId: user.tenantId, employeeLoanId: { not: null } }, include: { employeeLoan: true } } },
-    });
-    if (!period || period.status !== PayrollStatus.FINALIZED) throw new Error("Only finalized payroll can be marked paid.");
-    const latestRevision = await tx.payrollCalculationRevision.findFirst({
-      where: { tenantId: user.tenantId, payrollId: id },
-      orderBy: { revisionNumber: "desc" },
-    });
-    if (!latestRevision) throw new Error("Finalized payroll has no immutable calculation revision.");
-    if (latestRevision.revisionType === PayrollRevisionType.REVERSAL) throw new Error("Reversed payroll evidence cannot be marked paid.");
-
-    for (const deduction of period.deductions) {
-      if (!deduction.employeeLoan) continue;
-      if (deduction.employeeLoan.tenantId !== user.tenantId) throw new Error("Employee loan is outside the authenticated tenant.");
-      const amount = Number(deduction.amount);
-      const currentBalance = Number(deduction.employeeLoan.balance);
-      if (deduction.employeeLoan.status !== EmployeeLoanStatus.OPEN) throw new Error(`Loan ${deduction.employeeLoan.description} is not open for repayment.`);
-      if (amount > currentBalance + 0.005) throw new Error(`Deduction for ${deduction.employeeLoan.description} is greater than the remaining loan balance.`);
-      const nextPaid = roundMoney(Number(deduction.employeeLoan.amountPaid) + amount);
-      const nextBalance = roundMoney(Math.max(0, currentBalance - amount));
-      const fullyPaid = nextBalance <= 0;
-      await tx.employeeLoan.update({
-        where: { id: deduction.employeeLoan.id },
-        data: {
-          amountPaid: nextPaid,
-          balance: fullyPaid ? 0 : nextBalance,
-          status: fullyPaid ? EmployeeLoanStatus.PAID : EmployeeLoanStatus.OPEN,
-        },
-      });
-    }
-
-    const transitioned = await tx.payrollPeriod.updateMany({ where: { id, tenantId: user.tenantId, status: PayrollStatus.FINALIZED }, data: { status: PayrollStatus.PAID } });
-    if (transitioned.count !== 1) throw new Error("Payroll lifecycle changed while payment was being recorded.");
-  }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
-  await writeAuditLog({ actorId: user.id, module: "PAYROLL", action: "MARK_PAYROLL_PAID", entityType: "PayrollPeriod", entityId: id });
+  await requestPayrollFinancialPosting({ tenantId: user.tenantId, payrollId: id, actorId: user.id, eventType: PayrollPostingEventType.PAYMENT });
   revalidatePayrollPages();
   redirect(`/admin/payroll?section=approval&period=${id}&success=paid`);
 }
 
 /**
+ * @requirement PAY-SEC-001 PAY-FIN-001 PAY-FIN-002 PAY-FIN-003
+ * @status IMPLEMENTED
+ * @description Post the immutable reversal revision to the Financial Engine with the source posting as its audit reference.
+ */
+export async function postPayrollReversalToFinanceAction(formData: FormData) {
+  const { user } = await requirePayrollAccess(payrollApprovalRoles);
+  const id = String(formData.get("id") || "");
+  await requestPayrollFinancialPosting({ tenantId: user.tenantId, payrollId: id, actorId: user.id, eventType: PayrollPostingEventType.REVERSAL });
+  revalidatePayrollPages();
+  redirect(`/admin/payroll?section=approval&period=${id}&success=reversal-posted`);
+}
+
+/**
  * @requirement PAY-SEC-001 PAY-RUN-003
  * @status IMPLEMENTED
- * @description Records an immutable reversal revision without mutating or deleting the finalized/paid source evidence. Finance reversal linkage remains deferred to PAY-TASK-007.
+ * @description Records an immutable reversal revision without mutating or deleting the finalized/paid source evidence; the revision can then be posted through the idempotent Financial Engine outbox.
  */
 export async function recordPayrollReversalAction(formData: FormData) {
   const { user } = await requirePayrollAccess(payrollApprovalRoles);
@@ -484,6 +566,8 @@ export async function recordPayrollReversalAction(formData: FormData) {
         deductionSnapshot: jsonValue(sourceRevision.deductionSnapshot),
         adjustmentSnapshot: jsonValue(sourceRevision.adjustmentSnapshot),
         overtimeSnapshot: jsonValue(sourceRevision.overtimeSnapshot),
+        statutoryRuleSetId: sourceRevision.statutoryRuleSetId,
+        statutoryRuleSnapshot: sourceRevision.statutoryRuleSnapshot == null ? Prisma.JsonNull : jsonValue(sourceRevision.statutoryRuleSnapshot),
         totalsSnapshot: jsonValue({ grossPay: -sourceTotals.grossPay, deduction: -sourceTotals.deduction, netPay: -sourceTotals.netPay }),
         deltaSnapshot: jsonValue({ grossPay: -sourceTotals.grossPay, deduction: -sourceTotals.deduction, netPay: -sourceTotals.netPay }),
         createdById: user.id,
@@ -806,7 +890,8 @@ export async function savePayrollDeductionAction(formData: FormData) {
       create: { tenantId: user.tenantId, payrollId, employeeId, deductionTypeId, employeeLoanId, amount, remarks },
       update: { employeeLoanId, amount, remarks },
     });
-    await refreshPeriodPayslips(tx as unknown as Prisma.TransactionClient, period);
+    const statutoryRuleSet = await statutoryRuleSetForPeriod(tx as unknown as Prisma.TransactionClient, period.statutoryRuleSetId);
+    await refreshPeriodPayslips(tx as unknown as Prisma.TransactionClient, period, statutoryRuleSet);
   }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
   await writeAuditLog({ actorId: user.id, module: "PAYROLL", action: "SAVE_PAYROLL_DEDUCTION", entityType: "PayrollPeriod", entityId: payrollId, metadata: { employeeId, deductionTypeId, employeeLoanId, amount } });
 
@@ -833,7 +918,8 @@ export async function deletePayrollDeductionAction(formData: FormData) {
     if (!deduction || deduction.payrollId !== payrollId) throw new Error("Payroll deduction not found for this cutoff period.");
     employeeId = employeeId || deduction.employeeId;
     await tx.payrollDeduction.delete({ where: { id } });
-    await refreshPeriodPayslips(tx as unknown as Prisma.TransactionClient, period);
+    const statutoryRuleSet = await statutoryRuleSetForPeriod(tx as unknown as Prisma.TransactionClient, period.statutoryRuleSetId);
+    await refreshPeriodPayslips(tx as unknown as Prisma.TransactionClient, period, statutoryRuleSet);
   }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
   await writeAuditLog({ actorId: user.id, module: "PAYROLL", action: "DELETE_PAYROLL_DEDUCTION", entityType: "PayrollDeduction", entityId: id, metadata: { payrollId } });
 
@@ -994,6 +1080,29 @@ function revalidatePayrollPages() {
   revalidatePath("/admin/reports");
   revalidatePath("/admin/dashboard");
   revalidatePath("/employee/attendance");
+}
+
+function resolveMonthlyBasicSalary(input: {
+  compensationBasis: "MONTHLY" | "DAILY" | "HOURLY" | "FIXED_PER_PERIOD";
+  payFrequency: "SEMI_MONTHLY" | "MONTHLY";
+  rate: number | string | { toString(): string };
+  standardWorkDays: number;
+  standardHoursPerDay: number | string | { toString(): string };
+}) {
+  const rate = Number(input.rate);
+  const standardHoursPerDay = Number(input.standardHoursPerDay);
+  if (input.compensationBasis === "MONTHLY") return roundMoney(rate);
+  if (input.compensationBasis === "FIXED_PER_PERIOD") return roundMoney(rate * (input.payFrequency === "SEMI_MONTHLY" ? 2 : 1));
+  if (input.compensationBasis === "DAILY") return roundMoney(rate * input.standardWorkDays);
+  return roundMoney(rate * standardHoursPerDay * input.standardWorkDays);
+}
+
+async function statutoryRuleSetForPeriod(tx: Prisma.TransactionClient, statutoryRuleSetId: string | null) {
+  if (!statutoryRuleSetId) throw new Error("Recalculate this payroll with a verified statutory rule set before changing deductions.");
+  const statutoryRuleSet = await tx.payrollStatutoryRuleSet.findUnique({ where: { id: statutoryRuleSetId } });
+  if (!statutoryRuleSet || !statutoryRuleSet.active) throw new Error("The payroll statutory rule set is unavailable or inactive.");
+  parsePhilippineStatutoryRules(statutoryRuleSet.rules);
+  return statutoryRuleSet;
 }
 
 /**

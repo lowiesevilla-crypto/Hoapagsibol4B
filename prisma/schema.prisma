@@ -363,6 +363,31 @@ enum AttendanceStatus {
   HOLIDAY
 }
 
+enum LeaveRequestStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  CANCELLED
+}
+
+enum LeaveBalanceTransactionType {
+  ENTITLEMENT
+  ADJUSTMENT
+  USAGE
+  REVERSAL
+}
+
+enum LeaveDayCountingMethod {
+  WORKING_DAYS
+  CALENDAR_DAYS
+}
+
+enum LeavePayrollTreatment {
+  PAID_LEAVE
+  UNPAID_LEAVE
+  TRACK_ONLY
+}
+
 enum PayrollStatus {
   DRAFT
   CALCULATED
@@ -378,6 +403,31 @@ enum PayrollRevisionType {
   CORRECTION
   REVERSAL
   DELTA
+}
+
+enum PayrollPostingEventType {
+  POST
+  PAYMENT
+  REVERSAL
+}
+
+enum PayrollPostingStatus {
+  PENDING
+  PROCESSING
+  POSTED
+  FAILED
+}
+
+enum PayrollOutboxStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+}
+
+enum FinancialJournalStatus {
+  POSTED
+  VOIDED
 }
 
 enum PayrollAccessRole {
@@ -1011,6 +1061,8 @@ model User {
   employeeCompensationsCreated          EmployeeCompensation[]            @relation("EmployeeCompensationCreator")
   payrollArchivesDeleted                PayrollArchive[]                  @relation("PayrollArchiveDeletedBy")
   payrollRevisionsCreated               PayrollCalculationRevision[]      @relation("PayrollRevisionCreator")
+  leaveRequestsReviewed                 LeaveRequest[]                     @relation("LeaveRequestReviewer")
+  leaveBalanceTransactionsCreated       LeaveBalanceTransaction[]          @relation("LeaveBalanceTransactionActor")
   billsArchived                         Bill[]                            @relation("BillArchivedBy")
   paymentsVoided                        Payment[]                         @relation("PaymentVoidedBy")
   paymentsProcessed                     Payment[]                         @relation("PaymentProcessor")
@@ -2509,6 +2561,8 @@ model EmployeeProfile {
   payrollDeductions PayrollDeduction[]
   employeeLoans     EmployeeLoan[]
   overtimeRecords   OvertimeRecord[]
+  leaveRequests     LeaveRequest[]
+  leaveBalances     EmployeeLeaveBalance[]
   createdAt         DateTime               @default(now())
   updatedAt         DateTime               @updatedAt
 
@@ -2602,6 +2656,8 @@ model Attendance {
   isRestDay              Boolean                @default(false)
   holidayType            PayrollDayType?
   remarks                 String?
+  leaveRequestId          String?
+  leaveRequest            LeaveRequest?          @relation(fields: [leaveRequestId], references: [id], onDelete: Restrict)
   adjustments             AttendanceAdjustment[]
   overtimeRecords         OvertimeRecord[]
   createdAt               DateTime               @default(now())
@@ -2610,6 +2666,101 @@ model Attendance {
   @@unique([employeeId, date])
   @@index([date, status])
   @@index([tenantId])
+  @@index([leaveRequestId])
+}
+
+model LeaveType {
+  tenantId                String                    @default("tenant_pagsibol4b_default")
+  id                      String                    @id @default(cuid())
+  code                    String                    @db.VarChar(80)
+  name                    String                    @db.VarChar(160)
+  description             String?                   @db.Text
+  payrollTreatment        LeavePayrollTreatment     @default(PAID_LEAVE)
+  requiresBalance         Boolean                   @default(true)
+  annualEntitlementDays   Decimal?                  @db.Decimal(7, 2)
+  eligibilityServiceMonths Int                      @default(0)
+  maximumDaysPerRequest   Decimal?                  @db.Decimal(7, 2)
+  dayCountingMethod       LeaveDayCountingMethod    @default(WORKING_DAYS)
+  statutoryProtected      Boolean                   @default(false)
+  statutoryAuthority      String?                   @db.VarChar(191)
+  sourceSnapshot          Json?
+  active                  Boolean                   @default(true)
+  leaveRequests           LeaveRequest[]
+  balances                EmployeeLeaveBalance[]
+  createdAt               DateTime                  @default(now())
+  updatedAt               DateTime                  @updatedAt
+
+  @@unique([tenantId, code], map: "LeaveType_scope_code_key")
+  @@index([tenantId, active, name], map: "LeaveType_scope_active_idx")
+  @@index([tenantId, statutoryProtected], map: "LeaveType_scope_statutory_idx")
+}
+
+model EmployeeLeaveBalance {
+  tenantId         String                    @default("tenant_pagsibol4b_default")
+  id               String                    @id @default(cuid())
+  employeeId       String
+  employee         EmployeeProfile           @relation(fields: [employeeId], references: [id], onDelete: Restrict)
+  leaveTypeId      String
+  leaveType        LeaveType                 @relation(fields: [leaveTypeId], references: [id], onDelete: Restrict)
+  year             Int
+  entitlementDays  Decimal                   @default(0) @db.Decimal(7, 2)
+  carriedForwardDays Decimal                 @default(0) @db.Decimal(7, 2)
+  adjustmentDays   Decimal                   @default(0) @db.Decimal(7, 2)
+  usedDays         Decimal                   @default(0) @db.Decimal(7, 2)
+  transactions     LeaveBalanceTransaction[]
+  createdAt        DateTime                  @default(now())
+  updatedAt        DateTime                  @updatedAt
+
+  @@unique([tenantId, employeeId, leaveTypeId, year], map: "EmpLeaveBalance_scope_year_key")
+  @@index([tenantId, employeeId, year], map: "EmpLeaveBalance_scope_employee_idx")
+  @@index([tenantId, leaveTypeId, year], map: "EmpLeaveBalance_scope_type_idx")
+}
+
+model LeaveRequest {
+  tenantId          String                    @default("tenant_pagsibol4b_default")
+  id                String                    @id @default(cuid())
+  employeeId        String
+  employee          EmployeeProfile           @relation(fields: [employeeId], references: [id], onDelete: Restrict)
+  leaveTypeId       String
+  leaveType         LeaveType                 @relation(fields: [leaveTypeId], references: [id], onDelete: Restrict)
+  startDate         DateTime                   @db.Date
+  endDate           DateTime                   @db.Date
+  requestedDays     Decimal                    @db.Decimal(7, 2)
+  reason            String                     @db.VarChar(500)
+  evidenceReference String?                    @db.VarChar(500)
+  status            LeaveRequestStatus         @default(PENDING)
+  leaveTypeSnapshot Json
+  reviewedById      String?
+  reviewedBy        User?                      @relation("LeaveRequestReviewer", fields: [reviewedById], references: [id], onDelete: SetNull)
+  reviewRemarks     String?                    @db.VarChar(500)
+  reviewedAt        DateTime?
+  attendanceRecords Attendance[]
+  balanceTransactions LeaveBalanceTransaction[]
+  createdAt         DateTime                   @default(now())
+  updatedAt         DateTime                   @updatedAt
+
+  @@index([tenantId, status, startDate], map: "LeaveRequest_scope_status_idx")
+  @@index([tenantId, employeeId, startDate, endDate], map: "LeaveRequest_scope_employee_idx")
+  @@index([reviewedById])
+}
+
+model LeaveBalanceTransaction {
+  tenantId       String                       @default("tenant_pagsibol4b_default")
+  id             String                       @id @default(cuid())
+  balanceId      String
+  balance        EmployeeLeaveBalance         @relation(fields: [balanceId], references: [id], onDelete: Restrict)
+  leaveRequestId String?
+  leaveRequest   LeaveRequest?                @relation(fields: [leaveRequestId], references: [id], onDelete: Restrict)
+  type           LeaveBalanceTransactionType
+  days           Decimal                      @db.Decimal(7, 2)
+  reason         String                       @db.VarChar(500)
+  actorId        String?
+  actor          User?                        @relation("LeaveBalanceTransactionActor", fields: [actorId], references: [id], onDelete: SetNull)
+  createdAt      DateTime                     @default(now())
+
+  @@unique([tenantId, leaveRequestId, type], map: "LeaveBalanceTx_scope_request_key")
+  @@index([tenantId, balanceId, createdAt], map: "LeaveBalanceTx_scope_balance_idx")
+  @@index([actorId])
 }
 
 model PayrollAccess {
@@ -2757,17 +2908,124 @@ model PayrollPeriod {
   pendingRevisionType     PayrollRevisionType?
   pendingRevisionReason   String?                        @db.VarChar(500)
   pendingParentRevisionId String?
+  statutoryRuleSetId      String?
+  statutoryRuleSet        PayrollStatutoryRuleSet?       @relation(fields: [statutoryRuleSetId], references: [id], onDelete: Restrict)
   createdById             String
   createdBy               User                           @relation("PayrollCreator", fields: [createdById], references: [id], onDelete: Restrict)
   payslips                Payslip[]
   deductions              PayrollDeduction[]
   revisions               PayrollCalculationRevision[]  @relation("PayrollPeriodRevisions")
+  financialPostings       PayrollFinancialPosting[]
   createdAt               DateTime                       @default(now())
   updatedAt               DateTime                       @updatedAt
 
   @@unique([tenantId, startDate, endDate])
   @@index([status, payDate])
+  @@index([statutoryRuleSetId], map: "PayrollPeriod_stat_rule_idx")
   @@index([tenantId])
+}
+
+model PayrollStatutoryRuleSet {
+  id            String                         @id @default(cuid())
+  code          String                         @unique(map: "PayrollStatRule_code_key") @db.VarChar(80)
+  name          String                         @db.VarChar(160)
+  jurisdiction  String                         @default("PH") @db.VarChar(20)
+  effectiveFrom DateTime                       @db.Date
+  effectiveTo   DateTime?                      @db.Date
+  sourceSnapshot Json
+  rules         Json
+  contentHash   String                         @unique(map: "PayrollStatRule_hash_key") @db.VarChar(64)
+  active        Boolean                        @default(true)
+  payrollPeriods PayrollPeriod[]
+  revisions     PayrollCalculationRevision[]
+  payslips      Payslip[]
+  createdAt     DateTime                       @default(now())
+
+  @@index([jurisdiction, active, effectiveFrom, effectiveTo], map: "PayrollStatRule_effective_idx")
+}
+
+model FinancialJournalEntry {
+  tenantId        String                 @default("tenant_pagsibol4b_default")
+  id              String                 @id @default(cuid())
+  idempotencyKey  String                 @db.VarChar(191)
+  entryDate       DateTime               @db.Date
+  description     String                 @db.VarChar(500)
+  sourceType      String                 @db.VarChar(80)
+  sourceId        String                 @db.VarChar(191)
+  sourceRevisionId String?                @db.VarChar(191)
+  eventType       String                 @db.VarChar(40)
+  status          FinancialJournalStatus @default(POSTED)
+  postedById      String                 @db.VarChar(191)
+  lines           FinancialJournalLine[]
+  payrollPostings PayrollFinancialPosting[]
+  createdAt       DateTime               @default(now())
+
+  @@unique([tenantId, idempotencyKey], map: "FinJournal_scope_idem_key")
+  @@index([tenantId, entryDate], map: "FinJournal_scope_date_idx")
+  @@index([tenantId, sourceType, sourceId], map: "FinJournal_scope_source_idx")
+}
+
+model FinancialJournalLine {
+  tenantId      String                @default("tenant_pagsibol4b_default")
+  id            String                @id @default(cuid())
+  journalEntryId String
+  journalEntry  FinancialJournalEntry @relation(fields: [journalEntryId], references: [id], onDelete: Restrict)
+  lineOrder     Int
+  accountCode   String                @db.VarChar(60)
+  accountName   String                @db.VarChar(160)
+  debit         Decimal               @default(0) @db.Decimal(14, 2)
+  credit        Decimal               @default(0) @db.Decimal(14, 2)
+  metadata      Json?
+  createdAt     DateTime              @default(now())
+
+  @@unique([journalEntryId, lineOrder], map: "FinJournalLine_entry_order_key")
+  @@index([tenantId, accountCode], map: "FinJournalLine_scope_account_idx")
+}
+
+model PayrollPostingOutbox {
+  tenantId      String                  @default("tenant_pagsibol4b_default")
+  id            String                  @id @default(cuid())
+  idempotencyKey String                 @db.VarChar(191)
+  eventType     PayrollPostingEventType
+  payload       Json
+  status        PayrollOutboxStatus     @default(PENDING)
+  attemptCount  Int                     @default(0)
+  availableAt   DateTime                @default(now())
+  lockedAt      DateTime?
+  processedAt   DateTime?
+  lastError     String?                 @db.VarChar(1000)
+  posting       PayrollFinancialPosting?
+  createdAt     DateTime                @default(now())
+  updatedAt     DateTime                @updatedAt
+
+  @@unique([tenantId, idempotencyKey], map: "PayrollOutbox_scope_idem_key")
+  @@index([tenantId, status, availableAt], map: "PayrollOutbox_ready_idx")
+}
+
+model PayrollFinancialPosting {
+  tenantId       String                  @default("tenant_pagsibol4b_default")
+  id             String                  @id @default(cuid())
+  payrollId      String
+  payroll        PayrollPeriod           @relation(fields: [payrollId], references: [id], onDelete: Restrict)
+  revisionId     String
+  revision       PayrollCalculationRevision @relation(fields: [revisionId], references: [id], onDelete: Restrict)
+  eventType      PayrollPostingEventType
+  status         PayrollPostingStatus    @default(PENDING)
+  idempotencyKey String                  @db.VarChar(191)
+  outboxId       String                  @unique(map: "PayrollFinPost_outbox_key")
+  outbox         PayrollPostingOutbox    @relation(fields: [outboxId], references: [id], onDelete: Restrict)
+  journalEntryId String?
+  journalEntry   FinancialJournalEntry?  @relation(fields: [journalEntryId], references: [id], onDelete: Restrict)
+  requestedById  String                  @db.VarChar(191)
+  errorMessage   String?                 @db.VarChar(1000)
+  postedAt       DateTime?
+  createdAt      DateTime                @default(now())
+  updatedAt      DateTime                @updatedAt
+
+  @@unique([tenantId, revisionId, eventType], map: "PayrollFinPost_scope_revision_key")
+  @@unique([tenantId, idempotencyKey], map: "PayrollFinPost_scope_idem_key")
+  @@index([tenantId, payrollId, status], map: "PayrollFinPost_scope_payroll_idx")
+  @@index([journalEntryId], map: "PayrollFinPost_journal_idx")
 }
 
 model PayrollCalculationRevision {
@@ -2789,17 +3047,22 @@ model PayrollCalculationRevision {
   deductionSnapshot  Json
   adjustmentSnapshot Json
   overtimeSnapshot   Json
+  statutoryRuleSetId String?
+  statutoryRuleSet   PayrollStatutoryRuleSet?              @relation(fields: [statutoryRuleSetId], references: [id], onDelete: Restrict)
+  statutoryRuleSnapshot Json?
   totalsSnapshot     Json
   deltaSnapshot      Json?
   createdById        String
   createdBy          User                                 @relation("PayrollRevisionCreator", fields: [createdById], references: [id], onDelete: Restrict)
   payslips           PayrollCalculationRevisionPayslip[]
+  financialPostings  PayrollFinancialPosting[]
   createdAt          DateTime                             @default(now())
 
   @@unique([payrollId, revisionNumber], map: "PayrollCalcRev_payroll_revision_key")
   @@index([tenantId, payrollId, createdAt], map: "PayrollCalcRev_scope_idx")
   @@index([parentRevisionId], map: "PayrollCalcRev_parent_idx")
   @@index([createdById], map: "PayrollCalcRev_creator_idx")
+  @@index([statutoryRuleSetId], map: "PayrollCalcRev_stat_rule_idx")
 }
 
 model PayrollCalculationRevisionPayslip {
@@ -2883,6 +3146,9 @@ model Payslip {
   compensationId       String?
   compensation         EmployeeCompensation? @relation(fields: [compensationId], references: [id], onDelete: Restrict)
   compensationSnapshot Json?
+  statutoryRuleSetId   String?
+  statutoryRuleSet     PayrollStatutoryRuleSet? @relation(fields: [statutoryRuleSetId], references: [id], onDelete: Restrict)
+  statutorySnapshot    Json?
   revisionSnapshots     PayrollCalculationRevisionPayslip[]
   payableDays          Decimal               @db.Decimal(6, 2)
   absentDays     Decimal         @default(0) @db.Decimal(6, 2)
@@ -2892,6 +3158,16 @@ model Payslip {
   overtimeSource String          @default("NONE")
   allowance      Decimal         @default(0) @db.Decimal(12, 2)
   deduction      Decimal         @default(0) @db.Decimal(12, 2)
+  sssEmployeeContribution        Decimal @default(0) @db.Decimal(12, 2)
+  sssEmployerContribution        Decimal @default(0) @db.Decimal(12, 2)
+  employeeCompensationContribution Decimal @default(0) @db.Decimal(12, 2)
+  philHealthEmployeeContribution Decimal @default(0) @db.Decimal(12, 2)
+  philHealthEmployerContribution Decimal @default(0) @db.Decimal(12, 2)
+  pagIbigEmployeeContribution    Decimal @default(0) @db.Decimal(12, 2)
+  pagIbigEmployerContribution    Decimal @default(0) @db.Decimal(12, 2)
+  withholdingTax                 Decimal @default(0) @db.Decimal(12, 2)
+  statutoryDeduction             Decimal @default(0) @db.Decimal(12, 2)
+  employerContribution           Decimal @default(0) @db.Decimal(12, 2)
   grossPay       Decimal         @db.Decimal(12, 2)
   netPay         Decimal         @db.Decimal(12, 2)
   createdAt      DateTime        @default(now())
@@ -2900,6 +3176,7 @@ model Payslip {
   @@unique([payrollId, employeeId])
   @@index([employeeId, createdAt])
   @@index([compensationId])
+  @@index([statutoryRuleSetId], map: "Payslip_stat_rule_idx")
   @@index([tenantId])
 }
 

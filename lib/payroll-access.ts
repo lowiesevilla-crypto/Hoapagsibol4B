@@ -23,6 +23,14 @@ export const payrollManageRoles = [
   PayrollAccessRole.SYSTEM_ADMINISTRATOR,
 ] as const;
 
+export const leaveApprovalRoles = [
+  PayrollAccessRole.PAYROLL_MANAGER,
+  PayrollAccessRole.HR_ADMIN,
+  PayrollAccessRole.SYSTEM_ADMINISTRATOR,
+] as const;
+
+export const leaveConfigurationRoles = leaveApprovalRoles;
+
 export async function getPayrollAccessForUser(userId: string) {
   return prisma.payrollAccess.findMany({ where: { userId, active: true }, orderBy: { role: "asc" } });
 }

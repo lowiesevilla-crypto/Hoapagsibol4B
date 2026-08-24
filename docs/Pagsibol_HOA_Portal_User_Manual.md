@@ -1,6 +1,7 @@
 # PAGSIBOL VILLAGE PH2 4B EAST HOA Portal - User Manual
 
 Generated: June 24, 2026
+Last revised: August 24, 2026 (payroll completion verified in PR #166; production availability requires confirmed deployment)
 
 This manual explains how officers and homeowners use the portal. Screenshots were captured from the current clean database, so many tables show empty states until real homeowners, bills, payments, employees, and records are added.
 
@@ -176,17 +177,21 @@ Homeowners can view their own vehicle and sticker records in the portal.
 
 ## 11. Employees, Attendance, Payroll, and Payslips
 
-Admin can manage employee profiles, attendance, payroll periods, deduction types, and payslips.
+Authorized payroll users can manage employee profiles, effective-dated compensation, schedules, attendance, deductions/loans, leave, payroll periods, financial posting, and payslips. Employee users see only their own self-service records.
 
 ![Payroll management](screenshots/08-payroll-management.png)
 
 Payroll rules:
 
-- Draft payroll can be recalculated or edited.
-- Finalized payroll can be returned to draft when adjustments are needed.
-- Paid payroll is locked.
-- Admin can delete payroll periods that are not paid, with restriction message.
-- Total payroll amount is shown.
+- Compensation basis, pay frequency, attendance policy, rate, standard workdays/hours, allowance, and fixed deduction are effective-dated. Saving changed payroll terms creates a new version instead of rewriting history.
+- Generate/recalculate payroll to reach **CALCULATED**. Only Draft/Calculated working data may be edited; destructive deletion is Draft-only.
+- Finalize only after review. Finalization creates an immutable numbered revision and locks ordinary attendance/deduction changes.
+- A correction to finalized unpaid payroll requires a reason and creates a new child revision when re-finalized. The original revision remains unchanged.
+- Select **Post to Financial Engine** to create the payroll accrual journal. Failed posting can be retried with the same idempotency identity.
+- After the accrual reaches **POSTED**, select **Record net-pay disbursement** to create the cash journal, apply employee-loan deductions once, and reach **PAID**.
+- Paid payroll remains locked. Reversal requires reasoned immutable reversal evidence and a separate authorized financial-reversal post.
+- Statutory deductions/premiums are resolved from the effective Philippine rule set and shown as SSS, PhilHealth, Pag-IBIG, withholding tax, and employer contributions. The rule code/snapshot remains attached to payroll history.
+- The Financial Engine reconciliation section shows POST/PAYMENT/REVERSAL status, idempotency key, errors, and journal lines.
 
 Deduction types:
 
@@ -196,6 +201,26 @@ Deduction types:
 - Configure deduction amount and whether it applies to daily or monthly employees.
 
 Payslips are printable from payroll records.
+
+### Leave management
+
+Authorized Payroll Manager, HR Admin, or System Administrator users open **Leave management** to:
+
+1. Review protected statutory leave types and their source authority.
+2. Add/edit/deactivate custom tenant leave types. Protected statutory formulas cannot be edited or deactivated.
+3. Review pending employee requests and supporting reference information.
+4. Approve or reject with review remarks. Approval consumes the applicable balance and creates linked paid/unpaid attendance in one transaction.
+5. Record reasoned positive/negative annual balance adjustments.
+
+Employees open **Leave requests** to select an active leave type, choose dates, enter a reason/evidence reference, submit, see pending/approved/rejected/cancelled status, view applicable annual balances, or cancel their own pending request. HR review remains required for statutory eligibility. Requests that overlap finalized/posted/paid payroll cannot be approved directly.
+
+### Payroll access summary
+
+- Payroll Staff can prepare authorized payroll inputs but cannot gain employee self-service authority over another employee.
+- Payroll Manager/System Administrator controls payroll configuration and approvals.
+- Finance Approver participates in payroll financial approval/posting according to assigned Payroll Access.
+- HR Admin can configure/review leave according to assigned leave authority.
+- Employee login is owner-scoped to personal Time, timelogs/corrections, overtime, leave, paid payslips, and loans/cash advances.
 
 ## 12. Expenses
 
@@ -223,6 +248,8 @@ Reports can include:
 - Cash receipts and disbursements
 - Receivables
 - Bond accountability
+- Posted payroll expense using gross pay plus employer contributions
+- Paid net-pay cash disbursements
 
 Admin can filter by date and export printable PDF, Word DOCX, and CSV where supported.
 
@@ -313,10 +340,11 @@ Print using browser print on A4 or Letter paper.
 2. Add new homeowners, vehicles, contractors, employees, or events as needed.
 3. Record daily payments and collections.
 4. Review pending QR submissions.
-5. Update attendance.
-6. Add expenses and vouchers.
-7. Generate reports before officer meetings.
-8. Back up database and documents regularly.
+5. Review attendance, overtime, and leave queues.
+6. Calculate/finalize payroll, post its accrual, then record net-pay disbursement after actual payment.
+7. Add expenses and vouchers.
+8. Generate reports before officer meetings.
+9. Back up database and documents regularly.
 
 ## 20. Screenshot Index
 

@@ -26,28 +26,37 @@ const attendance = [{
 }];
 
 const policy: PayrollCalculationPolicy = {
-  key: "UNIT_TEST_POLICY_V1",
-  standardHoursPerDay: 8,
+  ...LEGACY_COMPATIBILITY_POLICY,
+  key: "UNIT_TEST_POLICY_V2",
   overtimeMultiplier: 2,
+  ordinaryOvertimeMultiplier: 2,
+  nonOrdinaryOvertimeMultiplier: 1.3,
   nightDifferentialRate: 0.2,
   restDayPremiumRate: 0.5,
   holidayPremiumRate: 1,
+  restDayMultiplier: 1.3,
+  specialNonWorkingDayMultiplier: 1.3,
+  specialNonWorkingRestDayMultiplier: 1.5,
+  specialWorkingDayMultiplier: 1,
+  regularHolidayMultiplier: 2,
+  regularHolidayRestDayMultiplier: 2.6,
+  hoaDeclaredHolidayMultiplier: 1,
 };
 
 test("PAY-CALC-001/PAY-CALC-002: explicit policy deterministically controls premium calculation", () => {
   const inputDeductions = [{ amount: 250 as never }];
-  const overtime = [{ hours: 2, source: "APPROVED_REQUEST" as const }];
+  const overtime = [{ hours: 2, source: "APPROVED_REQUEST" as const, isRestDay: true, holidayType: "REGULAR_HOLIDAY" as const }];
 
   const first = calculatePayslipWithPolicy(employee, attendance, inputDeductions, overtime, policy);
   const second = calculatePayslipWithPolicy(employee, attendance, inputDeductions, overtime, policy);
 
   assert.deepEqual(first, second);
   assert.equal(first.basicPay, 700);
-  assert.equal(first.overtimePay, 1640);
+  assert.equal(first.overtimePay, 2060);
   assert.equal(first.allowance, 100);
   assert.equal(first.deduction, 300);
-  assert.equal(first.grossPay, 2440);
-  assert.equal(first.netPay, 2140);
+  assert.equal(first.grossPay, 2860);
+  assert.equal(first.netPay, 2560);
   assert.equal(first.overtimeSource, "Approved OT Request");
 });
 

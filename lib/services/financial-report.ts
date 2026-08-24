@@ -23,7 +23,7 @@ export async function getFinancialReport(tenantId: string, fromInput?: string | 
     prisma.collection.findMany({ where: { OR: [{ collectionDate: range }, { forfeitedAt: range }] } }),
     prisma.bondRefund.findMany({ where: { refundDate: range } }),
     prisma.expense.findMany({ where: { expenseDate: range }, include: { category: true } }),
-    prisma.payrollPeriod.findMany({ where: { payDate: range, status: { in: ["FINALIZED", "PAID"] } }, include: { payslips: true } }),
+    prisma.payrollPeriod.findMany({ where: { payDate: range, status: { in: ["POSTED", "PAID"] } }, include: { payslips: true } }),
     prisma.employeeLoan.findMany({ where: { issuedDate: range, status: { not: "CANCELLED" } }, include: { employee: true }, orderBy: { issuedDate: "asc" } }),
     prisma.payrollDeduction.findMany({
       where: { employeeLoanId: { not: null }, payroll: { payDate: range, status: "PAID" } },
@@ -108,7 +108,8 @@ export async function getFinancialReport(tenantId: string, fromInput?: string | 
   const feeIncome = genericFeeIncome + rentalIncome;
   const forfeitedIncome = collections.filter((item) => item.forfeitedAt && item.forfeitedAt >= from && item.forfeitedAt <= to).reduce((sum, item) => sum + Number(item.amountForfeited), 0);
   const operatingExpenses = expenses.reduce((sum, item) => sum + Number(item.amount), 0);
-  const payrollExpense = payrolls.flatMap((period) => period.payslips).reduce((sum, item) => sum + Number(item.netPay), 0);
+  const payrollExpense = payrolls.flatMap((period) => period.payslips).reduce((sum, item) => sum + Number(item.grossPay) + Number(item.employerContribution), 0);
+  const payrollCashDisbursements = payrolls.filter((period) => period.status === "PAID").flatMap((period) => period.payslips).reduce((sum, item) => sum + Number(item.netPay), 0);
   const employeeLoansIssued = employeeLoanIssuances.reduce((sum, item) => sum + Number(item.principalAmount), 0);
   const employeeLoanRepayments = employeeLoanRepaymentRowsRaw.reduce((sum, item) => sum + Number(item.amount), 0);
   const bondsReceived = collections.filter((item) => item.refundable && !rentalDepositCollectionIds.has(item.id) && item.collectionDate >= from && item.collectionDate <= to).reduce((sum, item) => sum + Number(item.amount), 0);
@@ -117,7 +118,7 @@ export async function getFinancialReport(tenantId: string, fromInput?: string | 
   const recognizedIncome = duesIncome + feeIncome + forfeitedIncome;
   const totalExpenses = operatingExpenses + payrollExpense;
   const cashInflows = paymentCashReceived + feeIncome + rentalAdvanceCreditsReceived + rentalSecurityDepositsReceived + bondsReceived;
-  const cashOutflows = operatingExpenses + payrollExpense + bondsRefunded + rentalSecurityDepositsRefunded + employeeLoansIssued;
+  const cashOutflows = operatingExpenses + payrollCashDisbursements + bondsRefunded + rentalSecurityDepositsRefunded + employeeLoansIssued;
   const allBondTotals = allBondTotalsRows[0];
   const bondsHeld = Number(allBondTotals?.amount ?? 0) - Number(allBondTotals?.amountRefunded ?? 0) - Number(allBondTotals?.amountForfeited ?? 0);
   const rentalSecurityDepositsHeld = Number(rentalDepositHeldRows[0]?.total ?? 0);
@@ -130,7 +131,7 @@ export async function getFinancialReport(tenantId: string, fromInput?: string | 
     duesIncome, paymentCashReceived, unappliedCredits, feeIncome, rentalIncome, rentalAdvanceCreditsReceived, rentalAdvanceCreditsHeld,
     rentalSecurityDepositsReceived, rentalSecurityDepositsRefunded, rentalSecurityDepositsHeld,
     forfeitedIncome, recognizedIncome,
-    operatingExpenses, payrollExpense, totalExpenses, operatingSurplus: recognizedIncome - totalExpenses,
+    operatingExpenses, payrollExpense, payrollCashDisbursements, totalExpenses, operatingSurplus: recognizedIncome - totalExpenses,
     bondsReceived, bondsRefunded, bondsHeld, cashInflows, cashOutflows, netCashMovement: cashInflows - cashOutflows,
     employeeLoansIssued,
     employeeLoanRepayments,

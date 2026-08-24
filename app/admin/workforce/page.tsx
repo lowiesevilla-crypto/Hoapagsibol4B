@@ -51,7 +51,7 @@ export default async function WorkforceHubPage() {
       </WorkspaceCard>
 
       <WorkspaceCard title="Workforce actions" description="Direct entry to existing protected HRIS and payroll workflows.">
-        <div className="grid gap-2"><Action href="/admin/employees" title="Employee data management" note="Profiles, schedules and employment records" /><Action href="/admin/attendance" title="Time & attendance" note="Daily records, corrections and payroll review" /><Action href="/admin/payroll" title="Payroll processing" note="Periods, deductions, OT, loans, approval and payslips" /><Action href="/admin/attendance/corrections/approval" title="Correction approvals" note={`${pendingCorrections} request${pendingCorrections === 1 ? "" : "s"} pending`} /></div>
+        <div className="grid gap-2"><Action href="/admin/employees" title="Employee data management" note="Profiles, schedules and employment records" /><Action href="/admin/attendance" title="Time & attendance" note="Daily records, corrections and payroll review" /><Action href="/admin/leave" title="Leave management" note="Protected leave types, requests, balances and approvals" /><Action href="/admin/payroll" title="Payroll processing" note="Periods, deductions, OT, loans, approval and payslips" /><Action href="/admin/attendance/corrections/approval" title="Correction approvals" note={`${pendingCorrections} request${pendingCorrections === 1 ? "" : "s"} pending`} /></div>
       </WorkspaceCard>
     </section>
   </div>;

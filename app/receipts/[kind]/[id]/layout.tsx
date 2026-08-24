@@ -63,9 +63,34 @@ export default function ReceiptPrintLayout({ children }: { children: ReactNode }
           height: 18mm !important;
           max-width: 18mm !important;
           max-height: 18mm !important;
-          object-fit: contain !important;
           align-self: center !important;
           justify-self: center !important;
+          overflow: hidden !important;
+        }
+
+        /* AssociationLogo is wrapped by PostLoginBrandOrbit. Constrain the real
+           logo element too; resizing only the wrapper lets the screen-size logo
+           overflow into the tenant-name column when printing. */
+        .print-document header > :first-child > span:first-child {
+          width: 18mm !important;
+          height: 18mm !important;
+          max-width: 18mm !important;
+          max-height: 18mm !important;
+          box-shadow: none !important;
+        }
+
+        .print-document header > :first-child img {
+          width: 100% !important;
+          height: 100% !important;
+          max-width: 18mm !important;
+          max-height: 18mm !important;
+          object-fit: contain !important;
+          object-position: center !important;
+        }
+
+        /* Do not print the login-handoff orbit/status decoration around the logo. */
+        .print-document header > :first-child > span:last-child {
+          display: none !important;
         }
 
         .print-document header > :nth-child(2) {

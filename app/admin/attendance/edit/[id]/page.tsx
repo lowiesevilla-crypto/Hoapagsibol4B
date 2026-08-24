@@ -12,14 +12,14 @@ import { hasPayrollRole, payrollManageRoles, payrollWriteRoles, requirePayrollAc
 import { inputDate, shortDate } from "@/lib/utils";
 
 export default async function EditAttendancePage({ params }: { params: Promise<{ id: string }> }) {
-  const { roles } = await requirePayrollAccess(payrollWriteRoles);
+  const { user, roles } = await requirePayrollAccess(payrollWriteRoles);
   const { id } = await params;
   const [record, employees] = await Promise.all([
-    prisma.attendance.findUnique({ where: { id }, include: { employee: true } }),
-    prisma.employeeProfile.findMany({ where: { status: "ACTIVE" }, orderBy: { name: "asc" } }),
+    prisma.attendance.findFirst({ where: { id, tenantId: user.tenantId }, include: { employee: true } }),
+    prisma.employeeProfile.findMany({ where: { tenantId: user.tenantId, status: "ACTIVE" }, orderBy: { name: "asc" } }),
   ]);
   if (!record) notFound();
-  const paidPeriod = await prisma.payrollPeriod.findFirst({ where: { status: PayrollStatus.PAID, startDate: { lte: record.date }, endDate: { gte: record.date }, payslips: { some: { employeeId: record.employeeId } } } });
+  const paidPeriod = await prisma.payrollPeriod.findFirst({ where: { tenantId: user.tenantId, status: { in: [PayrollStatus.FINALIZED, PayrollStatus.POSTING, PayrollStatus.POSTED, PayrollStatus.POST_FAILED, PayrollStatus.PAID] }, startDate: { lte: record.date }, endDate: { gte: record.date }, payslips: { some: { tenantId: user.tenantId, employeeId: record.employeeId } } } });
   const paid = Boolean(paidPeriod);
   const canDeletePaid = hasPayrollRole(roles, payrollManageRoles);
   return <>

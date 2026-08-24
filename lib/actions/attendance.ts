@@ -76,7 +76,7 @@ export async function deleteAttendanceAction(formData: FormData) {
   const lockedPeriod = await prisma.payrollPeriod.findFirst({
     where: {
       tenantId: user.tenantId,
-      status: { in: [PayrollStatus.FINALIZED, PayrollStatus.PAID] },
+      status: { in: [PayrollStatus.FINALIZED, PayrollStatus.POSTING, PayrollStatus.POSTED, PayrollStatus.POST_FAILED, PayrollStatus.PAID] },
       startDate: { lte: record.date },
       endDate: { gte: record.date },
       payslips: { some: { employeeId: record.employeeId } },
@@ -270,7 +270,7 @@ async function applyAttendanceAdjustmentReview(id: string, decision: "APPROVED" 
     const locked = await tx.payrollPeriod.findFirst({
       where: {
         tenantId,
-        status: { in: [PayrollStatus.FINALIZED, PayrollStatus.PAID] },
+        status: { in: [PayrollStatus.FINALIZED, PayrollStatus.POSTING, PayrollStatus.POSTED, PayrollStatus.POST_FAILED, PayrollStatus.PAID] },
         startDate: { lte: adjustment.attendance.date },
         endDate: { gte: adjustment.attendance.date },
         payslips: { some: { employeeId: adjustment.attendance.employeeId } },
@@ -335,7 +335,7 @@ async function assertAttendanceEditable(employeeId: string, date: Date, tenantId
   const locked = await prisma.payrollPeriod.findFirst({
     where: {
       tenantId,
-      status: { in: [PayrollStatus.FINALIZED, PayrollStatus.PAID] },
+      status: { in: [PayrollStatus.FINALIZED, PayrollStatus.POSTING, PayrollStatus.POSTED, PayrollStatus.POST_FAILED, PayrollStatus.PAID] },
       startDate: { lte: date },
       endDate: { gte: date },
       payslips: { some: { employeeId } },

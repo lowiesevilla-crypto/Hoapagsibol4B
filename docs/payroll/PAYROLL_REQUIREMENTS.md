@@ -120,13 +120,13 @@ Payroll loan repayment cannot exceed the remaining available balance. A repaymen
 ### Payroll Lifecycle / Corrections
 
 #### PAY-RUN-001 — Payroll lifecycle
-The target lifecycle must distinguish calculation/review/approval/finalization/payment sufficiently to prevent accidental historical mutation. Existing schema currently supports DRAFT, FINALIZED, and PAID; lifecycle expansion requires a schema migration and UI/action updates.
+The persisted lifecycle distinguishes `DRAFT`, `CALCULATED`, `FINALIZED`, `POSTING`, `POSTED`, `POST_FAILED`, and `PAID` sufficiently to prevent accidental historical mutation. `POSTING`, `POSTED`, and `POST_FAILED` remain dormant until the idempotent Financial Engine posting/outbox contract is implemented; their presence must not be represented as live finance integration.
 
 #### PAY-RUN-002 — Finalization validation
 A payroll cannot finalize without calculated payslips and must preserve audit evidence of the actor and transition.
 
 #### PAY-RUN-003 — Immutable finalized/paid evidence
-Finalized and paid payroll must not be silently overwritten. Corrections must create an auditable correction/revision/reversal record instead of deleting historical evidence.
+Finalized and paid payroll must not be silently overwritten. Finalization creates an immutable tenant-scoped calculation revision with per-employee snapshots. Corrections preserve the source revision and create a new child revision with actor, reason, parent identity, input snapshots, totals, and deltas. Reversals create immutable negative evidence without deleting or mutating the source payroll/revision. Paid payroll remains terminal.
 
 ### Philippine Statutory Rules
 

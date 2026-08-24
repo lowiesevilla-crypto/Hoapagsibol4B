@@ -38,7 +38,7 @@ export async function submitEmployeeOvertimeRequestAction(formData: FormData) {
     const lockedPeriod = await tx.payrollPeriod.findFirst({
       where: {
         tenantId: user.tenantId,
-        status: { in: [PayrollStatus.FINALIZED, PayrollStatus.PAID] },
+        status: { in: [PayrollStatus.FINALIZED, PayrollStatus.POSTING, PayrollStatus.POSTED, PayrollStatus.POST_FAILED, PayrollStatus.PAID] },
         startDate: { lte: date },
         endDate: { gte: date },
         payslips: { some: { employeeId } },

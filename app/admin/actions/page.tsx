@@ -49,7 +49,7 @@ export default async function ActionCenterPage() {
     canPayments ? prisma.paymentRequest.count({ where: { tenantId, status: PaymentRequestStatus.PENDING_REVIEW } }) : Promise.resolve(0),
     canDocuments ? prisma.documentRequest.count({ where: { tenantId, archivedAt: null, status: { in: [DocumentRequestStatus.SUBMITTED, DocumentRequestStatus.UNDER_REVIEW, DocumentRequestStatus.PENDING_APPROVAL] } } }) : Promise.resolve(0),
     canBilling ? prisma.bill.groupBy({ by: ["homeownerId"], where: { tenantId, archivedAt: null, status: BillStatus.OVERDUE, balance: { gt: 0 } } }).then((rows) => rows.length) : Promise.resolve(0),
-    canPayroll ? prisma.payrollPeriod.count({ where: { tenantId, status: { in: [PayrollStatus.DRAFT, PayrollStatus.FINALIZED] } } }) : Promise.resolve(0),
+    canPayroll ? prisma.payrollPeriod.count({ where: { tenantId, status: { in: [PayrollStatus.DRAFT, PayrollStatus.CALCULATED, PayrollStatus.FINALIZED, PayrollStatus.POSTING, PayrollStatus.POST_FAILED] } } }) : Promise.resolve(0),
     canComplaints ? prisma.complaint.count({ where: { tenantId, status: { in: activeComplaintStatuses } } }) : Promise.resolve(0),
   ]);
 

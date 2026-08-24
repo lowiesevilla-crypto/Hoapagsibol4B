@@ -41,7 +41,11 @@ test("PAY-RUN-003: destructive deletion remains draft-only", () => {
 test("PAY-RUN-001: legacy persistence maps calculated draft periods without inventing persisted status", () => {
   assert.equal(deriveLifecycleState({ status: "DRAFT", payslipCount: 0 }), "DRAFT");
   assert.equal(deriveLifecycleState({ status: "DRAFT", payslipCount: 10 }), "CALCULATED");
+  assert.equal(deriveLifecycleState({ status: "CALCULATED", payslipCount: 10 }), "CALCULATED");
   assert.equal(deriveLifecycleState({ status: "FINALIZED", payslipCount: 10 }), "FINALIZED");
+  assert.equal(deriveLifecycleState({ status: "POSTING", payslipCount: 10 }), "POSTING");
+  assert.equal(deriveLifecycleState({ status: "POST_FAILED", payslipCount: 10 }), "POST_FAILED");
+  assert.equal(deriveLifecycleState({ status: "POSTED", payslipCount: 10 }), "POSTED");
   assert.equal(deriveLifecycleState({ status: "PAID", payslipCount: 10 }), "PAID");
 });
 

@@ -104,7 +104,7 @@ async function persistEmployeeCompensationVersion(
   const latestLockedPayroll = await tx.payrollPeriod.findFirst({
     where: {
       tenantId,
-      status: { in: [PayrollStatus.FINALIZED, PayrollStatus.PAID] },
+      status: { in: [PayrollStatus.FINALIZED, PayrollStatus.POSTING, PayrollStatus.POSTED, PayrollStatus.POST_FAILED, PayrollStatus.PAID] },
       endDate: { gte: configuration.effectiveFrom },
       payslips: { some: { employeeId } },
     },

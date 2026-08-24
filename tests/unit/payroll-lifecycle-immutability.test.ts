@@ -12,17 +12,38 @@ function functionSource(name: string, nextName?: string) {
   return payrollActions.slice(start, end === -1 ? payrollActions.length : end);
 }
 
-test("PAY-RUN-003: finalized payroll is snapshotted before controlled return to draft", () => {
+test("PAY-RUN-003: finalized payroll starts a tenant-scoped correction from immutable revision evidence", () => {
   const source = functionSource("returnPayrollToDraftAction", "markPayrollPaidAction");
-  assert.match(source, /PayrollStatus\.PAID/);
+  assert.match(source, /period\.status !== PayrollStatus\.FINALIZED/);
+  assert.match(source, /payrollCalculationRevision\.findFirst/);
+  assert.match(source, /tenantId: user\.tenantId/);
   assert.match(source, /payrollArchive\.create/);
   assert.match(source, /\[PRE_REOPEN_SNAPSHOT\]/);
-  assert.match(source, /SNAPSHOT_AND_RETURN_PAYROLL_TO_DRAFT/);
+  assert.match(source, /BEGIN_PAYROLL_CORRECTION/);
+  assert.match(source, /pendingRevisionType: PayrollRevisionType\.CORRECTION/);
   assert.match(source, /Prisma\.TransactionIsolationLevel\.Serializable/);
 
   const archiveIndex = source.indexOf("payrollArchive.create");
-  const reopenIndex = source.indexOf("status: PayrollStatus.DRAFT");
-  assert.ok(archiveIndex >= 0 && reopenIndex > archiveIndex, "immutable snapshot must be created before the period returns to draft");
+  const correctionIndex = source.indexOf("status: PayrollStatus.CALCULATED");
+  assert.ok(archiveIndex >= 0 && correctionIndex > archiveIndex, "compatibility snapshot must be created before correction work begins");
+});
+
+test("PAY-RUN-003: finalization creates immutable revision and per-employee snapshots before status transition", () => {
+  const source = functionSource("finalizePayrollAction", "returnPayrollToDraftAction");
+  assert.match(source, /createImmutablePayrollRevision/);
+  assert.match(source, /tenantId: user\.tenantId/);
+  assert.match(source, /status: PayrollStatus\.FINALIZED/);
+  assert.match(source, /FINALIZE_PAYROLL_REVISION/);
+  assert.match(source, /Prisma\.TransactionIsolationLevel\.Serializable/);
+});
+
+test("PAY-RUN-003: reversal records immutable negative delta evidence without changing payroll status", () => {
+  const source = functionSource("recordPayrollReversalAction", "deletePayrollAction");
+  assert.match(source, /revisionType: PayrollRevisionType\.REVERSAL/);
+  assert.match(source, /reversedRevisionId: sourceRevision\.id/);
+  assert.match(source, /tenantId: user\.tenantId/);
+  assert.match(source, /RECORD_PAYROLL_REVERSAL/);
+  assert.doesNotMatch(source, /payrollPeriod\.update/);
 });
 
 test("PAY-RUN-003: destructive payroll deletion is draft-only", () => {

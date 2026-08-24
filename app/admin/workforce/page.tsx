@@ -25,7 +25,7 @@ export default async function WorkforceHubPage() {
     prisma.employeeProfile.count({ where: { tenantId, status: "ACTIVE" } }),
     prisma.attendance.findMany({ where: { tenantId, date: today }, select: { status: true } }),
     prisma.attendanceAdjustment.count({ where: { tenantId, status: "PENDING" } }),
-    prisma.payrollPeriod.count({ where: { tenantId, status: PayrollStatus.DRAFT } }),
+    prisma.payrollPeriod.count({ where: { tenantId, status: { in: [PayrollStatus.DRAFT, PayrollStatus.CALCULATED] } } }),
     prisma.payrollPeriod.count({ where: { tenantId, status: PayrollStatus.FINALIZED } }),
     prisma.payrollPeriod.findMany({ where: { tenantId }, take: 5, orderBy: [{ payDate: "desc" }, { createdAt: "desc" }], select: { id: true, status: true, startDate: true, endDate: true, payDate: true, _count: { select: { payslips: true } } } }),
   ]);

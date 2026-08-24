@@ -57,8 +57,7 @@ export function canDestructivelyDeletePayroll(state: PayrollLifecycleState) {
 }
 
 export function deriveLifecycleState(input: { status: PayrollStatus; payslipCount: number }): PayrollLifecycleState {
-  if (input.status === "PAID") return "PAID";
-  if (input.status === "FINALIZED") return "FINALIZED";
+  if (input.status !== "DRAFT") return input.status;
   return input.payslipCount > 0 ? "CALCULATED" : "DRAFT";
 }
 

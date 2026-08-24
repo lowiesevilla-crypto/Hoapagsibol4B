@@ -53,9 +53,13 @@ test("PAY-RPT-001: report totals are deterministic and count unique periods/empl
 
 test("PAY-RPT-001: status parsing accepts only supported payroll lifecycle values", () => {
   assert.equal(parsePayrollReportStatus("DRAFT"), PayrollStatus.DRAFT);
+  assert.equal(parsePayrollReportStatus("CALCULATED"), PayrollStatus.CALCULATED);
   assert.equal(parsePayrollReportStatus("FINALIZED"), PayrollStatus.FINALIZED);
+  assert.equal(parsePayrollReportStatus("POSTING"), PayrollStatus.POSTING);
+  assert.equal(parsePayrollReportStatus("POSTED"), PayrollStatus.POSTED);
+  assert.equal(parsePayrollReportStatus("POST_FAILED"), PayrollStatus.POST_FAILED);
   assert.equal(parsePayrollReportStatus("PAID"), PayrollStatus.PAID);
   assert.equal(parsePayrollReportStatus("ALL"), "ALL");
-  assert.equal(parsePayrollReportStatus("POSTED"), "ALL");
+  assert.equal(parsePayrollReportStatus("UNKNOWN"), "ALL");
   assert.equal(parsePayrollReportStatus(undefined), "ALL");
 });

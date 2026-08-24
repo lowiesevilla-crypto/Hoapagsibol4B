@@ -14,6 +14,7 @@ import {
   finalizePayrollAction,
   generatePayrollAction,
   markPayrollPaidAction,
+  recordPayrollReversalAction,
   recalculatePayrollAction,
   returnPayrollToDraftAction,
   reviewOvertimeRecordAction,
@@ -31,7 +32,8 @@ import { inputDate, money, shortDate } from "@/lib/utils";
 type PayrollPageProps = { searchParams: Promise<{ period?: string; section?: string; employee?: string }> };
 
 export default async function PayrollPage({ searchParams }: PayrollPageProps) {
-  const { roles } = await requirePayrollAccess();
+  const { user, roles } = await requirePayrollAccess();
+  const tenantId = user.tenantId;
   const { period: periodId, section: requestedSection, employee: requestedEmployeeId } = await searchParams;
   const validSections = ["dashboard", "employees", "attendance", "processing", "calendar", "adjustments", "overtime", "loans", "approval", "payslips", "reports", "contributions", "settings"];
   const section = validSections.includes(requestedSection ?? "") ? requestedSection! : "dashboard";
@@ -39,25 +41,28 @@ export default async function PayrollPage({ searchParams }: PayrollPageProps) {
   const canApprovePayroll = hasPayrollRole(roles, payrollApprovalRoles);
   const canManagePayroll = hasPayrollRole(roles, payrollManageRoles);
   const periods = await prisma.payrollPeriod.findMany({
+    where: { tenantId },
     include: {
-      payslips: { include: { employee: true }, orderBy: { employee: { name: "asc" } } },
-      deductions: { include: { employee: true, deductionType: true, employeeLoan: true }, orderBy: { createdAt: "desc" } },
+      payslips: { where: { tenantId }, include: { employee: true }, orderBy: { employee: { name: "asc" } } },
+      deductions: { where: { tenantId }, include: { employee: true, deductionType: true, employeeLoan: true }, orderBy: { createdAt: "desc" } },
+      revisions: { where: { tenantId }, include: { createdBy: true }, orderBy: { revisionNumber: "desc" } },
       _count: { select: { payslips: true } },
     },
     orderBy: { endDate: "desc" },
   });
-  const deductionTypes = await prisma.payrollDeductionType.findMany({ orderBy: [{ active: "desc" }, { name: "asc" }] });
-  const activeEmployees = await prisma.employeeProfile.findMany({ where: { status: "ACTIVE" }, orderBy: { name: "asc" } });
-  const employeeLoans = await prisma.employeeLoan.findMany({ include: { employee: true }, orderBy: [{ status: "asc" }, { issuedDate: "desc" }, { createdAt: "desc" }] });
-  const calendarDays = await prisma.payrollCalendarDay.findMany({ include: { createdBy: true }, orderBy: { date: "desc" }, take: 80 });
-  const schedules = await prisma.employeeSchedule.findMany({ include: { employee: true }, orderBy: [{ employee: { name: "asc" } }, { dayOfWeek: "asc" }, { effectiveFrom: "desc" }], take: 120 });
-  const payrollUsers = await prisma.user.findMany({ where: { role: { in: ["ADMIN", "SYSTEM_ADMIN", "EMPLOYEE"] } }, include: { employeeProfile: true, payrollAccesses: { orderBy: { role: "asc" } } }, orderBy: { name: "asc" } });
-  const payrollAccesses = await prisma.payrollAccess.findMany({ include: { user: true, grantedBy: true }, orderBy: [{ active: "desc" }, { role: "asc" }] });
-  const auditLogs = await prisma.auditLog.findMany({ where: { module: { in: ["PAYROLL", "ATTENDANCE"] } }, include: { actor: true }, orderBy: { createdAt: "desc" }, take: 20 });
-  const overtimeRecords = await prisma.overtimeRecord.findMany({ include: { employee: true, createdBy: true, reviewedBy: true }, orderBy: [{ date: "desc" }, { createdAt: "desc" }], take: 200 });
+  const deductionTypes = await prisma.payrollDeductionType.findMany({ where: { tenantId }, orderBy: [{ active: "desc" }, { name: "asc" }] });
+  const activeEmployees = await prisma.employeeProfile.findMany({ where: { tenantId, status: "ACTIVE" }, orderBy: { name: "asc" } });
+  const employeeLoans = await prisma.employeeLoan.findMany({ where: { tenantId }, include: { employee: true }, orderBy: [{ status: "asc" }, { issuedDate: "desc" }, { createdAt: "desc" }] });
+  const calendarDays = await prisma.payrollCalendarDay.findMany({ where: { tenantId }, include: { createdBy: true }, orderBy: { date: "desc" }, take: 80 });
+  const schedules = await prisma.employeeSchedule.findMany({ where: { tenantId }, include: { employee: true }, orderBy: [{ employee: { name: "asc" } }, { dayOfWeek: "asc" }, { effectiveFrom: "desc" }], take: 120 });
+  const payrollUsers = await prisma.user.findMany({ where: { tenantId, role: { in: ["ADMIN", "SYSTEM_ADMIN", "EMPLOYEE"] } }, include: { employeeProfile: true, payrollAccesses: { where: { tenantId }, orderBy: { role: "asc" } } }, orderBy: { name: "asc" } });
+  const payrollAccesses = await prisma.payrollAccess.findMany({ where: { tenantId }, include: { user: true, grantedBy: true }, orderBy: [{ active: "desc" }, { role: "asc" }] });
+  const auditLogs = await prisma.auditLog.findMany({ where: { tenantId, module: { in: ["PAYROLL", "ATTENDANCE"] } }, include: { actor: true }, orderBy: { createdAt: "desc" }, take: 20 });
+  const overtimeRecords = await prisma.overtimeRecord.findMany({ where: { tenantId }, include: { employee: true, createdBy: true, reviewedBy: true }, orderBy: [{ date: "desc" }, { createdAt: "desc" }], take: 200 });
   const activeDeductionTypes = deductionTypes.filter((deduction) => deduction.active);
   const openEmployeeLoans = employeeLoans.filter((loan) => loan.status === "OPEN" && Number(loan.balance) > 0);
   const selected = periods.find((period) => period.id === periodId) ?? periods[0];
+  const selectedReversed = selected?.revisions[0]?.revisionType === "REVERSAL";
   const selectedDeductionAssignments = [...(selected?.deductions ?? [])].sort((a, b) => a.employee.name.localeCompare(b.employee.name) || a.deductionType.name.localeCompare(b.deductionType.name));
   const initialDeductionEmployeeId = activeEmployees.some((employee) => employee.id === requestedEmployeeId) ? requestedEmployeeId : "";
   const selectedGrossPay = selected?.payslips.reduce((sum, slip) => sum + Number(slip.grossPay), 0) ?? 0;
@@ -105,7 +110,7 @@ export default async function PayrollPage({ searchParams }: PayrollPageProps) {
 
     {section === "dashboard" && <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
       <Metric label="Payroll periods" value={periods.length} currency={false} />
-      <Metric label="Draft periods" value={periods.filter((item) => item.status === "DRAFT").length} currency={false} />
+      <Metric label="Open calculations" value={periods.filter((item) => item.status === "DRAFT" || item.status === "CALCULATED").length} currency={false} />
       <Metric label="Pending OT requests" value={overtimeRecords.filter((item) => item.status === "PENDING").length} currency={false} />
       <Metric label="Latest net payroll" value={selectedTotalPayroll} />
     </section>}
@@ -392,29 +397,38 @@ export default async function PayrollPage({ searchParams }: PayrollPageProps) {
                 <p className="text-sm text-slate-500">Pay date: {shortDate(selected.payDate)}</p>
               </div>
               <div className="flex flex-wrap gap-2">
-                {selected.status === "DRAFT" && <>
+                {(selected.status === "DRAFT" || selected.status === "CALCULATED") && <>
                   {canWritePayroll && <form action={recalculatePayrollAction}>
                     <input type="hidden" name="id" value={selected.id} />
                     <SubmitButton className="btn-secondary"><RotateCcw className="size-4" /> Recalculate</SubmitButton>
                   </form>}
-                  {canApprovePayroll && <form action={finalizePayrollAction}>
+                  {selected.status === "CALCULATED" && canApprovePayroll && <form action={finalizePayrollAction}>
                     <input type="hidden" name="id" value={selected.id} />
                     <SubmitButton><CheckCircle2 className="size-4" /> Finalize</SubmitButton>
                   </form>}
-                  {canManagePayroll && <PayrollDeleteForm id={selected.id} paid={false} />}
+                  {selected.status === "DRAFT" && canManagePayroll && <PayrollDeleteForm id={selected.id} paid={false} />}
                 </>}
                 {selected.status === "FINALIZED" && <>
-                  {canApprovePayroll && <form action={returnPayrollToDraftAction}>
+                  {canApprovePayroll && <form action={returnPayrollToDraftAction} className="flex min-w-64 flex-col gap-2">
                     <input type="hidden" name="id" value={selected.id} />
-                    <SubmitButton className="btn-secondary"><RotateCcw className="size-4" /> Return to draft</SubmitButton>
+                    <input className="field min-h-10 py-2 text-xs" name="reason" minLength={10} maxLength={500} required placeholder="Correction reason (required)" />
+                    <SubmitButton className="btn-secondary"><RotateCcw className="size-4" /> Begin correction</SubmitButton>
                   </form>}
-                  {canApprovePayroll && <form action={markPayrollPaidAction}>
+                  {canApprovePayroll && !selectedReversed && <form action={markPayrollPaidAction}>
                     <input type="hidden" name="id" value={selected.id} />
                     <SubmitButton>Mark payroll paid</SubmitButton>
                   </form>}
-                  {canManagePayroll && <PayrollDeleteForm id={selected.id} paid={false} />}
+                  {canApprovePayroll && !selectedReversed && <form action={recordPayrollReversalAction} className="flex min-w-64 flex-col gap-2">
+                    <input type="hidden" name="id" value={selected.id} />
+                    <input className="field min-h-10 py-2 text-xs" name="reason" minLength={10} maxLength={500} required placeholder="Reversal reason (required)" />
+                    <SubmitButton className="btn-danger">Record reversal evidence</SubmitButton>
+                  </form>}
                 </>}
-                {selected.status === "PAID" && canManagePayroll && <PayrollDeleteForm id={selected.id} paid />}
+                {selected.status === "PAID" && canApprovePayroll && !selectedReversed && <form action={recordPayrollReversalAction} className="flex min-w-64 flex-col gap-2">
+                  <input type="hidden" name="id" value={selected.id} />
+                  <input className="field min-h-10 py-2 text-xs" name="reason" minLength={10} maxLength={500} required placeholder="Reversal reason (required)" />
+                  <SubmitButton className="btn-danger">Record reversal evidence</SubmitButton>
+                </form>}
                 <StatusBadge status={selected.status} />
               </div>
             </div>
@@ -437,12 +451,29 @@ export default async function PayrollPage({ searchParams }: PayrollPageProps) {
 
             {selected.status === "FINALIZED" && <div className="mt-4 flex gap-3 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
               <AlertTriangle className="mt-0.5 size-5 shrink-0" />
-              <p><strong>Finalized but not paid.</strong> You can return this payroll to draft for attendance or salary adjustments. Once it is marked paid, it will be locked.</p>
+              <p><strong>Finalized but not paid.</strong> A correction starts from this immutable revision and produces a new revision when finalized again. The original evidence is never overwritten.</p>
             </div>}
             {selected.status === "PAID" && <div className="mt-4 flex gap-3 rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700">
               <LockKeyhole className="mt-0.5 size-5 shrink-0 text-slate-500" />
-              <p><strong>Paid payroll period is locked for editing.</strong> Payroll Managers may archive and remove it from active lists using the high-risk confirmation above.</p>
+              <p><strong>Paid payroll is terminal and locked.</strong> It cannot be reopened or deleted. An authorized approver may record immutable reversal evidence; Financial Engine reversal posting remains a separate controlled step.</p>
             </div>}
+            {selectedReversed && <div className="mt-4 flex gap-3 rounded-2xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-900">
+              <AlertTriangle className="mt-0.5 size-5 shrink-0" />
+              <p><strong>Reversal evidence recorded.</strong> The source calculation remains immutable. Any future Financial Engine reversal must reference this revision and preserve idempotency.</p>
+            </div>}
+
+            <div className="mt-5 border-t border-slate-100 pt-5">
+              <h3 className="text-sm font-black text-slate-900">Immutable revision history</h3>
+              <div className="mt-3 space-y-2">
+                {selected.revisions.map((revision) => <div key={revision.id} className="grid gap-2 rounded-xl border border-slate-100 bg-slate-50 p-3 text-xs sm:grid-cols-[90px_120px_1fr_auto] sm:items-center">
+                  <p className="font-black">Revision {revision.revisionNumber}</p>
+                  <StatusBadge status={revision.revisionType} />
+                  <p className="text-slate-600">{revision.reason || "Initial finalized calculation"}</p>
+                  <p className="text-slate-500">{revision.createdBy.name} · {revision.createdAt.toLocaleString("en-PH")}</p>
+                </div>)}
+                {!selected.revisions.length && <p className="text-xs text-slate-500">No immutable revision has been finalized yet.</p>}
+              </div>
+            </div>
           </div>
 
           {section === "adjustments" && <PayrollCutoffDeductionsPanel

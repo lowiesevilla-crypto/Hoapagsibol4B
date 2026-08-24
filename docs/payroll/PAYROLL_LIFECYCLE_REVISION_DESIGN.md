@@ -1,12 +1,12 @@
 # Payroll Lifecycle and Revision Contract
 
-Status: **IN_PROGRESS**  
-Task: `PAY-TASK-005`  
+Status: **IMPLEMENTED — PENDING EXACT-HEAD VERIFICATION**
+Task: `PAY-TASK-005`
 Requirements: `PAY-RUN-001`, `PAY-RUN-003`
 
 ## Purpose
 
-This document defines the lifecycle and immutable correction contract that the persistence migration and payroll actions must implement. It deliberately separates the target policy from the legacy `PayrollStatus` enum so incomplete persistence is not represented as completed functionality.
+This document defines the lifecycle and immutable correction contract implemented by the persistence migration and payroll actions. The implementation must remain `IMPLEMENTED`, not `VERIFIED`, until the exact-head acceptance gate passes.
 
 ## Canonical run lifecycle
 
@@ -32,14 +32,14 @@ A payroll run at `FINALIZED` or later must never be corrected by overwriting the
 
 The existing `PayrollArchive` pre-reopen snapshot is retained as compatibility evidence until the first-class revision model is migrated. It is not the final revision persistence design.
 
-## Persistence work still required
+## Implemented persistence contract
 
-1. Expand persisted payroll lifecycle without mutating legacy historical rows incorrectly.
-2. Add first-class `PayrollCalculationRevision` persistence and relations to payroll/payslip snapshots.
-3. Add a correction/reversal record with actor, reason, parent revision and immutable delta evidence.
-4. Update payroll actions so finalized/posted/paid values cannot be mutated directly.
-5. Wire finance posting states to `POSTING`, `POSTED`, and `POST_FAILED` only after the idempotent finance posting contract exists.
-6. Backfill existing calculated draft, finalized and paid periods into safe revision-1 evidence.
+1. Persisted lifecycle expands without rewriting legacy historical payslip values.
+2. `PayrollCalculationRevision` and per-employee revision snapshots retain first-class immutable evidence.
+3. Correction/reversal revisions retain actor, required reason, parent/source revision and immutable delta evidence.
+4. Payroll and attendance actions block direct mutation of finalized/posted/paid values.
+5. `POSTING`, `POSTED`, and `POST_FAILED` are persisted but remain dormant until the idempotent finance posting contract exists.
+6. Existing calculated, finalized, and paid periods are backfilled into deterministic revision-1 evidence.
 
 ## Acceptance criteria
 

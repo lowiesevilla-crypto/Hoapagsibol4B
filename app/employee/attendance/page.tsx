@@ -30,7 +30,7 @@ export default async function EmployeeAttendancePage() {
     prisma.payrollPeriod.findFirst({
       where: {
         tenantId: user.tenantId,
-        status: { in: [PayrollStatus.FINALIZED, PayrollStatus.PAID] },
+        status: { in: [PayrollStatus.FINALIZED, PayrollStatus.POSTING, PayrollStatus.POSTED, PayrollStatus.POST_FAILED, PayrollStatus.PAID] },
         startDate: { lte: today },
         endDate: { gte: today },
         payslips: { some: { employeeId: user.employeeProfile.id } },

@@ -18,6 +18,7 @@ import { permissionsForRoles } from "@/lib/authorization/permissions";
 import { prisma } from "@/lib/db";
 import { adminHomeForRole } from "@/lib/role-access";
 import { setTenantContext } from "@/lib/tenant-context";
+import { getEnabledTenantModules } from "@/lib/tenant";
 
 const COOKIE_NAME = "hoa_session";
 const configuredSecret = process.env.AUTH_SECRET;
@@ -202,14 +203,14 @@ export async function requireUser(requiredRole?: Role) {
   const platform = isPlatformRoleSet(roles);
   const permissions = permissionsForRoles(roles);
   if (!platform) {
-    const entitlements = await prisma.tenantModuleEntitlement.findMany({ where: { tenantId: user.tenantId, enabled: true }, select: { module: true } });
+    const enabledModules = await getEnabledTenantModules(user.tenantId);
     setTenantContext({
       tenantId: user.tenantId,
       role: primaryRoleForRoles(roles, user.role),
       roles,
       permissions,
       platform: false,
-      enabledModules: new Set(entitlements.map((item) => item.module)),
+      enabledModules,
     });
   } else {
     setTenantContext({ tenantId: user.tenantId, role: primaryRoleForRoles(roles, user.role), roles, permissions, platform: true });

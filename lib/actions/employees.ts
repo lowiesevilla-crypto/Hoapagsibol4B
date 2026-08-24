@@ -46,6 +46,8 @@ type PayrollConfigurationInput = {
   fixedDeduction: number;
 };
 
+type CompensationPersistenceClient = Pick<typeof prisma, "employeeCompensation" | "payrollPeriod">;
+
 function legacySalaryType(basis: CompensationBasis) {
   return basis === CompensationBasis.DAILY || basis === CompensationBasis.HOURLY ? "DAILY" as const : "MONTHLY" as const;
 }
@@ -82,7 +84,7 @@ function samePayrollConfiguration(current: {
  * @description Create a new immutable effective-dated payroll configuration version, close the prior version, and reject retroactive changes that overlap finalized/paid payroll history.
  */
 async function persistEmployeeCompensationVersion(
-  tx: Prisma.TransactionClient,
+  tx: CompensationPersistenceClient,
   input: { tenantId: string; employeeId: string; hireDate: Date; actorId: string; configuration: PayrollConfigurationInput },
 ) {
   const { tenantId, employeeId, hireDate, actorId, configuration } = input;
@@ -165,16 +167,13 @@ export async function saveEmployeeAction(formData: FormData) {
   const primaryRole = getPrimaryRole(formData);
   const createEmployeeLogin = formData.get("createEmployeeLogin") === "on";
   const loginEmail = String(formData.get("loginEmail") || email || "").trim().toLowerCase();
-  const loginPassword = String(formData.get("loginPassword") || "ChangeMe123!");
+  const loginPassword = String(formData.get("loginPassword") || "");
 
   if ((createEmployeeLogin || primaryRole !== Role.EMPLOYEE) && !loginEmail) {
     throw new Error("Enter a login email before assigning system access.");
   }
   if (primaryRole !== Role.EMPLOYEE && !createEmployeeLogin && !id) {
     throw new Error("Enable login account before assigning an administrator role.");
-  }
-  if (createEmployeeLogin && loginPassword.length < 8) {
-    throw new Error("Temporary password must be at least 8 characters.");
   }
 
   const employeeHireDate = new Date(`${hireDate}T00:00:00.000Z`);
@@ -205,11 +204,23 @@ export async function saveEmployeeAction(formData: FormData) {
     if (id) {
       const existing = await tx.employeeProfile.findFirst({ where: { id, tenantId: user.tenantId } });
       if (!existing) throw new Error("Employee not found.");
-      await tx.employeeProfile.update({ where: { id }, data: profileValues });
+      if (createEmployeeLogin && !existing.userId && loginPassword.length < 8) {
+        throw new Error("Temporary password must be at least 8 characters when enabling a new login account.");
+      }
+
+      // Resolve/version payroll terms before mutating the profile row. The tenant
+      // boundary validates related employee ownership using the base client; doing
+      // that after locking EmployeeProfile can make an otherwise simple update wait
+      // on its own interactive transaction until the request timeout is reached.
       const version = await persistEmployeeCompensationVersion(tx, {
         tenantId: user.tenantId, employeeId: id, hireDate: employeeHireDate, actorId: user.id, configuration,
       });
+      await tx.employeeProfile.update({ where: { id }, data: profileValues });
       return { employeeId: id, existingUserId: existing.userId, version };
+    }
+
+    if (createEmployeeLogin && loginPassword.length < 8) {
+      throw new Error("Temporary password must be at least 8 characters when enabling a new login account.");
     }
 
     const employee = await tx.employeeProfile.create({ data: profileValues });
@@ -327,7 +338,11 @@ async function upsertEmployeeLogin(
       role: primaryRole,
     };
 
+    // Existing login credentials remain unchanged unless the administrator
+    // explicitly enters a replacement password. This avoids an unnecessary
+    // bcrypt operation on every ordinary employee edit.
     if (password) {
+      if (password.length < 8) throw new Error("Replacement password must be at least 8 characters.");
       data.passwordHash = await hash(password, 12);
     }
 
@@ -337,6 +352,10 @@ async function upsertEmployeeLogin(
     });
 
     return;
+  }
+
+  if (password.length < 8) {
+    throw new Error("Temporary password must be at least 8 characters when enabling a new login account.");
   }
 
   const user = await prisma.user.create({

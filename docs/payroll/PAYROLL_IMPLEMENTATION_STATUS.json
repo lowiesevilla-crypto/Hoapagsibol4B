@@ -245,7 +245,8 @@
         "tests/unit/petty-cash-payroll-integration.test.ts"
       ],
       "evidence": [
-        "PR #166 verified the prior tenant-scoped deduction-maintenance baseline; Petty Cash automatic deduction extension awaits exact-head CI."
+        "PR #166 verified the prior tenant-scoped deduction-maintenance baseline.",
+        "PR #171 implementation head c47416e83bc3c40d6bf317786bab264f7b757a15: HOAHub MySQL CI #1136 and Canva Visual Parity #321 SUCCESS, including Petty Cash integration regressions"
       ],
       "notes": "Tenant-scoped deduction maintenance remains mutable only before finalization. Petty Cash Employee Cash Advance schedules now materialize idempotently into each eligible mutable payroll cutoff before payslip calculation, with existing unpaid loan reservations deducted from the available balance."
     },
@@ -262,9 +263,10 @@
         "tests/unit/payroll-deduction-schedules-controls.test.ts"
       ],
       "evidence": [
-        "Local multi-file Prisma validation/generation, typecheck, and targeted PAY-DED-002 tests PASS"
+        "Local multi-file Prisma validation/generation, typecheck, and targeted PAY-DED-002 tests PASS",
+        "PR #171 implementation head c47416e83bc3c40d6bf317786bab264f7b757a15: HOAHub MySQL CI #1136 and Canva Visual Parity #321 SUCCESS"
       ],
-      "notes": "ONE_TIME, RECURRING and UNTIL_FULLY_PAID schedules support from/to dates, optional installment limits, reasoned pause/resume/end controls, and idempotent materialization into mutable cutoffs. Exact-head CI is still required for VERIFIED."
+      "notes": "ONE_TIME, RECURRING and UNTIL_FULLY_PAID schedules support from/to dates, optional installment limits, reasoned pause/resume/end controls, and idempotent materialization into mutable cutoffs. The implementation head passed exact-head CI; review and merge remain before VERIFIED."
     },
     {
       "id": "PAY-LOAN-001",
@@ -280,7 +282,8 @@
         "tests/unit/petty-cash-payroll-integration.test.ts"
       ],
       "evidence": [
-        "PR #166 verified the prior loan/Financial Engine repayment baseline; Petty Cash automatic schedule extension awaits exact-head CI."
+        "PR #166 verified the prior loan/Financial Engine repayment baseline.",
+        "PR #171 implementation head c47416e83bc3c40d6bf317786bab264f7b757a15: HOAHub MySQL CI #1136 and Canva Visual Parity #321 SUCCESS, including Petty Cash integration regressions"
       ],
       "notes": "Petty Cash Employee Cash Advance creates a linked EmployeeLoan and per-cutoff schedule. Payroll calculation creates the linked PayrollDeduction without exceeding unreserved loan balance; PR #166 remains authoritative for changing loan balance only after the idempotent PAYMENT journal succeeds and for restoring it on a paid-payroll reversal."
     },
@@ -297,9 +300,10 @@
         "tests/unit/payroll-deduction-schedules-controls.test.ts"
       ],
       "evidence": [
-        "Local final-installment cap and unreserved-balance tests PASS"
+        "Local final-installment cap and unreserved-balance tests PASS",
+        "PR #171 implementation head c47416e83bc3c40d6bf317786bab264f7b757a15: HOAHub MySQL CI #1136 and Canva Visual Parity #321 SUCCESS"
       ],
-      "notes": "Generated installments reserve but do not mutate loan balances; the existing Financial Engine PAYMENT remains authoritative. Generic schedules remain compatible with PR #168's petty-cash-owned source. Exact-head CI is still required for VERIFIED."
+      "notes": "Generated installments reserve but do not mutate loan balances; the existing Financial Engine PAYMENT remains authoritative. Generic schedules remain compatible with PR #168's petty-cash-owned source. The implementation head passed exact-head CI; review and merge remain before VERIFIED."
     },
     {
       "id": "PAY-RUN-001",
@@ -400,9 +404,10 @@
         "tests/unit/payroll-deduction-schedules-controls.test.ts"
       ],
       "evidence": [
-        "Local applicability resolution, component-zeroing, snapshot, tenant-scope, and historical-lock tests PASS"
+        "Local applicability resolution, component-zeroing, snapshot, tenant-scope, and historical-lock tests PASS",
+        "PR #171 implementation head c47416e83bc3c40d6bf317786bab264f7b757a15: HOAHub MySQL CI #1136 and Canva Visual Parity #321 SUCCESS"
       ],
-      "notes": "Tenant defaults and employee overrides control applicability only; official rates/formulas remain system rules. No record preserves all-enabled compatibility. Exact-head CI is still required for VERIFIED."
+      "notes": "Tenant defaults and employee overrides control applicability only; official rates/formulas remain system rules. No record preserves all-enabled compatibility. The implementation head passed exact-head CI; review and merge remain before VERIFIED."
     },
     {
       "id": "PAY-FIN-001",
@@ -566,9 +571,10 @@
         "tests/unit/payroll-deduction-schedules-controls.test.ts"
       ],
       "evidence": [
-        "Local six-task navigation and lifecycle source acceptance tests PASS"
+        "Local six-task navigation and lifecycle source acceptance tests PASS",
+        "PR #171 implementation head c47416e83bc3c40d6bf317786bab264f7b757a15: HOAHub MySQL CI #1136 and Canva Visual Parity #321 SUCCESS"
       ],
-      "notes": "The broad tab strip is replaced by six responsive primary tasks and contextual run tools/lifecycle. Existing deep links and non-payroll navigation remain unchanged. Browser/visual exact-head evidence is still required for VERIFIED."
+      "notes": "The broad tab strip is replaced by six responsive primary tasks and contextual run tools/lifecycle. Existing deep links and non-payroll navigation remain unchanged. The implementation head passed browser and visual exact-head gates; review and merge remain before VERIFIED."
     }
   ],
   "tasks": [
@@ -784,7 +790,7 @@
       "title": "Implement deduction schedules, statutory applicability controls, and focused payroll UX",
       "status": "IMPLEMENTED",
       "dependencies": [
-        "Preserve PR #168 petty-cash ownership and avoid PR #167/#169 billing files"
+        "Preserve merged PR #168 Petty Cash ownership and avoid concurrent non-payroll files"
       ],
       "code": [
         "docs/payroll/PAYROLL_REQUIREMENTS.md",

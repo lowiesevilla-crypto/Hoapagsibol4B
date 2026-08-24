@@ -6,15 +6,37 @@ import { inputDate } from "@/lib/utils";
 import { SubmitButton } from "@/components/ui";
 
 type Homeowner = HomeownerProfile & { user: Pick<User, "name" | "email"> };
+type EditableBill = Bill & { homeowner: Homeowner };
 
-export function BillForm({ homeowners, bill }: { homeowners: Homeowner[]; bill?: Bill }) {
+export function BillForm({ homeowners, bill, searchQuery = "" }: { homeowners: Homeowner[]; bill?: EditableBill; searchQuery?: string }) {
   if (!bill) return <IndividualBillingPreviewForm homeowners={homeowners} />;
 
+  const editHomeowners = homeowners.some((homeowner) => homeowner.id === bill.homeownerId)
+    ? homeowners
+    : [bill.homeowner, ...homeowners];
+  const editOptions = editHomeowners.map((homeowner) => ({
+    id: homeowner.id,
+    label: `${homeowner.user.name} - Block ${homeowner.block}, Lot ${homeowner.lot}${homeowner.status === "ACTIVE" ? "" : ` - ${homeowner.status}`}`,
+    search: `${homeowner.user.name} ${homeowner.user.email} ${homeowner.accountNumber ?? ""} block ${homeowner.block} lot ${homeowner.lot} ${homeowner.phase ?? ""} ${homeowner.address ?? ""} account ${homeowner.id} ${homeowner.status}`.toLowerCase(),
+  }));
+
   return <form action={saveBillAction} className="card">
-    {bill && <input type="hidden" name="id" value={bill.id} />}
-    <div className="mb-5"><h2 className="text-lg font-black">Edit bill</h2><p className="text-sm text-slate-500">Adjust an existing billing record without changing the original generation policy.</p></div>
+    <input type="hidden" name="id" value={bill.id} />
+    {searchQuery && <input type="hidden" name="returnQ" value={searchQuery} />}
+    <div className="mb-5"><h2 className="text-lg font-black">Edit bill</h2><p className="text-sm text-slate-500">Adjust an existing billing record without changing the original generation policy. The homeowner currently assigned to this bill is pre-selected below.</p></div>
     <div className="grid gap-4 sm:grid-cols-2">
-      <div className="sm:col-span-2"><label className="label">Homeowner</label><select className="field" name="homeownerId" defaultValue={bill.homeownerId} required><option value="">Select homeowner</option>{homeowners.map((h) => <option key={h.id} value={h.id}>{h.user.name} - Block {h.block}, Lot {h.lot}</option>)}</select></div>
+      <div className="sm:col-span-2">
+        <SearchableHomeownerSelect
+          name="homeownerId"
+          label="Homeowner"
+          homeowners={editOptions}
+          defaultValue={bill.homeownerId}
+          required
+          placeholder="Search all tenant homeowners by name, account, block, lot or email"
+          searchEndpoint="/api/admin/billing/homeowners/search"
+        />
+        <p className="mt-2 text-xs text-slate-500">Current bill owner: <strong className="text-slate-700">{bill.homeowner.user.name}</strong> · Block {bill.homeowner.block}, Lot {bill.homeowner.lot}{bill.homeowner.accountNumber ? ` · ${bill.homeowner.accountNumber}` : ""}. Search includes active and inactive tenant homeowner records so migrated/opening-balance bills remain editable.</p>
+      </div>
       <div><label className="label">Billing month</label><input className="field" name="billingMonth" type="month" defaultValue={inputDate(bill.billingMonth).slice(0, 7)} required /></div>
       <div><label className="label">Due date</label><input className="field" name="dueDate" type="date" defaultValue={inputDate(bill.dueDate)} required /></div>
       <div><label className="label">Base amount</label><input className="field" name="amount" type="number" min="0.01" step="0.01" defaultValue={String(bill.amount)} required /></div>

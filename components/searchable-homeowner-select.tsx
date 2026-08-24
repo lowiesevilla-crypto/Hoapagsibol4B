@@ -32,6 +32,7 @@ export function SearchableHomeownerSelect({
   searchEndpoint?: string;
 }) {
   const [query, setQuery] = useState("");
+  const [selectedId, setSelectedId] = useState(defaultValue);
   const [remoteMatches, setRemoteMatches] = useState<SearchableHomeownerOption[]>([]);
   const [remoteTotal, setRemoteTotal] = useState<number | null>(null);
   const [remoteReady, setRemoteReady] = useState(false);
@@ -86,7 +87,12 @@ export function SearchableHomeownerSelect({
     };
   }, [query, searchEndpoint]);
 
-  const matches = remoteSearchActive && remoteReady ? remoteMatches : localMatches;
+  const matches = useMemo(() => {
+    const base = remoteSearchActive && remoteReady ? remoteMatches : localMatches;
+    if (!selectedId || base.some((item) => item.id === selectedId)) return base;
+    const selected = homeowners.find((item) => item.id === selectedId);
+    return selected ? [selected, ...base] : base;
+  }, [homeowners, localMatches, remoteMatches, remoteReady, remoteSearchActive, selectedId]);
 
   return <div>
     <label className="label">{label}</label>
@@ -94,12 +100,12 @@ export function SearchableHomeownerSelect({
       <Search className="pointer-events-none absolute left-3.5 top-3 size-4 text-slate-400" />
       <input className="field pl-10" type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder={placeholder} autoComplete="off" />
     </div>
-    <select className="field" name={name} defaultValue={defaultValue} required={required}>
+    <select className="field" name={name} value={selectedId} onChange={(event) => setSelectedId(event.target.value)} required={required}>
       <option value="">Select homeowner</option>
       {matches.map((homeowner) => <option key={homeowner.id} value={homeowner.id}>{homeowner.label}</option>)}
     </select>
-    {loading && <p className="mt-1 text-xs font-semibold text-slate-500">Searching all homeowners in this tenant...</p>}
-    {!loading && remoteSearchActive && remoteReady && remoteTotal !== null && remoteTotal > matches.length && <p className="mt-1 text-xs font-semibold text-slate-500">Showing {matches.length} of {remoteTotal} matches. Keep typing to narrow the result.</p>}
+    {loading && <p className="mt-1 text-xs font-semibold text-slate-500">Searching the complete homeowner directory for this tenant...</p>}
+    {!loading && remoteSearchActive && remoteReady && remoteTotal !== null && remoteTotal > remoteMatches.length && <p className="mt-1 text-xs font-semibold text-slate-500">Found {remoteTotal} tenant matches. Showing the first {remoteMatches.length}; keep typing to narrow the result.</p>}
     {!loading && !matches.length && <p className="mt-1 text-xs font-bold text-rose-700">No homeowner found.</p>}
   </div>;
 }

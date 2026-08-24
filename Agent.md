@@ -79,6 +79,7 @@ Employee portal is separate from Tenant Admin payroll authority. Employees may a
 - `/admin/receipts`, `/admin/collections` — receipt and Other Collection/bond authority.
 - `/admin/rentals` — Rental Management.
 - `/admin/expenses` — expenses/disbursements.
+- `/admin/petty-cash` — separately entitled Petty Cash Voucher register/create/print workflow when included in the tenant plan.
 - `/admin/reports`, `/admin/reports/dashboard` — finance reports.
 - `/admin/data`, `/admin/data/migrations` — bulk data and opening-balance migration.
 - `/admin/documents` — resident document service, request/approval/issue/archive workflows.
@@ -133,6 +134,23 @@ Homeowner rental asset reservation remains deferred unless a later merged change
 - `/admin/reports` supports tenant From/To date ranges and accounting for dues, credits, other income, expenses/payroll, cash movement, receivables, bonds, rental deposits, and employee loans.
 - PDF/DOCX/CSV exports must use the same tenant accounting authority.
 - Detailed payment-rail reporting (Admin Cash, PayMongo QR Ph/GCash/Maya, etc.) is still deferred; never infer an authoritative provider rail from a generic method field.
+
+## Petty Cash Voucher Candidate
+
+Implementation branch: `feat/petty-cash-voucher-urgent-fixes-20260824`. This section describes that candidate and becomes production baseline only after exact-head verification, merge, deployment, and UAT confirmation.
+
+- Commercial feature code is `PETTY_CASH_VOUCHER`. Platform Plan create/edit has a Petty Cash Voucher checkbox; tenant route/navigation access requires the Billing module, `EXPENSES_MANAGE`, and the feature entitlement. Direct route access must fail closed when not entitled.
+- Tenant `ExpenseCategory` is the Particular authority. `Other` persists/reactivates the entered Particular as a reusable tenant expense type.
+- Payee types are Employee, Homeowner, Renter, Contractor, and Other. Directory lookups are tenant-scoped; saved address populates automatically, while a missing address may be typed. `Received By` follows the resolved payee name.
+- Voucher identity is tenant/year sequenced as `PCV-YYYY-######`; vouchers support multiple Particular/Amount rows and a computed total.
+- Approved By may be the authenticated Admin or an active tenant Organization Officer. Homeowner-facing Organization/Community pages must never expose stored officer signature images.
+- Each voucher line posts an ordinary tenant-scoped `Expense` in the same transaction, linked by voucher/reference number. Petty Cash must not create a competing Financial Engine path for payroll repayment.
+- `Employee Cash Advance` requires Payroll + Loans, an active employee, and configured deduction-per-cutoff. Voucher creation creates the linked `EmployeeLoan` and stores its schedule.
+- `lib/petty-cash/payroll-integration.ts` materializes the schedule before payroll reads assigned deductions. Each voucher uses a distinct Payroll Deduction Type so multiple advances can coexist. Automatic amount is the lesser of configured deduction and remaining unreserved loan balance; unpaid linked deductions reserve balance, the final deduction may be smaller, and no deduction is created when available balance is zero.
+- The generated Payroll Deduction retains `employeeLoanId`. PR #166's idempotent Financial Engine PAYMENT processing remains authoritative for increasing `amountPaid`, decreasing/closing Employee Loan balance, journal/outbox behavior, and reversal restoration. Never mutate loan balance when merely calculating a Petty Cash schedule.
+- Because the candidate extends previously verified `PAY-DED-001` and `PAY-LOAN-001`, those requirement statuses are `IMPLEMENTED` until this new exact head has linked acceptance evidence; do not inherit PR #166 VERIFIED evidence for the changed behavior.
+- Petty Cash Voucher print is the compact half-A4/A5 voucher format. Receipt / Acknowledgement Receipt is a separate print contract: browser printing uses **A4 portrait paper** with the Receipt/AR content rendered at a **half-A4 portrait footprint**, while downloaded PDF remains **full A4 portrait**. Do not set Receipt/AR `@page` to A5 and do not generate an A5 Receipt/AR PDF.
+- Detailed implementation status and release gate are in `docs/petty-cash/PETTY_CASH_VOUCHER_IMPLEMENTATION.md`.
 
 ## PayMongo Homeowner Collections
 
@@ -237,7 +255,7 @@ Payroll, salary, deductions, loans/cash advances, corrections, and payslips are 
 - `LEGACY_COMPATIBILITY_POLICY` in `lib/services/payroll.ts` exists only to preserve pre-existing behavior while effective-dated policies are being implemented. Its values are not an assertion of current Philippine statutory law.
 - Effective-dated employee compensation/pay-frequency/attendance policy persistence passed exact-head PR #164 MySQL CI #1108 and Canva Visual Parity #298 and is `VERIFIED` in the payroll registry.
 - Expanded lifecycle/corrections passed exact-head PR #165 HOAHub MySQL CI #1111 and Canva Visual Parity #300 at `1743245f3d676f50fe026cf6831e9663ab8a666b`, merged to `main` at `8b6f07f2b9139ee89d104414a3e17e94d6c1f366`, and remains `VERIFIED`.
-- PR #166 on `codex/payroll-completion-20260824` completes `PAY-TASK-006`, `PAY-TASK-007`, `PAY-TASK-009`, and remaining acceptance coverage. The implementation head `f596c850a113bcd73d50d5a71116e9951685ffdb` passed HOAHub MySQL CI #1114 and Canva Visual Parity #302; the payroll registry is `VERIFIED`. Production availability still requires merge and separate deployment confirmation.
+- PR #166 (`Complete payroll statutory, finance, and leave workflows`) merged to `main` at `57a10d5f17dff7e98474997178852162ca6edf9a`; its implementation head `f596c850a113bcd73d50d5a71116e9951685ffdb` passed HOAHub MySQL CI #1114 and Canva Visual Parity #302. The PR #166 payroll baseline is `VERIFIED`. The Petty Cash candidate subsequently extends `PAY-DED-001` and `PAY-LOAN-001`, so only those changed requirements are back to `IMPLEMENTED` until the Petty Cash exact head is verified.
 
 ## AI Governance
 
@@ -316,7 +334,7 @@ Implementation task: `PAY-TASK-005`. PR #165 is merged to `main` at `8b6f07f2b91
 
 ### Statutory Payroll Rules
 
-Implementation task: `PAY-TASK-006`. Status: `VERIFIED` by PR #166 HOAHub MySQL CI #1114 and Canva Visual Parity #302 at `f596c850a113bcd73d50d5a71116e9951685ffdb`.
+Implementation task: `PAY-TASK-006`. Status: `VERIFIED` by PR #166 HOAHub MySQL CI #1114 and Canva Visual Parity #302 at `f596c850a113bcd73d50d5a71116e9951685ffdb`; PR #166 merged to `main` at `57a10d5f17dff7e98474997178852162ca6edf9a`.
 
 - `PayrollStatutoryRuleSet` is effective-dated legal evidence selected by jurisdiction and payroll pay date.
 - The first candidate rule set is `PH_STATUTORY_2025_2026_V1`, verified as of 2026-08-24 against official DOLE, BIR, SSS, PhilHealth, and Pag-IBIG publications recorded in its source snapshot.
@@ -325,7 +343,7 @@ Implementation task: `PAY-TASK-006`. Status: `VERIFIED` by PR #166 HOAHub MySQL 
 
 ### Financial Engine Posting
 
-Implementation task: `PAY-TASK-007`. Status: `VERIFIED` by PR #166 HOAHub MySQL CI #1114 and Canva Visual Parity #302 at `f596c850a113bcd73d50d5a71116e9951685ffdb`.
+Implementation task: `PAY-TASK-007`. Status: `VERIFIED` by PR #166 HOAHub MySQL CI #1114 and Canva Visual Parity #302 at `f596c850a113bcd73d50d5a71116e9951685ffdb`; PR #166 merged to `main` at `57a10d5f17dff7e98474997178852162ca6edf9a`.
 
 - Posting identity is authenticated tenant + immutable payroll revision + event (`POST`, `PAYMENT`, or `REVERSAL`).
 - `PayrollPostingOutbox`, `PayrollFinancialPosting`, and `FinancialJournalEntry` preserve durable retry, idempotency, reconciliation, error, and source-revision evidence.
@@ -334,7 +352,7 @@ Implementation task: `PAY-TASK-007`. Status: `VERIFIED` by PR #166 HOAHub MySQL 
 
 ### Employee Leave
 
-Implementation task: `PAY-TASK-009`. Status: `VERIFIED` by PR #166 HOAHub MySQL CI #1114 and Canva Visual Parity #302 at `f596c850a113bcd73d50d5a71116e9951685ffdb`.
+Implementation task: `PAY-TASK-009`. Status: `VERIFIED` by PR #166 HOAHub MySQL CI #1114 and Canva Visual Parity #302 at `f596c850a113bcd73d50d5a71116e9951685ffdb`; PR #166 merged to `main` at `57a10d5f17dff7e98474997178852162ca6edf9a`.
 
 - `LeaveType`, `LeaveRequest`, `EmployeeLeaveBalance`, and `LeaveBalanceTransaction` are tenant-scoped payroll data.
 - Employees submit/cancel only their own requests. Payroll Manager, HR Admin, or System Administrator review remains server-authoritative.

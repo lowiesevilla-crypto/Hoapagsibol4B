@@ -250,6 +250,23 @@
       "notes": "Tenant-scoped deduction maintenance remains mutable only before finalization. Petty Cash Employee Cash Advance schedules now materialize idempotently into each eligible mutable payroll cutoff before payslip calculation, with existing unpaid loan reservations deducted from the available balance."
     },
     {
+      "id": "PAY-DED-002",
+      "title": "Effective-dated scheduled and one-time deductions",
+      "status": "IMPLEMENTED",
+      "code": [
+        "prisma/schema.prisma",
+        "prisma/migrations/20260824213000_payroll_schedules_statutory_controls/migration.sql",
+        "lib/services/payroll-deduction-schedules.ts",
+        "lib/actions/payroll.ts",
+        "components/payroll-deduction-schedules-panel.tsx",
+        "tests/unit/payroll-deduction-schedules-controls.test.ts"
+      ],
+      "evidence": [
+        "Local multi-file Prisma validation/generation, typecheck, and targeted PAY-DED-002 tests PASS"
+      ],
+      "notes": "ONE_TIME, RECURRING and UNTIL_FULLY_PAID schedules support from/to dates, optional installment limits, reasoned pause/resume/end controls, and idempotent materialization into mutable cutoffs. Exact-head CI is still required for VERIFIED."
+    },
+    {
       "id": "PAY-LOAN-001",
       "title": "Loan/cash advance repayment integrity",
       "status": "IMPLEMENTED",
@@ -266,6 +283,23 @@
         "PR #166 verified the prior loan/Financial Engine repayment baseline; Petty Cash automatic schedule extension awaits exact-head CI."
       ],
       "notes": "Petty Cash Employee Cash Advance creates a linked EmployeeLoan and per-cutoff schedule. Payroll calculation creates the linked PayrollDeduction without exceeding unreserved loan balance; PR #166 remains authoritative for changing loan balance only after the idempotent PAYMENT journal succeeds and for restoring it on a paid-payroll reversal."
+    },
+    {
+      "id": "PAY-LOAN-002",
+      "title": "Automatic loan/cash-advance repayment schedules",
+      "status": "IMPLEMENTED",
+      "code": [
+        "prisma/schema.prisma",
+        "lib/services/payroll-deduction-schedules.ts",
+        "lib/actions/payroll.ts",
+        "components/payroll-deduction-schedules-panel.tsx",
+        "app/employee/loans/page.tsx",
+        "tests/unit/payroll-deduction-schedules-controls.test.ts"
+      ],
+      "evidence": [
+        "Local final-installment cap and unreserved-balance tests PASS"
+      ],
+      "notes": "Generated installments reserve but do not mutate loan balances; the existing Financial Engine PAYMENT remains authoritative. Generic schedules remain compatible with PR #168's petty-cash-owned source. Exact-head CI is still required for VERIFIED."
     },
     {
       "id": "PAY-RUN-001",
@@ -351,6 +385,24 @@
         "Local statutory snapshot and boundary tests PASS on completion candidate"
       ],
       "notes": "Each period, revision and payslip retains rule-set identity, content hash and immutable statutory calculation evidence so later rule changes do not rewrite payroll history."
+    },
+    {
+      "id": "PAY-STAT-003",
+      "title": "Effective-dated statutory applicability controls",
+      "status": "IMPLEMENTED",
+      "code": [
+        "prisma/schema.prisma",
+        "prisma/migrations/20260824213000_payroll_schedules_statutory_controls/migration.sql",
+        "lib/services/payroll-statutory.ts",
+        "lib/actions/payroll.ts",
+        "components/payroll-statutory-controls-panel.tsx",
+        "app/employee/payslips/[id]/page.tsx",
+        "tests/unit/payroll-deduction-schedules-controls.test.ts"
+      ],
+      "evidence": [
+        "Local applicability resolution, component-zeroing, snapshot, tenant-scope, and historical-lock tests PASS"
+      ],
+      "notes": "Tenant defaults and employee overrides control applicability only; official rates/formulas remain system rules. No record preserves all-enabled compatibility. Exact-head CI is still required for VERIFIED."
     },
     {
       "id": "PAY-FIN-001",
@@ -499,6 +551,24 @@
         "Local leave date, eligibility, balance, immutable-evidence and workflow tests PASS on completion candidate"
       ],
       "notes": "Tenant-configurable leave types, balances, requests, approval ledger and attendance effects are implemented. Seeded statutory types retain official source snapshots and protected legal formulas cannot be mutated or deactivated."
+    },
+    {
+      "id": "PAY-UX-001",
+      "title": "Task-based payroll administration and employee visibility",
+      "status": "IMPLEMENTED",
+      "code": [
+        "app/admin/payroll/page.tsx",
+        "app/admin/payroll/deductions/page.tsx",
+        "components/payroll-deduction-schedules-panel.tsx",
+        "components/payroll-statutory-controls-panel.tsx",
+        "app/employee/loans/page.tsx",
+        "app/employee/payslips/[id]/page.tsx",
+        "tests/unit/payroll-deduction-schedules-controls.test.ts"
+      ],
+      "evidence": [
+        "Local six-task navigation and lifecycle source acceptance tests PASS"
+      ],
+      "notes": "The broad tab strip is replaced by six responsive primary tasks and contextual run tools/lifecycle. Existing deep links and non-payroll navigation remain unchanged. Browser/visual exact-head evidence is still required for VERIFIED."
     }
   ],
   "tasks": [
@@ -701,6 +771,37 @@
         "tests/unit/payroll-report.test.ts",
         "tests/unit/payroll-report-security.test.ts"
       ]
+    },
+    {
+      "id": "PAY-TASK-011",
+      "requirementIds": [
+        "PAY-DED-002",
+        "PAY-LOAN-002",
+        "PAY-STAT-003",
+        "PAY-UX-001",
+        "PAY-SEC-001"
+      ],
+      "title": "Implement deduction schedules, statutory applicability controls, and focused payroll UX",
+      "status": "IMPLEMENTED",
+      "dependencies": [
+        "Preserve PR #168 petty-cash ownership and avoid PR #167/#169 billing files"
+      ],
+      "code": [
+        "docs/payroll/PAYROLL_REQUIREMENTS.md",
+        "docs/payroll/PAYROLL_IMPLEMENTATION_STATUS.json",
+        "prisma/schema.prisma",
+        "prisma/migrations/20260824213000_payroll_schedules_statutory_controls/migration.sql",
+        "lib/services/payroll-deduction-schedules.ts",
+        "lib/services/payroll-statutory.ts",
+        "lib/actions/payroll.ts",
+        "app/admin/payroll/page.tsx",
+        "components/payroll-deduction-schedules-panel.tsx",
+        "components/payroll-statutory-controls-panel.tsx",
+        "app/employee/loans/page.tsx",
+        "app/employee/payslips/[id]/page.tsx",
+        "tests/unit/payroll-deduction-schedules-controls.test.ts",
+        "docs/Pagsibol_HOA_Portal_User_Manual.md"
+      ]
     }
   ],
   "functions": [
@@ -742,7 +843,10 @@
         "PAY-COMP-002",
         "PAY-COMP-003",
         "PAY-DED-001",
-        "PAY-LOAN-001"
+        "PAY-DED-002",
+        "PAY-LOAN-001",
+        "PAY-LOAN-002",
+        "PAY-STAT-003"
       ],
       "status": "IMPLEMENTED"
     },
@@ -761,6 +865,34 @@
       "requirementIds": [
         "PAY-DED-001",
         "PAY-LOAN-001"
+      ],
+      "status": "IMPLEMENTED"
+    },
+    {
+      "path": "lib/services/payroll-deduction-schedules.ts",
+      "name": "isDeductionScheduleEligible",
+      "requirementIds": [
+        "PAY-DED-002",
+        "PAY-LOAN-002"
+      ],
+      "status": "IMPLEMENTED"
+    },
+    {
+      "path": "lib/services/payroll-deduction-schedules.ts",
+      "name": "scheduledDeductionAmount",
+      "requirementIds": [
+        "PAY-LOAN-001",
+        "PAY-LOAN-002"
+      ],
+      "status": "IMPLEMENTED"
+    },
+    {
+      "path": "lib/services/payroll-deduction-schedules.ts",
+      "name": "materializePayrollDeductionSchedules",
+      "requirementIds": [
+        "PAY-SEC-001",
+        "PAY-DED-002",
+        "PAY-LOAN-002"
       ],
       "status": "IMPLEMENTED"
     },
@@ -877,6 +1009,54 @@
         "PAY-SEC-001",
         "PAY-DED-001",
         "PAY-LOAN-001"
+      ],
+      "status": "IMPLEMENTED"
+    },
+    {
+      "path": "lib/actions/payroll.ts",
+      "name": "savePayrollDeductionScheduleAction",
+      "requirementIds": [
+        "PAY-SEC-001",
+        "PAY-DED-002",
+        "PAY-LOAN-002"
+      ],
+      "status": "IMPLEMENTED"
+    },
+    {
+      "path": "lib/actions/payroll.ts",
+      "name": "changePayrollDeductionScheduleStatusAction",
+      "requirementIds": [
+        "PAY-SEC-001",
+        "PAY-DED-002",
+        "PAY-LOAN-002"
+      ],
+      "status": "IMPLEMENTED"
+    },
+    {
+      "path": "lib/actions/payroll.ts",
+      "name": "savePayrollStatutoryApplicabilityAction",
+      "requirementIds": [
+        "PAY-SEC-001",
+        "PAY-STAT-003"
+      ],
+      "status": "IMPLEMENTED"
+    },
+    {
+      "path": "lib/actions/payroll.ts",
+      "name": "refreshMutablePayrollPeriods",
+      "requirementIds": [
+        "PAY-SEC-001",
+        "PAY-DED-002",
+        "PAY-LOAN-002",
+        "PAY-STAT-003"
+      ],
+      "status": "IMPLEMENTED"
+    },
+    {
+      "path": "lib/actions/payroll.ts",
+      "name": "statutoryApplicabilityFlags",
+      "requirementIds": [
+        "PAY-STAT-003"
       ],
       "status": "IMPLEMENTED"
     },
@@ -1225,10 +1405,19 @@
     },
     {
       "path": "lib/services/payroll-statutory.ts",
+      "name": "resolveStatutoryApplicability",
+      "requirementIds": [
+        "PAY-STAT-003"
+      ],
+      "status": "IMPLEMENTED"
+    },
+    {
+      "path": "lib/services/payroll-statutory.ts",
       "name": "calculateStatutoryContributions",
       "requirementIds": [
         "PAY-STAT-001",
-        "PAY-STAT-002"
+        "PAY-STAT-002",
+        "PAY-STAT-003"
       ],
       "status": "IMPLEMENTED"
     },
@@ -1388,6 +1577,43 @@
       "requirementIds": [
         "PAY-EMP-005",
         "PAY-SEC-001"
+      ],
+      "status": "IMPLEMENTED"
+    },
+    {
+      "path": "components/payroll-deduction-schedules-panel.tsx",
+      "name": "PayrollDeductionSchedulesPanel",
+      "requirementIds": [
+        "PAY-DED-002",
+        "PAY-LOAN-002",
+        "PAY-UX-001"
+      ],
+      "status": "IMPLEMENTED"
+    },
+    {
+      "path": "components/payroll-statutory-controls-panel.tsx",
+      "name": "PayrollStatutoryControlsPanel",
+      "requirementIds": [
+        "PAY-STAT-003",
+        "PAY-UX-001"
+      ],
+      "status": "IMPLEMENTED"
+    },
+    {
+      "path": "app/admin/payroll/page.tsx",
+      "name": "PayrollRunStepper",
+      "requirementIds": [
+        "PAY-RUN-001",
+        "PAY-UX-001"
+      ],
+      "status": "IMPLEMENTED"
+    },
+    {
+      "path": "app/employee/payslips/[id]/page.tsx",
+      "name": "statutoryApplicabilityFromSnapshot",
+      "requirementIds": [
+        "PAY-STAT-003",
+        "PAY-EMP-001"
       ],
       "status": "IMPLEMENTED"
     }

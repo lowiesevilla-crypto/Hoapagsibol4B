@@ -14,6 +14,16 @@ export default async function EmployeeLoansPage() {
   const loans = await prisma.employeeLoan.findMany({
     where: { tenantId: user.tenantId, employeeId: user.employeeProfile.id },
     include: {
+      deductionSchedules: {
+        include: {
+          deductionType: true,
+          payrollDeductions: {
+            include: { payroll: { select: { status: true, startDate: true, endDate: true, payDate: true } } },
+            orderBy: { createdAt: "desc" },
+          },
+        },
+        orderBy: [{ status: "asc" }, { effectiveFrom: "desc" }],
+      },
       payrollDeductions: {
         include: { payroll: { select: { status: true, startDate: true, endDate: true, payDate: true } } },
         orderBy: { createdAt: "desc" },
@@ -101,6 +111,24 @@ export default async function EmployeeLoansPage() {
             <Metric label="Other/manual payments" value={money(Math.max(0, Number(loan.amountPaid) - paidPayrollDeductions))} />
           </div>
 
+          {loan.deductionSchedules.length > 0 && <div className="mt-4 rounded-2xl border border-pine-100 bg-pine-50/40 p-4">
+            <h3 className="font-black text-pine-900">Repayment plan</h3>
+            <div className="mt-3 space-y-3">
+              {loan.deductionSchedules.map((schedule) => {
+                const nextDeduction = schedule.payrollDeductions
+                  .filter((item) => item.payroll.status !== PayrollStatus.PAID)
+                  .sort((a, b) => a.payroll.payDate.getTime() - b.payroll.payDate.getTime())[0];
+                return <div key={schedule.id} className="rounded-xl bg-white p-3 text-sm">
+                  <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                    <div><p className="font-black">{schedule.deductionType.name} · {scheduleModeLabel(schedule.mode)}</p><p className="text-xs text-slate-500">{money(schedule.amountPerCutoff)} per cutoff · from {shortDate(schedule.effectiveFrom)}{schedule.effectiveTo ? ` to ${shortDate(schedule.effectiveTo)}` : " until completed"}{schedule.installmentLimit ? ` · up to ${schedule.installmentLimit} installments` : ""}</p></div>
+                    <StatusBadge status={schedule.status} />
+                  </div>
+                  <p className="mt-2 text-xs text-slate-600"><strong>Next eligible deduction:</strong> {nextDeduction ? `${money(nextDeduction.amount)} on ${shortDate(nextDeduction.payroll.payDate)} (${nextDeduction.payroll.status.replaceAll("_", " ")})` : schedule.status === "ACTIVE" ? "Will be created in the next eligible open payroll cutoff." : "No future deduction while this plan is not active."}</p>
+                </div>;
+              })}
+            </div>
+          </div>}
+
           {loan.payrollDeductions.length > 0 && <details className="mt-4 rounded-2xl border border-slate-100 p-4">
             <summary className="cursor-pointer font-bold">Payroll deduction history</summary>
             <div className="mt-3 space-y-2">
@@ -120,4 +148,8 @@ export default async function EmployeeLoansPage() {
 
 function Metric({ label, value, strong = false }: { label: string; value: string; strong?: boolean }) {
   return <div><p className="text-xs font-black uppercase tracking-wider text-slate-500">{label}</p><p className={`mt-1 ${strong ? "text-lg font-black text-pine-700" : "font-bold text-ink"}`}>{value}</p></div>;
+}
+
+function scheduleModeLabel(mode: string) {
+  return ({ ONE_TIME: "One-time", RECURRING: "Recurring", UNTIL_FULLY_PAID: "Until fully paid" } as Record<string, string>)[mode] ?? mode.replaceAll("_", " ");
 }

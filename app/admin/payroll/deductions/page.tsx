@@ -1,2 +1,2 @@
 import { redirect } from "next/navigation";
-export default function Page() { redirect("/admin/payroll?section=loans"); }
+export default function Page() { redirect("/admin/payroll?section=deductions"); }

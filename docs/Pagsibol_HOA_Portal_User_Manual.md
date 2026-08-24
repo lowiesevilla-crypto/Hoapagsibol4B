@@ -183,6 +183,7 @@ Authorized payroll users can manage employee profiles, effective-dated compensat
 
 Payroll rules:
 
+- The payroll workspace has six primary tasks: **Overview**, **Payroll runs**, **Deductions & loans**, **Government contributions**, **Reports**, and **Settings**. Inside a selected payroll run, follow **Setup → Calculate → Review → Approve → Post → Pay**.
 - Compensation basis, pay frequency, attendance policy, rate, standard workdays/hours, allowance, and fixed deduction are effective-dated. Saving changed payroll terms creates a new version instead of rewriting history.
 - Generate/recalculate payroll to reach **CALCULATED**. Only Draft/Calculated working data may be edited; destructive deletion is Draft-only.
 - Finalize only after review. Finalization creates an immutable numbered revision and locks ordinary attendance/deduction changes.
@@ -191,6 +192,7 @@ Payroll rules:
 - After the accrual reaches **POSTED**, select **Record net-pay disbursement** to create the cash journal, apply employee-loan deductions once, and reach **PAID**.
 - Paid payroll remains locked. Reversal requires reasoned immutable reversal evidence and a separate authorized financial-reversal post.
 - Statutory deductions/premiums are resolved from the effective Philippine rule set and shown as SSS, PhilHealth, Pag-IBIG, withholding tax, and employer contributions. The rule code/snapshot remains attached to payroll history.
+- Under **Government contributions**, an authorized Payroll Manager/System Administrator can save a prospective tenant default or employee override for the statutory master switch, SSS, PhilHealth, Pag-IBIG, and withholding tax. Select an effective date and enter the reason. These switches control applicability only; official rates/formulas cannot be edited here. Changes that would overlap finalized, posted, or paid payroll are rejected.
 - The Financial Engine reconciliation section shows POST/PAYMENT/REVERSAL status, idempotency key, errors, and journal lines.
 
 Deduction types:
@@ -199,6 +201,18 @@ Deduction types:
 - Edit existing deduction type.
 - Activate or deactivate deduction type.
 - Configure deduction amount and whether it applies to daily or monthly employees.
+
+Deduction and loan schedules:
+
+1. Open **Deductions & loans**.
+2. Create the loan/cash-advance receivable first when the deduction is a repayment.
+3. Select the employee and deduction type, then choose **One-time deduction**, **Recurring deduction**, or **Loan · until fully paid**.
+4. Enter the amount per cutoff and **From** date. **To** date and installment count are optional for recurring plans.
+5. Link an open employee loan for an until-fully-paid plan and enter the payroll reason.
+6. Save the schedule. Eligible Draft/Calculated cutoffs receive the deduction automatically and recalculation does not duplicate it.
+7. Use **Pause**, **Resume**, or **End** with a reason. This removes/recreates only mutable cutoff assignments; finalized and paid evidence remains unchanged.
+
+The final loan installment is capped at the available balance after other unpaid reservations. Creating a schedule does not reduce the loan balance; the balance changes only when the payroll payment journal posts successfully.
 
 Payslips are printable from payroll records.
 
@@ -220,7 +234,7 @@ Employees open **Leave requests** to select an active leave type, choose dates, 
 - Payroll Manager/System Administrator controls payroll configuration and approvals.
 - Finance Approver participates in payroll financial approval/posting according to assigned Payroll Access.
 - HR Admin can configure/review leave according to assigned leave authority.
-- Employee login is owner-scoped to personal Time, timelogs/corrections, overtime, leave, paid payslips, and loans/cash advances.
+- Employee login is owner-scoped to personal Time, timelogs/corrections, overtime, leave, paid payslips, and loans/cash advances. The loan page shows the employee's repayment mode, From/To window, amount per cutoff, next generated deduction, and history. A paid payslip shows whether each government-deduction component was applied for that cutoff. Employees cannot change payroll schedules or statutory controls.
 
 ## 12. Expenses
 

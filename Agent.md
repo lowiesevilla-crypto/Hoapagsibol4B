@@ -260,6 +260,12 @@ Payroll, salary, deductions, loans/cash advances, corrections, and payslips are 
 - `PAY-TASK-011` merged in PR #171 to `main` at `28a45e8322e74590859e42093b0db08717ec86ae`. It adds effective-dated `ONE_TIME`, `RECURRING`, and `UNTIL_FULLY_PAID` generic deduction schedules; loan-installment materialization; tenant/employee statutory applicability versions; a six-task admin payroll workspace; and employee schedule/statutory visibility. Its implementation head passed exact-head HOAHub MySQL CI #1136 and Canva Visual Parity #321, so `PAY-DED-001`, `PAY-DED-002`, `PAY-LOAN-001`, `PAY-LOAN-002`, `PAY-STAT-003`, `PAY-UX-001`, and `PAY-TASK-011` are `VERIFIED`. Separate deployment confirmation is still required; do not report the PR #171 scope as production merely because the earlier payroll baseline is deployed.
 - PR #167's billing-search/homeowner-selection work and PR #170's receipt browser-print work are merged and remain outside payroll scope.
 
+## Current Billing and Petty Cash Hotfix Evidence
+
+- Billing Edit Save month validation is fixed in PR #176. Exact implementation head `7d7eb1ce9e3b2edacd84aed2348e2401ea4195be` passed HOAHub MySQL CI #1150 and Canva Visual Parity #330, then merged to `main` at `230d3d09f268fd8aeb201898597ac0c08c6affe8`. The server now accepts the `YYYY-MM` value submitted by the HTML month control while rejecting impossible months. See `docs/billing/BILLING_EDIT_SAVE_MONTH_VALIDATION_HOTFIX.md`.
+- Petty Cash Voucher edit prefill and Enter-to-select behavior is fixed in PR #175. Refreshed exact head `a4ffe36f182f069f3e2c0fdca41f010fbbdf0bea` passed HOAHub MySQL CI #1152 and Canva Visual Parity #331, then merged to `main` at `70eda4af51759b491a0ab2380b03a8fc1c76e7c4`. See `docs/petty-cash/PETTY_CASH_VOUCHER_EDIT_PREFILL_HOTFIX.md`.
+- These repository changes are merged and verified by exact-head CI. Do not report them as Hostinger production-deployed until the managed deployment/release marker and authenticated production UAT confirm the merged `main` commit.
+
 ## AI Governance
 
 AI is commercially/governance/permission controlled. Staff Copilot is tenant scoped and permission scoped; homeowner AI may use approved knowledge plus only that homeowner's authorized data. AI may draft/explain but is not final approval, publication, payment, or grievance authority unless a separately authorized workflow explicitly exists.

@@ -73,14 +73,13 @@ export function EventMobileCard({ href, title, description, type, dateLabel, tim
   );
 }
 
-export function OfficerMobileCard({ name, position, committee, contact, email, photoUrl, signatureUrl }: { name: string; position: string; committee?: string | null; contact?: string | null; email?: string | null; photoUrl?: string | null; signatureUrl?: string | null }) {
+export function OfficerMobileCard({ name, position, committee, contact, email, photoUrl }: { name: string; position: string; committee?: string | null; contact?: string | null; email?: string | null; photoUrl?: string | null }) {
   return (
     <article className="rounded-2xl border border-slate-100 bg-white p-4 text-center shadow-[0_4px_18px_rgba(15,23,42,.04)]">
       <div className="mx-auto grid size-20 place-items-center overflow-hidden rounded-full bg-pine-50 text-2xl font-black text-pine-700"><ContentImage src={photoUrl} alt={name} className="size-full object-cover" fallbackText={name.slice(0, 1)} /></div>
       <h2 className="mt-3 text-base font-black text-ink">{name}</h2><p className="text-sm font-bold text-pine-700">{position}</p>
       {committee && <p className="mt-1 text-xs text-slate-400">{committee}</p>}
       {(contact || email) && <p className="mt-2 break-words text-xs text-slate-400">{[contact, email].filter(Boolean).join(" | ")}</p>}
-      {signatureUrl && <div className="mx-auto mt-3 grid h-12 max-w-36 place-items-center overflow-hidden rounded-xl border bg-white p-2"><ContentImage src={signatureUrl} alt={`${name} signature`} className="max-h-full max-w-full object-contain" fallbackText="Signature unavailable" /></div>}
     </article>
   );
 }
@@ -109,7 +108,7 @@ export function CommunityPageSkeleton() {
 }
 
 export function CommunityRouteError({ title = "Unable to load this page", description = "Refresh to try again. Your private HOAHub data was not cached." }: { title?: string; description?: string }) {
-  return <div className="rounded-2xl border border-rose-100 bg-rose-50 p-4 text-rose-900" role="alert"><p className="font-black">{title}</p><p className="mt-1 text-sm">{description}</p></div>;
+  return <div className="rounded-2xl border border-rose-100 bg-rose-50 p-4 text-rose-900" role="alert"><p className="font-black text-ink">{title}</p><p className="mt-1 text-sm">{description}</p></div>;
 }
 
 function Field({ label, value, mono = false }: { label: string; value: string; mono?: boolean }) {

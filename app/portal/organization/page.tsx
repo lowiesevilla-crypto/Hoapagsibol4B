@@ -31,7 +31,7 @@ export default async function PortalOrganizationPage() {
         ) : (
           <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
             {officers.map((officer) => (
-              <OfficerMobileCard key={officer.id} name={officer.fullName} position={officer.position} committee={officer.committee} contact={officer.contactNumber} email={officer.email} photoUrl={officer.photoUrl} signatureUrl={officer.signatureUrl} />
+              <OfficerMobileCard key={officer.id} name={officer.fullName} position={officer.position} committee={officer.committee} contact={officer.contactNumber} email={officer.email} photoUrl={officer.photoUrl} />
             ))}
           </div>
         )}

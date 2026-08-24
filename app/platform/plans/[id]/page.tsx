@@ -1,11 +1,12 @@
 import { TenantModule } from "@prisma/client";
-import { ArrowLeft, Bot, FolderLock, Save } from "lucide-react";
+import { ArrowLeft, Bot, FolderLock, Save, WalletCards } from "lucide-react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { AI_ASSISTANCE_FEATURE_CODE, parseAiCommercialConfiguration } from "@/lib/ai-assistance/commercial";
 import { updateSubscriptionPlanAction } from "@/lib/actions/platform-commercial-plans";
 import { prisma } from "@/lib/db";
 import { DOCUMENT_MANAGEMENT_FEATURE_CODE } from "@/lib/document-repository/constants";
+import { PETTY_CASH_FEATURE_CODE } from "@/lib/petty-cash/constants";
 
 export default async function EditSubscriptionPlanPage({
   params,
@@ -18,11 +19,12 @@ export default async function EditSubscriptionPlanPage({
   const query = await searchParams;
   const [plan, featureRows] = await Promise.all([
     prisma.subscriptionPlan.findUnique({ where: { id }, include: { modules: true } }),
-    prisma.subscriptionPlanFeatureEntitlement.findMany({ where: { planId: id, featureCode: { in: [DOCUMENT_MANAGEMENT_FEATURE_CODE, AI_ASSISTANCE_FEATURE_CODE] } } }),
+    prisma.subscriptionPlanFeatureEntitlement.findMany({ where: { planId: id, featureCode: { in: [DOCUMENT_MANAGEMENT_FEATURE_CODE, AI_ASSISTANCE_FEATURE_CODE, PETTY_CASH_FEATURE_CODE] } } }),
   ]);
   if (!plan) notFound();
   const documentManagement = featureRows.find((item) => item.featureCode === DOCUMENT_MANAGEMENT_FEATURE_CODE);
   const aiAssistance = featureRows.find((item) => item.featureCode === AI_ASSISTANCE_FEATURE_CODE);
+  const pettyCash = featureRows.find((item) => item.featureCode === PETTY_CASH_FEATURE_CODE);
   const ai = parseAiCommercialConfiguration(aiAssistance?.configuration);
   const enabled = new Set(plan.modules.filter((item) => item.enabled).map((item) => item.module));
 
@@ -52,7 +54,12 @@ export default async function EditSubscriptionPlanPage({
 
       <div className="mt-6 border-t pt-6"><span className="label">Included modules</span><div className="mt-2 grid gap-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">{Object.values(TenantModule).map((module) => <label key={module} className="flex min-h-12 items-center gap-3 rounded-xl border p-3 text-sm font-semibold"><input className="size-5" type="checkbox" name="modules" value={module} defaultChecked={enabled.has(module)} />{module.replaceAll("_", " ")}</label>)}</div></div>
 
-      <section className="mt-7 rounded-3xl border border-pine-100 bg-pine-50/35 p-5 sm:p-6">
+      <section className="mt-7 rounded-3xl border border-amber-100 bg-amber-50/40 p-5 sm:p-6">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between"><div className="flex items-start gap-3"><span className="grid size-11 shrink-0 place-items-center rounded-2xl bg-white text-amber-700 shadow-sm"><WalletCards className="size-5" /></span><div><p className="text-xs font-black uppercase tracking-wider text-amber-700">Sellable platform capability</p><h2 className="mt-1 text-xl font-black text-ink">Petty Cash Voucher</h2><p className="mt-1 max-w-2xl text-sm leading-6 text-slate-600">Tenant expense-type vouchers, clean guided entry, A5 printing and automatic expense-ledger posting. Billing is required; Employee Cash Advance also requires Payroll and Loans.</p></div></div><label className="flex min-h-12 shrink-0 items-center gap-3 rounded-2xl border bg-white px-4 py-3 text-sm font-black text-slate-800 shadow-sm"><input className="size-5" type="checkbox" name="pettyCashEnabled" defaultChecked={pettyCash?.enabled ?? false} /> Include in this plan</label></div>
+        <p className="mt-4 rounded-2xl border border-amber-200 bg-white/70 px-4 py-3 text-xs leading-5 text-amber-900">Disabling Petty Cash hides new voucher entry but does not delete historical vouchers or finance expense postings.</p>
+      </section>
+
+      <section className="mt-6 rounded-3xl border border-pine-100 bg-pine-50/35 p-5 sm:p-6">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between"><div className="flex items-start gap-3"><span className="grid size-11 shrink-0 place-items-center rounded-2xl bg-white text-pine-700 shadow-sm"><FolderLock className="size-5" /></span><div><p className="text-xs font-black uppercase tracking-wider text-pine-700">Sellable platform capability</p><h2 className="mt-1 text-xl font-black text-ink">Document Management</h2><p className="mt-1 max-w-2xl text-sm leading-6 text-slate-600">Tenant-isolated repository, governance and homeowner Document Library. Separate from generated/requested HOA documents.</p></div></div><label className="flex min-h-12 shrink-0 items-center gap-3 rounded-2xl border bg-white px-4 py-3 text-sm font-black text-slate-800 shadow-sm"><input className="size-5" type="checkbox" name="documentManagementEnabled" defaultChecked={documentManagement?.enabled ?? false} /> Include in this plan</label></div>
         <div className="mt-5 grid gap-4 sm:grid-cols-2 xl:grid-cols-4"><label><span className="label">Repository storage (MB)</span><input className="field bg-white" name="documentStorageLimitMb" type="number" min="1" defaultValue={documentManagement?.storageLimitMb ?? ""} placeholder={plan.maximumStorageMb ? String(plan.maximumStorageMb) : "Unlimited"} /></label><label><span className="label">Max file size (MB)</span><input className="field bg-white" name="documentMaxFileSizeMb" type="number" min="1" defaultValue={documentManagement?.maxFileSizeMb ?? 25} /></label><label className="flex min-h-20 items-center gap-3 rounded-2xl border bg-white p-4 text-sm font-semibold"><input className="size-5" type="checkbox" name="retainRevisionBinaries" defaultChecked={documentManagement?.retainRevisionBinaries ?? false} /><span><strong className="block text-slate-900">Retain revision files</strong><span className="mt-1 block text-xs font-normal leading-5 text-slate-500">Keep governed historical binaries.</span></span></label><label><span className="label">Max retained revisions</span><input className="field bg-white" name="maxRevisionBinaries" type="number" min="1" defaultValue={documentManagement?.maxRevisionBinaries ?? ""} /></label></div>
         <p className="mt-4 rounded-2xl border border-blue-100 bg-blue-50 px-4 py-3 text-xs leading-5 text-blue-800">Disabling Document Management never deletes tenant files. Stored data remains preserved for re-enable, migration, export, or administrative resolution.</p>

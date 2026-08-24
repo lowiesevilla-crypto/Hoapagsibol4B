@@ -7,6 +7,7 @@ import { writeAuditLog } from "@/lib/audit";
 import { prisma } from "@/lib/db";
 import { payrollApprovalRoles, payrollManageRoles, payrollWriteRoles, requirePayrollAccess } from "@/lib/payroll-access";
 import { normalizePayrollCorrectionReason } from "@/lib/payroll-lifecycle";
+import { materializePettyCashPayrollDeductions } from "@/lib/petty-cash/payroll-integration";
 import { calculatePayslip } from "@/lib/services/payroll";
 import { requestPayrollFinancialPosting } from "@/lib/services/payroll-finance";
 import {
@@ -81,9 +82,9 @@ async function calculatePeriod(input: { startDate: Date; endDate: Date; payDate:
 }
 
 /**
- * @requirement PAY-SEC-001 PAY-CALC-001 PAY-ATT-001 PAY-OT-001 PAY-COMP-002 PAY-COMP-003
+ * @requirement PAY-SEC-001 PAY-CALC-001 PAY-ATT-001 PAY-OT-001 PAY-COMP-002 PAY-COMP-003 PAY-DED-001 PAY-LOAN-001
  * @status IMPLEMENTED
- * @description Resolve the employee payroll configuration effective on the cutoff end date and persist an immutable configuration snapshot on the payslip.
+ * @description Resolve employee payroll configuration and statutory rules, materialize eligible Petty Cash cash-advance deductions, and persist the payslip calculation snapshot.
  */
 async function refreshPeriodPayslips(
   tx: Prisma.TransactionClient,
@@ -107,6 +108,7 @@ async function refreshPeriodPayslips(
       },
     },
   });
+  await materializePettyCashPayrollDeductions(tx, period);
   const assignedDeductions = await tx.payrollDeduction.findMany({
     where: { tenantId: period.tenantId, payrollId: period.id },
     select: { employeeId: true, amount: true },
@@ -807,7 +809,7 @@ export async function cancelEmployeeLoanAction(formData: FormData) {
   await writeAuditLog({ actorId: user.id, module: "PAYROLL", action: "CANCEL_EMPLOYEE_LOAN", entityType: "EmployeeLoan", entityId: id });
 
   revalidatePayrollPages();
-  redirect(`/admin/payroll?section=loans&success=cancelled&message=${encodeURIComponent("Employee loan or cash advance has been cancelled.")}`);
+  redirect(`/admin/payroll?section=loans&success=cancelled&message=${encodeURIComponent("Employee loan or cash advance has been cancelled successfully.")}`);
 }
 
 /**

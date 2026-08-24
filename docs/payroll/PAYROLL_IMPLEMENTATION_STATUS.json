@@ -236,32 +236,36 @@
     {
       "id": "PAY-DED-001",
       "title": "Payroll-period deductions",
-      "status": "VERIFIED",
+      "status": "IMPLEMENTED",
       "code": [
         "lib/actions/payroll.ts",
+        "lib/petty-cash/payroll-integration.ts",
         "prisma/schema.prisma",
-        "tests/unit/payroll-remaining-acceptance.test.ts"
+        "tests/unit/payroll-remaining-acceptance.test.ts",
+        "tests/unit/petty-cash-payroll-integration.test.ts"
       ],
       "evidence": [
-        "Local PAY-DED-001 acceptance test PASS on completion candidate"
+        "PR #166 verified the prior tenant-scoped deduction-maintenance baseline; Petty Cash automatic deduction extension awaits exact-head CI."
       ],
-      "notes": "Tenant-scoped deduction maintenance is draft-only and locks after finalization."
+      "notes": "Tenant-scoped deduction maintenance remains mutable only before finalization. Petty Cash Employee Cash Advance schedules now materialize idempotently into each eligible mutable payroll cutoff before payslip calculation, with existing unpaid loan reservations deducted from the available balance."
     },
     {
       "id": "PAY-LOAN-001",
       "title": "Loan/cash advance repayment integrity",
-      "status": "VERIFIED",
+      "status": "IMPLEMENTED",
       "code": [
         "lib/actions/payroll.ts",
+        "lib/petty-cash/payroll-integration.ts",
         "lib/services/payroll-finance.ts",
         "prisma/schema.prisma",
         "tests/unit/payroll-financial-posting.test.ts",
-        "tests/unit/payroll-remaining-acceptance.test.ts"
+        "tests/unit/payroll-remaining-acceptance.test.ts",
+        "tests/unit/petty-cash-payroll-integration.test.ts"
       ],
       "evidence": [
-        "Local loan and financial-posting acceptance tests PASS on completion candidate"
+        "PR #166 verified the prior loan/Financial Engine repayment baseline; Petty Cash automatic schedule extension awaits exact-head CI."
       ],
-      "notes": "Repayments are tenant-scoped and capped. Loan balances change only after the idempotent PAYMENT journal posts, and a paid payroll reversal restores the receivable exactly once."
+      "notes": "Petty Cash Employee Cash Advance creates a linked EmployeeLoan and per-cutoff schedule. Payroll calculation creates the linked PayrollDeduction without exceeding unreserved loan balance; PR #166 remains authoritative for changing loan balance only after the idempotent PAYMENT journal succeeds and for restoring it on a paid-payroll reversal."
     },
     {
       "id": "PAY-RUN-001",
@@ -736,7 +740,27 @@
         "PAY-ATT-001",
         "PAY-OT-001",
         "PAY-COMP-002",
-        "PAY-COMP-003"
+        "PAY-COMP-003",
+        "PAY-DED-001",
+        "PAY-LOAN-001"
+      ],
+      "status": "IMPLEMENTED"
+    },
+    {
+      "path": "lib/petty-cash/payroll-integration.ts",
+      "name": "materializePettyCashPayrollDeductions",
+      "requirementIds": [
+        "PAY-DED-001",
+        "PAY-LOAN-001"
+      ],
+      "status": "IMPLEMENTED"
+    },
+    {
+      "path": "lib/petty-cash/payroll-integration.ts",
+      "name": "calculatePettyCashDeductionAmount",
+      "requirementIds": [
+        "PAY-DED-001",
+        "PAY-LOAN-001"
       ],
       "status": "IMPLEMENTED"
     },

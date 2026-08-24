@@ -7,6 +7,7 @@ import { AI_ASSISTANCE_FEATURE_CODE } from "@/lib/ai-assistance/commercial";
 import { requireUser } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { DOCUMENT_MANAGEMENT_FEATURE_CODE } from "@/lib/document-repository/constants";
+import { PETTY_CASH_FEATURE_CODE } from "@/lib/petty-cash/constants";
 
 function clean(value: FormDataEntryValue | null) {
   return String(value || "").trim();
@@ -102,6 +103,7 @@ export async function createSubscriptionPlanAction(formData: FormData) {
     const modules = selectedModules(formData);
     const documentManagement = documentFeature(formData);
     const aiAssistance = { enabled: formData.get("aiAssistanceEnabled") === "on", configuration: aiConfiguration(formData) };
+    const pettyCash = { enabled: formData.get("pettyCashEnabled") === "on" };
 
     const plan = await prisma.$transaction(async (tx) => {
       const created = await tx.subscriptionPlan.create({ data: planFields });
@@ -110,6 +112,7 @@ export async function createSubscriptionPlanAction(formData: FormData) {
         data: [
           { planId: created.id, featureCode: DOCUMENT_MANAGEMENT_FEATURE_CODE, ...documentManagement },
           { planId: created.id, featureCode: AI_ASSISTANCE_FEATURE_CODE, enabled: aiAssistance.enabled, configuration: aiAssistance.configuration },
+          { planId: created.id, featureCode: PETTY_CASH_FEATURE_CODE, enabled: pettyCash.enabled },
         ],
       });
       await tx.auditLog.create({
@@ -124,7 +127,7 @@ export async function createSubscriptionPlanAction(formData: FormData) {
             code: created.code,
             name: created.name,
             modules,
-            sellableFeatures: { documentManagement, aiAssistance },
+            sellableFeatures: { documentManagement, aiAssistance, pettyCash },
           },
         },
       });
@@ -149,9 +152,10 @@ export async function updateSubscriptionPlanAction(formData: FormData) {
     const modules = selectedModules(formData);
     const documentManagement = documentFeature(formData);
     const aiAssistance = { enabled: formData.get("aiAssistanceEnabled") === "on", configuration: aiConfiguration(formData) };
+    const pettyCash = { enabled: formData.get("pettyCashEnabled") === "on" };
     const existing = await prisma.subscriptionPlan.findUnique({ where: { id: planId }, include: { modules: true } });
     if (!existing) throw new Error("Subscription plan not found.");
-    const existingFeatures = await prisma.subscriptionPlanFeatureEntitlement.findMany({ where: { planId, featureCode: { in: [DOCUMENT_MANAGEMENT_FEATURE_CODE, AI_ASSISTANCE_FEATURE_CODE] } } });
+    const existingFeatures = await prisma.subscriptionPlanFeatureEntitlement.findMany({ where: { planId, featureCode: { in: [DOCUMENT_MANAGEMENT_FEATURE_CODE, AI_ASSISTANCE_FEATURE_CODE, PETTY_CASH_FEATURE_CODE] } } });
 
     await prisma.$transaction(async (tx) => {
       await tx.subscriptionPlan.update({ where: { id: planId }, data: planFields });
@@ -166,6 +170,11 @@ export async function updateSubscriptionPlanAction(formData: FormData) {
         where: { planId_featureCode: { planId, featureCode: AI_ASSISTANCE_FEATURE_CODE } },
         update: aiAssistance,
         create: { planId, featureCode: AI_ASSISTANCE_FEATURE_CODE, ...aiAssistance },
+      });
+      await tx.subscriptionPlanFeatureEntitlement.upsert({
+        where: { planId_featureCode: { planId, featureCode: PETTY_CASH_FEATURE_CODE } },
+        update: pettyCash,
+        create: { planId, featureCode: PETTY_CASH_FEATURE_CODE, ...pettyCash },
       });
       await tx.auditLog.create({
         data: {
@@ -186,7 +195,7 @@ export async function updateSubscriptionPlanAction(formData: FormData) {
               code: planFields.code,
               name: planFields.name,
               modules,
-              sellableFeatures: { documentManagement, aiAssistance },
+              sellableFeatures: { documentManagement, aiAssistance, pettyCash },
             },
             historicalAgreementTermsUnaffected: true,
           },
@@ -201,5 +210,6 @@ export async function updateSubscriptionPlanAction(formData: FormData) {
   revalidatePath(`/platform/plans/${planId}`);
   revalidatePath("/platform/document-management");
   revalidatePath("/admin/document-management");
+  revalidatePath("/admin/petty-cash");
   redirect(`/platform/plans/${planId}?success=${encodeURIComponent("Subscription plan and sellable features updated.")}`);
 }

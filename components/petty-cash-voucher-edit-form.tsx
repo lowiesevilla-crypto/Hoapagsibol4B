@@ -2,7 +2,7 @@
 
 import { CirclePlus, Save, Search, Trash2 } from "lucide-react";
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useMemo, useState, type KeyboardEvent } from "react";
 import { updatePettyCashVoucherAction } from "@/lib/actions/petty-cash-maintenance";
 
 type PayeeOption = { id: string; label: string; address: string; search: string };
@@ -39,8 +39,41 @@ function normalize(value: string) {
   return value.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
 }
 
+function optionName(label: string) {
+  return label.split(" · ")[0]?.trim() || label;
+}
+
 function peso(value: number) {
   return new Intl.NumberFormat("en-PH", { style: "currency", currency: "PHP" }).format(value);
+}
+
+function initialPayeeOption(options: PayeeOption[], initial: InitialVoucher) {
+  const byId = initial.payeeEntityId ? options.find((item) => item.id === initial.payeeEntityId) : undefined;
+  if (byId) return byId;
+
+  const expectedName = normalize(initial.payeeName);
+  const sameName = options.filter((item) => normalize(optionName(item.label)) === expectedName);
+  if (!sameName.length) return undefined;
+
+  if (initial.address) {
+    const expectedAddress = normalize(initial.address);
+    const byAddress = sameName.find((item) => normalize(item.address) === expectedAddress);
+    if (byAddress) return byAddress;
+  }
+
+  return sameName.length === 1 ? sameName[0] : undefined;
+}
+
+function filteredDirectoryOptions<T extends { label: string; search: string }>(options: T[], query: string) {
+  const term = normalize(query);
+  if (!term) return options.slice(0, 100);
+  return options.filter((item) => normalize(item.search).includes(term) || normalize(item.label).includes(term)).slice(0, 100);
+}
+
+function keepSelectedVisible<T extends { id: string }>(matches: T[], allOptions: T[], selectedId: string) {
+  if (!selectedId || matches.some((item) => item.id === selectedId)) return matches;
+  const selected = allOptions.find((item) => item.id === selectedId);
+  return selected ? [selected, ...matches.slice(0, 99)] : matches;
 }
 
 export function PettyCashVoucherEditForm({
@@ -58,15 +91,22 @@ export function PettyCashVoucherEditForm({
   employees: EmployeeOption[];
   currentAdminName: string;
 }) {
+  const initialDirectoryPayees = initial.payeeType === "OTHER" ? [] : payees[initial.payeeType];
+  const resolvedInitialPayee = initial.payeeType === "OTHER" ? undefined : initialPayeeOption(initialDirectoryPayees, initial);
+  const initialSelectedPayeeId = resolvedInitialPayee?.id || initial.payeeEntityId;
+  const initialPayeeQuery = initial.payeeType === "OTHER" ? "" : resolvedInitialPayee ? optionName(resolvedInitialPayee.label) : initial.payeeName;
+  const initialEmployee = employees.find((item) => item.id === initial.employeeId);
+  const initialEmployeeQuery = initialEmployee ? optionName(initialEmployee.label) : "";
+
   const [payeeType, setPayeeType] = useState<PayeeType>(initial.payeeType);
-  const [payeeQuery, setPayeeQuery] = useState("");
-  const [payeeEntityId, setPayeeEntityId] = useState(initial.payeeEntityId);
+  const [payeeQuery, setPayeeQuery] = useState(initialPayeeQuery);
+  const [payeeEntityId, setPayeeEntityId] = useState(initialSelectedPayeeId);
   const [otherPayeeName, setOtherPayeeName] = useState(initial.payeeType === "OTHER" ? initial.payeeName : "");
   const [address, setAddress] = useState(initial.address);
   const [approverType, setApproverType] = useState<"ADMIN" | "OFFICER">(initial.approvedByType);
   const [approvingOfficerId, setApprovingOfficerId] = useState(initial.approvedByType === "OFFICER" ? initial.approvedById : "");
   const [employeeAdvanceEmployeeId, setEmployeeAdvanceEmployeeId] = useState(initial.employeeId);
-  const [employeeQuery, setEmployeeQuery] = useState("");
+  const [employeeQuery, setEmployeeQuery] = useState(initialEmployeeQuery);
   const [deductionPerCutoff, setDeductionPerCutoff] = useState(initial.deductionPerCutoff);
   const [items, setItems] = useState<DraftItem[]>(initial.items.map((item, index) => ({
     key: `existing-${index}`,
@@ -76,14 +116,16 @@ export function PettyCashVoucherEditForm({
   })));
 
   const currentPayees = useMemo(() => payeeType === "OTHER" ? [] : payees[payeeType], [payeeType, payees]);
-  const matchingPayees = useMemo(() => {
-    const term = payeeQuery.trim().toLowerCase();
-    return currentPayees.filter((item) => !term || item.search.includes(term)).slice(0, 100);
-  }, [currentPayees, payeeQuery]);
-  const matchingEmployees = useMemo(() => {
-    const term = employeeQuery.trim().toLowerCase();
-    return employees.filter((item) => !term || item.search.includes(term)).slice(0, 100);
-  }, [employees, employeeQuery]);
+  const searchedPayees = useMemo(() => filteredDirectoryOptions(currentPayees, payeeQuery), [currentPayees, payeeQuery]);
+  const matchingPayees = useMemo(
+    () => keepSelectedVisible(searchedPayees, currentPayees, payeeEntityId),
+    [searchedPayees, currentPayees, payeeEntityId],
+  );
+  const searchedEmployees = useMemo(() => filteredDirectoryOptions(employees, employeeQuery), [employees, employeeQuery]);
+  const matchingEmployees = useMemo(
+    () => keepSelectedVisible(searchedEmployees, employees, employeeAdvanceEmployeeId),
+    [searchedEmployees, employees, employeeAdvanceEmployeeId],
+  );
   const categoryById = useMemo(() => new Map(expenseTypes.map((item) => [item.id, item.name])), [expenseTypes]);
   const total = useMemo(() => items.reduce((sum, item) => sum + (Number(item.amount) || 0), 0), [items]);
   const hasEmployeeCashAdvance = useMemo(() => items.some((item) => {
@@ -93,8 +135,8 @@ export function PettyCashVoucherEditForm({
 
   function changePayeeType(next: PayeeType) {
     setPayeeType(next);
-    setPayeeQuery("");
-    setPayeeEntityId(next === initial.payeeType ? initial.payeeEntityId : "");
+    setPayeeQuery(next === initial.payeeType ? initialPayeeQuery : "");
+    setPayeeEntityId(next === initial.payeeType ? initialSelectedPayeeId : "");
     setOtherPayeeName(next === "OTHER" ? (initial.payeeType === "OTHER" ? initial.payeeName : "") : "");
     setAddress(next === initial.payeeType ? initial.address : "");
   }
@@ -103,9 +145,48 @@ export function PettyCashVoucherEditForm({
     setPayeeEntityId(id);
     const selected = currentPayees.find((item) => item.id === id);
     if (selected) {
+      setPayeeQuery(optionName(selected.label));
       setAddress(selected.address || "");
-      if (payeeType === "EMPLOYEE" && !employeeAdvanceEmployeeId) setEmployeeAdvanceEmployeeId(id);
+      if (payeeType === "EMPLOYEE" && !employeeAdvanceEmployeeId) {
+        setEmployeeAdvanceEmployeeId(id);
+        const employee = employees.find((item) => item.id === id);
+        if (employee) setEmployeeQuery(optionName(employee.label));
+      }
     }
+  }
+
+  function changePayeeQuery(value: string) {
+    setPayeeQuery(value);
+    const selected = currentPayees.find((item) => item.id === payeeEntityId);
+    if (selected && normalize(value) !== normalize(optionName(selected.label))) setPayeeEntityId("");
+  }
+
+  function selectPayeeFromSearch(event: KeyboardEvent<HTMLInputElement>) {
+    if (event.key !== "Enter") return;
+    event.preventDefault();
+    event.stopPropagation();
+    const match = searchedPayees[0];
+    if (match) selectPayee(match.id);
+  }
+
+  function selectEmployee(id: string) {
+    setEmployeeAdvanceEmployeeId(id);
+    const selected = employees.find((item) => item.id === id);
+    if (selected) setEmployeeQuery(optionName(selected.label));
+  }
+
+  function changeEmployeeQuery(value: string) {
+    setEmployeeQuery(value);
+    const selected = employees.find((item) => item.id === employeeAdvanceEmployeeId);
+    if (selected && normalize(value) !== normalize(optionName(selected.label))) setEmployeeAdvanceEmployeeId("");
+  }
+
+  function selectEmployeeFromSearch(event: KeyboardEvent<HTMLInputElement>) {
+    if (event.key !== "Enter") return;
+    event.preventDefault();
+    event.stopPropagation();
+    const match = searchedEmployees[0];
+    if (match) selectEmployee(match.id);
   }
 
   function updateItem(key: string, patch: Partial<DraftItem>) {
@@ -121,9 +202,8 @@ export function PettyCashVoucherEditForm({
   }
 
   const serializedItems = JSON.stringify(items.map(({ categoryId, otherParticular, amount }) => ({ categoryId, otherParticular, amount })));
-  const receivedBy = payeeType === "OTHER"
-    ? otherPayeeName
-    : currentPayees.find((item) => item.id === payeeEntityId)?.label.split(" · ")[0] || initial.payeeName;
+  const selectedPayee = currentPayees.find((item) => item.id === payeeEntityId);
+  const receivedBy = payeeType === "OTHER" ? otherPayeeName : selectedPayee ? optionName(selectedPayee.label) : "";
 
   return <form action={updatePettyCashVoucherAction} className="space-y-5">
     <input type="hidden" name="voucherId" value={initial.id} />
@@ -142,7 +222,7 @@ export function PettyCashVoucherEditForm({
 
     <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
       <h2 className="text-lg font-black text-ink">Payee</h2>
-      <p className="mt-1 text-sm text-slate-500">Change the payee type or search the tenant directory. Received By follows the selected payee.</p>
+      <p className="mt-1 text-sm text-slate-500">The saved payee is preselected. Search and press Enter to select the first matching tenant record; only Save voucher changes submits the voucher.</p>
       <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-5">
         {PAYEE_TYPES.map((type) => <button key={type.value} type="button" onClick={() => changePayeeType(type.value)} className={`min-h-11 rounded-xl border px-3 py-2 text-sm font-black ${payeeType === type.value ? "border-pine-700 bg-pine-700 text-white" : "border-slate-200 bg-white text-slate-600"}`}>{type.label}</button>)}
       </div>
@@ -150,7 +230,12 @@ export function PettyCashVoucherEditForm({
         <label><span className="label">Name</span><input className="field" value={otherPayeeName} onChange={(event) => setOtherPayeeName(event.target.value)} required /></label>
         <label><span className="label">Address</span><input className="field" name="address" value={address} onChange={(event) => setAddress(event.target.value)} /></label>
       </div> : <div className="mt-4 grid gap-4 lg:grid-cols-2">
-        <div><label className="label" htmlFor="petty-edit-payee-search">Search payee</label><div className="relative"><Search className="pointer-events-none absolute left-3.5 top-3.5 size-4 text-slate-400" /><input id="petty-edit-payee-search" className="field pl-10" type="search" value={payeeQuery} onChange={(event) => setPayeeQuery(event.target.value)} placeholder="Search name, account or property" /></div><select className="field mt-2" value={payeeEntityId} onChange={(event) => selectPayee(event.target.value)} required><option value="">Select a matching record</option>{matchingPayees.map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}</select></div>
+        <div>
+          <label className="label" htmlFor="petty-edit-payee-search">Search payee</label>
+          <div className="relative"><Search className="pointer-events-none absolute left-3.5 top-3.5 size-4 text-slate-400" /><input id="petty-edit-payee-search" className="field pl-10" type="search" value={payeeQuery} onChange={(event) => changePayeeQuery(event.target.value)} onKeyDown={selectPayeeFromSearch} placeholder="Search name, account or property" /></div>
+          <select className="field mt-2" value={payeeEntityId} onChange={(event) => selectPayee(event.target.value)} required><option value="">Select a matching record</option>{matchingPayees.map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}</select>
+          <p className="mt-1 text-xs text-slate-500">Press Enter to select the first search match. Enter never saves this form.</p>
+        </div>
         <label><span className="label">Address</span><input className="field" name="address" value={address} onChange={(event) => setAddress(event.target.value)} /></label>
       </div>}
       <div className="mt-3 rounded-xl bg-slate-50 px-3 py-2 text-sm"><b>Received By:</b> {receivedBy || "Select a payee"}</div>
@@ -174,7 +259,12 @@ export function PettyCashVoucherEditForm({
       <h2 className="text-lg font-black text-amber-950">Employee Cash Advance</h2>
       <p className="mt-1 text-sm text-amber-900">The linked Employee Loan and pending automatic deductions will be updated. A voucher already repaid or included in finalized payroll cannot be changed.</p>
       <div className="mt-4 grid gap-4 lg:grid-cols-2">
-        <div><label className="label" htmlFor="petty-edit-employee-search">Employee to deduct</label><div className="relative"><Search className="pointer-events-none absolute left-3.5 top-3.5 size-4 text-slate-400" /><input id="petty-edit-employee-search" className="field bg-white pl-10" type="search" value={employeeQuery} onChange={(event) => setEmployeeQuery(event.target.value)} placeholder="Search employee" /></div><select className="field mt-2 bg-white" name="employeeAdvanceEmployeeId" value={employeeAdvanceEmployeeId} onChange={(event) => setEmployeeAdvanceEmployeeId(event.target.value)} required><option value="">Select employee</option>{matchingEmployees.map((employee) => <option key={employee.id} value={employee.id}>{employee.label}</option>)}</select></div>
+        <div>
+          <label className="label" htmlFor="petty-edit-employee-search">Employee to deduct</label>
+          <div className="relative"><Search className="pointer-events-none absolute left-3.5 top-3.5 size-4 text-slate-400" /><input id="petty-edit-employee-search" className="field bg-white pl-10" type="search" value={employeeQuery} onChange={(event) => changeEmployeeQuery(event.target.value)} onKeyDown={selectEmployeeFromSearch} placeholder="Search employee" /></div>
+          <select className="field mt-2 bg-white" name="employeeAdvanceEmployeeId" value={employeeAdvanceEmployeeId} onChange={(event) => selectEmployee(event.target.value)} required><option value="">Select employee</option>{matchingEmployees.map((employee) => <option key={employee.id} value={employee.id}>{employee.label}</option>)}</select>
+          <p className="mt-1 text-xs text-amber-900/70">Press Enter to select the first matching employee without submitting the voucher.</p>
+        </div>
         <label><span className="label">Deduction amount per cutoff</span><input className="field bg-white" name="deductionPerCutoff" type="number" min="0.01" step="0.01" value={deductionPerCutoff} onChange={(event) => setDeductionPerCutoff(event.target.value)} required /></label>
       </div>
     </section>}

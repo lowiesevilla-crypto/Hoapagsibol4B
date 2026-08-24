@@ -87,7 +87,7 @@ async function calculatePeriod(input: { startDate: Date; endDate: Date; payDate:
 /**
  * @requirement PAY-SEC-001 PAY-CALC-001 PAY-ATT-001 PAY-OT-001 PAY-COMP-002 PAY-COMP-003 PAY-DED-001 PAY-DED-002 PAY-LOAN-001 PAY-LOAN-002 PAY-STAT-003
  * @status IMPLEMENTED
- * @description Resolve employee payroll configuration and statutory rules, materialize eligible Petty Cash cash-advance deductions, and persist the payslip calculation snapshot.
+ * @description Resolve employee/statutory policy, materialize generic and Petty Cash deduction schedules, and persist the payslip calculation snapshot.
  */
 async function refreshPeriodPayslips(
   tx: Prisma.TransactionClient,

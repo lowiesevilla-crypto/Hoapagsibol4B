@@ -2,7 +2,7 @@
 
 Last updated: 2026-08-24
 Source of truth: `docs/payroll/PAYROLL_IMPLEMENTATION_STATUS.json`
-Current candidate branch: `codex/payroll-schedules-controls-20260824`
+Current candidate branch: `codex/payroll-schedules-controls-latest-20260824`
 Current pull request: not opened yet
 Current candidate task: `PAY-TASK-011`
 
@@ -26,7 +26,7 @@ The implementation head `f596c850a113bcd73d50d5a71116e9951685ffdb` passed exact-
 - `PAY-STAT-003` — effective-dated tenant defaults and employee overrides for the statutory master switch, SSS, PhilHealth, Pag-IBIG, and withholding-tax applicability. Official rules remain system-controlled.
 - `PAY-UX-001` — six primary admin payroll tasks, a visible run lifecycle, responsive navigation, schedule management, and read-only employee visibility.
 
-The four new requirements and `PAY-TASK-011` are `IMPLEMENTED`, not `VERIFIED`. PR #168 remains the owner of Petty Cash Voucher issuance/cash-advance source integration; PR #167 and PR #169 remain outside payroll scope.
+The four new requirements and `PAY-TASK-011` are `IMPLEMENTED`, not `VERIFIED`. PR #168 merged to `main` at `a1f2f05` and remains the owner of Petty Cash Voucher issuance/cash-advance source integration. This candidate was transplanted onto that exact main state and preserves both materializers; PR #167's billing work and PR #170's receipt-print work remain outside payroll scope.
 
 ## Verified implementation
 
@@ -65,20 +65,20 @@ The four new requirements and `PAY-TASK-011` are `IMPLEMENTED`, not `VERIFIED`. 
 - Multi-file Prisma validate: passed on the `PAY-TASK-011` candidate.
 - Prisma generate: passed on the `PAY-TASK-011` candidate.
 - TypeScript typecheck: passed on the `PAY-TASK-011` candidate.
-- Targeted schedule/statutory/requirement tests: 12/12 passed locally.
-- Full unit suite: 434/434 passed locally.
+- Targeted generic-schedule/statutory/Petty-Cash/requirement integration tests: 13/13 passed locally on latest main.
+- Full unit suite: 442/442 passed locally on latest main.
 - Full ESLint with zero warnings: passed locally.
-- Next.js production build: passed locally, including route generation and build-time lint/type validation.
+- Next.js production build: passed locally on latest main, including all 48 routes and build-time lint/type validation.
 - Clean MySQL migration/seed and exact-head workflows remain pending for the current candidate.
 - The prior PR #166 clean migration, seed, finance, production smoke, critical browser, and visual evidence remains valid only for its exact tested head.
 
 ## Required release gate
 
-1. Open a PR from `codex/payroll-schedules-controls-20260824` without including the user's unrelated dirty Prisma split-schema files.
+1. Open a PR from `codex/payroll-schedules-controls-latest-20260824` without including the user's unrelated dirty Prisma split-schema files.
 2. Run clean MySQL migration/seed, full HOAHub MySQL CI, and the applicable visual/browser gate on the exact PR head.
-3. Reconcile PR #168 before merge if it lands first; preserve its Petty Cash Voucher ownership and add the missing requirement tag identified by its current CI.
+3. Preserve merged PR #168's Petty Cash Voucher ownership and both payroll materializers through review.
 4. Merge only a passing exact head, then verify Hostinger deployment separately.
 
 ## Remaining blockers
 
-No implementation blocker is currently known. Full local verification, exact-head PR checks, concurrent PR #168 reconciliation, review, merge, and separate deployment confirmation remain.
+No implementation blocker is currently known. Exact-head PR checks, review, merge, and separate deployment confirmation remain.

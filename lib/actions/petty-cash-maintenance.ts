@@ -228,6 +228,7 @@ export async function updatePettyCashVoucherAction(formData: FormData) {
   try {
     const enabledModules = await getEnabledTenantModules(actor.tenantId);
     await prisma.$transaction(async (tx) => {
+      const transaction = tx as unknown as Prisma.TransactionClient;
       const rows = await tx.$queryRaw<ExistingVoucher[]>(Prisma.sql`
         SELECT id, voucherNumber, payeeType, payeeEntityId, employeeId, employeeLoanId, status
         FROM PettyCashVoucher
@@ -242,9 +243,9 @@ export async function updatePettyCashVoucherAction(formData: FormData) {
         SELECT approvedById FROM PettyCashVoucher WHERE tenantId=${actor.tenantId} AND id=${voucherId} LIMIT 1
       `);
       const [payee, approver, items] = await Promise.all([
-        resolvePayee(tx, actor.tenantId, payeeType, payeeEntityId, otherPayeeName, existing.payeeEntityId),
-        resolveApprover(tx, actor.tenantId, { id: actor.id, name: actor.name }, approverType, approvingOfficerId, approverRows[0]?.approvedById || null),
-        resolveVoucherItems(tx, actor.tenantId, draftItems),
+        resolvePayee(transaction, actor.tenantId, payeeType, payeeEntityId, otherPayeeName, existing.payeeEntityId),
+        resolveApprover(transaction, actor.tenantId, { id: actor.id, name: actor.name }, approverType, approvingOfficerId, approverRows[0]?.approvedById || null),
+        resolveVoucherItems(transaction, actor.tenantId, draftItems),
       ]);
 
       const totalAmount = Math.round((items.reduce((sum, item) => sum + item.amount, 0) + Number.EPSILON) * 100) / 100;
@@ -253,7 +254,7 @@ export async function updatePettyCashVoucherAction(formData: FormData) {
 
       let employeeLoanId = existing.employeeLoanId;
       let deductionPerCutoff: number | null = null;
-      if (existing.employeeLoanId) await clearMutablePettyCashLoanDeductions(tx, actor.tenantId, existing.employeeLoanId, voucherId);
+      if (existing.employeeLoanId) await clearMutablePettyCashLoanDeductions(transaction, actor.tenantId, existing.employeeLoanId, voucherId);
 
       if (employeeAdvanceAmount > 0) {
         if (!enabledModules.has(TenantModule.PAYROLL) || !enabledModules.has(TenantModule.LOANS)) {
@@ -380,6 +381,7 @@ export async function deletePettyCashVoucherAction(formData: FormData) {
   let errorMessage = "";
   try {
     await prisma.$transaction(async (tx) => {
+      const transaction = tx as unknown as Prisma.TransactionClient;
       const rows = await tx.$queryRaw<ExistingVoucher[]>(Prisma.sql`
         SELECT id, voucherNumber, payeeType, payeeEntityId, employeeId, employeeLoanId, status
         FROM PettyCashVoucher
@@ -388,7 +390,7 @@ export async function deletePettyCashVoucherAction(formData: FormData) {
       `);
       const existing = rows[0];
       if (!existing) throw new Error("Petty Cash Voucher was not found.");
-      if (existing.employeeLoanId) await clearMutablePettyCashLoanDeductions(tx, actor.tenantId, existing.employeeLoanId, voucherId);
+      if (existing.employeeLoanId) await clearMutablePettyCashLoanDeductions(transaction, actor.tenantId, existing.employeeLoanId, voucherId);
 
       const oldItems = await tx.$queryRaw<ExistingVoucherItem[]>(Prisma.sql`
         SELECT expenseId FROM PettyCashVoucherItem

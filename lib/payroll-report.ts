@@ -92,10 +92,18 @@ export function parsePayrollReportStatus(value: string | null | undefined): Payr
   return "ALL";
 }
 
+/**
+ * @requirement PAY-RPT-001
+ * @status IMPLEMENTED
+ */
 function roundMoney(value: number) {
   return Math.round((value + Number.EPSILON) * 100) / 100;
 }
 
+/**
+ * @requirement PAY-RPT-001
+ * @status IMPLEMENTED
+ */
 function roundReportNumber(value: number) {
   return Math.round((value + Number.EPSILON) * 10000) / 10000;
 }

@@ -4,7 +4,7 @@ import { homeownerModuleRules, moduleForHomeownerLink } from "@/lib/homeowner-na
 
 const rules: Array<[string, TenantModule]> = [
   ["/admin/documents", TenantModule.DOCUMENTS], ["/admin/document-templates", TenantModule.DOCUMENTS], ["/documents", TenantModule.DOCUMENTS],
-  ["/admin/payroll", TenantModule.PAYROLL], ["/admin/employees", TenantModule.PAYROLL], ["/admin/workforce", TenantModule.PAYROLL], ["/employee/payslips", TenantModule.PAYROLL], ["/employee/requests/overtime", TenantModule.PAYROLL],
+  ["/admin/payroll", TenantModule.PAYROLL], ["/admin/employees", TenantModule.PAYROLL], ["/admin/workforce", TenantModule.PAYROLL], ["/admin/leave", TenantModule.PAYROLL], ["/employee/payslips", TenantModule.PAYROLL], ["/employee/requests/overtime", TenantModule.PAYROLL], ["/employee/leave", TenantModule.PAYROLL],
   ["/admin/attendance", TenantModule.ATTENDANCE], ["/employee/attendance", TenantModule.ATTENDANCE],
   ["/employee/loans", TenantModule.LOANS],
   ["/admin/reports", TenantModule.REPORTS],
@@ -15,8 +15,8 @@ const rules: Array<[string, TenantModule]> = [
   ["/admin/vehicles", TenantModule.VEHICLES],
   ["/admin/contractors", TenantModule.CONTRACTORS],
   // Finance surfaces, including Rental Management and Petty Cash, are governed
-  // by the plan's BILLING module. Petty Cash then adds its own independent
-  // sellable feature entitlement on top of this finance dependency.
+  // by the plan's BILLING capability. Petty Cash adds its independent sellable
+  // feature entitlement on top of this finance dependency.
   ["/admin/settings/billing-rules", TenantModule.BILLING], ["/admin/settings/billing-exemptions", TenantModule.BILLING], ["/admin/settings/payments", TenantModule.BILLING],
   ["/admin/billing", TenantModule.BILLING], ["/admin/payments", TenantModule.BILLING], ["/admin/receipts", TenantModule.BILLING], ["/admin/collections", TenantModule.BILLING], ["/admin/rentals", TenantModule.BILLING], ["/admin/expenses", TenantModule.BILLING], ["/admin/petty-cash", TenantModule.BILLING], ["/admin/data", TenantModule.BILLING],
   ["/api/payments", TenantModule.BILLING],

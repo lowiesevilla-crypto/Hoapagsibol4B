@@ -102,10 +102,13 @@ export async function resolveDocumentManagementEntitlement(tenantId?: string): P
     : null;
 
   const planEnabled = planFeature?.enabled ?? false;
-  const configuredEnabled = tenantOverride?.enabledOverride ?? planEnabled;
+  const tenantDisabled = tenantOverride?.enabledOverride === false;
   const subscriptionBlocked = blockedSubscriptionStatuses.has(planState.subscriptionStatus);
-  const enabled = Boolean(configuredEnabled && planState.planActive && !subscriptionBlocked);
-  const enabledSource = tenantOverride?.enabledOverride != null
+  // The active subscription plan is the commercial ceiling. Tenant-level platform
+  // controls may restrict an included feature, but can never grant a feature that
+  // the active plan does not include.
+  const enabled = Boolean(planEnabled && !tenantDisabled && planState.planActive && !subscriptionBlocked);
+  const enabledSource = tenantDisabled
     ? "TENANT_OVERRIDE"
     : planEnabled
       ? "PLAN"

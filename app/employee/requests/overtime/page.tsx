@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Clock3, FileCheck2, Hourglass3 } from "lucide-react";
+import { Clock3, FileCheck2, Hourglass } from "lucide-react";
 import { OvertimeStatus, Role } from "@prisma/client";
 import { PageHeader } from "@/components/page-header";
 import { StatusBadge } from "@/components/status-badge";
@@ -97,7 +97,7 @@ export default async function EmployeeOvertimeRequestsPage() {
             <p className="mt-3 text-sm text-slate-700">{item.reason}</p>
             <p className="mt-3 text-xs text-slate-500">Filed {shortDate(item.createdAt)}{item.reviewedAt ? ` · Reviewed ${shortDate(item.reviewedAt)}` : ""}</p>
           </article>)}
-          {!requests.length && <div className="rounded-2xl bg-slate-50 p-8 text-center text-sm text-slate-500"><Hourglass3 className="mx-auto mb-2 size-7 text-slate-300" />No overtime requests yet.</div>}
+          {!requests.length && <div className="rounded-2xl bg-slate-50 p-8 text-center text-sm text-slate-500"><Hourglass className="mx-auto mb-2 size-7 text-slate-300" />No overtime requests yet.</div>}
         </div>
         <div className="hidden table-wrap shadow-none md:block">
           <table className="data-table">

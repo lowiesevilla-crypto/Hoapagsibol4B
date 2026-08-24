@@ -14,12 +14,11 @@ const rules: Array<[string, TenantModule]> = [
   ["/admin/events", TenantModule.EVENTS],
   ["/admin/vehicles", TenantModule.VEHICLES],
   ["/admin/contractors", TenantModule.CONTRACTORS],
-  // Finance surfaces, including the Rental Management workspace, are governed by
-  // the plan's BILLING capability. This keeps every currently exposed finance
-  // function inside the Platform Admin commercial boundary without inventing a
-  // second overlapping rental entitlement.
+  // Finance surfaces, including Rental Management and Petty Cash, are governed
+  // by the plan's BILLING module. Petty Cash then adds its own independent
+  // sellable feature entitlement on top of this finance dependency.
   ["/admin/settings/billing-rules", TenantModule.BILLING], ["/admin/settings/billing-exemptions", TenantModule.BILLING], ["/admin/settings/payments", TenantModule.BILLING],
-  ["/admin/billing", TenantModule.BILLING], ["/admin/payments", TenantModule.BILLING], ["/admin/receipts", TenantModule.BILLING], ["/admin/collections", TenantModule.BILLING], ["/admin/rentals", TenantModule.BILLING], ["/admin/expenses", TenantModule.BILLING], ["/admin/data", TenantModule.BILLING],
+  ["/admin/billing", TenantModule.BILLING], ["/admin/payments", TenantModule.BILLING], ["/admin/receipts", TenantModule.BILLING], ["/admin/collections", TenantModule.BILLING], ["/admin/rentals", TenantModule.BILLING], ["/admin/expenses", TenantModule.BILLING], ["/admin/petty-cash", TenantModule.BILLING], ["/admin/data", TenantModule.BILLING],
   ["/api/payments", TenantModule.BILLING],
   ...homeownerModuleRules,
 ];

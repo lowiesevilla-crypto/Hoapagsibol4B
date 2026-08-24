@@ -91,7 +91,15 @@ export default async function EmployeeAttendanceHistoryPage() {
     <section className="card">
       <h2 className="text-lg font-black">Correction request history</h2>
       <p className="mt-1 text-sm text-slate-500">Requests preserve the original timelog and require Payroll review before the effective attendance is changed.</p>
-      <div className="mt-4 table-wrap shadow-none"><table className="data-table"><thead><tr><th>Requested</th><th>Attendance date</th><th>Reason</th><th>Status</th><th>Reviewed</th></tr></thead><tbody>{requests.map((item) => <tr key={item.id}><td>{shortDate(item.createdAt)}</td><td>{shortDate((item.originalData as Record<string, string>).date || item.createdAt)}</td><td>{item.reason}</td><td><StatusBadge status={item.status} /></td><td>{item.reviewedAt ? shortDate(item.reviewedAt) : "Pending"}</td></tr>)}{!requests.length && <tr><td colSpan={5} className="py-10 text-center text-slate-500">No correction requests yet.</td></tr>}</tbody></table></div>
+      <div className="mt-4 table-wrap shadow-none"><table className="data-table"><thead><tr><th>Requested</th><th>Attendance date</th><th>Reason</th><th>Status</th><th>Reviewed</th></tr></thead><tbody>{requests.map((item) => <tr key={item.id}><td>{shortDate(item.createdAt)}</td><td>{shortDate(correctionAttendanceDate(item.originalData, item.createdAt))}</td><td>{item.reason}</td><td><StatusBadge status={item.status} /></td><td>{item.reviewedAt ? shortDate(item.reviewedAt) : "Pending"}</td></tr>)}{!requests.length && <tr><td colSpan={5} className="py-10 text-center text-slate-500">No correction requests yet.</td></tr>}</tbody></table></div>
     </section>
   </>;
+}
+
+function correctionAttendanceDate(value: unknown, fallback: Date) {
+  if (value && typeof value === "object" && !Array.isArray(value)) {
+    const date = (value as { date?: unknown }).date;
+    if (typeof date === "string" && date.trim()) return date;
+  }
+  return fallback;
 }

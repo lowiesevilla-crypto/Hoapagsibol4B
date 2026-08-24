@@ -1,13 +1,16 @@
 "use server";
 
-import { EmployeeLoanStatus, OvertimeSource, OvertimeStatus, PayrollAccessRole, PayrollStatus, Prisma } from "@prisma/client";
+import { EmployeeLoanStatus, OvertimeSource, OvertimeStatus, PayrollAccessRole, PayrollRevisionType, PayrollStatus, Prisma } from "@prisma/client";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { writeAuditLog } from "@/lib/audit";
 import { prisma } from "@/lib/db";
 import { payrollApprovalRoles, payrollManageRoles, payrollWriteRoles, requirePayrollAccess } from "@/lib/payroll-access";
+import { normalizePayrollCorrectionReason } from "@/lib/payroll-lifecycle";
 import { calculatePayslip } from "@/lib/services/payroll";
 import { employeeLoanSchema, employeeScheduleRangeSchema, overtimeRecordSchema, payrollAccessSchema, payrollCalendarSchema, payrollDeductionSchema, payrollDeductionTypeSchema, payrollPeriodSchema } from "@/lib/validation";
+
+const MUTABLE_PAYROLL_STATUSES: readonly PayrollStatus[] = [PayrollStatus.DRAFT, PayrollStatus.CALCULATED];
 
 /**
  * @requirement PAY-SEC-001 PAY-CALC-001
@@ -35,8 +38,7 @@ export async function recalculatePayrollAction(formData: FormData) {
   const id = String(formData.get("id") || "");
   const period = await prisma.payrollPeriod.findFirst({ where: { id, tenantId: admin.tenantId } });
   if (!period) throw new Error("Payroll period not found.");
-  if (period.status === PayrollStatus.PAID) throw new Error("Paid payroll periods are locked and cannot be recalculated.");
-  if (period.status === PayrollStatus.FINALIZED) throw new Error("Return this payroll period to draft before recalculating.");
+  if (!MUTABLE_PAYROLL_STATUSES.includes(period.status)) throw new Error("Finalized or paid payroll requires a controlled correction before recalculation.");
   const periodId = await calculatePeriod({ startDate: period.startDate, endDate: period.endDate, payDate: period.payDate, createdById: admin.id });
   await writeAuditLog({ actorId: admin.id, module: "PAYROLL", action: "RECALCULATE_PAYROLL", entityType: "PayrollPeriod", entityId: periodId });
   redirect(`/admin/payroll?section=processing&period=${periodId}&success=recalculated`);
@@ -50,12 +52,12 @@ async function calculatePeriod(input: { startDate: Date; endDate: Date; payDate:
   return prisma.$transaction(async (tx) => {
     const actor = await tx.user.findUniqueOrThrow({ where: { id: input.createdById }, select: { tenantId: true } });
     const existing = await tx.payrollPeriod.findUnique({ where: { tenantId_startDate_endDate: { tenantId: actor.tenantId, startDate: input.startDate, endDate: input.endDate } } });
-    if (existing?.status === PayrollStatus.PAID) throw new Error("Paid payroll periods are locked and cannot be recalculated.");
-    if (existing?.status === PayrollStatus.FINALIZED) throw new Error("Return this payroll period to draft before recalculating.");
+    if (existing && !MUTABLE_PAYROLL_STATUSES.includes(existing.status)) throw new Error("Finalized or paid payroll requires a controlled correction before recalculation.");
     const period = existing
       ? await tx.payrollPeriod.update({ where: { id: existing.id }, data: { payDate: input.payDate } })
       : await tx.payrollPeriod.create({ data: { ...input, tenantId: actor.tenantId } });
     await refreshPeriodPayslips(tx as unknown as Prisma.TransactionClient, period);
+    await tx.payrollPeriod.update({ where: { id: period.id }, data: { status: PayrollStatus.CALCULATED } });
     return period.id;
   }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
 }
@@ -157,30 +159,159 @@ async function refreshPeriodPayslips(tx: Prisma.TransactionClient, period: { id:
 }
 
 /**
- * @requirement PAY-SEC-001 PAY-RUN-002
+ * @requirement PAY-RUN-001 PAY-RUN-003 PAY-SEC-001
+ * @status IMPLEMENTED
+ * @description Creates immutable tenant-scoped revision evidence before a calculated payroll becomes finalized.
+ */
+async function createImmutablePayrollRevision(tx: Prisma.TransactionClient, input: { tenantId: string; payrollId: string; actorId: string }) {
+  const period = await tx.payrollPeriod.findFirst({
+    where: { id: input.payrollId, tenantId: input.tenantId },
+    include: {
+      payslips: { where: { tenantId: input.tenantId }, orderBy: { employeeId: "asc" } },
+      deductions: { where: { tenantId: input.tenantId }, orderBy: { createdAt: "asc" } },
+    },
+  });
+  if (!period) throw new Error("Payroll period not found.");
+  if (period.status !== PayrollStatus.CALCULATED) throw new Error("Only calculated payroll can be finalized.");
+  if (!period.payslips.length) throw new Error("Calculate at least one employee payslip before finalizing.");
+
+  const latestRevision = await tx.payrollCalculationRevision.findFirst({
+    where: { tenantId: input.tenantId, payrollId: period.id },
+    include: { payslips: true },
+    orderBy: { revisionNumber: "desc" },
+  });
+  const parentRevision = period.pendingParentRevisionId
+    ? await tx.payrollCalculationRevision.findFirst({
+      where: { id: period.pendingParentRevisionId, tenantId: input.tenantId, payrollId: period.id },
+      include: { payslips: true },
+    })
+    : latestRevision;
+  if (period.pendingParentRevisionId && !parentRevision) throw new Error("The correction source revision is outside the authenticated payroll scope.");
+
+  const revisionType = period.pendingRevisionType
+    ?? (latestRevision ? PayrollRevisionType.DELTA : PayrollRevisionType.INITIAL);
+  const reason = revisionType === PayrollRevisionType.CORRECTION || revisionType === PayrollRevisionType.DELTA
+    ? normalizePayrollCorrectionReason(period.pendingRevisionReason ?? "Calculated payroll finalized as a new immutable revision.")
+    : period.pendingRevisionReason;
+  const revisionNumber = (latestRevision?.revisionNumber ?? 0) + 1;
+  const parentByEmployee = new Map((parentRevision?.payslips ?? []).map((item) => [item.employeeId, item]));
+  const employeeIds = period.payslips.map((item) => item.employeeId);
+  const [adjustments, overtimeRecords] = await Promise.all([
+    tx.attendanceAdjustment.findMany({
+      where: { tenantId: input.tenantId, attendance: { employeeId: { in: employeeIds }, date: { gte: period.startDate, lte: period.endDate } } },
+      include: { attendance: true },
+      orderBy: { createdAt: "asc" },
+    }),
+    tx.overtimeRecord.findMany({
+      where: { tenantId: input.tenantId, employeeId: { in: employeeIds }, date: { gte: period.startDate, lte: period.endDate } },
+      orderBy: { createdAt: "asc" },
+    }),
+  ]);
+  const totals = period.payslips.reduce((sum, slip) => ({
+    grossPay: roundMoney(sum.grossPay + Number(slip.grossPay)),
+    deduction: roundMoney(sum.deduction + Number(slip.deduction)),
+    netPay: roundMoney(sum.netPay + Number(slip.netPay)),
+  }), { grossPay: 0, deduction: 0, netPay: 0 });
+  const parentTotals = parentRevision?.payslips.reduce((sum, slip) => ({
+    grossPay: roundMoney(sum.grossPay + Number(slip.grossPay)),
+    deduction: roundMoney(sum.deduction + Number(slip.deduction)),
+    netPay: roundMoney(sum.netPay + Number(slip.netPay)),
+  }), { grossPay: 0, deduction: 0, netPay: 0 }) ?? { grossPay: 0, deduction: 0, netPay: 0 };
+
+  return tx.payrollCalculationRevision.create({
+    data: {
+      tenantId: input.tenantId,
+      payrollId: period.id,
+      revisionNumber,
+      revisionType,
+      lifecycleStatus: PayrollStatus.FINALIZED,
+      parentRevisionId: parentRevision?.id ?? null,
+      reason,
+      periodSnapshot: jsonValue({
+        payrollId: period.id,
+        tenantId: period.tenantId,
+        startDate: period.startDate,
+        endDate: period.endDate,
+        payDate: period.payDate,
+        sourceStatus: period.status,
+        finalizedStatus: PayrollStatus.FINALIZED,
+      }),
+      deductionSnapshot: jsonValue(period.deductions),
+      adjustmentSnapshot: jsonValue(adjustments),
+      overtimeSnapshot: jsonValue(overtimeRecords),
+      totalsSnapshot: jsonValue(totals),
+      deltaSnapshot: jsonValue({
+        grossPay: roundMoney(totals.grossPay - parentTotals.grossPay),
+        deduction: roundMoney(totals.deduction - parentTotals.deduction),
+        netPay: roundMoney(totals.netPay - parentTotals.netPay),
+      }),
+      createdById: input.actorId,
+      payslips: {
+        create: period.payslips.map((slip) => {
+          const parent = parentByEmployee.get(slip.employeeId);
+          return {
+            tenantId: input.tenantId,
+            payslipId: slip.id,
+            employeeId: slip.employeeId,
+            snapshot: jsonValue(slip),
+            grossPay: slip.grossPay,
+            deduction: slip.deduction,
+            netPay: slip.netPay,
+            grossPayDelta: roundMoney(Number(slip.grossPay) - Number(parent?.grossPay ?? 0)),
+            deductionDelta: roundMoney(Number(slip.deduction) - Number(parent?.deduction ?? 0)),
+            netPayDelta: roundMoney(Number(slip.netPay) - Number(parent?.netPay ?? 0)),
+          };
+        }),
+      },
+    },
+  });
+}
+
+/**
+ * @requirement PAY-SEC-001 PAY-RUN-001 PAY-RUN-002 PAY-RUN-003
  * @status IMPLEMENTED
  */
 export async function finalizePayrollAction(formData: FormData) {
   const { user } = await requirePayrollAccess(payrollApprovalRoles);
   const id = String(formData.get("id") || "");
-  const period = await prisma.payrollPeriod.findFirst({ where: { id, tenantId: user.tenantId }, include: { _count: { select: { payslips: true } } } });
-  if (!period || !period._count.payslips) throw new Error("Calculate at least one employee payslip before finalizing.");
-  if (period.status !== PayrollStatus.DRAFT) throw new Error("Payroll is already finalized.");
-  await prisma.payrollPeriod.update({ where: { id }, data: { status: PayrollStatus.FINALIZED } });
-  await writeAuditLog({ actorId: user.id, module: "PAYROLL", action: "FINALIZE_PAYROLL", entityType: "PayrollPeriod", entityId: id });
+  const revision = await prisma.$transaction(async (tx) => {
+    const createdRevision = await createImmutablePayrollRevision(tx as unknown as Prisma.TransactionClient, { tenantId: user.tenantId, payrollId: id, actorId: user.id });
+    const transitioned = await tx.payrollPeriod.updateMany({
+      where: { id, tenantId: user.tenantId, status: PayrollStatus.CALCULATED },
+      data: {
+        status: PayrollStatus.FINALIZED,
+        pendingRevisionType: null,
+        pendingRevisionReason: null,
+        pendingParentRevisionId: null,
+      },
+    });
+    if (transitioned.count !== 1) throw new Error("Payroll lifecycle changed while finalization was in progress.");
+    await tx.auditLog.create({
+      data: {
+        tenantId: user.tenantId,
+        actorId: user.id,
+        module: "PAYROLL",
+        action: "FINALIZE_PAYROLL_REVISION",
+        entityType: "PayrollCalculationRevision",
+        entityId: createdRevision.id,
+        metadata: { payrollId: id, revisionNumber: createdRevision.revisionNumber, revisionType: createdRevision.revisionType },
+      },
+    });
+    return createdRevision;
+  }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
   revalidatePayrollPages();
-  redirect(`/admin/payroll?section=approval&period=${id}&success=finalized`);
+  redirect(`/admin/payroll?section=approval&period=${id}&success=finalized&revision=${revision.revisionNumber}`);
 }
 
 /**
  * @requirement PAY-SEC-001 PAY-RUN-003
  * @status IMPLEMENTED
- * @description Preserves a full immutable pre-reopen snapshot before a finalized payroll can return to draft. Full revision/delta records remain pending under PAY-RUN-003.
+ * @description Starts a controlled correction from an immutable finalized revision. The original revision remains unchanged while working payslips return to CALCULATED.
  */
 export async function returnPayrollToDraftAction(formData: FormData) {
   const { user } = await requirePayrollAccess(payrollApprovalRoles);
   const id = String(formData.get("id") || "");
-  const reason = String(formData.get("reason") || "").trim() || "Finalized payroll returned to draft for controlled correction.";
+  const reason = normalizePayrollCorrectionReason(String(formData.get("reason") || ""));
 
   const archiveId = await prisma.$transaction(async (tx) => {
     const period = await tx.payrollPeriod.findFirst({
@@ -192,8 +323,13 @@ export async function returnPayrollToDraftAction(formData: FormData) {
       },
     });
     if (!period) throw new Error("Payroll period not found.");
-    if (period.status === PayrollStatus.PAID) throw new Error("Paid payroll periods are locked and cannot be returned to draft.");
-    if (period.status === PayrollStatus.DRAFT) throw new Error("Payroll period is already in draft.");
+    if (period.status !== PayrollStatus.FINALIZED) throw new Error("Only finalized, unpaid payroll can begin a correction. Paid payroll requires reversal evidence.");
+    const sourceRevision = await tx.payrollCalculationRevision.findFirst({
+      where: { tenantId: user.tenantId, payrollId: period.id },
+      orderBy: { revisionNumber: "desc" },
+    });
+    if (!sourceRevision) throw new Error("Finalized payroll has no immutable source revision.");
+    if (sourceRevision.revisionType === PayrollRevisionType.REVERSAL) throw new Error("Reversed payroll evidence cannot begin another correction.");
 
     const employeeIds = period.payslips.map((item) => item.employeeId);
     const adjustments = await tx.attendanceAdjustment.findMany({
@@ -224,16 +360,25 @@ export async function returnPayrollToDraftAction(formData: FormData) {
       },
     });
 
-    await tx.payrollPeriod.update({ where: { id }, data: { status: PayrollStatus.DRAFT } });
+    const transitioned = await tx.payrollPeriod.updateMany({
+      where: { id, tenantId: user.tenantId, status: PayrollStatus.FINALIZED },
+      data: {
+        status: PayrollStatus.CALCULATED,
+        pendingRevisionType: PayrollRevisionType.CORRECTION,
+        pendingRevisionReason: reason,
+        pendingParentRevisionId: sourceRevision.id,
+      },
+    });
+    if (transitioned.count !== 1) throw new Error("Payroll lifecycle changed while the correction was being started.");
     await tx.auditLog.create({
       data: {
         tenantId: user.tenantId,
         actorId: user.id,
         module: "PAYROLL",
-        action: "SNAPSHOT_AND_RETURN_PAYROLL_TO_DRAFT",
+        action: "BEGIN_PAYROLL_CORRECTION",
         entityType: "PayrollPeriod",
         entityId: id,
-        metadata: { archiveId: archive.id, priorStatus: period.status, reason },
+        metadata: { archiveId: archive.id, priorStatus: period.status, reason, sourceRevisionId: sourceRevision.id, sourceRevisionNumber: sourceRevision.revisionNumber },
       },
     });
     return archive.id;
@@ -241,7 +386,7 @@ export async function returnPayrollToDraftAction(formData: FormData) {
 
   revalidatePayrollPages();
   revalidatePath("/admin/payroll/archive");
-  redirect(`/admin/payroll?section=approval&period=${id}&success=reopened&snapshot=${archiveId}`);
+  redirect(`/admin/payroll?section=approval&period=${id}&success=correction-started&snapshot=${archiveId}`);
 }
 
 /**
@@ -257,6 +402,12 @@ export async function markPayrollPaidAction(formData: FormData) {
       include: { deductions: { where: { tenantId: user.tenantId, employeeLoanId: { not: null } }, include: { employeeLoan: true } } },
     });
     if (!period || period.status !== PayrollStatus.FINALIZED) throw new Error("Only finalized payroll can be marked paid.");
+    const latestRevision = await tx.payrollCalculationRevision.findFirst({
+      where: { tenantId: user.tenantId, payrollId: id },
+      orderBy: { revisionNumber: "desc" },
+    });
+    if (!latestRevision) throw new Error("Finalized payroll has no immutable calculation revision.");
+    if (latestRevision.revisionType === PayrollRevisionType.REVERSAL) throw new Error("Reversed payroll evidence cannot be marked paid.");
 
     for (const deduction of period.deductions) {
       if (!deduction.employeeLoan) continue;
@@ -278,11 +429,97 @@ export async function markPayrollPaidAction(formData: FormData) {
       });
     }
 
-    await tx.payrollPeriod.update({ where: { id }, data: { status: PayrollStatus.PAID } });
+    const transitioned = await tx.payrollPeriod.updateMany({ where: { id, tenantId: user.tenantId, status: PayrollStatus.FINALIZED }, data: { status: PayrollStatus.PAID } });
+    if (transitioned.count !== 1) throw new Error("Payroll lifecycle changed while payment was being recorded.");
   }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
   await writeAuditLog({ actorId: user.id, module: "PAYROLL", action: "MARK_PAYROLL_PAID", entityType: "PayrollPeriod", entityId: id });
   revalidatePayrollPages();
   redirect(`/admin/payroll?section=approval&period=${id}&success=paid`);
+}
+
+/**
+ * @requirement PAY-SEC-001 PAY-RUN-003
+ * @status IMPLEMENTED
+ * @description Records an immutable reversal revision without mutating or deleting the finalized/paid source evidence. Finance reversal linkage remains deferred to PAY-TASK-007.
+ */
+export async function recordPayrollReversalAction(formData: FormData) {
+  const { user } = await requirePayrollAccess(payrollApprovalRoles);
+  const id = String(formData.get("id") || "");
+  const reason = normalizePayrollCorrectionReason(String(formData.get("reason") || ""));
+
+  const reversal = await prisma.$transaction(async (tx) => {
+    const period = await tx.payrollPeriod.findFirst({ where: { id, tenantId: user.tenantId } });
+    if (!period) throw new Error("Payroll period not found.");
+    const reversibleStatuses: readonly PayrollStatus[] = [PayrollStatus.FINALIZED, PayrollStatus.POSTED, PayrollStatus.PAID];
+    if (!reversibleStatuses.includes(period.status)) throw new Error("Only finalized, posted, or paid payroll evidence can be reversed.");
+
+    const sourceRevision = await tx.payrollCalculationRevision.findFirst({
+      where: { tenantId: user.tenantId, payrollId: id, revisionType: { not: PayrollRevisionType.REVERSAL } },
+      include: { payslips: { orderBy: { employeeId: "asc" } } },
+      orderBy: { revisionNumber: "desc" },
+    });
+    if (!sourceRevision) throw new Error("Payroll has no immutable calculation revision to reverse.");
+    const existingReversal = await tx.payrollCalculationRevision.findFirst({
+      where: { tenantId: user.tenantId, payrollId: id, reversedRevisionId: sourceRevision.id },
+    });
+    if (existingReversal) throw new Error(`Payroll revision ${sourceRevision.revisionNumber} already has reversal evidence.`);
+    const maximum = await tx.payrollCalculationRevision.aggregate({ where: { tenantId: user.tenantId, payrollId: id }, _max: { revisionNumber: true } });
+    const sourceTotals = sourceRevision.payslips.reduce((sum, slip) => ({
+      grossPay: roundMoney(sum.grossPay + Number(slip.grossPay)),
+      deduction: roundMoney(sum.deduction + Number(slip.deduction)),
+      netPay: roundMoney(sum.netPay + Number(slip.netPay)),
+    }), { grossPay: 0, deduction: 0, netPay: 0 });
+
+    const created = await tx.payrollCalculationRevision.create({
+      data: {
+        tenantId: user.tenantId,
+        payrollId: id,
+        revisionNumber: (maximum._max.revisionNumber ?? 0) + 1,
+        revisionType: PayrollRevisionType.REVERSAL,
+        lifecycleStatus: period.status,
+        parentRevisionId: sourceRevision.id,
+        reversedRevisionId: sourceRevision.id,
+        reason,
+        periodSnapshot: jsonValue({ payrollId: id, tenantId: user.tenantId, lifecycleStatus: period.status, reversalOfRevision: sourceRevision.revisionNumber }),
+        deductionSnapshot: jsonValue(sourceRevision.deductionSnapshot),
+        adjustmentSnapshot: jsonValue(sourceRevision.adjustmentSnapshot),
+        overtimeSnapshot: jsonValue(sourceRevision.overtimeSnapshot),
+        totalsSnapshot: jsonValue({ grossPay: -sourceTotals.grossPay, deduction: -sourceTotals.deduction, netPay: -sourceTotals.netPay }),
+        deltaSnapshot: jsonValue({ grossPay: -sourceTotals.grossPay, deduction: -sourceTotals.deduction, netPay: -sourceTotals.netPay }),
+        createdById: user.id,
+        payslips: {
+          create: sourceRevision.payslips.map((slip) => ({
+            tenantId: user.tenantId,
+            payslipId: slip.payslipId,
+            employeeId: slip.employeeId,
+            snapshot: jsonValue({ reversalOfRevisionPayslipId: slip.id, sourceSnapshot: slip.snapshot }),
+            grossPay: roundMoney(-Number(slip.grossPay)),
+            deduction: roundMoney(-Number(slip.deduction)),
+            netPay: roundMoney(-Number(slip.netPay)),
+            grossPayDelta: roundMoney(-Number(slip.grossPay)),
+            deductionDelta: roundMoney(-Number(slip.deduction)),
+            netPayDelta: roundMoney(-Number(slip.netPay)),
+          })),
+        },
+      },
+    });
+    await tx.auditLog.create({
+      data: {
+        tenantId: user.tenantId,
+        actorId: user.id,
+        module: "PAYROLL",
+        action: "RECORD_PAYROLL_REVERSAL",
+        entityType: "PayrollCalculationRevision",
+        entityId: created.id,
+        reason,
+        metadata: { payrollId: id, sourceRevisionId: sourceRevision.id, sourceRevisionNumber: sourceRevision.revisionNumber, reversalRevisionNumber: created.revisionNumber },
+      },
+    });
+    return created;
+  }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+
+  revalidatePayrollPages();
+  redirect(`/admin/payroll?section=approval&period=${id}&success=reversal-recorded&revision=${reversal.revisionNumber}`);
 }
 
 /**
@@ -533,8 +770,7 @@ export async function savePayrollDeductionAction(formData: FormData) {
       tx.payrollDeductionType.findFirst({ where: { id: deductionTypeId, tenantId: user.tenantId } }),
     ]);
     if (!period) throw new Error("Payroll period not found.");
-    if (period.status === PayrollStatus.PAID) throw new Error("Paid payroll periods are locked and cannot be changed.");
-    if (period.status === PayrollStatus.FINALIZED) throw new Error("Return this payroll period to draft before changing employee deductions.");
+    if (!MUTABLE_PAYROLL_STATUSES.includes(period.status)) throw new Error("Finalized, posting, posted, and paid payroll periods cannot be changed directly.");
     if (!employee) throw new Error("Employee not found.");
     if (!deductionType) throw new Error("Deduction type not found.");
     if (!deductionType.active) throw new Error("Activate this deduction type before assigning it to an employee.");
@@ -555,7 +791,7 @@ export async function savePayrollDeductionAction(formData: FormData) {
         where: {
           tenantId: user.tenantId,
           employeeLoanId,
-          payroll: { status: { in: [PayrollStatus.DRAFT, PayrollStatus.FINALIZED] } },
+          payroll: { status: { not: PayrollStatus.PAID } },
           ...(existingDeduction ? { NOT: { id: existingDeduction.id } } : {}),
         },
         select: { amount: true },
@@ -592,8 +828,7 @@ export async function deletePayrollDeductionAction(formData: FormData) {
   await prisma.$transaction(async (tx) => {
     const period = await tx.payrollPeriod.findFirst({ where: { id: payrollId, tenantId: user.tenantId } });
     if (!period) throw new Error("Payroll period not found.");
-    if (period.status === PayrollStatus.PAID) throw new Error("Paid payroll periods are locked and cannot be changed.");
-    if (period.status === PayrollStatus.FINALIZED) throw new Error("Return this payroll period to draft before changing employee deductions.");
+    if (!MUTABLE_PAYROLL_STATUSES.includes(period.status)) throw new Error("Finalized, posting, posted, and paid payroll periods cannot be changed directly.");
     const deduction = await tx.payrollDeduction.findFirst({ where: { id, tenantId: user.tenantId }, select: { employeeId: true, payrollId: true } });
     if (!deduction || deduction.payrollId !== payrollId) throw new Error("Payroll deduction not found for this cutoff period.");
     employeeId = employeeId || deduction.employeeId;

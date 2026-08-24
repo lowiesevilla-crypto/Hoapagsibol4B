@@ -235,7 +235,8 @@ Payroll, salary, deductions, loans/cash advances, corrections, and payslips are 
 - Payroll records created by Server Actions must explicitly carry the authenticated tenant ID where the schema permits it; do not rely on static/default tenant values for new payroll, payslip, overtime, loan, deduction, access, calendar, schedule, or archive data.
 - Opaque payroll/employee/attendance/loan/deduction/schedule IDs must be resolved under authenticated tenant scope before mutation.
 - `LEGACY_COMPATIBILITY_POLICY` in `lib/services/payroll.ts` exists only to preserve pre-existing behavior while effective-dated policies are being implemented. Its values are not an assertion of current Philippine statutory law.
-- Effective-dated employee compensation/pay-frequency/attendance policy persistence, expanded lifecycle/corrections, effective-dated statutory tables, and idempotent Financial Engine posting/outbox remain incomplete until their registry entries become `VERIFIED`.
+- Effective-dated employee compensation/pay-frequency/attendance policy persistence passed exact-head PR #164 MySQL CI #1108 and Canva Visual Parity #298 and is `VERIFIED` in the payroll registry.
+- Expanded lifecycle/corrections passed exact-head PR #165 HOAHub MySQL CI #1111 and Canva Visual Parity #300 at `1743245f3d676f50fe026cf6831e9663ab8a666b` and are `VERIFIED` in the payroll registry. Effective-dated statutory tables and idempotent Financial Engine posting/outbox remain incomplete.
 
 ## AI Governance
 
@@ -283,12 +284,14 @@ Unless a later merged change updates this file, these remain pending:
 - Homeowner self-service advance Monthly Dues by selecting future From/To months with server-calculated effective Billing Rules.
 - Detailed finance reporting by successful payment posting path/provider rail.
 - Homeowner rental asset browsing/reservation with concurrency-safe ownership and Admin reserved-homeowner visibility.
-- Payroll effective-dated compensation/pay-frequency/attendance policy persistence, expanded correction/revision lifecycle, verified statutory rule sets, and idempotent Financial Engine posting/outbox while their payroll registry entries are not `VERIFIED`.
+- Payroll verified statutory rule sets and idempotent Financial Engine posting/outbox.
 - Any issue/task/old-PR requirement not present in current `main` merely because it exists in documentation or conversation.
 
 ### Effective-Dated Employee Payroll Configuration
 
 Implementation task: `PAY-TASK-004`.
+
+Verification evidence: exact-head PR #164 HOAHub MySQL CI #1108 and Canva Visual Parity #298 passed at `aafe4eef87454745064b4c52178b610087b78119`; merged to `main` at `bb7588a524847b23f68430e92d92e48a6065e589`.
 
 - `EmployeeCompensation` is the payroll-history authority for employee compensation terms. Compensation basis, pay frequency and attendance policy are independent fields; do not re-collapse them into legacy `SalaryType`.
 - Existing `EmployeeProfile.salaryType`, `baseRate`, `standardWorkDays`, `fixedAllowance`, and `fixedDeduction` remain compatibility mirrors during migration. New payroll calculations must resolve `EmployeeCompensation` first.
@@ -298,3 +301,15 @@ Implementation task: `PAY-TASK-004`.
 - Pre-migration payslips are legacy historical evidence and are not mass-rewritten by the compensation backfill.
 - `NOT_REQUIRED` and `EXCEPTION_ONLY` attendance policies are supported only for monthly/fixed-per-period compensation in the current implementation; Daily and Hourly require attendance.
 - This configuration foundation is not a statutory-rate engine. `PAY-STAT-001` remains separately blocked until authoritative Philippine rule tables/effective dates are verified and persisted.
+
+### Payroll Lifecycle and Immutable Revisions
+
+Implementation task: `PAY-TASK-005`. Current delivery branch: `feat/payroll-lifecycle-revisions-20260824` / PR #165. Status: `VERIFIED` by exact-head HOAHub MySQL CI #1111 and Canva Visual Parity #300 at `1743245f3d676f50fe026cf6831e9663ab8a666b`.
+
+- Persisted lifecycle states are `DRAFT`, `CALCULATED`, `FINALIZED`, `POSTING`, `POSTED`, `POST_FAILED`, and `PAID`.
+- Only `DRAFT` and `CALCULATED` working data is mutable. Finalized or later payroll must not be recalculated, have deductions/attendance changed directly, or be destructively deleted.
+- `PayrollCalculationRevision` and `PayrollCalculationRevisionPayslip` are immutable historical authority for finalized calculations. Each revision carries tenant/payroll identity, monotonic revision number, type, actor, reason, parent/source revision, period/input snapshots, totals, and per-employee/aggregate deltas.
+- Controlled correction of finalized unpaid payroll requires a 10–500 character reason, preserves the source revision, returns working data to `CALCULATED`, and creates a new child revision on re-finalization.
+- Finalized/posted/paid evidence may receive one immutable reversal revision. Reversal evidence does not delete or overwrite the source payroll. Paid remains terminal.
+- `POSTING`, `POSTED`, and `POST_FAILED` are persistence states only until `PAY-TASK-007` implements an idempotent Financial Engine posting/outbox/reconciliation contract. Do not manufacture posting transitions before then.
+- The legacy `PayrollArchive` pre-correction snapshot remains compatibility evidence; it does not replace first-class calculation revisions.

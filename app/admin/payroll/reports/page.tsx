@@ -42,7 +42,7 @@ export default async function PayrollReportsPage({ searchParams }: PayrollReport
       <form className="card mb-6 grid gap-4 md:grid-cols-[1fr_1fr_1fr_auto] md:items-end">
         <div><label className="label" htmlFor="from">From payout date</label><input className="field" id="from" name="from" type="date" defaultValue={fromText} required /></div>
         <div><label className="label" htmlFor="to">To payout date</label><input className="field" id="to" name="to" type="date" defaultValue={toText} required /></div>
-        <div><label className="label" htmlFor="status">Payroll status</label><select className="field" id="status" name="status" defaultValue={status}><option value="ALL">All statuses</option><option value="DRAFT">Draft</option><option value="FINALIZED">Finalized</option><option value="PAID">Paid</option></select></div>
+        <div><label className="label" htmlFor="status">Payroll status</label><select className="field" id="status" name="status" defaultValue={status}><option value="ALL">All statuses</option><option value="DRAFT">Draft</option><option value="CALCULATED">Calculated</option><option value="FINALIZED">Finalized</option><option value="POSTING">Posting</option><option value="POSTED">Posted</option><option value="POST_FAILED">Post failed</option><option value="PAID">Paid</option></select></div>
         <button className="btn-primary">Generate</button>
       </form>
     </div>

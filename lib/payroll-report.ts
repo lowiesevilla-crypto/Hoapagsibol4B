@@ -88,7 +88,7 @@ export function summarizePayrollReport(periodIds: string[], rows: PayrollReportR
  * @status IMPLEMENTED
  */
 export function parsePayrollReportStatus(value: string | null | undefined): PayrollReportStatusFilter {
-  if (value === PayrollStatus.DRAFT || value === PayrollStatus.FINALIZED || value === PayrollStatus.PAID) return value;
+  if (Object.values(PayrollStatus).includes(value as PayrollStatus)) return value as PayrollStatus;
   return "ALL";
 }
 

@@ -18,7 +18,7 @@ export default async function EmployeeAttendanceHistoryPage() {
     prisma.payrollPeriod.findMany({
       where: {
         tenantId: user.tenantId,
-        status: { in: [PayrollStatus.FINALIZED, PayrollStatus.PAID] },
+        status: { in: [PayrollStatus.FINALIZED, PayrollStatus.POSTING, PayrollStatus.POSTED, PayrollStatus.POST_FAILED, PayrollStatus.PAID] },
         payslips: { some: { employeeId } },
       },
       select: { startDate: true, endDate: true, status: true, payDate: true },

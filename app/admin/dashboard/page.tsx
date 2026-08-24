@@ -55,7 +55,7 @@ export default async function AdminDashboard() {
     prisma.collection.findMany({ where: { tenantId }, take: 6, orderBy: [{ collectionDate: "desc" }, { createdAt: "desc" }], include: { homeowner: { include: { user: true } }, contractor: true } }),
     prisma.paymentRequest.count({ where: { tenantId, status: PaymentRequestStatus.PENDING_REVIEW } }),
     prisma.documentRequest.count({ where: { tenantId, archivedAt: null, status: { in: [DocumentRequestStatus.SUBMITTED, DocumentRequestStatus.UNDER_REVIEW] } } }),
-    prisma.payrollPeriod.count({ where: { tenantId, status: { in: [PayrollStatus.DRAFT, PayrollStatus.FINALIZED] } } }),
+    prisma.payrollPeriod.count({ where: { tenantId, status: { in: [PayrollStatus.DRAFT, PayrollStatus.CALCULATED, PayrollStatus.FINALIZED, PayrollStatus.POSTING, PayrollStatus.POST_FAILED] } } }),
   ]);
 
   const billedAmount = Number(billed._sum.totalAmount ?? 0);

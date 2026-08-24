@@ -365,8 +365,19 @@ enum AttendanceStatus {
 
 enum PayrollStatus {
   DRAFT
+  CALCULATED
   FINALIZED
+  POSTING
+  POSTED
+  POST_FAILED
   PAID
+}
+
+enum PayrollRevisionType {
+  INITIAL
+  CORRECTION
+  REVERSAL
+  DELTA
 }
 
 enum PayrollAccessRole {
@@ -999,6 +1010,7 @@ model User {
   overtimeRecordsReviewed               OvertimeRecord[]                  @relation("OvertimeRecordReviewer")
   employeeCompensationsCreated          EmployeeCompensation[]            @relation("EmployeeCompensationCreator")
   payrollArchivesDeleted                PayrollArchive[]                  @relation("PayrollArchiveDeletedBy")
+  payrollRevisionsCreated               PayrollCalculationRevision[]      @relation("PayrollRevisionCreator")
   billsArchived                         Bill[]                            @relation("BillArchivedBy")
   paymentsVoided                        Payment[]                         @relation("PaymentVoidedBy")
   paymentsProcessed                     Payment[]                         @relation("PaymentProcessor")
@@ -2493,6 +2505,7 @@ model EmployeeProfile {
   attendance        Attendance[]
   schedules         EmployeeSchedule[]
   payslips          Payslip[]
+  payrollRevisionSnapshots PayrollCalculationRevisionPayslip[]
   payrollDeductions PayrollDeduction[]
   employeeLoans     EmployeeLoan[]
   overtimeRecords   OvertimeRecord[]
@@ -2735,22 +2748,81 @@ model OvertimeRecord {
 }
 
 model PayrollPeriod {
-  tenantId    String             @default("tenant_pagsibol4b_default")
-  id          String             @id @default(cuid())
-  startDate   DateTime           @db.Date
-  endDate     DateTime           @db.Date
-  payDate     DateTime           @db.Date
-  status      PayrollStatus      @default(DRAFT)
-  createdById String
-  createdBy   User               @relation("PayrollCreator", fields: [createdById], references: [id], onDelete: Restrict)
-  payslips    Payslip[]
-  deductions  PayrollDeduction[]
-  createdAt   DateTime           @default(now())
-  updatedAt   DateTime           @updatedAt
+  tenantId                String                         @default("tenant_pagsibol4b_default")
+  id                      String                         @id @default(cuid())
+  startDate               DateTime                       @db.Date
+  endDate                 DateTime                       @db.Date
+  payDate                 DateTime                       @db.Date
+  status                  PayrollStatus                  @default(DRAFT)
+  pendingRevisionType     PayrollRevisionType?
+  pendingRevisionReason   String?                        @db.VarChar(500)
+  pendingParentRevisionId String?
+  createdById             String
+  createdBy               User                           @relation("PayrollCreator", fields: [createdById], references: [id], onDelete: Restrict)
+  payslips                Payslip[]
+  deductions              PayrollDeduction[]
+  revisions               PayrollCalculationRevision[]  @relation("PayrollPeriodRevisions")
+  createdAt               DateTime                       @default(now())
+  updatedAt               DateTime                       @updatedAt
 
   @@unique([tenantId, startDate, endDate])
   @@index([status, payDate])
   @@index([tenantId])
+}
+
+model PayrollCalculationRevision {
+  tenantId           String                               @default("tenant_pagsibol4b_default")
+  id                 String                               @id @default(cuid())
+  payrollId          String
+  payroll            PayrollPeriod                        @relation("PayrollPeriodRevisions", fields: [payrollId], references: [id], onDelete: Restrict)
+  revisionNumber     Int
+  revisionType       PayrollRevisionType
+  lifecycleStatus    PayrollStatus
+  parentRevisionId   String?
+  parentRevision     PayrollCalculationRevision?          @relation("PayrollRevisionParent", fields: [parentRevisionId], references: [id], onDelete: Restrict)
+  childRevisions     PayrollCalculationRevision[]          @relation("PayrollRevisionParent")
+  reversedRevisionId String?                              @unique
+  reversedRevision   PayrollCalculationRevision?          @relation("PayrollRevisionReversal", fields: [reversedRevisionId], references: [id], onDelete: Restrict)
+  reversalRevision   PayrollCalculationRevision?          @relation("PayrollRevisionReversal")
+  reason             String?                              @db.VarChar(500)
+  periodSnapshot     Json
+  deductionSnapshot  Json
+  adjustmentSnapshot Json
+  overtimeSnapshot   Json
+  totalsSnapshot     Json
+  deltaSnapshot      Json?
+  createdById        String
+  createdBy          User                                 @relation("PayrollRevisionCreator", fields: [createdById], references: [id], onDelete: Restrict)
+  payslips           PayrollCalculationRevisionPayslip[]
+  createdAt          DateTime                             @default(now())
+
+  @@unique([payrollId, revisionNumber], map: "PayrollCalcRev_payroll_revision_key")
+  @@index([tenantId, payrollId, createdAt], map: "PayrollCalcRev_scope_idx")
+  @@index([parentRevisionId], map: "PayrollCalcRev_parent_idx")
+  @@index([createdById], map: "PayrollCalcRev_creator_idx")
+}
+
+model PayrollCalculationRevisionPayslip {
+  tenantId       String                     @default("tenant_pagsibol4b_default")
+  id             String                     @id @default(cuid())
+  revisionId     String
+  revision       PayrollCalculationRevision @relation(fields: [revisionId], references: [id], onDelete: Cascade)
+  payslipId      String?
+  payslip        Payslip?                   @relation(fields: [payslipId], references: [id], onDelete: SetNull)
+  employeeId     String
+  employee       EmployeeProfile            @relation(fields: [employeeId], references: [id], onDelete: Restrict)
+  snapshot       Json
+  grossPay       Decimal                    @db.Decimal(12, 2)
+  deduction      Decimal                    @db.Decimal(12, 2)
+  netPay         Decimal                    @db.Decimal(12, 2)
+  grossPayDelta  Decimal                    @default(0) @db.Decimal(12, 2)
+  deductionDelta Decimal                    @default(0) @db.Decimal(12, 2)
+  netPayDelta    Decimal                    @default(0) @db.Decimal(12, 2)
+  createdAt      DateTime                   @default(now())
+
+  @@unique([revisionId, employeeId], map: "PayrollCalcRevSlip_revision_employee_key")
+  @@index([tenantId, employeeId], map: "PayrollCalcRevSlip_scope_idx")
+  @@index([payslipId], map: "PayrollCalcRevSlip_payslip_idx")
 }
 
 model PayrollArchive {
@@ -2811,6 +2883,7 @@ model Payslip {
   compensationId       String?
   compensation         EmployeeCompensation? @relation(fields: [compensationId], references: [id], onDelete: Restrict)
   compensationSnapshot Json?
+  revisionSnapshots     PayrollCalculationRevisionPayslip[]
   payableDays          Decimal               @db.Decimal(6, 2)
   absentDays     Decimal         @default(0) @db.Decimal(6, 2)
   overtimeHours  Decimal         @default(0) @db.Decimal(6, 2)

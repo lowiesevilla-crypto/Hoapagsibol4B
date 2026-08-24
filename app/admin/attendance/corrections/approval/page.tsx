@@ -9,10 +9,10 @@ import { payrollWriteRoles, requirePayrollAccess } from "@/lib/payroll-access";
 import { shortDate } from "@/lib/utils";
 
 export default async function AttendanceCorrectionApprovalPage() {
-  await requirePayrollAccess(payrollWriteRoles);
+  const { user } = await requirePayrollAccess(payrollWriteRoles);
   const [requests, paidPeriods] = await Promise.all([
-    prisma.attendanceAdjustment.findMany({ include: { attendance: { include: { employee: true } }, requestedBy: true, reviewedBy: true }, orderBy: { createdAt: "desc" }, take: 200 }),
-    prisma.payrollPeriod.findMany({ where: { status: PayrollStatus.PAID }, include: { payslips: { select: { employeeId: true } } } }),
+    prisma.attendanceAdjustment.findMany({ where: { tenantId: user.tenantId }, include: { attendance: { include: { employee: true } }, requestedBy: true, reviewedBy: true }, orderBy: { createdAt: "desc" }, take: 200 }),
+    prisma.payrollPeriod.findMany({ where: { tenantId: user.tenantId, status: { in: [PayrollStatus.FINALIZED, PayrollStatus.POSTING, PayrollStatus.POSTED, PayrollStatus.POST_FAILED, PayrollStatus.PAID] } }, include: { payslips: { where: { tenantId: user.tenantId }, select: { employeeId: true } } } }),
   ]);
   const hasPendingRequests = requests.some((item) => item.status === AttendanceAdjustmentStatus.PENDING);
   return <>

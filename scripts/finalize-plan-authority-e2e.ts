@@ -40,11 +40,11 @@ async function main() {
     data: { active: true },
   });
 
-  for (const module of Object.values(TenantModule)) {
+  for (const tenantModule of Object.values(TenantModule)) {
     await prisma.subscriptionPlanModule.upsert({
-      where: { planId_module: { planId: subscription.planId, module } },
+      where: { planId_module: { planId: subscription.planId, module: tenantModule } },
       update: { enabled: true },
-      create: { planId: subscription.planId, module, enabled: true },
+      create: { planId: subscription.planId, module: tenantModule, enabled: true },
     });
   }
 

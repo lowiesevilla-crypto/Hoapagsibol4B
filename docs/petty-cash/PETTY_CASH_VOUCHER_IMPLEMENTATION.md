@@ -28,23 +28,19 @@ Status: IMPLEMENTED on the feature branch. Exact-head CI/UAT remains pending.
 
 - `PCV-007` — A Particular named `Employee Cash Advance` requires tenant Payroll + Loans modules, an active employee, and a deduction amount per cutoff.
 - Voucher creation creates an `EmployeeLoan` with type `CASH_ADVANCE`, principal/balance equal to the Employee Cash Advance voucher amount, reference number equal to the Petty Cash Voucher number, and stores the configured deduction-per-cutoff schedule on the Petty Cash Voucher.
-- Existing payroll repayment integrity applies an Employee Loan repayment only when the related payroll is marked PAID and caps repayment against remaining available loan balance.
+- `lib/petty-cash/payroll-integration.ts` materializes each eligible Petty Cash schedule into the mutable payroll cutoff before payroll reads assigned deductions.
+- Each Petty Cash voucher receives its own tenant-scoped Payroll Deduction Type (`Petty Cash · <voucher number>`), allowing multiple employee cash advances to coexist for the same employee and cutoff without violating payroll's unique deduction identity.
+- Automatic deduction amount is `min(configured deduction, remaining unreserved EmployeeLoan balance)`. Existing unpaid payroll deductions linked to the loan are treated as reservations so repeated calculation/recalculation cannot over-reserve the balance. The final cutoff may therefore be smaller than the configured amount, and no new deduction is created when no available balance remains.
+- The generated `PayrollDeduction` retains `employeeLoanId`. HOAHub does not introduce a second Petty Cash repayment ledger: PR #166's Financial Engine PAYMENT processor remains authoritative for actually increasing `EmployeeLoan.amountPaid`, decreasing `EmployeeLoan.balance`, closing the loan at zero, journal posting, retry/idempotency, and restoring the loan on a paid-payroll reversal.
+- Payroll calculation traceability now maps the Petty Cash materialization hook to `PAY-DED-001` and `PAY-LOAN-001`. Because these previously VERIFIED requirements were extended on this branch, they are correctly recorded as IMPLEMENTED until the new exact head passes the required verification gate.
 
-Status: PARTIAL. The automatic materialization of the configured Petty Cash deduction into each eligible payroll cutoff is intentionally NOT wired yet.
+Status: IMPLEMENTED on the feature branch. Exact-head payroll/finance CI evidence remains pending.
 
-### PR #166 Integration Gate
+### PR #166 Integration Result
 
-PR #166, `Complete payroll statutory, finance, and leave workflows`, is currently active and modifies payroll actions, Prisma payroll schema, finance services, `Agent.md`, `components/sidebar-links.ts`, and `lib/module-routing.ts` among other files. Do not add a competing Petty Cash payroll/finance hook while that PR is open.
+PR #166, `Complete payroll statutory, finance, and leave workflows`, was merged to `main` at `57a10d5f17dff7e98474997178852162ca6edf9a` before the automatic Petty Cash payroll hook was completed.
 
-After PR #166 is merged:
-
-1. Refresh this branch from latest `main` and resolve `components/sidebar-links.ts` / `lib/module-routing.ts` by preserving both PR #166 behavior and Petty Cash navigation/module rules.
-2. Re-read the final `lib/actions/payroll.ts`, payroll finance service, Prisma schema, and payroll implementation ledger.
-3. Implement idempotent automatic Petty Cash Employee Cash Advance deduction materialization for eligible mutable payroll cutoffs.
-4. Deduction amount per cutoff must be `min(configured deduction, remaining unreserved loan balance)`; stop at zero; the last deduction may be smaller than the configured amount.
-5. Account for unpaid/reserved payroll deductions so repeated payroll calculation/recalculation cannot over-reserve a loan balance.
-6. Preserve the `employeeLoanId` relationship so marking payroll PAID reduces `EmployeeLoan.amountPaid`/`balance` through the authoritative payroll repayment path.
-7. Update payroll requirement traceability only if final PR #166 governance requires a new/changed `PAY-*` mapping; do not claim VERIFIED without exact-head evidence.
+This feature branch was reconciled with that merged baseline. PR #166 navigation/leave routes, statutory payroll rules, immutable revisions, Financial Engine posting/outbox, loan repayment processing, and reversal behavior were preserved. Petty Cash only supplies the scheduled Payroll Deduction input; it does not bypass or duplicate the PR #166 finance lifecycle.
 
 ## Privacy and Receipt/AR Regression Requirements
 
@@ -57,6 +53,11 @@ After PR #166 is merged:
 
 Status: IMPLEMENTED on the feature branch. Visual/UAT evidence remains pending.
 
-## Merge Rule
+## Remaining Release Gate
 
-Do not merge this Petty Cash branch to `main` until PR #166 has completed its required release gate and has been merged, this branch has been reconciled with the resulting `main`, the Employee Cash Advance automatic payroll deduction hook is completed against the final payroll contract, `Agent.md` is updated, and exact-head applicable CI/UAT is green.
+Before merge to `main`:
+
+1. Update `Agent.md` against the post-PR #166 operating contract.
+2. Run the exact-head applicable test/typecheck/lint/Prisma/build/MySQL/browser/visual gates.
+3. Resolve any test or migration finding without weakening tenant scope, payroll immutability, financial posting idempotency, or Receipt/AR print behavior.
+4. Only promote `PAY-DED-001` / `PAY-LOAN-001` back to VERIFIED when the new exact Petty Cash head has linked acceptance evidence.

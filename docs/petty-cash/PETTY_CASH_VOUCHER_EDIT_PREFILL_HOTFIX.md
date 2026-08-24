@@ -16,6 +16,11 @@ When editing a Petty Cash Voucher, the saved payee name and voucher data are vis
 - Apply the same selected-record retention and Enter-to-select behavior to Employee Cash Advance employee search.
 - Only the explicit `Save voucher changes` button submits the edit form.
 
-## Verification gate
+## Verification outcome
 
-Run exact-head HOAHub MySQL CI and Canva Visual Parity before merge. Confirm the edit screen opens with the existing payee visibly selected and that pressing Enter in either search field does not submit the form.
+- PR #175 implementation was refreshed onto the current `main` after PR #176 and verified at exact head `a4ffe36f182f069f3e2c0fdca41f010fbbdf0bea`.
+- HOAHub MySQL CI #1152 passed, including production smoke and the complete critical browser suite.
+- Canva Visual Parity #331 passed.
+- PR #175 merged to `main` at `70eda4af51759b491a0ab2380b03a8fc1c76e7c4`.
+- Focused Petty Cash and Billing regressions passed locally after the refresh (8 tests).
+- Repository implementation and merge are complete. Hostinger production deployment and authenticated production UAT remain separate verification gates.

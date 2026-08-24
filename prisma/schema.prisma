@@ -2527,7 +2527,7 @@ model EmployeeCompensation {
   updatedAt          DateTime          @updatedAt
 
   @@unique([tenantId, employeeId, effectiveFrom])
-  @@index([tenantId, employeeId, effectiveFrom, effectiveTo])
+  @@index([tenantId, employeeId, effectiveFrom, effectiveTo], map: "EmpComp_scope_effective_idx")
   @@index([createdById])
 }
 

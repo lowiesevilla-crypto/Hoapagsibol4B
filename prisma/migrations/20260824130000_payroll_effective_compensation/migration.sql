@@ -24,7 +24,7 @@ CREATE TABLE `EmployeeCompensation` (
 
 CREATE UNIQUE INDEX `EmployeeCompensation_tenantId_employeeId_effectiveFrom_key`
   ON `EmployeeCompensation`(`tenantId`, `employeeId`, `effectiveFrom`);
-CREATE INDEX `EmployeeCompensation_tenantId_employeeId_effectiveFrom_effectiveTo_idx`
+CREATE INDEX `EmpComp_scope_effective_idx`
   ON `EmployeeCompensation`(`tenantId`, `employeeId`, `effectiveFrom`, `effectiveTo`);
 CREATE INDEX `EmployeeCompensation_createdById_idx` ON `EmployeeCompensation`(`createdById`);
 

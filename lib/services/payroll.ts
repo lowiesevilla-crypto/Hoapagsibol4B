@@ -1,4 +1,10 @@
-import type { Attendance, EmployeeProfile, PayrollDeduction } from "@prisma/client";
+import type { Attendance, PayrollDeduction } from "@prisma/client";
+
+type DecimalLike = number | string | { toString(): string };
+
+export type CompensationBasisValue = "MONTHLY" | "DAILY" | "HOURLY" | "FIXED_PER_PERIOD";
+export type PayFrequencyValue = "SEMI_MONTHLY" | "MONTHLY";
+export type AttendancePolicyValue = "REQUIRED" | "EXCEPTION_ONLY" | "NOT_REQUIRED";
 
 export type PayrollCalculationPolicy = Readonly<{
   key: string;
@@ -27,15 +33,27 @@ export const LEGACY_COMPATIBILITY_POLICY: PayrollCalculationPolicy = Object.free
 });
 
 type ApprovedOvertime = {
-  hours: number | string | { toString(): string };
+  hours: DecimalLike;
   source: "APPROVED_REQUEST" | "PAYROLL_MANAGER_ADJUSTMENT";
 };
 
-type PayrollEmployeeSnapshot = Pick<EmployeeProfile, "salaryType" | "baseRate" | "standardWorkDays" | "fixedAllowance" | "fixedDeduction">;
+export type PayrollEmployeeSnapshot = {
+  salaryType?: "DAILY" | "MONTHLY";
+  baseRate?: DecimalLike;
+  compensationBasis?: CompensationBasisValue;
+  payFrequency?: PayFrequencyValue;
+  attendancePolicy?: AttendancePolicyValue;
+  rate?: DecimalLike;
+  standardWorkDays: number;
+  standardHoursPerDay?: DecimalLike;
+  fixedAllowance: DecimalLike;
+  fixedDeduction: DecimalLike;
+};
+
 type PayrollAttendanceSnapshot = Pick<
   Attendance,
   "status" | "lateMinutes" | "undertimeMinutes" | "nightDifferentialHours" | "isRestDay" | "holidayType"
->;
+> & Partial<Pick<Attendance, "totalHours">>;
 
 /**
  * @requirement PAY-CALC-003
@@ -76,9 +94,64 @@ export function validatePayrollCalculationPolicy(policy: PayrollCalculationPolic
 }
 
 /**
- * @requirement PAY-CALC-001 PAY-CALC-002 PAY-CALC-003 PAY-ATT-001 PAY-OT-001
+ * @requirement PAY-COMP-001 PAY-COMP-002 PAY-CALC-001
  * @status IMPLEMENTED
- * @description Deterministically calculate a payslip from explicit employee, attendance, deduction, overtime, and policy snapshots.
+ * @description Resolve independent compensation basis, pay frequency and attendance policy while preserving the legacy calculation path for pre-migration snapshots.
+ */
+function resolveEmployeeCompensation(employee: PayrollEmployeeSnapshot, policy: PayrollCalculationPolicy) {
+  const legacy = !employee.compensationBasis;
+  const compensationBasis: CompensationBasisValue = employee.compensationBasis
+    ?? (employee.salaryType === "DAILY" ? "DAILY" : "MONTHLY");
+  const payFrequency: PayFrequencyValue = employee.payFrequency ?? "SEMI_MONTHLY";
+  const attendancePolicy: AttendancePolicyValue = employee.attendancePolicy ?? "REQUIRED";
+  const rate = Number(employee.rate ?? employee.baseRate);
+  const standardWorkDays = Number(employee.standardWorkDays);
+  const standardHoursPerDay = Number(employee.standardHoursPerDay ?? policy.standardHoursPerDay);
+
+  if (!Number.isFinite(rate) || rate <= 0) throw new Error("Employee compensation rate must be greater than zero.");
+  if (!Number.isFinite(standardWorkDays) || standardWorkDays <= 0) throw new Error("Employee standard work days must be greater than zero.");
+  if (!Number.isFinite(standardHoursPerDay) || standardHoursPerDay <= 0 || standardHoursPerDay > 24) {
+    throw new Error("Employee standard hours per day must be greater than zero and no more than 24.");
+  }
+  if (!legacy && attendancePolicy !== "REQUIRED" && ["DAILY", "HOURLY"].includes(compensationBasis)) {
+    throw new Error("Daily and hourly compensation require attendance-based payroll.");
+  }
+
+  const payPeriodsPerMonth = payFrequency === "SEMI_MONTHLY" ? 2 : 1;
+  const expectedWorkDaysPerPeriod = standardWorkDays / payPeriodsPerMonth;
+  const periodBase = compensationBasis === "MONTHLY"
+    ? rate / payPeriodsPerMonth
+    : compensationBasis === "FIXED_PER_PERIOD"
+      ? rate
+      : 0;
+  const dailyRate = compensationBasis === "MONTHLY"
+    ? rate / standardWorkDays
+    : compensationBasis === "DAILY"
+      ? rate
+      : compensationBasis === "HOURLY"
+        ? rate * standardHoursPerDay
+        : rate / expectedWorkDaysPerPeriod;
+  const hourlyRate = compensationBasis === "HOURLY" ? rate : dailyRate / standardHoursPerDay;
+
+  return {
+    legacy,
+    compensationBasis,
+    payFrequency,
+    attendancePolicy,
+    rate,
+    standardWorkDays,
+    standardHoursPerDay,
+    expectedWorkDaysPerPeriod,
+    periodBase,
+    dailyRate,
+    hourlyRate,
+  };
+}
+
+/**
+ * @requirement PAY-CALC-001 PAY-CALC-002 PAY-CALC-003 PAY-ATT-001 PAY-OT-001 PAY-COMP-001 PAY-COMP-002
+ * @status IMPLEMENTED
+ * @description Deterministically calculate a payslip from explicit effective-dated employee, attendance, deduction, overtime, and policy snapshots.
  */
 export function calculatePayslipWithPolicy(
   employee: PayrollEmployeeSnapshot,
@@ -88,12 +161,15 @@ export function calculatePayslipWithPolicy(
   calculationPolicy: PayrollCalculationPolicy,
 ) {
   const policy = validatePayrollCalculationPolicy(calculationPolicy);
+  const compensation = resolveEmployeeCompensation(employee, policy);
   let payableDays = 0;
   let absentDays = 0;
   let lateAndUndertimeHours = 0;
   let nightDifferentialHours = 0;
   let holidayPremiumDays = 0;
   let restDayPremiumDays = 0;
+  let trackedRegularHours = 0;
+  let hasTrackedHours = false;
 
   for (const record of records) {
     if (["PRESENT", "PAID_LEAVE", "HOLIDAY"].includes(record.status)) payableDays += 1;
@@ -102,6 +178,11 @@ export function calculatePayslipWithPolicy(
 
     lateAndUndertimeHours += (Number(record.lateMinutes ?? 0) + Number(record.undertimeMinutes ?? 0)) / 60;
     nightDifferentialHours += Number(record.nightDifferentialHours ?? 0);
+
+    if (record.totalHours != null) {
+      hasTrackedHours = true;
+      trackedRegularHours += Math.min(Math.max(0, Number(record.totalHours)), compensation.standardHoursPerDay);
+    }
 
     if (record.isRestDay && ["PRESENT", "HALF_DAY", "HOLIDAY"].includes(record.status)) {
       restDayPremiumDays += record.status === "HALF_DAY" ? 0.5 : 1;
@@ -121,21 +202,37 @@ export function calculatePayslipWithPolicy(
       ? "Approved OT Request"
       : "None";
 
-  const standardWorkDays = Number(employee.standardWorkDays);
-  if (!Number.isFinite(standardWorkDays) || standardWorkDays <= 0) {
-    throw new Error("Employee standard work days must be greater than zero.");
+  let basicPayBeforeRounding: number;
+  if (compensation.legacy) {
+    basicPayBeforeRounding = compensation.dailyRate * payableDays - compensation.hourlyRate * lateAndUndertimeHours;
+  } else if (compensation.attendancePolicy === "NOT_REQUIRED") {
+    basicPayBeforeRounding = compensation.periodBase;
+  } else if (compensation.attendancePolicy === "EXCEPTION_ONLY") {
+    basicPayBeforeRounding = compensation.periodBase
+      - compensation.dailyRate * absentDays
+      - compensation.hourlyRate * lateAndUndertimeHours;
+  } else if (compensation.compensationBasis === "HOURLY") {
+    const regularHours = hasTrackedHours
+      ? trackedRegularHours
+      : Math.max(0, payableDays * compensation.standardHoursPerDay - lateAndUndertimeHours);
+    basicPayBeforeRounding = compensation.hourlyRate * regularHours;
+  } else if (compensation.compensationBasis === "FIXED_PER_PERIOD") {
+    const attendanceRatio = compensation.expectedWorkDaysPerPeriod > 0
+      ? Math.min(1, payableDays / compensation.expectedWorkDaysPerPeriod)
+      : 0;
+    basicPayBeforeRounding = compensation.periodBase * attendanceRatio
+      - compensation.hourlyRate * lateAndUndertimeHours;
+  } else {
+    basicPayBeforeRounding = compensation.dailyRate * payableDays
+      - compensation.hourlyRate * lateAndUndertimeHours;
   }
 
-  const dailyRate = employee.salaryType === "MONTHLY"
-    ? Number(employee.baseRate) / standardWorkDays
-    : Number(employee.baseRate);
-  const hourlyRate = dailyRate / policy.standardHoursPerDay;
-  const basicPay = roundMoney(Math.max(0, dailyRate * payableDays - hourlyRate * lateAndUndertimeHours));
+  const basicPay = roundMoney(Math.max(0, basicPayBeforeRounding));
   const overtimePay = roundMoney(
-    (hourlyRate * policy.overtimeMultiplier * overtimeHours)
-    + (hourlyRate * policy.nightDifferentialRate * nightDifferentialHours)
-    + (dailyRate * policy.restDayPremiumRate * restDayPremiumDays)
-    + (dailyRate * policy.holidayPremiumRate * holidayPremiumDays),
+    (compensation.hourlyRate * policy.overtimeMultiplier * overtimeHours)
+    + (compensation.hourlyRate * policy.nightDifferentialRate * nightDifferentialHours)
+    + (compensation.dailyRate * policy.restDayPremiumRate * restDayPremiumDays)
+    + (compensation.dailyRate * policy.holidayPremiumRate * holidayPremiumDays),
   );
   const allowance = roundMoney(Number(employee.fixedAllowance));
   const employeeSpecificDeductions = assignedDeductions.reduce((sum, item) => sum + Number(item.amount), 0);
@@ -158,9 +255,9 @@ export function calculatePayslipWithPolicy(
 }
 
 /**
- * @requirement PAY-CALC-001 PAY-CALC-002
- * @status DEFERRED
- * @description Backward-compatible wrapper. Replace its legacy default with an effective-dated persisted policy resolver under PAY-STAT-001/PAY-COMP-002.
+ * @requirement PAY-CALC-001 PAY-CALC-002 PAY-COMP-001
+ * @status IMPLEMENTED
+ * @description Backward-compatible entry point. Effective-dated compensation snapshots use the independent compensation fields; legacy callers continue through the named compatibility policy.
  */
 export function calculatePayslip(
   employee: PayrollEmployeeSnapshot,

@@ -61,13 +61,25 @@ async function calculatePeriod(input: { startDate: Date; endDate: Date; payDate:
 }
 
 /**
- * @requirement PAY-SEC-001 PAY-CALC-001 PAY-ATT-001 PAY-OT-001
+ * @requirement PAY-SEC-001 PAY-CALC-001 PAY-ATT-001 PAY-OT-001 PAY-COMP-002 PAY-COMP-003
  * @status IMPLEMENTED
+ * @description Resolve the employee payroll configuration effective on the cutoff end date and persist an immutable configuration snapshot on the payslip.
  */
 async function refreshPeriodPayslips(tx: Prisma.TransactionClient, period: { id: string; tenantId: string; startDate: Date; endDate: Date }) {
   const employees = await tx.employeeProfile.findMany({
     where: { tenantId: period.tenantId, status: "ACTIVE", hireDate: { lte: period.endDate } },
-    include: { attendance: { where: { tenantId: period.tenantId, date: { gte: period.startDate, lte: period.endDate } } } },
+    include: {
+      attendance: { where: { tenantId: period.tenantId, date: { gte: period.startDate, lte: period.endDate } } },
+      compensations: {
+        where: {
+          tenantId: period.tenantId,
+          effectiveFrom: { lte: period.endDate },
+          OR: [{ effectiveTo: null }, { effectiveTo: { gte: period.endDate } }],
+        },
+        orderBy: { effectiveFrom: "desc" },
+        take: 1,
+      },
+    },
   });
   const assignedDeductions = await tx.payrollDeduction.findMany({
     where: { tenantId: period.tenantId, payrollId: period.id },
@@ -91,12 +103,55 @@ async function refreshPeriodPayslips(tx: Prisma.TransactionClient, period: { id:
   }
   const activeIds = employees.map((employee) => employee.id);
   await tx.payslip.deleteMany({ where: { tenantId: period.tenantId, payrollId: period.id, ...(activeIds.length ? { employeeId: { notIn: activeIds } } : {}) } });
+
   for (const employee of employees) {
-    const values = calculatePayslip(employee, employee.attendance, deductionsByEmployee.get(employee.id) ?? [], overtimeByEmployee.get(employee.id) ?? []);
+    const compensation = employee.compensations[0];
+    const payrollEmployee = compensation ? {
+      compensationBasis: compensation.compensationBasis,
+      payFrequency: compensation.payFrequency,
+      attendancePolicy: compensation.attendancePolicy,
+      rate: compensation.rate,
+      standardWorkDays: compensation.standardWorkDays,
+      standardHoursPerDay: compensation.standardHoursPerDay,
+      fixedAllowance: compensation.fixedAllowance,
+      fixedDeduction: compensation.fixedDeduction,
+    } : employee;
+
+    const values = calculatePayslip(
+      payrollEmployee,
+      employee.attendance,
+      deductionsByEmployee.get(employee.id) ?? [],
+      overtimeByEmployee.get(employee.id) ?? [],
+    );
+    const compensationSnapshot = compensation ? {
+      source: "EMPLOYEE_COMPENSATION",
+      compensationId: compensation.id,
+      resolvedForDate: period.endDate.toISOString(),
+      effectiveFrom: compensation.effectiveFrom.toISOString(),
+      effectiveTo: compensation.effectiveTo?.toISOString() ?? null,
+      compensationBasis: compensation.compensationBasis,
+      payFrequency: compensation.payFrequency,
+      attendancePolicy: compensation.attendancePolicy,
+      rate: compensation.rate.toString(),
+      standardWorkDays: compensation.standardWorkDays,
+      standardHoursPerDay: compensation.standardHoursPerDay.toString(),
+      fixedAllowance: compensation.fixedAllowance.toString(),
+      fixedDeduction: compensation.fixedDeduction.toString(),
+    } : {
+      source: "LEGACY_EMPLOYEE_PROFILE",
+      resolvedForDate: period.endDate.toISOString(),
+      salaryType: employee.salaryType,
+      baseRate: employee.baseRate.toString(),
+      standardWorkDays: employee.standardWorkDays,
+      fixedAllowance: employee.fixedAllowance.toString(),
+      fixedDeduction: employee.fixedDeduction.toString(),
+    };
+    const payslipValues = { ...values, compensationId: compensation?.id ?? null, compensationSnapshot };
+
     await tx.payslip.upsert({
       where: { payrollId_employeeId: { payrollId: period.id, employeeId: employee.id } },
-      create: { tenantId: period.tenantId, payrollId: period.id, employeeId: employee.id, ...values },
-      update: values,
+      create: { tenantId: period.tenantId, payrollId: period.id, employeeId: employee.id, ...payslipValues },
+      update: payslipValues,
     });
   }
 }

@@ -285,3 +285,16 @@ Unless a later merged change updates this file, these remain pending:
 - Homeowner rental asset browsing/reservation with concurrency-safe ownership and Admin reserved-homeowner visibility.
 - Payroll effective-dated compensation/pay-frequency/attendance policy persistence, expanded correction/revision lifecycle, verified statutory rule sets, and idempotent Financial Engine posting/outbox while their payroll registry entries are not `VERIFIED`.
 - Any issue/task/old-PR requirement not present in current `main` merely because it exists in documentation or conversation.
+
+### Effective-Dated Employee Payroll Configuration
+
+Implementation task: `PAY-TASK-004`.
+
+- `EmployeeCompensation` is the payroll-history authority for employee compensation terms. Compensation basis, pay frequency and attendance policy are independent fields; do not re-collapse them into legacy `SalaryType`.
+- Existing `EmployeeProfile.salaryType`, `baseRate`, `standardWorkDays`, `fixedAllowance`, and `fixedDeduction` remain compatibility mirrors during migration. New payroll calculations must resolve `EmployeeCompensation` first.
+- Payroll configuration edits create a new effective-dated version and close the prior version. Do not update historical compensation rows in place.
+- New configuration effective dates must not overlap finalized/paid payroll history for that employee.
+- Payroll resolves the configuration effective on the cutoff end date and stores `Payslip.compensationId` plus `Payslip.compensationSnapshot`. Later master-data changes must not mutate that snapshot.
+- Pre-migration payslips are legacy historical evidence and are not mass-rewritten by the compensation backfill.
+- `NOT_REQUIRED` and `EXCEPTION_ONLY` attendance policies are supported only for monthly/fixed-per-period compensation in the current implementation; Daily and Hourly require attendance.
+- This configuration foundation is not a statutory-rate engine. `PAY-STAT-001` remains separately blocked until authoritative Philippine rule tables/effective dates are verified and persisted.

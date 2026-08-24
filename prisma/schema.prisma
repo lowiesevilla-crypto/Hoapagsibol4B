@@ -336,6 +336,24 @@ enum SalaryType {
   MONTHLY
 }
 
+enum CompensationBasis {
+  MONTHLY
+  DAILY
+  HOURLY
+  FIXED_PER_PERIOD
+}
+
+enum PayFrequency {
+  SEMI_MONTHLY
+  MONTHLY
+}
+
+enum AttendancePolicy {
+  REQUIRED
+  EXCEPTION_ONLY
+  NOT_REQUIRED
+}
+
 enum AttendanceStatus {
   PRESENT
   HALF_DAY
@@ -979,6 +997,7 @@ model User {
   attendanceAdjustmentsReviewed         AttendanceAdjustment[]            @relation("AttendanceAdjustmentReviewer")
   overtimeRecordsCreated                OvertimeRecord[]                  @relation("OvertimeRecordCreator")
   overtimeRecordsReviewed               OvertimeRecord[]                  @relation("OvertimeRecordReviewer")
+  employeeCompensationsCreated          EmployeeCompensation[]            @relation("EmployeeCompensationCreator")
   payrollArchivesDeleted                PayrollArchive[]                  @relation("PayrollArchiveDeletedBy")
   billsArchived                         Bill[]                            @relation("BillArchivedBy")
   paymentsVoided                        Payment[]                         @relation("PaymentVoidedBy")
@@ -2453,36 +2472,63 @@ model DocumentPlaceholderDefinition {
 }
 
 model EmployeeProfile {
-  tenantId          String             @default("tenant_pagsibol4b_default")
-  id                String             @id @default(cuid())
-  userId            String?            @unique
-  user              User?              @relation("EmployeeUser", fields: [userId], references: [id], onDelete: SetNull)
+  tenantId          String                 @default("tenant_pagsibol4b_default")
+  id                String                 @id @default(cuid())
+  userId            String?                @unique
+  user              User?                  @relation("EmployeeUser", fields: [userId], references: [id], onDelete: SetNull)
   employeeNumber    String
   name              String
   position          String
   email             String?
   phone             String
   address           String
-  hireDate          DateTime           @db.Date
+  hireDate          DateTime               @db.Date
   salaryType        SalaryType
-  baseRate          Decimal            @db.Decimal(12, 2)
-  standardWorkDays  Int                @default(26)
-  fixedAllowance    Decimal            @default(0) @db.Decimal(12, 2)
-  fixedDeduction    Decimal            @default(0) @db.Decimal(12, 2)
-  status            EmployeeStatus     @default(ACTIVE)
+  baseRate          Decimal                @db.Decimal(12, 2)
+  standardWorkDays  Int                    @default(26)
+  fixedAllowance    Decimal                @default(0) @db.Decimal(12, 2)
+  fixedDeduction    Decimal                @default(0) @db.Decimal(12, 2)
+  status            EmployeeStatus         @default(ACTIVE)
+  compensations     EmployeeCompensation[]
   attendance        Attendance[]
   schedules         EmployeeSchedule[]
   payslips          Payslip[]
   payrollDeductions PayrollDeduction[]
   employeeLoans     EmployeeLoan[]
   overtimeRecords   OvertimeRecord[]
-  createdAt         DateTime           @default(now())
-  updatedAt         DateTime           @updatedAt
+  createdAt         DateTime               @default(now())
+  updatedAt         DateTime               @updatedAt
 
   @@unique([tenantId, employeeNumber])
   @@index([name])
   @@index([status])
   @@index([tenantId])
+}
+
+model EmployeeCompensation {
+  tenantId           String            @default("tenant_pagsibol4b_default")
+  id                 String            @id @default(cuid())
+  employeeId         String
+  employee           EmployeeProfile   @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  effectiveFrom      DateTime          @db.Date
+  effectiveTo        DateTime?         @db.Date
+  compensationBasis  CompensationBasis
+  payFrequency       PayFrequency      @default(SEMI_MONTHLY)
+  attendancePolicy   AttendancePolicy  @default(REQUIRED)
+  rate               Decimal           @db.Decimal(12, 2)
+  standardWorkDays   Int               @default(26)
+  standardHoursPerDay Decimal          @default(8) @db.Decimal(5, 2)
+  fixedAllowance     Decimal           @default(0) @db.Decimal(12, 2)
+  fixedDeduction     Decimal           @default(0) @db.Decimal(12, 2)
+  createdById        String?
+  createdBy          User?             @relation("EmployeeCompensationCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  payslips           Payslip[]
+  createdAt          DateTime          @default(now())
+  updatedAt          DateTime          @updatedAt
+
+  @@unique([tenantId, employeeId, effectiveFrom])
+  @@index([tenantId, employeeId, effectiveFrom, effectiveTo])
+  @@index([createdById])
 }
 
 model PayrollDeductionType {
@@ -2756,13 +2802,16 @@ model PayrollDeduction {
 }
 
 model Payslip {
-  tenantId       String          @default("tenant_pagsibol4b_default")
-  id             String          @id @default(cuid())
-  payrollId      String
-  payroll        PayrollPeriod   @relation(fields: [payrollId], references: [id], onDelete: Restrict)
-  employeeId     String
-  employee       EmployeeProfile @relation(fields: [employeeId], references: [id], onDelete: Restrict)
-  payableDays    Decimal         @db.Decimal(6, 2)
+  tenantId             String                @default("tenant_pagsibol4b_default")
+  id                   String                @id @default(cuid())
+  payrollId            String
+  payroll              PayrollPeriod         @relation(fields: [payrollId], references: [id], onDelete: Restrict)
+  employeeId           String
+  employee             EmployeeProfile       @relation(fields: [employeeId], references: [id], onDelete: Restrict)
+  compensationId       String?
+  compensation         EmployeeCompensation? @relation(fields: [compensationId], references: [id], onDelete: Restrict)
+  compensationSnapshot Json?
+  payableDays          Decimal               @db.Decimal(6, 2)
   absentDays     Decimal         @default(0) @db.Decimal(6, 2)
   overtimeHours  Decimal         @default(0) @db.Decimal(6, 2)
   basicPay       Decimal         @db.Decimal(12, 2)
@@ -2777,6 +2826,7 @@ model Payslip {
 
   @@unique([payrollId, employeeId])
   @@index([employeeId, createdAt])
+  @@index([compensationId])
   @@index([tenantId])
 }
 

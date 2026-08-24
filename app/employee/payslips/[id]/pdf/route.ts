@@ -10,11 +10,11 @@ export const runtime = "nodejs";
 export async function GET(_request: Request, { params }: { params: Promise<{ id: string }> }) {
   const user = await requireUser();
   const { id } = await params;
-  const slip = await prisma.payslip.findUnique({
-    where: { id },
+  const slip = await prisma.payslip.findFirst({
+    where: { id, tenantId: user.tenantId },
     include: {
       employee: true,
-      payroll: { include: { deductions: { where: {}, include: { deductionType: true, employeeLoan: true }, orderBy: { createdAt: "asc" } } } },
+      payroll: { include: { deductions: { where: { tenantId: user.tenantId }, include: { deductionType: true, employeeLoan: true }, orderBy: { createdAt: "asc" } } } },
     },
   });
   if (!slip) return new Response("Payslip not found.", { status: 404 });
@@ -61,6 +61,10 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
   const deductionRows = [
     ...(Number(slip.employee.fixedDeduction) > 0 ? [["Employee fixed deduction", moneyPdf(slip.employee.fixedDeduction)]] : []),
     ...deductions.map((deduction) => [deduction.employeeLoan ? `${deduction.deductionType.name} - ${deduction.employeeLoan.description}` : deduction.deductionType.name, moneyPdf(deduction.amount)]),
+    ...(Number(slip.sssEmployeeContribution) > 0 ? [["SSS employee contribution", moneyPdf(slip.sssEmployeeContribution)]] : []),
+    ...(Number(slip.philHealthEmployeeContribution) > 0 ? [["PhilHealth contribution", moneyPdf(slip.philHealthEmployeeContribution)]] : []),
+    ...(Number(slip.pagIbigEmployeeContribution) > 0 ? [["Pag-IBIG contribution", moneyPdf(slip.pagIbigEmployeeContribution)]] : []),
+    ...(Number(slip.withholdingTax) > 0 ? [["Withholding tax", moneyPdf(slip.withholdingTax)]] : []),
     ["Total Deductions", moneyPdf(slip.deduction)],
   ];
   const deductionsY = drawAmountRows(page, y, deductionRows.length ? deductionRows : [["No assigned deductions", moneyPdf(0)]], 315, regular, bold);

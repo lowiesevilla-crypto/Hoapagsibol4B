@@ -2,8 +2,8 @@ import type { PayrollStatus } from "@prisma/client";
 
 /**
  * @requirement PAY-RUN-001 PAY-RUN-003
- * @status IN_PROGRESS
- * @description Canonical lifecycle policy for payroll processing and immutable correction/revision handling. Persistence wiring for POSTING/POSTED/POST_FAILED and first-class revision rows remains pending.
+ * @status IMPLEMENTED
+ * @description Canonical lifecycle policy for payroll processing, durable financial posting, payment, and immutable correction/revision handling.
  */
 export const PAYROLL_LIFECYCLE_STATES = [
   "DRAFT",

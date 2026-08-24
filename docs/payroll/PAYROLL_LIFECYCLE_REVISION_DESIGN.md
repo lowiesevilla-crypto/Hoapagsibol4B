@@ -38,7 +38,7 @@ The existing `PayrollArchive` pre-reopen snapshot is retained as compatibility e
 2. `PayrollCalculationRevision` and per-employee revision snapshots retain first-class immutable evidence.
 3. Correction/reversal revisions retain actor, required reason, parent/source revision and immutable delta evidence.
 4. Payroll and attendance actions block direct mutation of finalized/posted/paid values.
-5. `POSTING`, `POSTED`, and `POST_FAILED` are persisted but remain dormant until the idempotent finance posting contract exists.
+5. `POSTING`, `POSTED`, and `POST_FAILED` are driven only by the durable tenant/revision/event outbox. A successful accrual journal reaches `POSTED`; a separate successful payment journal reaches `PAID`; failures remain retryable with the same idempotency identity.
 6. Existing calculated, finalized, and paid periods are backfilled into deterministic revision-1 evidence.
 
 ## Acceptance criteria

@@ -120,7 +120,7 @@ Payroll loan repayment cannot exceed the remaining available balance. A repaymen
 ### Payroll Lifecycle / Corrections
 
 #### PAY-RUN-001 — Payroll lifecycle
-The persisted lifecycle distinguishes `DRAFT`, `CALCULATED`, `FINALIZED`, `POSTING`, `POSTED`, `POST_FAILED`, and `PAID` sufficiently to prevent accidental historical mutation. `POSTING`, `POSTED`, and `POST_FAILED` remain dormant until the idempotent Financial Engine posting/outbox contract is implemented; their presence must not be represented as live finance integration.
+The persisted lifecycle distinguishes `DRAFT`, `CALCULATED`, `FINALIZED`, `POSTING`, `POSTED`, `POST_FAILED`, and `PAID` sufficiently to prevent accidental historical mutation. Financial posting uses the durable outbox contract described by `PAY-FIN-001/002/003`; `PAID` is reached only after the accrual post succeeds and net-pay disbursement is posted.
 
 #### PAY-RUN-002 — Finalization validation
 A payroll cannot finalize without calculated payslips and must preserve audit evidence of the actor and transition.
@@ -135,6 +135,8 @@ SSS, PhilHealth, Pag-IBIG, withholding tax, statutory holiday/rest-day/night dif
 
 Safety constraint: do not embed a value as “current Philippine law” until the authoritative table/rule and effective date have been verified for the target production period.
 
+Current implemented rule-set sources are the official DOLE 2024 statutory-benefits handbook, BIR Annex E effective 2023 onward, SSS contribution schedule effective January 2025, PhilHealth 5% premium schedule, and Pag-IBIG Circular No. 460. A later legal change requires a new effective-dated rule-set row; historical rows are never overwritten.
+
 #### PAY-STAT-002 — Statutory rule snapshot
 Each finalized payroll must retain enough rule/version evidence to reproduce how statutory deductions/premiums were calculated.
 
@@ -148,6 +150,11 @@ Payroll-to-finance integration must use durable delivery/retry semantics (for ex
 
 #### PAY-FIN-003 — Payroll expense/liability traceability
 Finance entries must retain source payroll period/revision references and reconcile gross pay, employer/employee deductions/contributions as designed, and net-pay liability/disbursement.
+
+Accounting boundary:
+- `POST` recognizes gross wage/employer-contribution expense and the corresponding statutory, deduction-clearing, and net-pay liabilities.
+- `PAYMENT` clears net-pay liability to cash and applies employee-loan repayment exactly once.
+- `REVERSAL` references immutable reversal evidence and restores loan receivable/recovery evidence where payment had already occurred.
 
 ### Reports / Employee Self-Service
 
@@ -175,7 +182,9 @@ Employees can view only their own loans/cash advances, including principal, tota
 #### PAY-EMP-005 — Employee leave self-service
 Employees can file leave using a leave type configured by the tenant administrator and view leave-request status/balance where applicable. Statutory leave types must be protected from unsafe tenant formula overrides.
 
-Dependency note: the current payroll schema does not yet contain a tenant-configurable leave type/request/balance domain. This requirement remains blocked until that persistence and approval workflow are implemented.
+Implemented domain: `LeaveType`, `LeaveRequest`, `EmployeeLeaveBalance`, and `LeaveBalanceTransaction` are tenant scoped. Requests snapshot the resolved type and date evidence. Approval consumes balance and creates linked paid/unpaid attendance atomically, while track-only statutory leave remains outside ordinary wage calculation. Finalized/posted/paid payroll dates cannot be changed through direct leave approval.
+
+Protected presets include Service Incentive, Maternity, Paternity, Solo Parent, VAWC, and Special Leave for Women. Tenant administrators may add/edit custom leave policies but cannot edit or deactivate protected statutory formulas. Statutory eligibility/evidence still requires authorized HR review; the system does not infer a qualifying legal event from the request alone.
 
 ## 5. Implementation Sequence
 

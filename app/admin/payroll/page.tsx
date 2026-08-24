@@ -14,6 +14,8 @@ import {
   finalizePayrollAction,
   generatePayrollAction,
   markPayrollPaidAction,
+  postPayrollReversalToFinanceAction,
+  postPayrollToFinanceAction,
   recordPayrollReversalAction,
   recalculatePayrollAction,
   returnPayrollToDraftAction,
@@ -46,6 +48,12 @@ export default async function PayrollPage({ searchParams }: PayrollPageProps) {
       payslips: { where: { tenantId }, include: { employee: true }, orderBy: { employee: { name: "asc" } } },
       deductions: { where: { tenantId }, include: { employee: true, deductionType: true, employeeLoan: true }, orderBy: { createdAt: "desc" } },
       revisions: { where: { tenantId }, include: { createdBy: true }, orderBy: { revisionNumber: "desc" } },
+      financialPostings: {
+        where: { tenantId },
+        include: { outbox: true, journalEntry: { include: { lines: { orderBy: { lineOrder: "asc" } } } } },
+        orderBy: { createdAt: "desc" },
+      },
+      statutoryRuleSet: true,
       _count: { select: { payslips: true } },
     },
     orderBy: { endDate: "desc" },
@@ -63,10 +71,13 @@ export default async function PayrollPage({ searchParams }: PayrollPageProps) {
   const openEmployeeLoans = employeeLoans.filter((loan) => loan.status === "OPEN" && Number(loan.balance) > 0);
   const selected = periods.find((period) => period.id === periodId) ?? periods[0];
   const selectedReversed = selected?.revisions[0]?.revisionType === "REVERSAL";
+  const selectedFinancialReversalPosted = selected?.financialPostings.some((posting) => posting.eventType === "REVERSAL" && posting.status === "POSTED") ?? false;
   const selectedDeductionAssignments = [...(selected?.deductions ?? [])].sort((a, b) => a.employee.name.localeCompare(b.employee.name) || a.deductionType.name.localeCompare(b.deductionType.name));
   const initialDeductionEmployeeId = activeEmployees.some((employee) => employee.id === requestedEmployeeId) ? requestedEmployeeId : "";
   const selectedGrossPay = selected?.payslips.reduce((sum, slip) => sum + Number(slip.grossPay), 0) ?? 0;
   const selectedDeductions = selected?.payslips.reduce((sum, slip) => sum + Number(slip.deduction), 0) ?? 0;
+  const selectedStatutoryDeductions = selected?.payslips.reduce((sum, slip) => sum + Number(slip.statutoryDeduction), 0) ?? 0;
+  const selectedEmployerContributions = selected?.payslips.reduce((sum, slip) => sum + Number(slip.employerContribution), 0) ?? 0;
   const selectedTotalPayroll = selected?.payslips.reduce((sum, slip) => sum + Number(slip.netPay), 0) ?? 0;
   const activeLoanRecords = employeeLoans.filter((loan) => loan.status !== "CANCELLED");
   const totalLoanPrincipal = activeLoanRecords.reduce((sum, loan) => sum + Number(loan.principalAmount), 0);
@@ -337,16 +348,17 @@ export default async function PayrollPage({ searchParams }: PayrollPageProps) {
       <div className="mb-5">
         <p className="text-xs font-bold uppercase tracking-wider text-pine-600">Statutory payroll setup</p>
         <h2 className="mt-1 text-lg font-black">Government contributions</h2>
-        <p className="text-sm leading-6 text-slate-500">Use payroll deduction types for SSS, PhilHealth, Pag-IBIG, and other statutory deductions. Activate a contribution type only when the amount and applicability are ready.</p>
+        <p className="text-sm leading-6 text-slate-500">SSS, PhilHealth, Pag-IBIG, withholding tax, holiday, rest-day, overtime, and night-differential rules resolve from an immutable effective-dated source record. Ordinary deduction types remain separate.</p>
       </div>
       <div className="grid gap-3 md:grid-cols-3">
-        {deductionTypes.filter((deduction) => ["sss", "philhealth", "pag-ibig", "pagibig"].includes(deduction.name.toLowerCase())).map((deduction) => <div key={deduction.id} className="rounded-2xl border border-slate-100 bg-slate-50 p-4">
-          <p className="font-black">{deduction.name}</p>
-          <p className="mt-1 text-xs text-slate-500">{deduction.description || "No contribution settings yet."}</p>
-          <div className="mt-3 flex flex-wrap gap-2 text-xs font-bold"><span className="rounded-full bg-white px-2.5 py-1">{money(deduction.amount)}</span><span className={`rounded-full px-2.5 py-1 ${deduction.active ? "bg-emerald-100 text-emerald-700" : "bg-slate-200 text-slate-600"}`}>{deduction.active ? "Active" : "Inactive"}</span></div>
-        </div>)}
+        <div className="rounded-2xl border border-slate-100 bg-slate-50 p-4 md:col-span-3">
+          <p className="font-black">{selected?.statutoryRuleSet?.name ?? "No statutory rule set resolved"}</p>
+          <p className="mt-1 text-xs text-slate-500">{selected?.statutoryRuleSet ? `${selected.statutoryRuleSet.code} · Effective ${shortDate(selected.statutoryRuleSet.effectiveFrom)}${selected.statutoryRuleSet.effectiveTo ? ` to ${shortDate(selected.statutoryRuleSet.effectiveTo)}` : " until superseded"} · Integrity ${selected.statutoryRuleSet.contentHash.slice(0, 12)}` : "Calculate a payroll period with a supported pay date to resolve verified rules."}</p>
+        </div>
+        <div className="rounded-2xl border border-slate-100 bg-white p-4"><p className="text-xs font-bold uppercase tracking-wider text-slate-500">Employee statutory deductions</p><p className="mt-1 text-xl font-black">{money(selectedStatutoryDeductions)}</p></div>
+        <div className="rounded-2xl border border-slate-100 bg-white p-4"><p className="text-xs font-bold uppercase tracking-wider text-slate-500">Employer contributions</p><p className="mt-1 text-xl font-black">{money(selectedEmployerContributions)}</p></div>
+        <div className="rounded-2xl border border-slate-100 bg-white p-4"><p className="text-xs font-bold uppercase tracking-wider text-slate-500">Employees calculated</p><p className="mt-1 text-xl font-black">{selected?.payslips.length ?? 0}</p></div>
       </div>
-      <div className="mt-5"><Link className="btn-secondary" href={`/admin/payroll?section=settings${selected ? `&period=${selected.id}` : ""}`}>Edit contribution deduction types</Link></div>
     </section>}
 
     {section === "reports" && <section className="grid gap-4 lg:grid-cols-2">
@@ -395,6 +407,7 @@ export default async function PayrollPage({ searchParams }: PayrollPageProps) {
                 <p className="text-xs font-bold uppercase tracking-wider text-pine-600">Selected payroll</p>
                 <h2 className="mt-1 text-xl font-black">{shortDate(selected.startDate)} to {shortDate(selected.endDate)}</h2>
                 <p className="text-sm text-slate-500">Pay date: {shortDate(selected.payDate)}</p>
+                <p className="mt-1 text-xs text-slate-500">Statutory rules: {selected.statutoryRuleSet?.code ?? "Recalculation required"}</p>
               </div>
               <div className="flex flex-wrap gap-2">
                 {(selected.status === "DRAFT" || selected.status === "CALCULATED") && <>
@@ -414,9 +427,9 @@ export default async function PayrollPage({ searchParams }: PayrollPageProps) {
                     <input className="field min-h-10 py-2 text-xs" name="reason" minLength={10} maxLength={500} required placeholder="Correction reason (required)" />
                     <SubmitButton className="btn-secondary"><RotateCcw className="size-4" /> Begin correction</SubmitButton>
                   </form>}
-                  {canApprovePayroll && !selectedReversed && <form action={markPayrollPaidAction}>
+                  {canApprovePayroll && !selectedReversed && <form action={postPayrollToFinanceAction}>
                     <input type="hidden" name="id" value={selected.id} />
-                    <SubmitButton>Mark payroll paid</SubmitButton>
+                    <SubmitButton><HandCoins className="size-4" /> Post to Financial Engine</SubmitButton>
                   </form>}
                   {canApprovePayroll && !selectedReversed && <form action={recordPayrollReversalAction} className="flex min-w-64 flex-col gap-2">
                     <input type="hidden" name="id" value={selected.id} />
@@ -424,10 +437,22 @@ export default async function PayrollPage({ searchParams }: PayrollPageProps) {
                     <SubmitButton className="btn-danger">Record reversal evidence</SubmitButton>
                   </form>}
                 </>}
-                {selected.status === "PAID" && canApprovePayroll && !selectedReversed && <form action={recordPayrollReversalAction} className="flex min-w-64 flex-col gap-2">
+                {selected.status === "POST_FAILED" && canApprovePayroll && !selectedReversed && <form action={postPayrollToFinanceAction}>
+                  <input type="hidden" name="id" value={selected.id} />
+                  <SubmitButton><RotateCcw className="size-4" /> Retry Financial Engine post</SubmitButton>
+                </form>}
+                {selected.status === "POSTED" && canApprovePayroll && !selectedReversed && <form action={markPayrollPaidAction}>
+                  <input type="hidden" name="id" value={selected.id} />
+                  <SubmitButton><HandCoins className="size-4" /> Record net-pay disbursement</SubmitButton>
+                </form>}
+                {(selected.status === "POSTED" || selected.status === "PAID") && canApprovePayroll && !selectedReversed && <form action={recordPayrollReversalAction} className="flex min-w-64 flex-col gap-2">
                   <input type="hidden" name="id" value={selected.id} />
                   <input className="field min-h-10 py-2 text-xs" name="reason" minLength={10} maxLength={500} required placeholder="Reversal reason (required)" />
                   <SubmitButton className="btn-danger">Record reversal evidence</SubmitButton>
+                </form>}
+                {(selected.status === "POSTED" || selected.status === "PAID") && canApprovePayroll && selectedReversed && !selectedFinancialReversalPosted && <form action={postPayrollReversalToFinanceAction}>
+                  <input type="hidden" name="id" value={selected.id} />
+                  <SubmitButton className="btn-danger"><RotateCcw className="size-4" /> Post financial reversal</SubmitButton>
                 </form>}
                 <StatusBadge status={selected.status} />
               </div>
@@ -451,16 +476,46 @@ export default async function PayrollPage({ searchParams }: PayrollPageProps) {
 
             {selected.status === "FINALIZED" && <div className="mt-4 flex gap-3 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
               <AlertTriangle className="mt-0.5 size-5 shrink-0" />
-              <p><strong>Finalized but not paid.</strong> A correction starts from this immutable revision and produces a new revision when finalized again. The original evidence is never overwritten.</p>
+              <p><strong>Finalized and ready to post.</strong> Financial posting records the payroll accrual through a durable, idempotent outbox. Net-pay disbursement is available only after that posting succeeds.</p>
+            </div>}
+            {selected.status === "POSTING" && <div className="mt-4 flex gap-3 rounded-2xl border border-blue-200 bg-blue-50 p-4 text-sm text-blue-900">
+              <HandCoins className="mt-0.5 size-5 shrink-0" />
+              <p><strong>Financial posting is processing.</strong> The durable outbox prevents duplicate journals if delivery is retried.</p>
+            </div>}
+            {selected.status === "POST_FAILED" && <div className="mt-4 flex gap-3 rounded-2xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-900">
+              <AlertTriangle className="mt-0.5 size-5 shrink-0" />
+              <p><strong>Financial posting failed.</strong> Review the recorded error below, then use the retry action. The same idempotency key will be reused.</p>
+            </div>}
+            {selected.status === "POSTED" && <div className="mt-4 flex gap-3 rounded-2xl border border-pine-200 bg-pine-50 p-4 text-sm text-pine-900">
+              <ShieldCheck className="mt-0.5 size-5 shrink-0" />
+              <p><strong>Accrual journal posted.</strong> Record net-pay disbursement to post the cash journal, apply loan repayments once, and transition this payroll to paid.</p>
             </div>}
             {selected.status === "PAID" && <div className="mt-4 flex gap-3 rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700">
               <LockKeyhole className="mt-0.5 size-5 shrink-0 text-slate-500" />
-              <p><strong>Paid payroll is terminal and locked.</strong> It cannot be reopened or deleted. An authorized approver may record immutable reversal evidence; Financial Engine reversal posting remains a separate controlled step.</p>
+              <p><strong>Paid payroll is terminal and locked.</strong> Its accrual and cash journals are linked below. A controlled reversal requires immutable reversal evidence followed by a separate financial reversal post.</p>
             </div>}
             {selectedReversed && <div className="mt-4 flex gap-3 rounded-2xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-900">
               <AlertTriangle className="mt-0.5 size-5 shrink-0" />
-              <p><strong>Reversal evidence recorded.</strong> The source calculation remains immutable. Any future Financial Engine reversal must reference this revision and preserve idempotency.</p>
+              <p><strong>Reversal evidence recorded.</strong> The source calculation remains immutable. Financial reversal status: {selectedFinancialReversalPosted ? "posted and reconciled" : "awaiting authorized posting"}.</p>
             </div>}
+
+            <div className="mt-5 border-t border-slate-100 pt-5">
+              <h3 className="text-sm font-black text-slate-900">Financial Engine reconciliation</h3>
+              <div className="mt-3 space-y-3">
+                {selected.financialPostings.map((posting) => <div key={posting.id} className="rounded-xl border border-slate-100 bg-slate-50 p-3 text-xs">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <p className="font-black">{posting.eventType} · {posting.journalEntry?.description ?? "Journal pending"}</p>
+                    <StatusBadge status={posting.status} />
+                  </div>
+                  <p className="mt-1 break-all text-slate-500">Idempotency: {posting.idempotencyKey}</p>
+                  {posting.errorMessage && <p className="mt-1 text-rose-700">{posting.errorMessage}</p>}
+                  {posting.journalEntry && <div className="mt-2 grid gap-1 sm:grid-cols-2">
+                    {posting.journalEntry.lines.map((line) => <p key={line.id} className="text-slate-600">{line.accountCode} {line.accountName}: Dr {money(Number(line.debit))} · Cr {money(Number(line.credit))}</p>)}
+                  </div>}
+                </div>)}
+                {!selected.financialPostings.length && <p className="text-xs text-slate-500">No Financial Engine posting has been requested for this payroll.</p>}
+              </div>
+            </div>
 
             <div className="mt-5 border-t border-slate-100 pt-5">
               <h3 className="text-sm font-black text-slate-900">Immutable revision history</h3>
@@ -534,6 +589,7 @@ export default async function PayrollPage({ searchParams }: PayrollPageProps) {
                   <th>Basic pay</th>
                   <th>Gross pay</th>
                   <th>Deductions</th>
+                  <th>Statutory</th>
                   <th>Net pay</th>
                   <th></th>
                 </tr>
@@ -550,6 +606,7 @@ export default async function PayrollPage({ searchParams }: PayrollPageProps) {
                   <td>{money(slip.basicPay)}</td>
                   <td>{money(slip.grossPay)}</td>
                   <td>{money(slip.deduction)}</td>
+                  <td><p>{money(slip.statutoryDeduction)}</p><p className="text-[11px] text-slate-400">Employer {money(slip.employerContribution)}</p></td>
                   <td className="font-black text-pine-700">{money(slip.netPay)}</td>
                   <td>
                     <Link className="btn-secondary min-h-8 px-3 py-1" href={`/admin/payroll/${slip.id}/print`} target="_blank">
@@ -557,7 +614,7 @@ export default async function PayrollPage({ searchParams }: PayrollPageProps) {
                     </Link>
                   </td>
                 </tr>)}
-                {!selected.payslips.length && <tr><td colSpan={9} className="py-10 text-center text-slate-500">No active employees were available for this period.</td></tr>}
+                {!selected.payslips.length && <tr><td colSpan={10} className="py-10 text-center text-slate-500">No active employees were available for this period.</td></tr>}
               </tbody>
             </table>
           </div>}

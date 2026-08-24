@@ -1,7 +1,8 @@
 import "server-only";
 
 import { TenantModule, TenantStatus, TenantSubscriptionStatus } from "@prisma/client";
-import { prisma } from "@/lib/db";
+import { platformPrisma, prisma } from "@/lib/db";
+import { currentTenantContext } from "@/lib/tenant-context";
 
 export const DEFAULT_TENANT_ID = "tenant_pagsibol4b_default";
 export const DEFAULT_TENANT_SLUG = "pagsibol4b";
@@ -25,13 +26,22 @@ export function tenantCanSignIn(tenant: Awaited<ReturnType<typeof resolveTenant>
 }
 
 async function resolvePlanModules(tenantId: string) {
-  const tenant = await prisma.tenant.findUnique({
+  const context = currentTenantContext();
+  if (context && !context.platform && context.tenantId !== tenantId) {
+    throw new Error("Cross-tenant subscription entitlement lookup blocked.");
+  }
+
+  // Commercial entitlement resolution is a trusted bootstrap boundary: it is
+  // used to build the tenant request context itself, so it cannot depend on the
+  // tenant-scoped Prisma extension that consumes that context. The explicit
+  // tenant-id check above prevents non-platform callers from switching tenants.
+  const tenant = await platformPrisma.tenant.findUnique({
     where: { id: tenantId },
     select: { status: true, subscriptionPlan: true, subscriptionStatus: true },
   });
   if (!tenant || tenant.status !== TenantStatus.ACTIVE) return new Set<TenantModule>();
 
-  const subscription = await prisma.tenantSubscription.findFirst({
+  const subscription = await platformPrisma.tenantSubscription.findFirst({
     where: { tenantId },
     orderBy: [{ startedAt: "desc" }, { createdAt: "desc" }],
     select: {
@@ -54,7 +64,7 @@ async function resolvePlanModules(tenantId: string) {
   // plan code still resolves through the Platform Admin plan catalog so runtime
   // module access never silently defaults to every HOAHub function.
   if (blockedModuleSubscriptionStatuses.has(tenant.subscriptionStatus)) return new Set<TenantModule>();
-  const plan = await prisma.subscriptionPlan.findFirst({
+  const plan = await platformPrisma.subscriptionPlan.findFirst({
     where: { code: tenant.subscriptionPlan },
     orderBy: { updatedAt: "desc" },
     select: {

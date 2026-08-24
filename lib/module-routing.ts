@@ -3,7 +3,7 @@ import type { LinkItem } from "@/components/sidebar-links";
 import { homeownerModuleRules, moduleForHomeownerLink } from "@/lib/homeowner-navigation";
 
 const rules: Array<[string, TenantModule]> = [
-  ["/admin/document", TenantModule.DOCUMENTS], ["/documents", TenantModule.DOCUMENTS],
+  ["/admin/documents", TenantModule.DOCUMENTS], ["/admin/document-templates", TenantModule.DOCUMENTS], ["/documents", TenantModule.DOCUMENTS],
   ["/admin/payroll", TenantModule.PAYROLL], ["/admin/employees", TenantModule.PAYROLL], ["/admin/workforce", TenantModule.PAYROLL], ["/employee/payslips", TenantModule.PAYROLL],
   ["/admin/attendance", TenantModule.ATTENDANCE], ["/employee/attendance", TenantModule.ATTENDANCE],
   ["/admin/reports", TenantModule.REPORTS],

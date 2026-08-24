@@ -14,6 +14,7 @@ import { resolveDocumentManagementEntitlement } from "@/lib/document-repository/
 import { filterLinksByModules, moduleForPath } from "@/lib/module-routing";
 import { routeTitle, tenantMetadata, tenantNameForMetadata } from "@/lib/metadata-title";
 import { userCanAccessPayroll } from "@/lib/payroll-access";
+import { resolvePettyCashEntitlement } from "@/lib/petty-cash/entitlement";
 import { adminHomeForRole, canAccessAdminPath, filterAdminLinksByRole } from "@/lib/role-access";
 import { getUnreadChatCount } from "@/lib/services/chat";
 import { getAssociationSettings } from "@/lib/system-settings";
@@ -41,15 +42,17 @@ export default async function AdminLayout({ children }: { children: React.ReactN
   const requestedModule = moduleForPath(pathname);
   if (requestedModule && !enabledModules.has(requestedModule)) redirect("/admin/dashboard?error=This%20module%20is%20not%20included%20in%20your%20active%20subscription%20plan.");
 
-  const [association, initialChatUnreadCount, actionableDocumentRequests, documentManagementEntitlement, aiAssistanceEntitlement] = await Promise.all([
+  const [association, initialChatUnreadCount, actionableDocumentRequests, documentManagementEntitlement, aiAssistanceEntitlement, pettyCashEntitlement] = await Promise.all([
     getAssociationSettings(user.tenantId),
     getUnreadChatCount(user.id),
     getActionableDocumentRequestCount(user.tenantId),
     resolveDocumentManagementEntitlement(user.tenantId),
     resolveAiAssistanceEntitlement(user.tenantId),
+    resolvePettyCashEntitlement(user.tenantId),
   ]);
 
   if (pathname.startsWith("/admin/document-management") && !documentManagementEntitlement.enabled) redirect("/admin/dashboard?error=Document%20Management%20is%20not%20included%20in%20your%20active%20subscription%20plan.");
+  if (pathname.startsWith("/admin/petty-cash") && !pettyCashEntitlement.enabled) redirect("/admin/dashboard?error=Petty%20Cash%20Voucher%20is%20not%20included%20in%20your%20active%20subscription%20plan.");
 
   const canManageAi = user.permissions.includes(Permission.AI_ASSISTANCE_MANAGE);
   if (pathname.startsWith("/admin/ai-assistance")) {
@@ -70,6 +73,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
   function authorizedAdminLinks(items: LinkItem[]) {
     return filterAdminLinksByRole(filterLinksByModules(items, enabledModules), user.roles)
       .filter((item) => documentManagementEntitlement.enabled || !item.href.startsWith("/admin/document-management"))
+      .filter((item) => pettyCashEntitlement.enabled || !item.href.startsWith("/admin/petty-cash"))
       .filter((item) => (aiAssistanceEntitlement.enabled && canManageAi) || !item.href.startsWith("/admin/ai-assistance"))
       .filter((item) => (aiAssistanceEntitlement.enabled && canUseAi) || !item.href.startsWith("/admin/ai-copilot"))
       .filter((item) => canAccessPayroll || !["/admin/employees", "/admin/attendance", "/admin/payroll"].includes(item.href));

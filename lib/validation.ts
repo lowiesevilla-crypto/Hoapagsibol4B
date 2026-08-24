@@ -60,7 +60,7 @@ export const homeownerSchema = z.object({
 export const billSchema = z.object({
   id: z.string().optional(),
   homeownerId: z.string().min(1),
-  billingMonth: z.string().date(),
+  billingMonth: z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/, "Choose a valid billing month."),
   dueDate: z.string().date(),
   amount: currency.positive(),
   penalty: currency,

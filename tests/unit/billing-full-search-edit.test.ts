@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import test from "node:test";
+import { billSchema } from "../../lib/validation";
 
 const page = readFileSync(resolve(process.cwd(), "app/admin/billing/page.tsx"), "utf8");
 const billForm = readFileSync(resolve(process.cwd(), "components/bill-form.tsx"), "utf8");
@@ -32,4 +33,33 @@ test("billing homeowner lookup uses Billing Adjust authority and searches all te
   assert.match(endpoint, /homeownerSearchWhere\(q\)/);
   assert.match(endpoint, /total,/);
   assert.match(endpoint, /hasMore:/);
+});
+
+test("Edit Bill accepts the YYYY-MM value submitted by the billing month control", () => {
+  const result = billSchema.safeParse({
+    id: "bill-1",
+    homeownerId: "homeowner-1",
+    billingMonth: "2026-09",
+    dueDate: "2026-09-15",
+    amount: "1",
+    penalty: "0",
+    status: "UNPAID",
+    notes: "Generated from Board Resolution January 2025.",
+  });
+
+  assert.equal(result.success, true);
+});
+
+test("Edit Bill rejects impossible billing months", () => {
+  const result = billSchema.safeParse({
+    id: "bill-1",
+    homeownerId: "homeowner-1",
+    billingMonth: "2026-13",
+    dueDate: "2026-09-15",
+    amount: "1",
+    penalty: "0",
+    status: "UNPAID",
+  });
+
+  assert.equal(result.success, false);
 });

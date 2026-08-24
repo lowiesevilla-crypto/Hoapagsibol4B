@@ -120,19 +120,73 @@ export async function finalizePayrollAction(formData: FormData) {
 /**
  * @requirement PAY-SEC-001 PAY-RUN-003
  * @status IMPLEMENTED
- * @description Existing controlled reopen path; full immutable revision model remains IN_PROGRESS under PAY-RUN-003.
+ * @description Preserves a full immutable pre-reopen snapshot before a finalized payroll can return to draft. Full revision/delta records remain pending under PAY-RUN-003.
  */
 export async function returnPayrollToDraftAction(formData: FormData) {
   const { user } = await requirePayrollAccess(payrollApprovalRoles);
   const id = String(formData.get("id") || "");
-  const period = await prisma.payrollPeriod.findFirst({ where: { id, tenantId: user.tenantId } });
-  if (!period) throw new Error("Payroll period not found.");
-  if (period.status === PayrollStatus.PAID) throw new Error("Paid payroll periods are locked and cannot be returned to draft.");
-  if (period.status === PayrollStatus.DRAFT) throw new Error("Payroll period is already in draft.");
-  await prisma.payrollPeriod.update({ where: { id }, data: { status: PayrollStatus.DRAFT } });
-  await writeAuditLog({ actorId: user.id, module: "PAYROLL", action: "RETURN_PAYROLL_TO_DRAFT", entityType: "PayrollPeriod", entityId: id });
+  const reason = String(formData.get("reason") || "").trim() || "Finalized payroll returned to draft for controlled correction.";
+
+  const archiveId = await prisma.$transaction(async (tx) => {
+    const period = await tx.payrollPeriod.findFirst({
+      where: { id, tenantId: user.tenantId },
+      include: {
+        createdBy: { select: { id: true, name: true, email: true } },
+        payslips: { include: { employee: true } },
+        deductions: { include: { employee: true, deductionType: true, employeeLoan: true } },
+      },
+    });
+    if (!period) throw new Error("Payroll period not found.");
+    if (period.status === PayrollStatus.PAID) throw new Error("Paid payroll periods are locked and cannot be returned to draft.");
+    if (period.status === PayrollStatus.DRAFT) throw new Error("Payroll period is already in draft.");
+
+    const employeeIds = period.payslips.map((item) => item.employeeId);
+    const adjustments = await tx.attendanceAdjustment.findMany({
+      where: { tenantId: user.tenantId, attendance: { employeeId: { in: employeeIds }, date: { gte: period.startDate, lte: period.endDate } } },
+      include: { attendance: true, requestedBy: { select: { id: true, name: true } }, reviewedBy: { select: { id: true, name: true } } },
+    });
+    const overtimeRecords = await tx.overtimeRecord.findMany({
+      where: { tenantId: user.tenantId, employeeId: { in: employeeIds }, date: { gte: period.startDate, lte: period.endDate } },
+      include: { employee: true, createdBy: { select: { id: true, name: true } }, reviewedBy: { select: { id: true, name: true } } },
+    });
+
+    const archive = await tx.payrollArchive.create({
+      data: {
+        tenantId: user.tenantId,
+        originalPayrollId: period.id,
+        status: period.status,
+        startDate: period.startDate,
+        endDate: period.endDate,
+        payDate: period.payDate,
+        periodSnapshot: jsonValue(period),
+        employeeBreakdown: jsonValue(period.payslips.map((item) => ({ employee: item.employee, payslip: item }))),
+        deductions: jsonValue(period.deductions),
+        adjustments: jsonValue(adjustments),
+        overtimeRecords: jsonValue(overtimeRecords),
+        payslipData: jsonValue(period.payslips),
+        deletedById: user.id,
+        deletionReason: `[PRE_REOPEN_SNAPSHOT] ${reason}`,
+      },
+    });
+
+    await tx.payrollPeriod.update({ where: { id }, data: { status: PayrollStatus.DRAFT } });
+    await tx.auditLog.create({
+      data: {
+        tenantId: user.tenantId,
+        actorId: user.id,
+        module: "PAYROLL",
+        action: "SNAPSHOT_AND_RETURN_PAYROLL_TO_DRAFT",
+        entityType: "PayrollPeriod",
+        entityId: id,
+        metadata: { archiveId: archive.id, priorStatus: period.status, reason },
+      },
+    });
+    return archive.id;
+  }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+
   revalidatePayrollPages();
-  redirect(`/admin/payroll?section=approval&period=${id}&success=reopened`);
+  revalidatePath("/admin/payroll/archive");
+  redirect(`/admin/payroll?section=approval&period=${id}&success=reopened&snapshot=${archiveId}`);
 }
 
 /**
@@ -178,8 +232,8 @@ export async function markPayrollPaidAction(formData: FormData) {
 
 /**
  * @requirement PAY-SEC-001 PAY-RUN-003
- * @status IN_PROGRESS
- * @description Tenant-safe archive/delete behavior exists; immutable finalized correction/reversal replacement remains pending.
+ * @status IMPLEMENTED
+ * @description Destructive payroll deletion is restricted to DRAFT periods. Finalized and paid periods require a correction/reversal path and cannot be erased.
  */
 export async function deletePayrollAction(formData: FormData) {
   const { user } = await requirePayrollAccess(payrollManageRoles);
@@ -197,6 +251,7 @@ export async function deletePayrollAction(formData: FormData) {
     },
   });
   if (!period) throw new Error("Payroll period not found.");
+  if (period.status !== PayrollStatus.DRAFT) throw new Error("Finalized and paid payroll periods cannot be deleted. Use the controlled correction/reversal workflow so historical payroll evidence is preserved.");
   const employeeIds = period.payslips.map((item) => item.employeeId);
   const [adjustments, overtimeRecords] = await Promise.all([
     prisma.attendanceAdjustment.findMany({
@@ -229,7 +284,7 @@ export async function deletePayrollAction(formData: FormData) {
       },
     });
     await tx.auditLog.create({
-      data: { tenantId: user.tenantId, actorId: user.id, module: "PAYROLL", action: "ARCHIVE_AND_DELETE_PAYROLL_PERIOD", entityType: "PayrollArchive", entityId: archived.id, metadata: { originalPayrollId: id, status: period.status, deletionReason: deletionReason || null } },
+      data: { tenantId: user.tenantId, actorId: user.id, module: "PAYROLL", action: "ARCHIVE_AND_DELETE_DRAFT_PAYROLL_PERIOD", entityType: "PayrollArchive", entityId: archived.id, metadata: { originalPayrollId: id, status: period.status, deletionReason: deletionReason || null } },
     });
     await tx.payrollDeduction.deleteMany({ where: { tenantId: user.tenantId, payrollId: id } });
     await tx.payslip.deleteMany({ where: { tenantId: user.tenantId, payrollId: id } });

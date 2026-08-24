@@ -30,9 +30,11 @@ function optionalNonNegativeInt(value: FormDataEntryValue | null) {
 
 function enabledOverride(value: FormDataEntryValue | null) {
   const mode = clean(value);
-  if (mode === "ENABLE") return true;
   if (mode === "DISABLE") return false;
   if (mode === "INHERIT") return null;
+  // Tenant-specific controls are restrictions only. Inclusion must come from the
+  // active plan so Platform Admin plan configuration remains authoritative.
+  if (mode === "ENABLE") throw new Error("A tenant cannot be force-enabled for a capability excluded from its plan. Add the capability to the plan or assign an eligible plan first.");
   throw new Error("Invalid feature override mode.");
 }
 
@@ -129,6 +131,7 @@ export async function updateTenantFeatureEntitlementsAction(formData: FormData) 
           entityType: "Tenant",
           entityId: tenantId,
           metadata: {
+            commercialPolicy: "ACTIVE_PLAN_IS_CAPABILITY_CEILING",
             documentManagement: {
               enabledOverride: documentEnabledOverride,
               storageLimitMbOverride: documentStorageLimitMbOverride,
@@ -155,5 +158,5 @@ export async function updateTenantFeatureEntitlementsAction(formData: FormData) 
   revalidatePath("/platform/plans");
   revalidatePath("/admin/document-management");
   revalidatePath("/portal/document-library");
-  redirect(`/platform/tenants/${tenantId}/features?success=${encodeURIComponent("Tenant feature controls updated.")}`);
+  redirect(`/platform/tenants/${tenantId}/features?success=${encodeURIComponent("Tenant feature restrictions updated.")}`);
 }

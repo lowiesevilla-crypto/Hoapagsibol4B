@@ -6,15 +6,29 @@ import { inputDate } from "@/lib/utils";
 import { SubmitButton } from "@/components/ui";
 
 type Homeowner = HomeownerProfile & { user: Pick<User, "name" | "email"> };
+type EditableBill = Bill & { homeowner?: Homeowner };
 
-export function BillForm({ homeowners, bill }: { homeowners: Homeowner[]; bill?: Bill }) {
+function homeownerOption(homeowner: Homeowner) {
+  return {
+    id: homeowner.id,
+    label: `${homeowner.user.name} - Block ${homeowner.block}, Lot ${homeowner.lot}`,
+    search: `${homeowner.user.name} ${homeowner.user.email} ${homeowner.accountNumber || ""} block ${homeowner.block} lot ${homeowner.lot} ${homeowner.phase || ""} account ${homeowner.id}`.toLowerCase(),
+  };
+}
+
+export function BillForm({ homeowners, bill }: { homeowners: Homeowner[]; bill?: EditableBill }) {
   if (!bill) return <IndividualBillingPreviewForm homeowners={homeowners} />;
 
+  const homeownerOptions = homeowners.map(homeownerOption);
+  if (bill.homeowner && !homeownerOptions.some((option) => option.id === bill.homeownerId)) {
+    homeownerOptions.unshift(homeownerOption(bill.homeowner));
+  }
+
   return <form action={saveBillAction} className="card">
-    {bill && <input type="hidden" name="id" value={bill.id} />}
-    <div className="mb-5"><h2 className="text-lg font-black">Edit bill</h2><p className="text-sm text-slate-500">Adjust an existing billing record without changing the original generation policy.</p></div>
+    <input type="hidden" name="id" value={bill.id} />
+    <div className="mb-5"><h2 className="text-lg font-black">Edit bill</h2><p className="text-sm text-slate-500">Adjust an existing billing record without changing the original generation policy. The homeowner linked to this bill is preselected; search across the full tenant directory only when a correction is required.</p></div>
     <div className="grid gap-4 sm:grid-cols-2">
-      <div className="sm:col-span-2"><label className="label">Homeowner</label><select className="field" name="homeownerId" defaultValue={bill.homeownerId} required><option value="">Select homeowner</option>{homeowners.map((h) => <option key={h.id} value={h.id}>{h.user.name} - Block {h.block}, Lot {h.lot}</option>)}</select></div>
+      <div className="sm:col-span-2"><SearchableHomeownerSelect name="homeownerId" label="Homeowner" homeowners={homeownerOptions} defaultValue={bill.homeownerId} required searchEndpoint="/api/admin/homeowners/search?status=all" placeholder="Search all tenant homeowners by name, account, block, lot, phase, or email" /></div>
       <div><label className="label">Billing month</label><input className="field" name="billingMonth" type="month" defaultValue={inputDate(bill.billingMonth).slice(0, 7)} required /></div>
       <div><label className="label">Due date</label><input className="field" name="dueDate" type="date" defaultValue={inputDate(bill.dueDate)} required /></div>
       <div><label className="label">Base amount</label><input className="field" name="amount" type="number" min="0.01" step="0.01" defaultValue={String(bill.amount)} required /></div>
@@ -28,11 +42,7 @@ export function BillForm({ homeowners, bill }: { homeowners: Homeowner[]; bill?:
 
 function IndividualBillingPreviewForm({ homeowners }: { homeowners: Homeowner[] }) {
   const now = new Date();
-  const options = homeowners.map((homeowner) => ({
-    id: homeowner.id,
-    label: `${homeowner.user.name} - Block ${homeowner.block}, Lot ${homeowner.lot}`,
-    search: `${homeowner.user.name} ${homeowner.user.email} block ${homeowner.block} lot ${homeowner.lot} account ${homeowner.id} ${homeowner.id}`.toLowerCase(),
-  }));
+  const options = homeowners.map(homeownerOption);
   return <form method="get" action="/admin/billing" className="card">
     <input type="hidden" name="preview" value="1" />
     <input type="hidden" name="scope" value="HOMEOWNER" />

@@ -86,7 +86,7 @@ async function calculatePeriod(input: { startDate: Date; endDate: Date; payDate:
 
 /**
  * @requirement PAY-SEC-001 PAY-CALC-001 PAY-ATT-001 PAY-OT-001 PAY-COMP-002 PAY-COMP-003 PAY-DED-001 PAY-DED-002 PAY-LOAN-001 PAY-LOAN-002 PAY-STAT-003
- * @status IMPLEMENTED
+ * @status VERIFIED
  * @description Resolve employee/statutory policy, materialize generic and Petty Cash deduction schedules, and persist the payslip calculation snapshot.
  */
 async function refreshPeriodPayslips(
@@ -525,7 +525,7 @@ export async function postPayrollToFinanceAction(formData: FormData) {
 
 /**
  * @requirement PAY-SEC-001 PAY-FIN-001 PAY-FIN-002 PAY-LOAN-001
- * @status IMPLEMENTED
+ * @status VERIFIED
  * @description Record net-pay disbursement only after accrual posting; loan repayments and PAID transition occur in the same idempotent processor.
  */
 export async function markPayrollPaidAction(formData: FormData) {
@@ -758,7 +758,7 @@ export async function reviewOvertimeRecordAction(formData: FormData) {
 
 /**
  * @requirement PAY-SEC-001 PAY-LOAN-001
- * @status IMPLEMENTED
+ * @status VERIFIED
  */
 export async function saveEmployeeLoanAction(formData: FormData) {
   const { user } = await requirePayrollAccess(payrollWriteRoles);
@@ -821,7 +821,7 @@ export async function saveEmployeeLoanAction(formData: FormData) {
 
 /**
  * @requirement PAY-SEC-001 PAY-LOAN-001
- * @status IMPLEMENTED
+ * @status VERIFIED
  */
 export async function cancelEmployeeLoanAction(formData: FormData) {
   const { user } = await requirePayrollAccess(payrollManageRoles);
@@ -842,7 +842,7 @@ export async function cancelEmployeeLoanAction(formData: FormData) {
 
 /**
  * @requirement PAY-SEC-001 PAY-DED-001
- * @status IMPLEMENTED
+ * @status VERIFIED
  */
 export async function savePayrollDeductionTypeAction(formData: FormData) {
   const { user } = await requirePayrollAccess(payrollManageRoles);
@@ -869,7 +869,7 @@ export async function savePayrollDeductionTypeAction(formData: FormData) {
 
 /**
  * @requirement PAY-SEC-001 PAY-DED-001 PAY-LOAN-001
- * @status IMPLEMENTED
+ * @status VERIFIED
  */
 export async function savePayrollDeductionAction(formData: FormData) {
   const { user } = await requirePayrollAccess(payrollWriteRoles);
@@ -931,7 +931,7 @@ export async function savePayrollDeductionAction(formData: FormData) {
 
 /**
  * @requirement PAY-SEC-001 PAY-DED-002 PAY-LOAN-002
- * @status IMPLEMENTED
+ * @status VERIFIED
  */
 export async function savePayrollDeductionScheduleAction(formData: FormData) {
   const { user } = await requirePayrollAccess(payrollWriteRoles);
@@ -1043,7 +1043,7 @@ export async function savePayrollDeductionScheduleAction(formData: FormData) {
 
 /**
  * @requirement PAY-SEC-001 PAY-DED-002 PAY-LOAN-002
- * @status IMPLEMENTED
+ * @status VERIFIED
  */
 export async function changePayrollDeductionScheduleStatusAction(formData: FormData) {
   const { user } = await requirePayrollAccess(payrollManageRoles);
@@ -1102,7 +1102,7 @@ export async function changePayrollDeductionScheduleStatusAction(formData: FormD
 
 /**
  * @requirement PAY-SEC-001 PAY-STAT-003
- * @status IMPLEMENTED
+ * @status VERIFIED
  */
 export async function savePayrollStatutoryApplicabilityAction(formData: FormData) {
   const { user } = await requirePayrollAccess(payrollManageRoles);
@@ -1174,7 +1174,7 @@ export async function savePayrollStatutoryApplicabilityAction(formData: FormData
 
 /**
  * @requirement PAY-SEC-001 PAY-DED-001
- * @status IMPLEMENTED
+ * @status VERIFIED
  */
 export async function deletePayrollDeductionAction(formData: FormData) {
   const { user } = await requirePayrollAccess(payrollWriteRoles);
@@ -1372,7 +1372,7 @@ function resolveMonthlyBasicSalary(input: {
 
 /**
  * @requirement PAY-SEC-001 PAY-DED-002 PAY-LOAN-002 PAY-STAT-003
- * @status IMPLEMENTED
+ * @status VERIFIED
  */
 async function refreshMutablePayrollPeriods(
   tx: Prisma.TransactionClient,
@@ -1396,7 +1396,7 @@ async function statutoryRuleSetForPeriod(tx: Prisma.TransactionClient, statutory
 
 /**
  * @requirement PAY-STAT-003
- * @status IMPLEMENTED
+ * @status VERIFIED
  */
 function statutoryApplicabilityFlags(record: StatutoryApplicability): StatutoryApplicability {
   return {
@@ -1410,7 +1410,7 @@ function statutoryApplicabilityFlags(record: StatutoryApplicability): StatutoryA
 
 /**
  * @requirement PAY-CALC-003 PAY-LOAN-001
- * @status IMPLEMENTED
+ * @status VERIFIED
  */
 function roundMoney(value: number) {
   return Math.round((value + Number.EPSILON) * 100) / 100;
@@ -1418,7 +1418,7 @@ function roundMoney(value: number) {
 
 /**
  * @requirement PAY-LOAN-001
- * @status IMPLEMENTED
+ * @status VERIFIED
  */
 function formatPeso(value: number) {
   return new Intl.NumberFormat("en-PH", { style: "currency", currency: "PHP" }).format(value);

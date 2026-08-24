@@ -24,7 +24,7 @@ export type ScheduleMaterializationResult = Readonly<{
 
 /**
  * @requirement PAY-DED-002 PAY-LOAN-002
- * @status IMPLEMENTED
+ * @status VERIFIED
  * @description Decide whether a schedule is eligible for a cutoff without reading mutable browser state.
  */
 export function isDeductionScheduleEligible(
@@ -41,7 +41,7 @@ export function isDeductionScheduleEligible(
 
 /**
  * @requirement PAY-LOAN-001 PAY-LOAN-002
- * @status IMPLEMENTED
+ * @status VERIFIED
  * @description Cap a generated repayment at the loan balance that remains after other unpaid payroll reservations.
  */
 export function scheduledDeductionAmount(
@@ -57,7 +57,7 @@ export function scheduledDeductionAmount(
 
 /**
  * @requirement PAY-SEC-001 PAY-DED-002 PAY-LOAN-002
- * @status IMPLEMENTED
+ * @status VERIFIED
  * @description Materialize active tenant-scoped schedules into one mutable payroll cutoff idempotently.
  */
 export async function materializePayrollDeductionSchedules(

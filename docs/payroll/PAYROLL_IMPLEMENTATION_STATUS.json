@@ -236,7 +236,7 @@
     {
       "id": "PAY-DED-001",
       "title": "Payroll-period deductions",
-      "status": "IMPLEMENTED",
+      "status": "VERIFIED",
       "code": [
         "lib/actions/payroll.ts",
         "lib/petty-cash/payroll-integration.ts",
@@ -245,14 +245,15 @@
         "tests/unit/petty-cash-payroll-integration.test.ts"
       ],
       "evidence": [
-        "PR #166 verified the prior tenant-scoped deduction-maintenance baseline; Petty Cash automatic deduction extension awaits exact-head CI."
+        "PR #166 verified the prior tenant-scoped deduction-maintenance baseline.",
+        "PR #171 implementation head c47416e83bc3c40d6bf317786bab264f7b757a15: HOAHub MySQL CI #1136 and Canva Visual Parity #321 SUCCESS, including Petty Cash integration regressions"
       ],
-      "notes": "Tenant-scoped deduction maintenance remains mutable only before finalization. Petty Cash Employee Cash Advance schedules now materialize idempotently into each eligible mutable payroll cutoff before payslip calculation, with existing unpaid loan reservations deducted from the available balance."
+      "notes": "Tenant-scoped deduction maintenance remains mutable only before finalization. Petty Cash Employee Cash Advance schedules materialize idempotently into each eligible mutable payroll cutoff before payslip calculation, with existing unpaid loan reservations deducted from the available balance; PR #171 preserved and verified this integration before merge."
     },
     {
       "id": "PAY-DED-002",
       "title": "Effective-dated scheduled and one-time deductions",
-      "status": "IMPLEMENTED",
+      "status": "VERIFIED",
       "code": [
         "prisma/schema.prisma",
         "prisma/migrations/20260824213000_payroll_schedules_statutory_controls/migration.sql",
@@ -262,14 +263,15 @@
         "tests/unit/payroll-deduction-schedules-controls.test.ts"
       ],
       "evidence": [
-        "Local multi-file Prisma validation/generation, typecheck, and targeted PAY-DED-002 tests PASS"
+        "Local multi-file Prisma validation/generation, typecheck, and targeted PAY-DED-002 tests PASS",
+        "PR #171 implementation head c47416e83bc3c40d6bf317786bab264f7b757a15: HOAHub MySQL CI #1136 and Canva Visual Parity #321 SUCCESS"
       ],
-      "notes": "ONE_TIME, RECURRING and UNTIL_FULLY_PAID schedules support from/to dates, optional installment limits, reasoned pause/resume/end controls, and idempotent materialization into mutable cutoffs. Exact-head CI is still required for VERIFIED."
+      "notes": "ONE_TIME, RECURRING and UNTIL_FULLY_PAID schedules support from/to dates, optional installment limits, reasoned pause/resume/end controls, and idempotent materialization into mutable cutoffs. PR #171 passed exact-head CI and merged to main at 28a45e8322e74590859e42093b0db08717ec86ae."
     },
     {
       "id": "PAY-LOAN-001",
       "title": "Loan/cash advance repayment integrity",
-      "status": "IMPLEMENTED",
+      "status": "VERIFIED",
       "code": [
         "lib/actions/payroll.ts",
         "lib/petty-cash/payroll-integration.ts",
@@ -280,14 +282,15 @@
         "tests/unit/petty-cash-payroll-integration.test.ts"
       ],
       "evidence": [
-        "PR #166 verified the prior loan/Financial Engine repayment baseline; Petty Cash automatic schedule extension awaits exact-head CI."
+        "PR #166 verified the prior loan/Financial Engine repayment baseline.",
+        "PR #171 implementation head c47416e83bc3c40d6bf317786bab264f7b757a15: HOAHub MySQL CI #1136 and Canva Visual Parity #321 SUCCESS, including Petty Cash integration regressions"
       ],
       "notes": "Petty Cash Employee Cash Advance creates a linked EmployeeLoan and per-cutoff schedule. Payroll calculation creates the linked PayrollDeduction without exceeding unreserved loan balance; PR #166 remains authoritative for changing loan balance only after the idempotent PAYMENT journal succeeds and for restoring it on a paid-payroll reversal."
     },
     {
       "id": "PAY-LOAN-002",
       "title": "Automatic loan/cash-advance repayment schedules",
-      "status": "IMPLEMENTED",
+      "status": "VERIFIED",
       "code": [
         "prisma/schema.prisma",
         "lib/services/payroll-deduction-schedules.ts",
@@ -297,9 +300,10 @@
         "tests/unit/payroll-deduction-schedules-controls.test.ts"
       ],
       "evidence": [
-        "Local final-installment cap and unreserved-balance tests PASS"
+        "Local final-installment cap and unreserved-balance tests PASS",
+        "PR #171 implementation head c47416e83bc3c40d6bf317786bab264f7b757a15: HOAHub MySQL CI #1136 and Canva Visual Parity #321 SUCCESS"
       ],
-      "notes": "Generated installments reserve but do not mutate loan balances; the existing Financial Engine PAYMENT remains authoritative. Generic schedules remain compatible with PR #168's petty-cash-owned source. Exact-head CI is still required for VERIFIED."
+      "notes": "Generated installments reserve but do not mutate loan balances; the existing Financial Engine PAYMENT remains authoritative. Generic schedules remain compatible with PR #168's petty-cash-owned source. PR #171 passed exact-head CI and merged to main at 28a45e8322e74590859e42093b0db08717ec86ae."
     },
     {
       "id": "PAY-RUN-001",
@@ -389,7 +393,7 @@
     {
       "id": "PAY-STAT-003",
       "title": "Effective-dated statutory applicability controls",
-      "status": "IMPLEMENTED",
+      "status": "VERIFIED",
       "code": [
         "prisma/schema.prisma",
         "prisma/migrations/20260824213000_payroll_schedules_statutory_controls/migration.sql",
@@ -400,9 +404,10 @@
         "tests/unit/payroll-deduction-schedules-controls.test.ts"
       ],
       "evidence": [
-        "Local applicability resolution, component-zeroing, snapshot, tenant-scope, and historical-lock tests PASS"
+        "Local applicability resolution, component-zeroing, snapshot, tenant-scope, and historical-lock tests PASS",
+        "PR #171 implementation head c47416e83bc3c40d6bf317786bab264f7b757a15: HOAHub MySQL CI #1136 and Canva Visual Parity #321 SUCCESS"
       ],
-      "notes": "Tenant defaults and employee overrides control applicability only; official rates/formulas remain system rules. No record preserves all-enabled compatibility. Exact-head CI is still required for VERIFIED."
+      "notes": "Tenant defaults and employee overrides control applicability only; official rates/formulas remain system rules. No record preserves all-enabled compatibility. PR #171 passed exact-head CI and merged to main at 28a45e8322e74590859e42093b0db08717ec86ae."
     },
     {
       "id": "PAY-FIN-001",
@@ -555,7 +560,7 @@
     {
       "id": "PAY-UX-001",
       "title": "Task-based payroll administration and employee visibility",
-      "status": "IMPLEMENTED",
+      "status": "VERIFIED",
       "code": [
         "app/admin/payroll/page.tsx",
         "app/admin/payroll/deductions/page.tsx",
@@ -566,9 +571,10 @@
         "tests/unit/payroll-deduction-schedules-controls.test.ts"
       ],
       "evidence": [
-        "Local six-task navigation and lifecycle source acceptance tests PASS"
+        "Local six-task navigation and lifecycle source acceptance tests PASS",
+        "PR #171 implementation head c47416e83bc3c40d6bf317786bab264f7b757a15: HOAHub MySQL CI #1136 and Canva Visual Parity #321 SUCCESS"
       ],
-      "notes": "The broad tab strip is replaced by six responsive primary tasks and contextual run tools/lifecycle. Existing deep links and non-payroll navigation remain unchanged. Browser/visual exact-head evidence is still required for VERIFIED."
+      "notes": "The broad tab strip is replaced by six responsive primary tasks and contextual run tools/lifecycle. Existing deep links and non-payroll navigation remain unchanged. PR #171 passed browser and visual exact-head gates and merged to main at 28a45e8322e74590859e42093b0db08717ec86ae."
     }
   ],
   "tasks": [
@@ -782,9 +788,9 @@
         "PAY-SEC-001"
       ],
       "title": "Implement deduction schedules, statutory applicability controls, and focused payroll UX",
-      "status": "IMPLEMENTED",
+      "status": "VERIFIED",
       "dependencies": [
-        "Preserve PR #168 petty-cash ownership and avoid PR #167/#169 billing files"
+        "Preserve merged PR #168 Petty Cash ownership and avoid concurrent non-payroll files"
       ],
       "code": [
         "docs/payroll/PAYROLL_REQUIREMENTS.md",
@@ -848,7 +854,7 @@
         "PAY-LOAN-002",
         "PAY-STAT-003"
       ],
-      "status": "IMPLEMENTED"
+      "status": "VERIFIED"
     },
     {
       "path": "lib/petty-cash/payroll-integration.ts",
@@ -857,7 +863,7 @@
         "PAY-DED-001",
         "PAY-LOAN-001"
       ],
-      "status": "IMPLEMENTED"
+      "status": "VERIFIED"
     },
     {
       "path": "lib/petty-cash/payroll-integration.ts",
@@ -866,7 +872,7 @@
         "PAY-DED-001",
         "PAY-LOAN-001"
       ],
-      "status": "IMPLEMENTED"
+      "status": "VERIFIED"
     },
     {
       "path": "lib/services/payroll-deduction-schedules.ts",
@@ -875,7 +881,7 @@
         "PAY-DED-002",
         "PAY-LOAN-002"
       ],
-      "status": "IMPLEMENTED"
+      "status": "VERIFIED"
     },
     {
       "path": "lib/services/payroll-deduction-schedules.ts",
@@ -884,7 +890,7 @@
         "PAY-LOAN-001",
         "PAY-LOAN-002"
       ],
-      "status": "IMPLEMENTED"
+      "status": "VERIFIED"
     },
     {
       "path": "lib/services/payroll-deduction-schedules.ts",
@@ -894,7 +900,7 @@
         "PAY-DED-002",
         "PAY-LOAN-002"
       ],
-      "status": "IMPLEMENTED"
+      "status": "VERIFIED"
     },
     {
       "path": "lib/actions/payroll.ts",
@@ -925,7 +931,7 @@
         "PAY-FIN-002",
         "PAY-LOAN-001"
       ],
-      "status": "IMPLEMENTED"
+      "status": "VERIFIED"
     },
     {
       "path": "lib/actions/payroll.ts",
@@ -982,7 +988,7 @@
         "PAY-SEC-001",
         "PAY-LOAN-001"
       ],
-      "status": "IMPLEMENTED"
+      "status": "VERIFIED"
     },
     {
       "path": "lib/actions/payroll.ts",
@@ -991,7 +997,7 @@
         "PAY-SEC-001",
         "PAY-LOAN-001"
       ],
-      "status": "IMPLEMENTED"
+      "status": "VERIFIED"
     },
     {
       "path": "lib/actions/payroll.ts",
@@ -1000,7 +1006,7 @@
         "PAY-SEC-001",
         "PAY-DED-001"
       ],
-      "status": "IMPLEMENTED"
+      "status": "VERIFIED"
     },
     {
       "path": "lib/actions/payroll.ts",
@@ -1010,7 +1016,7 @@
         "PAY-DED-001",
         "PAY-LOAN-001"
       ],
-      "status": "IMPLEMENTED"
+      "status": "VERIFIED"
     },
     {
       "path": "lib/actions/payroll.ts",
@@ -1020,7 +1026,7 @@
         "PAY-DED-002",
         "PAY-LOAN-002"
       ],
-      "status": "IMPLEMENTED"
+      "status": "VERIFIED"
     },
     {
       "path": "lib/actions/payroll.ts",
@@ -1030,7 +1036,7 @@
         "PAY-DED-002",
         "PAY-LOAN-002"
       ],
-      "status": "IMPLEMENTED"
+      "status": "VERIFIED"
     },
     {
       "path": "lib/actions/payroll.ts",
@@ -1039,7 +1045,7 @@
         "PAY-SEC-001",
         "PAY-STAT-003"
       ],
-      "status": "IMPLEMENTED"
+      "status": "VERIFIED"
     },
     {
       "path": "lib/actions/payroll.ts",
@@ -1050,7 +1056,7 @@
         "PAY-LOAN-002",
         "PAY-STAT-003"
       ],
-      "status": "IMPLEMENTED"
+      "status": "VERIFIED"
     },
     {
       "path": "lib/actions/payroll.ts",
@@ -1058,7 +1064,7 @@
       "requirementIds": [
         "PAY-STAT-003"
       ],
-      "status": "IMPLEMENTED"
+      "status": "VERIFIED"
     },
     {
       "path": "lib/actions/payroll.ts",
@@ -1067,7 +1073,7 @@
         "PAY-SEC-001",
         "PAY-DED-001"
       ],
-      "status": "IMPLEMENTED"
+      "status": "VERIFIED"
     },
     {
       "path": "lib/actions/payroll.ts",
@@ -1138,7 +1144,7 @@
         "PAY-CALC-003",
         "PAY-LOAN-001"
       ],
-      "status": "IMPLEMENTED"
+      "status": "VERIFIED"
     },
     {
       "path": "lib/actions/payroll.ts",
@@ -1146,7 +1152,7 @@
       "requirementIds": [
         "PAY-LOAN-001"
       ],
-      "status": "IMPLEMENTED"
+      "status": "VERIFIED"
     },
     {
       "path": "lib/actions/payroll.ts",
@@ -1409,7 +1415,7 @@
       "requirementIds": [
         "PAY-STAT-003"
       ],
-      "status": "IMPLEMENTED"
+      "status": "VERIFIED"
     },
     {
       "path": "lib/services/payroll-statutory.ts",
@@ -1419,7 +1425,7 @@
         "PAY-STAT-002",
         "PAY-STAT-003"
       ],
-      "status": "IMPLEMENTED"
+      "status": "VERIFIED"
     },
     {
       "path": "lib/services/payroll-statutory.ts",
@@ -1588,7 +1594,7 @@
         "PAY-LOAN-002",
         "PAY-UX-001"
       ],
-      "status": "IMPLEMENTED"
+      "status": "VERIFIED"
     },
     {
       "path": "components/payroll-statutory-controls-panel.tsx",
@@ -1597,7 +1603,7 @@
         "PAY-STAT-003",
         "PAY-UX-001"
       ],
-      "status": "IMPLEMENTED"
+      "status": "VERIFIED"
     },
     {
       "path": "app/admin/payroll/page.tsx",
@@ -1606,7 +1612,7 @@
         "PAY-RUN-001",
         "PAY-UX-001"
       ],
-      "status": "IMPLEMENTED"
+      "status": "VERIFIED"
     },
     {
       "path": "app/employee/payslips/[id]/page.tsx",
@@ -1615,7 +1621,7 @@
         "PAY-STAT-003",
         "PAY-EMP-001"
       ],
-      "status": "IMPLEMENTED"
+      "status": "VERIFIED"
     }
   ]
 }

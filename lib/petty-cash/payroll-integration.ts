@@ -21,7 +21,7 @@ type PettyCashAdvanceSchedule = {
 
 /**
  * @requirement PAY-DED-001 PAY-LOAN-001
- * @status IMPLEMENTED
+ * @status VERIFIED
  * @description Calculates a bounded Petty Cash cash-advance deduction using the
  * configured per-cutoff amount, current loan balance, and unpaid payroll reservations.
  */
@@ -35,7 +35,7 @@ export function calculatePettyCashDeductionAmount(configured: number, loanBalanc
 
 /**
  * @requirement PAY-DED-001 PAY-LOAN-001
- * @status IMPLEMENTED
+ * @status VERIFIED
  * @description PCV-007 materializes Petty Cash Employee Cash Advance schedules into
  * the current mutable payroll cutoff. The resulting PayrollDeduction remains ordinary
  * payroll input; PR #166's Financial Engine PAYMENT processor is authoritative for

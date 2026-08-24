@@ -18,7 +18,7 @@ type ApplicabilityVersion = {
 
 /**
  * @requirement PAY-STAT-003 PAY-UX-001
- * @status IMPLEMENTED
+ * @status VERIFIED
  */
 export function PayrollStatutoryControlsPanel({ canManagePayroll, defaultEffectiveDate, employees, versions }: { canManagePayroll: boolean; defaultEffectiveDate: string; employees: Array<{ id: string; name: string; employeeNumber: string }>; versions: ApplicabilityVersion[] }) {
   return <section className="mt-5 grid gap-5 xl:grid-cols-[.9fr_1.1fr]">

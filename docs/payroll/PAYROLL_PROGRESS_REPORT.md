@@ -2,9 +2,9 @@
 
 Last updated: 2026-08-24
 Source of truth: `docs/payroll/PAYROLL_IMPLEMENTATION_STATUS.json`
-Current candidate branch: `codex/payroll-schedules-controls-latest-20260824`
-Current pull request: draft PR #171
-Current candidate task: `PAY-TASK-011`
+Current verification branch: `codex/payroll-verification-record-20260824`
+Completed pull request: PR #171
+Completed task: `PAY-TASK-011`
 
 ## Executive status
 
@@ -19,14 +19,14 @@ PR #166 completed and verified every previously pending payroll task and merged 
 
 The implementation head `f596c850a113bcd73d50d5a71116e9951685ffdb` passed exact-head HOAHub MySQL CI #1114 and Canva Visual Parity #302. The product owner separately confirmed the Hostinger production deployment completed for that baseline.
 
-`PAY-TASK-011` is the current, not-yet-released candidate. It adds:
+`PAY-TASK-011` merged in PR #171 to `main` at `28a45e8322e74590859e42093b0db08717ec86ae`. It adds:
 
 - `PAY-DED-002` — one-time, recurring, and until-fully-paid schedules with From/To dates and optional installment limits.
 - `PAY-LOAN-002` — idempotent automatic loan installments capped at the remaining unreserved balance; only paid-payroll Financial Engine posting mutates the loan ledger.
 - `PAY-STAT-003` — effective-dated tenant defaults and employee overrides for the statutory master switch, SSS, PhilHealth, Pag-IBIG, and withholding-tax applicability. Official rules remain system-controlled.
 - `PAY-UX-001` — six primary admin payroll tasks, a visible run lifecycle, responsive navigation, schedule management, and read-only employee visibility.
 
-The four new requirements and `PAY-TASK-011` are `IMPLEMENTED`, not `VERIFIED`. PR #168 merged to `main` at `a1f2f05` and remains the owner of Petty Cash Voucher issuance/cash-advance source integration. This candidate was transplanted onto that exact main state and preserves both materializers; PR #167's billing work and PR #170's receipt-print work remain outside payroll scope.
+The four new requirements and `PAY-TASK-011` are `VERIFIED`. PR #171's implementation head `c47416e83bc3c40d6bf317786bab264f7b757a15` passed exact-head HOAHub MySQL CI #1136 and Canva Visual Parity #321 before merge. This evidence also verifies PR #168's `PAY-DED-001`/`PAY-LOAN-001` Petty Cash integration because the candidate preserved both materializers and passed the linked regression coverage. PR #167's billing work and merged PR #170's receipt-print work remain outside payroll scope.
 
 ## Verified implementation
 
@@ -69,16 +69,15 @@ The four new requirements and `PAY-TASK-011` are `IMPLEMENTED`, not `VERIFIED`. 
 - Full unit suite: 442/442 passed locally on latest main.
 - Full ESLint with zero warnings: passed locally.
 - Next.js production build: passed locally on latest main, including all 48 routes and build-time lint/type validation.
-- Clean MySQL migration/seed and exact-head workflows remain pending for the current candidate.
+- PR #171 implementation head: clean MySQL migration/seed, full HOAHub MySQL CI #1136, production build/browser smoke, and Canva Visual Parity #321 passed.
 - The prior PR #166 clean migration, seed, finance, production smoke, critical browser, and visual evidence remains valid only for its exact tested head.
 
-## Required release gate
+## Remaining release gate
 
-1. Keep draft PR #171 isolated from the user's unrelated dirty Prisma split-schema files and concurrent non-payroll work.
-2. Run clean MySQL migration/seed, full HOAHub MySQL CI, and the applicable visual/browser gate on the exact PR head.
-3. Preserve merged PR #168's Petty Cash Voucher ownership and both payroll materializers through review.
-4. Merge only a passing exact head, then verify Hostinger deployment separately.
+1. Merge this traceability-only verification record after its exact-head checks pass.
+2. Verify Hostinger deployment of merge commit `28a45e8322e74590859e42093b0db08717ec86ae` separately.
+3. Preserve PR #168's Petty Cash Voucher ownership and both payroll materializers in later payroll changes.
 
 ## Remaining blockers
 
-No implementation blocker is currently known. Exact-head PR checks, review, merge, and separate deployment confirmation remain.
+No implementation blocker remains. PR #171 is merged and verified; production deployment confirmation for its merge commit remains separate.

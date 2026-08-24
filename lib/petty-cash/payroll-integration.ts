@@ -28,11 +28,12 @@ export function calculatePettyCashDeductionAmount(configured: number, loanBalanc
 }
 
 /**
- * PCV-007 / PAY-DED-001 / PAY-LOAN-001
- * Materialize Petty Cash Employee Cash Advance schedules into the current mutable
- * payroll cutoff. The resulting PayrollDeduction remains ordinary payroll input;
- * PR #166's Financial Engine PAYMENT processor is authoritative for repayment,
- * loan-balance mutation, posting, retry, and reversal.
+ * @requirement PAY-DED-001 PAY-LOAN-001
+ * @status IMPLEMENTED
+ * @description PCV-007 materializes Petty Cash Employee Cash Advance schedules into
+ * the current mutable payroll cutoff. The resulting PayrollDeduction remains ordinary
+ * payroll input; PR #166's Financial Engine PAYMENT processor is authoritative for
+ * repayment, loan-balance mutation, posting, retry, and reversal.
  */
 export async function materializePettyCashPayrollDeductions(
   tx: Prisma.TransactionClient,

@@ -3,7 +3,9 @@ import { AlertTriangle, CalendarDays, Calculator, CheckCircle2, HandCoins, LockK
 import { PayrollAccessRole } from "@prisma/client";
 import { PageHeader } from "@/components/page-header";
 import { PayrollCutoffDeductionsPanel } from "@/components/payroll-cutoff-deductions-panel";
+import { PayrollDeductionSchedulesPanel } from "@/components/payroll-deduction-schedules-panel";
 import { PayrollDeleteForm } from "@/components/payroll-delete-form";
+import { PayrollStatutoryControlsPanel } from "@/components/payroll-statutory-controls-panel";
 import { StatusBadge } from "@/components/status-badge";
 import { DeleteButton, SubmitButton } from "@/components/ui";
 import {
@@ -37,36 +39,50 @@ export default async function PayrollPage({ searchParams }: PayrollPageProps) {
   const { user, roles } = await requirePayrollAccess();
   const tenantId = user.tenantId;
   const { period: periodId, section: requestedSection, employee: requestedEmployeeId } = await searchParams;
-  const validSections = ["dashboard", "employees", "attendance", "processing", "calendar", "adjustments", "overtime", "loans", "approval", "payslips", "reports", "contributions", "settings"];
-  const section = validSections.includes(requestedSection ?? "") ? requestedSection! : "dashboard";
+  const validSections = ["dashboard", "employees", "attendance", "processing", "calendar", "adjustments", "overtime", "deductions", "loans", "approval", "payslips", "reports", "government", "contributions", "settings"];
+  const requestedValidSection = validSections.includes(requestedSection ?? "") ? requestedSection! : "dashboard";
+  const section = requestedValidSection === "loans" ? "deductions" : requestedValidSection === "contributions" ? "government" : requestedValidSection;
   const canWritePayroll = hasPayrollRole(roles, payrollWriteRoles);
   const canApprovePayroll = hasPayrollRole(roles, payrollApprovalRoles);
   const canManagePayroll = hasPayrollRole(roles, payrollManageRoles);
-  const periods = await prisma.payrollPeriod.findMany({
-    where: { tenantId },
-    include: {
-      payslips: { where: { tenantId }, include: { employee: true }, orderBy: { employee: { name: "asc" } } },
-      deductions: { where: { tenantId }, include: { employee: true, deductionType: true, employeeLoan: true }, orderBy: { createdAt: "desc" } },
-      revisions: { where: { tenantId }, include: { createdBy: true }, orderBy: { revisionNumber: "desc" } },
-      financialPostings: {
-        where: { tenantId },
-        include: { outbox: true, journalEntry: { include: { lines: { orderBy: { lineOrder: "asc" } } } } },
-        orderBy: { createdAt: "desc" },
+  const [periods, deductionTypes, activeEmployees, employeeLoans, calendarDays, schedules, payrollUsers, payrollAccesses, auditLogs, overtimeRecords, deductionSchedules, statutoryApplicabilityVersions] = await Promise.all([
+    prisma.payrollPeriod.findMany({
+      where: { tenantId },
+      include: {
+        payslips: { where: { tenantId }, include: { employee: true }, orderBy: { employee: { name: "asc" } } },
+        deductions: { where: { tenantId }, include: { employee: true, deductionType: true, employeeLoan: true }, orderBy: { createdAt: "desc" } },
+        revisions: { where: { tenantId }, include: { createdBy: true }, orderBy: { revisionNumber: "desc" } },
+        financialPostings: {
+          where: { tenantId },
+          include: { outbox: true, journalEntry: { include: { lines: { orderBy: { lineOrder: "asc" } } } } },
+          orderBy: { createdAt: "desc" },
+        },
+        statutoryRuleSet: true,
+        _count: { select: { payslips: true } },
       },
-      statutoryRuleSet: true,
-      _count: { select: { payslips: true } },
-    },
-    orderBy: { endDate: "desc" },
-  });
-  const deductionTypes = await prisma.payrollDeductionType.findMany({ where: { tenantId }, orderBy: [{ active: "desc" }, { name: "asc" }] });
-  const activeEmployees = await prisma.employeeProfile.findMany({ where: { tenantId, status: "ACTIVE" }, orderBy: { name: "asc" } });
-  const employeeLoans = await prisma.employeeLoan.findMany({ where: { tenantId }, include: { employee: true }, orderBy: [{ status: "asc" }, { issuedDate: "desc" }, { createdAt: "desc" }] });
-  const calendarDays = await prisma.payrollCalendarDay.findMany({ where: { tenantId }, include: { createdBy: true }, orderBy: { date: "desc" }, take: 80 });
-  const schedules = await prisma.employeeSchedule.findMany({ where: { tenantId }, include: { employee: true }, orderBy: [{ employee: { name: "asc" } }, { dayOfWeek: "asc" }, { effectiveFrom: "desc" }], take: 120 });
-  const payrollUsers = await prisma.user.findMany({ where: { tenantId, role: { in: ["ADMIN", "SYSTEM_ADMIN", "EMPLOYEE"] } }, include: { employeeProfile: true, payrollAccesses: { where: { tenantId }, orderBy: { role: "asc" } } }, orderBy: { name: "asc" } });
-  const payrollAccesses = await prisma.payrollAccess.findMany({ where: { tenantId }, include: { user: true, grantedBy: true }, orderBy: [{ active: "desc" }, { role: "asc" }] });
-  const auditLogs = await prisma.auditLog.findMany({ where: { tenantId, module: { in: ["PAYROLL", "ATTENDANCE"] } }, include: { actor: true }, orderBy: { createdAt: "desc" }, take: 20 });
-  const overtimeRecords = await prisma.overtimeRecord.findMany({ where: { tenantId }, include: { employee: true, createdBy: true, reviewedBy: true }, orderBy: [{ date: "desc" }, { createdAt: "desc" }], take: 200 });
+      orderBy: { endDate: "desc" },
+    }),
+    prisma.payrollDeductionType.findMany({ where: { tenantId }, orderBy: [{ active: "desc" }, { name: "asc" }] }),
+    prisma.employeeProfile.findMany({ where: { tenantId, status: "ACTIVE" }, orderBy: { name: "asc" } }),
+    prisma.employeeLoan.findMany({ where: { tenantId }, include: { employee: true }, orderBy: [{ status: "asc" }, { issuedDate: "desc" }, { createdAt: "desc" }] }),
+    prisma.payrollCalendarDay.findMany({ where: { tenantId }, include: { createdBy: true }, orderBy: { date: "desc" }, take: 80 }),
+    prisma.employeeSchedule.findMany({ where: { tenantId }, include: { employee: true }, orderBy: [{ employee: { name: "asc" } }, { dayOfWeek: "asc" }, { effectiveFrom: "desc" }], take: 120 }),
+    prisma.user.findMany({ where: { tenantId, role: { in: ["ADMIN", "SYSTEM_ADMIN", "EMPLOYEE"] } }, include: { employeeProfile: true, payrollAccesses: { where: { tenantId }, orderBy: { role: "asc" } } }, orderBy: { name: "asc" } }),
+    prisma.payrollAccess.findMany({ where: { tenantId }, include: { user: true, grantedBy: true }, orderBy: [{ active: "desc" }, { role: "asc" }] }),
+    prisma.auditLog.findMany({ where: { tenantId, module: { in: ["PAYROLL", "ATTENDANCE"] } }, include: { actor: true }, orderBy: { createdAt: "desc" }, take: 20 }),
+    prisma.overtimeRecord.findMany({ where: { tenantId }, include: { employee: true, createdBy: true, reviewedBy: true }, orderBy: [{ date: "desc" }, { createdAt: "desc" }], take: 200 }),
+    prisma.payrollDeductionSchedule.findMany({
+      where: { tenantId },
+      include: {
+        employee: true,
+        deductionType: true,
+        employeeLoan: true,
+        payrollDeductions: { include: { payroll: { select: { startDate: true, endDate: true, payDate: true, status: true } } }, orderBy: { createdAt: "desc" } },
+      },
+      orderBy: [{ status: "asc" }, { effectiveFrom: "desc" }, { createdAt: "desc" }],
+    }),
+    prisma.payrollStatutoryApplicability.findMany({ where: { tenantId }, include: { employee: true }, orderBy: [{ effectiveFrom: "desc" }, { createdAt: "desc" }] }),
+  ]);
   const activeDeductionTypes = deductionTypes.filter((deduction) => deduction.active);
   const openEmployeeLoans = employeeLoans.filter((loan) => loan.status === "OPEN" && Number(loan.balance) > 0);
   const selected = periods.find((period) => period.id === periodId) ?? periods[0];
@@ -86,28 +102,22 @@ export default async function PayrollPage({ searchParams }: PayrollPageProps) {
   const now = new Date();
   const start = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
   const end = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 0));
+  const runSections = new Set(["processing", "adjustments", "overtime", "approval", "payslips"]);
+  const primarySection = runSections.has(section) ? "runs" : section;
   const tabs = [
-    { id: "dashboard", href: "/admin/payroll", label: "Dashboard" },
-    { id: "processing", href: "/admin/payroll/periods", label: "Period management" },
-    { id: "processing", href: "/admin/payroll/computation", label: "Computation" },
-    { id: "payslips", href: "/admin/payroll/employee-details", label: "Employee details" },
-    { id: "adjustments", href: "/admin/payroll/adjustments", label: "Adjustments" },
-    { id: "overtime", href: "/admin/payroll/overtime", label: "Approved OT" },
-    { id: "loans", href: "/admin/payroll/deductions", label: "Deductions & balances" },
-    { id: "approval", href: "/admin/payroll/review", label: "Review" },
-    { id: "approval", href: "/admin/payroll/approval", label: "Approval" },
-    { id: "approval", href: "/admin/payroll/release", label: "Release / mark paid" },
-    { id: "payslips", href: "/admin/payroll/payslips", label: "Payslips" },
+    { id: "dashboard", href: "/admin/payroll", label: "Overview" },
+    { id: "runs", href: "/admin/payroll/periods", label: "Payroll runs" },
+    { id: "deductions", href: "/admin/payroll/deductions", label: "Deductions & loans" },
+    { id: "government", href: "/admin/payroll?section=government", label: "Government contributions" },
     { id: "reports", href: "/admin/payroll/reports", label: "Reports" },
     { id: "settings", href: "/admin/payroll/settings", label: "Settings" },
-    { id: "archive", href: "/admin/payroll/archive", label: "Archive" },
   ];
 
   return <>
     <PageHeader
       eyebrow="Human resources"
       title="Payroll & payslips"
-      description="Calculate salary from attendance, reopen finalized periods for adjustments, lock paid periods, and print individual payslips."
+      description="Run payroll cutoffs, manage deductions and government applicability, approve financial posting, and release employee payslips."
     />
     <section className="mb-6 rounded-2xl border border-amber-100 bg-amber-50 p-4 text-sm text-amber-950">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -115,15 +125,30 @@ export default async function PayrollPage({ searchParams }: PayrollPageProps) {
         {canManagePayroll && <Link className="btn-secondary min-h-8 px-3 py-1 text-xs" href="/admin/payroll?section=settings">Manage payroll access</Link>}
       </div>
     </section>
-    <nav className="mb-6 flex max-w-full gap-2 overflow-x-auto pb-2" aria-label="Payroll sections">
-      {tabs.map((tab, index) => <Link key={`${tab.href}-${index}`} href={tab.href} className={`shrink-0 rounded-xl border px-4 py-2 text-sm font-bold transition ${section === tab.id ? "border-pine-500 bg-pine-50 text-pine-900 shadow-sm" : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"}`}>{tab.label}</Link>)}
+    <nav className="mb-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6" aria-label="Payroll sections">
+      {tabs.map((tab) => <Link key={tab.id} href={tab.href} className={`flex min-h-12 items-center justify-center rounded-xl border px-3 py-2 text-center text-sm font-bold transition ${primarySection === tab.id ? "border-pine-500 bg-pine-50 text-pine-900 shadow-sm" : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"}`}>{tab.label}</Link>)}
     </nav>
 
-    {section === "dashboard" && <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-      <Metric label="Payroll periods" value={periods.length} currency={false} />
-      <Metric label="Open calculations" value={periods.filter((item) => item.status === "DRAFT" || item.status === "CALCULATED").length} currency={false} />
-      <Metric label="Pending OT requests" value={overtimeRecords.filter((item) => item.status === "PENDING").length} currency={false} />
-      <Metric label="Latest net payroll" value={selectedTotalPayroll} />
+    {primarySection === "runs" && <nav className="mb-6 grid gap-2 rounded-2xl border border-slate-100 bg-white p-3 sm:grid-cols-2 lg:grid-cols-5" aria-label="Selected payroll run tools">
+      <RunToolLink href="/admin/payroll/periods" active={section === "processing"} label="Setup & calculate" />
+      <RunToolLink href="/admin/payroll/payslips" active={section === "payslips"} label="Review employees" />
+      <RunToolLink href="/admin/payroll/adjustments" active={section === "adjustments"} label="Adjustments" />
+      <RunToolLink href="/admin/payroll/overtime" active={section === "overtime"} label="Approved overtime" />
+      <RunToolLink href="/admin/payroll/approval" active={section === "approval"} label="Approve, post & pay" />
+    </nav>}
+
+    {section === "dashboard" && <section className="space-y-5">
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <Metric label="Payroll periods" value={periods.length} currency={false} />
+        <Metric label="Open calculations" value={periods.filter((item) => item.status === "DRAFT" || item.status === "CALCULATED").length} currency={false} />
+        <Metric label="Pending OT requests" value={overtimeRecords.filter((item) => item.status === "PENDING").length} currency={false} />
+        <Metric label="Latest net payroll" value={selectedTotalPayroll} />
+      </div>
+      <div className="grid gap-4 lg:grid-cols-3">
+        <SectionLinkCard title="Continue a payroll run" description="Open a cutoff, review employee results, then approve, post, and record payment through the controlled lifecycle." href="/admin/payroll/periods" action="Open payroll runs" />
+        <SectionLinkCard title="Manage deductions & loans" description={`${deductionSchedules.filter((item) => item.status === "ACTIVE").length} active schedules · ${money(totalLoanBalance)} employee loan balance.`} href="/admin/payroll/deductions" action="Open deductions" />
+        <SectionLinkCard title="Government contribution controls" description="Review the effective legal rule source and configure tenant or employee applicability without editing official formulas." href="/admin/payroll?section=government" action="Open controls" />
+      </div>
     </section>}
 
     {section === "employees" && <section className="grid gap-4 lg:grid-cols-2">
@@ -215,7 +240,7 @@ export default async function PayrollPage({ searchParams }: PayrollPageProps) {
       <section className="card">
       <div className="mb-5">
         <h2 className="text-lg font-black">Payroll deduction types</h2>
-        <p className="text-sm leading-6 text-slate-500">Add, edit, activate, or deactivate deduction templates. A type is not automatically applied to every employee. Assign it to a specific employee and payroll period below when needed, such as Cash Advance for one cutoff only.</p>
+        <p className="text-sm leading-6 text-slate-500">Add, edit, activate, or deactivate deduction templates. A type is not automatically applied to every employee; use Deductions & loans for one-time or scheduled assignments.</p>
       </div>
       <div className="grid gap-5 xl:grid-cols-[.9fr_1.1fr]">
         {canManagePayroll ? <form action={savePayrollDeductionTypeAction} className="rounded-2xl border border-pine-100 bg-pine-50/40 p-4">
@@ -264,12 +289,22 @@ export default async function PayrollPage({ searchParams }: PayrollPageProps) {
       <section className="card"><h2 className="text-lg font-black">Recent payroll audit trail</h2><p className="mb-4 text-sm text-slate-500">Security-sensitive payroll and attendance changes are logged automatically.</p><div className="table-wrap shadow-none"><table className="data-table"><thead><tr><th>Date</th><th>Actor</th><th>Module</th><th>Action</th><th>Entity</th></tr></thead><tbody>{auditLogs.map((item) => <tr key={item.id}><td>{shortDate(item.createdAt)}</td><td>{item.actor?.name ?? "System"}</td><td>{item.module}</td><td>{item.action.replaceAll("_", " ")}</td><td>{item.entityType ?? "-"} {item.entityId ? item.entityId.slice(-6).toUpperCase() : ""}</td></tr>)}{!auditLogs.length && <tr><td colSpan={5} className="py-10 text-center text-slate-500">No payroll audit logs yet.</td></tr>}</tbody></table></div></section>
     </section>}
 
-    {section === "loans" && <section className="card mb-6">
+    {section === "deductions" && <>
+      <PayrollDeductionSchedulesPanel
+        canWritePayroll={canWritePayroll}
+        canManagePayroll={canManagePayroll}
+        defaultStartDate={inputDate(now)}
+        employees={activeEmployees.map((employee) => ({ id: employee.id, name: employee.name, employeeNumber: employee.employeeNumber }))}
+        deductionTypes={activeDeductionTypes.map((deduction) => ({ id: deduction.id, name: deduction.name, amount: Number(deduction.amount) }))}
+        loans={openEmployeeLoans.map((loan) => ({ id: loan.id, employeeId: loan.employeeId, employeeName: loan.employee.name, description: loan.description, balance: Number(loan.balance) }))}
+        schedules={deductionSchedules}
+      />
+      <section className="card my-6">
       <div className="mb-5 flex flex-col justify-between gap-4 lg:flex-row lg:items-start">
         <div>
           <p className="text-xs font-bold uppercase tracking-wider text-pine-600">Employee receivables</p>
           <h2 className="mt-1 text-lg font-black">Loans and cash advances</h2>
-          <p className="text-sm leading-6 text-slate-500">Create employee loans or cash advances here. During payroll, assign a deduction and link it to the loan so each paid cutoff reduces the employee balance.</p>
+          <p className="text-sm leading-6 text-slate-500">Create the employee receivable here, then use the schedule panel above for one-time, dated recurring, or until-fully-paid payroll deductions. The loan balance changes only after payroll payment posts.</p>
         </div>
         <div className="grid gap-2 sm:grid-cols-3 lg:min-w-[520px]">
           <Metric label="Principal" value={totalLoanPrincipal} />
@@ -342,9 +377,10 @@ export default async function PayrollPage({ searchParams }: PayrollPageProps) {
           </table>
         </div>
       </div>
-    </section>}
+      </section>
+    </>}
 
-    {section === "contributions" && <section className="card mb-6">
+    {section === "government" && <section className="card mb-6">
       <div className="mb-5">
         <p className="text-xs font-bold uppercase tracking-wider text-pine-600">Statutory payroll setup</p>
         <h2 className="mt-1 text-lg font-black">Government contributions</h2>
@@ -359,6 +395,12 @@ export default async function PayrollPage({ searchParams }: PayrollPageProps) {
         <div className="rounded-2xl border border-slate-100 bg-white p-4"><p className="text-xs font-bold uppercase tracking-wider text-slate-500">Employer contributions</p><p className="mt-1 text-xl font-black">{money(selectedEmployerContributions)}</p></div>
         <div className="rounded-2xl border border-slate-100 bg-white p-4"><p className="text-xs font-bold uppercase tracking-wider text-slate-500">Employees calculated</p><p className="mt-1 text-xl font-black">{selected?.payslips.length ?? 0}</p></div>
       </div>
+      <PayrollStatutoryControlsPanel
+        canManagePayroll={canManagePayroll}
+        defaultEffectiveDate={inputDate(now)}
+        employees={activeEmployees.map((employee) => ({ id: employee.id, name: employee.name, employeeNumber: employee.employeeNumber }))}
+        versions={statutoryApplicabilityVersions}
+      />
     </section>}
 
     {section === "reports" && <section className="grid gap-4 lg:grid-cols-2">
@@ -457,6 +499,8 @@ export default async function PayrollPage({ searchParams }: PayrollPageProps) {
                 <StatusBadge status={selected.status} />
               </div>
             </div>
+
+            <PayrollRunStepper status={selected.status} />
 
             <div className="mt-5 grid gap-3 sm:grid-cols-3">
               <div className="rounded-2xl border border-pine-100 bg-pine-50 p-4">
@@ -626,6 +670,25 @@ export default async function PayrollPage({ searchParams }: PayrollPageProps) {
 
 function payrollSectionPath(section: string) {
   return ({ processing: "/admin/payroll/periods", adjustments: "/admin/payroll/adjustments", approval: "/admin/payroll/approval", payslips: "/admin/payroll/payslips" } as Record<string, string>)[section] ?? "/admin/payroll";
+}
+
+function RunToolLink({ href, active, label }: { href: string; active: boolean; label: string }) {
+  return <Link href={href} className={`rounded-xl px-3 py-2 text-center text-sm font-bold ${active ? "bg-pine-700 text-white" : "bg-slate-50 text-slate-600 hover:bg-slate-100"}`}>{label}</Link>;
+}
+
+/**
+ * @requirement PAY-RUN-001 PAY-UX-001
+ * @status IMPLEMENTED
+ */
+function PayrollRunStepper({ status }: { status: string }) {
+  const current = ({ DRAFT: 0, CALCULATED: 2, FINALIZED: 4, POSTING: 4, POST_FAILED: 4, POSTED: 5, PAID: 6 } as Record<string, number>)[status] ?? 0;
+  const steps = ["Setup", "Calculate", "Review", "Approve", "Post", "Pay"];
+  return <div className="mt-5 rounded-2xl border border-slate-100 bg-slate-50 p-3">
+    <p className="mb-3 text-xs font-black uppercase tracking-wider text-slate-500">Payroll lifecycle</p>
+    <ol className="grid gap-2 sm:grid-cols-3 xl:grid-cols-6">
+      {steps.map((step, index) => <li key={step} className={`rounded-xl border px-3 py-2 text-center text-xs font-bold ${index < current ? "border-emerald-200 bg-emerald-50 text-emerald-700" : index === current ? "border-pine-500 bg-white text-pine-800 shadow-sm" : "border-slate-200 bg-white text-slate-400"}`}>{index < current ? "✓ " : ""}{step}</li>)}
+    </ol>
+  </div>;
 }
 
 function Metric({ label, value, currency = true }: { label: string; value: number; currency?: boolean }) {

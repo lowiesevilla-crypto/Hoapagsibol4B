@@ -1,6 +1,6 @@
 "use server";
 
-import { EmployeeLoanStatus, OvertimeSource, OvertimeStatus, PayrollAccessRole, PayrollDayType, PayrollPostingEventType, PayrollRevisionType, PayrollStatus, Prisma } from "@prisma/client";
+import { EmployeeLoanStatus, OvertimeSource, OvertimeStatus, PayrollAccessRole, PayrollDayType, PayrollDeductionScheduleStatus, PayrollPostingEventType, PayrollRevisionType, PayrollStatus, Prisma } from "@prisma/client";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { writeAuditLog } from "@/lib/audit";
@@ -9,14 +9,17 @@ import { payrollApprovalRoles, payrollManageRoles, payrollWriteRoles, requirePay
 import { normalizePayrollCorrectionReason } from "@/lib/payroll-lifecycle";
 import { materializePettyCashPayrollDeductions } from "@/lib/petty-cash/payroll-integration";
 import { calculatePayslip } from "@/lib/services/payroll";
+import { materializePayrollDeductionSchedules } from "@/lib/services/payroll-deduction-schedules";
 import { requestPayrollFinancialPosting } from "@/lib/services/payroll-finance";
 import {
   calculateStatutoryContributions,
   parsePhilippineStatutoryRules,
   payrollPolicyFromStatutoryRules,
+  resolveStatutoryApplicability,
+  type StatutoryApplicability,
   type PayrollStatutoryRuleRecord,
 } from "@/lib/services/payroll-statutory";
-import { employeeLoanSchema, employeeScheduleRangeSchema, overtimeRecordSchema, payrollAccessSchema, payrollCalendarSchema, payrollDeductionSchema, payrollDeductionTypeSchema, payrollPeriodSchema } from "@/lib/validation";
+import { employeeLoanSchema, employeeScheduleRangeSchema, overtimeRecordSchema, payrollAccessSchema, payrollCalendarSchema, payrollDeductionScheduleSchema, payrollDeductionSchema, payrollDeductionTypeSchema, payrollPeriodSchema, payrollStatutoryApplicabilitySchema } from "@/lib/validation";
 
 const MUTABLE_PAYROLL_STATUSES: readonly PayrollStatus[] = [PayrollStatus.DRAFT, PayrollStatus.CALCULATED];
 
@@ -82,17 +85,18 @@ async function calculatePeriod(input: { startDate: Date; endDate: Date; payDate:
 }
 
 /**
- * @requirement PAY-SEC-001 PAY-CALC-001 PAY-ATT-001 PAY-OT-001 PAY-COMP-002 PAY-COMP-003 PAY-DED-001 PAY-LOAN-001
+ * @requirement PAY-SEC-001 PAY-CALC-001 PAY-ATT-001 PAY-OT-001 PAY-COMP-002 PAY-COMP-003 PAY-DED-001 PAY-DED-002 PAY-LOAN-001 PAY-LOAN-002 PAY-STAT-003
  * @status IMPLEMENTED
- * @description Resolve employee payroll configuration and statutory rules, materialize eligible Petty Cash cash-advance deductions, and persist the payslip calculation snapshot.
+ * @description Resolve employee/statutory policy, materialize generic and Petty Cash deduction schedules, and persist the payslip calculation snapshot.
  */
 async function refreshPeriodPayslips(
   tx: Prisma.TransactionClient,
-  period: { id: string; tenantId: string; startDate: Date; endDate: Date },
+  period: { id: string; tenantId: string; startDate: Date; endDate: Date; payDate: Date; status: PayrollStatus },
   statutoryRuleSet: PayrollStatutoryRuleRecord,
 ) {
   const statutoryRules = parsePhilippineStatutoryRules(statutoryRuleSet.rules);
   const calculationPolicy = payrollPolicyFromStatutoryRules(statutoryRuleSet.code, statutoryRules);
+  await materializePayrollDeductionSchedules(tx, period);
   const employees = await tx.employeeProfile.findMany({
     where: { tenantId: period.tenantId, status: "ACTIVE", hireDate: { lte: period.endDate } },
     include: {
@@ -117,6 +121,19 @@ async function refreshPeriodPayslips(
     where: { tenantId: period.tenantId, status: OvertimeStatus.APPROVED, date: { gte: period.startDate, lte: period.endDate } },
     select: { employeeId: true, hours: true, source: true, date: true, attendance: { select: { isRestDay: true, holidayType: true } } },
   });
+  const applicabilityRows = await tx.payrollStatutoryApplicability.findMany({
+    where: {
+      tenantId: period.tenantId,
+      effectiveFrom: { lte: period.payDate },
+      OR: [{ effectiveTo: null }, { effectiveTo: { gte: period.payDate } }],
+    },
+    orderBy: { effectiveFrom: "desc" },
+  });
+  const tenantApplicability = applicabilityRows.find((record) => record.employeeId === null) ?? null;
+  const employeeApplicability = new Map<string, (typeof applicabilityRows)[number]>();
+  for (const record of applicabilityRows) {
+    if (record.employeeId && !employeeApplicability.has(record.employeeId)) employeeApplicability.set(record.employeeId, record);
+  }
   const deductionsByEmployee = new Map<string, { amount: Prisma.Decimal }[]>();
   for (const deduction of assignedDeductions) {
     const employeeDeductions = deductionsByEmployee.get(deduction.employeeId) ?? [];
@@ -167,7 +184,12 @@ async function refreshPeriodPayslips(
       standardWorkDays: compensation?.standardWorkDays ?? employee.standardWorkDays,
       standardHoursPerDay: compensation?.standardHoursPerDay ?? calculationPolicy.standardHoursPerDay,
     });
-    const statutory = calculateStatutoryContributions({ monthlyBasicSalary, grossPay: values.grossPay, payFrequency, rules: statutoryRules });
+    const employeeStatutoryApplicability = employeeApplicability.get(employee.id) ?? null;
+    const applicability = resolveStatutoryApplicability(
+      tenantApplicability ? statutoryApplicabilityFlags(tenantApplicability) : null,
+      employeeStatutoryApplicability ? statutoryApplicabilityFlags(employeeStatutoryApplicability) : null,
+    );
+    const statutory = calculateStatutoryContributions({ monthlyBasicSalary, grossPay: values.grossPay, payFrequency, rules: statutoryRules, applicability });
     const compensationSnapshot = compensation ? {
       source: "EMPLOYEE_COMPENSATION",
       compensationId: compensation.id,
@@ -210,6 +232,12 @@ async function refreshPeriodPayslips(
           contentHash: statutoryRuleSet.contentHash,
           sourceSnapshot: statutoryRuleSet.sourceSnapshot,
           rules: statutoryRuleSet.rules,
+        },
+        applicability: {
+          resolvedForDate: period.payDate,
+          tenantDefaultId: tenantApplicability?.id ?? null,
+          employeeOverrideId: employeeStatutoryApplicability?.id ?? null,
+          flags: applicability,
         },
         calculation: statutory,
       }),
@@ -902,6 +930,249 @@ export async function savePayrollDeductionAction(formData: FormData) {
 }
 
 /**
+ * @requirement PAY-SEC-001 PAY-DED-002 PAY-LOAN-002
+ * @status IMPLEMENTED
+ */
+export async function savePayrollDeductionScheduleAction(formData: FormData) {
+  const { user } = await requirePayrollAccess(payrollWriteRoles);
+  const parsed = payrollDeductionScheduleSchema.safeParse(Object.fromEntries(formData.entries()));
+  if (!parsed.success) throw new Error(parsed.error.issues[0]?.message || "Invalid payroll deduction schedule.");
+  const { id, employeeId, deductionTypeId, employeeLoanId, mode, amountPerCutoff, effectiveFrom, effectiveTo, installmentLimit, reason } = parsed.data;
+  const start = new Date(`${effectiveFrom}T00:00:00.000Z`);
+  const end = effectiveTo ? new Date(`${effectiveTo}T00:00:00.000Z`) : null;
+  const searchEnd = end ?? new Date("9999-12-31T00:00:00.000Z");
+  let scheduleId = id ?? "";
+
+  await prisma.$transaction(async (tx) => {
+    const [employee, deductionType, loan] = await Promise.all([
+      tx.employeeProfile.findFirst({ where: { id: employeeId, tenantId: user.tenantId } }),
+      tx.payrollDeductionType.findFirst({ where: { id: deductionTypeId, tenantId: user.tenantId } }),
+      employeeLoanId ? tx.employeeLoan.findFirst({ where: { id: employeeLoanId, tenantId: user.tenantId } }) : Promise.resolve(null),
+    ]);
+    if (!employee) throw new Error("Employee not found.");
+    if (!deductionType || !deductionType.active) throw new Error("Select an active deduction type.");
+    if (employeeLoanId && !loan) throw new Error("Employee loan or cash advance not found.");
+    if (loan && loan.employeeId !== employeeId) throw new Error("The selected loan belongs to a different employee.");
+    if (loan && loan.status !== EmployeeLoanStatus.OPEN) throw new Error("Only an open loan or cash advance can be scheduled.");
+
+    const conflictingSchedule = await tx.payrollDeductionSchedule.findFirst({
+      where: {
+        tenantId: user.tenantId,
+        employeeId,
+        deductionTypeId,
+        status: { not: PayrollDeductionScheduleStatus.COMPLETED },
+        effectiveFrom: { lte: searchEnd },
+        OR: [{ effectiveTo: null }, { effectiveTo: { gte: start } }],
+        ...(id ? { NOT: { id } } : {}),
+      },
+      select: { id: true },
+    });
+    if (conflictingSchedule) throw new Error("This employee already has an overlapping schedule for the selected deduction type.");
+
+    if (id) {
+      const existing = await tx.payrollDeductionSchedule.findFirst({
+        where: { id, tenantId: user.tenantId },
+        include: {
+          payrollDeductions: {
+            where: { payroll: { status: { notIn: [...MUTABLE_PAYROLL_STATUSES] } } },
+            take: 1,
+          },
+        },
+      });
+      if (!existing) throw new Error("Payroll deduction schedule not found.");
+      if (existing.status === PayrollDeductionScheduleStatus.COMPLETED) throw new Error("Completed schedules cannot be edited. Create a new effective-dated schedule.");
+      if (existing.payrollDeductions.length) throw new Error("This schedule already has finalized payroll evidence. End it and create a new effective-dated schedule instead.");
+      await tx.payrollDeduction.deleteMany({
+        where: { tenantId: user.tenantId, scheduleId: id, payroll: { status: { in: [...MUTABLE_PAYROLL_STATUSES] } } },
+      });
+      await tx.payrollDeductionSchedule.update({
+        where: { id },
+        data: {
+          employeeId,
+          deductionTypeId,
+          employeeLoanId: employeeLoanId ?? null,
+          mode,
+          amountPerCutoff,
+          effectiveFrom: start,
+          effectiveTo: end,
+          installmentLimit: mode === "ONE_TIME" ? 1 : installmentLimit ?? null,
+          reason,
+        },
+      });
+    } else {
+      const schedule = await tx.payrollDeductionSchedule.create({
+        data: {
+          tenantId: user.tenantId,
+          employeeId,
+          deductionTypeId,
+          employeeLoanId: employeeLoanId ?? null,
+          mode,
+          amountPerCutoff,
+          effectiveFrom: start,
+          effectiveTo: end,
+          installmentLimit: mode === "ONE_TIME" ? 1 : installmentLimit ?? null,
+          reason,
+          createdById: user.id,
+        },
+      });
+      scheduleId = schedule.id;
+    }
+
+    const mutablePeriods = await tx.payrollPeriod.findMany({
+      where: {
+        tenantId: user.tenantId,
+        status: { in: [...MUTABLE_PAYROLL_STATUSES] },
+        endDate: { gte: start, ...(end ? { lte: end } : {}) },
+      },
+      orderBy: { endDate: "asc" },
+    });
+    await refreshMutablePayrollPeriods(tx as unknown as Prisma.TransactionClient, mutablePeriods);
+  }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+
+  await writeAuditLog({
+    actorId: user.id,
+    module: "PAYROLL",
+    action: id ? "UPDATE_DEDUCTION_SCHEDULE" : "CREATE_DEDUCTION_SCHEDULE",
+    entityType: "PayrollDeductionSchedule",
+    entityId: scheduleId,
+    metadata: { employeeId, deductionTypeId, employeeLoanId, mode, amountPerCutoff, effectiveFrom, effectiveTo, installmentLimit },
+  });
+  revalidatePayrollPages();
+  redirect(`/admin/payroll?section=deductions&success=saved&message=${encodeURIComponent("The deduction schedule has been saved and applied to eligible open cutoffs.")}`);
+}
+
+/**
+ * @requirement PAY-SEC-001 PAY-DED-002 PAY-LOAN-002
+ * @status IMPLEMENTED
+ */
+export async function changePayrollDeductionScheduleStatusAction(formData: FormData) {
+  const { user } = await requirePayrollAccess(payrollManageRoles);
+  const id = String(formData.get("id") || "");
+  const action = String(formData.get("scheduleAction") || "").toUpperCase();
+  const changeReason = String(formData.get("changeReason") || "").trim();
+  if (!id) throw new Error("Payroll deduction schedule not found.");
+  if (!["PAUSE", "RESUME", "END"].includes(action)) throw new Error("Choose pause, resume, or end.");
+  if (!changeReason) throw new Error("Enter a reason for changing the schedule.");
+
+  await prisma.$transaction(async (tx) => {
+    const schedule = await tx.payrollDeductionSchedule.findFirst({ where: { id, tenantId: user.tenantId } });
+    if (!schedule) throw new Error("Payroll deduction schedule not found.");
+    if (schedule.status === PayrollDeductionScheduleStatus.COMPLETED) throw new Error("Completed schedules cannot be changed.");
+
+    if (action === "RESUME") {
+      const conflict = await tx.payrollDeductionSchedule.findFirst({
+        where: {
+          tenantId: user.tenantId,
+          employeeId: schedule.employeeId,
+          deductionTypeId: schedule.deductionTypeId,
+          status: PayrollDeductionScheduleStatus.ACTIVE,
+          effectiveFrom: { lte: schedule.effectiveTo ?? new Date("9999-12-31T00:00:00.000Z") },
+          OR: [{ effectiveTo: null }, { effectiveTo: { gte: schedule.effectiveFrom } }],
+          NOT: { id },
+        },
+        select: { id: true },
+      });
+      if (conflict) throw new Error("Another active schedule overlaps this employee and deduction type.");
+    }
+
+    const status = action === "PAUSE"
+      ? PayrollDeductionScheduleStatus.PAUSED
+      : action === "RESUME"
+        ? PayrollDeductionScheduleStatus.ACTIVE
+        : PayrollDeductionScheduleStatus.COMPLETED;
+    await tx.payrollDeductionSchedule.update({ where: { id }, data: { status } });
+    await tx.payrollDeduction.deleteMany({
+      where: { tenantId: user.tenantId, scheduleId: id, payroll: { status: { in: [...MUTABLE_PAYROLL_STATUSES] } } },
+    });
+    const mutablePeriods = await tx.payrollPeriod.findMany({
+      where: {
+        tenantId: user.tenantId,
+        status: { in: [...MUTABLE_PAYROLL_STATUSES] },
+        endDate: { gte: schedule.effectiveFrom, ...(schedule.effectiveTo ? { lte: schedule.effectiveTo } : {}) },
+      },
+      orderBy: { endDate: "asc" },
+    });
+    await refreshMutablePayrollPeriods(tx as unknown as Prisma.TransactionClient, mutablePeriods);
+  }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+
+  await writeAuditLog({ actorId: user.id, module: "PAYROLL", action: `${action}_DEDUCTION_SCHEDULE`, entityType: "PayrollDeductionSchedule", entityId: id, metadata: { reason: changeReason } });
+  revalidatePayrollPages();
+  redirect(`/admin/payroll?section=deductions&success=updated&message=${encodeURIComponent(`The deduction schedule was ${action === "END" ? "ended" : `${action.toLowerCase()}d`}.`)}`);
+}
+
+/**
+ * @requirement PAY-SEC-001 PAY-STAT-003
+ * @status IMPLEMENTED
+ */
+export async function savePayrollStatutoryApplicabilityAction(formData: FormData) {
+  const { user } = await requirePayrollAccess(payrollManageRoles);
+  const parsed = payrollStatutoryApplicabilitySchema.safeParse({
+    ...Object.fromEntries(formData.entries()),
+    statutoryEnabled: formData.get("statutoryEnabled") === "on",
+    sssEnabled: formData.get("sssEnabled") === "on",
+    philHealthEnabled: formData.get("philHealthEnabled") === "on",
+    pagIbigEnabled: formData.get("pagIbigEnabled") === "on",
+    withholdingTaxEnabled: formData.get("withholdingTaxEnabled") === "on",
+  });
+  if (!parsed.success) throw new Error(parsed.error.issues[0]?.message || "Invalid statutory applicability settings.");
+  const { employeeId, effectiveFrom, reason, ...flags } = parsed.data;
+  const start = new Date(`${effectiveFrom}T00:00:00.000Z`);
+  let applicabilityId = "";
+
+  await prisma.$transaction(async (tx) => {
+    if (employeeId) {
+      const employee = await tx.employeeProfile.findFirst({ where: { id: employeeId, tenantId: user.tenantId } });
+      if (!employee) throw new Error("Employee not found.");
+    }
+    const lockedPeriod = await tx.payrollPeriod.findFirst({
+      where: {
+        tenantId: user.tenantId,
+        status: { notIn: [...MUTABLE_PAYROLL_STATUSES] },
+        payDate: { gte: start },
+        ...(employeeId ? { payslips: { some: { employeeId } } } : {}),
+      },
+      select: { payDate: true },
+      orderBy: { payDate: "asc" },
+    });
+    if (lockedPeriod) throw new Error("The effective date overlaps finalized, posted, or paid payroll evidence. Choose a later prospective date.");
+
+    const previous = await tx.payrollStatutoryApplicability.findFirst({
+      where: { tenantId: user.tenantId, employeeId: employeeId ?? null },
+      orderBy: { effectiveFrom: "desc" },
+    });
+    if (previous && previous.effectiveFrom >= start) throw new Error("The new effective date must be later than the latest applicability version.");
+    if (previous) {
+      await tx.payrollStatutoryApplicability.update({
+        where: { id: previous.id },
+        data: { effectiveTo: new Date(start.getTime() - 86_400_000) },
+      });
+    }
+    const record = await tx.payrollStatutoryApplicability.create({
+      data: {
+        tenantId: user.tenantId,
+        employeeId: employeeId ?? null,
+        effectiveFrom: start,
+        effectiveTo: null,
+        ...flags,
+        reason,
+        createdById: user.id,
+      },
+    });
+    applicabilityId = record.id;
+
+    const mutablePeriods = await tx.payrollPeriod.findMany({
+      where: { tenantId: user.tenantId, status: { in: [...MUTABLE_PAYROLL_STATUSES] }, payDate: { gte: start } },
+      orderBy: { payDate: "asc" },
+    });
+    await refreshMutablePayrollPeriods(tx as unknown as Prisma.TransactionClient, mutablePeriods);
+  }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+
+  await writeAuditLog({ actorId: user.id, module: "PAYROLL", action: employeeId ? "CREATE_EMPLOYEE_STATUTORY_OVERRIDE" : "CREATE_TENANT_STATUTORY_DEFAULT", entityType: "PayrollStatutoryApplicability", entityId: applicabilityId, metadata: { employeeId: employeeId ?? null, effectiveFrom, reason, ...flags } });
+  revalidatePayrollPages();
+  redirect(`/admin/payroll?section=government&success=saved&message=${encodeURIComponent("The new statutory applicability version has been saved.")}`);
+}
+
+/**
  * @requirement PAY-SEC-001 PAY-DED-001
  * @status IMPLEMENTED
  */
@@ -1099,12 +1370,42 @@ function resolveMonthlyBasicSalary(input: {
   return roundMoney(rate * standardHoursPerDay * input.standardWorkDays);
 }
 
+/**
+ * @requirement PAY-SEC-001 PAY-DED-002 PAY-LOAN-002 PAY-STAT-003
+ * @status IMPLEMENTED
+ */
+async function refreshMutablePayrollPeriods(
+  tx: Prisma.TransactionClient,
+  periods: Array<{ id: string; tenantId: string; startDate: Date; endDate: Date; payDate: Date; status: PayrollStatus; statutoryRuleSetId: string | null }>,
+) {
+  for (const period of periods) {
+    await materializePayrollDeductionSchedules(tx, period);
+    if (!period.statutoryRuleSetId) continue;
+    const statutoryRuleSet = await statutoryRuleSetForPeriod(tx, period.statutoryRuleSetId);
+    await refreshPeriodPayslips(tx, period, statutoryRuleSet);
+  }
+}
+
 async function statutoryRuleSetForPeriod(tx: Prisma.TransactionClient, statutoryRuleSetId: string | null) {
   if (!statutoryRuleSetId) throw new Error("Recalculate this payroll with a verified statutory rule set before changing deductions.");
   const statutoryRuleSet = await tx.payrollStatutoryRuleSet.findUnique({ where: { id: statutoryRuleSetId } });
   if (!statutoryRuleSet || !statutoryRuleSet.active) throw new Error("The payroll statutory rule set is unavailable or inactive.");
   parsePhilippineStatutoryRules(statutoryRuleSet.rules);
   return statutoryRuleSet;
+}
+
+/**
+ * @requirement PAY-STAT-003
+ * @status IMPLEMENTED
+ */
+function statutoryApplicabilityFlags(record: StatutoryApplicability): StatutoryApplicability {
+  return {
+    statutoryEnabled: record.statutoryEnabled,
+    sssEnabled: record.sssEnabled,
+    philHealthEnabled: record.philHealthEnabled,
+    pagIbigEnabled: record.pagIbigEnabled,
+    withholdingTaxEnabled: record.withholdingTaxEnabled,
+  };
 }
 
 /**

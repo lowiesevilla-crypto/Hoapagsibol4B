@@ -448,6 +448,18 @@ enum PayrollDayType {
   NON_WORKING_DAY
 }
 
+enum PayrollDeductionScheduleMode {
+  ONE_TIME
+  RECURRING
+  UNTIL_FULLY_PAID
+}
+
+enum PayrollDeductionScheduleStatus {
+  ACTIVE
+  PAUSED
+  COMPLETED
+}
+
 enum AttendanceAdjustmentStatus {
   PENDING
   APPROVED
@@ -2559,6 +2571,8 @@ model EmployeeProfile {
   payslips          Payslip[]
   payrollRevisionSnapshots PayrollCalculationRevisionPayslip[]
   payrollDeductions PayrollDeduction[]
+  deductionSchedules PayrollDeductionSchedule[]
+  statutoryApplicabilities PayrollStatutoryApplicability[]
   employeeLoans     EmployeeLoan[]
   overtimeRecords   OvertimeRecord[]
   leaveRequests     LeaveRequest[]
@@ -2608,6 +2622,7 @@ model PayrollDeductionType {
   applyToMonthly    Boolean            @default(true)
   applyToDaily      Boolean            @default(true)
   payrollDeductions PayrollDeduction[]
+  deductionSchedules PayrollDeductionSchedule[]
   createdAt         DateTime           @default(now())
   updatedAt         DateTime           @updatedAt
 
@@ -2631,6 +2646,7 @@ model EmployeeLoan {
   remarks           String?
   status            EmployeeLoanStatus @default(OPEN)
   payrollDeductions PayrollDeduction[]
+  deductionSchedules PayrollDeductionSchedule[]
   createdAt         DateTime           @default(now())
   updatedAt         DateTime           @updatedAt
 
@@ -2925,6 +2941,32 @@ model PayrollPeriod {
   @@index([tenantId])
 }
 
+model PayrollDeductionSchedule {
+  tenantId          String                         @default("tenant_pagsibol4b_default")
+  id                String                         @id @default(cuid())
+  employeeId        String
+  employee          EmployeeProfile                @relation(fields: [employeeId], references: [id], onDelete: Restrict)
+  deductionTypeId   String
+  deductionType     PayrollDeductionType            @relation(fields: [deductionTypeId], references: [id], onDelete: Restrict)
+  employeeLoanId    String?
+  employeeLoan      EmployeeLoan?                   @relation(fields: [employeeLoanId], references: [id], onDelete: Restrict)
+  mode              PayrollDeductionScheduleMode
+  amountPerCutoff   Decimal                         @db.Decimal(12, 2)
+  effectiveFrom     DateTime                        @db.Date
+  effectiveTo       DateTime?                       @db.Date
+  installmentLimit  Int?
+  status            PayrollDeductionScheduleStatus  @default(ACTIVE)
+  reason            String                          @db.VarChar(500)
+  createdById       String
+  payrollDeductions PayrollDeduction[]
+  createdAt         DateTime                        @default(now())
+  updatedAt         DateTime                        @updatedAt
+
+  @@index([tenantId, employeeId, status, effectiveFrom], map: "PayDedSchedule_scope_active_idx")
+  @@index([tenantId, deductionTypeId], map: "PayDedSchedule_scope_type_idx")
+  @@index([tenantId, employeeLoanId], map: "PayDedSchedule_scope_loan_idx")
+}
+
 model PayrollStatutoryRuleSet {
   id            String                         @id @default(cuid())
   code          String                         @unique(map: "PayrollStatRule_code_key") @db.VarChar(80)
@@ -2942,6 +2984,27 @@ model PayrollStatutoryRuleSet {
   createdAt     DateTime                       @default(now())
 
   @@index([jurisdiction, active, effectiveFrom, effectiveTo], map: "PayrollStatRule_effective_idx")
+}
+
+model PayrollStatutoryApplicability {
+  tenantId             String           @default("tenant_pagsibol4b_default")
+  id                   String           @id @default(cuid())
+  employeeId           String?
+  employee             EmployeeProfile? @relation(fields: [employeeId], references: [id], onDelete: Restrict)
+  effectiveFrom        DateTime          @db.Date
+  effectiveTo          DateTime?         @db.Date
+  statutoryEnabled     Boolean           @default(true)
+  sssEnabled           Boolean           @default(true)
+  philHealthEnabled    Boolean           @default(true)
+  pagIbigEnabled       Boolean           @default(true)
+  withholdingTaxEnabled Boolean          @default(true)
+  reason               String            @db.VarChar(500)
+  createdById          String
+  createdAt            DateTime          @default(now())
+  updatedAt            DateTime          @updatedAt
+
+  @@unique([tenantId, employeeId, effectiveFrom], map: "PayStatApp_scope_effective_key")
+  @@index([tenantId, employeeId, effectiveFrom, effectiveTo], map: "PayStatApp_scope_lookup_idx")
 }
 
 model FinancialJournalEntry {
@@ -3124,6 +3187,8 @@ model PayrollDeduction {
   deductionType   PayrollDeductionType @relation(fields: [deductionTypeId], references: [id], onDelete: Restrict)
   employeeLoanId  String?
   employeeLoan    EmployeeLoan?        @relation(fields: [employeeLoanId], references: [id], onDelete: Restrict)
+  scheduleId      String?
+  schedule        PayrollDeductionSchedule? @relation(fields: [scheduleId], references: [id], onDelete: Restrict)
   amount          Decimal              @db.Decimal(12, 2)
   remarks         String?
   createdAt       DateTime             @default(now())
@@ -3133,6 +3198,7 @@ model PayrollDeduction {
   @@index([employeeId])
   @@index([deductionTypeId])
   @@index([employeeLoanId])
+  @@index([scheduleId])
   @@index([tenantId])
 }
 

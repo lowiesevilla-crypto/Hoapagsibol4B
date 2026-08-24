@@ -22,6 +22,7 @@ export default async function EmployeePayslipPrintPage({ params }: { params: Pro
     orderBy: { createdAt: "asc" },
   });
   const association = await getAssociationSettings(user.tenantId);
+  const statutoryApplicability = statutoryApplicabilityFromSnapshot(slip.statutorySnapshot);
 
   return <main className="print-document mx-auto min-h-screen max-w-3xl bg-white p-5 sm:p-10">
     <div className="print-hidden mb-6 flex flex-wrap justify-end gap-2">
@@ -69,6 +70,16 @@ export default async function EmployeePayslipPrintPage({ params }: { params: Pro
           <div className="mt-8 border-2 border-ink p-3"><Line label="NET PAY" value={money(slip.netPay)} strong /></div>
         </div>
       </div>
+      {statutoryApplicability && <div className="border-t border-ink py-5">
+        <h2 className="font-black uppercase">Government deduction applicability</h2>
+        <p className="mt-1 text-xs text-slate-500">This is the effective payroll snapshot used for this paid cutoff. Official rates remain system-controlled.</p>
+        <div className="mt-3 grid gap-2 text-xs sm:grid-cols-4">
+          <ApplicabilityFlag label="SSS" enabled={statutoryApplicability.sssEnabled} />
+          <ApplicabilityFlag label="PhilHealth" enabled={statutoryApplicability.philHealthEnabled} />
+          <ApplicabilityFlag label="Pag-IBIG" enabled={statutoryApplicability.pagIbigEnabled} />
+          <ApplicabilityFlag label="Withholding tax" enabled={statutoryApplicability.withholdingTaxEnabled} />
+        </div>
+      </div>}
       <div className="mt-12 grid gap-10 text-center text-xs sm:grid-cols-2">
         <div className="border-t border-ink pt-2">Employee signature</div>
         <div className="border-t border-ink pt-2">Authorized signature</div>
@@ -82,4 +93,28 @@ function Line({ label, value, strong = false }: { label: string; value: string; 
 function deductionLabel(deduction: { deductionType: { name: string }; employeeLoan: { description: string; balance: number | string | { toString(): string } } | null }) {
   if (!deduction.employeeLoan) return deduction.deductionType.name;
   return `${deduction.deductionType.name} - ${deduction.employeeLoan.description} (balance ${money(deduction.employeeLoan.balance)})`;
+}
+
+/**
+ * @requirement PAY-STAT-003 PAY-EMP-001
+ * @status IMPLEMENTED
+ */
+function statutoryApplicabilityFromSnapshot(value: unknown) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const applicability = (value as Record<string, unknown>).applicability;
+  if (!applicability || typeof applicability !== "object" || Array.isArray(applicability)) return null;
+  const flags = (applicability as Record<string, unknown>).flags;
+  if (!flags || typeof flags !== "object" || Array.isArray(flags)) return null;
+  const record = flags as Record<string, unknown>;
+  if (["sssEnabled", "philHealthEnabled", "pagIbigEnabled", "withholdingTaxEnabled"].some((key) => typeof record[key] !== "boolean")) return null;
+  return {
+    sssEnabled: record.sssEnabled as boolean,
+    philHealthEnabled: record.philHealthEnabled as boolean,
+    pagIbigEnabled: record.pagIbigEnabled as boolean,
+    withholdingTaxEnabled: record.withholdingTaxEnabled as boolean,
+  };
+}
+
+function ApplicabilityFlag({ label, enabled }: { label: string; enabled: boolean }) {
+  return <div className={`rounded-xl border p-2 text-center font-bold ${enabled ? "border-emerald-200 bg-emerald-50 text-emerald-700" : "border-slate-200 bg-slate-50 text-slate-500"}`}>{label}: {enabled ? "Applied" : "Not applied"}</div>;
 }

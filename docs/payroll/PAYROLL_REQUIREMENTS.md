@@ -114,8 +114,28 @@ Net pay and payable basic pay must not become negative because of lateness/under
 #### PAY-DED-001 — Payroll-period deductions
 Authorized users may assign configured deduction types to an employee for a draft payroll period. Finalized/paid payroll cannot be edited through normal deduction maintenance.
 
+#### PAY-DED-002 — Effective-dated scheduled and one-time deductions
+Authorized payroll users can configure an employee deduction as `ONE_TIME`, `RECURRING`, or `UNTIL_FULLY_PAID`, with a start date, optional end date, amount per cutoff, and optional installment limit. Eligible schedules are materialized into mutable payroll cutoffs automatically and idempotently before payslips are calculated.
+
+Acceptance criteria:
+- Schedule ownership, selected employee, deduction type, dates, amounts, and generated payroll deductions are tenant-scoped from the authenticated server context.
+- `ONE_TIME` creates at most one deduction in the first eligible mutable cutoff.
+- `RECURRING` stops after its optional end date or installment limit.
+- Pausing or ending a schedule prevents future materialization without deleting finalized or paid payroll evidence.
+- Recalculating the same cutoff does not duplicate a scheduled deduction.
+- Manual period deductions remain available and finalized/paid payroll remains immutable.
+
 #### PAY-LOAN-001 — Loan/cash advance repayment integrity
 Payroll loan repayment cannot exceed the remaining available balance. A repayment changes the loan ledger only when payroll is marked paid and must not be applied twice.
+
+#### PAY-LOAN-002 — Automatic loan/cash-advance repayment schedules
+An open employee loan or cash advance may have an effective-dated `UNTIL_FULLY_PAID`, recurring, or one-time payroll repayment schedule. Each generated installment is capped at the loan balance still available after other unpaid reservations, and scheduling stops when the balance is fully reserved or paid.
+
+Acceptance criteria:
+- A linked schedule must belong to the same tenant and employee as its loan.
+- The final generated installment is reduced when the configured installment would exceed the remaining available balance.
+- Payroll calculation reserves repayments but does not mutate the authoritative loan balance; the existing idempotent paid-payroll financial event remains the only repayment ledger mutation.
+- Employee self-service shows the configured repayment plan, next eligible deduction, generated cutoff deductions, payment history, and remaining balance for the signed-in employee only.
 
 ### Payroll Lifecycle / Corrections
 
@@ -139,6 +159,17 @@ Current implemented rule-set sources are the official DOLE 2024 statutory-benefi
 
 #### PAY-STAT-002 — Statutory rule snapshot
 Each finalized payroll must retain enough rule/version evidence to reproduce how statutory deductions/premiums were calculated.
+
+#### PAY-STAT-003 — Effective-dated statutory applicability controls
+Authorized payroll administrators have effective-dated control over whether statutory deductions are applied for the tenant and, when justified, for an individual employee. The controls cover a master statutory switch plus SSS, PhilHealth, Pag-IBIG, and withholding tax. These switches control applicability only; official formulas, rates, tables, and legal effective dates remain system-controlled by `PAY-STAT-001`.
+
+Acceptance criteria:
+- The default is enabled for every statutory component when no applicability record exists, preserving existing payroll behavior.
+- Tenant defaults and employee overrides are tenant-scoped, effective-dated, versioned, reasoned, and audited.
+- A new version closes the previous version instead of overwriting historical applicability.
+- Backdated changes that overlap finalized, posted, or paid payroll evidence are rejected.
+- Payroll resolves applicability on the cutoff pay date, zeroes only disabled components (including their employer share), and stores the resolved source/flags in the immutable payslip statutory snapshot.
+- The employee view explains which statutory components were applied to each released payslip without exposing another employee or payroll-administration controls.
 
 ### Finance Integration
 
@@ -186,6 +217,18 @@ Implemented domain: `LeaveType`, `LeaveRequest`, `EmployeeLeaveBalance`, and `Le
 
 Protected presets include Service Incentive, Maternity, Paternity, Solo Parent, VAWC, and Special Leave for Women. Tenant administrators may add/edit custom leave policies but cannot edit or deactivate protected statutory formulas. Statutory eligibility/evidence still requires authorized HR review; the system does not infer a qualifying legal event from the request alone.
 
+### Payroll Workspace UX
+
+#### PAY-UX-001 — Task-based payroll administration and employee visibility
+Payroll administration must use a focused, responsive task hierarchy instead of a broad horizontal list of internal processing labels. The primary workspace is `Overview`, `Payroll runs`, `Deductions & loans`, `Government contributions`, `Reports`, and `Settings`. A selected payroll run exposes the lifecycle as `Setup`, `Calculate`, `Review`, `Approve`, `Post`, and `Pay`; employee details, adjustments, overtime, payslips, and archives remain available as contextual drill-downs rather than competing global tabs.
+
+Acceptance criteria:
+- Existing authorized payroll capabilities and deep links remain reachable while the top-level navigation is consolidated.
+- Narrow screens do not require a clipped horizontal tab strip to discover primary payroll tasks.
+- Admin deduction/loan screens expose schedule mode, from/to dates, amount per cutoff, installment limit, status, and generated history using plain operational labels.
+- Government-contribution controls clearly separate applicability switches from system-controlled legal rates and require an effective date and reason.
+- Employee payroll pages remain read-only and show own payslips, loan/deduction schedules, and applied statutory deductions without changing attendance, leave, billing, document, or other non-payroll navigation behavior.
+
 ## 5. Implementation Sequence
 
 Foundation sequence:
@@ -198,6 +241,7 @@ Foundation sequence:
 6. Effective-dated statutory rules (`PAY-STAT-*`) after authoritative rule verification.
 7. Idempotent Finance Engine posting/outbox/reconciliation (`PAY-FIN-*`).
 8. Remaining admin UX, reporting, and employee self-service acceptance coverage (`PAY-EMP-*`, `PAY-RPT-*`).
+9. Effective-dated deduction schedules, statutory applicability controls, and task-based payroll UX (`PAY-DED-002`, `PAY-LOAN-002`, `PAY-STAT-003`, `PAY-UX-001`).
 
 ## 6. Definition of Done
 

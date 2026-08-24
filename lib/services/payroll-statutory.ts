@@ -81,6 +81,43 @@ export type StatutoryContributionResult = Readonly<{
   taxableCompensation: number;
 }>;
 
+export type StatutoryApplicability = Readonly<{
+  statutoryEnabled: boolean;
+  sssEnabled: boolean;
+  philHealthEnabled: boolean;
+  pagIbigEnabled: boolean;
+  withholdingTaxEnabled: boolean;
+}>;
+
+export const DEFAULT_STATUTORY_APPLICABILITY: StatutoryApplicability = Object.freeze({
+  statutoryEnabled: true,
+  sssEnabled: true,
+  philHealthEnabled: true,
+  pagIbigEnabled: true,
+  withholdingTaxEnabled: true,
+});
+
+/**
+ * @requirement PAY-STAT-003
+ * @status IMPLEMENTED
+ * @description Resolve tenant defaults and an optional employee override; the tenant master switch always remains authoritative.
+ */
+export function resolveStatutoryApplicability(
+  tenantDefault?: StatutoryApplicability | null,
+  employeeOverride?: StatutoryApplicability | null,
+): StatutoryApplicability {
+  const tenant = tenantDefault ?? DEFAULT_STATUTORY_APPLICABILITY;
+  const employee = employeeOverride ?? DEFAULT_STATUTORY_APPLICABILITY;
+  const statutoryEnabled = tenant.statutoryEnabled && employee.statutoryEnabled;
+  return {
+    statutoryEnabled,
+    sssEnabled: statutoryEnabled && tenant.sssEnabled && employee.sssEnabled,
+    philHealthEnabled: statutoryEnabled && tenant.philHealthEnabled && employee.philHealthEnabled,
+    pagIbigEnabled: statutoryEnabled && tenant.pagIbigEnabled && employee.pagIbigEnabled,
+    withholdingTaxEnabled: statutoryEnabled && tenant.withholdingTaxEnabled && employee.withholdingTaxEnabled,
+  };
+}
+
 /**
  * @requirement PAY-STAT-001
  * @status IMPLEMENTED
@@ -138,7 +175,7 @@ export function payrollPolicyFromStatutoryRules(ruleCode: string, rules: Philipp
 }
 
 /**
- * @requirement PAY-STAT-001 PAY-STAT-002
+ * @requirement PAY-STAT-001 PAY-STAT-002 PAY-STAT-003
  * @status IMPLEMENTED
  * @description Calculate statutory employee deductions and employer liabilities from an explicit effective-dated rule snapshot.
  */
@@ -147,6 +184,7 @@ export function calculateStatutoryContributions(input: {
   grossPay: DecimalLike;
   payFrequency: PayFrequency | "SEMI_MONTHLY" | "MONTHLY";
   rules: PhilippineStatutoryRulesV1;
+  applicability?: StatutoryApplicability;
 }): StatutoryContributionResult {
   const monthlyBasicSalary = positiveMoney(input.monthlyBasicSalary, "Monthly basic salary");
   const grossPay = nonNegativeMoney(input.grossPay, "Gross pay");
@@ -154,25 +192,38 @@ export function calculateStatutoryContributions(input: {
   const sss = input.rules.sss;
   const philHealth = input.rules.philHealth;
   const pagIbig = input.rules.pagIbig;
+  const applicability = resolveStatutoryApplicability(input.applicability);
 
   const sssMonthlySalaryCredit = resolveSssMonthlySalaryCredit(monthlyBasicSalary, sss);
-  const sssEmployeeContribution = roundMoney(sssMonthlySalaryCredit * sss.employeeRate / periodsPerMonth);
-  const sssEmployerContribution = roundMoney(sssMonthlySalaryCredit * sss.employerRate / periodsPerMonth);
-  const employeeCompensationContribution = roundMoney(
-    (sssMonthlySalaryCredit <= sss.employeeCompensationThreshold ? sss.employeeCompensationLow : sss.employeeCompensationHigh) / periodsPerMonth,
-  );
+  const sssEmployeeContribution = applicability.sssEnabled
+    ? roundMoney(sssMonthlySalaryCredit * sss.employeeRate / periodsPerMonth)
+    : 0;
+  const sssEmployerContribution = applicability.sssEnabled
+    ? roundMoney(sssMonthlySalaryCredit * sss.employerRate / periodsPerMonth)
+    : 0;
+  const employeeCompensationContribution = applicability.sssEnabled
+    ? roundMoney((sssMonthlySalaryCredit <= sss.employeeCompensationThreshold ? sss.employeeCompensationLow : sss.employeeCompensationHigh) / periodsPerMonth)
+    : 0;
 
   const philHealthSalary = clamp(monthlyBasicSalary, philHealth.monthlyBasicSalaryFloor, philHealth.monthlyBasicSalaryCeiling);
   const philHealthMonthlyPremium = philHealthSalary * philHealth.premiumRate;
-  const philHealthEmployeeContribution = roundMoney(philHealthMonthlyPremium * philHealth.employeeShareRate / periodsPerMonth);
-  const philHealthEmployerContribution = roundMoney((philHealthMonthlyPremium * (1 - philHealth.employeeShareRate)) / periodsPerMonth);
+  const philHealthEmployeeContribution = applicability.philHealthEnabled
+    ? roundMoney(philHealthMonthlyPremium * philHealth.employeeShareRate / periodsPerMonth)
+    : 0;
+  const philHealthEmployerContribution = applicability.philHealthEnabled
+    ? roundMoney((philHealthMonthlyPremium * (1 - philHealth.employeeShareRate)) / periodsPerMonth)
+    : 0;
 
   const pagIbigSalary = Math.min(monthlyBasicSalary, pagIbig.monthlyFundSalaryCeiling);
   const pagIbigEmployeeRate = monthlyBasicSalary <= pagIbig.employeeRateThreshold
     ? pagIbig.employeeRateAtOrBelowThreshold
     : pagIbig.employeeRateAboveThreshold;
-  const pagIbigEmployeeContribution = roundMoney(pagIbigSalary * pagIbigEmployeeRate / periodsPerMonth);
-  const pagIbigEmployerContribution = roundMoney(pagIbigSalary * pagIbig.employerRate / periodsPerMonth);
+  const pagIbigEmployeeContribution = applicability.pagIbigEnabled
+    ? roundMoney(pagIbigSalary * pagIbigEmployeeRate / periodsPerMonth)
+    : 0;
+  const pagIbigEmployerContribution = applicability.pagIbigEnabled
+    ? roundMoney(pagIbigSalary * pagIbig.employerRate / periodsPerMonth)
+    : 0;
 
   const mandatoryEmployeeContributions = roundMoney(
     sssEmployeeContribution + philHealthEmployeeContribution + pagIbigEmployeeContribution,
@@ -181,7 +232,9 @@ export function calculateStatutoryContributions(input: {
   const brackets = input.payFrequency === "SEMI_MONTHLY"
     ? input.rules.withholdingTax.semiMonthly
     : input.rules.withholdingTax.monthly;
-  const withholdingTax = calculateWithholdingTax(taxableCompensation, brackets);
+  const withholdingTax = applicability.withholdingTaxEnabled
+    ? calculateWithholdingTax(taxableCompensation, brackets)
+    : 0;
   const statutoryDeduction = roundMoney(mandatoryEmployeeContributions + withholdingTax);
   const employerContribution = roundMoney(
     sssEmployerContribution

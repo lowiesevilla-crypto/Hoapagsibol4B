@@ -350,6 +350,37 @@ export const payrollDeductionSchema = z.object({
   remarks: z.string().trim().max(500).optional(),
 });
 
+export const payrollDeductionScheduleSchema = z.object({
+  id: z.preprocess(emptyToUndefined, z.string().optional()),
+  employeeId: z.string().min(1, "Select an employee."),
+  deductionTypeId: z.string().min(1, "Select a deduction type."),
+  employeeLoanId: z.preprocess(emptyToUndefined, z.string().optional()),
+  mode: z.enum(["ONE_TIME", "RECURRING", "UNTIL_FULLY_PAID"]),
+  amountPerCutoff: currency.positive("Amount per cutoff must be greater than zero."),
+  effectiveFrom: z.string().date(),
+  effectiveTo: z.preprocess(emptyToUndefined, z.string().date().optional()),
+  installmentLimit: z.preprocess(emptyToUndefined, z.coerce.number().int().positive().max(1200).optional()),
+  reason: required.max(500),
+}).superRefine((value, context) => {
+  if (value.effectiveTo && value.effectiveTo < value.effectiveFrom) {
+    context.addIssue({ code: z.ZodIssueCode.custom, path: ["effectiveTo"], message: "End date must be on or after the start date." });
+  }
+  if (value.mode === "UNTIL_FULLY_PAID" && !value.employeeLoanId) {
+    context.addIssue({ code: z.ZodIssueCode.custom, path: ["employeeLoanId"], message: "Select a loan or cash advance for an until-fully-paid schedule." });
+  }
+});
+
+export const payrollStatutoryApplicabilitySchema = z.object({
+  employeeId: z.preprocess(emptyToUndefined, z.string().optional()),
+  effectiveFrom: z.string().date(),
+  statutoryEnabled: z.boolean(),
+  sssEnabled: z.boolean(),
+  philHealthEnabled: z.boolean(),
+  pagIbigEnabled: z.boolean(),
+  withholdingTaxEnabled: z.boolean(),
+  reason: required.max(500),
+});
+
 export const payrollAccessSchema = z.object({
   userId: z.string().min(1, "Select a user."),
   role: z.enum(["PAYROLL_MANAGER", "PAYROLL_STAFF", "HR_ADMIN", "FINANCE_APPROVER", "SYSTEM_ADMINISTRATOR", "READ_ONLY_AUDITOR"]),

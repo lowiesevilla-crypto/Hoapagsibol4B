@@ -17,6 +17,10 @@ async function requirePlatformUser() {
 function clean(value: FormDataEntryValue | null) { return String(value || "").trim(); }
 const slugPattern = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 
+function startOfUtcDay(value: Date) {
+  return new Date(Date.UTC(value.getUTCFullYear(), value.getUTCMonth(), value.getUTCDate()));
+}
+
 export async function createTenantAction(formData: FormData) {
   const actor = await requirePlatformUser();
   const name = clean(formData.get("name"));
@@ -34,7 +38,7 @@ export async function createTenantAction(formData: FormData) {
 
   const plan = await prisma.subscriptionPlan.findFirst({
     where: { code: planCode, active: true },
-    select: { id: true, code: true, trialDays: true },
+    select: { id: true, code: true, trialDays: true, monthlyPrice: true, currency: true },
   });
   if (!plan) redirect("/platform/tenants/new?error=Select%20a%20currently%20active%20subscription%20plan.");
 
@@ -42,6 +46,11 @@ export async function createTenantAction(formData: FormData) {
   const trialEndsAt = plan.trialDays > 0
     ? new Date(startedAt.getTime() + plan.trialDays * 24 * 60 * 60 * 1000)
     : null;
+  const subscriptionStatus = plan.trialDays > 0
+    ? TenantSubscriptionStatus.TRIAL
+    : TenantSubscriptionStatus.ACTIVE;
+  const currentPeriodStart = startOfUtcDay(startedAt);
+  const nextBillingDate = trialEndsAt ? startOfUtcDay(trialEndsAt) : currentPeriodStart;
 
   const tenant = await prisma.$transaction(async (tx) => {
     const created = await tx.tenant.create({
@@ -55,16 +64,20 @@ export async function createTenantAction(formData: FormData) {
         secRegistrationNumber: clean(formData.get("secRegistrationNumber")) || null,
         tinNumber: clean(formData.get("tinNumber")) || null,
         subscriptionPlan: plan.code,
-        subscriptionStatus: TenantSubscriptionStatus.TRIAL,
+        subscriptionStatus,
       },
     });
     await tx.tenantSubscription.create({
       data: {
         tenantId: created.id,
         planId: plan.id,
-        status: TenantSubscriptionStatus.TRIAL,
+        status: subscriptionStatus,
         startedAt,
         trialEndsAt,
+        currentPeriodStart,
+        nextBillingDate,
+        agreedPrice: plan.monthlyPrice,
+        currency: plan.currency,
       },
     });
     const adminUser = await tx.user.create({ data: { tenantId: created.id, name: adminName, email: adminEmail, passwordHash: await hash(password, 12), role: adminRole } });
@@ -81,7 +94,8 @@ export async function createTenantAction(formData: FormData) {
           slug: created.slug,
           plan: plan.code,
           planId: plan.id,
-          subscriptionStatus: TenantSubscriptionStatus.TRIAL,
+          subscriptionStatus,
+          nextBillingDate: nextBillingDate.toISOString().slice(0, 10),
           commercialPolicy: "ACTIVE_PLAN_IS_CAPABILITY_CEILING",
           initialAdminRole: adminRole,
         },

@@ -10,6 +10,8 @@ import { getAssociationSettings } from "@/lib/system-settings";
 import { roleLabel } from "@/lib/tenant-roles";
 import { amountInWords, collectionLabel, money, receiptDateTime, shortDate } from "@/lib/utils";
 
+const A5_PRINT_SCALE = 148 / 210;
+
 type PdfReceipt = {
   association: Awaited<ReturnType<typeof getAssociationSettings>>;
   number: string;
@@ -119,6 +121,9 @@ export async function GET(_request: Request, { params }: { params: Promise<{ kin
   const firstPage = pdf.addPage([595.28, 841.89]);
   drawReceipt(firstPage, receipt, regular, bold);
   drawAllocationContinuationPages(pdf, receipt, regular, bold);
+  // Preserve the established receipt layout exactly, then proportionally scale
+  // every generated page from A4 to half-A4 (A5) for paper-saving download/print.
+  for (const page of pdf.getPages()) page.scale(A5_PRINT_SCALE, A5_PRINT_SCALE);
   pdf.setTitle(`${receipt.number} - Acknowledgement Receipt`);
   pdf.setAuthor(receipt.association.name);
   const bytes = await pdf.save();

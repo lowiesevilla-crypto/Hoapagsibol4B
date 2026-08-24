@@ -24,7 +24,7 @@ export async function saveAttendanceAction(formData: FormData) {
   const employee = await prisma.employeeProfile.findFirst({ where: { id: data.employeeId, tenantId: user.tenantId }, select: { id: true } });
   if (!employee) throw new Error("Employee not found in the authenticated tenant.");
 
-  const metrics = await deriveAttendanceMetrics({ employeeId: data.employeeId, date: targetDate, timeIn: timeIn || null, timeOut: timeOut || null, status: data.status, overtimeHours: data.overtimeHours });
+  const metrics = await deriveAttendanceMetrics({ tenantId: user.tenantId, employeeId: data.employeeId, date: targetDate, timeIn: timeIn || null, timeOut: timeOut || null, status: data.status, overtimeHours: data.overtimeHours });
   const values = { ...data, ...metrics, date: targetDate, timeIn: timeIn || null, timeOut: timeOut || null, remarks: remarks || null };
 
   if (id) {
@@ -125,7 +125,7 @@ export async function employeeClockInAction(formData: FormData) {
   if (existing?.timeIn) throw new Error("You have already completed your Time In for today.");
 
   const remarks = mergeClockRemark(existing?.remarks ?? null, "Time In Remarks", parsed.data.timeInRemarks || parsed.data.remarks);
-  const metrics = await deriveAttendanceMetrics({ employeeId: user.employeeProfile.id, date, timeIn, timeOut: existing?.timeOut ?? null, status: AttendanceStatus.PRESENT, overtimeHours: Number(existing?.overtimeHours ?? 0) });
+  const metrics = await deriveAttendanceMetrics({ tenantId: user.tenantId, employeeId: user.employeeProfile.id, date, timeIn, timeOut: existing?.timeOut ?? null, status: AttendanceStatus.PRESENT, overtimeHours: Number(existing?.overtimeHours ?? 0) });
 
   let record;
   if (existing) {
@@ -160,7 +160,7 @@ export async function employeeClockOutAction(formData: FormData) {
 
   const timeOut = timeInManila();
   const remarks = mergeClockRemark(existing.remarks, "Time Out Remarks", parsed.data.timeOutRemarks || parsed.data.remarks);
-  const metrics = await deriveAttendanceMetrics({ employeeId: user.employeeProfile.id, date, timeIn: existing.timeIn, timeOut, status: existing.status, overtimeHours: Number(existing.overtimeHours) });
+  const metrics = await deriveAttendanceMetrics({ tenantId: user.tenantId, employeeId: user.employeeProfile.id, date, timeIn: existing.timeIn, timeOut, status: existing.status, overtimeHours: Number(existing.overtimeHours) });
   const record = await prisma.attendance.update({ where: { id: existing.id }, data: { timeOut, remarks, ...metrics } });
 
   await writeAuditLog({ actorId: user.id, module: "ATTENDANCE", action: "EMPLOYEE_CLOCK_OUT", entityType: "Attendance", entityId: record.id, metadata: { timeOut, totalHours: metrics.totalHours } });
@@ -191,7 +191,7 @@ export async function requestAttendanceCorrectionAction(formData: FormData) {
   if (existingPending) throw new Error("A correction request for this timelog is already pending Payroll review.");
 
   const status = parsed.data.correctTimeIn && parsed.data.correctTimeOut ? AttendanceStatus.PRESENT : attendance.status;
-  const metrics = await deriveAttendanceMetrics({ employeeId: attendance.employeeId, date: targetDate, timeIn: parsed.data.correctTimeIn, timeOut: parsed.data.correctTimeOut, status, overtimeHours: Number(attendance.overtimeHours) });
+  const metrics = await deriveAttendanceMetrics({ tenantId: user.tenantId, employeeId: attendance.employeeId, date: targetDate, timeIn: parsed.data.correctTimeIn, timeOut: parsed.data.correctTimeOut, status, overtimeHours: Number(attendance.overtimeHours) });
   const adjustedData = { ...attendanceSnapshot(attendance), ...metrics, status, date: targetDate, timeIn: parsed.data.correctTimeIn, timeOut: parsed.data.correctTimeOut, remarks: parsed.data.remarks };
 
   await prisma.attendanceAdjustment.create({

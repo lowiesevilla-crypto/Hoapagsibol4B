@@ -10,6 +10,7 @@ import { TransactionFeedback } from "@/components/transaction-feedback";
 import { resolveAiAssistanceEntitlement } from "@/lib/ai-assistance/entitlement";
 import { requireUser } from "@/lib/auth";
 import { Permission } from "@/lib/authorization/permissions";
+import { canUseTenantRepositoryWhenPlanDisabled } from "@/lib/document-repository/admin-access";
 import { resolveDocumentManagementEntitlement } from "@/lib/document-repository/entitlement";
 import { filterLinksByModules, moduleForPath } from "@/lib/module-routing";
 import { routeTitle, tenantMetadata, tenantNameForMetadata } from "@/lib/metadata-title";
@@ -46,7 +47,8 @@ export default async function AdminLayout({ children }: { children: React.ReactN
     resolveAiAssistanceEntitlement(user.tenantId),
   ]);
 
-  if (pathname.startsWith("/admin/document-management") && !documentManagementEntitlement.enabled) redirect("/admin/dashboard?error=Document%20Management%20is%20not%20included%20in%20your%20subscription%20plan.");
+  const canUseRepositoryWhenPlanDisabled = canUseTenantRepositoryWhenPlanDisabled(user.roles);
+  if (pathname.startsWith("/admin/document-management") && !documentManagementEntitlement.enabled && !canUseRepositoryWhenPlanDisabled) redirect("/admin/dashboard?error=Document%20Management%20is%20not%20included%20in%20your%20subscription%20plan.");
 
   const canManageAi = user.permissions.includes(Permission.AI_ASSISTANCE_MANAGE);
   if (pathname.startsWith("/admin/ai-assistance")) {
@@ -66,7 +68,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
 
   function authorizedAdminLinks(items: LinkItem[]) {
     return filterAdminLinksByRole(filterLinksByModules(items, enabledModules), user.roles)
-      .filter((item) => documentManagementEntitlement.enabled || !item.href.startsWith("/admin/document-management"))
+      .filter((item) => documentManagementEntitlement.enabled || canUseRepositoryWhenPlanDisabled || !item.href.startsWith("/admin/document-management"))
       .filter((item) => (aiAssistanceEntitlement.enabled && canManageAi) || !item.href.startsWith("/admin/ai-assistance"))
       .filter((item) => (aiAssistanceEntitlement.enabled && canUseAi) || !item.href.startsWith("/admin/ai-copilot"))
       .filter((item) => canAccessPayroll || !["/admin/employees", "/admin/attendance", "/admin/payroll"].includes(item.href));

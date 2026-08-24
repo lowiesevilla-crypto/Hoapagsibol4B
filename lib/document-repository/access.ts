@@ -1,6 +1,7 @@
 import type { Role } from "@prisma/client";
 import { requireUser } from "@/lib/auth";
 import { Permission, hasPermission } from "@/lib/authorization/permissions";
+import { canUseTenantRepositoryWhenPlanDisabled } from "@/lib/document-repository/admin-access";
 import { resolveDocumentManagementEntitlement } from "@/lib/document-repository/entitlement";
 import { currentTenantContext, type TenantRequestContext } from "@/lib/tenant-context";
 
@@ -35,7 +36,7 @@ async function resolveRepositoryContext() {
 export async function requireDocumentManagementEntitlement() {
   const context = await resolveRepositoryContext();
   const entitlement = await resolveDocumentManagementEntitlement(context.tenantId);
-  if (!entitlement.enabled) {
+  if (!entitlement.enabled && !canUseTenantRepositoryWhenPlanDisabled(effectiveRoles(context))) {
     throw new Error("Document Management is not included in this tenant subscription.");
   }
   return { context, entitlement };

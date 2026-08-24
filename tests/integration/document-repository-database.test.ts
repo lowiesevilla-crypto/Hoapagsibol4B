@@ -21,8 +21,13 @@ const tagAId = `${runId}-tag-a`;
 const tagBId = `${runId}-tag-b`;
 const tenantIds = [tenantAId, tenantBId];
 
-function inTenant<T>(tenantId: string, callback: () => T, permissions?: ReadonlySet<Permission>) {
-  return runWithTenant(tenantId, callback, { role: Role.HOA_ADMIN, permissions });
+function inTenant<T>(
+  tenantId: string,
+  callback: () => T,
+  permissions?: ReadonlySet<Permission>,
+  role: Role = Role.HOA_ADMIN,
+) {
+  return runWithTenant(tenantId, callback, { role, permissions });
 }
 
 async function cleanFixtures() {
@@ -205,7 +210,19 @@ test("plan entitlement is inherited and tenant override can disable Document Man
   });
 });
 
-test("a repository permission cannot bypass a disabled tenant feature", async () => {
+test("tenant administrators retain repository governance access when commercial entitlement is disabled", async () => {
+  await inTenant(
+    tenantBId,
+    async () => {
+      const resolved = await requireRepositoryPermission(Permission.DOCUMENT_REPOSITORY_READ);
+      assert.equal(resolved.context.tenantId, tenantBId);
+      assert.equal(resolved.entitlement.enabled, false);
+    },
+    new Set([Permission.DOCUMENT_REPOSITORY_READ]),
+  );
+});
+
+test("non-admin repository permission cannot bypass a disabled tenant feature", async () => {
   await inTenant(
     tenantBId,
     async () => {
@@ -215,6 +232,7 @@ test("a repository permission cannot bypass a disabled tenant feature", async ()
       );
     },
     new Set([Permission.DOCUMENT_REPOSITORY_READ]),
+    Role.STAFF,
   );
 });
 

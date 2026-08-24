@@ -1,6 +1,6 @@
 "use client";
 
-import { CirclePlus, Landmark, Minus, ReceiptText, Search, Trash2, UserRoundCheck, WalletCards } from "lucide-react";
+import { CirclePlus, Landmark, ReceiptText, Search, Trash2, UserRoundCheck, WalletCards } from "lucide-react";
 import { useMemo, useState } from "react";
 import { createPettyCashVoucherAction } from "@/lib/actions/petty-cash";
 
@@ -53,7 +53,7 @@ export function PettyCashVoucherForm({
   const [employeeAdvanceEmployeeId, setEmployeeAdvanceEmployeeId] = useState("");
   const [employeeQuery, setEmployeeQuery] = useState("");
 
-  const currentPayees = payeeType === "OTHER" ? [] : payees[payeeType];
+  const currentPayees = useMemo(() => payeeType === "OTHER" ? [] : payees[payeeType], [payeeType, payees]);
   const matchingPayees = useMemo(() => {
     const term = payeeQuery.trim().toLowerCase();
     return currentPayees.filter((item) => !term || item.search.includes(term)).slice(0, 60);

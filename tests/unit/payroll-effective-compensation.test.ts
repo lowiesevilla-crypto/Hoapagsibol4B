@@ -81,3 +81,13 @@ test("PAY-COMP-002/PAY-COMP-003: persistence model, backfill, versioning and pay
   assert.match(employeeForm, /name="payFrequency"/);
   assert.match(employeeForm, /name="attendancePolicy"/);
 });
+
+test("PAY-COMP-002: ordinary employee edits avoid the timeout-prone self-lock and password rehash path", () => {
+  const versionCall = employeeActions.indexOf("const version = await persistEmployeeCompensationVersion(tx");
+  const profileUpdate = employeeActions.indexOf("await tx.employeeProfile.update({ where: { id }, data: profileValues });");
+  assert.ok(versionCall >= 0 && profileUpdate > versionCall, "payroll versioning must run before the profile row is locked");
+  assert.match(employeeActions, /const loginPassword = String\(formData\.get\("loginPassword"\) \|\| ""\)/);
+  assert.match(employeeActions, /if \(password\) \{[\s\S]*data\.passwordHash = await hash\(password, 12\)/);
+  assert.match(employeeForm, /defaultValue=\{employee \? "" : "ChangeMe123!"\}/);
+  assert.match(employeeForm, /Leave blank to keep current password/);
+});

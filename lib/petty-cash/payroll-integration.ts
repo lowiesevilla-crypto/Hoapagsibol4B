@@ -19,6 +19,12 @@ type PettyCashAdvanceSchedule = {
   deductionPerCutoff: Prisma.Decimal;
 };
 
+/**
+ * @requirement PAY-DED-001 PAY-LOAN-001
+ * @status IMPLEMENTED
+ * @description Calculates a bounded Petty Cash cash-advance deduction using the
+ * configured per-cutoff amount, current loan balance, and unpaid payroll reservations.
+ */
 export function calculatePettyCashDeductionAmount(configured: number, loanBalance: number, reservedAmount: number) {
   const safeConfigured = Number.isFinite(configured) ? Math.max(0, configured) : 0;
   const safeBalance = Number.isFinite(loanBalance) ? Math.max(0, loanBalance) : 0;

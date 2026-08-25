@@ -1,3 +1,4 @@
+import { StandardTable } from "@/components/standard-table";
 import Link from "next/link";
 import { PageHeader } from "@/components/page-header";
 import { prisma } from "@/lib/db";
@@ -35,9 +36,9 @@ export default async function ComplaintReportsPage({ searchParams }: { searchPar
     </div>
     <section className="card mt-6">
       <h2 className="text-lg font-black">Filtered Complaint Rows</h2>
-      <div className="mt-4 overflow-x-auto"><table><thead><tr><th>Reference</th><th>Subject</th><th>Privacy</th><th>Status</th><th>Category</th><th>Handler</th><th>Submitted</th></tr></thead><tbody>
+      <div className="mt-4 overflow-x-auto"><StandardTable><table><thead><tr><th>Reference</th><th>Subject</th><th>Privacy</th><th>Status</th><th>Category</th><th>Handler</th><th>Submitted</th></tr></thead><tbody>
         {report.rows.map((item) => <tr key={item.id}><td className="font-mono text-xs">{item.publicReference}</td><td><p className="font-bold">{item.title}</p><p className="max-w-sm truncate text-xs text-slate-500">{item.requestedAction || "No requested action recorded"}</p></td><td>{complaintPrivacyLabel(item.privacyMode)}</td><td>{complaintStatusLabel(item.status)}</td><td>{item.category?.name || "General"}</td><td>{item.assignedTo?.name || "Unassigned"}</td><td>{shortDate(item.submittedAt)}</td></tr>)}
-      </tbody></table></div>
+      </tbody></table></StandardTable></div>
       <div className="mt-4 flex items-center justify-between text-sm font-bold"><span>{report.filteredTotal} filtered result(s)</span><div className="flex gap-2">{report.page > 1 && <Link className="btn-secondary min-h-9 px-3 py-1.5" href={reportPageHref(query, report.page - 1)}>Previous</Link>}{report.page * report.pageSize < report.filteredTotal && <Link className="btn-secondary min-h-9 px-3 py-1.5" href={reportPageHref(query, report.page + 1)}>Next</Link>}</div></div>
     </section>
   </>;

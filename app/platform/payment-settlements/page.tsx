@@ -1,3 +1,4 @@
+import { StandardTable } from "@/components/standard-table";
 import { CircleDollarSign, Clock3, Landmark, RefreshCw, ShieldCheck } from "lucide-react";
 import Link from "next/link";
 import { MetricCard } from "@/components/ui/metric-card";
@@ -150,7 +151,7 @@ export default async function PlatformPaymentSettlementsPage({
         </form>
 
         <div className="mt-5 hidden max-h-[68vh] overflow-auto rounded-2xl border border-slate-200 md:block">
-          <table className="min-w-[1260px] w-full text-sm">
+          <StandardTable><table className="min-w-[1260px] w-full text-sm">
             <thead className="sticky top-0 z-10 bg-surface-subtle text-left">
               <tr>
                 <th className="p-4 text-xs font-black uppercase tracking-wider text-slate-500">Confirmed</th>
@@ -194,7 +195,7 @@ export default async function PlatformPaymentSettlementsPage({
                 </tr>
               ))}
             </tbody>
-          </table>
+          </table></StandardTable>
         </div>
 
         <div className="mt-5 grid gap-3 md:hidden">

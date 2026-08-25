@@ -1,3 +1,4 @@
+import { StandardTable } from "@/components/standard-table";
 import Link from "next/link";
 import { Role, SystemSettingCategory } from "@prisma/client";
 import { Building2, Database, Facebook, KeyRound, Mail, MessageSquare, QrCode } from "lucide-react";
@@ -88,7 +89,7 @@ export default async function SystemSettingsPage({ searchParams }: { searchParam
     <section className="card mb-6">
       <div className="mb-5"><h2 className="text-lg font-black">Current setup overview</h2><p className="text-sm leading-6 text-slate-500">Read-only snapshot of the effective configuration. Secrets are intentionally masked.</p></div>
       <div className="grid gap-5 xl:grid-cols-[1fr_.75fr]">
-        <div className="table-wrap shadow-none"><table className="data-table"><thead><tr><th>Configuration</th><th>Category</th><th>Source</th><th>Current value</th></tr></thead><tbody>{setupRows.map((row) => <tr key={`${row.category}.${row.key}`}><td><p className="font-bold">{row.label}</p><p className="font-mono text-[11px] text-slate-400">{row.key}</p></td><td>{row.category.toLowerCase()}</td><td>{row.source}</td><td className="max-w-sm break-words text-sm">{row.secret ? (row.value ? "Configured - hidden" : "Not configured") : row.value || "Not configured"}</td></tr>)}</tbody></table></div>
+        <div className="table-wrap shadow-none"><StandardTable><table className="data-table"><thead><tr><th>Configuration</th><th>Category</th><th>Source</th><th>Current value</th></tr></thead><tbody>{setupRows.map((row) => <tr key={`${row.category}.${row.key}`}><td><p className="font-bold">{row.label}</p><p className="font-mono text-[11px] text-slate-400">{row.key}</p></td><td>{row.category.toLowerCase()}</td><td>{row.source}</td><td className="max-w-sm break-words text-sm">{row.secret ? (row.value ? "Configured - hidden" : "Not configured") : row.value || "Not configured"}</td></tr>)}</tbody></table></StandardTable></div>
         <div className="rounded-3xl border border-pine-100 bg-pine-50/50 p-4">
           <h3 className="font-black text-pine-900">Portal endpoints</h3>
           <dl className="mt-4 space-y-3 text-sm">{endpointRows.map(([label, value]) => <div key={label} className="rounded-2xl bg-white p-3 shadow-sm"><dt className="text-xs font-black uppercase tracking-wider text-slate-500">{label}</dt><dd className="mt-1 break-all font-semibold text-slate-700">{value}</dd></div>)}</dl>

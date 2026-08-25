@@ -1,3 +1,4 @@
+import { StandardTable } from "@/components/standard-table";
 import Link from "next/link";
 import { ComplaintPrivacyMode, ComplaintStatus } from "@prisma/client";
 import { PageHeader } from "@/components/page-header";
@@ -132,12 +133,12 @@ export default async function AdminComplaintsPage({ searchParams }: { searchPara
       {canManageGrievance && <p className="text-xs text-slate-500 md:col-span-2 xl:col-span-6">Complaint status remains the operational queue state. Grievance status and independent verification are filtered and displayed separately.</p>}
     </form>
     <section className="card p-0 sm:p-0">
-      {complaints.length ? <div className="table-wrap rounded-none shadow-none"><table className={`data-table ${canManageGrievance ? "min-w-[1320px]" : "min-w-[1100px]"}`}><thead><tr><th>Complaint</th><th>Privacy</th><th>Category</th><th>Submitted</th><th>Assigned</th><th>Complaint status</th>{canManageGrievance && <th>Grievance</th>}{canManageGrievance && <th>Verification</th>}<th>Activity</th><th>Action</th></tr></thead><tbody>
+      {complaints.length ? <div className="table-wrap rounded-none shadow-none"><StandardTable><table className={`data-table ${canManageGrievance ? "min-w-[1320px]" : "min-w-[1100px]"}`}><thead><tr><th>Complaint</th><th>Privacy</th><th>Category</th><th>Submitted</th><th>Assigned</th><th>Complaint status</th>{canManageGrievance && <th>Grievance</th>}{canManageGrievance && <th>Verification</th>}<th>Activity</th><th>Action</th></tr></thead><tbody>
         {complaints.map((item) => {
           const metadata = grievanceMetadata.get(item.id);
           return <tr key={item.id}><td><Link className="font-black text-pine-800 hover:underline" href={`/admin/complaints/${item.id}`}>{item.title}</Link><p className="font-mono text-xs text-slate-500">{item.complaintNumber} | {item.publicReference}</p></td><td>{complaintPrivacyLabel(item.privacyMode)}</td><td>{item.category?.name || "General"}</td><td>{shortDate(item.submittedAt)}</td><td>{item.assignedTo?.name || "Unassigned"}</td><td><StatusBadge status={item.status} /></td>{canManageGrievance && <td><span className="badge badge-info">{metadata?.grievanceStatus ? label(metadata.grievanceStatus) : "Not initiated"}</span></td>}{canManageGrievance && <td><VerificationBadge status={metadata?.verificationStatus || null} required={Boolean(metadata?.verificationRequired)} blocked={Boolean(metadata?.blocksEnforcement)} /></td>}<td className="text-xs text-slate-500">{item._count.messages} messages | {item._count.attachments} attachments</td><td><Link className="btn-secondary min-h-9 px-3 py-1.5 text-xs" href={`/admin/complaints/${item.id}`}>Review</Link></td></tr>;
         })}
-      </tbody></table></div> : <div className="py-14 text-center text-sm text-slate-500">No complaints match the selected filters.</div>}
+      </tbody></table></StandardTable></div> : <div className="py-14 text-center text-sm text-slate-500">No complaints match the selected filters.</div>}
     </section>
   </>;
 }

@@ -1,3 +1,4 @@
+import { StandardTable } from "@/components/standard-table";
 import { AgreementTemplateVersionStatus, TenantAgreementStatus } from "@prisma/client";
 import { FileCheck2, FileSignature, Scale, ShieldCheck } from "lucide-react";
 import Link from "next/link";
@@ -100,14 +101,14 @@ export default async function PlatformAgreementsPage({
           <p className="mt-1 text-sm text-slate-500">Platform-wide register of issued, signed, declined, and superseded subscription agreements.</p>
         </div>
         <div className="mt-5 overflow-auto">
-          <table className="min-w-[1000px] w-full text-sm">
+          <StandardTable><table className="min-w-[1000px] w-full text-sm">
             <thead className="bg-slate-50 text-left"><tr><th className="p-3">Agreement</th><th className="p-3">Tenant</th><th className="p-3">Plan</th><th className="p-3">Template</th><th className="p-3">Status</th><th className="p-3">Issued</th><th className="p-3">Signed</th><th className="p-3">Action</th></tr></thead>
             <tbody>{agreements.map((agreement) => {
               const tenant = agreement.tenantSnapshot as Record<string, unknown>;
               const terms = agreement.termsSnapshot as Record<string, unknown>;
               return <tr key={agreement.id} className="border-t align-top"><td className="p-3 font-black">{agreement.agreementNumber}</td><td className="p-3">{String(tenant.legalBusinessName || tenant.name || agreement.tenantId)}</td><td className="p-3">{String(terms.planName || "—")}</td><td className="p-3">v{agreement.templateVersion.versionLabel}</td><td className="p-3"><span className={`rounded-full px-2.5 py-1 text-xs font-black ${agreement.status === TenantAgreementStatus.SIGNED ? "bg-emerald-100 text-emerald-800" : agreement.status === TenantAgreementStatus.DECLINED ? "bg-rose-100 text-rose-800" : "bg-slate-100 text-slate-700"}`}>{agreement.status.replaceAll("_", " ")}</span></td><td className="p-3">{agreement.createdAt.toLocaleDateString("en-PH")}</td><td className="p-3">{agreement.signedAt?.toLocaleDateString("en-PH") || "—"}</td><td className="p-3"><Link className="font-black text-blue-700 hover:underline" href={`/platform/agreements/${agreement.id}`}>View</Link></td></tr>;
             })}</tbody>
-          </table>
+          </table></StandardTable>
         </div>
         {!agreements.length && <p className="mt-5 rounded-xl border border-dashed p-8 text-center text-sm text-slate-500">No tenant agreements issued yet.</p>}
       </section>

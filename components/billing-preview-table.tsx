@@ -1,5 +1,6 @@
 "use client";
 
+import { StandardTable } from "@/components/standard-table";
 import { ArrowDown, ArrowUp, Search } from "lucide-react";
 import { useMemo, useState } from "react";
 import { PaginationFocusTarget, focusPaginationTarget } from "@/components/pagination-focus";
@@ -64,7 +65,7 @@ export function BillingPreviewTable({ rows }: { rows: BillingGenerationRow[] }) 
       <p className="text-sm font-semibold text-slate-500">{filtered.length} of {rows.length} preview rows</p>
     </div>
     <div className="table-wrap shadow-none">
-      <table className="data-table min-w-[1300px]">
+      <StandardTable><table className="data-table min-w-[1300px]">
         <thead><tr>
           <SortableHeader label="Homeowner" sortKey="homeownerName" activeKey={sortKey} direction={direction} onSort={changeSort} />
           <SortableHeader label="Block" sortKey="block" activeKey={sortKey} direction={direction} onSort={changeSort} />
@@ -92,7 +93,7 @@ export function BillingPreviewTable({ rows }: { rows: BillingGenerationRow[] }) 
           </tr>)}
           {!visible.length && <tr><td colSpan={10} className="py-10 text-center text-slate-500">No preview rows match that search.</td></tr>}
         </tbody>
-      </table>
+      </table></StandardTable>
     </div>
     {pageCount > 1 && <nav className="mt-3 flex items-center justify-between gap-3 text-sm">
       <button className="btn-secondary" type="button" disabled={safePage <= 1} onClick={() => changePage(Math.max(1, safePage - 1))}>Previous</button>

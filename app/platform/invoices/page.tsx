@@ -1,3 +1,4 @@
+import { StandardTable } from "@/components/standard-table";
 import { PlatformInvoiceStatus, Role } from "@prisma/client";
 import { Download, ExternalLink, FileText } from "lucide-react";
 import Link from "next/link";
@@ -104,7 +105,7 @@ export default async function PlatformInvoicesPage({ searchParams }: { searchPar
         </form>
 
         <div className="mt-5 overflow-auto">
-          <table className="min-w-[1180px] w-full text-sm">
+          <StandardTable><table className="min-w-[1180px] w-full text-sm">
             <thead className="bg-slate-50 text-left">
               <tr>
                 <th className="p-3">Invoice</th>
@@ -138,7 +139,7 @@ export default async function PlatformInvoicesPage({ searchParams }: { searchPar
                 </tr>
               ))}
             </tbody>
-          </table>
+          </table></StandardTable>
         </div>
         {!invoices.length && <p className="mt-5 rounded-xl border border-dashed p-8 text-center text-sm text-slate-500">No platform invoices match the current filters.</p>}
 

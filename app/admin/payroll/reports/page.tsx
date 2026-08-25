@@ -1,3 +1,4 @@
+import { StandardTable } from "@/components/standard-table";
 import { Download, FileSpreadsheet } from "lucide-react";
 import { PageHeader } from "@/components/page-header";
 import { PayrollReportPrintButton } from "@/components/payroll-report-print-button";
@@ -79,7 +80,7 @@ export default async function PayrollReportsPage({ searchParams }: PayrollReport
     <section className="card print:border-0 print:p-0 print:shadow-none">
       <div className="mb-4"><h2 className="text-lg font-black">Employee payroll breakdown</h2><p className="text-sm text-slate-500">Each row is tied to one payroll period and payslip for the authenticated tenant.</p></div>
       <div className="table-wrap shadow-none print:overflow-visible">
-        <table className="data-table text-xs">
+        <StandardTable><table className="data-table text-xs">
           <thead><tr><th>Employee</th><th>Coverage</th><th>Pay date</th><th>Status</th><th className="text-right">Days</th><th className="text-right">OT hrs</th><th className="text-right">Basic</th><th className="text-right">OT pay</th><th className="text-right">Allowance</th><th className="text-right">Deduction</th><th className="text-right">Gross</th><th className="text-right">Net</th></tr></thead>
           <tbody>
             {report.rows.map((row) => <tr key={row.payslipId}>
@@ -99,7 +100,7 @@ export default async function PayrollReportsPage({ searchParams }: PayrollReport
             {!report.rows.length && <tr><td colSpan={12} className="py-12 text-center text-slate-500">No payroll records match the selected payout-date range and status.</td></tr>}
           </tbody>
           {!!report.rows.length && <tfoot><tr className="font-black"><td colSpan={6}>TOTAL</td><td className="text-right">{money(report.totals.basicPay)}</td><td className="text-right">{money(report.totals.overtimePay)}</td><td className="text-right">{money(report.totals.allowance)}</td><td className="text-right">{money(report.totals.deduction)}</td><td className="text-right">{money(report.totals.grossPay)}</td><td className="text-right">{money(report.totals.netPay)}</td></tr></tfoot>}
-        </table>
+        </table></StandardTable>
       </div>
     </section>
   </>;

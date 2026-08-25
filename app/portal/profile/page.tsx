@@ -9,8 +9,10 @@ import {
   KeyRound,
   Mail,
   MessageCircle,
+  Pencil,
   Phone,
   ShieldCheck,
+  UserPlus,
   UsersRound,
   WalletCards,
 } from "lucide-react";
@@ -20,6 +22,10 @@ import { ProfilePhotoUploader } from "@/components/homeowner/profile-photo-uploa
 import { PasskeyEnrollmentPanel } from "@/components/passkey-enrollment-panel";
 import { PortalPageContainer } from "@/components/portal-mobile-shell";
 import { StatusBadge } from "@/components/status-badge";
+import {
+  addHomeownerHouseholdMemberAction,
+  updateHomeownerProfileAction,
+} from "@/lib/actions/homeowner-profile";
 import { switchLinkedAccountAction } from "@/lib/actions/linked-accounts";
 import { prisma } from "@/lib/db";
 import { homeownerAccountNumber } from "@/lib/homeowner-account";
@@ -28,15 +34,16 @@ import { requireHomeownerProfile } from "@/lib/portal";
 import { getHomeownerProfilePhoto } from "@/lib/services/homeowner-profile-photo";
 import { money, shortDate } from "@/lib/utils";
 
-export default async function ProfilePage() {
+export default async function ProfilePage({ searchParams }: { searchParams: Promise<{ error?: string; success?: string; message?: string }> }) {
   const profile = await requireHomeownerProfile();
+  const query = await searchParams;
   const [passkeyCount, householdMembers, linkedAccounts, photo] = await Promise.all([
     prisma.userPasskeyCredential.count({ where: { userId: profile.userId, tenantId: profile.tenantId } }),
     prisma.householdMember.findMany({
       where: { tenantId: profile.tenantId, homeownerId: profile.id, active: true, revokedAt: null },
       select: { id: true, fullName: true, relationship: true, birthDate: true, validatedAt: true },
       orderBy: [{ fullName: "asc" }],
-      take: 8,
+      take: 20,
     }),
     listLinkedAccounts(profile.user.email, profile.userId),
     getHomeownerProfilePhoto(profile.tenantId, profile.userId),
@@ -57,6 +64,9 @@ export default async function ProfilePage() {
 
   return (
     <PortalPageContainer className="space-y-4">
+      {query.error && <div className="rounded-2xl border border-rose-200 bg-rose-50 p-4 text-sm font-semibold text-rose-800">{query.error}</div>}
+      {query.success && <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-sm font-semibold text-emerald-800">{query.message || "Saved successfully."}</div>}
+
       <section className="rounded-3xl border border-slate-200 bg-white p-4 shadow-soft sm:p-5">
         <div className="flex items-center gap-4">
           <ProfilePhotoUploader name={profile.user.name} initialVersion={photo?.updatedAt.toISOString() ?? null} />
@@ -82,6 +92,38 @@ export default async function ProfilePage() {
           </div>
         </div>
       </section>
+
+      <details className="group overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-soft">
+        <summary className="flex min-h-16 cursor-pointer list-none items-center gap-3 px-4 py-3 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-pine-500 [&::-webkit-details-marker]:hidden sm:px-5">
+          <span className="grid size-10 shrink-0 place-items-center rounded-2xl bg-pine-50 text-pine-700"><Pencil className="size-5" aria-hidden="true" /></span>
+          <div className="min-w-0 flex-1"><h2 className="font-black text-ink">Edit my profile</h2><p className="text-xs font-semibold text-slate-500">Update your own contact, personal, and property details</p></div>
+          <ChevronDown className="size-5 shrink-0 text-slate-400 transition-transform group-open:rotate-180" aria-hidden="true" />
+        </summary>
+        <form action={updateHomeownerProfileAction} className="grid gap-4 border-t border-slate-100 p-4 sm:grid-cols-2 sm:p-5">
+          <ProfileInput label="Full name" name="name" defaultValue={profile.user.name} required />
+          <ProfileInput label="Email" name="email" type="email" defaultValue={profile.user.email} required />
+          <ProfileInput label="Phone" name="phone" defaultValue={profile.phone} required />
+          <ProfileInput label="Messenger ID" name="messengerId" defaultValue={profile.messengerId || ""} />
+          <ProfileInput label="Birth date" name="birthDate" type="date" defaultValue={dateValue(profile.birthDate)} />
+          <ProfileInput label="Civil status" name="civilStatus" defaultValue={profile.civilStatus || ""} />
+          <ProfileInput label="Citizenship" name="citizenship" defaultValue={profile.citizenship || ""} />
+          <ProfileInput label="Occupation" name="occupation" defaultValue={profile.occupation || ""} />
+          <ProfileInput label="Residency date" name="residencyDate" type="date" defaultValue={dateValue(profile.residencyDate)} />
+          <ProfileInput label="Phase" name="phase" defaultValue={profile.phase || ""} />
+          <ProfileInput label="Block" name="block" defaultValue={profile.block} required />
+          <ProfileInput label="Lot" name="lot" defaultValue={profile.lot} required />
+          <ProfileInput label="Property type" name="propertyType" defaultValue={profile.propertyType || ""} />
+          <ProfileInput label="Occupancy status" name="occupancyStatus" defaultValue={profile.occupancyStatus || ""} />
+          <label className="sm:col-span-2"><span className="label">Address</span><textarea className="field min-h-24" name="address" defaultValue={profile.address} maxLength={250} required /></label>
+
+          <div className="grid gap-4 rounded-2xl border border-slate-200 bg-slate-50 p-4 sm:col-span-2 sm:grid-cols-2">
+            <ReadonlyProfileInput label="Account number" value={homeownerAccountNumber(profile)} />
+            <ReadonlyProfileInput label="Monthly dues" value={money(profile.monthlyDuesAmount)} />
+            <p className="text-xs font-semibold text-slate-500 sm:col-span-2">Account number and Monthly Dues are HOA-controlled records. They are read-only in the homeowner portal and are also blocked from self-service updates on the server.</p>
+          </div>
+          <button className="btn-primary min-h-12 sm:col-span-2" type="submit">Save profile</button>
+        </form>
+      </details>
 
       <section className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-soft">
         <div className="px-4 pb-2 pt-4 sm:px-5">
@@ -121,7 +163,7 @@ export default async function ProfilePage() {
         </section>
       )}
 
-      <details className="group overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-soft">
+      <details className="group overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-soft" open={query.success === "household"}>
         <summary className="flex min-h-16 cursor-pointer list-none items-center gap-3 px-4 py-3 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-pine-500 [&::-webkit-details-marker]:hidden sm:px-5">
           <span className="grid size-10 shrink-0 place-items-center rounded-2xl bg-pine-50 text-pine-700"><Home className="size-5" aria-hidden="true" /></span>
           <div className="min-w-0 flex-1">
@@ -135,20 +177,33 @@ export default async function ProfilePage() {
             {propertyDetails.map((item) => <CompactDetail key={item.label} {...item} />)}
           </div>
           <div className="mt-4 border-t border-slate-100 pt-4">
-            <div className="mb-3 flex items-center gap-2"><UsersRound className="size-4 text-pine-700" aria-hidden="true" /><h3 className="text-sm font-black text-slate-900">Household</h3></div>
+            <div className="mb-2 flex items-center gap-2"><UsersRound className="size-4 text-pine-700" aria-hidden="true" /><h3 className="text-sm font-black text-slate-900">Household members</h3></div>
+            <p className="mb-4 text-xs font-semibold text-slate-500">You can add members of your household directly. HOA Admin approval is not required; the member becomes available to your authorized household workflows immediately.</p>
+
+            <form action={addHomeownerHouseholdMemberAction} className="mb-5 grid gap-3 rounded-2xl border border-pine-100 bg-pine-50/50 p-4 sm:grid-cols-2">
+              <div className="flex items-center gap-2 sm:col-span-2"><UserPlus className="size-4 text-pine-700" aria-hidden="true" /><h4 className="text-sm font-black text-pine-950">Add household member</h4></div>
+              <ProfileInput label="Full name" name="fullName" required />
+              <ProfileInput label="Relationship" name="relationship" placeholder="Spouse, child, parent, etc." required />
+              <ProfileInput label="Birth date" name="birthDate" type="date" />
+              <ProfileInput label="Civil status" name="civilStatus" />
+              <ProfileInput label="Nationality" name="nationality" />
+              <ProfileInput label="Address (optional)" name="address" />
+              <button className="btn-primary min-h-11 sm:col-span-2" type="submit">Add member</button>
+            </form>
+
             {householdMembers.length ? (
               <div className="space-y-2">
                 {householdMembers.map((member) => (
                   <article key={member.id} className="rounded-2xl bg-slate-50 px-3 py-3">
                     <div className="flex min-w-0 items-start justify-between gap-3">
                       <div className="min-w-0"><p className="truncate text-sm font-black text-slate-900">{member.fullName}</p><p className="mt-0.5 text-xs font-semibold text-slate-500">{member.relationship}{member.birthDate ? ` · ${shortDate(member.birthDate)}` : ""}</p></div>
-                      <span className={`shrink-0 rounded-full px-2 py-1 text-[10px] font-black ${member.validatedAt ? "bg-emerald-50 text-emerald-700" : "bg-amber-50 text-amber-700"}`}>{member.validatedAt ? "Validated" : "Pending"}</span>
+                      <span className="shrink-0 rounded-full bg-emerald-50 px-2 py-1 text-[10px] font-black text-emerald-700">Active</span>
                     </div>
                   </article>
                 ))}
               </div>
             ) : (
-              <CommunityEmptyState title="No household members" description="Household members will appear here when added." />
+              <CommunityEmptyState title="No household members" description="Add your household members here. No HOA Admin approval is required." />
             )}
           </div>
         </div>
@@ -174,6 +229,14 @@ export default async function ProfilePage() {
   );
 }
 
+function ProfileInput({ label, name, defaultValue = "", type = "text", required = false, placeholder }: { label: string; name: string; defaultValue?: string; type?: string; required?: boolean; placeholder?: string }) {
+  return <label><span className="label">{label}</span><input className="field" name={name} type={type} defaultValue={defaultValue} placeholder={placeholder} required={required} /></label>;
+}
+
+function ReadonlyProfileInput({ label, value }: { label: string; value: string }) {
+  return <label><span className="label">{label}</span><input className="field cursor-not-allowed bg-slate-100 font-bold text-slate-600" value={value} readOnly aria-readonly="true" /></label>;
+}
+
 function CompactDetail({ label, value, icon: Icon }: { label: string; value: string | null | undefined; icon: LucideIcon }) {
   return (
     <div className="grid min-w-0 grid-cols-[36px_minmax(0,1fr)] items-center gap-3 py-3">
@@ -181,4 +244,8 @@ function CompactDetail({ label, value, icon: Icon }: { label: string; value: str
       <div className="min-w-0"><p className="text-[11px] font-black uppercase tracking-wide text-slate-400">{label}</p><p className="mt-0.5 break-words text-sm font-bold text-slate-900">{value || "—"}</p></div>
     </div>
   );
+}
+
+function dateValue(value: Date | null | undefined) {
+  return value ? value.toISOString().slice(0, 10) : "";
 }

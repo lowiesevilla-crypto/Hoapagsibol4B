@@ -36,7 +36,13 @@ export function householdMemberEligibility(
   if (member.homeownerId !== expected.homeownerId) return { eligible: false, label: "Wrong household", reason: "This household member does not belong to your registered household." };
   if (!member.active) return { eligible: false, label: "Inactive", reason: "This household member is inactive." };
   const status = householdMemberValidationStatus(member);
-  if (status === "PENDING") return { eligible: false, label: "Pending Validation", reason: "Validation is still pending." };
-  if (status === "REJECTED") return { eligible: false, label: "Validation Rejected", reason: "This household member was not approved." };
+  if (status === "REJECTED") return { eligible: false, label: "Validation Rejected", reason: "This household member has been revoked by the HOA and is unavailable for self-service." };
+  if (status === "PENDING") {
+    return {
+      eligible: true,
+      label: "Active",
+      reason: "This active household member is linked to your account and does not require HOA approval for homeowner self-service.",
+    };
+  }
   return { eligible: true, label: "Validated", reason: "Eligible for document requests." };
 }

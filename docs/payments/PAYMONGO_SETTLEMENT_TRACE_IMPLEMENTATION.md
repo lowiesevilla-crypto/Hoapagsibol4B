@@ -2,7 +2,9 @@
 
 Last updated: 2026-08-25
 
-Status: **IMPLEMENTED locally; pending exact-head CI, review, merge, deployment, and authenticated production UAT**.
+Status: **DEPLOYED; pending authenticated tenant production UAT before final VERIFIED status**.
+
+Release evidence: PR #179 passed exact-head HOAHub MySQL CI run `32793090994` and Canva Visual Parity run `32793090998` at head `eb8d39d21d09b9ee9d753e217c15b53be559aa82`. It merged to `main` as `4d1f794576eae66dd77bb0bf6b6498fcf9bc55fa`. Hostinger reported that commit as the current completed deployment, `/release.txt` returned `4d1f794576ea`, `/api/health` returned HTTP 200 with MySQL healthy, and post-merge CI/managed-production verification run `32794934089` passed.
 
 ## Purpose
 
@@ -49,4 +51,4 @@ Aggregate schedules are explicitly labeled as estimates. HOAHub never claims tha
 
 ## Release gate
 
-Do not describe this feature as production until its exact branch head passes the applicable CI and visual gates, merges to `main`, Hostinger deploys the merge commit, and authenticated production UAT confirms a real tenant-scoped trace.
+Exact-head CI, visual parity, merge, Hostinger release-marker verification, public health, and post-merge CI are complete. The remaining release gate is authenticated production UAT: an authorized tenant Payment Manager must open a real **Trace settlement** record and confirm tenant isolation, masked recipient IDs, the principal/fee split, and exact-or-estimated payout wording. Do not mark the feature fully `VERIFIED` until that evidence is recorded.

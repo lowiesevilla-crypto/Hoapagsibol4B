@@ -1,7 +1,7 @@
 # PAGSIBOL VILLAGE PH2 4B EAST HOA Portal - User Manual
 
 Generated: June 24, 2026
-Last revised: August 25, 2026 (PayMongo settlement trace documented as an implementation candidate; production availability requires exact-head verification, merge, deployment, and authenticated UAT)
+Last revised: August 25, 2026 (PayMongo settlement trace deployed in PR #179; authenticated tenant production UAT remains pending)
 
 This manual explains how officers and homeowners use the portal. Screenshots were captured from the current clean database, so many tables show empty states until real homeowners, bills, payments, employees, and records are added.
 
@@ -142,7 +142,7 @@ For a tenant using PayMongo Online, an authorized Payment Manager can open **Pay
 
 An **Upcoming payout** amount is an account-level estimate until PayMongo generates a payout. HOAHub labels it as an estimate and does not claim that the selected payment is included. Confirm the tenant principal in PayMongo **Linked Accounts → Child payouts** and the HOAHub fee in PayMongo **Payouts → Transaction Logs**. The trace is read-only and cannot create, refund, transfer, or release money.
 
-Settlement Trace is an implementation candidate as of August 25, 2026. Do not treat this procedure as production-live until the release gate and authenticated UAT are complete.
+Settlement Trace was deployed in PR #179 on August 25, 2026. Automated release gates, the Hostinger release marker, and public health verification passed. An authorized tenant administrator should still complete the first authenticated production UAT against a real PayMongo checkout before the feature is marked fully verified.
 
 Payment methods include cash, bank transfer, GCash, check, and other.
 

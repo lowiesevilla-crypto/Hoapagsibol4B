@@ -168,7 +168,7 @@ function ResponsiveTable({
   kind: "ledger" | "payment" | "billing";
   minWidth: string;
 }) {
-  return <div className={`soa-table-frame soa-${kind}-table-frame overflow-x-auto rounded-lg border border-slate-200`}><StandardTable><table className={`data-table soa-print-table soa-${kind}-table`} style={{ minWidth }}>{children}</table></div></StandardTable>;
+  return <StandardTable><div className={`soa-table-frame soa-${kind}-table-frame overflow-x-auto rounded-lg border border-slate-200`}><table className={`data-table soa-print-table soa-${kind}-table`} style={{ minWidth }}>{children}</table></div></StandardTable>;
 }
 
 function LedgerRow({ entry }: { entry: StatementLedgerEntry }) {

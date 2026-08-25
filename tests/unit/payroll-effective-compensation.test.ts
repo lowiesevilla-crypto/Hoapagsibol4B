@@ -87,3 +87,16 @@ test("PAY-COMP-002: ordinary employee edits avoid the timeout-prone self-lock an
   assert.match(employeeForm, /defaultValue=\{employee \? "" : "ChangeMe123!"\}/);
   assert.match(employeeForm, /Leave blank to keep current password/);
 });
+
+test("PAY-COMP-002: new tenant employees create profile and initial compensation in one nested write", () => {
+  const profileCreate = employeeActions.indexOf("const employee = await tx.employeeProfile.create({");
+  assert.ok(profileCreate >= 0, "new employee flow must create the profile");
+  const createTail = employeeActions.slice(profileCreate);
+  assert.match(createTail, /compensations:\s*\{\s*create:\s*\{/);
+  assert.match(createTail, /createdById:\s*user\.id/);
+  assert.equal(
+    createTail.indexOf("persistEmployeeCompensationVersion(tx"),
+    -1,
+    "new employee flow must not create EmployeeCompensation in a second statement after an uncommitted EmployeeProfile",
+  );
+});

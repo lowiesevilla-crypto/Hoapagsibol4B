@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { Role } from "@prisma/client";
 import { PageHeader } from "@/components/page-header";
-import { PaymentsNav } from "@/components/admin-payment-sections";
+import { PaymentsNav } from "@/components/payments-nav";
 import { RecordPaymentAdvanceForm } from "@/components/record-payment-advance-form";
 import { requireUser } from "@/lib/auth";
 import { inputDate } from "@/lib/utils";

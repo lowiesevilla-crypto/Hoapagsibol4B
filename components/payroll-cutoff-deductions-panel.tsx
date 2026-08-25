@@ -1,6 +1,5 @@
 "use client";
 
-import { StandardTable } from "@/components/standard-table";
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { deletePayrollDeductionAction, savePayrollDeductionAction } from "@/lib/actions/payroll";
 import { money } from "@/lib/utils";
@@ -211,7 +210,7 @@ export function PayrollCutoffDeductionsPanel({
     {!selectedEmployeeId && <div className="mt-5 rounded-2xl border border-dashed border-slate-200 bg-slate-50 p-6 text-center text-sm text-slate-500">Select an employee to view cutoff deductions, existing balances, and Apply to Balance options.</div>}
 
     {selectedEmployeeId && !loadingEmployeeData && <div className="mt-5 table-wrap">
-      <StandardTable><table className="data-table">
+      <table className="data-table">
         <thead><tr><th>Employee</th><th>Deduction</th><th>Loan balance</th><th>Amount</th><th>Remarks</th><th></th></tr></thead>
         <tbody>
           {employeeDeductions.map((deduction) => <tr key={deduction.id}>
@@ -245,7 +244,7 @@ export function PayrollCutoffDeductionsPanel({
           </tr>)}
           {!employeeDeductions.length && <tr><td colSpan={6} className="py-10 text-center text-slate-500">No cutoff deductions have been assigned for the selected employee.</td></tr>}
         </tbody>
-      </table></StandardTable>
+      </table>
     </div>}
   </section>;
 }

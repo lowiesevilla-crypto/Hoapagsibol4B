@@ -1,4 +1,3 @@
-import { StandardTable } from "@/components/standard-table";
 import { Role } from "@prisma/client";
 import { Download, FileArchive, FileCheck2, FileClock, FileLock2, Search, Upload } from "lucide-react";
 import Link from "next/link";
@@ -144,7 +143,7 @@ export default async function DocumentManagementPage({
     {result.documents.length ? <>
       <section className="mt-4 hidden overflow-hidden rounded-3xl border bg-white shadow-sm lg:block">
         <div className="overflow-x-auto">
-          <StandardTable><table className="w-full min-w-[1180px] text-sm">
+          <table className="w-full min-w-[1180px] text-sm">
             <thead className="bg-slate-50 text-left text-xs font-extrabold uppercase tracking-wider text-slate-500"><tr><th className="px-4 py-3">Document</th><th className="px-4 py-3">Category</th><th className="px-4 py-3">Reference</th><th className="px-4 py-3">Status</th><th className="px-4 py-3">Visibility</th><th className="px-4 py-3">Revision</th><th className="px-4 py-3">File</th><th className="px-4 py-3">Updated</th><th className="px-4 py-3">Actions</th></tr></thead>
             <tbody>{result.documents.map((document) => <tr key={document.id} className="border-t align-top hover:bg-slate-50/70">
               <td className="max-w-xs px-4 py-4"><Link className="font-black text-ink hover:text-pine-700 hover:underline" href={`/admin/document-management/${document.id}`}>{document.title}</Link><p className="mt-1 truncate text-xs text-slate-500" title={document.originalFileName}>{document.description || document.originalFileName}</p></td>
@@ -157,7 +156,7 @@ export default async function DocumentManagementPage({
               <td className="px-4 py-4 text-slate-600">{dateLabel(document.updatedAt)}</td>
               <td className="px-4 py-4"><div className="flex flex-wrap gap-2"><Link className="btn-secondary inline-flex min-h-10 items-center px-3 py-2" href={`/admin/document-management/${document.id}`}>Manage</Link>{canDownload && <a className="btn-secondary inline-flex min-h-10 items-center gap-2 px-3 py-2" href={`/api/admin/document-management/documents/${document.id}/download`}><Download className="size-4" /> Download</a>}</div></td>
             </tr>)}</tbody>
-          </table></StandardTable>
+          </table>
         </div>
       </section>
 

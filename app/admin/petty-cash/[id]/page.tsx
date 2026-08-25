@@ -1,4 +1,3 @@
-import { StandardTable } from "@/components/standard-table";
 import { ArrowLeft, Pencil } from "lucide-react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
@@ -78,10 +77,10 @@ export default async function PettyCashVoucherPage({ params, searchParams }: { p
           <InfoLine label="Payee Type" value={voucher.payeeType.replaceAll("_", " ")} />
         </dl>
 
-        <StandardTable><table className="mt-4 w-full border-collapse text-[10px]">
+        <table className="mt-4 w-full border-collapse text-[10px]">
           <thead><tr className="bg-slate-100"><th className="border border-slate-900 px-2 py-1.5 text-left">Particular</th><th className="w-[34mm] border border-slate-900 px-2 py-1.5 text-right">Amount</th></tr></thead>
           <tbody>{items.map((item) => <tr key={item.id}><td className="border border-slate-900 px-2 py-1.5 font-semibold">{item.particular}</td><td className="border border-slate-900 px-2 py-1.5 text-right font-black">{money(Number(item.amount))}</td></tr>)}<tr><td className="border border-slate-900 px-2 py-2 text-right font-black">TOTAL AMOUNT</td><td className="border border-slate-900 px-2 py-2 text-right text-xs font-black">{money(Number(voucher.totalAmount))}</td></tr></tbody>
-        </table></StandardTable>
+        </table>
         <p className="mt-2 text-[9px] leading-4 text-slate-600"><b>Amount in words:</b> {amountInWords(Number(voucher.totalAmount))}</p>
 
         {voucher.employeeLoanId && <div className="mt-3 border border-slate-400 bg-slate-50 p-2 text-[9px] leading-4"><p className="font-black uppercase tracking-wide text-slate-700">Employee Cash Advance · Payroll Schedule</p><p className="mt-0.5">Employee: <b>{voucher.employeeName || "Employee record"}</b> · Deduction per cutoff: <b>{money(Number(voucher.deductionPerCutoff || 0))}</b></p><p>Employee Loan Ref.: <span className="font-mono">{voucher.employeeLoanId}</span></p></div>}

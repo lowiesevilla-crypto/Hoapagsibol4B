@@ -1,4 +1,3 @@
-import { StandardTable } from "@/components/standard-table";
 import { PlatformInvoiceStatus, Role } from "@prisma/client";
 import { CreditCard, Download, ExternalLink, FileText, ReceiptText, ShieldCheck } from "lucide-react";
 import Link from "next/link";
@@ -127,7 +126,7 @@ export default async function TenantSubscriptionPage() {
         <h2 className="text-xl font-black">Platform invoices</h2>
         <p className="mt-1 text-sm text-slate-500">Only HOAHub subscription invoices for this tenant are shown here. Every issued invoice can be printed or downloaded as PDF.</p>
         <div className="mt-5 overflow-auto">
-          <StandardTable><table className="min-w-[1040px] w-full text-sm">
+          <table className="min-w-[1040px] w-full text-sm">
             <thead className="bg-slate-50 text-left"><tr><th className="p-3">Invoice</th><th className="p-3">Billing period</th><th className="p-3">Due</th><th className="p-3">Total</th><th className="p-3">Paid</th><th className="p-3">Balance</th><th className="p-3">Status</th><th className="p-3">Actions</th></tr></thead>
             <tbody>{invoices.map((invoice) => {
               const payable = payableStatuses.includes(invoice.status) && Number(invoice.outstandingBalance) > 0;
@@ -148,7 +147,7 @@ export default async function TenantSubscriptionPage() {
                 </td>
               </tr>;
             })}</tbody>
-          </table></StandardTable>
+          </table>
         </div>
         {!invoices.length && <p className="mt-5 rounded-xl border border-dashed p-8 text-center text-sm text-slate-500">No HOAHub subscription invoices yet.</p>}
       </section>

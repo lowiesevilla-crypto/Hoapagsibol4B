@@ -1,4 +1,3 @@
-import { StandardTable } from "@/components/standard-table";
 import { PlatformInvoiceStatus } from "@prisma/client";
 import { DeleteButton, SubmitButton } from "@/components/ui";
 import { deletePlatformInvoiceAction, updatePlatformInvoiceAction } from "@/lib/actions/platform-invoice-maintenance";
@@ -30,7 +29,7 @@ export async function PlatformInvoiceMaintenancePanel({ tenantId }: { tenantId: 
     <p className="mt-2 text-sm font-semibold text-slate-700">Platform Admin and Super Admin can edit unpaid invoices here. Click <span className="font-black text-blue-700">Edit invoice</span> on the invoice row below.</p>
     <p className="mt-1 text-xs text-slate-500">Edit is limited to invoices without payment history. Delete is limited to the latest unpaid invoice so the subscription billing schedule can be restored safely.</p>
     <div className="mt-4 overflow-auto rounded-xl border bg-white">
-      <StandardTable><table className="min-w-[1120px] w-full text-sm">
+      <table className="min-w-[1120px] w-full text-sm">
         <thead className="bg-slate-50 text-left"><tr><th className="p-3">Invoice</th><th className="p-3">Coverage</th><th className="p-3">Total</th><th className="p-3">Paid</th><th className="p-3">Status</th><th className="p-3">Actions</th></tr></thead>
         <tbody>{invoices.map((invoice) => {
           const noPaymentHistory = Number(invoice.amountPaid) === 0 && invoice._count.allocations === 0;
@@ -70,7 +69,7 @@ export async function PlatformInvoiceMaintenancePanel({ tenantId }: { tenantId: 
             </td>
           </tr>;
         })}</tbody>
-      </table></StandardTable>
+      </table>
     </div>
   </details>;
 }

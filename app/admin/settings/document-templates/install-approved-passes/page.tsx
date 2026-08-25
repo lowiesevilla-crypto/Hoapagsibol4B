@@ -1,4 +1,3 @@
-import { StandardTable } from "@/components/standard-table";
 import Link from "next/link";
 import { unstable_noStore as noStore } from "next/cache";
 import { notFound } from "next/navigation";
@@ -79,10 +78,10 @@ export default async function InstallApprovedPassTemplatesPage({ searchParams }:
               <Info label="Assigned version ID" value={plan.assignedTemplateVersionId} />
             </div>
             <div className="mt-4 overflow-auto rounded-lg border border-slate-200">
-              <StandardTable><table className="w-full min-w-[360px] text-left text-xs">
+              <table className="w-full min-w-[360px] text-left text-xs">
                 <thead className="bg-slate-100 text-slate-600"><tr><th className="p-2">Version</th><th className="p-2">Status</th><th className="p-2">Approved package</th></tr></thead>
                 <tbody>{plan.versionStatuses.map((version) => <tr key={`${plan.key}-${version.version}`} className="border-t"><td className="p-2 font-black">v{version.version}</td><td className="p-2">{version.status}</td><td className="p-2">{version.matchesApprovedPackage ? "Matches" : "No"}</td></tr>)}</tbody>
-              </table></StandardTable>
+              </table>
             </div>
             <div className="mt-4">
               <Link className="btn-secondary min-h-9 px-3 py-1.5 text-xs" href={`/admin/settings/document-definitions/${plan.definitionId}/templates`}>Open Template Editor</Link>

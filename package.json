@@ -25,7 +25,6 @@
     "verify:homeowner-mobile-requests": "tsx scripts/verify-homeowner-mobile-requests.ts",
     "verify:homeowner-mobile-shell": "tsx scripts/verify-homeowner-mobile-shell.ts",
     "verify:homeowner-pwa": "tsx scripts/verify-homeowner-pwa.ts",
-    "verify:tables": "node scripts/verify-standard-tables.mjs",
     "verify:pass-template-tokens": "tsx scripts/verify-pass-template-tokens.ts",
     "verify:pass-template-packages": "tsx scripts/verify-approved-pass-template-packages.ts",
     "verify:approved-pass-web-installer": "tsx scripts/verify-approved-pass-template-web-installer.ts",

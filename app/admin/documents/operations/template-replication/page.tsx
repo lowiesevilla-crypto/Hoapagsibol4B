@@ -1,4 +1,3 @@
-import { StandardTable } from "@/components/standard-table";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 
@@ -161,7 +160,7 @@ export default async function PublishedTemplateReplicationPage({
               </div>
             </div>
             <div className="table-wrap rounded-none shadow-none">
-              <StandardTable><table className="data-table min-w-[1100px]">
+              <table className="data-table min-w-[1100px]">
                 <thead>
                   <tr>
                     <th>Document type</th>
@@ -216,7 +215,7 @@ export default async function PublishedTemplateReplicationPage({
                     </tr>
                   ))}
                 </tbody>
-              </table></StandardTable>
+              </table>
             </div>
           </section>
 

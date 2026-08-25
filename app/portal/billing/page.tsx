@@ -1,4 +1,3 @@
-import { StandardTable } from "@/components/standard-table";
 import Link from "next/link";
 import { QrCode, ReceiptText } from "lucide-react";
 import { BillRemarks } from "@/components/bill-remarks";
@@ -51,10 +50,10 @@ export default async function PortalBillingPage({ searchParams }: { searchParams
           {!bills.length && <PaymentEmptyState title="No billing history" description="Monthly dues and other billing records will appear here after posting." />}
         </div>
         <div className="table-wrap hidden shadow-none md:block">
-          <StandardTable><table className="data-table">
+          <table className="data-table">
             <thead><tr><th>Billing month</th><th>Type</th><th>Remarks</th><th>Due date</th><th>Base dues</th><th>Penalty</th><th>Paid</th><th>Balance</th><th>Status</th><th></th></tr></thead>
             <tbody>{bills.map((bill) => <tr key={bill.id}><td className="font-bold">{monthLabel(bill.billingMonth)}</td><td>{bill.recurringChargeType.replaceAll("_", " ")}</td><td><BillRemarks notes={bill.notes} /></td><td>{shortDate(bill.dueDate)}</td><td>{money(bill.amount)}</td><td>{money(bill.penalty)}</td><td>{money(bill.amountPaid)}</td><td className="font-black">{money(bill.balance)}</td><td><StatusBadge status={bill.status} /></td><td>{Number(bill.balance) > 0 && <Link className="btn-secondary min-h-8 px-3 py-1" href="/portal/pay"><QrCode className="size-4" /> Pay</Link>}</td></tr>)}{!bills.length && <tr><td colSpan={10} className="py-12 text-center text-slate-500">No billing history yet.</td></tr>}</tbody>
-          </table></StandardTable>
+          </table>
         </div>
       </section>
     </PortalPageContainer>

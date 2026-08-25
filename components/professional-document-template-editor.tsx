@@ -1,6 +1,5 @@
 "use client";
 
-import { StandardTable } from "@/components/standard-table";
 import { Component, memo, useEffect, useLayoutEffect, useMemo, useRef, useState, useTransition } from "react";
 import type React from "react";
 import type { ErrorInfo } from "react";
@@ -809,7 +808,7 @@ function BlockContent({ block, scale, tenantLogoSrc, onImageError, onImageUpload
     const objectPosition = `${block.image?.positionX || "center"} ${block.image?.positionY || "center"}`;
     return imageSrc && !imageFailed ? <img className="h-full w-full" src={imageSrc} alt={block.image?.alt || block.label || "Document image"} style={{ objectFit: fit, objectPosition, opacity: block.image?.opacity || 1 }} onError={() => { setImageFailed(true); onImageError(`${block.type === "logo" ? "Tenant logo" : "Approved image"} could not be loaded. Re-upload the approved image.`); }} /> : <button type="button" className="flex h-full w-full flex-col items-center justify-center gap-1 bg-slate-100 text-[9px] font-black text-slate-500" onClick={onImageUpload}><ImageIcon className="size-6" /><span>{imageFailed ? "Re-upload image" : block.type === "logo" ? "Tenant logo" : "Add image"}</span></button>;
   }
-  if (block.table?.rows?.length) return <StandardTable><table className="w-full border-collapse text-[9px]"><tbody>{block.table.rows.map((row, index) => <tr key={index}>{row.map((cell, cellIndex) => <td key={cellIndex} className="border border-slate-300 p-1">{renderFriendlyText(cell)}</td>)}</tr>)}</tbody></table></StandardTable>;
+  if (block.table?.rows?.length) return <table className="w-full border-collapse text-[9px]"><tbody>{block.table.rows.map((row, index) => <tr key={index}>{row.map((cell, cellIndex) => <td key={cellIndex} className="border border-slate-300 p-1">{renderFriendlyText(cell)}</td>)}</tr>)}</tbody></table>;
   const value = block.content || block.text || (block.binding ? `{{${block.binding}}}` : "");
   if (!value && isTextBlock(block)) return <div className="whitespace-pre-wrap break-words italic text-slate-400">Type to edit</div>;
   return <div className="whitespace-pre-wrap break-words">{block.richText ? renderEditorRichText(block.richText) : renderFriendlyText(value)}</div>;

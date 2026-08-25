@@ -1,4 +1,3 @@
-import { StandardTable } from "@/components/standard-table";
 import {
   BillingFrequency,
   PlatformInvoiceStatus,
@@ -168,7 +167,7 @@ export default async function TenantBillingPage({
           {subscription && <form action={generateTenantInvoiceAction}><input type="hidden" name="tenantId" value={tenant.id} /><button className="btn-primary">Generate bill</button></form>}
         </div>
         <div className="mt-5 overflow-auto">
-          <StandardTable><table className="min-w-[1040px] w-full text-sm">
+          <table className="min-w-[1040px] w-full text-sm">
             <thead className="bg-slate-50 text-left"><tr><th className="p-3">Invoice</th><th className="p-3">Coverage</th><th className="p-3">Issued / Due</th><th className="p-3">Total</th><th className="p-3">Paid</th><th className="p-3">Balance</th><th className="p-3">Status</th><th className="p-3">Tenant payment</th></tr></thead>
             <tbody>{invoices.map((invoice) => (
               <tr key={invoice.id} className="border-t">
@@ -182,7 +181,7 @@ export default async function TenantBillingPage({
                 <td className="p-3">{[PlatformInvoiceStatus.OPEN, PlatformInvoiceStatus.PARTIALLY_PAID, PlatformInvoiceStatus.OVERDUE].includes(invoice.status) ? <Link className="font-black text-blue-700 hover:underline" href={platformInvoicePaymentUrl(invoice.id)} target="_blank">Open pay link</Link> : <span className="text-slate-400">Closed</span>}</td>
               </tr>
             ))}</tbody>
-          </table></StandardTable>
+          </table>
         </div>
         {!invoices.length && <p className="mt-5 rounded-xl border border-dashed p-8 text-center text-sm text-slate-500">No platform invoices yet.</p>}
       </section>

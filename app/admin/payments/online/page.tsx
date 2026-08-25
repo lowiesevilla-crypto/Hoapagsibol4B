@@ -1,4 +1,3 @@
-import { StandardTable } from "@/components/standard-table";
 import Link from "next/link";
 import { PageHeader } from "@/components/page-header";
 import { PaymentsNav } from "@/components/payments-nav";
@@ -97,7 +96,7 @@ export default async function OnlinePaymentStatusPage({ searchParams }: { search
       </div>
 
       {report.items.length === 0 ? <div className="px-6 py-14 text-center"><p className="font-black text-ink">No online payments match these filters.</p><p className="mt-1 text-sm text-slate-500">Clear the filters or change the date/status criteria.</p></div> : <div className="max-h-[70vh] overflow-auto">
-        <StandardTable><table className="data-table min-w-[1050px]">
+        <table className="data-table min-w-[1050px]">
           <thead className="sticky top-0 z-10 bg-white shadow-sm"><tr><th>Homeowner</th><th>Reference</th><th className="text-right">Amount</th><th>Gateway status</th><th>Finance</th><th>Created</th><th>Settlement</th></tr></thead>
           <tbody>{report.items.map((payment) => <tr key={payment.requestId} className="odd:bg-white even:bg-slate-50/60">
             <td><p className="font-bold text-ink">{payment.homeownerName}</p><p className="text-xs text-slate-500">{payment.property}</p></td>
@@ -108,7 +107,7 @@ export default async function OnlinePaymentStatusPage({ searchParams }: { search
             <td className="whitespace-nowrap">{shortDate(new Date(payment.createdAt))}</td>
             <td><Link className="btn-secondary min-h-9 whitespace-nowrap px-3 py-1.5" href={`/admin/payments/online/${encodeURIComponent(payment.requestId)}`}>Trace settlement</Link></td>
           </tr>)}</tbody>
-        </table></StandardTable>
+        </table>
       </div>}
 
       <div className="flex flex-col gap-3 border-t border-slate-200 px-4 py-4 sm:flex-row sm:items-center sm:justify-between">

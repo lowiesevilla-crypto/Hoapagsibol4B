@@ -1,4 +1,3 @@
-import { StandardTable } from "@/components/standard-table";
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { RecurringChargeType } from "@prisma/client";
@@ -43,7 +42,7 @@ export default async function BillingExemptionsPage({ searchParams }: { searchPa
         <div><h2 className="text-lg font-black">Exemption history</h2><p className="text-sm text-slate-500">Search by homeowner, property, reason, or resolution.</p></div>
         <div className="flex flex-wrap gap-2"><SearchInput placeholder="Search exemptions" /><Link className={`btn-secondary min-h-9 px-3 py-1.5 text-xs ${query.status !== "all" && query.status !== "inactive" ? "border-pine-500" : ""}`} href="/admin/settings/billing-exemptions">Active</Link><Link className={`btn-secondary min-h-9 px-3 py-1.5 text-xs ${query.status === "inactive" ? "border-pine-500" : ""}`} href="/admin/settings/billing-exemptions?status=inactive">Inactive</Link><Link className={`btn-secondary min-h-9 px-3 py-1.5 text-xs ${query.status === "all" ? "border-pine-500" : ""}`} href="/admin/settings/billing-exemptions?status=all">All</Link></div>
       </div>
-      <div className="table-wrap shadow-none"><StandardTable><table className="data-table min-w-[1050px]"><thead><tr><th>Homeowner</th><th>Property</th><th>Period</th><th>Reason</th><th>Resolution</th><th>Approved by</th><th>Status</th><th>Created</th><th></th></tr></thead><tbody>{exemptions.map((item) => {
+      <div className="table-wrap shadow-none"><table className="data-table min-w-[1050px]"><thead><tr><th>Homeowner</th><th>Property</th><th>Period</th><th>Reason</th><th>Resolution</th><th>Approved by</th><th>Status</th><th>Created</th><th></th></tr></thead><tbody>{exemptions.map((item) => {
         const fallback = periodFromDate(item.billingMonth);
         const startMonth = item.startMonth ?? fallback.month;
         const startYear = item.startYear ?? fallback.year;
@@ -51,7 +50,7 @@ export default async function BillingExemptionsPage({ searchParams }: { searchPa
         const endYear = item.endYear ?? fallback.year;
         const haystack = `${item.homeowner.user.name} ${item.homeowner.block} ${item.homeowner.lot} ${item.reason} ${item.resolutionReference ?? ""} ${item.approvedBy ?? ""}`.toLowerCase();
         return <tr key={item.id} data-search={haystack}><td className="font-bold">{item.homeowner.user.name}</td><td>B{item.homeowner.block} L{item.homeowner.lot}</td><td>{monthName(startMonth)} {startYear} to {monthName(endMonth)} {endYear}</td><td>{item.reason}</td><td>{item.resolutionReference || "-"}</td><td>{item.approvedBy || item.createdBy.name}</td><td>{item.active ? "Active" : "Inactive"}</td><td><p>{shortDate(item.createdAt)}</p><p className="text-xs text-slate-400">{item.createdBy.name}</p></td><td>{item.active && <form action={deactivateBillingExemptionAction} className="flex justify-end"><input type="hidden" name="id" value={item.id} /><ConfirmSubmitButton className="btn-danger min-h-8 px-3 py-1 text-xs" message="Deactivate this exemption? Historical skip records will remain in audit logs.">Deactivate</ConfirmSubmitButton></form>}</td></tr>;
-      })}{!exemptions.length && <tr><td colSpan={9} className="py-12 text-center text-slate-500">No exemptions found.</td></tr>}</tbody></table></StandardTable></div>
+      })}{!exemptions.length && <tr><td colSpan={9} className="py-12 text-center text-slate-500">No exemptions found.</td></tr>}</tbody></table></div>
     </section>
   </>;
 }

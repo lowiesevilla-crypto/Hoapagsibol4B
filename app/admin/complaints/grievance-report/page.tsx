@@ -1,4 +1,3 @@
-import { StandardTable } from "@/components/standard-table";
 import Link from "next/link";
 import { ComplaintPrivacyMode, ComplaintStatus, Role } from "@prisma/client";
 import { PageHeader } from "@/components/page-header";
@@ -73,10 +72,10 @@ export default async function GrievanceReportPage({ searchParams }: { searchPara
     </section>
 
     <section className="card overflow-x-auto">
-      <StandardTable><table className="w-full min-w-[1180px] text-sm">
+      <table className="w-full min-w-[1180px] text-sm">
         <thead><tr className="border-b border-slate-200 text-left text-xs uppercase text-slate-500"><th className="pb-3">Complaint</th><th className="pb-3">Privacy</th><th className="pb-3">Category</th><th className="pb-3">Submitted</th><th className="pb-3">Handler</th><th className="pb-3">Complaint</th><th className="pb-3">Grievance</th><th className="pb-3">Verification</th><th className="pb-3">Board review policy</th></tr></thead>
         <tbody>{report.rows.map((item) => <tr key={item.complaintId} className="border-b border-slate-100 align-top"><td className="py-3 pr-4"><Link className="font-black text-pine-800 hover:underline" href={`/admin/complaints/${item.complaintId}`}>{item.title}</Link><p className="font-mono text-xs text-slate-500">{item.complaintNumber} · {item.publicReference}</p></td><td className="py-3 pr-4">{complaintPrivacyLabel(item.privacyMode as ComplaintPrivacyMode)}</td><td className="py-3 pr-4">{item.categoryName || "General"}</td><td className="py-3 pr-4">{shortDate(item.submittedAt)}</td><td className="py-3 pr-4">{item.assignedToName || "Unassigned"}</td><td className="py-3 pr-4"><StatusBadge status={item.complaintStatus} /></td><td className="py-3 pr-4"><span className="badge badge-info">{item.grievanceStatus ? label(item.grievanceStatus) : "Not initiated"}</span></td><td className="py-3 pr-4"><VerificationBadge status={item.verificationStatus} required={Boolean(item.verificationRequired)} blocked={Boolean(item.blocksEnforcement)} /></td><td className="py-3">{Boolean(item.boardReviewRequired) ? <span className="badge badge-warning">Required by policy</span> : <span className="badge">Not flagged</span>}</td></tr>)}</tbody>
-      </table></StandardTable>
+      </table>
       {report.rows.length === 0 && <p className="py-10 text-center text-sm text-slate-500">No grievance foundation records match the selected filters.</p>}
     </section>
 

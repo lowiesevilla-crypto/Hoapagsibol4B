@@ -1,4 +1,3 @@
-import { StandardTable } from "@/components/standard-table";
 import Link from "next/link";
 import { Download, Printer, ReceiptText } from "lucide-react";
 import { PayrollStatus, Role } from "@prisma/client";
@@ -48,7 +47,7 @@ export default async function EmployeePayslipsPage() {
         </div>
       </div>
       <div className="table-wrap shadow-none">
-        <StandardTable><table className="data-table">
+        <table className="data-table">
           <thead><tr><th>Payroll Period</th><th>Gross Pay</th><th>Deductions</th><th>Net Pay</th><th>Payment Date</th><th>Status</th><th></th></tr></thead>
           <tbody>
             {payslips.map((slip) => <tr key={slip.id}>
@@ -67,7 +66,7 @@ export default async function EmployeePayslipsPage() {
             </tr>)}
             {!payslips.length && <tr><td colSpan={7} className="py-12 text-center text-slate-500"><ReceiptText className="mx-auto mb-3 size-8 text-slate-300" />No paid payslips are available yet.</td></tr>}
           </tbody>
-        </table></StandardTable>
+        </table>
       </div>
     </section>
   </>;

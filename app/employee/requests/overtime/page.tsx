@@ -1,4 +1,3 @@
-import { StandardTable } from "@/components/standard-table";
 import Link from "next/link";
 import { Clock3, FileCheck2, Hourglass } from "lucide-react";
 import { OvertimeStatus, Role } from "@prisma/client";
@@ -101,7 +100,7 @@ export default async function EmployeeOvertimeRequestsPage() {
           {!requests.length && <div className="rounded-2xl bg-slate-50 p-8 text-center text-sm text-slate-500"><Hourglass className="mx-auto mb-2 size-7 text-slate-300" />No overtime requests yet.</div>}
         </div>
         <div className="hidden table-wrap shadow-none md:block">
-          <StandardTable><table className="data-table">
+          <table className="data-table">
             <thead><tr><th>Date</th><th>Hours</th><th>Reason</th><th>Status</th><th>Reviewed</th></tr></thead>
             <tbody>
               {requests.map((item) => <tr key={item.id}>
@@ -113,7 +112,7 @@ export default async function EmployeeOvertimeRequestsPage() {
               </tr>)}
               {!requests.length && <tr><td colSpan={5} className="py-12 text-center text-slate-500"><FileCheck2 className="mx-auto mb-2 size-7 text-slate-300" />No overtime requests yet.</td></tr>}
             </tbody>
-          </table></StandardTable>
+          </table>
         </div>
       </section>
     </section>

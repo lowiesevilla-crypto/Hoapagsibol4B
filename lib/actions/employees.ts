@@ -223,11 +223,36 @@ export async function saveEmployeeAction(formData: FormData) {
       throw new Error("Temporary password must be at least 8 characters when enabling a new login account.");
     }
 
-    const employee = await tx.employeeProfile.create({ data: profileValues });
-    const version = await persistEmployeeCompensationVersion(tx, {
-      tenantId: user.tenantId, employeeId: employee.id, hireDate: employeeHireDate, actorId: user.id, configuration,
+    // Create the employee profile and its first effective-dated compensation row
+    // as one nested write. Creating EmployeeCompensation in a second statement in
+    // the same interactive transaction makes the tenant-boundary relation check use
+    // the base client, which cannot see the uncommitted EmployeeProfile yet and
+    // incorrectly rejects the new employee as a cross-tenant relation.
+    const employee = await tx.employeeProfile.create({
+      data: {
+        ...profileValues,
+        compensations: {
+          create: {
+            tenantId: user.tenantId,
+            effectiveFrom: configuration.effectiveFrom,
+            effectiveTo: null,
+            compensationBasis: configuration.compensationBasis,
+            payFrequency: configuration.payFrequency,
+            attendancePolicy: configuration.attendancePolicy,
+            rate: configuration.rate,
+            standardWorkDays: configuration.standardWorkDays,
+            standardHoursPerDay: configuration.standardHoursPerDay,
+            fixedAllowance: configuration.fixedAllowance,
+            fixedDeduction: configuration.fixedDeduction,
+            createdById: user.id,
+          },
+        },
+      },
+      include: { compensations: { select: { id: true }, take: 1 } },
     });
-    return { employeeId: employee.id, existingUserId: null, version };
+    const compensation = employee.compensations[0];
+    if (!compensation) throw new Error("Employee payroll configuration could not be created.");
+    return { employeeId: employee.id, existingUserId: null, version: { id: compensation.id, created: true } };
   }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
 
   if (result.existingUserId || createEmployeeLogin) {

@@ -33,6 +33,7 @@ export type PayMongoOnlineReportPage = {
 };
 
 const pageSizes = new Set([25, 50, 100]);
+const reconciliationBatchSize = 8;
 
 function positiveInt(value: string | undefined, fallback: number) {
   const parsed = Number.parseInt(value || "", 10);
@@ -75,19 +76,6 @@ export async function getTenantPayMongoOnlineReport(input: {
   const from = parseStartDate(input.query.from);
   const to = parseEndDate(input.query.to);
 
-  const homeownerIds = q ? (await prisma.homeownerProfile.findMany({
-    where: {
-      tenantId: input.tenantId,
-      OR: [
-        { block: { contains: q } },
-        { lot: { contains: q } },
-        { user: { is: { name: { contains: q } } } },
-      ],
-    },
-    select: { id: true },
-    take: 5000,
-  })).map((row) => row.id) : [];
-
   const where: Prisma.PaymentRequestWhereInput = {
     tenantId: input.tenantId,
     proofContentType: PAYMONGO_PAYMENT_REQUEST_MARKER,
@@ -101,7 +89,9 @@ export async function getTenantPayMongoOnlineReport(input: {
       OR: [
         { id: { contains: q } },
         { referenceNumber: { contains: q } },
-        ...(homeownerIds.length ? [{ homeownerId: { in: homeownerIds } }] : []),
+        { homeowner: { tenantId: input.tenantId, block: { contains: q } } },
+        { homeowner: { tenantId: input.tenantId, lot: { contains: q } } },
+        { homeowner: { tenantId: input.tenantId, user: { name: { contains: q } } } },
       ],
     } : {}),
   };
@@ -138,8 +128,11 @@ export async function getTenantPayMongoOnlineReport(input: {
     },
   });
   const leadersById = new Map(leaders.map((row) => [row.id, row]));
+  type LeaderRow = (typeof leaders)[number];
 
-  const orderedLeaders = candidateLeaderIds.map((id) => leadersById.get(id)).filter((row): row is NonNullable<typeof row> => Boolean(row));
+  const orderedLeaders = candidateLeaderIds
+    .map((id) => leadersById.get(id))
+    .filter((row): row is LeaderRow => Boolean(row));
   const tracked = orderedLeaders.length;
   const reconciled = orderedLeaders.filter((row) => row.status === PaymentRequestStatus.APPROVED).length;
   const filteredLeaders = orderedLeaders.filter((row) => {
@@ -153,14 +146,13 @@ export async function getTenantPayMongoOnlineReport(input: {
   const page = Math.min(requestedPage, totalPages);
   const pageLeaders = filteredLeaders.slice((page - 1) * pageSize, page * pageSize);
 
-  const activities = [] as Awaited<ReturnType<typeof reconcileHomeownerPayMongoCheckout>>[];
-  for (const leader of pageLeaders) {
+  async function reconcileLeader(leader: LeaderRow) {
     try {
-      activities.push(await reconcileHomeownerPayMongoCheckout({ requestId: leader.id, tenantId: input.tenantId }));
+      return await reconcileHomeownerPayMongoCheckout({ requestId: leader.id, tenantId: input.tenantId });
     } catch {
       const state = classifyPayMongoGatewayState({ localStatus: leader.status, reviewRemarks: leader.reviewRemarks });
       const presentation = paymongoGatewayPresentation(state);
-      activities.push({
+      return {
         requestId: leader.id,
         homeownerId: leader.homeownerId,
         referenceNumber: leader.referenceNumber || `HOP-${leader.id}`,
@@ -169,13 +161,19 @@ export async function getTenantPayMongoOnlineReport(input: {
         label: presentation.label,
         tone: presentation.tone,
         localStatus: leader.status,
-        financeStatus: leader.status === PaymentRequestStatus.APPROVED ? "RECONCILED" : "NOT_POSTED",
+        financeStatus: leader.status === PaymentRequestStatus.APPROVED ? "RECONCILED" as const : "NOT_POSTED" as const,
         canResume: presentation.canResume,
         terminal: presentation.terminal,
         createdAt: leader.createdAt.toISOString(),
         updatedAt: leader.updatedAt.toISOString(),
-      });
+      };
     }
+  }
+
+  const activities: Awaited<ReturnType<typeof reconcileHomeownerPayMongoCheckout>>[] = [];
+  for (let index = 0; index < pageLeaders.length; index += reconciliationBatchSize) {
+    const batch = pageLeaders.slice(index, index + reconciliationBatchSize);
+    activities.push(...await Promise.all(batch.map(reconcileLeader)));
   }
 
   const currentHomeownerIds = [...new Set(activities.map((row) => row.homeownerId))];

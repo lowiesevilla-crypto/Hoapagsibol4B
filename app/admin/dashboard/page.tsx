@@ -64,17 +64,17 @@ export default async function AdminDashboard() {
     </section>
     <section className="card mt-6">
       <div className="mb-4"><h2 className="text-lg font-black">Recent other collections</h2><p className="text-sm text-slate-500">Fees and refundable bonds outside monthly dues.</p></div>
-      <div className="table-wrap shadow-none"><StandardTable><table className="data-table"><thead><tr><th>Payer</th><th>Type</th><th>Date</th><th>Treatment</th><th className="text-right">Amount</th></tr></thead><tbody>
+      <StandardTable><div className="table-wrap shadow-none"><table className="data-table"><thead><tr><th>Payer</th><th>Type</th><th>Date</th><th>Treatment</th><th className="text-right">Amount</th></tr></thead><tbody>
         {recentCollections.map((item) => <tr key={item.id}><td className="font-bold">{item.homeowner?.user.name ?? item.contractor?.companyName ?? "Unknown"}</td><td>{collectionLabel(item.type, item.description)}</td><td>{shortDate(item.collectionDate)}</td><td><StatusBadge status={item.refundable ? item.refundStatus : "INCOME"} /></td><td className="text-right font-black text-pine-700">{money(item.amount)}</td></tr>)}
         {!recentCollections.length && <tr><td colSpan={5} className="py-10 text-center text-slate-500">No other collections have been recorded yet.</td></tr>}
-      </tbody></table></StandardTable></div>
+      </tbody></table></div></StandardTable>
     </section>
     <section className="card mt-6">
       <div className="mb-4"><h2 className="text-lg font-black">Recent payments</h2><p className="text-sm text-slate-500">Latest receipts recorded by the association.</p></div>
-      <div className="table-wrap shadow-none"><StandardTable><table className="data-table"><thead><tr><th>Homeowner</th><th>Billing month</th><th>Date</th><th>Method</th><th className="text-right">Amount</th></tr></thead><tbody>
+      <StandardTable><div className="table-wrap shadow-none"><table className="data-table"><thead><tr><th>Homeowner</th><th>Billing month</th><th>Date</th><th>Method</th><th className="text-right">Amount</th></tr></thead><tbody>
         {recentPayments.map((payment) => <tr key={payment.id}><td><p className="font-bold">{payment.homeowner.user.name}</p><p className="text-xs text-slate-400">Block {payment.homeowner.block}, Lot {payment.homeowner.lot}</p></td><td>{paymentCoverageLabel(payment)}</td><td>{shortDate(payment.paymentDate)}</td><td><StatusBadge status={payment.method.replaceAll("_", " ")} /></td><td className="text-right font-black text-pine-700">{money(payment.amount)}</td></tr>)}
         {!recentPayments.length && <tr><td colSpan={5} className="py-10 text-center text-slate-500">No payments have been recorded yet.</td></tr>}
-      </tbody></table></StandardTable></div>
+      </tbody></table></div></StandardTable>
     </section>
   </>;
 }

@@ -13,6 +13,11 @@ import { inputDate } from "@/lib/utils";
 
 type RenterOption = { id: string; fullName: string; address: string | null; email: string | null; phone: string | null };
 
+function prependMissingById<T extends { id: string }>(rows: T[], requiredRows: T[]) {
+  const existingIds = new Set(rows.map((row) => row.id));
+  return [...requiredRows.filter((row) => !existingIds.has(row.id)), ...rows];
+}
+
 export default async function EditPettyCashVoucherPage({
   params,
   searchParams,
@@ -28,76 +33,119 @@ export default async function EditPettyCashVoucherPage({
   if (!record) notFound();
   const { voucher, items } = record;
 
-  const currentCategoryIds = items.map((item) => item.expenseCategoryId);
-  const currentEmployeeId = voucher.employeeId || (voucher.payeeType === "EMPLOYEE" ? voucher.payeeEntityId : null);
+  const currentCategoryIds = Array.from(new Set(items.map((item) => item.expenseCategoryId)));
+  const currentEmployeeIds = Array.from(new Set([
+    voucher.employeeId,
+    voucher.payeeType === "EMPLOYEE" ? voucher.payeeEntityId : null,
+  ].filter((value): value is string => Boolean(value))));
   const currentHomeownerId = voucher.payeeType === "HOMEOWNER" ? voucher.payeeEntityId : null;
   const currentContractorId = voucher.payeeType === "CONTRACTOR" ? voucher.payeeEntityId : null;
   const currentRenterId = voucher.payeeType === "RENTER" ? voucher.payeeEntityId : null;
   const currentOfficerId = voucher.approvedByType === "OFFICER" ? voucher.approvedById : null;
 
+  // Load the searchable active directory with bounded queries. Saved voucher rows are
+  // hydrated separately below so a current selection can never disappear because a
+  // large tenant exceeded one of these result caps.
   const [expenseTypes, employees, homeowners, contractors, officers, renters] = await Promise.all([
     prisma.expenseCategory.findMany({
-      where: { tenantId: admin.tenantId, OR: [{ active: true }, ...(currentCategoryIds.length ? [{ id: { in: currentCategoryIds } }] : [])] },
+      where: { tenantId: admin.tenantId, active: true },
       orderBy: { name: "asc" },
       take: 1000,
     }),
     prisma.employeeProfile.findMany({
-      where: { tenantId: admin.tenantId, OR: [{ status: "ACTIVE" }, ...(currentEmployeeId ? [{ id: currentEmployeeId }] : [])] },
+      where: { tenantId: admin.tenantId, status: "ACTIVE" },
       orderBy: { name: "asc" },
       take: 5000,
     }),
     prisma.homeownerProfile.findMany({
-      where: { tenantId: admin.tenantId, OR: [{ status: "ACTIVE" }, ...(currentHomeownerId ? [{ id: currentHomeownerId }] : [])] },
+      where: { tenantId: admin.tenantId, status: "ACTIVE" },
       include: { user: true },
       orderBy: { user: { name: "asc" } },
       take: 5000,
     }),
     prisma.contractorProfile.findMany({
-      where: { tenantId: admin.tenantId, OR: [{ status: "ACTIVE" }, ...(currentContractorId ? [{ id: currentContractorId }] : [])] },
+      where: { tenantId: admin.tenantId, status: "ACTIVE" },
       orderBy: { companyName: "asc" },
       take: 5000,
     }),
     prisma.organizationOfficer.findMany({
-      where: { tenantId: admin.tenantId, OR: [{ active: true, archivedAt: null }, ...(currentOfficerId ? [{ id: currentOfficerId }] : [])] },
+      where: { tenantId: admin.tenantId, active: true, archivedAt: null },
       orderBy: [{ displayOrder: "asc" }, { fullName: "asc" }],
       take: 500,
     }),
-    currentRenterId
+    prisma.$queryRaw<RenterOption[]>(Prisma.sql`
+      SELECT id, fullName, address, email, phone
+      FROM Renter
+      WHERE tenantId=${admin.tenantId} AND status='ACTIVE'
+      ORDER BY fullName
+      LIMIT 5000
+    `),
+  ]);
+
+  const missingCategoryIds = currentCategoryIds.filter((currentId) => !expenseTypes.some((item) => item.id === currentId));
+  const missingEmployeeIds = currentEmployeeIds.filter((currentId) => !employees.some((item) => item.id === currentId));
+
+  const [currentExpenseTypes, currentEmployees, currentHomeowner, currentContractor, currentOfficer, currentRenters] = await Promise.all([
+    prisma.expenseCategory.findMany({
+      where: { tenantId: admin.tenantId, id: { in: missingCategoryIds } },
+      orderBy: { name: "asc" },
+    }),
+    prisma.employeeProfile.findMany({
+      where: { tenantId: admin.tenantId, id: { in: missingEmployeeIds } },
+      orderBy: { name: "asc" },
+    }),
+    currentHomeownerId && !homeowners.some((item) => item.id === currentHomeownerId)
+      ? prisma.homeownerProfile.findFirst({
+          where: { id: currentHomeownerId, tenantId: admin.tenantId },
+          include: { user: true },
+        })
+      : Promise.resolve(null),
+    currentContractorId && !contractors.some((item) => item.id === currentContractorId)
+      ? prisma.contractorProfile.findFirst({
+          where: { id: currentContractorId, tenantId: admin.tenantId },
+        })
+      : Promise.resolve(null),
+    currentOfficerId && !officers.some((item) => item.id === currentOfficerId)
+      ? prisma.organizationOfficer.findFirst({
+          where: { id: currentOfficerId, tenantId: admin.tenantId },
+        })
+      : Promise.resolve(null),
+    currentRenterId && !renters.some((item) => item.id === currentRenterId)
       ? prisma.$queryRaw<RenterOption[]>(Prisma.sql`
           SELECT id, fullName, address, email, phone
           FROM Renter
-          WHERE tenantId=${admin.tenantId} AND (status='ACTIVE' OR id=${currentRenterId})
-          ORDER BY fullName
-          LIMIT 5000
+          WHERE tenantId=${admin.tenantId} AND id=${currentRenterId}
+          LIMIT 1
         `)
-      : prisma.$queryRaw<RenterOption[]>(Prisma.sql`
-          SELECT id, fullName, address, email, phone
-          FROM Renter
-          WHERE tenantId=${admin.tenantId} AND status='ACTIVE'
-          ORDER BY fullName
-          LIMIT 5000
-        `),
+      : Promise.resolve<RenterOption[]>([]),
   ]);
 
-  const employeePayees = employees.map((employee) => ({
+  const expenseTypeRows = prependMissingById(expenseTypes, currentExpenseTypes);
+  const employeeRows = prependMissingById(employees, currentEmployees);
+  const homeownerRows = prependMissingById(homeowners, currentHomeowner ? [currentHomeowner] : []);
+  const contractorRows = prependMissingById(contractors, currentContractor ? [currentContractor] : []);
+  const officerRows = prependMissingById(officers, currentOfficer ? [currentOfficer] : []);
+  const renterRows = prependMissingById(renters, currentRenters);
+
+  const employeePayees = employeeRows.map((employee) => ({
     id: employee.id,
     label: `${employee.name} · ${employee.employeeNumber}`,
     address: employee.address || "",
     search: `${employee.name} ${employee.employeeNumber} ${employee.email || ""} ${employee.phone || ""}`.toLowerCase(),
   }));
-  const homeownerPayees = homeowners.map((homeowner) => ({
+  const homeownerPayees = homeownerRows.map((homeowner) => ({
     id: homeowner.id,
     label: `${homeowner.user.name} · Block ${homeowner.block} Lot ${homeowner.lot}`,
     address: homeowner.address || "",
     search: `${homeowner.user.name} ${homeowner.user.email} ${homeowner.accountNumber || ""} block ${homeowner.block} lot ${homeowner.lot} ${homeowner.phase || ""} ${homeowner.address || ""}`.toLowerCase(),
   }));
-  const renterPayees = renters.map((renter) => ({
+  const renterPayees = renterRows.map((renter) => ({
     id: renter.id,
     label: renter.fullName,
     address: renter.address || "",
     search: `${renter.fullName} ${renter.email || ""} ${renter.phone || ""} ${renter.address || ""}`.toLowerCase(),
   }));
-  const contractorPayees = contractors.map((contractor) => ({
+  const contractorPayees = contractorRows.map((contractor) => ({
     id: contractor.id,
     label: contractor.companyName,
     address: contractor.address || "",
@@ -130,8 +178,8 @@ export default async function EditPettyCashVoucherPage({
         items: items.map((item) => ({ categoryId: item.expenseCategoryId, particular: item.particular, amount: String(item.amount) })),
       }}
       payees={{ EMPLOYEE: employeePayees, HOMEOWNER: homeownerPayees, RENTER: renterPayees, CONTRACTOR: contractorPayees }}
-      expenseTypes={expenseTypes.map((item) => ({ id: item.id, name: item.name }))}
-      officers={officers.map((officer) => ({ id: officer.id, label: officer.fullName, position: officer.position }))}
+      expenseTypes={expenseTypeRows.map((item) => ({ id: item.id, name: item.name }))}
+      officers={officerRows.map((officer) => ({ id: officer.id, label: officer.fullName, position: officer.position }))}
       employees={employeePayees.map((item) => ({ id: item.id, label: item.label, search: item.search }))}
       currentAdminName={admin.name}
     />

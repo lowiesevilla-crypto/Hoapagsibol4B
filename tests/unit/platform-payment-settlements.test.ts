@@ -16,7 +16,7 @@ test("platform settlement reconciliation uses existing payment audit evidence an
   assert.match(service, /attributes\.payment_id/);
   assert.match(service, /available_at/);
   assert.match(service, /credited_at/);
-  assert.match(service, /No fallback transfer/iu);
+  assert.doesNotMatch(service, /\/transfers(?:\/|`|\")/);
 });
 
 test("platform payment settlements are visible from platform navigation and remain read only", async () => {

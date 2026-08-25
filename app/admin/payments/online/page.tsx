@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { PageHeader } from "@/components/page-header";
 import { requirePermission } from "@/lib/authorization/guards";
 import { Permission } from "@/lib/authorization/permissions";
@@ -36,7 +37,7 @@ export default async function OnlinePaymentStatusPage() {
 
     {payments.length === 0 ? <section className="card text-center"><p className="font-black text-ink">No PayMongo homeowner attempts yet.</p><p className="mt-1 text-sm text-slate-500">Online payment attempts will appear here after homeowners start checkout.</p></section> : <div className="table-wrap">
       <table className="data-table">
-        <thead><tr><th>Homeowner</th><th>Reference</th><th>Amount</th><th>Gateway status</th><th>Finance</th><th>Created</th></tr></thead>
+        <thead><tr><th>Homeowner</th><th>Reference</th><th>Amount</th><th>Gateway status</th><th>Finance</th><th>Created</th><th>Settlement</th></tr></thead>
         <tbody>{payments.map((payment) => <tr key={payment.requestId}>
           <td><p className="font-bold text-ink">{payment.homeownerName}</p><p className="text-xs text-slate-500">{payment.property}</p></td>
           <td className="font-mono text-xs">{payment.referenceNumber}</td>
@@ -44,6 +45,7 @@ export default async function OnlinePaymentStatusPage() {
           <td><span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-black ${toneClass[payment.tone]}`}>{payment.label}</span></td>
           <td><span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-black ${payment.financeStatus === "RECONCILED" ? "bg-emerald-100 text-emerald-800" : "bg-slate-100 text-slate-700"}`}>{payment.financeStatus === "RECONCILED" ? "Posted & reconciled" : "Not posted"}</span></td>
           <td>{shortDate(new Date(payment.createdAt))}</td>
+          <td><Link className="btn-secondary whitespace-nowrap" href={`/admin/payments/online/${encodeURIComponent(payment.requestId)}`}>Trace settlement</Link></td>
         </tr>)}</tbody>
       </table>
     </div>}

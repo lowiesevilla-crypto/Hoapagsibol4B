@@ -160,6 +160,8 @@ Implementation branch: `feat/petty-cash-voucher-urgent-fixes-20260824`. This sec
 - Tenant, homeowner, child account, reference, identifiers, currency, amount, and fee metadata must reconcile before posting.
 - HOAHub subscription billing credentials remain separate from homeowner-collection credentials.
 - Platform convenience fee routing is platform-controlled; tenant admins cannot alter it.
+- Settlement visibility candidate `codex/paymongo-settlement-trace-20260825` adds a read-only `/admin/payments/online/[id]` trace for authorized tenant payment managers. It resolves the opaque request under authenticated tenant scope, retrieves Checkout evidence with the snapshotted child `Account-ID`, separates HOA principal/platform fee/processing fee, and matches generated payout transactions only by exact organization plus original Payment ID. Aggregate upcoming schedules must remain labeled as estimates and never be represented as proof that an individual payment is included.
+- The settlement trace must never return PayMongo credentials, authorization headers, bank-account details, or unfiltered parent/cross-tenant payout data. Its implementation status is `IMPLEMENTED` locally and remains pending exact-head CI, review, merge, deployment, and authenticated production UAT. See `docs/payments/PAYMONGO_SETTLEMENT_TRACE_IMPLEMENTATION.md`.
 
 ## Document Platform Architecture
 

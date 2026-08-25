@@ -1,7 +1,7 @@
 # PAGSIBOL VILLAGE PH2 4B EAST HOA Portal - User Manual
 
 Generated: June 24, 2026
-Last revised: August 24, 2026 (payroll completion verified in PR #166; production availability requires confirmed deployment)
+Last revised: August 25, 2026 (PayMongo settlement trace documented as an implementation candidate; production availability requires exact-head verification, merge, deployment, and authenticated UAT)
 
 This manual explains how officers and homeowners use the portal. Screenshots were captured from the current clean database, so many tables show empty states until real homeowners, bills, payments, employees, and records are added.
 
@@ -130,6 +130,19 @@ Admin can:
 - Review QR/GCash submissions from homeowners.
 - Approve valid submissions to create receipt and update balances.
 - Reject invalid submissions with review remarks.
+
+For a tenant using PayMongo Online, an authorized Payment Manager can open **Payments → Online payment status** to review server-verified Checkout and HOAHub posting state. Select **Trace settlement** for one attempt to see:
+
+- Checkout Session ID and original PayMongo Payment ID;
+- HOA principal routed to the tenant child account;
+- HOAHub convenience fee routed to the platform parent account;
+- PayMongo processing fee and total paid;
+- split-routing evidence;
+- exact parent/child payout status when PayMongo has generated a payout transaction linked to that Payment ID.
+
+An **Upcoming payout** amount is an account-level estimate until PayMongo generates a payout. HOAHub labels it as an estimate and does not claim that the selected payment is included. Confirm the tenant principal in PayMongo **Linked Accounts → Child payouts** and the HOAHub fee in PayMongo **Payouts → Transaction Logs**. The trace is read-only and cannot create, refund, transfer, or release money.
+
+Settlement Trace is an implementation candidate as of August 25, 2026. Do not treat this procedure as production-live until the release gate and authenticated UAT are complete.
 
 Payment methods include cash, bank transfer, GCash, check, and other.
 

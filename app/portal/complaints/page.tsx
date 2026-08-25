@@ -1,3 +1,4 @@
+import { StandardTable } from "@/components/standard-table";
 import Link from "next/link";
 import { ComplaintStatus } from "@prisma/client";
 import { MessageSquarePlus, Search } from "lucide-react";
@@ -47,10 +48,10 @@ export default async function PortalComplaintsPage({ searchParams }: { searchPar
           </section>
           <section className="hidden rounded-3xl border border-pine-100 bg-white shadow-soft md:block">
             <div className="table-wrap rounded-3xl shadow-none">
-              <table className="data-table min-w-[860px]">
+              <StandardTable><table className="data-table min-w-[860px]">
                 <thead><tr><th>Complaint</th><th>Privacy</th><th>Category</th><th>Submitted</th><th>Status</th><th>Activity</th><th>Action</th></tr></thead>
                 <tbody>{filtered.map((item) => <tr key={item.id}><td><p className="font-black">{item.title}</p><p className="font-mono text-xs text-slate-500">{item.complaintNumber}</p></td><td>{complaintPrivacyLabel(item.privacyMode)}</td><td>{item.category?.name || "General"}</td><td>{shortDate(item.submittedAt)}</td><td><StatusBadge status={item.status} /></td><td className="text-xs text-slate-500">{item._count.messages} messages | {item._count.attachments} attachments</td><td><Link className="btn-secondary min-h-9 px-3 py-1.5 text-xs" href={`/portal/complaints/${item.id}`}>View</Link></td></tr>)}</tbody>
-              </table>
+              </table></StandardTable>
             </div>
           </section>
         </>

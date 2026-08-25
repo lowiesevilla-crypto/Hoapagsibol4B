@@ -1,3 +1,4 @@
+import { StandardTable } from "@/components/standard-table";
 import Link from "next/link";
 import { LockKeyhole, PencilLine } from "lucide-react";
 import { PayrollStatus, Role } from "@prisma/client";
@@ -66,7 +67,7 @@ export default async function EmployeeAttendanceHistoryPage() {
       </div>
 
       <div className="hidden table-wrap shadow-none md:block">
-        <table className="data-table">
+        <StandardTable><table className="data-table">
           <thead><tr><th>Date</th><th>Status</th><th>Time</th><th>Total</th><th>Late / undertime</th><th>Remarks</th><th></th></tr></thead>
           <tbody>
             {records.map((record) => {
@@ -84,14 +85,14 @@ export default async function EmployeeAttendanceHistoryPage() {
             })}
             {!records.length && <tr><td colSpan={7} className="py-10 text-center text-slate-500">No attendance records yet.</td></tr>}
           </tbody>
-        </table>
+        </table></StandardTable>
       </div>
     </section>
 
     <section className="card">
       <h2 className="text-lg font-black">Correction request history</h2>
       <p className="mt-1 text-sm text-slate-500">Requests preserve the original timelog and require Payroll review before the effective attendance is changed.</p>
-      <div className="mt-4 table-wrap shadow-none"><table className="data-table"><thead><tr><th>Requested</th><th>Attendance date</th><th>Reason</th><th>Status</th><th>Reviewed</th></tr></thead><tbody>{requests.map((item) => <tr key={item.id}><td>{shortDate(item.createdAt)}</td><td>{shortDate(correctionAttendanceDate(item.originalData, item.createdAt))}</td><td>{item.reason}</td><td><StatusBadge status={item.status} /></td><td>{item.reviewedAt ? shortDate(item.reviewedAt) : "Pending"}</td></tr>)}{!requests.length && <tr><td colSpan={5} className="py-10 text-center text-slate-500">No correction requests yet.</td></tr>}</tbody></table></div>
+      <div className="mt-4 table-wrap shadow-none"><StandardTable><table className="data-table"><thead><tr><th>Requested</th><th>Attendance date</th><th>Reason</th><th>Status</th><th>Reviewed</th></tr></thead><tbody>{requests.map((item) => <tr key={item.id}><td>{shortDate(item.createdAt)}</td><td>{shortDate(correctionAttendanceDate(item.originalData, item.createdAt))}</td><td>{item.reason}</td><td><StatusBadge status={item.status} /></td><td>{item.reviewedAt ? shortDate(item.reviewedAt) : "Pending"}</td></tr>)}{!requests.length && <tr><td colSpan={5} className="py-10 text-center text-slate-500">No correction requests yet.</td></tr>}</tbody></table></StandardTable></div>
     </section>
   </>;
 }

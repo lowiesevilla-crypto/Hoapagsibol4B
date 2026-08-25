@@ -29,7 +29,7 @@ export default async function OrganizationSettingsPage({ searchParams }: { searc
           <Field label="Committee"><input className="field" name="committee" defaultValue={editing?.committee || ""} /></Field>
           <div className="grid gap-3 sm:grid-cols-2"><Field label="Contact number"><input className="field" name="contactNumber" defaultValue={editing?.contactNumber || ""} /></Field><Field label="Email"><input className="field" type="email" name="email" defaultValue={editing?.email || ""} /></Field></div>
           <div className="grid gap-3 sm:grid-cols-2"><Field label="Effective date"><input className="field" type="date" name="effectiveDate" defaultValue={(editing?.effectiveDate || new Date()).toISOString().slice(0, 10)} required /></Field><Field label="End date"><input className="field" type="date" name="endDate" defaultValue={editing?.endDate?.toISOString().slice(0, 10)} /></Field></div>
-          <Field label="Display order"><input className="field" type="number" min="0" name="displayOrder" defaultValue={editing?.displayOrder || officers.length + 1} /></Field>
+          <Field label="Display order"><input className="field" type="number" min="0" name="displayOrder" defaultValue={editing?.displayOrder ?? officers.length + 1} /></Field>
           <OrganizationImageUpload kind="photo" currentUrl={editing?.photoUrl} />
           <OrganizationImageUpload kind="signature" currentUrl={editing?.signatureUrl} />
           <label className="flex min-h-11 items-center gap-3 rounded-xl bg-slate-50 px-3 text-sm font-bold"><input type="checkbox" name="active" defaultChecked={editing?.active ?? true} /> Active officer</label>

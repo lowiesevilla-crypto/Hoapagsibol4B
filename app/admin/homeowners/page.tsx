@@ -1,3 +1,4 @@
+import { StandardTable } from "@/components/standard-table";
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { HomeownerActivationStatus, HomeownerStatus, NotificationType, Prisma, Role } from "@prisma/client";
@@ -111,7 +112,7 @@ export default async function HomeownersPage({ searchParams }: { searchParams: P
         <ConfirmSubmitButton className="btn-primary min-h-9 px-3 py-1.5 text-xs" name="mode" value="selected" message="Send activation invitations to selected eligible homeowners?">Send to selected eligible homeowners</ConfirmSubmitButton>
         <p className="text-xs font-semibold text-slate-500">Only checked eligible homeowners on this page will be processed. Ineligible records remain visible with a reason.</p>
       </div>
-      <div className="table-wrap"><table className="data-table min-w-[1150px]"><thead><tr><th></th><th>Homeowner</th><th>Masked Account</th><th>Property</th><th>Monthly dues</th><th>Operational Status</th><th>Digital Account Activation</th><th>Latest Delivery</th><th></th></tr></thead><tbody>
+      <div className="table-wrap"><StandardTable><table className="data-table min-w-[1150px]"><thead><tr><th></th><th>Homeowner</th><th>Masked Account</th><th>Property</th><th>Monthly dues</th><th>Operational Status</th><th>Digital Account Activation</th><th>Latest Delivery</th><th></th></tr></thead><tbody>
       {homeowners.map((homeowner) => {
         const accountNumber = homeownerAccountNumber(homeowner);
         const eligibility = homeownerDigitalActivationEligibility(homeowner);
@@ -120,7 +121,7 @@ export default async function HomeownersPage({ searchParams }: { searchParams: P
         return <tr key={homeowner.id}><td>{eligibility.eligible && <input aria-label={`Select ${homeowner.user.name}`} name="homeownerId" type="checkbox" value={homeowner.id} />}</td><td><p className="font-bold">{homeowner.user.name}</p><p className="text-xs text-slate-400">{maskEmail(homeowner.user.email)}</p></td><td className="font-mono text-xs font-bold">{maskAccountNumber(accountNumber)}</td><td>Block {homeowner.block}, Lot {homeowner.lot}</td><td className="font-bold">{money(homeowner.monthlyDuesAmount)}</td><td><StatusBadge status={homeowner.status} /></td><td><p className="font-bold">{digitalActivationLabel(homeowner.activationStatus)}</p><p className="text-xs text-slate-400">{emailLabel(homeowner.emailStatus)}</p><p className="text-xs text-slate-400">Sent: {homeowner.activationSentAt ? homeowner.activationSentAt.toLocaleDateString("en-PH") : "Not sent"}</p><p className="text-xs text-slate-400">Expires: {expiration ? expiration.toLocaleDateString("en-PH") : "Not set"}</p><p className={`mt-1 text-xs font-semibold ${eligibility.eligible ? "text-emerald-700" : "text-slate-400"}`}>{eligibility.reason}</p></td><td><p className="font-bold">{deliveryStatusLabel(delivery)}</p>{delivery?.errorMessage && <p className="text-xs text-rose-600">{delivery.errorMessage}</p>}</td><td className="text-right"><Link className="font-bold text-pine-600 hover:underline" href={`/admin/homeowners/${homeowner.id}`}>View & edit</Link></td></tr>;
       })}
       {!homeowners.length && <tr><td colSpan={9} className="py-12 text-center text-slate-500">No homeowners match the selected filters.</td></tr>}
-    </tbody></table></div>
+    </tbody></table></StandardTable></div>
     </form>
 
     <nav className="mt-5 flex flex-wrap items-center justify-between gap-3 rounded-xl border bg-white p-3 text-sm font-semibold text-slate-600">

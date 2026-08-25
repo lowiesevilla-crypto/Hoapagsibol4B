@@ -1,3 +1,4 @@
+import { StandardTable } from "@/components/standard-table";
 import Link from "next/link";
 import { Database, FolderLock, HardDrive, LibraryBig, TriangleAlert } from "lucide-react";
 import { PageHeader } from "@/components/page-header";
@@ -50,7 +51,7 @@ export default async function PlatformDocumentManagementPage() {
         <p className="mt-1 text-sm text-slate-500">80% and 90% thresholds are surfaced before the hard quota is reached. Downgrades never delete repository files.</p>
       </div>
       <div className="hidden overflow-x-auto lg:block">
-        <table className="min-w-full text-left text-sm">
+        <StandardTable><table className="min-w-full text-left text-sm">
           <thead className="bg-slate-50 text-xs font-black uppercase tracking-wider text-slate-500"><tr>
             <th className="px-5 py-3">Tenant</th><th className="px-5 py-3">Plan</th><th className="px-5 py-3">Feature</th><th className="px-5 py-3">Documents</th><th className="px-5 py-3">Used</th><th className="px-5 py-3">Limit</th><th className="px-5 py-3">Utilization</th><th className="px-5 py-3">State</th><th className="px-5 py-3"></th>
           </tr></thead>
@@ -65,7 +66,7 @@ export default async function PlatformDocumentManagementPage() {
             <td className="px-5 py-4"><span className={`rounded-full px-2.5 py-1 text-xs font-black ${quotaBadge(row.quota.state)}`}>{row.quota.state.replaceAll("_", " ")}</span></td>
             <td className="px-5 py-4"><Link className="font-black text-pine-700 hover:underline" href={`/platform/tenants/${row.tenantId}/features`}>Controls</Link></td>
           </tr>)}</tbody>
-        </table>
+        </table></StandardTable>
       </div>
       <div className="grid gap-3 p-4 lg:hidden">{rows.map((row) => <article key={row.tenantId} className="rounded-2xl border p-4">
         <div className="flex items-start justify-between gap-3"><div><h3 className="font-black text-slate-950">{row.tenantName}</h3><p className="text-xs text-slate-500">{row.planCode} · {row.subscriptionStatus.replaceAll("_", " ")}</p></div><span className={`rounded-full px-2.5 py-1 text-xs font-black ${quotaBadge(row.quota.state)}`}>{row.quota.state.replaceAll("_", " ")}</span></div>

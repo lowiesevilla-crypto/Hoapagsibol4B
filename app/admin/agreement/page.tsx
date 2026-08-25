@@ -1,3 +1,4 @@
+import { StandardTable } from "@/components/standard-table";
 import { Role, TenantAgreementStatus } from "@prisma/client";
 import { Download, ExternalLink, FileSignature, ShieldCheck } from "lucide-react";
 import Link from "next/link";
@@ -52,10 +53,10 @@ export default async function TenantAgreementCenterPage() {
         <h2 className="text-xl font-black">Agreement history</h2>
         <p className="mt-1 text-sm text-slate-500">Historical signed copies remain preserved even when the subscription plan or a later master agreement version changes.</p>
         <div className="mt-5 overflow-auto">
-          <table className="min-w-[900px] w-full text-sm">
+          <StandardTable><table className="min-w-[900px] w-full text-sm">
             <thead className="bg-slate-50 text-left"><tr><th className="p-3">Agreement</th><th className="p-3">Effective</th><th className="p-3">Term end</th><th className="p-3">Template</th><th className="p-3">Status</th><th className="p-3">Signed</th><th className="p-3">Actions</th></tr></thead>
             <tbody>{agreements.map((agreement) => <tr key={agreement.id} className="border-t"><td className="p-3 font-black">{agreement.agreementNumber}</td><td className="p-3">{agreement.effectiveDate.toLocaleDateString("en-PH")}</td><td className="p-3">{agreement.termEndsAt?.toLocaleDateString("en-PH") || "—"}</td><td className="p-3">v{agreement.templateVersion.versionLabel}</td><td className="p-3"><span className={`rounded-full px-2.5 py-1 text-xs font-black ${agreement.status === TenantAgreementStatus.SIGNED ? "bg-emerald-100 text-emerald-800" : agreement.status === TenantAgreementStatus.DECLINED ? "bg-rose-100 text-rose-800" : "bg-slate-100 text-slate-700"}`}>{agreement.status.replaceAll("_", " ")}</span></td><td className="p-3">{agreement.signedAt?.toLocaleDateString("en-PH") || "—"}</td><td className="p-3"><div className="flex flex-col items-start gap-2"><Link className="inline-flex items-center gap-1 font-black text-blue-700 hover:underline" href={`/admin/agreement/${agreement.id}`}>View / Sign <ExternalLink className="size-3" /></Link><a className="inline-flex items-center gap-1 font-black text-pine-700 hover:underline" href={agreementPdfUrl(agreement.id)}><Download className="size-3" /> Download PDF</a></div></td></tr>)}</tbody>
-          </table>
+          </table></StandardTable>
         </div>
         {!agreements.length && <p className="mt-5 rounded-xl border border-dashed p-8 text-center text-sm text-slate-500">No HOAHub subscription agreement is available yet. Platform Administration must first assign an active subscription.</p>}
       </section>

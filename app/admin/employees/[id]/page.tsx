@@ -1,3 +1,4 @@
+import { StandardTable } from "@/components/standard-table";
 import { notFound } from "next/navigation";
 import { EmployeeForm } from "@/components/employee-form";
 import { PageHeader } from "@/components/page-header";
@@ -47,7 +48,7 @@ export default async function EditEmployeePage({ params }: { params: Promise<{ i
         </div>
         {employee.compensations.length ? (
           <div className="overflow-x-auto">
-            <table className="min-w-full text-sm">
+            <StandardTable><table className="min-w-full text-sm">
               <thead className="text-left text-xs uppercase tracking-wide text-slate-500">
                 <tr>
                   <th className="px-3 py-2">Effective</th>
@@ -68,7 +69,7 @@ export default async function EditEmployeePage({ params }: { params: Promise<{ i
                   </tr>
                 ))}
               </tbody>
-            </table>
+            </table></StandardTable>
           </div>
         ) : (
           <p className="text-sm text-slate-500">No effective-dated payroll configuration exists yet.</p>

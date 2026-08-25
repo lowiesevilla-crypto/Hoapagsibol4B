@@ -1,3 +1,4 @@
+import { StandardTable } from "@/components/standard-table";
 import Link from "next/link";
 import { Printer, WalletCards } from "lucide-react";
 import { CollectionCard, PaymentAreaNavigation, PaymentEmptyState, PaymentMetricCard } from "@/components/homeowner/payments/payment-cards";
@@ -45,13 +46,13 @@ export default async function PortalCollectionsPage({ searchParams }: { searchPa
           {!collections.length && <PaymentEmptyState title="No collection records" description="Other fees, bonds, refunds, and collection receipts will appear here." />}
         </div>
         <div className="table-wrap hidden shadow-none md:block">
-          <table className="data-table">
+          <StandardTable><table className="data-table">
             <thead><tr><th>Type / remarks</th><th>Collection date</th><th>Amount</th><th>Refunded</th><th>Balance held</th><th>Status</th><th>Receipt / reference</th><th></th></tr></thead>
             <tbody>{collections.map((item) => {
               const balance = item.refundable ? Number(item.amount) - Number(item.amountRefunded) - Number(item.amountForfeited) : 0;
               return <tr key={item.id}><td><p className="font-bold">{collectionLabel(item.type, item.description)}</p><p className="text-xs text-slate-400">{item.refundable ? "Refundable bond" : "Association fee"}</p>{item.remarks && <p className="mt-1 max-w-sm whitespace-pre-wrap text-xs text-slate-600">{item.remarks}</p>}</td><td>{shortDate(item.collectionDate)}</td><td className="font-black">{money(item.amount)}</td><td>{money(item.amountRefunded)}</td><td>{money(balance)}</td><td><StatusBadge status={item.refundable ? item.refundStatus : "INCOME"} /></td><td><p className="font-mono text-xs font-bold">{item.receiptNumber || "-"}</p><p className="font-mono text-[10px] text-slate-400">Ref: {item.referenceNumber || "-"}</p></td><td><Link className="btn-secondary min-h-8 px-3 py-1" href={`/receipts/collection/${item.id}`} target="_blank"><Printer className="size-4" /> Receipt</Link></td></tr>;
             })}{!collections.length && <tr><td colSpan={8} className="py-12 text-center text-slate-500">No other collections are associated with your account.</td></tr>}</tbody>
-          </table>
+          </table></StandardTable>
         </div>
       </section>
     </PortalPageContainer>

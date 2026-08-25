@@ -1,3 +1,4 @@
+import { StandardTable } from "@/components/standard-table";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 
@@ -175,7 +176,7 @@ export default async function PublishedTemplateReplicationSourceDiagnosticsPage(
                     <div className="p-4 text-sm text-slate-600">No template sets belong to this definition.</div>
                   ) : (
                     <div className="table-wrap rounded-none border-0 shadow-none">
-                      <table className="data-table min-w-[900px]">
+                      <StandardTable><table className="data-table min-w-[900px]">
                         <thead>
                           <tr>
                             <th>Template set</th>
@@ -221,7 +222,7 @@ export default async function PublishedTemplateReplicationSourceDiagnosticsPage(
                                 ],
                           )}
                         </tbody>
-                      </table>
+                      </table></StandardTable>
                     </div>
                   )}
                 </div>

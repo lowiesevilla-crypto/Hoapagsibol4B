@@ -1,3 +1,4 @@
+import { StandardTable } from "@/components/standard-table";
 import { Role } from "@prisma/client";
 import { ArrowLeft, Download } from "lucide-react";
 import Link from "next/link";
@@ -167,7 +168,7 @@ function ResponsiveTable({
   kind: "ledger" | "payment" | "billing";
   minWidth: string;
 }) {
-  return <div className={`soa-table-frame soa-${kind}-table-frame overflow-x-auto rounded-lg border border-slate-200`}><table className={`data-table soa-print-table soa-${kind}-table`} style={{ minWidth }}>{children}</table></div>;
+  return <div className={`soa-table-frame soa-${kind}-table-frame overflow-x-auto rounded-lg border border-slate-200`}><StandardTable><table className={`data-table soa-print-table soa-${kind}-table`} style={{ minWidth }}>{children}</table></StandardTable></div>;
 }
 
 function LedgerRow({ entry }: { entry: StatementLedgerEntry }) {

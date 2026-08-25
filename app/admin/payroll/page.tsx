@@ -1,3 +1,4 @@
+import { StandardTable } from "@/components/standard-table";
 import Link from "next/link";
 import { AlertTriangle, CalendarDays, Calculator, CheckCircle2, HandCoins, LockKeyhole, Printer, RotateCcw, ShieldCheck } from "lucide-react";
 import { PayrollAccessRole } from "@prisma/client";
@@ -155,8 +156,8 @@ export default async function PayrollPage({ searchParams }: PayrollPageProps) {
       </div> : <ReadOnlyNotice text="Your payroll role can view calendar and schedule settings but cannot change them." />}
 
       <div className="grid gap-6 xl:grid-cols-2">
-        <section className="card"><h2 className="text-lg font-black">Configured calendar days</h2><div className="mt-4 table-wrap shadow-none"><table className="data-table"><thead><tr><th>Date</th><th>Type</th><th>Description</th><th>Rule</th><th></th></tr></thead><tbody>{calendarDays.map((item) => <tr key={item.id}><td className="font-bold">{shortDate(item.date)}</td><td>{item.type.replaceAll("_", " ")}</td><td>{item.description}<p className="text-xs text-slate-400">{item.active ? "Active" : "Inactive"}</p></td><td>{item.payRule}</td><td>{canManagePayroll && <form action={deletePayrollCalendarDayAction}><input type="hidden" name="id" value={item.id} /><DeleteButton /></form>}</td></tr>)}{!calendarDays.length && <tr><td colSpan={5} className="py-10 text-center text-slate-500">No calendar days configured yet.</td></tr>}</tbody></table></div></section>
-        <section className="card"><h2 className="text-lg font-black">Employee schedules</h2><div className="mt-4 table-wrap shadow-none"><table className="data-table"><thead><tr><th>Employee</th><th>Day</th><th>Shift</th><th>Effective</th><th></th></tr></thead><tbody>{schedules.map((item) => <tr key={item.id}><td className="font-bold">{item.employee.name}</td><td>{dayName(item.dayOfWeek)}<p className="text-xs text-slate-400">{item.restDay ? "Rest day" : "Working day"}</p></td><td>{item.shiftStart} - {item.shiftEnd}</td><td>{shortDate(item.effectiveFrom)}{item.effectiveTo ? ` to ${shortDate(item.effectiveTo)}` : ""}</td><td>{canManagePayroll && <form action={deleteEmployeeScheduleAction}><input type="hidden" name="id" value={item.id} /><DeleteButton /></form>}</td></tr>)}{!schedules.length && <tr><td colSpan={5} className="py-10 text-center text-slate-500">No employee schedules configured yet.</td></tr>}</tbody></table></div></section>
+        <section className="card"><h2 className="text-lg font-black">Configured calendar days</h2><div className="mt-4 table-wrap shadow-none"><StandardTable><table className="data-table"><thead><tr><th>Date</th><th>Type</th><th>Description</th><th>Rule</th><th></th></tr></thead><tbody>{calendarDays.map((item) => <tr key={item.id}><td className="font-bold">{shortDate(item.date)}</td><td>{item.type.replaceAll("_", " ")}</td><td>{item.description}<p className="text-xs text-slate-400">{item.active ? "Active" : "Inactive"}</p></td><td>{item.payRule}</td><td>{canManagePayroll && <form action={deletePayrollCalendarDayAction}><input type="hidden" name="id" value={item.id} /><DeleteButton /></form>}</td></tr>)}{!calendarDays.length && <tr><td colSpan={5} className="py-10 text-center text-slate-500">No calendar days configured yet.</td></tr>}</tbody></table></StandardTable></div></section>
+        <section className="card"><h2 className="text-lg font-black">Employee schedules</h2><div className="mt-4 table-wrap shadow-none"><StandardTable><table className="data-table"><thead><tr><th>Employee</th><th>Day</th><th>Shift</th><th>Effective</th><th></th></tr></thead><tbody>{schedules.map((item) => <tr key={item.id}><td className="font-bold">{item.employee.name}</td><td>{dayName(item.dayOfWeek)}<p className="text-xs text-slate-400">{item.restDay ? "Rest day" : "Working day"}</p></td><td>{item.shiftStart} - {item.shiftEnd}</td><td>{shortDate(item.effectiveFrom)}{item.effectiveTo ? ` to ${shortDate(item.effectiveTo)}` : ""}</td><td>{canManagePayroll && <form action={deleteEmployeeScheduleAction}><input type="hidden" name="id" value={item.id} /><DeleteButton /></form>}</td></tr>)}{!schedules.length && <tr><td colSpan={5} className="py-10 text-center text-slate-500">No employee schedules configured yet.</td></tr>}</tbody></table></StandardTable></div></section>
       </div>
     </section>}
 
@@ -193,7 +194,7 @@ export default async function PayrollPage({ searchParams }: PayrollPageProps) {
           <label className="flex items-center gap-2 rounded-xl bg-slate-50 p-3 text-sm font-bold"><input type="checkbox" name="active" defaultChecked className="accent-pine-600" /> Active</label>
           <SubmitButton>Save access</SubmitButton>
         </form>
-        <div className="table-wrap shadow-none"><table className="data-table"><thead><tr><th>User</th><th>Role</th><th>Status</th><th>Granted by</th><th></th></tr></thead><tbody>{payrollAccesses.map((item) => <tr key={item.id}><td><p className="font-bold">{item.user.name}</p><p className="text-xs text-slate-400">{item.user.email}</p></td><td>{payrollRoleLabel(item.role)}</td><td><StatusBadge status={item.active ? "ACTIVE" : "INACTIVE"} /></td><td>{item.grantedBy?.name ?? "-"}</td><td><form action={deletePayrollAccessAction}><input type="hidden" name="id" value={item.id} /><DeleteButton label="Remove" /></form></td></tr>)}{!payrollAccesses.length && <tr><td colSpan={5} className="py-10 text-center text-slate-500">No payroll access assignments yet.</td></tr>}</tbody></table></div>
+        <div className="table-wrap shadow-none"><StandardTable><table className="data-table"><thead><tr><th>User</th><th>Role</th><th>Status</th><th>Granted by</th><th></th></tr></thead><tbody>{payrollAccesses.map((item) => <tr key={item.id}><td><p className="font-bold">{item.user.name}</p><p className="text-xs text-slate-400">{item.user.email}</p></td><td>{payrollRoleLabel(item.role)}</td><td><StatusBadge status={item.active ? "ACTIVE" : "INACTIVE"} /></td><td>{item.grantedBy?.name ?? "-"}</td><td><form action={deletePayrollAccessAction}><input type="hidden" name="id" value={item.id} /><DeleteButton label="Remove" /></form></td></tr>)}{!payrollAccesses.length && <tr><td colSpan={5} className="py-10 text-center text-slate-500">No payroll access assignments yet.</td></tr>}</tbody></table></StandardTable></div>
       </section>}
 
       <section className="card">
@@ -245,7 +246,7 @@ export default async function PayrollPage({ searchParams }: PayrollPageProps) {
       </div>
       </section>
 
-      <section className="card"><h2 className="text-lg font-black">Recent payroll audit trail</h2><p className="mb-4 text-sm text-slate-500">Security-sensitive payroll and attendance changes are logged automatically.</p><div className="table-wrap shadow-none"><table className="data-table"><thead><tr><th>Date</th><th>Actor</th><th>Module</th><th>Action</th><th>Entity</th></tr></thead><tbody>{auditLogs.map((item) => <tr key={item.id}><td>{shortDate(item.createdAt)}</td><td>{item.actor?.name ?? "System"}</td><td>{item.module}</td><td>{item.action.replaceAll("_", " ")}</td><td>{item.entityType ?? "-"} {item.entityId ? item.entityId.slice(-6).toUpperCase() : ""}</td></tr>)}{!auditLogs.length && <tr><td colSpan={5} className="py-10 text-center text-slate-500">No payroll audit logs yet.</td></tr>}</tbody></table></div></section>
+      <section className="card"><h2 className="text-lg font-black">Recent payroll audit trail</h2><p className="mb-4 text-sm text-slate-500">Security-sensitive payroll and attendance changes are logged automatically.</p><div className="table-wrap shadow-none"><StandardTable><table className="data-table"><thead><tr><th>Date</th><th>Actor</th><th>Module</th><th>Action</th><th>Entity</th></tr></thead><tbody>{auditLogs.map((item) => <tr key={item.id}><td>{shortDate(item.createdAt)}</td><td>{item.actor?.name ?? "System"}</td><td>{item.module}</td><td>{item.action.replaceAll("_", " ")}</td><td>{item.entityType ?? "-"} {item.entityId ? item.entityId.slice(-6).toUpperCase() : ""}</td></tr>)}{!auditLogs.length && <tr><td colSpan={5} className="py-10 text-center text-slate-500">No payroll audit logs yet.</td></tr>}</tbody></table></StandardTable></div></section>
     </section>}
 
     {section === "loans" && <section className="card mb-6">
@@ -291,7 +292,7 @@ export default async function PayrollPage({ searchParams }: PayrollPageProps) {
         </form> : <ReadOnlyNotice text="Your payroll role can view employee loans and cash advances but cannot create or edit them." />}
 
         <div className="table-wrap">
-          <table className="data-table">
+          <StandardTable><table className="data-table">
             <thead><tr><th>Employee</th><th>Loan / cash advance</th><th>Paid</th><th>Balance</th><th>Status</th><th></th></tr></thead>
             <tbody>
               {employeeLoans.map((loan) => <tr key={loan.id} data-search={`${loan.employee.name} ${loan.employee.employeeNumber} ${loan.description} ${loan.type} ${loan.status}`.toLowerCase()}>
@@ -323,7 +324,7 @@ export default async function PayrollPage({ searchParams }: PayrollPageProps) {
               </tr>)}
               {!employeeLoans.length && <tr><td colSpan={6} className="py-10 text-center text-slate-500">No employee loans or cash advances have been recorded yet.</td></tr>}
             </tbody>
-          </table>
+          </table></StandardTable>
         </div>
       </div>
     </section>}
@@ -356,7 +357,7 @@ export default async function PayrollPage({ searchParams }: PayrollPageProps) {
         <div className="mt-4 grid gap-4"><div><label className="label">Employee</label><select className="field" name="employeeId" required defaultValue=""><option value="" disabled>Select employee</option>{activeEmployees.map((employee) => <option key={employee.id} value={employee.id}>{employee.name} - {employee.employeeNumber}</option>)}</select></div><div className="grid gap-4 sm:grid-cols-2"><div><label className="label">Date</label><input className="field" name="date" type="date" required /></div><div><label className="label">Hours</label><input className="field" name="hours" type="number" min="0.25" max="24" step="0.25" required /></div></div><div><label className="label">OT source</label><select className="field" name="source" defaultValue="APPROVED_REQUEST"><option value="APPROVED_REQUEST">OT request (pending review)</option>{canManagePayroll && <option value="PAYROLL_MANAGER_ADJUSTMENT">Payroll Manager Adjustment</option>}</select></div><input type="hidden" name="status" value="PENDING" /><div><label className="label">Reason</label><textarea className="field min-h-24" name="reason" maxLength={500} required /></div></div>
         <SubmitButton className="mt-4">Save OT record</SubmitButton>
       </form> : <ReadOnlyNotice text="Your payroll role can view overtime records but cannot create them." />}
-      <div className="table-wrap"><table className="data-table"><thead><tr><th>Date</th><th>Employee</th><th>Hours</th><th>Source</th><th>Status</th><th>Reason</th><th>Review</th></tr></thead><tbody>{overtimeRecords.map((item) => <tr key={item.id}><td>{shortDate(item.date)}</td><td><p className="font-bold">{item.employee.name}</p><p className="text-xs text-slate-400">{item.employee.employeeNumber}</p></td><td>{String(item.hours)}</td><td>{item.source === "PAYROLL_MANAGER_ADJUSTMENT" ? "Payroll Manager Adjustment" : "Approved OT Request"}</td><td><StatusBadge status={item.status} /></td><td className="max-w-xs whitespace-pre-line">{item.reason}</td><td>{item.status === "PENDING" && canManagePayroll ? <div className="flex gap-2"><form action={reviewOvertimeRecordAction}><input type="hidden" name="id" value={item.id} /><input type="hidden" name="decision" value="APPROVED" /><SubmitButton className="btn-secondary min-h-8 px-3 py-1 text-xs">Approve</SubmitButton></form><form action={reviewOvertimeRecordAction}><input type="hidden" name="id" value={item.id} /><input type="hidden" name="decision" value="REJECTED" /><SubmitButton className="btn-danger min-h-8 px-3 py-1 text-xs">Reject</SubmitButton></form></div> : item.reviewedBy?.name ?? "-"}</td></tr>)}{!overtimeRecords.length && <tr><td colSpan={7} className="py-10 text-center text-slate-500">No overtime records yet.</td></tr>}</tbody></table></div>
+      <div className="table-wrap"><StandardTable><table className="data-table"><thead><tr><th>Date</th><th>Employee</th><th>Hours</th><th>Source</th><th>Status</th><th>Reason</th><th>Review</th></tr></thead><tbody>{overtimeRecords.map((item) => <tr key={item.id}><td>{shortDate(item.date)}</td><td><p className="font-bold">{item.employee.name}</p><p className="text-xs text-slate-400">{item.employee.employeeNumber}</p></td><td>{String(item.hours)}</td><td>{item.source === "PAYROLL_MANAGER_ADJUSTMENT" ? "Payroll Manager Adjustment" : "Approved OT Request"}</td><td><StatusBadge status={item.status} /></td><td className="max-w-xs whitespace-pre-line">{item.reason}</td><td>{item.status === "PENDING" && canManagePayroll ? <div className="flex gap-2"><form action={reviewOvertimeRecordAction}><input type="hidden" name="id" value={item.id} /><input type="hidden" name="decision" value="APPROVED" /><SubmitButton className="btn-secondary min-h-8 px-3 py-1 text-xs">Approve</SubmitButton></form><form action={reviewOvertimeRecordAction}><input type="hidden" name="id" value={item.id} /><input type="hidden" name="decision" value="REJECTED" /><SubmitButton className="btn-danger min-h-8 px-3 py-1 text-xs">Reject</SubmitButton></form></div> : item.reviewedBy?.name ?? "-"}</td></tr>)}{!overtimeRecords.length && <tr><td colSpan={7} className="py-10 text-center text-slate-500">No overtime records yet.</td></tr>}</tbody></table></StandardTable></div>
     </section>}
 
     {(section === "processing" || section === "adjustments" || section === "approval" || section === "payslips") && <section className="grid gap-6 xl:grid-cols-[320px_1fr]">
@@ -493,7 +494,7 @@ export default async function PayrollPage({ searchParams }: PayrollPageProps) {
           </div>}
 
           {(section === "processing" || section === "payslips") && <div className="table-wrap">
-            <table className="data-table">
+            <StandardTable><table className="data-table">
               <thead>
                 <tr>
                   <th>Employee</th>
@@ -528,7 +529,7 @@ export default async function PayrollPage({ searchParams }: PayrollPageProps) {
                 </tr>)}
                 {!selected.payslips.length && <tr><td colSpan={9} className="py-10 text-center text-slate-500">No active employees were available for this period.</td></tr>}
               </tbody>
-            </table>
+            </table></StandardTable>
           </div>}
         </div> : <div className="card text-sm text-slate-500">Calculate the first payroll period to see payslips.</div>}
       </div>

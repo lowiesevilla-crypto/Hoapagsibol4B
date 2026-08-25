@@ -1,7 +1,6 @@
 "use client";
 
 import { StandardTable } from "@/components/standard-table";
-
 import { ArrowDown, ArrowUp, Search } from "lucide-react";
 import { useMemo, useState } from "react";
 import { PaginationFocusTarget, focusPaginationTarget } from "@/components/pagination-focus";
@@ -55,18 +54,25 @@ export function BillingPreviewTable({ rows }: { rows: BillingGenerationRow[] }) 
     focusPaginationTarget("billing-preview-table");
   }
 
+  const toolbar = <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center">
+    <label className="relative block">
+      <span className="sr-only">Search billing preview</span>
+      <Search className="pointer-events-none absolute left-3.5 top-3 size-4 text-slate-400" />
+      <input className="field pl-10" type="search" value={query} onChange={(event) => { setQuery(event.target.value); setPage(1); }} placeholder="Search homeowner, block, lot, action, or resolution" />
+    </label>
+    <p className="text-sm font-semibold text-slate-500">{filtered.length} of {rows.length} preview rows</p>
+  </div>;
+
+  const pagination = pageCount > 1 ? <nav className="flex items-center justify-between gap-3 border-t border-slate-100 pt-3 text-sm" aria-label="Billing preview pagination">
+    <button className="btn-secondary" type="button" disabled={safePage <= 1} onClick={() => changePage(Math.max(1, safePage - 1))}>Previous</button>
+    <span className="font-bold">Page {safePage} of {pageCount}</span>
+    <button className="btn-secondary" type="button" disabled={safePage >= pageCount} onClick={() => changePage(Math.min(pageCount, safePage + 1))}>Next</button>
+  </nav> : null;
+
   return <div className="mt-4">
     <PaginationFocusTarget id="billing-preview-table" label="Billing preview table" />
-    <div className="mb-3 grid gap-3 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center">
-      <label className="relative block">
-        <span className="sr-only">Search billing preview</span>
-        <Search className="pointer-events-none absolute left-3.5 top-3 size-4 text-slate-400" />
-        <input className="field pl-10" type="search" value={query} onChange={(event) => { setQuery(event.target.value); setPage(1); }} placeholder="Search homeowner, block, lot, action, or resolution" />
-      </label>
-      <p className="text-sm font-semibold text-slate-500">{filtered.length} of {rows.length} preview rows</p>
-    </div>
-    <div className="table-wrap shadow-none">
-      <StandardTable mode="managed"><table className="data-table min-w-[1300px]">
+    <StandardTable mode="managed" toolbar={toolbar} pagination={pagination}>
+      <div className="table-wrap shadow-none"><table className="data-table min-w-[1300px]">
         <thead><tr>
           <SortableHeader label="Homeowner" sortKey="homeownerName" activeKey={sortKey} direction={direction} onSort={changeSort} />
           <SortableHeader label="Block" sortKey="block" activeKey={sortKey} direction={direction} onSort={changeSort} />
@@ -94,13 +100,8 @@ export function BillingPreviewTable({ rows }: { rows: BillingGenerationRow[] }) 
           </tr>)}
           {!visible.length && <tr><td colSpan={10} className="py-10 text-center text-slate-500">No preview rows match that search.</td></tr>}
         </tbody>
-      </table></StandardTable>
-    </div>
-    {pageCount > 1 && <nav className="mt-3 flex items-center justify-between gap-3 text-sm">
-      <button className="btn-secondary" type="button" disabled={safePage <= 1} onClick={() => changePage(Math.max(1, safePage - 1))}>Previous</button>
-      <span className="font-bold">Page {safePage} of {pageCount}</span>
-      <button className="btn-secondary" type="button" disabled={safePage >= pageCount} onClick={() => changePage(Math.min(pageCount, safePage + 1))}>Next</button>
-    </nav>}
+      </table></div>
+    </StandardTable>
   </div>;
 }
 

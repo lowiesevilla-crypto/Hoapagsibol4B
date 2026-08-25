@@ -16,18 +16,29 @@ for (const file of files.sort()) {
   const normalized = file.replaceAll(path.sep, "/");
   if (isStaticOutput(normalized)) continue;
   let source = await readFile(file, "utf8");
-  if (!/<table\b/i.test(source) || source.includes('from "@/components/standard-table"')) continue;
-
+  if (!/<table\b/i.test(source)) continue;
+  const original = source;
   const managed = managedFiles.has(normalized);
-  if (!managed) {
-    source = source.replace(/\s*<div className="mb-4"><SearchInput\b[^>]*\/><\/div>/g, "");
-    source = removeUnusedNamedImport(source, "@/components/ui", "SearchInput");
+
+  if (!source.includes('from "@/components/standard-table"')) {
+    if (!managed) {
+      source = source.replace(/\s*<div className="mb-4"><SearchInput\b[^>]*\/><\/div>/g, "");
+      source = removeUnusedNamedImport(source, "@/components/ui", "SearchInput");
+    }
+    const open = managed ? '<StandardTable mode="managed">' : "<StandardTable>";
+    source = source.replace(/<table\b/g, `${open}<table`);
+    source = source.replace(/<\/table>/g, "</table></StandardTable>");
+    source = addStandardTableImport(source);
   }
 
-  const open = managed ? '<StandardTable mode="managed">' : "<StandardTable>";
-  source = source.replace(/<table\b/g, `${open}<table`);
-  source = source.replace(/<\/table>/g, "</table></StandardTable>");
-  source = addStandardTableImport(source);
+  // Keep the search bar and pagination outside horizontal scrolling containers.
+  source = source.replace(
+    /<div className="([^"]*(?:table-wrap|overflow-x-auto)[^"]*)"><StandardTable([^>]*)><table/g,
+    '<StandardTable$2><div className="$1"><table',
+  );
+  source = source.replace(/<\/table><\/StandardTable><\/div>/g, "</table></div></StandardTable>");
+
+  if (source === original) continue;
   await writeFile(file, source, "utf8");
   changed += 1;
   console.log(`${managed ? "managed" : "client"}: ${normalized}`);

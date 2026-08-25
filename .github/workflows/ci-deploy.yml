@@ -81,6 +81,8 @@ jobs:
         run: pnpm run verify:homeowner-mobile-hardening
       - name: Verify homeowner PWA
         run: pnpm run verify:homeowner-pwa
+      - name: Verify StandardTable coverage
+        run: pnpm run verify:tables
       - run: pnpm typecheck
       - run: pnpm build
       - name: Prepare controlled Chromium for browser suites

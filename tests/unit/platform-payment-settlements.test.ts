@@ -27,7 +27,7 @@ test("platform payment settlements are visible from platform navigation and rema
   assert.match(page, /export const dynamic = "force-dynamic"/);
   assert.match(page, /Live PayMongo reconciliation/);
   assert.match(page, /Read only/);
-  assert.match(page, /No fallback transfer is attempted/);
+  assert.match(page, /no fallback transfer is attempted/i);
   assert.doesNotMatch(page, /method:\s*"POST"/);
   assert.doesNotMatch(page, /method:\s*"PUT"/);
   assert.doesNotMatch(page, /method:\s*"DELETE"/);

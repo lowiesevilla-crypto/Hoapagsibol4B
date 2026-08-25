@@ -129,6 +129,7 @@ export const platformLinks: LinkItem[] = [
   { href: "/platform/invoices", label: "Invoices", icon: "billing", section: "Commercial" },
   { href: "/platform/agreements", label: "Agreements", icon: "documents", section: "Commercial" },
   { href: "/platform/licenses", label: "Licenses", icon: "licenses", section: "Operations" },
+  { href: "/platform/payment-settlements", label: "Payment Settlements", icon: "payments", section: "Operations" },
   { href: "/platform/document-management", label: "Document Usage", icon: "documents", section: "Operations" },
   { href: "/platform/ai-usage", label: "AI Usage", icon: "chat", section: "Operations" },
   { href: "/platform/audit", label: "Audit & Security", icon: "audit", section: "Governance" },

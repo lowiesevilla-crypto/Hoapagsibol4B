@@ -49,5 +49,10 @@ async function walk(directory) {
 }
 
 function isStaticOutput(file) {
-  return file.includes("/print/") || file.startsWith("app/receipts/") || file.includes("/pdf/") || file.endsWith("/pdf/route.ts");
+  return file.includes("/print/")
+    || file.startsWith("app/receipts/")
+    || file.includes("/pdf/")
+    || file.endsWith("/pdf/route.ts")
+    || file === "components/homeowner/payments/homeowner-soa-print-document.tsx"
+    || file === "app/subscription/invoice/[invoiceId]/page.tsx";
 }

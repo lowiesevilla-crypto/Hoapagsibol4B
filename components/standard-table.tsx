@@ -97,7 +97,7 @@ export function StandardTable({
     return () => observer.disconnect();
   }, [applyClientView, mode]);
 
-  return <div className={`space-y-3 ${className}`.trim()}>
+  return <div data-standard-table-shell="true" className={`space-y-3 ${className}`.trim()}>
     {mode === "client" ? <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
       <label className="relative block">
         <span className="sr-only">{searchLabel}</span>
@@ -144,7 +144,6 @@ function detectExternalPagination(root: HTMLElement) {
   const params = new URLSearchParams(window.location.search);
   if (["page", "cursor", "offset"].some((name) => params.has(name))) return true;
 
-  const shell = root.parentElement;
   const scope = root.closest("section, article, main") ?? document.body;
   const selectors = [
     'a[href*="page="]',
@@ -157,7 +156,8 @@ function detectExternalPagination(root: HTMLElement) {
   ];
 
   for (const candidate of scope.querySelectorAll(selectors.join(","))) {
-    if (!shell?.contains(candidate)) return true;
+    if (candidate.closest('[data-standard-table-shell="true"]')) continue;
+    return true;
   }
   return false;
 }

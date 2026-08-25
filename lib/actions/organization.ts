@@ -25,9 +25,9 @@ export async function saveOrganizationOfficerAction(formData: FormData) {
     const data = {
       fullName,
       position,
-      committee: clean(formData.get("committee")),
-      contactNumber: clean(formData.get("contactNumber")),
-      email: clean(formData.get("email")),
+      committee: optionalText(formData.get("committee")),
+      contactNumber: optionalText(formData.get("contactNumber")),
+      email: optionalText(formData.get("email")),
       photoUrl,
       signatureUrl,
       displayOrder: Math.max(0, Number(formData.get("displayOrder")) || 0),
@@ -71,6 +71,7 @@ export async function changeOrganizationOfficerStatusAction(formData: FormData) 
 }
 
 function clean(value: FormDataEntryValue | null) { return String(value || "").trim() || undefined; }
+function optionalText(value: FormDataEntryValue | null) { return String(value || "").trim() || null; }
 function dateValue(value: FormDataEntryValue | null) { const text = clean(value); if (!text || !/^\d{4}-\d{2}-\d{2}$/.test(text)) return undefined; const date = new Date(`${text}T00:00:00.000Z`); return Number.isNaN(date.valueOf()) ? undefined : date; }
 function optionalDate(value: FormDataEntryValue | null) { return dateValue(value) || null; }
 function goError(message: string): never { redirect(`/admin/settings/organization?error=${encodeURIComponent(message)}`); }

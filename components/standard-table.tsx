@@ -24,8 +24,10 @@ export type StandardTableProps = {
  *
  * `client` mode adds local search and pagination without changing the caller's
  * data source, fetch lifecycle, row mapping, permissions, or server actions.
- * `managed` mode preserves existing server/client filtering and pagination while
- * standardizing placement, loading/empty states, and responsive layout.
+ * When a page already owns server-side pagination, the shell detects those
+ * controls and leaves row paging to the page so users never get nested/double
+ * pagination. `managed` mode is available for callers that explicitly provide
+ * their own toolbar and pagination controls.
  */
 export function StandardTable({
   children,
@@ -45,18 +47,21 @@ export function StandardTable({
   const [page, setPage] = useState(1);
   const [rowCount, setRowCount] = useState(0);
   const [matchCount, setMatchCount] = useState(0);
+  const [externalPagination, setExternalPagination] = useState(false);
 
   const effectivePageSize = Math.max(1, pageSize);
   const pageCount = useMemo(() => Math.max(1, Math.ceil(matchCount / effectivePageSize)), [effectivePageSize, matchCount]);
-  const safePage = Math.min(page, pageCount);
+  const safePage = externalPagination ? 1 : Math.min(page, pageCount);
 
   const applyClientView = useCallback(() => {
     if (mode !== "client") return;
-    const table = contentRef.current?.querySelector("table");
+    const root = contentRef.current;
+    const table = root?.querySelector("table");
     const tbody = table?.tBodies.item(0);
-    if (!tbody) {
+    if (!root || !tbody) {
       setRowCount(0);
       setMatchCount(0);
+      setExternalPagination(false);
       return;
     }
 
@@ -64,17 +69,20 @@ export function StandardTable({
     const dataRows = rows.filter((row) => !isExistingEmptyRow(row));
     const normalizedQuery = query.trim().toLocaleLowerCase();
     const matchingRows = dataRows.filter((row) => !normalizedQuery || (row.textContent || "").toLocaleLowerCase().includes(normalizedQuery));
+    const hasExternalPagination = detectExternalPagination(root);
     const nextPageCount = Math.max(1, Math.ceil(matchingRows.length / effectivePageSize));
-    const activePage = Math.min(page, nextPageCount);
+    const activePage = hasExternalPagination ? 1 : Math.min(page, nextPageCount);
     const start = (activePage - 1) * effectivePageSize;
     const end = start + effectivePageSize;
-    const matchingSet = new Set(matchingRows.slice(start, end));
+    const visibleRows = hasExternalPagination ? matchingRows : matchingRows.slice(start, end);
+    const matchingSet = new Set(visibleRows);
 
     for (const row of dataRows) row.hidden = !matchingSet.has(row);
     for (const row of rows.filter(isExistingEmptyRow)) row.hidden = dataRows.length > 0;
 
     setRowCount(dataRows.length);
     setMatchCount(matchingRows.length);
+    setExternalPagination(hasExternalPagination);
     if (activePage !== page) setPage(activePage);
   }, [effectivePageSize, mode, page, query]);
 
@@ -110,7 +118,7 @@ export function StandardTable({
 
     {mode === "client" ? <>
       {!loading && !empty && query && rowCount > 0 && matchCount === 0 && <TableState message="No records match your search." />}
-      {!loading && !empty && matchCount > effectivePageSize && <nav className="flex flex-col gap-2 border-t border-slate-100 pt-3 text-sm sm:flex-row sm:items-center sm:justify-between" aria-label="Table pagination">
+      {!externalPagination && !loading && !empty && matchCount > effectivePageSize && <nav className="flex flex-col gap-2 border-t border-slate-100 pt-3 text-sm sm:flex-row sm:items-center sm:justify-between" aria-label="Table pagination">
         <button className="btn-secondary min-h-9 px-3 py-1.5" type="button" disabled={safePage <= 1} onClick={() => setPage(Math.max(1, safePage - 1))}><ChevronLeft className="size-4" /> Previous</button>
         <span className="text-center font-bold text-slate-600">Page {safePage} of {pageCount}</span>
         <button className="btn-secondary min-h-9 px-3 py-1.5" type="button" disabled={safePage >= pageCount} onClick={() => setPage(Math.min(pageCount, safePage + 1))}>Next <ChevronRight className="size-4" /></button>
@@ -129,4 +137,27 @@ function isExistingEmptyRow(row: HTMLTableRowElement) {
   const cell = row.cells.item(0);
   if (!cell?.hasAttribute("colspan")) return false;
   return /^\s*(no|nothing)\b/i.test(cell.textContent || "");
+}
+
+function detectExternalPagination(root: HTMLElement) {
+  if (typeof window === "undefined") return false;
+  const params = new URLSearchParams(window.location.search);
+  if (["page", "cursor", "offset"].some((name) => params.has(name))) return true;
+
+  const shell = root.parentElement;
+  const scope = root.closest("section, article, main") ?? document.body;
+  const selectors = [
+    'a[href*="page="]',
+    'a[href*="cursor="]',
+    'a[href*="offset="]',
+    'input[name="page"]',
+    'select[name="page"]',
+    '[data-pagination]',
+    '[aria-label*="pagination" i]',
+  ];
+
+  for (const candidate of scope.querySelectorAll(selectors.join(","))) {
+    if (!shell?.contains(candidate)) return true;
+  }
+  return false;
 }

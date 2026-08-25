@@ -1,6 +1,7 @@
 import { Role } from "@prisma/client";
+import { ActivePaymentsView } from "@/components/admin-payment-sections";
 import { PageHeader } from "@/components/page-header";
-import { ActivePaymentsView, PaymentsNav } from "@/components/admin-payment-sections";
+import { PaymentsNav } from "@/components/payments-nav";
 import { requireUser } from "@/lib/auth";
 import { getActivePaymentsData, type PaymentQuery } from "@/lib/services/admin-payments";
 

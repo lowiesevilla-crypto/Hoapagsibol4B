@@ -111,10 +111,9 @@ export async function saveAdminHouseholdMemberAction(formData: FormData) {
     redirect(`${returnPath}?success=created&message=${encodeURIComponent(`${member.fullName} was added to the household.`)}`);
   }
 
-  const member = await prisma.householdMember.findFirst({
+  const member = (await prisma.householdMember.findFirst({
     where: { id, tenantId: admin.tenantId, homeownerId },
-  });
-  if (!member) fail("Household member was not found for this tenant and homeowner.");
+  })) ?? fail("Household member was not found for this tenant and homeowner.");
 
   const previousValidationStatus = householdMemberValidationStatus(member);
   const validationChanged = requestedValidationStatus !== previousValidationStatus;

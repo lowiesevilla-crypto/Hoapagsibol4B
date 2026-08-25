@@ -1,3 +1,4 @@
+import { StandardTable } from "@/components/standard-table";
 import Link from "next/link";
 import { AttendanceStatus, PayrollStatus, type Prisma } from "@prisma/client";
 import { AttendanceDeleteForm } from "@/components/attendance-delete-form";
@@ -41,11 +42,11 @@ export default async function AttendanceHistoryPage({ searchParams }: { searchPa
       </div>
       <div className="mt-4 flex gap-2"><SubmitButton>Apply filters</SubmitButton><Link className="btn-secondary" href="/admin/attendance/history">Clear</Link></div>
     </form>
-    <div className="table-wrap"><table className="data-table"><thead><tr><th>Date</th><th>Employee</th><th>Status</th><th>Payroll</th><th>Time</th><th>Total</th><th>Late / undertime</th><th>Remarks</th><th>Actions</th></tr></thead><tbody>{records.map((record) => {
+    <StandardTable><div className="table-wrap"><table className="data-table"><thead><tr><th>Date</th><th>Employee</th><th>Status</th><th>Payroll</th><th>Time</th><th>Total</th><th>Late / undertime</th><th>Remarks</th><th>Actions</th></tr></thead><tbody>{records.map((record) => {
       const payrollStatus = payrollStatusFor(record, periods);
       const paid = payrollStatus === PayrollStatus.PAID;
       return <tr key={record.id}><td className="font-bold">{shortDate(record.date)}</td><td><p className="font-bold">{record.employee.name}</p><p className="text-xs text-slate-400">{record.employee.employeeNumber}</p></td><td><StatusBadge status={record.status} /></td><td><StatusBadge status={payrollStatus} /></td><td>{record.timeIn || "-"} - {record.timeOut || "-"}</td><td>{String(record.totalHours)} hrs</td><td>{record.lateMinutes}m / {record.undertimeMinutes}m</td><td className="max-w-xs whitespace-pre-line">{record.remarks || "-"}</td><td><div className="flex flex-col items-end gap-2">{paid ? <Link className="btn-secondary min-h-8 px-3 py-1 text-xs" href={`/admin/attendance/edit/${record.id}`}>View</Link> : <Link className="btn-secondary min-h-8 px-3 py-1 text-xs" href={`/admin/attendance/edit/${record.id}`}>Edit</Link>}{(!paid || canDeletePaid) && <AttendanceDeleteForm id={record.id} paid={paid} />}</div></td></tr>;
-    })}{!records.length && <tr><td colSpan={9} className="py-12 text-center text-slate-500">No attendance records match these filters.</td></tr>}</tbody></table></div>
+    })}{!records.length && <tr><td colSpan={9} className="py-12 text-center text-slate-500">No attendance records match these filters.</td></tr>}</tbody></table></div></StandardTable>
   </>;
 }
 

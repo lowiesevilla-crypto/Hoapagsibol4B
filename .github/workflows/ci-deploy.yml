@@ -50,6 +50,7 @@ jobs:
       - run: pnpm exec prisma generate
       - run: pnpm exec prisma migrate deploy
       - run: pnpm db:seed
+      - run: pnpm verify:tables
       - run: pnpm typecheck
       - run: pnpm build
       - name: Application smoke check

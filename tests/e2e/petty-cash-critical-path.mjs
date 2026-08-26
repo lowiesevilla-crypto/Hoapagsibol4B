@@ -89,12 +89,27 @@ async function clearAndTypeHandle(element, value) {
   if (value) await element.type(value);
 }
 
+async function waitForUrl(page, predicate, label) {
+  const deadline = Date.now() + timeout;
+  let lastUrl = page.url();
+  while (Date.now() < deadline) {
+    lastUrl = page.url();
+    try {
+      if (predicate(new URL(lastUrl))) return lastUrl;
+    } catch {
+      // Keep polling through transient frame replacement during Next.js redirects.
+    }
+    await new Promise((resolve) => setTimeout(resolve, 100));
+  }
+  throw new Error(`Timed out waiting for ${label}. Last URL: ${lastUrl}`);
+}
+
 async function login(page) {
   await page.goto(`${baseUrl}/login`, { waitUntil: "networkidle2", timeout });
   await page.type("#identifier", adminEmail);
   await page.type("#password", adminPassword);
   await clickByText(page, "button", "Sign in securely");
-  await page.waitForFunction(() => window.location.pathname.startsWith("/admin/"), { timeout });
+  await waitForUrl(page, (url) => url.pathname.startsWith("/admin/"), "administrator redirect after login");
 }
 
 async function createPage(context) {
@@ -162,10 +177,12 @@ async function runPettyCashRegression(browser) {
     const amountInput = await controlByLabel(page, "Amount");
     await clearAndTypeHandle(amountInput, "1250.50");
 
-    const navigation = page.waitForNavigation({ waitUntil: "networkidle2", timeout });
     await clickByText(page, "button[type='submit']", /Post|Save|Create/);
-    await navigation;
-    await page.waitForFunction(() => /^\/admin\/petty-cash\/[^/]+$/.test(window.location.pathname) && new URL(window.location.href).searchParams.get("success") === "created", { timeout });
+    await waitForUrl(
+      page,
+      (url) => /^\/admin\/petty-cash\/[^/]+$/.test(url.pathname) && url.searchParams.get("success") === "created",
+      "created Petty Cash voucher detail redirect",
+    );
     voucherId = page.url().match(/\/admin\/petty-cash\/([^?]+)/)?.[1] || null;
     assert.ok(voucherId, "Expected created Petty Cash voucher id in the detail URL.");
 
@@ -182,7 +199,7 @@ async function runPettyCashRegression(browser) {
     assert.match(printCss, /@page\s*\{\s*size:\s*A4 portrait/);
 
     await clickByText(page, "a", "Edit");
-    await page.waitForFunction(() => window.location.pathname.endsWith("/edit"), { timeout });
+    await waitForUrl(page, (url) => url.pathname.endsWith("/edit"), "Petty Cash edit page");
     await expectText(page, "Save voucher changes");
 
     await clickByText(page, "button", /^Employee$/);
@@ -196,10 +213,8 @@ async function runPettyCashRegression(browser) {
 
     const editAmount = await controlByLabel(page, "Amount");
     await clearAndTypeHandle(editAmount, "1350.75");
-    const updateNavigation = page.waitForNavigation({ waitUntil: "networkidle2", timeout });
     await clickByText(page, "button[type='submit']", "Save voucher changes");
-    await updateNavigation;
-    await page.waitForFunction(() => new URL(window.location.href).searchParams.get("success") === "updated", { timeout });
+    await waitForUrl(page, (url) => url.searchParams.get("success") === "updated", "updated Petty Cash voucher redirect");
 
     const updatedRows = await prisma.$queryRaw(Prisma.sql`SELECT payeeType, payeeEntityId, payeeName, totalAmount FROM PettyCashVoucher WHERE tenantId=${primaryTenantId} AND id=${voucherId} LIMIT 1`);
     assert.equal(updatedRows.length, 1);

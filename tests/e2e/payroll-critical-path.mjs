@@ -128,12 +128,19 @@ async function clickByText(page, selector, matcher) {
 
 async function clearAndType(page, selector, value) {
   await page.waitForSelector(selector, { timeout });
-  await page.$eval(selector, (element) => {
-    element.value = "";
-    element.dispatchEvent(new Event("input", { bubbles: true }));
-    element.dispatchEvent(new Event("change", { bubbles: true }));
-  });
-  await page.type(selector, value);
+  const state = await page.$eval(
+    selector,
+    (element, nextValue) => {
+      element.value = nextValue;
+      element.dispatchEvent(new Event("input", { bubbles: true }));
+      element.dispatchEvent(new Event("change", { bubbles: true }));
+      return { value: element.value, badInput: element.validity.badInput, valid: element.validity.valid };
+    },
+    value,
+  );
+  assert.equal(state.value, value, `Expected ${selector} to contain canonical date value ${value}.`);
+  assert.equal(state.badInput, false, `Expected ${selector} to reject browser bad-input state.`);
+  assert.equal(state.valid, true, `Expected ${selector} to be valid before payroll submission.`);
 }
 
 async function clickAndWaitForNavigation(page, selector, matcher) {

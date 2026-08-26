@@ -373,7 +373,7 @@ export const prisma = basePrisma.$extends({
         if (scoped.create) await validateWriteData(model, scoped.create, context.tenantId);
         if (scoped.update) await validateWriteData(model, scoped.update, context.tenantId);
         const result = await query(scoped as typeof args);
-        if (operation === "create") {
+        if (operation === "create" || operation === "upsert") {
           rememberCreatedRows(model, result, context.tenantId);
         } else if (operation === "createMany" && scoped.skipDuplicates !== true) {
           rememberCreatedRows(model, scoped.data, context.tenantId);

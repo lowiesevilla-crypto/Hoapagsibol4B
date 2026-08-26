@@ -38,7 +38,7 @@ function assertE2eDatabaseSafety() {
 }
 
 async function resolveBrowserExecutable() {
-  const candidates = [process.env.PUPETEER_EXECUTABLE_PATH, process.env.CHROME_BIN, "/usr/bin/google-chrome", "/usr/bin/google-chrome-stable", "/usr/bin/chromium", "/usr/bin/chromium-browser"].filter(Boolean);
+  const candidates = [process.env.PUPPETEER_EXECUTABLE_PATH, process.env.CHROME_BIN, "/usr/bin/google-chrome", "/usr/bin/google-chrome-stable", "/usr/bin/chromium", "/usr/bin/chromium-browser"].filter(Boolean);
   for (const candidate of candidates) if (await pathExists(candidate)) return candidate;
   const packaged = await chromium.executablePath();
   if (await pathExists(packaged)) return packaged;

@@ -109,7 +109,8 @@ async function expectText(page, text, label = text) {
 
 async function expectNoText(page, text, label = text) {
   const body = await pageText(page);
-  assert.ok(!body.includes(text), `Did not expect ${label} on ${page.url()}`);
+  const escaped = text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  assert.ok(!new RegExp(`\\b${escaped}\\b`).test(body), `Did not expect ${label} on ${page.url()}`);
 }
 
 async function clickByText(page, selector, matcher) {

@@ -13,6 +13,9 @@ const timeout = 45_000;
 const runToken = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 const originalPayee = `E2E Petty Payee ${runToken}`;
 const originalParticular = `E2E Petty Cash ${runToken}`;
+const employeeNumber = `PC-E2E-${runToken}`.slice(0, 40);
+const employeeName = `E2E Petty Employee ${runToken}`;
+let employeeFixtureId = null;
 let voucherId = null;
 let voucherNumber = null;
 
@@ -102,8 +105,27 @@ async function createPage(context) {
   return page;
 }
 
+async function createEmployeeFixture() {
+  const employee = await prisma.employeeProfile.create({
+    data: {
+      tenantId: primaryTenantId,
+      employeeNumber,
+      name: employeeName,
+      position: "E2E Petty Cash Payee",
+      phone: "09179990198",
+      address: "Disposable E2E Petty Cash Address",
+      hireDate: new Date("2026-01-01T00:00:00.000Z"),
+      salaryType: "MONTHLY",
+      baseRate: new Prisma.Decimal("18000.00"),
+      status: "ACTIVE",
+    },
+    select: { id: true, name: true },
+  });
+  employeeFixtureId = employee.id;
+  return employee;
+}
+
 async function cleanup() {
-  if (!voucherId && !voucherNumber) return;
   if (voucherId) {
     await prisma.$executeRaw(Prisma.sql`DELETE FROM PettyCashVoucherItem WHERE tenantId=${primaryTenantId} AND voucherId=${voucherId}`);
     await prisma.auditLog.deleteMany({ where: { tenantId: primaryTenantId, entityType: "PettyCashVoucher", entityId: voucherId } }).catch(() => undefined);
@@ -111,11 +133,14 @@ async function cleanup() {
   }
   if (voucherNumber) await prisma.expense.deleteMany({ where: { tenantId: primaryTenantId, referenceNumber: voucherNumber } });
   await prisma.expenseCategory.deleteMany({ where: { tenantId: primaryTenantId, name: originalParticular } }).catch(() => undefined);
+  if (employeeFixtureId) {
+    await prisma.employeeCompensation.deleteMany({ where: { employeeId: employeeFixtureId } }).catch(() => undefined);
+    await prisma.employeeProfile.deleteMany({ where: { id: employeeFixtureId, tenantId: primaryTenantId } });
+  }
 }
 
 async function runPettyCashRegression(browser) {
-  const employee = await prisma.employeeProfile.findFirst({ where: { tenantId: primaryTenantId, status: "ACTIVE" }, orderBy: { name: "asc" }, select: { id: true, name: true } });
-  assert.ok(employee, "Petty Cash search regression requires one active seeded employee in the disposable CI tenant.");
+  const employee = await createEmployeeFixture();
 
   const context = await browser.createBrowserContext();
   const page = await createPage(context);

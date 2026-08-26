@@ -191,12 +191,28 @@ async function runPettyCashRegression(browser) {
     voucherNumber = rows[0].voucherNumber;
     assert.equal(rows[0].payeeName, originalPayee);
     assert.equal(Number(rows[0].totalAmount), 1250.5);
+
+    const linkedExpenses = await prisma.$queryRaw(Prisma.sql`
+      SELECT i.expenseId, e.referenceNumber, e.voucherNumber, e.payee, e.amount
+      FROM PettyCashVoucherItem i
+      JOIN Expense e ON e.tenantId=i.tenantId AND e.id=i.expenseId
+      WHERE i.tenantId=${primaryTenantId} AND i.voucherId=${voucherId}
+      ORDER BY i.displayOrder
+    `);
+    assert.equal(linkedExpenses.length, 1, "Expected one Petty Cash item linked to one tenant-scoped Expense row.");
+    assert.ok(linkedExpenses[0].expenseId, "Petty Cash voucher item must retain the linked Expense id.");
+    assert.equal(linkedExpenses[0].referenceNumber, voucherNumber);
+    assert.equal(linkedExpenses[0].voucherNumber, voucherNumber);
+    assert.equal(linkedExpenses[0].payee, originalPayee);
+    assert.equal(Number(linkedExpenses[0].amount), 1250.5);
+
     await expectText(page, voucherNumber, "created voucher number");
     await expectText(page, originalParticular, "created voucher particular");
     await expectText(page, "Print Half-A4 Voucher", "print action");
     assert.ok(await page.$(".petty-cash-print"), "Voucher detail must expose the Half-A4 print document container.");
     const printCss = await page.$eval("style", (node) => node.textContent || "");
     assert.match(printCss, /@page\s*\{\s*size:\s*A4 portrait/);
+    assert.match(printCss, /\.petty-cash-print\s*\{[^}]*height:\s*148\.5mm\s*!important/s, "Petty Cash print contract must constrain the voucher to the top half of an A4 portrait sheet (148.5mm).");
 
     await clickByText(page, "a", "Edit");
     await waitForUrl(page, (url) => url.pathname.endsWith("/edit"), "Petty Cash edit page");
@@ -223,6 +239,19 @@ async function runPettyCashRegression(browser) {
     assert.equal(updatedRows[0].payeeName, employee.name);
     assert.equal(Number(updatedRows[0].totalAmount), 1350.75);
 
+    const updatedLinkedExpenses = await prisma.$queryRaw(Prisma.sql`
+      SELECT i.expenseId, e.referenceNumber, e.voucherNumber, e.payee, e.amount
+      FROM PettyCashVoucherItem i
+      JOIN Expense e ON e.tenantId=i.tenantId AND e.id=i.expenseId
+      WHERE i.tenantId=${primaryTenantId} AND i.voucherId=${voucherId}
+      ORDER BY i.displayOrder
+    `);
+    assert.equal(updatedLinkedExpenses.length, 1, "Edited voucher must retain exactly one synchronized linked Expense row.");
+    assert.equal(updatedLinkedExpenses[0].referenceNumber, voucherNumber);
+    assert.equal(updatedLinkedExpenses[0].voucherNumber, voucherNumber);
+    assert.equal(updatedLinkedExpenses[0].payee, employee.name);
+    assert.equal(Number(updatedLinkedExpenses[0].amount), 1350.75);
+
     await page.goto(`${baseUrl}/admin/petty-cash`, { waitUntil: "networkidle2", timeout });
     await expectText(page, voucherNumber, "voucher in register");
     await expectText(page, employee.name, "edited payee in register");
@@ -239,10 +268,10 @@ const browser = await puppeteer.launch({ executablePath, headless: headlessMode,
 try {
   await runPettyCashRegression(browser);
   console.log("Petty Cash browser regression suite passed:");
-  console.log("- voucher create persisted tenant-scoped expense evidence");
-  console.log("- voucher detail exposed printable Half-A4 output");
+  console.log("- voucher create persisted tenant-scoped voucher and linked Expense evidence");
+  console.log("- voucher detail enforced the A4 portrait / 148.5mm Half-A4 print contract");
   console.log("- edit search Enter selected a tenant employee without submitting");
-  console.log("- explicit Save persisted edited payee and amount");
+  console.log("- explicit Save persisted edited payee/amount and synchronized the linked Expense");
   console.log("- updated voucher remained visible in the register");
 } catch (error) {
   console.error("Petty Cash browser regression suite failed.");

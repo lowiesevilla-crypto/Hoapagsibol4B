@@ -1,7 +1,7 @@
 # HOAHub Quality / UX Work Status Register
 
 Status: ACTIVE
-Last updated: 2026-08-26
+Last updated: 2026-08-27
 
 This register is the concise operational reference for completed, in-progress, pending, blocked, and deferred product-quality work.
 
@@ -27,7 +27,7 @@ This register is the concise operational reference for completed, in-progress, p
 | Employee create browser regression | P0 | VERIFIED | PR #191 merged; critical browser chain verified again on post-merge `main` CI #1223 |
 | Employee edit persistence browser regression | P0 | VERIFIED | PR #191 merged; nullable/zero-value edit persistence covered and verified again on post-merge `main` CI #1223 |
 | Payroll critical browser regression | P0 | VERIFIED | PR #197 exact head `4fba1a6d02452d8ed0be547fb80108091e419a93` passed HOAHub MySQL CI + Canva Visual Parity; post-merge `main` CI #1223 passed |
-| Petty Cash critical browser regression | P0 | IN_PROGRESS | Active branch `test/petty-cash-critical-browser-20260826` from verified main `5eaaffe4c9f86c68215ce371fe4fffba3bf56940`; create/edit/search/Enter/print coverage is next |
+| Petty Cash critical browser regression | P0 | VERIFIED | PR #198 exact head `33055e969ca38672d9ed28fe072ca761b82cf92d` passed HOAHub MySQL CI #1233 + Canva Visual Parity #376; browser regression verifies create/edit/search/Enter behavior, tenant-scoped linked Expense creation/synchronization, browser print invocation, computed 210mm x 148.5mm Half-A4 print dimensions, and rendered PDF output |
 | Payment Void browser regression | P0 | PENDING | DB evidence exists; browser path pending |
 | Refund browser regression | P0 | PENDING | DB evidence exists for homeowner refund; browser path pending |
 | Online Payments report browser regression | P0 | PENDING | Search/filter/pagination/trace browser evidence pending |
@@ -46,11 +46,10 @@ This register is the concise operational reference for completed, in-progress, p
 
 ## Immediate Execution Order
 
-1. Implement Petty Cash create/edit/search/Enter/print browser regression in a dedicated PR.
-2. Implement Payment Void/Refund browser regression.
-3. Implement Online Payments + Financial Reports browser regression.
-4. Add authenticated post-deploy UAT smoke harness.
-5. Start UI Wave 1 only after affected P0 regression gates are green.
+1. Implement Payment Void/Refund browser regression.
+2. Implement Online Payments + Financial Reports browser regression.
+3. Add authenticated post-deploy UAT smoke harness.
+4. Start UI Wave 1 only after affected P0 regression gates are green.
 
 ## Update Rule
 

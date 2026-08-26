@@ -115,7 +115,8 @@ const modelModules: Partial<Record<string, TenantModule>> = {
   ComplaintIdentityAccessGrant: TenantModule.COMPLAINTS,
 };
 
-const createdTenantRelations = new WeakMap<object, Set<string>>();
+const CREATED_RELATION_TTL_MS = 5 * 60_000;
+const createdTenantRelations = new Map<string, Map<string, number>>();
 const validatedTenantRelations = new WeakMap<object, Set<string>>();
 
 function asRecord(value: unknown): MutableRecord | undefined {
@@ -223,10 +224,22 @@ function currentTenantRelationSet(store: WeakMap<object, Set<string>>, tenantId:
   return relations ?? null;
 }
 
+function recentlyCreatedRelationTrusted(key: string | null, tenantId: string) {
+  if (!key) return false;
+  const relations = createdTenantRelations.get(tenantId);
+  if (!relations) return false;
+  const now = Date.now();
+  for (const [cachedKey, expiresAt] of relations) {
+    if (expiresAt <= now) relations.delete(cachedKey);
+  }
+  if (!relations.size) createdTenantRelations.delete(tenantId);
+  return (relations.get(key) ?? 0) > now;
+}
+
 function relationAlreadyTrusted(key: string | null, tenantId: string) {
   if (!key) return false;
   return Boolean(
-    currentTenantRelationSet(createdTenantRelations, tenantId)?.has(key) ||
+    recentlyCreatedRelationTrusted(key, tenantId) ||
     currentTenantRelationSet(validatedTenantRelations, tenantId)?.has(key),
   );
 }
@@ -238,13 +251,17 @@ function rememberValidatedRelation(key: string | null, tenantId: string) {
 
 function rememberCreatedRows(model: string, value: unknown, tenantId: string) {
   const rows = Array.isArray(value) ? value : [value];
-  const relations = currentTenantRelationSet(createdTenantRelations, tenantId, true);
-  if (!relations) return;
+  let relations = createdTenantRelations.get(tenantId);
+  if (!relations) {
+    relations = new Map<string, number>();
+    createdTenantRelations.set(tenantId, relations);
+  }
+  const expiresAt = Date.now() + CREATED_RELATION_TTL_MS;
   for (const entry of rows) {
     const data = asRecord(entry);
     const id = data?.id;
     if (typeof id !== "string" && typeof id !== "number") continue;
-    relations.add(`${model}:${JSON.stringify([["id", id]])}`);
+    relations.set(`${model}:${JSON.stringify([["id", id]])}`, expiresAt);
   }
 }
 
@@ -298,7 +315,6 @@ async function validateWriteData(model: string, value: unknown, tenantId: string
         continue;
       }
       const cacheKey = relationCacheKey(field.type, fromFields, toFields, data);
-      if (relationAlreadyTrusted(cacheKey, tenantId)) continue;
       const where: MutableRecord = { tenantId };
       fromFields.forEach((name, index) => { where[toFields[index] || "id"] = data[name]; });
       const related = await delegateFor(field.type)?.findFirst({ where, select: { tenantId: true } });
@@ -306,6 +322,11 @@ async function validateWriteData(model: string, value: unknown, tenantId: string
         const relationWhere: MutableRecord = {};
         fromFields.forEach((name, index) => { relationWhere[toFields[index] || "id"] = data[name]; });
         const actual = await delegateFor(field.type)?.findFirst({ where: relationWhere, select: { tenantId: true } });
+        if (actual && actual.tenantId !== tenantId) {
+          logTenantMismatch(entityType, tenantId, actual.tenantId);
+          throw new Error(`Cross-tenant relation blocked for ${entityType}.`);
+        }
+        if (!actual && relationAlreadyTrusted(cacheKey, tenantId)) continue;
         logTenantMismatch(entityType, tenantId, actual?.tenantId ?? "not-found");
         throw new Error(`Cross-tenant relation blocked for ${entityType}.`);
       }
@@ -352,7 +373,9 @@ export const prisma = basePrisma.$extends({
         if (scoped.create) await validateWriteData(model, scoped.create, context.tenantId);
         if (scoped.update) await validateWriteData(model, scoped.update, context.tenantId);
         const result = await query(scoped as typeof args);
-        if (operation === "createMany" && scoped.skipDuplicates !== true) {
+        if (operation === "create") {
+          rememberCreatedRows(model, result, context.tenantId);
+        } else if (operation === "createMany" && scoped.skipDuplicates !== true) {
           rememberCreatedRows(model, scoped.data, context.tenantId);
         }
         return result;

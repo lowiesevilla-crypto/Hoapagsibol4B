@@ -18,16 +18,16 @@ This register is the concise operational reference for completed, in-progress, p
 
 | Work Item | Priority | Status | Evidence / Note |
 |---|---:|---|---|
-| Protect post-rollback production baseline | P0 | VERIFIED | `main` baseline `34e62289d351...`; latest CI/deploy health passed |
-| Product Quality Excellence Program documentation | P0 | IN_PROGRESS | `docs/quality-excellence-program-20260826` |
-| Master Regression Matrix | P0 | IN_PROGRESS | Added under `docs/quality/` on program branch |
-| Professional UI/UX Standard | P0 | IN_PROGRESS | Added under `docs/quality/` on program branch |
-| Release Governance | P0 | IN_PROGRESS | Added under `docs/quality/` on program branch |
+| Protect post-rollback production baseline | P0 | VERIFIED | Current verified `main` includes PR #197 at merge SHA `5eaaffe4c9f86c68215ce371fe4fffba3bf56940`; post-merge HOAHub MySQL CI #1223 passed |
+| Product Quality Excellence Program documentation | P0 | VERIFIED | PR #190 merged to `main` |
+| Master Regression Matrix | P0 | VERIFIED | Added under `docs/quality/` by PR #190 |
+| Professional UI/UX Standard | P0 | VERIFIED | Added under `docs/quality/` by PR #190 |
+| Release Governance | P0 | VERIFIED | Added under `docs/quality/` by PR #190 |
 | Current critical browser E2E baseline | P0 | VERIFIED | Admin auth, billing generation, payment/receipt, homeowner mobile/SOA, documents, announcements, registration/activation |
-| Employee create browser regression | P0 | PENDING | Unit regression exists; full browser path pending |
-| Employee edit persistence browser regression | P0 | PENDING | Needed for nullable/zero-value edit confidence |
-| Payroll critical browser regression | P0 | PENDING | Full critical user journey not evidenced in current E2E package |
-| Petty Cash critical browser regression | P0 | PENDING | Create/edit/search/Enter/print path pending |
+| Employee create browser regression | P0 | VERIFIED | PR #191 merged; critical browser chain verified again on post-merge `main` CI #1223 |
+| Employee edit persistence browser regression | P0 | VERIFIED | PR #191 merged; nullable/zero-value edit persistence covered and verified again on post-merge `main` CI #1223 |
+| Payroll critical browser regression | P0 | VERIFIED | PR #197 exact head `4fba1a6d02452d8ed0be547fb80108091e419a93` passed HOAHub MySQL CI + Canva Visual Parity; post-merge `main` CI #1223 passed |
+| Petty Cash critical browser regression | P0 | IN_PROGRESS | Active branch `test/petty-cash-critical-browser-20260826` from verified main `5eaaffe4c9f86c68215ce371fe4fffba3bf56940`; create/edit/search/Enter/print coverage is next |
 | Payment Void browser regression | P0 | PENDING | DB evidence exists; browser path pending |
 | Refund browser regression | P0 | PENDING | DB evidence exists for homeowner refund; browser path pending |
 | Online Payments report browser regression | P0 | PENDING | Search/filter/pagination/trace browser evidence pending |
@@ -46,13 +46,11 @@ This register is the concise operational reference for completed, in-progress, p
 
 ## Immediate Execution Order
 
-1. Merge documentation/governance PR after CI confirms no unintended impact.
-2. Implement Employee create/edit browser regression in a dedicated PR.
-3. Implement Petty Cash browser regression in a dedicated PR.
-4. Implement Payment Void/Refund browser regression.
-5. Implement Online Payments + Financial Reports browser regression.
-6. Add authenticated post-deploy UAT smoke harness.
-7. Start UI Wave 1 only after affected P0 regression gates are green.
+1. Implement Petty Cash create/edit/search/Enter/print browser regression in a dedicated PR.
+2. Implement Payment Void/Refund browser regression.
+3. Implement Online Payments + Financial Reports browser regression.
+4. Add authenticated post-deploy UAT smoke harness.
+5. Start UI Wave 1 only after affected P0 regression gates are green.
 
 ## Update Rule
 

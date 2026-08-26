@@ -124,16 +124,17 @@ async function cleanFixture() {
     select: { id: true },
   });
   const billIds = [...new Set([billId, ...bills.map((bill) => bill.id)].filter(Boolean))];
-  const payments = await prisma.payment.findMany({
+  const payments = billIds.length ? await prisma.payment.findMany({
     where: {
       tenantId: primaryTenantId,
       OR: [
         ...(paymentId ? [{ id: paymentId }] : []),
-        ...(billIds.length ? [{ allocations: { some: { billId: { in: billIds } } } }, { billId: { in: billIds } }] : []),
+        { allocations: { some: { billId: { in: billIds } } } },
+        { billId: { in: billIds } },
       ],
     },
     select: { id: true },
-  });
+  }) : [];
   const paymentIds = [...new Set([paymentId, ...payments.map((payment) => payment.id)].filter(Boolean))];
 
   if (paymentIds.length) {
@@ -170,7 +171,8 @@ async function runPaymentVoidRegression(browser) {
     billingUrl.searchParams.set("preview", "1");
     billingUrl.searchParams.set("coverageYear", String(coverageYear));
     billingUrl.searchParams.set("coverageMonth", String(coverageMonth));
-    billingUrl.searchParams.set("scope", "ALL");
+    billingUrl.searchParams.set("scope", "HOMEOWNER");
+    billingUrl.searchParams.set("homeownerId", homeowner.id);
     await page.goto(billingUrl.toString(), { waitUntil: "networkidle2", timeout });
     await expectText(page, "Billing generation");
     await clickByText(page, "button", "Generate for Eligible Homeowners");
@@ -210,7 +212,7 @@ async function runPaymentVoidRegression(browser) {
     await page.goto(activeUrl.toString(), { waitUntil: "networkidle2", timeout });
     await expectText(page, receiptNumber, "active payment receipt");
     await clickByText(page, "button[type='button']", /^Void$/);
-    const reasonInput = await page.$(`input[name='reason']`);
+    const reasonInput = await page.$("input[name='reason']");
     assert.ok(reasonInput, "Expected the audited void reason input after opening the void control.");
     await reasonInput.type(voidReason);
     page.once("dialog", async (dialog) => dialog.accept());
@@ -218,13 +220,15 @@ async function runPaymentVoidRegression(browser) {
     await waitForUrl(page, (url) => url.pathname === "/admin/payments/active" && url.searchParams.get("success") === "deleted", "successful payment void redirect");
     await expectText(page, "Payment voided, archived, and billing totals recalculated.", "void success message");
 
-    const [voidedPayment, archive, recalculatedBill, audit] = await Promise.all([
+    const [voidedPayment, archive, recalculatedBill] = await Promise.all([
       prisma.payment.findFirstOrThrow({ where: { tenantId: primaryTenantId, id: paymentId } }),
       prisma.paymentArchive.findFirstOrThrow({ where: { tenantId: primaryTenantId, originalPaymentId: paymentId } }),
       prisma.bill.findFirstOrThrow({ where: { tenantId: primaryTenantId, id: billId } }),
-      prisma.auditLog.findFirst({ where: { tenantId: primaryTenantId, action: "VOID_PAYMENT_TRANSACTION", OR: [{ entityId: paymentId }, { metadata: { path: ["originalPaymentId"], equals: paymentId } }] } }),
     ]);
     archiveId = archive.id;
+    const audit = await prisma.auditLog.findFirst({
+      where: { tenantId: primaryTenantId, action: "VOID_PAYMENT_TRANSACTION", entityType: "PaymentArchive", entityId: archive.id },
+    });
     assert.equal(voidedPayment.status, "VOIDED");
     assert.ok(voidedPayment.voidedAt, "Expected a void timestamp.");
     assert.equal(voidedPayment.voidReason, voidReason);

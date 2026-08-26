@@ -124,6 +124,7 @@ jobs:
           path: |
             /tmp/hoahub-ci-suite-status.log
             /tmp/hoahub-ci-suite-output.log
+            /tmp/hoa-next.log
           if-no-files-found: warn
           retention-days: 7
 

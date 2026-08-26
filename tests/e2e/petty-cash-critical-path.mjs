@@ -38,7 +38,7 @@ function assertE2eDatabaseSafety() {
 }
 
 async function resolveBrowserExecutable() {
-  const candidates = [process.env.PUPPETEER_EXECUTABLE_PATH, process.env.CHROME_BIN, "/usr/bin/google-chrome", "/usr/bin/google-chrome-stable", "/usr/bin/chromium", "/usr/bin/chromium-browser"].filter(Boolean);
+  const candidates = [process.env.PUPETEER_EXECUTABLE_PATH, process.env.CHROME_BIN, "/usr/bin/google-chrome", "/usr/bin/google-chrome-stable", "/usr/bin/chromium", "/usr/bin/chromium-browser"].filter(Boolean);
   for (const candidate of candidates) if (await pathExists(candidate)) return candidate;
   const packaged = await chromium.executablePath();
   if (await pathExists(packaged)) return packaged;
@@ -214,6 +214,26 @@ async function runPettyCashRegression(browser) {
     assert.match(printCss, /@page\s*\{\s*size:\s*A4 portrait/);
     assert.match(printCss, /\.petty-cash-print\s*\{[^}]*height:\s*148\.5mm\s*!important/s, "Petty Cash print contract must constrain the voucher to the top half of an A4 portrait sheet (148.5mm).");
 
+    await page.evaluate(() => {
+      document.documentElement.dataset.e2ePrintInvoked = "0";
+      window.print = () => { document.documentElement.dataset.e2ePrintInvoked = "1"; };
+    });
+    await clickByText(page, "button", "Print Half-A4 Voucher");
+    assert.equal(await page.$eval("html", (node) => node.dataset.e2ePrintInvoked), "1", "Print action must invoke the browser print path.");
+
+    await page.emulateMediaType("print");
+    const printBox = await page.$eval(".petty-cash-print", (node) => {
+      const style = getComputedStyle(node);
+      return { widthPx: Number.parseFloat(style.width), heightPx: Number.parseFloat(style.height) };
+    });
+    const pxPerMm = 96 / 25.4;
+    assert.ok(Math.abs(printBox.widthPx - (210 * pxPerMm)) <= 2, `Expected 210mm A4 print width, received ${printBox.widthPx}px.`);
+    assert.ok(Math.abs(printBox.heightPx - (148.5 * pxPerMm)) <= 2, `Expected 148.5mm Half-A4 voucher height, received ${printBox.heightPx}px.`);
+    const pdf = await page.pdf({ printBackground: true, preferCSSPageSize: true });
+    assert.ok(pdf.byteLength > 5000, `Expected a rendered Petty Cash PDF, received ${pdf.byteLength} bytes.`);
+    assert.equal(Buffer.from(pdf).subarray(0, 5).toString("ascii"), "%PDF-", "Rendered Petty Cash output must be a PDF document.");
+    await page.emulateMediaType("screen");
+
     await clickByText(page, "a", "Edit");
     await waitForUrl(page, (url) => url.pathname.endsWith("/edit"), "Petty Cash edit page");
     await expectText(page, "Save voucher changes");
@@ -269,7 +289,7 @@ try {
   await runPettyCashRegression(browser);
   console.log("Petty Cash browser regression suite passed:");
   console.log("- voucher create persisted tenant-scoped voucher and linked Expense evidence");
-  console.log("- voucher detail enforced the A4 portrait / 148.5mm Half-A4 print contract");
+  console.log("- print button invoked the browser print path and Chromium rendered the 210mm x 148.5mm Half-A4 voucher contract to PDF");
   console.log("- edit search Enter selected a tenant employee without submitting");
   console.log("- explicit Save persisted edited payee/amount and synchronized the linked Expense");
   console.log("- updated voucher remained visible in the register");

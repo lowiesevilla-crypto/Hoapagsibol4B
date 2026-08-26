@@ -18,7 +18,7 @@ This register is the concise operational reference for completed, in-progress, p
 
 | Work Item | Priority | Status | Evidence / Note |
 |---|---:|---|---|
-| Protect post-rollback production baseline | P0 | VERIFIED | Current verified `main` includes PR #197 at merge SHA `5eaaffe4c9f86c68215ce371fe4fffba3bf56940`; post-merge HOAHub MySQL CI #1223 passed |
+| Protect post-rollback production baseline | P0 | VERIFIED | Current verified `main` includes Petty Cash PR #198 at merge SHA `cc2403d3f1276a6ab58a75ac7f11b5bdd50ff479`; exact-head HOAHub MySQL CI #1233 and Canva Visual Parity #376 passed |
 | Product Quality Excellence Program documentation | P0 | VERIFIED | PR #190 merged to `main` |
 | Master Regression Matrix | P0 | VERIFIED | Added under `docs/quality/` by PR #190 |
 | Professional UI/UX Standard | P0 | VERIFIED | Added under `docs/quality/` by PR #190 |
@@ -27,8 +27,8 @@ This register is the concise operational reference for completed, in-progress, p
 | Employee create browser regression | P0 | VERIFIED | PR #191 merged; critical browser chain verified again on post-merge `main` CI #1223 |
 | Employee edit persistence browser regression | P0 | VERIFIED | PR #191 merged; nullable/zero-value edit persistence covered and verified again on post-merge `main` CI #1223 |
 | Payroll critical browser regression | P0 | VERIFIED | PR #197 exact head `4fba1a6d02452d8ed0be547fb80108091e419a93` passed HOAHub MySQL CI + Canva Visual Parity; post-merge `main` CI #1223 passed |
-| Petty Cash critical browser regression | P0 | IN_PROGRESS | Active branch `test/petty-cash-critical-browser-20260826` from verified main `5eaaffe4c9f86c68215ce371fe4fffba3bf56940`; create/edit/search/Enter/print coverage is next |
-| Payment Void browser regression | P0 | PENDING | DB evidence exists; browser path pending |
+| Petty Cash critical browser regression | P0 | VERIFIED | PR #198 merged from exact head `33055e969ca38672d9ed28fe072ca761b82cf92d`; HOAHub MySQL CI #1233 + Canva Visual Parity #376 passed; merge `cc2403d3f1276a6ab58a75ac7f11b5bdd50ff479` |
+| Payment Void browser regression | P0 | IN_PROGRESS | Issue #199 active on branch `test/payment-void-critical-browser-20260826`; DB evidence exists and browser path is now the active P0 task |
 | Refund browser regression | P0 | PENDING | DB evidence exists for homeowner refund; browser path pending |
 | Online Payments report browser regression | P0 | PENDING | Search/filter/pagination/trace browser evidence pending |
 | Financial Reports browser regression | P0 | PENDING | Date-filter/totals/export browser evidence pending |
@@ -46,8 +46,8 @@ This register is the concise operational reference for completed, in-progress, p
 
 ## Immediate Execution Order
 
-1. Implement Petty Cash create/edit/search/Enter/print browser regression in a dedicated PR.
-2. Implement Payment Void/Refund browser regression.
+1. Implement Payment Void browser regression in a dedicated PR.
+2. Implement Refund browser regression.
 3. Implement Online Payments + Financial Reports browser regression.
 4. Add authenticated post-deploy UAT smoke harness.
 5. Start UI Wave 1 only after affected P0 regression gates are green.

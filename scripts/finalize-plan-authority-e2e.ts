@@ -73,6 +73,21 @@ async function main() {
     },
   });
 
+  await prisma.subscriptionPlanFeatureEntitlement.upsert({
+    where: {
+      planId_featureCode: {
+        planId: subscription.planId,
+        featureCode: "PETTY_CASH_VOUCHER",
+      },
+    },
+    update: { enabled: true },
+    create: {
+      planId: subscription.planId,
+      featureCode: "PETTY_CASH_VOUCHER",
+      enabled: true,
+    },
+  });
+
   console.log(`Plan-authority E2E fixtures finalized on plan ${subscription.planId}.`);
 }
 

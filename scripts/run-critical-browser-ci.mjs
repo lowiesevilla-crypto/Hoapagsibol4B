@@ -29,6 +29,11 @@ const suites = [
     args: ["--import", safeCleanupImport, "tests/e2e/payroll-critical-path.mjs"],
   },
   {
+    name: "petty-cash-critical-path",
+    command: "node",
+    args: ["--import", safeCleanupImport, "tests/e2e/petty-cash-critical-path.mjs"],
+  },
+  {
     name: "onboarding-workflow",
     command: "node",
     args: ["--import", safeCleanupImport, "tests/e2e/onboarding-workflow.mjs"],

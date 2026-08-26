@@ -16,6 +16,7 @@ const employeeName = `Payroll E2E Employee ${runToken}`;
 let payrollId = null;
 let employeeId = null;
 let revisionId = null;
+let testDates = null;
 
 async function pathExists(path) {
   if (!path) return false;
@@ -94,6 +95,10 @@ async function pageText(page) {
   return page.evaluate(() => document.body?.textContent || "");
 }
 
+function checkpoint(label, page) {
+  console.log(`[payroll-e2e] ${label}${page ? ` | ${page.url()}` : ""}`);
+}
+
 async function expectText(page, text, label = text) {
   try {
     await page.waitForFunction(
@@ -107,26 +112,30 @@ async function expectText(page, text, label = text) {
   }
 }
 
-async function expectNoText(page, text, label = text) {
-  const body = await pageText(page);
-  const escaped = text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  assert.ok(!new RegExp(`\\b${escaped}\\b`).test(body), `Did not expect ${label} on ${page.url()}`);
-}
-
-async function clickByText(page, selector, matcher) {
-  const elements = await page.$$(selector);
-  for (const element of elements) {
-    const text = (await element.evaluate((node) => node.textContent || "")).replace(/\s+/g, " ").trim();
-    const matches = typeof matcher === "string" ? text.includes(matcher) : matcher.test(text);
-    if (matches) {
-      await element.click();
-      return;
-    }
+async function findExactSubmitButton(page, expectedText) {
+  const buttons = await page.$$("button[type='submit']");
+  for (const button of buttons) {
+    const text = (await button.evaluate((node) => node.textContent || "")).replace(/\s+/g, " ").trim();
+    if (text === expectedText) return button;
   }
-  throw new Error(`No ${selector} matched ${String(matcher)} on ${page.url()}`);
+  return null;
 }
 
-async function clearAndType(page, selector, value) {
+async function clickExactSubmitButton(page, expectedText) {
+  const button = await findExactSubmitButton(page, expectedText);
+  if (!button) {
+    const body = (await pageText(page)).replace(/\s+/g, " ").trim();
+    throw new Error(`No submit button exactly matched ${expectedText} on ${page.url()}. Page text: ${body.slice(0, 2500)}`);
+  }
+  await button.click();
+}
+
+async function expectNoExactSubmitButton(page, expectedText) {
+  const button = await findExactSubmitButton(page, expectedText);
+  assert.equal(button, null, `Did not expect an actionable ${expectedText} submit button on ${page.url()}`);
+}
+
+async function setDateInput(page, selector, value) {
   await page.waitForSelector(selector, { timeout });
   const state = await page.$eval(
     selector,
@@ -143,10 +152,33 @@ async function clearAndType(page, selector, value) {
   assert.equal(state.valid, true, `Expected ${selector} to be valid before payroll submission.`);
 }
 
-async function clickAndWaitForNavigation(page, selector, matcher) {
-  const navigation = page.waitForNavigation({ waitUntil: "networkidle2", timeout }).catch(() => null);
-  await clickByText(page, selector, matcher);
-  await navigation;
+async function waitForUrlParam(page, key, expectedValue, label) {
+  try {
+    await page.waitForFunction(
+      (paramKey, value) => new URL(window.location.href).searchParams.get(paramKey) === value,
+      { timeout },
+      key,
+      expectedValue,
+    );
+  } catch (error) {
+    const body = (await pageText(page)).replace(/\s+/g, " ").trim();
+    throw new Error(`Timed out waiting for ${label} on ${page.url()}. Page text: ${body.slice(0, 2500)}`, { cause: error });
+  }
+}
+
+async function waitForDatabase(predicate, label) {
+  const started = Date.now();
+  let lastError = null;
+  while (Date.now() - started < timeout) {
+    try {
+      if (await predicate()) return;
+      lastError = null;
+    } catch (error) {
+      lastError = error;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 250));
+  }
+  throw new Error(`Timed out waiting for database evidence: ${label}`, lastError ? { cause: lastError } : undefined);
 }
 
 async function login(page) {
@@ -154,7 +186,17 @@ async function login(page) {
   await page.waitForSelector("#identifier", { timeout });
   await page.type("#identifier", adminEmail);
   await page.type("#password", adminPassword);
-  await clickByText(page, "button", "Sign in securely");
+  const buttons = await page.$$("button");
+  let signedIn = false;
+  for (const button of buttons) {
+    const text = (await button.evaluate((node) => node.textContent || "")).replace(/\s+/g, " ").trim();
+    if (text.includes("Sign in securely")) {
+      await button.click();
+      signedIn = true;
+      break;
+    }
+  }
+  assert.ok(signedIn, "Expected the secure sign-in button.");
   await page.waitForFunction(() => window.location.pathname.startsWith("/admin/"), { timeout });
   await page.waitForNetworkIdle({ idleTime: 500, timeout }).catch(() => undefined);
 }
@@ -213,20 +255,42 @@ async function provisionEmployee(dates) {
   employeeId = employee.id;
 }
 
+async function resolveCleanupPayrollId() {
+  if (payrollId) return payrollId;
+  if (!testDates) return null;
+  const period = await prisma.payrollPeriod.findUnique({
+    where: {
+      tenantId_startDate_endDate: {
+        tenantId: primaryTenantId,
+        startDate: testDates.startDate,
+        endDate: testDates.endDate,
+      },
+    },
+    select: { id: true },
+  });
+  return period?.id ?? null;
+}
+
 async function cleanup() {
-  if (payrollId) {
-    if (revisionId) {
+  const targetPayrollId = await resolveCleanupPayrollId();
+  if (targetPayrollId) {
+    const revisions = await prisma.payrollCalculationRevision.findMany({
+      where: { tenantId: primaryTenantId, payrollId: targetPayrollId },
+      select: { id: true },
+    });
+    const revisionIds = revisions.map((item) => item.id);
+    if (revisionIds.length) {
       await prisma.auditLog.deleteMany({
-        where: { tenantId: primaryTenantId, entityId: revisionId },
-      }).catch(() => undefined);
+        where: { tenantId: primaryTenantId, entityId: { in: revisionIds } },
+      });
     }
     await prisma.auditLog.deleteMany({
-      where: { tenantId: primaryTenantId, entityId: payrollId },
-    }).catch(() => undefined);
-    await prisma.payrollCalculationRevision.deleteMany({ where: { tenantId: primaryTenantId, payrollId } });
-    await prisma.payrollDeduction.deleteMany({ where: { tenantId: primaryTenantId, payrollId } });
-    await prisma.payslip.deleteMany({ where: { tenantId: primaryTenantId, payrollId } });
-    await prisma.payrollPeriod.deleteMany({ where: { tenantId: primaryTenantId, id: payrollId } });
+      where: { tenantId: primaryTenantId, entityId: targetPayrollId },
+    });
+    await prisma.payrollCalculationRevision.deleteMany({ where: { tenantId: primaryTenantId, payrollId: targetPayrollId } });
+    await prisma.payrollDeduction.deleteMany({ where: { tenantId: primaryTenantId, payrollId: targetPayrollId } });
+    await prisma.payslip.deleteMany({ where: { tenantId: primaryTenantId, payrollId: targetPayrollId } });
+    await prisma.payrollPeriod.deleteMany({ where: { tenantId: primaryTenantId, id: targetPayrollId } });
   }
   if (employeeId) {
     await prisma.employeeCompensation.deleteMany({ where: { tenantId: primaryTenantId, employeeId } });
@@ -234,41 +298,45 @@ async function cleanup() {
   }
 }
 
+async function fetchPeriod(dates) {
+  return prisma.payrollPeriod.findUnique({
+    where: {
+      tenantId_startDate_endDate: {
+        tenantId: primaryTenantId,
+        startDate: dates.startDate,
+        endDate: dates.endDate,
+      },
+    },
+    include: {
+      payslips: { where: { employeeId }, include: { employee: true } },
+      revisions: true,
+    },
+  });
+}
+
 async function runPayrollFlow(browser, dates) {
   const context = await browser.createBrowserContext();
   const page = await createPage(context);
   try {
+    checkpoint("login", page);
     await login(page);
     await page.goto(`${baseUrl}/admin/payroll/periods`, { waitUntil: "networkidle2", timeout });
     await expectText(page, "Calculate payroll period");
     await expectText(page, "Confidential payroll module");
 
-    await clearAndType(page, "input[name='startDate']", inputDate(dates.startDate));
-    await clearAndType(page, "input[name='endDate']", inputDate(dates.endDate));
-    await clearAndType(page, "input[name='payDate']", inputDate(dates.payDate));
-    await clickAndWaitForNavigation(page, "button[type='submit']", "Calculate payroll");
-    await page.waitForFunction(
-      () => new URL(window.location.href).searchParams.get("success") === "calculated",
-      { timeout },
-    );
-    await expectText(page, employeeName, "calculated employee payslip row");
-    await expectText(page, "Total payroll amount");
+    checkpoint("calculate payroll", page);
+    await setDateInput(page, "input[name='startDate']", inputDate(dates.startDate));
+    await setDateInput(page, "input[name='endDate']", inputDate(dates.endDate));
+    await setDateInput(page, "input[name='payDate']", inputDate(dates.payDate));
+    await clickExactSubmitButton(page, "Calculate payroll");
+    await waitForUrlParam(page, "success", "calculated", "successful payroll calculation redirect");
 
-    let period = await prisma.payrollPeriod.findUnique({
-      where: {
-        tenantId_startDate_endDate: {
-          tenantId: primaryTenantId,
-          startDate: dates.startDate,
-          endDate: dates.endDate,
-        },
-      },
-      include: {
-        payslips: { where: { employeeId }, include: { employee: true } },
-        revisions: true,
-      },
-    });
+    let period = await fetchPeriod(dates);
     assert.ok(period, "Expected payroll period created through the Admin browser workflow.");
     payrollId = period.id;
+
+    await expectText(page, employeeName, "calculated employee payslip row");
+    await expectText(page, "Total payroll amount");
     assert.equal(period.tenantId, primaryTenantId);
     assert.equal(period.status, "CALCULATED");
     assert.equal(period.statutoryRuleSetId, dates.statutoryRuleSetId);
@@ -278,12 +346,20 @@ async function runPayrollFlow(browser, dates) {
     assert.ok(Number(period.payslips[0].netPay) > 0 && Number(period.payslips[0].netPay) <= 10000, "Net pay must be positive and no greater than gross pay.");
     assert.equal(period.revisions.length, 0, "Calculated payroll must not create immutable finalization evidence yet.");
 
-    // Re-submit the same cutoff before finalization. The domain contract is to recalculate
-    // the existing mutable period instead of creating a duplicate payroll run.
-    await clearAndType(page, "input[name='startDate']", inputDate(dates.startDate));
-    await clearAndType(page, "input[name='endDate']", inputDate(dates.endDate));
-    await clearAndType(page, "input[name='payDate']", inputDate(dates.payDate));
-    await clickAndWaitForNavigation(page, "button[type='submit']", "Calculate payroll");
+    checkpoint("verify duplicate-safe recalculation", page);
+    const generateAuditCountBefore = await prisma.auditLog.count({
+      where: { tenantId: primaryTenantId, entityId: payrollId, action: "GENERATE_PAYROLL" },
+    });
+    await setDateInput(page, "input[name='startDate']", inputDate(dates.startDate));
+    await setDateInput(page, "input[name='endDate']", inputDate(dates.endDate));
+    await setDateInput(page, "input[name='payDate']", inputDate(dates.payDate));
+    await clickExactSubmitButton(page, "Calculate payroll");
+    await waitForDatabase(
+      async () => (await prisma.auditLog.count({ where: { tenantId: primaryTenantId, entityId: payrollId, action: "GENERATE_PAYROLL" } })) > generateAuditCountBefore,
+      "second payroll generation audit entry",
+    );
+    await page.waitForNetworkIdle({ idleTime: 500, timeout: 5_000 }).catch(() => undefined);
+
     const duplicateCount = await prisma.payrollPeriod.count({
       where: { tenantId: primaryTenantId, startDate: dates.startDate, endDate: dates.endDate },
     });
@@ -291,16 +367,15 @@ async function runPayrollFlow(browser, dates) {
     const payslipCount = await prisma.payslip.count({ where: { tenantId: primaryTenantId, payrollId, employeeId } });
     assert.equal(payslipCount, 1, "Repeated calculation must upsert rather than duplicate the employee payslip.");
 
-    await clickAndWaitForNavigation(page, "button[type='submit']", "Finalize");
-    await page.waitForFunction(
-      () => new URL(window.location.href).searchParams.get("success") === "finalized",
-      { timeout },
-    );
+    checkpoint("finalize payroll", page);
+    await clickExactSubmitButton(page, "Finalize");
+    await waitForUrlParam(page, "success", "finalized", "successful payroll finalization redirect");
     await expectText(page, "Finalized and ready to post.");
     await expectText(page, "Revision 1");
     await expectText(page, "Post to Financial Engine");
-    await expectNoText(page, "Finalize", "finalize action after payroll is locked");
+    await expectNoExactSubmitButton(page, "Finalize");
 
+    checkpoint("verify immutable finalization evidence", page);
     period = await prisma.payrollPeriod.findFirst({
       where: { id: payrollId, tenantId: primaryTenantId },
       include: {
@@ -315,11 +390,16 @@ async function runPayrollFlow(browser, dates) {
     assert.equal(period.revisions[0].revisionNumber, 1);
     assert.equal(period.revisions[0].revisionType, "INITIAL");
     assert.equal(period.revisions[0].lifecycleStatus, "FINALIZED");
-    assert.equal(period.revisions[0].payslips.filter((item) => item.employeeId === employeeId).length, 1, "Immutable revision must snapshot the disposable employee payslip.");
+    assert.equal(
+      period.revisions[0].payslips.filter((item) => item.employeeId === employeeId).length,
+      1,
+      "Immutable revision must snapshot the disposable employee payslip.",
+    );
 
     const finalizedPayslip = period.payslips[0];
     assert.ok(finalizedPayslip?.statutorySnapshot, "Finalized payslip must retain statutory calculation evidence.");
     assert.ok(finalizedPayslip?.compensationSnapshot, "Finalized payslip must retain compensation calculation evidence.");
+    checkpoint("payroll lifecycle verified", page);
   } finally {
     await context.close();
   }
@@ -327,6 +407,7 @@ async function runPayrollFlow(browser, dates) {
 
 assertE2eDatabaseSafety();
 const dates = await choosePayrollDates();
+testDates = dates;
 await provisionEmployee(dates);
 const executablePath = await resolveBrowserExecutable();
 const headlessMode = "shell";
@@ -342,7 +423,7 @@ try {
   console.log("- authorized payroll module access passed");
   console.log("- payroll calculation created the tenant-scoped cutoff and payslip");
   console.log("- deterministic semi-monthly basic/gross pay assertions passed");
-  console.log("- repeated calculation remained duplicate-safe");
+  console.log("- repeated calculation completed and remained duplicate-safe");
   console.log("- finalization created immutable revision evidence");
   console.log("- finalized payroll exposed the controlled Financial Engine next step and removed the finalize action");
 } catch (error) {
@@ -350,7 +431,12 @@ try {
   console.error(error);
   process.exitCode = 1;
 } finally {
-  await cleanup().catch((error) => console.error("Payroll browser cleanup failed.", error));
+  try {
+    await cleanup();
+  } catch (error) {
+    console.error("Payroll browser cleanup failed.", error);
+    process.exitCode = 1;
+  }
   await browser.close();
   await prisma.$disconnect();
 }

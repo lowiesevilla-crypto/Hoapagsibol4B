@@ -59,6 +59,7 @@ export async function recordCollectionAction(formData: FormData) {
     const series = collectionReceiptSeries(data.type);
     const receiptNumber = await allocateReceiptNumber(tx as unknown as Prisma.TransactionClient, admin.tenantId, collectionDate, series);
     const collection = await tx.collection.create({ data: {
+      tenantId: admin.tenantId,
       type: data.type,
       description: data.description || null,
       payerType: data.payerType,
@@ -76,6 +77,7 @@ export async function recordCollectionAction(formData: FormData) {
       createdById: admin.id,
     } });
     await tx.auditLog.create({ data: {
+      tenantId: admin.tenantId,
       actorId: admin.id,
       module: "RECEIPTS",
       action: `GENERATE_${series}_RECEIPT`,

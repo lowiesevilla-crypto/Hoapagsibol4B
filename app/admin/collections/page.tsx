@@ -7,15 +7,18 @@ import { StatCard } from "@/components/stat-card";
 import { StatusBadge } from "@/components/status-badge";
 import { DeleteButton, SearchInput, SubmitButton } from "@/components/ui";
 import { deleteCollectionAction, forfeitBondAction } from "@/lib/actions/collections";
+import { requirePermission } from "@/lib/authorization/guards";
+import { Permission } from "@/lib/authorization/permissions";
 import { prisma } from "@/lib/db";
 import { collectionLabel, inputDate, money, shortDate } from "@/lib/utils";
 
 export default async function CollectionsPage() {
+  const admin = await requirePermission(Permission.COLLECTIONS_MANAGE);
   const [homeowners, contractors, collections, refunds] = await Promise.all([
-    prisma.homeownerProfile.findMany({ include: { user: true }, orderBy: { user: { name: "asc" } } }),
-    prisma.contractorProfile.findMany({ where: { status: "ACTIVE" }, orderBy: { companyName: "asc" } }),
-    prisma.collection.findMany({ include: { homeowner: { include: { user: true } }, contractor: true, refunds: true }, orderBy: [{ collectionDate: "desc" }, { createdAt: "desc" }] }),
-    prisma.bondRefund.findMany({ take: 10, include: { collection: { include: { homeowner: { include: { user: true } }, contractor: true } }, processedBy: true }, orderBy: [{ refundDate: "desc" }, { createdAt: "desc" }] }),
+    prisma.homeownerProfile.findMany({ where: { tenantId: admin.tenantId }, include: { user: true }, orderBy: { user: { name: "asc" } } }),
+    prisma.contractorProfile.findMany({ where: { tenantId: admin.tenantId, status: "ACTIVE" }, orderBy: { companyName: "asc" } }),
+    prisma.collection.findMany({ where: { tenantId: admin.tenantId }, include: { homeowner: { include: { user: true } }, contractor: true, refunds: true }, orderBy: [{ collectionDate: "desc" }, { createdAt: "desc" }] }),
+    prisma.bondRefund.findMany({ where: { tenantId: admin.tenantId }, take: 10, include: { collection: { include: { homeowner: { include: { user: true } }, contractor: true } }, processedBy: true }, orderBy: [{ refundDate: "desc" }, { createdAt: "desc" }] }),
   ]);
   const feeIncome = collections.filter((item) => !item.refundable).reduce((sum, item) => sum + Number(item.amount), 0);
   const forfeitedIncome = collections.reduce((sum, item) => sum + Number(item.amountForfeited), 0);

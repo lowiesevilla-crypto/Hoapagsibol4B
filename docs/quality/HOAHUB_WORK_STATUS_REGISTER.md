@@ -1,7 +1,7 @@
 # HOAHub Quality / UX Work Status Register
 
 Status: ACTIVE
-Last updated: 2026-08-26
+Last updated: 2026-08-27
 
 This register is the concise operational reference for completed, in-progress, pending, blocked, and deferred product-quality work.
 
@@ -18,7 +18,7 @@ This register is the concise operational reference for completed, in-progress, p
 
 | Work Item | Priority | Status | Evidence / Note |
 |---|---:|---|---|
-| Protect post-rollback production baseline | P0 | VERIFIED | Current verified `main` includes Petty Cash PR #198 at merge SHA `cc2403d3f1276a6ab58a75ac7f11b5bdd50ff479`; exact-head HOAHub MySQL CI #1233 and Canva Visual Parity #376 passed |
+| Protect post-rollback production baseline | P0 | VERIFIED | Current verified `main` includes Petty Cash PR #198 at merge SHA `cc2403d3f1276a6ab58a75ac7f11b5bdd50ff479` and Payment Void PR #200 at merge SHA `d99eeb67c2204ce58f534a814d6f4c59a55c5f52` |
 | Product Quality Excellence Program documentation | P0 | VERIFIED | PR #190 merged to `main` |
 | Master Regression Matrix | P0 | VERIFIED | Added under `docs/quality/` by PR #190 |
 | Professional UI/UX Standard | P0 | VERIFIED | Added under `docs/quality/` by PR #190 |
@@ -27,9 +27,9 @@ This register is the concise operational reference for completed, in-progress, p
 | Employee create browser regression | P0 | VERIFIED | PR #191 merged; critical browser chain verified again on post-merge `main` CI #1223 |
 | Employee edit persistence browser regression | P0 | VERIFIED | PR #191 merged; nullable/zero-value edit persistence covered and verified again on post-merge `main` CI #1223 |
 | Payroll critical browser regression | P0 | VERIFIED | PR #197 exact head `4fba1a6d02452d8ed0be547fb80108091e419a93` passed HOAHub MySQL CI + Canva Visual Parity; post-merge `main` CI #1223 passed |
-| Petty Cash critical browser regression | P0 | VERIFIED | PR #198 merged from exact head `33055e969ca38672d9ed28fe072ca761b82cf92d`; HOAHub MySQL CI #1233 + Canva Visual Parity #376 passed; merge `cc2403d3f1276a6ab58a75ac7f11b5bdd50ff479` |
-| Payment Void browser regression | P0 | IN_PROGRESS | Issue #199 active on branch `test/payment-void-critical-browser-20260826`; DB evidence exists and browser path is now the active P0 task |
-| Refund browser regression | P0 | PENDING | DB evidence exists for homeowner refund; browser path pending |
+| Petty Cash critical browser regression | P0 | VERIFIED | PR #198 merged from exact head `33055e969ca38672d9ed28fe072ca761b82cf92d`; HOAHub MySQL CI #1233 + Canva Visual Parity #376 passed; coverage includes create/edit/search/Enter behavior, linked Expense synchronization, browser print invocation, 210mm x 148.5mm Half-A4 dimensions, and rendered PDF output |
+| Payment Void browser regression | P0 | VERIFIED | PR #200 exact head `3670713d53bd94d165460a1b98639a53ccd9a997` passed HOAHub MySQL CI #1235 + Canva Visual Parity #377 and merged to `main` at `d99eeb67c2204ce58f534a814d6f4c59a55c5f52`; coverage verifies void authority, audit/archive evidence, bill recalculation, transaction-history visibility, and tenant isolation |
+| Refund browser regression | P0 | VERIFIED | PR #202 implementation head `334631ab65f93365fbc184ef040a812164f2c583` passed HOAHub MySQL CI #1238 + Canva Visual Parity #379; coverage verifies tenant-scoped bond visibility, partial refund amount/status, audit evidence, and rejection of forged cross-tenant collection IDs |
 | Online Payments report browser regression | P0 | PENDING | Search/filter/pagination/trace browser evidence pending |
 | Financial Reports browser regression | P0 | PENDING | Date-filter/totals/export browser evidence pending |
 | Authenticated post-deploy UAT smoke | P0 | PENDING | Must be non-destructive using controlled UAT tenant |
@@ -46,11 +46,9 @@ This register is the concise operational reference for completed, in-progress, p
 
 ## Immediate Execution Order
 
-1. Implement Payment Void browser regression in a dedicated PR.
-2. Implement Refund browser regression.
-3. Implement Online Payments + Financial Reports browser regression.
-4. Add authenticated post-deploy UAT smoke harness.
-5. Start UI Wave 1 only after affected P0 regression gates are green.
+1. Implement Online Payments + Financial Reports browser regression.
+2. Add authenticated post-deploy UAT smoke harness.
+3. Start UI Wave 1 only after affected P0 regression gates are green.
 
 ## Update Rule
 

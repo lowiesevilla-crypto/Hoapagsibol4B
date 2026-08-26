@@ -44,8 +44,8 @@ export async function recordBondRefund({
 
   return prisma.$transaction(
     async (tx) => {
-      const collection = await tx.collection.findUnique({
-        where: { id: collectionId },
+      const collection = await tx.collection.findFirst({
+        where: { id: collectionId, tenantId: actor.tenantId },
         select: {
           id: true,
           amount: true,
@@ -82,6 +82,7 @@ export async function recordBondRefund({
 
       const refund = await tx.bondRefund.create({
         data: {
+          tenantId: actor.tenantId,
           collectionId: collection.id,
           amount,
           refundDate,
@@ -100,6 +101,7 @@ export async function recordBondRefund({
       });
       await tx.auditLog.create({
         data: {
+          tenantId: actor.tenantId,
           actorId: actor.id,
           module: "COLLECTIONS",
           action: "BOND_REFUND_PROCESSED",

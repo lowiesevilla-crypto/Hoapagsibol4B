@@ -177,7 +177,7 @@ async function runPettyCashRegression(browser) {
     const amountInput = await controlByLabel(page, "Amount");
     await clearAndTypeHandle(amountInput, "1250.50");
 
-    await clickByText(page, "button[type='submit']", /Post|Save|Create/);
+    await clickByText(page, "button", "Create & open voucher");
     await waitForUrl(
       page,
       (url) => /^\/admin\/petty-cash\/[^/]+$/.test(url.pathname) && url.searchParams.get("success") === "created",

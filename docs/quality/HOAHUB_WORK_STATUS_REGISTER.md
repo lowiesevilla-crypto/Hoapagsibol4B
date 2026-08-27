@@ -1,7 +1,7 @@
 # HOAHub Quality / UX Work Status Register
 
 Status: ACTIVE
-Last updated: 2026-08-27
+Last updated: 2026-08-28
 
 This register is the concise operational reference for completed, in-progress, pending, blocked, and deferred product-quality work.
 
@@ -18,7 +18,7 @@ This register is the concise operational reference for completed, in-progress, p
 
 | Work Item | Priority | Status | Evidence / Note |
 |---|---:|---|---|
-| Protect post-rollback production baseline | P0 | VERIFIED | Current verified `main` includes Petty Cash PR #198, Payment Void PR #200, Refund PR #202, Online Payments PR #204, Financial Reports PR #206, and subsequent verified quality increments through UI Wave 1 Employees PR #226 merge `91fee2b3adf8f7d15cecc0dd109faed79c33f7c4` |
+| Protect post-rollback production baseline | P0 | VERIFIED | Current verified `main` includes Petty Cash PR #198, Payment Void PR #200, Refund PR #202, Online Payments PR #204, Financial Reports PR #206, and subsequent verified quality increments through UI Wave 2 Billing list/search PR #228 merge `3940dc97bade87ec8ed7044e8d3a5eebeed154c0` |
 | Product Quality Excellence Program documentation | P0 | VERIFIED | PR #190 merged to `main` |
 | Master Regression Matrix | P0 | VERIFIED | Added under `docs/quality/` by PR #190 |
 | Professional UI/UX Standard | P0 | VERIFIED | Added under `docs/quality/` by PR #190 |
@@ -44,7 +44,7 @@ This register is the concise operational reference for completed, in-progress, p
 | Firefox critical-flow browser evidence | P1 | VERIFIED | PR #221 exact head `7cf132740996da10114440827064ce6a592a3f20` passed HOAHub MySQL CI #1286 + Canva Visual Parity #412 + HOAHub Firefox Critical Flow #1; Edge regression #5 also passed; merged as `ffb753b7085282d8b2827512bdb14e4cea1c1331` |
 | Android/iOS responsive browser evidence | P1 | VERIFIED | PR #222 exact head `54572b73aa9666f82373a5386c8d498483c3d17b` passed HOAHub MySQL CI #1292 + Canva Visual Parity #417 + Mobile Responsive Evidence #5 + Edge #10 + Firefox #6 and merged as `9622b67eef4e89d4fcf0abaf4119274ba3b50c70`; evidence is deterministic mobile emulation only, while real iOS Safari/WebKit and physical-device behavior remain a controlled UAT boundary |
 | UI Wave 1: Homeowners / Household / Employees | P1 | VERIFIED | Issue #223 completed. PR #224 Homeowners list/search merged as `77b3f39a8f41fef2748790c84dfabbf1413ad86d`; PR #225 Homeowner profile/household merged as `62f9b4af0f5ca3388ee14b2cf2432110c2429daf`; PR #226 Employees list/profile exact head `5573245133e835b7c1bf0a8cd4bfe5b6b178224a` passed MySQL CI #1298, Canva Visual Parity #420, Edge #13, Firefox #9, Mobile Responsive #8 and merged as `91fee2b3adf8f7d15cecc0dd109faed79c33f7c4` |
-| UI Wave 2: Billing | P1 | IN_PROGRESS | Issue #227. Active branch `ui/wave2-billing-list-20260827` from verified PR #226 merge `91fee2b3adf8f7d15cecc0dd109faed79c33f7c4`; first slice targets Admin Billing list/search presentation only with billing rules, tenant scoping and server query authority unchanged |
+| UI Wave 2: Billing | P1 | IN_PROGRESS | Issue #227. Billing list/search slice completed by PR #228 exact head `a2d9b88ccd97f43325da2e6a52e819ad1255679c`: MySQL CI #1300, Canva Visual Parity #421, Edge #14, Firefox #10 and Mobile Responsive #9 all passed; merged as `3940dc97bade87ec8ed7044e8d3a5eebeed154c0`. Active branch `ui/wave2-billing-rules-20260828` targets only Billing rule/configuration presentation with calculation semantics and billing authority unchanged. |
 | UI Wave 3: Collections / Payments / Receipts | P1 | PENDING | Route/workflow-level implementation |
 | UI Wave 4: Documents | P1 | PENDING | Route/workflow-level implementation |
 | UI Wave 5: Operations | P1 | PENDING | Complaints, Vehicles, Contractors, Attendance |
@@ -52,8 +52,8 @@ This register is the concise operational reference for completed, in-progress, p
 
 ## Immediate Execution Order
 
-1. Complete UI Wave 2 Billing first slice under #227 with exact-head MySQL CI, Canva Visual Parity and relevant browser regressions green.
-2. Continue the remaining Billing slices independently; do not combine billing-rule authority changes with presentation modernization.
+1. Continue UI Wave 2 under #227 with the Billing rule/configuration presentation as the next independently gated slice.
+2. Continue the remaining Billing detail/generation presentation separately; do not combine billing-rule authority changes with presentation modernization.
 3. When administrator prerequisites are supplied, execute the controlled authenticated non-destructive post-deploy UAT smoke under #194.
 4. Repository administrator enables `main` PR/required-check/force-push/delete protections under #194.
 5. Begin UI Wave 3 only after Billing Wave 2 is closed.

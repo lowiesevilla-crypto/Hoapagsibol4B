@@ -153,12 +153,15 @@ async function visitAndCheck(page, path, label) {
 }
 
 const executablePath = await resolveBrowserExecutable();
-const headlessMode = "shell";
+const headlessMode = requestedBrowser === "edge" ? true : "shell";
+const launchArgs = requestedBrowser === "edge"
+  ? puppeteer.defaultArgs({ headless: true, args: ["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage"] })
+  : await puppeteer.defaultArgs({ args: chromium.args, headless: headlessMode });
 console.log(`Running critical-flow accessibility evidence with ${requestedBrowser}: ${executablePath}`);
 const browser = await puppeteer.launch({
   executablePath,
   headless: headlessMode,
-  args: await puppeteer.defaultArgs({ args: chromium.args, headless: headlessMode }),
+  args: launchArgs,
 });
 
 try {

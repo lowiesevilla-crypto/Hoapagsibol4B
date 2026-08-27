@@ -250,7 +250,11 @@ async function runPettyCashRegression(browser) {
     const editAmount = await controlByLabel(page, "Amount");
     await clearAndTypeHandle(editAmount, "1350.75");
     await clickByText(page, "button[type='submit']", "Save voucher changes");
-    await waitForUrl(page, (url) => url.searchParams.get("success") === "updated", "updated Petty Cash voucher redirect");
+    await waitForUrl(
+      page,
+      (url) => url.pathname === `/admin/petty-cash/${voucherId}`,
+      "updated Petty Cash voucher detail redirect",
+    );
 
     const updatedRows = await prisma.$queryRaw(Prisma.sql`SELECT payeeType, payeeEntityId, payeeName, totalAmount FROM PettyCashVoucher WHERE tenantId=${primaryTenantId} AND id=${voucherId} LIMIT 1`);
     assert.equal(updatedRows.length, 1);

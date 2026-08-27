@@ -37,12 +37,12 @@ export function BillForm({ homeowners, bill, searchQuery = "" }: { homeowners: H
         />
         <p className="mt-2 text-xs text-slate-500">Current bill owner: <strong className="text-slate-700">{bill.homeowner.user.name}</strong> · Block {bill.homeowner.block}, Lot {bill.homeowner.lot}{bill.homeowner.accountNumber ? ` · ${bill.homeowner.accountNumber}` : ""}. Search includes active and inactive tenant homeowner records so migrated/opening-balance bills remain editable.</p>
       </div>
-      <div><label className="label">Billing month</label><input className="field" name="billingMonth" type="month" defaultValue={inputDate(bill.billingMonth).slice(0, 7)} required /></div>
-      <div><label className="label">Due date</label><input className="field" name="dueDate" type="date" defaultValue={inputDate(bill.dueDate)} required /></div>
-      <div><label className="label">Base amount</label><input className="field" name="amount" type="number" min="0.01" step="0.01" defaultValue={String(bill.amount)} required /></div>
-      <div><label className="label">Penalty</label><input className="field" name="penalty" type="number" min="0" step="0.01" defaultValue={String(bill.penalty)} required /></div>
-      <div><label className="label">Collection status</label><select className="field" name="status" defaultValue={bill.status}><option value="UNPAID">Unpaid</option><option value="PARTIAL">Partial</option><option value="OVERDUE">Overdue</option><option value="PAID">Paid</option></select></div>
-      <div><label className="label">Notes</label><input className="field" name="notes" defaultValue={bill.notes ?? ""} /></div>
+      <div><label className="label" htmlFor="edit-bill-month">Billing month</label><input id="edit-bill-month" className="field" name="billingMonth" type="month" defaultValue={inputDate(bill.billingMonth).slice(0, 7)} required /></div>
+      <div><label className="label" htmlFor="edit-bill-due-date">Due date</label><input id="edit-bill-due-date" className="field" name="dueDate" type="date" defaultValue={inputDate(bill.dueDate)} required /></div>
+      <div><label className="label" htmlFor="edit-bill-amount">Base amount</label><input id="edit-bill-amount" className="field" name="amount" type="number" min="0.01" step="0.01" defaultValue={String(bill.amount)} required /></div>
+      <div><label className="label" htmlFor="edit-bill-penalty">Penalty</label><input id="edit-bill-penalty" className="field" name="penalty" type="number" min="0" step="0.01" defaultValue={String(bill.penalty)} required /></div>
+      <div><label className="label" htmlFor="edit-bill-status">Collection status</label><select id="edit-bill-status" className="field" name="status" defaultValue={bill.status}><option value="UNPAID">Unpaid</option><option value="PARTIAL">Partial</option><option value="OVERDUE">Overdue</option><option value="PAID">Paid</option></select></div>
+      <div><label className="label" htmlFor="edit-bill-notes">Notes</label><input id="edit-bill-notes" className="field" name="notes" defaultValue={bill.notes ?? ""} /></div>
     </div>
     <div className="mt-5"><SubmitButton>Save bill</SubmitButton></div>
   </form>;
@@ -62,8 +62,8 @@ function IndividualBillingPreviewForm({ homeowners }: { homeowners: Homeowner[] 
     <div className="mb-5"><h2 className="text-lg font-black">Create individual bill</h2><p className="text-sm text-slate-500">Preview one homeowner through the Billing Rules engine before generating a bill. Manual creation is disabled while Automatic Billing is ON.</p></div>
     <div className="grid gap-4 sm:grid-cols-2">
       <div className="sm:col-span-2"><SearchableHomeownerSelect name="homeownerId" label="Homeowner" homeowners={options} required searchEndpoint="/api/admin/homeowners/search" /></div>
-      <div><label className="label">Coverage month</label><select className="field" name="coverageMonth" defaultValue={now.getUTCMonth() + 1}>{Array.from({ length: 12 }, (_, index) => <option key={index + 1} value={index + 1}>{monthName(index + 1)}</option>)}</select></div>
-      <div><label className="label">Coverage year</label><input className="field" name="coverageYear" type="number" min="1900" max="2200" defaultValue={now.getUTCFullYear()} required /></div>
+      <div><label className="label" htmlFor="individual-bill-coverage-month">Coverage month</label><select id="individual-bill-coverage-month" className="field" name="coverageMonth" defaultValue={now.getUTCMonth() + 1}>{Array.from({ length: 12 }, (_, index) => <option key={index + 1} value={index + 1}>{monthName(index + 1)}</option>)}</select></div>
+      <div><label className="label" htmlFor="individual-bill-coverage-year">Coverage year</label><input id="individual-bill-coverage-year" className="field" name="coverageYear" type="number" min="1900" max="2200" defaultValue={now.getUTCFullYear()} required /></div>
     </div>
     <div className="mt-5"><SubmitButton>Preview individual bill</SubmitButton></div>
   </form>;

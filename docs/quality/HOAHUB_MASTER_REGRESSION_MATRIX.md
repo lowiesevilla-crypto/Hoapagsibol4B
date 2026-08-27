@@ -58,7 +58,7 @@ This matrix is the primary QA reference for what is verified, what has partial e
 | Homeowner mobile/PWA shell | YES multiple verifiers | PARTIAL | YES | PARTIAL | P1 | VERIFIED covered paths | Continue mobile route-by-route protection |
 | Accessibility | NO formal complete gate | N/A | PENDING | PENDING | P1 | PENDING | Add WCAG 2.1 AA automation + manual keyboard review |
 | Cross-browser compatibility | N/A | N/A | Chromium-focused only | PENDING | P1 | PENDING | Add Edge/Firefox-compatible evidence strategy |
-| 5,000+ homeowner scale | YES/PARTIAL implementation guards | PARTIAL | PENDING realistic-volume browser | PENDING | P0/P1 | PENDING | Add seeded large-tenant performance/search test pack |
+| 5,000+ homeowner / high-volume finance scale | YES bounded 5,001-homeowner and 2,001-row finance fixtures | PARTIAL | PENDING realistic-volume browser | PENDING | P0/P1 | IN_PROGRESS | PR #211 merged homeowner pagination/search increment; finance pagination/query-bound increment is in progress |
 | Backup/restore | N/A | Not evidenced in current audit | N/A | PENDING | P0 | PENDING | Establish periodic restore evidence and release runbook |
 | Post-deploy authenticated smoke | YES source contract | N/A | YES read-only harness | PENDING live run | P0 | IMPLEMENTED | Configure protected UAT credentials and record controlled production evidence |
 

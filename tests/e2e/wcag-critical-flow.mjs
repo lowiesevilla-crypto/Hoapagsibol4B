@@ -9,6 +9,7 @@ const adminPassword = process.env.E2E_ADMIN_PASSWORD || process.env.SEED_SYSTEM_
 const homeownerEmail = process.env.E2E_HOMEOWNER_EMAIL || "ci-homeowner@example.invalid";
 const homeownerPassword = process.env.E2E_HOMEOWNER_PASSWORD || "CI-Homeowner-Password-2026!";
 const timeout = 45_000;
+const requestedBrowser = (process.env.HOAHUB_E2E_BROWSER || "chromium").trim().toLowerCase();
 
 async function pathExists(path) {
   if (!path) return false;
@@ -16,6 +17,21 @@ async function pathExists(path) {
 }
 
 async function resolveBrowserExecutable() {
+  if (requestedBrowser === "edge") {
+    const edgeCandidates = [
+      process.env.EDGE_BIN,
+      process.env.MSEDGE_BIN,
+      "/usr/bin/microsoft-edge",
+      "/usr/bin/microsoft-edge-stable",
+    ].filter(Boolean);
+    for (const candidate of edgeCandidates) if (await pathExists(candidate)) return candidate;
+    throw new Error("Microsoft Edge was requested for the critical-flow evidence run, but no Edge executable is available. Refusing to fall back to Chromium because that would invalidate Edge evidence.");
+  }
+
+  if (requestedBrowser !== "chromium") {
+    throw new Error(`Unsupported HOAHub E2E browser request: ${requestedBrowser}`);
+  }
+
   const candidates = [
     process.env.PUPPETEER_EXECUTABLE_PATH,
     process.env.CHROME_BIN,
@@ -138,6 +154,7 @@ async function visitAndCheck(page, path, label) {
 
 const executablePath = await resolveBrowserExecutable();
 const headlessMode = "shell";
+console.log(`Running critical-flow accessibility evidence with ${requestedBrowser}: ${executablePath}`);
 const browser = await puppeteer.launch({
   executablePath,
   headless: headlessMode,
@@ -165,7 +182,7 @@ try {
   await visitAndCheck(homeownerPage, "/portal/dashboard", "Homeowner mobile portal");
   await homeownerContext.close();
 
-  console.log("WCAG critical-flow browser gate passed:");
+  console.log(`${requestedBrowser === "edge" ? "Edge" : "WCAG"} critical-flow browser gate passed:`);
   console.log("- named visible buttons and links");
   console.log("- labeled visible form controls");
   console.log("- no duplicate ids or visible images missing alt");

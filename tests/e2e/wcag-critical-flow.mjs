@@ -10,6 +10,29 @@ const homeownerEmail = process.env.E2E_HOMEOWNER_EMAIL || "ci-homeowner@example.
 const homeownerPassword = process.env.E2E_HOMEOWNER_PASSWORD || "CI-Homeowner-Password-2026!";
 const timeout = 45_000;
 const requestedBrowser = (process.env.HOAHUB_E2E_BROWSER || "chromium").trim().toLowerCase();
+const mobileProfile = (process.env.HOAHUB_E2E_MOBILE_PROFILE || "default").trim().toLowerCase();
+
+const mobileProfiles = {
+  default: {
+    viewport: { width: 390, height: 844, deviceScaleFactor: 1, isMobile: true, hasTouch: true },
+    userAgent: null,
+    label: "Homeowner mobile portal",
+  },
+  android: {
+    viewport: { width: 412, height: 915, deviceScaleFactor: 2.625, isMobile: true, hasTouch: true },
+    userAgent: "Mozilla/5.0 (Linux; Android 14; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36",
+    label: "Android-like mobile emulation",
+  },
+  ios: {
+    viewport: { width: 390, height: 844, deviceScaleFactor: 3, isMobile: true, hasTouch: true },
+    userAgent: "Mozilla/5.0 (iPhone; CPU iPhone OS 17_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.6 Mobile/15E148 Safari/604.1",
+    label: "iPhone-like mobile emulation",
+  },
+};
+
+if (!mobileProfiles[mobileProfile]) {
+  throw new Error(`Unsupported HOAHub E2E mobile profile request: ${mobileProfile}`);
+}
 
 async function pathExists(path) {
   if (!path) return false;
@@ -18,38 +41,20 @@ async function pathExists(path) {
 
 async function resolveBrowserExecutable() {
   if (requestedBrowser === "edge") {
-    const edgeCandidates = [
-      process.env.EDGE_BIN,
-      process.env.MSEDGE_BIN,
-      "/usr/bin/microsoft-edge",
-      "/usr/bin/microsoft-edge-stable",
-    ].filter(Boolean);
+    const edgeCandidates = [process.env.EDGE_BIN, process.env.MSEDGE_BIN, "/usr/bin/microsoft-edge", "/usr/bin/microsoft-edge-stable"].filter(Boolean);
     for (const candidate of edgeCandidates) if (await pathExists(candidate)) return candidate;
     throw new Error("Microsoft Edge was requested for the critical-flow evidence run, but no Edge executable is available. Refusing to fall back to Chromium because that would invalidate Edge evidence.");
   }
 
   if (requestedBrowser === "firefox") {
-    const firefoxCandidates = [
-      process.env.FIREFOX_BIN,
-      "/usr/bin/firefox",
-      "/usr/bin/firefox-esr",
-    ].filter(Boolean);
+    const firefoxCandidates = [process.env.FIREFOX_BIN, "/usr/bin/firefox", "/usr/bin/firefox-esr"].filter(Boolean);
     for (const candidate of firefoxCandidates) if (await pathExists(candidate)) return candidate;
     throw new Error("Mozilla Firefox was requested for the critical-flow evidence run, but no Firefox executable is available. Refusing browser fallback because that would invalidate Firefox evidence.");
   }
 
-  if (requestedBrowser !== "chromium") {
-    throw new Error(`Unsupported HOAHub E2E browser request: ${requestedBrowser}`);
-  }
+  if (requestedBrowser !== "chromium") throw new Error(`Unsupported HOAHub E2E browser request: ${requestedBrowser}`);
 
-  const candidates = [
-    process.env.PUPPETEER_EXECUTABLE_PATH,
-    process.env.CHROME_BIN,
-    "/usr/bin/google-chrome",
-    "/usr/bin/google-chrome-stable",
-    "/usr/bin/chromium",
-    "/usr/bin/chromium-browser",
-  ].filter(Boolean);
+  const candidates = [process.env.PUPPETEER_EXECUTABLE_PATH, process.env.CHROME_BIN, "/usr/bin/google-chrome", "/usr/bin/google-chrome-stable", "/usr/bin/chromium", "/usr/bin/chromium-browser"].filter(Boolean);
   for (const candidate of candidates) if (await pathExists(candidate)) return candidate;
   const packaged = await chromium.executablePath();
   if (await pathExists(packaged)) return packaged;
@@ -91,46 +96,20 @@ async function assertAccessibilitySurface(page, label) {
       ids.set(element.id, (ids.get(element.id) || 0) + 1);
     }
     const duplicateIds = [...ids.entries()].filter(([, count]) => count > 1).map(([id]) => id);
-
-    const unnamedButtons = [...document.querySelectorAll("button")]
-      .filter(visible)
-      .filter((element) => !normalized(element.getAttribute("aria-label")) && !normalized(element.textContent))
-      .map((element) => element.outerHTML.slice(0, 180));
-
-    const unnamedLinks = [...document.querySelectorAll("a[href]")]
-      .filter(visible)
-      .filter((element) => !normalized(element.getAttribute("aria-label")) && !normalized(element.textContent))
-      .map((element) => element.outerHTML.slice(0, 180));
-
-    const unlabeledControls = [...document.querySelectorAll("input:not([type='hidden']), select, textarea")]
-      .filter(visible)
-      .filter((element) => {
-        const id = element.id;
-        const explicitLabel = id && document.querySelector(`label[for="${CSS.escape(id)}"]`);
-        const wrappingLabel = element.closest("label");
-        const ariaLabel = normalized(element.getAttribute("aria-label"));
-        const ariaLabelledBy = normalized(element.getAttribute("aria-labelledby"));
-        return !explicitLabel && !wrappingLabel && !ariaLabel && !ariaLabelledBy;
-      })
-      .map((element) => `${element.tagName.toLowerCase()}#${element.id || "(no-id)"}[name=${element.getAttribute("name") || ""}]`);
-
-    const imagesMissingAlt = [...document.querySelectorAll("img")]
-      .filter(visible)
-      .filter((element) => !element.hasAttribute("alt"))
-      .map((element) => element.getAttribute("src") || "(inline image)");
-
+    const unnamedButtons = [...document.querySelectorAll("button")].filter(visible).filter((element) => !normalized(element.getAttribute("aria-label")) && !normalized(element.textContent)).map((element) => element.outerHTML.slice(0, 180));
+    const unnamedLinks = [...document.querySelectorAll("a[href]")].filter(visible).filter((element) => !normalized(element.getAttribute("aria-label")) && !normalized(element.textContent)).map((element) => element.outerHTML.slice(0, 180));
+    const unlabeledControls = [...document.querySelectorAll("input:not([type='hidden']), select, textarea")].filter(visible).filter((element) => {
+      const id = element.id;
+      const explicitLabel = id && document.querySelector(`label[for="${CSS.escape(id)}"]`);
+      const wrappingLabel = element.closest("label");
+      const ariaLabel = normalized(element.getAttribute("aria-label"));
+      const ariaLabelledBy = normalized(element.getAttribute("aria-labelledby"));
+      return !explicitLabel && !wrappingLabel && !ariaLabel && !ariaLabelledBy;
+    }).map((element) => `${element.tagName.toLowerCase()}#${element.id || "(no-id)"}[name=${element.getAttribute("name") || ""}]`);
+    const imagesMissingAlt = [...document.querySelectorAll("img")].filter(visible).filter((element) => !element.hasAttribute("alt")).map((element) => element.getAttribute("src") || "(inline image)");
     const mainCount = document.querySelectorAll("main").length;
     const headingCount = document.querySelectorAll("h1, h2, h3, h4, h5, h6").length;
-    return {
-      title: normalized(document.title),
-      duplicateIds,
-      unnamedButtons,
-      unnamedLinks,
-      unlabeledControls,
-      imagesMissingAlt,
-      mainCount,
-      headingCount,
-    };
+    return { title: normalized(document.title), duplicateIds, unnamedButtons, unnamedLinks, unlabeledControls, imagesMissingAlt, mainCount, headingCount };
   });
 
   assert.ok(findings.title, `${label}: page must have a non-empty document title`);
@@ -163,19 +142,18 @@ async function visitAndCheck(page, path, label) {
 }
 
 const executablePath = await resolveBrowserExecutable();
-const headlessMode = requestedBrowser === "chromium" ? "shell" : true;
+const isChromiumMobileEvidence = requestedBrowser === "chromium" && mobileProfile !== "default";
+const headlessMode = requestedBrowser === "chromium" ? (isChromiumMobileEvidence ? true : "shell") : true;
 const launchArgs = requestedBrowser === "edge"
   ? ["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage"]
   : requestedBrowser === "firefox"
     ? []
-    : await puppeteer.defaultArgs({ args: chromium.args, headless: headlessMode });
+    : isChromiumMobileEvidence
+      ? ["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage"]
+      : await puppeteer.defaultArgs({ args: chromium.args, headless: headlessMode });
 console.log(`Running critical-flow accessibility evidence with ${requestedBrowser}: ${executablePath}`);
-const browser = await puppeteer.launch({
-  executablePath,
-  headless: headlessMode,
-  args: launchArgs,
-  ...(requestedBrowser === "firefox" ? { browser: "firefox" } : {}),
-});
+console.log(`Mobile profile: ${mobileProfile} (${mobileProfiles[mobileProfile].label})`);
+const browser = await puppeteer.launch({ executablePath, headless: headlessMode, args: launchArgs, ...(requestedBrowser === "firefox" ? { browser: "firefox" } : {}) });
 
 try {
   const adminContext = await browser.createBrowserContext();
@@ -193,9 +171,11 @@ try {
   const homeownerContext = await browser.createBrowserContext();
   const homeownerPage = await homeownerContext.newPage();
   homeownerPage.setDefaultTimeout(timeout);
-  await homeownerPage.setViewport({ width: 390, height: 844, deviceScaleFactor: 1 });
+  const profile = mobileProfiles[mobileProfile];
+  await homeownerPage.setViewport(profile.viewport);
+  if (profile.userAgent) await homeownerPage.setUserAgent(profile.userAgent);
   await login(homeownerPage, homeownerEmail, homeownerPassword, "/portal/");
-  await visitAndCheck(homeownerPage, "/portal/dashboard", "Homeowner mobile portal");
+  await visitAndCheck(homeownerPage, "/portal/dashboard", profile.label);
   await homeownerContext.close();
 
   const gateLabel = requestedBrowser === "edge" ? "Edge" : requestedBrowser === "firefox" ? "Firefox" : "WCAG";

@@ -1,0 +1,106 @@
+name: HOAHub Mobile Responsive Evidence
+
+on:
+  pull_request:
+    branches: [main, develop]
+
+jobs:
+  mobile-responsive-evidence:
+    runs-on: ubuntu-latest
+    services:
+      mysql:
+        image: mysql:8.4
+        env:
+          MYSQL_DATABASE: hoa_portal
+          MYSQL_ALLOW_EMPTY_PASSWORD: "yes"
+        ports: ["3306:3306"]
+        options: >-
+          --health-cmd="mysqladmin ping -h localhost -uroot"
+          --health-interval=5s --health-timeout=5s --health-retries=20
+    env:
+      DATABASE_URL: mysql://root@127.0.0.1:3306/hoa_portal
+      AUTH_SECRET: ci-test-only-auth-value-with-at-least-32-characters
+      APP_URL: http://127.0.0.1:3000
+      BASE_URL: http://127.0.0.1:3000
+      API_URL: http://127.0.0.1:3000/api
+      ALLOWED_ORIGINS: http://127.0.0.1:3000
+      CRON_SECRET: ci-test-only-cron-value-with-at-least-32-characters
+      STORAGE_ROOT: /tmp/hoahub-storage
+      SEED_SYSTEM_ADMIN_EMAIL: ci-system@example.invalid
+      SEED_SYSTEM_ADMIN_PASSWORD: CI-Temporary-Password-2026!
+      E2E_BASE_URL: http://127.0.0.1:3000
+      E2E_COVERAGE_YEAR: "2099"
+      E2E_COVERAGE_MONTH: "1"
+      AI_RUNTIME_ENABLED: "true"
+      AI_PROVIDER_MODE: mock
+      HOAHUB_E2E_BROWSER: chromium
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.9.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm exec prisma validate
+      - run: pnpm exec prisma generate
+      - run: pnpm exec prisma migrate deploy
+      - run: pnpm db:seed
+      - run: pnpm build
+      - name: Resolve packaged Chromium for mobile evidence
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          CHROMIUM_PATH="$(node --input-type=module -e 'import chromium from "@sparticuz/chromium"; console.log(await chromium.executablePath())')"
+          if [ -z "$CHROMIUM_PATH" ] || [ ! -x "$CHROMIUM_PATH" ]; then
+            echo "::error::Packaged Chromium executable is unavailable for mobile responsive evidence."
+            exit 1
+          fi
+          echo "PUPPETEER_EXECUTABLE_PATH=$CHROMIUM_PATH" >> "$GITHUB_ENV"
+          "$CHROMIUM_PATH" --version || true
+      - name: Run non-destructive mobile responsive evidence
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          pnpm e2e:prepare
+          pnpm start > /tmp/hoa-mobile-next.log 2>&1 &
+          APP_PID=$!
+          cleanup() {
+            kill "$APP_PID" 2>/dev/null || true
+            pnpm e2e:cleanup || true
+            echo "--- HOAHub mobile server log ---"
+            cat /tmp/hoa-mobile-next.log || true
+          }
+          trap cleanup EXIT
+          for attempt in {1..45}; do
+            if curl --fail --silent http://127.0.0.1:3000/api/health > /dev/null; then break; fi
+            sleep 2
+          done
+          curl --fail --silent http://127.0.0.1:3000/api/health
+
+          set +e
+          HOAHUB_E2E_MOBILE_PROFILE=android node --import ./tests/e2e/safe-browser-context-cleanup.mjs tests/e2e/wcag-critical-flow.mjs 2>&1 | tee /tmp/hoa-mobile-android-e2e.log
+          ANDROID_STATUS=${PIPESTATUS[0]}
+          set -e
+          if [ "$ANDROID_STATUS" -ne 0 ]; then
+            exit "$ANDROID_STATUS"
+          fi
+
+          set +e
+          HOAHUB_E2E_MOBILE_PROFILE=ios node --import ./tests/e2e/safe-browser-context-cleanup.mjs tests/e2e/wcag-critical-flow.mjs 2>&1 | tee /tmp/hoa-mobile-ios-e2e.log
+          IOS_STATUS=${PIPESTATUS[0]}
+          set -e
+          exit "$IOS_STATUS"
+      - name: Upload mobile failure diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: hoa-mobile-failure-diagnostics
+          path: |
+            /tmp/hoa-mobile-android-e2e.log
+            /tmp/hoa-mobile-ios-e2e.log
+            /tmp/hoa-mobile-next.log
+          if-no-files-found: warn
+          retention-days: 3

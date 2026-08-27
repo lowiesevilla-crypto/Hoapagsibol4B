@@ -18,7 +18,7 @@ This register is the concise operational reference for completed, in-progress, p
 
 | Work Item | Priority | Status | Evidence / Note |
 |---|---:|---|---|
-| Protect post-rollback production baseline | P0 | VERIFIED | Current verified `main` includes Petty Cash PR #198, Payment Void PR #200, Refund PR #202, Online Payments PR #204, Financial Reports PR #206, and subsequent verified quality increments through Firefox PR #221 merge `ffb753b7085282d8b2827512bdb14e4cea1c1331` |
+| Protect post-rollback production baseline | P0 | VERIFIED | Current verified `main` includes Petty Cash PR #198, Payment Void PR #200, Refund PR #202, Online Payments PR #204, Financial Reports PR #206, and subsequent verified quality increments through Mobile Responsive Evidence PR #222 merge `9622b67eef4e89d4fcf0abaf4119274ba3b50c70` |
 | Product Quality Excellence Program documentation | P0 | VERIFIED | PR #190 merged to `main` |
 | Master Regression Matrix | P0 | VERIFIED | Added under `docs/quality/` by PR #190 |
 | Professional UI/UX Standard | P0 | VERIFIED | Added under `docs/quality/` by PR #190 |
@@ -32,8 +32,8 @@ This register is the concise operational reference for completed, in-progress, p
 | Refund browser regression | P0 | VERIFIED | PR #202 exact head `f4fbc4133792157e2ff96b4afe1adb88004ac1e6` passed HOAHub MySQL CI #1239 + Canva Visual Parity #380 and merged as `c32e9f4700ff0bd33695281e451ee7076cf811a1` |
 | Online Payments report browser regression | P0 | VERIFIED | PR #204 exact head `042c7494fe2367e8d28e6115bf532e413354089a` passed HOAHub MySQL CI #1241 + Canva Visual Parity #381 and merged as `6939533b69b229186eb3b64ea9f786ec9f34fa88` |
 | Financial Reports browser regression | P0 | VERIFIED | PR #206 exact head `42e65793f606217744040e3127782bddc14909b3` passed HOAHub MySQL CI #1243 + Canva Visual Parity #382 and merged as `96ff7d4546904a285d720b9d4c6a7bb770bf04c1`; post-merge CI #1244 verify passed |
-| Authenticated post-deploy UAT smoke | P0 | IMPLEMENTED | PR #210 exact head `8fc506415a4d95fd436cac3c52de488e922c0498` passed HOAHub MySQL CI #1250 + Canva Visual Parity #386 and merged as `8a63538b30d7812811f36f8a9eeeb1d3e9d33586`; live verification still requires a dedicated controlled UAT tenant/account and protected production credentials |
-| GitHub `main` branch protection / required checks | P0 | BLOCKED | Requires repository administration; `main` currently reports `protected: false` with no required checks |
+| Authenticated post-deploy UAT smoke | P0 | BLOCKED | PR #210 implementation is merged and exact-head gates passed, but live verification requires a dedicated controlled UAT tenant/account plus protected production credentials supplied through an approved administrator-controlled channel; no live tenant may be used as a substitute |
+| GitHub `main` branch protection / required checks | P0 | BLOCKED | Requires repository administration; `main` remains outside connected integration control for PR-required-check/force-push/delete enforcement |
 | 5,000+ homeowner large-volume QA pack | P1 | VERIFIED | PR #211 exact head `417036126607b21345f1be2adff16cd7328fa1f7` passed HOAHub MySQL CI #1252 + Canva Visual Parity #387 and merged as `e5d690cbb28434e1c00063e5934d409787a77f63` |
 | High-volume bills / payments / collections QA pack | P1 | VERIFIED | PR #212 exact head `2b46bd46b618c38cdb795f60d45809475d8259a9` passed HOAHub MySQL CI #1254 + Canva Visual Parity #388 and merged as `6cf0ac462fb65537a0aeb21b1e0ed0b947ae3a5e` |
 | 5,000+ employee directory scale | P1 | VERIFIED | PR #213 exact head `530eee02f360b9509e8fc0c28c085e2be8a80687` passed HOAHub MySQL CI #1256 + Canva Visual Parity #389 and merged as `08be4d9680a24b71d69093dc7d2b69102eab5542` |
@@ -42,8 +42,8 @@ This register is the concise operational reference for completed, in-progress, p
 | WCAG 2.1 AA critical-flow gate | P1 | VERIFIED | PR #216 exact head `40bd7aad82911762ab6e491f7296a3569fa679de` passed HOAHub MySQL CI #1274 + Canva Visual Parity #404 and merged as `c79231c86e0c659130326046b5b338b815166620` |
 | Edge critical-flow browser evidence | P1 | VERIFIED | PR #220 exact head `6f6e3e62febcd61b584051e73d23594d400722ad` passed HOAHub MySQL CI #1284 + Canva Visual Parity #411 + HOAHub Edge Critical Flow #4 and merged as `16b4d256a4a3b805cb279e70bb52d7db8864b0cc` |
 | Firefox critical-flow browser evidence | P1 | VERIFIED | PR #221 exact head `7cf132740996da10114440827064ce6a592a3f20` passed HOAHub MySQL CI #1286 + Canva Visual Parity #412 + HOAHub Firefox Critical Flow #1; Edge regression #5 also passed; merged as `ffb753b7085282d8b2827512bdb14e4cea1c1331` |
-| Android/iOS browser evidence | P1 | IN_PROGRESS | Active branch `test/mobile-browser-evidence-20260827` from verified Firefox merge `ffb753b7085282d8b2827512bdb14e4cea1c1331`; deterministic emulation may prove responsive/navigation/read-only behavior only; actual iOS Safari/WebKit and OS-native behaviors require a WebKit-capable environment or controlled real-device/manual UAT and must not be inferred from Chromium emulation |
-| UI Wave 1: Homeowners / Household / Employees | P1 | PENDING | Begin only after the agreed browser-compatibility sequence is complete and affected regression coverage remains green |
+| Android/iOS responsive browser evidence | P1 | VERIFIED | PR #222 exact head `54572b73aa9666f82373a5386c8d498483c3d17b` passed HOAHub MySQL CI #1292 + Canva Visual Parity #417 + Mobile Responsive Evidence #5 + Edge #10 + Firefox #6 and merged as `9622b67eef4e89d4fcf0abaf4119274ba3b50c70`; evidence is deterministic mobile emulation only, while real iOS Safari/WebKit and physical-device behavior remain a controlled UAT boundary |
+| UI Wave 1: Homeowners / Household / Employees | P1 | IN_PROGRESS | Issue #223; active branch `ui/wave1-homeowners-20260827` from verified PR #222 merge `9622b67eef4e89d4fcf0abaf4119274ba3b50c70`; first increment is Admin Homeowners list/search presentation only, preserving server-side tenant scoping/search/pagination and existing business authority |
 | UI Wave 2: Billing | P1 | PENDING | Route/workflow-level implementation; no global wrapper rollout |
 | UI Wave 3: Collections / Payments / Receipts | P1 | PENDING | Route/workflow-level implementation |
 | UI Wave 4: Documents | P1 | PENDING | Route/workflow-level implementation |
@@ -52,10 +52,10 @@ This register is the concise operational reference for completed, in-progress, p
 
 ## Immediate Execution Order
 
-1. Validate Android/iOS homeowner critical-flow evidence with automation/manual-UAT boundaries explicit.
-2. Configure controlled production UAT credentials and record the authenticated non-destructive production smoke under #194 when administrator prerequisites are available.
+1. Continue UI Wave 1 under #223 with the Admin Homeowners list/search surface as the first independently gated slice.
+2. When administrator prerequisites are supplied, execute the controlled authenticated non-destructive post-deploy UAT smoke under #194.
 3. Repository administrator enables `main` PR/required-check/force-push/delete protections under #194.
-4. Begin UI Wave 1 only after the browser sequence and affected regression gates are complete.
+4. Continue Household then Employees slices only after the Homeowners slice passes exact-head gates and is merged.
 
 ## Update Rule
 

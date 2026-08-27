@@ -60,7 +60,7 @@ This matrix is the primary QA reference for what is verified, what has partial e
 | Cross-browser compatibility | N/A | N/A | Chromium-focused only | PENDING | P1 | PENDING | Add Edge/Firefox-compatible evidence strategy |
 | 5,000+ homeowner scale | YES/PARTIAL implementation guards | PARTIAL | PENDING realistic-volume browser | PENDING | P0/P1 | PENDING | Add seeded large-tenant performance/search test pack |
 | Backup/restore | N/A | Not evidenced in current audit | N/A | PENDING | P0 | PENDING | Establish periodic restore evidence and release runbook |
-| Post-deploy authenticated smoke | N/A | N/A | PENDING | PENDING | P0 | PENDING | Build non-destructive UAT tenant smoke suite |
+| Post-deploy authenticated smoke | YES source contract | N/A | YES read-only harness | PENDING live run | P0 | IMPLEMENTED | Configure protected UAT credentials and record controlled production evidence |
 
 ## P0 Browser Scenarios to Add First
 

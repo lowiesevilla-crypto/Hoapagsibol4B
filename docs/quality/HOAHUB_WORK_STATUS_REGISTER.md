@@ -18,7 +18,7 @@ This register is the concise operational reference for completed, in-progress, p
 
 | Work Item | Priority | Status | Evidence / Note |
 |---|---:|---|---|
-| Protect post-rollback production baseline | P0 | VERIFIED | Current verified `main` includes Petty Cash PR #198 at merge SHA `cc2403d3f1276a6ab58a75ac7f11b5bdd50ff479`, Payment Void PR #200 at `d99eeb67c2204ce58f534a814d6f4c59a55c5f52`, Refund PR #202 at `c32e9f4700ff0bd33695281e451ee7076cf811a1`, and Online Payments PR #204 at `6939533b69b229186eb3b64ea9f786ec9f34fa88` |
+| Protect post-rollback production baseline | P0 | VERIFIED | Current verified `main` includes Petty Cash PR #198 at merge SHA `cc2403d3f1276a6ab58a75ac7f11b5bdd50ff479`, Payment Void PR #200 at `d99eeb67c2204ce58f534a814d6f4c59a55c5f52`, Refund PR #202 at `c32e9f4700ff0bd33695281e451ee7076cf811a1`, Online Payments PR #204 at `6939533b69b229186eb3b64ea9f786ec9f34fa88`, and Financial Reports PR #206 at `96ff7d4546904a285d720b9d4c6a7bb770bf04c1` |
 | Product Quality Excellence Program documentation | P0 | VERIFIED | PR #190 merged to `main` |
 | Master Regression Matrix | P0 | VERIFIED | Added under `docs/quality/` by PR #190 |
 | Professional UI/UX Standard | P0 | VERIFIED | Added under `docs/quality/` by PR #190 |
@@ -31,9 +31,9 @@ This register is the concise operational reference for completed, in-progress, p
 | Payment Void browser regression | P0 | VERIFIED | PR #200 exact head `3670713d53bd94d165460a1b98639a53ccd9a997` passed HOAHub MySQL CI #1235 + Canva Visual Parity #377 and merged to `main` at `d99eeb67c2204ce58f534a814d6f4c59a55c5f52`; coverage verifies void authority, audit/archive evidence, bill recalculation, transaction-history visibility, and tenant isolation |
 | Refund browser regression | P0 | VERIFIED | PR #202 exact head `f4fbc4133792157e2ff96b4afe1adb88004ac1e6` passed HOAHub MySQL CI #1239 + Canva Visual Parity #380 and merged to `main` at `c32e9f4700ff0bd33695281e451ee7076cf811a1`; coverage verifies tenant-scoped bond visibility, partial refund amount/status, audit evidence, and rejection of forged cross-tenant collection IDs |
 | Online Payments report browser regression | P0 | VERIFIED | PR #204 exact head `042c7494fe2367e8d28e6115bf532e413354089a` passed HOAHub MySQL CI #1241 + Canva Visual Parity #381 and merged to `main` at `6939533b69b229186eb3b64ea9f786ec9f34fa88`; coverage verifies search/filter/pagination, tenant isolation, exact settlement amounts/references, and forged cross-tenant settlement denial |
-| Financial Reports browser regression | P0 | IN_PROGRESS | Issue #205; active branch `test/financial-reports-regression-20260827` from post-Online-Payments `main`; date-filter/totals/export regression is the current bounded delivery item |
-| Authenticated post-deploy UAT smoke | P0 | PENDING | Must be non-destructive using controlled UAT tenant |
-| GitHub `main` branch protection / required checks | P0 | BLOCKED | Requires repository administration; current branch reports unprotected |
+| Financial Reports browser regression | P0 | VERIFIED | PR #206 exact head `42e65793f606217744040e3127782bddc14909b3` passed HOAHub MySQL CI #1243 + Canva Visual Parity #382 and merged to `main` at `96ff7d4546904a285d720b9d4c6a7bb770bf04c1`; post-merge verify job in MySQL CI #1244 passed; regression covers tenant-scoped date boundaries, exact totals, CSV range scope, and cross-tenant exclusion |
+| Authenticated post-deploy UAT smoke | P0 | IN_PROGRESS | Issue #194; active branch `test/authenticated-post-deploy-smoke-20260827`; read-only browser harness and protected production workflow are being added. Live run requires a dedicated controlled UAT tenant/account and protected production credentials |
+| GitHub `main` branch protection / required checks | P0 | BLOCKED | Requires repository administration; `main` currently reports `protected: false` with no required checks |
 | 5,000+ homeowner large-volume QA pack | P1 | PENDING | Add realistic search/pagination/job-performance fixtures |
 | WCAG 2.1 AA critical-flow gate | P1 | PENDING | Add automated/manual accessibility evidence |
 | Cross-browser compatibility evidence | P1 | PENDING | Current browser automation is Chromium-focused |
@@ -46,9 +46,10 @@ This register is the concise operational reference for completed, in-progress, p
 
 ## Immediate Execution Order
 
-1. Complete Financial Reports date-filter/totals/export browser regression under #205.
-2. Add authenticated post-deploy UAT smoke harness.
-3. Start UI Wave 1 only after affected P0 regression gates are green.
+1. Complete authenticated non-destructive post-deploy UAT smoke under #194 and record a controlled production run.
+2. Repository administrator enables `main` PR/required-check/force-push/delete protections under #194.
+3. Start the 5,000+ homeowner large-volume QA pack while administrative release-control work is pending.
+4. Begin UI Wave 1 only after the affected P0 and large-volume safety gates are green.
 
 ## Update Rule
 

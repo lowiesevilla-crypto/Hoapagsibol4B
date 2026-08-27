@@ -49,6 +49,17 @@ jobs:
       - run: pnpm exec prisma migrate deploy
       - run: pnpm db:seed
       - run: pnpm build
+      - name: Resolve packaged Chromium for mobile evidence
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          CHROMIUM_PATH="$(node --input-type=module -e 'import chromium from "@sparticuz/chromium"; console.log(await chromium.executablePath())')"
+          if [ -z "$CHROMIUM_PATH" ] || [ ! -x "$CHROMIUM_PATH" ]; then
+            echo "::error::Packaged Chromium executable is unavailable for mobile responsive evidence."
+            exit 1
+          fi
+          echo "PUPPETEER_EXECUTABLE_PATH=$CHROMIUM_PATH" >> "$GITHUB_ENV"
+          "$CHROMIUM_PATH" --version || true
       - name: Run non-destructive mobile responsive evidence
         shell: bash
         run: |

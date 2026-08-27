@@ -142,12 +142,15 @@ async function visitAndCheck(page, path, label) {
 }
 
 const executablePath = await resolveBrowserExecutable();
-const headlessMode = requestedBrowser === "chromium" ? "shell" : true;
+const isChromiumMobileEvidence = requestedBrowser === "chromium" && mobileProfile !== "default";
+const headlessMode = requestedBrowser === "chromium" ? (isChromiumMobileEvidence ? true : "shell") : true;
 const launchArgs = requestedBrowser === "edge"
   ? ["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage"]
   : requestedBrowser === "firefox"
     ? []
-    : await puppeteer.defaultArgs({ args: chromium.args, headless: headlessMode });
+    : isChromiumMobileEvidence
+      ? ["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage"]
+      : await puppeteer.defaultArgs({ args: chromium.args, headless: headlessMode });
 console.log(`Running critical-flow accessibility evidence with ${requestedBrowser}: ${executablePath}`);
 console.log(`Mobile profile: ${mobileProfile} (${mobileProfiles[mobileProfile].label})`);
 const browser = await puppeteer.launch({ executablePath, headless: headlessMode, args: launchArgs, ...(requestedBrowser === "firefox" ? { browser: "firefox" } : {}) });

@@ -32,9 +32,9 @@ This register is the concise operational reference for completed, in-progress, p
 | Refund browser regression | P0 | VERIFIED | PR #202 exact head `f4fbc4133792157e2ff96b4afe1adb88004ac1e6` passed HOAHub MySQL CI #1239 + Canva Visual Parity #380 and merged to `main` at `c32e9f4700ff0bd33695281e451ee7076cf811a1`; coverage verifies tenant-scoped bond visibility, partial refund amount/status, audit evidence, and rejection of forged cross-tenant collection IDs |
 | Online Payments report browser regression | P0 | VERIFIED | PR #204 exact head `042c7494fe2367e8d28e6115bf532e413354089a` passed HOAHub MySQL CI #1241 + Canva Visual Parity #381 and merged to `main` at `6939533b69b229186eb3b64ea9f786ec9f34fa88`; coverage verifies search/filter/pagination, tenant isolation, exact settlement amounts/references, and forged cross-tenant settlement denial |
 | Financial Reports browser regression | P0 | VERIFIED | PR #206 exact head `42e65793f606217744040e3127782bddc14909b3` passed HOAHub MySQL CI #1243 + Canva Visual Parity #382 and merged to `main` at `96ff7d4546904a285d720b9d4c6a7bb770bf04c1`; post-merge verify job in MySQL CI #1244 passed; regression covers tenant-scoped date boundaries, exact totals, CSV range scope, and cross-tenant exclusion |
-| Authenticated post-deploy UAT smoke | P0 | IN_PROGRESS | Issue #194; active branch `test/authenticated-post-deploy-smoke-20260827`; read-only browser harness and protected production workflow are being added. Live run requires a dedicated controlled UAT tenant/account and protected production credentials |
+| Authenticated post-deploy UAT smoke | P0 | IMPLEMENTED | PR #210 exact head `8fc506415a4d95fd436cac3c52de488e922c0498` passed HOAHub MySQL CI #1250 + Canva Visual Parity #386 and merged to `main` at `8a63538b30d7812811f36f8a9eeeb1d3e9d33586`; live verification still requires a dedicated controlled UAT tenant/account and protected production credentials |
 | GitHub `main` branch protection / required checks | P0 | BLOCKED | Requires repository administration; `main` currently reports `protected: false` with no required checks |
-| 5,000+ homeowner large-volume QA pack | P1 | PENDING | Add realistic search/pagination/job-performance fixtures |
+| 5,000+ homeowner large-volume QA pack | P1 | IN_PROGRESS | Issue #196; active branch `test/large-tenant-homeowner-scale-20260827`; first increment seeds 5,001 disposable homeowners and verifies bounded pagination plus beyond-first-N tenant-scoped search |
 | WCAG 2.1 AA critical-flow gate | P1 | PENDING | Add automated/manual accessibility evidence |
 | Cross-browser compatibility evidence | P1 | PENDING | Current browser automation is Chromium-focused |
 | UI Wave 1: Homeowners / Household / Employees | P1 | PENDING | Begin only after P0 regression coverage for affected flows |
@@ -46,9 +46,9 @@ This register is the concise operational reference for completed, in-progress, p
 
 ## Immediate Execution Order
 
-1. Complete authenticated non-destructive post-deploy UAT smoke under #194 and record a controlled production run.
+1. Configure the controlled production UAT tenant credentials and record a live authenticated smoke run under #194.
 2. Repository administrator enables `main` PR/required-check/force-push/delete protections under #194.
-3. Start the 5,000+ homeowner large-volume QA pack while administrative release-control work is pending.
+3. Complete the 5,000+ homeowner large-volume QA pack under #196 while administrative release-control work is pending.
 4. Begin UI Wave 1 only after the affected P0 and large-volume safety gates are green.
 
 ## Update Rule

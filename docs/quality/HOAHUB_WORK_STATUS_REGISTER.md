@@ -18,7 +18,7 @@ This register is the concise operational reference for completed, in-progress, p
 
 | Work Item | Priority | Status | Evidence / Note |
 |---|---:|---|---|
-| Protect post-rollback production baseline | P0 | VERIFIED | Current verified `main` includes Petty Cash PR #198, Payment Void PR #200, Refund PR #202, Online Payments PR #204, Financial Reports PR #206, and subsequent verified quality increments through UI Wave 1 Homeowner profile / household PR #225 merge `62f9b4af0f5ca3388ee14b2cf2432110c2429daf` |
+| Protect post-rollback production baseline | P0 | VERIFIED | Current verified `main` includes Petty Cash PR #198, Payment Void PR #200, Refund PR #202, Online Payments PR #204, Financial Reports PR #206, and subsequent verified quality increments through UI Wave 1 Employees PR #226 merge `91fee2b3adf8f7d15cecc0dd109faed79c33f7c4` |
 | Product Quality Excellence Program documentation | P0 | VERIFIED | PR #190 merged to `main` |
 | Master Regression Matrix | P0 | VERIFIED | Added under `docs/quality/` by PR #190 |
 | Professional UI/UX Standard | P0 | VERIFIED | Added under `docs/quality/` by PR #190 |
@@ -43,8 +43,8 @@ This register is the concise operational reference for completed, in-progress, p
 | Edge critical-flow browser evidence | P1 | VERIFIED | PR #220 exact head `6f6e3e62febcd61b584051e73d23594d400722ad` passed HOAHub MySQL CI #1284 + Canva Visual Parity #411 + HOAHub Edge Critical Flow #4 and merged as `16b4d256a4a3b805cb279e70bb52d7db8864b0cc` |
 | Firefox critical-flow browser evidence | P1 | VERIFIED | PR #221 exact head `7cf132740996da10114440827064ce6a592a3f20` passed HOAHub MySQL CI #1286 + Canva Visual Parity #412 + HOAHub Firefox Critical Flow #1; Edge regression #5 also passed; merged as `ffb753b7085282d8b2827512bdb14e4cea1c1331` |
 | Android/iOS responsive browser evidence | P1 | VERIFIED | PR #222 exact head `54572b73aa9666f82373a5386c8d498483c3d17b` passed HOAHub MySQL CI #1292 + Canva Visual Parity #417 + Mobile Responsive Evidence #5 + Edge #10 + Firefox #6 and merged as `9622b67eef4e89d4fcf0abaf4119274ba3b50c70`; evidence is deterministic mobile emulation only, while real iOS Safari/WebKit and physical-device behavior remain a controlled UAT boundary |
-| UI Wave 1: Homeowners / Household / Employees | P1 | IN_PROGRESS | Issue #223. Homeowners list/search slice completed by PR #224 exact head `01c88d4738213ba790ade1d2cb11ad0d92673baf` and merged as `77b3f39a8f41fef2748790c84dfabbf1413ad86d`. Homeowner profile / household slice completed by PR #225 exact head `6b879f4d77bff2e26f5d103eacf83b94876740d6`: MySQL CI #1296, Canva Visual Parity #419, Edge #12, Firefox #8, and Mobile Responsive #7 all passed; merged as `62f9b4af0f5ca3388ee14b2cf2432110c2429daf`. Active branch `ui/wave1-employees-20260827` targets only Employees list/profile presentation. |
-| UI Wave 2: Billing | P1 | PENDING | Route/workflow-level implementation; no global wrapper rollout |
+| UI Wave 1: Homeowners / Household / Employees | P1 | VERIFIED | Issue #223 completed. PR #224 Homeowners list/search merged as `77b3f39a8f41fef2748790c84dfabbf1413ad86d`; PR #225 Homeowner profile/household merged as `62f9b4af0f5ca3388ee14b2cf2432110c2429daf`; PR #226 Employees list/profile exact head `5573245133e835b7c1bf0a8cd4bfe5b6b178224a` passed MySQL CI #1298, Canva Visual Parity #420, Edge #13, Firefox #9, Mobile Responsive #8 and merged as `91fee2b3adf8f7d15cecc0dd109faed79c33f7c4` |
+| UI Wave 2: Billing | P1 | IN_PROGRESS | Issue #227. Active branch `ui/wave2-billing-list-20260827` from verified PR #226 merge `91fee2b3adf8f7d15cecc0dd109faed79c33f7c4`; first slice targets Admin Billing list/search presentation only with billing rules, tenant scoping and server query authority unchanged |
 | UI Wave 3: Collections / Payments / Receipts | P1 | PENDING | Route/workflow-level implementation |
 | UI Wave 4: Documents | P1 | PENDING | Route/workflow-level implementation |
 | UI Wave 5: Operations | P1 | PENDING | Complaints, Vehicles, Contractors, Attendance |
@@ -52,10 +52,11 @@ This register is the concise operational reference for completed, in-progress, p
 
 ## Immediate Execution Order
 
-1. Continue UI Wave 1 under #223 with the Employees list/profile presentation as the next independently gated slice.
-2. When administrator prerequisites are supplied, execute the controlled authenticated non-destructive post-deploy UAT smoke under #194.
-3. Repository administrator enables `main` PR/required-check/force-push/delete protections under #194.
-4. Begin UI Wave 2 only after the Employees slice passes exact-head gates and Wave 1 is closed.
+1. Complete UI Wave 2 Billing first slice under #227 with exact-head MySQL CI, Canva Visual Parity and relevant browser regressions green.
+2. Continue the remaining Billing slices independently; do not combine billing-rule authority changes with presentation modernization.
+3. When administrator prerequisites are supplied, execute the controlled authenticated non-destructive post-deploy UAT smoke under #194.
+4. Repository administrator enables `main` PR/required-check/force-push/delete protections under #194.
+5. Begin UI Wave 3 only after Billing Wave 2 is closed.
 
 ## Update Rule
 

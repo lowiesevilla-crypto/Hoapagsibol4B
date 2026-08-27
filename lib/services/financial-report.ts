@@ -19,20 +19,20 @@ export async function getFinancialReport(tenantId: string, fromInput?: string | 
   if (from > to) throw new Error("Report start date must be on or before the end date.");
   const range = { gte: from, lte: to };
   const [payments, collections, refunds, expenses, payrolls, employeeLoanIssuances, employeeLoanRepaymentRowsRaw, allEmployeeLoanTotals, billSummary, statusCounts, allBondTotalsRows, rentalAllocations, allRentalDepositIds, rentalDepositHeldRows, rentalAdvanceHeldRows] = await Promise.all([
-    prisma.payment.findMany({ where: { status: "ACTIVE", paymentDate: range }, include: { homeowner: { include: { user: true } }, bill: true, allocations: { include: { bill: true }, orderBy: { bill: { billingMonth: "asc" } } } }, orderBy: [{ paymentDate: "desc" }, { createdAt: "desc" }] }),
-    prisma.collection.findMany({ where: { OR: [{ collectionDate: range }, { forfeitedAt: range }] } }),
-    prisma.bondRefund.findMany({ where: { refundDate: range } }),
-    prisma.expense.findMany({ where: { expenseDate: range }, include: { category: true } }),
-    prisma.payrollPeriod.findMany({ where: { payDate: range, status: { in: ["POSTED", "PAID"] } }, include: { payslips: true } }),
-    prisma.employeeLoan.findMany({ where: { issuedDate: range, status: { not: "CANCELLED" } }, include: { employee: true }, orderBy: { issuedDate: "asc" } }),
+    prisma.payment.findMany({ where: { tenantId, status: "ACTIVE", paymentDate: range }, include: { homeowner: { include: { user: true } }, bill: true, allocations: { include: { bill: true }, orderBy: { bill: { billingMonth: "asc" } } } }, orderBy: [{ paymentDate: "desc" }, { createdAt: "desc" }] }),
+    prisma.collection.findMany({ where: { tenantId, OR: [{ collectionDate: range }, { forfeitedAt: range }] } }),
+    prisma.bondRefund.findMany({ where: { tenantId, refundDate: range } }),
+    prisma.expense.findMany({ where: { tenantId, expenseDate: range }, include: { category: true } }),
+    prisma.payrollPeriod.findMany({ where: { tenantId, payDate: range, status: { in: ["POSTED", "PAID"] } }, include: { payslips: true } }),
+    prisma.employeeLoan.findMany({ where: { tenantId, issuedDate: range, status: { not: "CANCELLED" } }, include: { employee: true }, orderBy: { issuedDate: "asc" } }),
     prisma.payrollDeduction.findMany({
-      where: { employeeLoanId: { not: null }, payroll: { payDate: range, status: "PAID" } },
+      where: { tenantId, employeeLoanId: { not: null }, payroll: { payDate: range, status: "PAID" } },
       include: { employee: true, employeeLoan: true, deductionType: true, payroll: true },
       orderBy: { createdAt: "asc" },
     }),
-    prisma.employeeLoan.aggregate({ _sum: { principalAmount: true, amountPaid: true, balance: true }, where: { status: { not: "CANCELLED" } } }),
-    prisma.bill.aggregate({ _sum: { totalAmount: true, balance: true } }),
-    prisma.bill.groupBy({ by: ["status"], _count: true, _sum: { balance: true } }),
+    prisma.employeeLoan.aggregate({ _sum: { principalAmount: true, amountPaid: true, balance: true }, where: { tenantId, status: { not: "CANCELLED" } } }),
+    prisma.bill.aggregate({ _sum: { totalAmount: true, balance: true }, where: { tenantId } }),
+    prisma.bill.groupBy({ by: ["status"], where: { tenantId }, _count: true, _sum: { balance: true } }),
     prisma.$queryRaw<TotalsRow[]>(Prisma.sql`
       SELECT COALESCE(SUM(c.amount),0) AS amount,COALESCE(SUM(c.amountRefunded),0) AS amountRefunded,COALESCE(SUM(c.amountForfeited),0) AS amountForfeited
       FROM Collection c

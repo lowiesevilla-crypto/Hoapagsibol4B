@@ -24,19 +24,19 @@ export default async function ReportsPage({ searchParams }: { searchParams: Prom
   const range = { gte: from, lte: to };
 
   const [payments, collections, refunds, expenses, payrolls, employeeLoanIssuances, employeeLoanRepaymentRows, allEmployeeLoanTotals, employeeLoanBalances, billSummary, statusCounts, monthly, allBondTotals, rentalAllocations] = await Promise.all([
-    prisma.payment.findMany({ where: { status: "ACTIVE", paymentDate: range }, include: { homeowner: { include: { user: true } }, bill: true, allocations: { include: { bill: true }, orderBy: { bill: { billingMonth: "asc" } } } }, orderBy: [{ paymentDate: "desc" }, { createdAt: "desc" }] }),
-    prisma.collection.findMany({ where: { OR: [{ collectionDate: range }, { forfeitedAt: range }] } }),
-    prisma.bondRefund.findMany({ where: { refundDate: range } }),
-    prisma.expense.findMany({ where: { expenseDate: range }, include: { category: true }, orderBy: { expenseDate: "asc" } }),
-    prisma.payrollPeriod.findMany({ where: { payDate: range, status: { in: ["POSTED", "PAID"] } }, include: { payslips: true } }),
-    prisma.employeeLoan.findMany({ where: { issuedDate: range, status: { not: "CANCELLED" } }, include: { employee: true }, orderBy: { issuedDate: "asc" } }),
-    prisma.payrollDeduction.findMany({ where: { employeeLoanId: { not: null }, payroll: { payDate: range, status: "PAID" } }, include: { employee: true, employeeLoan: true, payroll: true }, orderBy: { createdAt: "asc" } }),
-    prisma.employeeLoan.aggregate({ _sum: { principalAmount: true, amountPaid: true, balance: true }, where: { status: { not: "CANCELLED" } } }),
-    prisma.employeeLoan.findMany({ where: { status: { not: "CANCELLED" } }, include: { employee: true }, orderBy: [{ status: "asc" }, { issuedDate: "desc" }] }),
-    prisma.bill.aggregate({ _sum: { totalAmount: true, balance: true } }),
-    prisma.bill.groupBy({ by: ["status"], _count: true, _sum: { balance: true } }),
-    prisma.bill.groupBy({ by: ["billingMonth"], _sum: { totalAmount: true, amountPaid: true, balance: true }, orderBy: { billingMonth: "desc" }, take: 12 }),
-    prisma.collection.aggregate({ _sum: { amount: true, amountRefunded: true, amountForfeited: true }, where: { refundable: true } }),
+    prisma.payment.findMany({ where: { tenantId: user.tenantId, status: "ACTIVE", paymentDate: range }, include: { homeowner: { include: { user: true } }, bill: true, allocations: { include: { bill: true }, orderBy: { bill: { billingMonth: "asc" } } } }, orderBy: [{ paymentDate: "desc" }, { createdAt: "desc" }] }),
+    prisma.collection.findMany({ where: { tenantId: user.tenantId, OR: [{ collectionDate: range }, { forfeitedAt: range }] } }),
+    prisma.bondRefund.findMany({ where: { tenantId: user.tenantId, refundDate: range } }),
+    prisma.expense.findMany({ where: { tenantId: user.tenantId, expenseDate: range }, include: { category: true }, orderBy: { expenseDate: "asc" } }),
+    prisma.payrollPeriod.findMany({ where: { tenantId: user.tenantId, payDate: range, status: { in: ["POSTED", "PAID"] } }, include: { payslips: true } }),
+    prisma.employeeLoan.findMany({ where: { tenantId: user.tenantId, issuedDate: range, status: { not: "CANCELLED" } }, include: { employee: true }, orderBy: { issuedDate: "asc" } }),
+    prisma.payrollDeduction.findMany({ where: { tenantId: user.tenantId, employeeLoanId: { not: null }, payroll: { payDate: range, status: "PAID" } }, include: { employee: true, employeeLoan: true, payroll: true }, orderBy: { createdAt: "asc" } }),
+    prisma.employeeLoan.aggregate({ _sum: { principalAmount: true, amountPaid: true, balance: true }, where: { tenantId: user.tenantId, status: { not: "CANCELLED" } } }),
+    prisma.employeeLoan.findMany({ where: { tenantId: user.tenantId, status: { not: "CANCELLED" } }, include: { employee: true }, orderBy: [{ status: "asc" }, { issuedDate: "desc" }] }),
+    prisma.bill.aggregate({ _sum: { totalAmount: true, balance: true }, where: { tenantId: user.tenantId } }),
+    prisma.bill.groupBy({ by: ["status"], where: { tenantId: user.tenantId }, _count: true, _sum: { balance: true } }),
+    prisma.bill.groupBy({ by: ["billingMonth"], where: { tenantId: user.tenantId }, _sum: { totalAmount: true, amountPaid: true, balance: true }, orderBy: { billingMonth: "desc" }, take: 12 }),
+    prisma.collection.aggregate({ _sum: { amount: true, amountRefunded: true, amountForfeited: true }, where: { tenantId: user.tenantId, refundable: true } }),
     prisma.$queryRaw<RentalAllocationAccountingRow[]>(Prisma.sql`
       SELECT a.collectionId,a.amount,i.chargeType
       FROM RentalPaymentAllocation a
@@ -77,7 +77,7 @@ export default async function ReportsPage({ searchParams }: { searchParams: Prom
   for (const item of expenses) expenseBreakdown.set(item.category.name, (expenseBreakdown.get(item.category.name) ?? 0) + Number(item.amount));
 
   const reportQuery = `from=${fromText}&to=${toText}`;
-  return <><PageHeader eyebrow="Financials" title="HOA financial reports" description={`Reporting period: ${shortDate(from)} to ${shortDate(to)}.`} action={<div className="flex flex-wrap gap-2"><a className="btn-primary" href={`/admin/reports/pdf?${reportQuery}`}><Download className="size-4" /> PDF report</a><a className="btn-secondary" href={`/admin/reports/docx?${reportQuery}`}><FileText className="size-4" /> Word report</a><a className="btn-secondary" href="/admin/reports/export"><Download className="size-4" /> CSV</a></div>} />
+  return <><PageHeader eyebrow="Financials" title="HOA financial reports" description={`Reporting period: ${shortDate(from)} to ${shortDate(to)}.`} action={<div className="flex flex-wrap gap-2"><a className="btn-primary" href={`/admin/reports/pdf?${reportQuery}`}><Download className="size-4" /> PDF report</a><a className="btn-secondary" href={`/admin/reports/docx?${reportQuery}`}><FileText className="size-4" /> Word report</a><a className="btn-secondary" href={`/admin/reports/export?${reportQuery}`}><Download className="size-4" /> CSV</a></div>} />
     <form className="card mb-6 grid gap-4 sm:grid-cols-[1fr_1fr_auto] sm:items-end"><div><label className="label">From</label><input className="field" name="from" type="date" defaultValue={fromText} required /></div><div><label className="label">To</label><input className="field" name="to" type="date" defaultValue={toText} required /></div><button className="btn-primary">Generate report</button></form>
     <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5"><StatCard label="Recognized income" value={money(recognizedIncome)} note="Dues, fees and forfeitures" icon={ReceiptText} /><StatCard label="Operating expenses" value={money(totalExpenses)} note="Expenses plus finalized payroll" icon={WalletCards} /><StatCard label="Operating surplus" value={money(operatingSurplus)} note="Income less operating expenses" icon={TrendingUp} /><StatCard label="Refundable bonds held" value={money(bondsHeld)} note="Ending liability, all periods" icon={HandCoins} /><StatCard label="Employee loan balance" value={money(employeeLoanOutstanding)} note="Cash advances and loans receivable" icon={HandCoins} /></section>
 

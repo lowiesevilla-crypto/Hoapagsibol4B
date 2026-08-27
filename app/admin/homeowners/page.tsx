@@ -91,16 +91,16 @@ export default async function HomeownersPage({ searchParams }: { searchParams: P
     </section>
 
     <form className="card mb-5 grid gap-3 md:grid-cols-2 xl:grid-cols-[1fr_180px_240px_150px_auto]">
-      <input className="field" name="q" type="search" defaultValue={query.q || ""} placeholder="Search name, email, account number, block or lot" />
-      <select className="field" name="status" defaultValue={operationalStatus}>
+      <input aria-label="Search homeowners" className="field" name="q" type="search" defaultValue={query.q || ""} placeholder="Search name, email, account number, block or lot" />
+      <select aria-label="Operational status" className="field" name="status" defaultValue={operationalStatus}>
         <option value="all">All operational statuses</option>
         <option value={HomeownerStatus.ACTIVE}>Active</option>
         <option value={HomeownerStatus.INACTIVE}>Inactive</option>
       </select>
-      <select className="field" name="digital" defaultValue={digitalFilter}>
+      <select aria-label="Digital activation status" className="field" name="digital" defaultValue={digitalFilter}>
         {digitalFilters.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
       </select>
-      <select className="field" name="pageSize" defaultValue={pageSize}>
+      <select aria-label="Homeowners per page" className="field" name="pageSize" defaultValue={pageSize}>
         {pageSizes.map((size) => <option key={size} value={size}>{size} per page</option>)}
       </select>
       <div className="flex gap-2"><button className="btn-primary">Apply</button><Link className="btn-secondary" href="/admin/homeowners">Reset</Link></div>

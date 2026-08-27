@@ -1,0 +1,72 @@
+name: HOAHub Authenticated Production UAT
+
+on:
+  workflow_dispatch:
+    inputs:
+      expected_release_sha:
+        description: Optional 12-character deployed release SHA to verify before login
+        required: false
+        type: string
+
+concurrency:
+  group: hoahub-authenticated-production-uat
+  cancel-in-progress: false
+
+jobs:
+  authenticated-read-only-uat:
+    runs-on: ubuntu-latest
+    environment: production
+    permissions:
+      contents: read
+    env:
+      HOSTINGER_APP_URL: ${{ secrets.HOSTINGER_APP_URL }}
+      HOAHUB_UAT_ADMIN_EMAIL: ${{ secrets.HOAHUB_UAT_ADMIN_EMAIL }}
+      HOAHUB_UAT_ADMIN_PASSWORD: ${{ secrets.HOAHUB_UAT_ADMIN_PASSWORD }}
+      HOAHUB_UAT_HOMEOWNER_QUERY: ${{ vars.HOAHUB_UAT_HOMEOWNER_QUERY }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.9.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+
+      - name: Validate controlled UAT configuration
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          for name in HOSTINGER_APP_URL HOAHUB_UAT_ADMIN_EMAIL HOAHUB_UAT_ADMIN_PASSWORD HOAHUB_UAT_HOMEOWNER_QUERY; do
+            if [ -z "${!name:-}" ]; then
+              echo "::error::$name is required in the production environment before authenticated UAT can run."
+              exit 1
+            fi
+          done
+
+      - name: Verify expected deployed release
+        if: ${{ inputs.expected_release_sha != '' }}
+        shell: bash
+        env:
+          EXPECTED_RELEASE_SHA: ${{ inputs.expected_release_sha }}
+        run: |
+          set -Eeuo pipefail
+          EXPECTED="${EXPECTED_RELEASE_SHA:0:12}"
+          LIVE="$(curl --fail --silent --show-error --max-time 15 -H 'Cache-Control: no-cache' "${HOSTINGER_APP_URL%/}/release.txt?uat=${GITHUB_RUN_ID}" | tr -d '\r\n')"
+          if [ "$LIVE" != "$EXPECTED" ]; then
+            echo "::error::Production serves $LIVE but authenticated UAT expected $EXPECTED."
+            exit 1
+          fi
+          echo "Verified deployed release $LIVE before authenticated UAT."
+
+      - name: Prepare controlled Chromium
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          CHROMIUM_PATH="$(node --input-type=module -e 'import chromium from "@sparticuz/chromium"; process.stdout.write(await chromium.executablePath())')"
+          test -x "$CHROMIUM_PATH"
+          echo "PUPPETEER_EXECUTABLE_PATH=$CHROMIUM_PATH" >> "$GITHUB_ENV"
+
+      - name: Run authenticated non-destructive production UAT
+        run: node scripts/authenticated-production-smoke.mjs

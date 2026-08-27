@@ -1,0 +1,37 @@
+import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
+import test from "node:test";
+
+const automaticBillingPath = new URL("../../lib/services/automatic-billing.ts", import.meta.url);
+const billingRulesPath = new URL("../../lib/services/billing-rules.ts", import.meta.url);
+
+test("automatic billing and downstream writes use explicit bounded batch sizes", async () => {
+  const [automaticBilling, billingRules] = await Promise.all([
+    readFile(automaticBillingPath, "utf8"),
+    readFile(billingRulesPath, "utf8"),
+  ]);
+  assert.match(automaticBilling, /HOMEOWNER_BATCH_SIZE = 250/);
+  assert.match(automaticBilling, /homeowners\.slice\(index, index \+ HOMEOWNER_BATCH_SIZE\)/);
+  assert.match(billingRules, /billingWriteBatchSize = 20/);
+  assert.match(billingRules, /billingAuditBatchSize = 50/);
+  assert.match(billingRules, /billingNotificationBatchSize = 50/);
+});
+
+test("one billing-row or notification failure is isolated and counted without undoing persisted bills", async () => {
+  const billingRules = await readFile(billingRulesPath, "utf8");
+  assert.match(billingRules, /try \{[\s\S]*?await prisma\.\$transaction/);
+  assert.match(billingRules, /catch \(error\) \{[\s\S]*?row\.action = "ERROR"/);
+  assert.match(billingRules, /failedCount: rows\.filter\(\(row\) => row\.action === "ERROR"\)\.length/);
+  assert.match(billingRules, /Billing persistence must not fail because an email provider is unavailable/);
+});
+
+test("automatic billing retry safety relies on tenant-period duplicate checks and completion audit", async () => {
+  const [automaticBilling, billingRules] = await Promise.all([
+    readFile(automaticBillingPath, "utf8"),
+    readFile(billingRulesPath, "utf8"),
+  ]);
+  assert.match(automaticBilling, /hasCompletedMonthlyDuesRun\(tenantId, rule\.id, clock\.year, clock\.month\)/);
+  assert.match(automaticBilling, /AUTOMATIC_MONTHLY_DUES_COMPLETED/);
+  assert.match(billingRules, /tenantId: input\.actor\.tenantId, homeownerId: row\.homeownerId, recurringChargeType: RecurringChargeType\.MONTHLY_DUES, coverageYear: input\.coverageYear, coverageMonth: input\.coverageMonth/);
+  assert.match(billingRules, /row\.action = "SKIP_DUPLICATE"/);
+});

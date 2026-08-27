@@ -3,22 +3,31 @@ import { requireUser } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { paymentAllocationCoverageDisplay } from "@/lib/payment-coverage";
 import { paymentAppliedAmount, paymentUnappliedCredit } from "@/lib/payment-credit";
-import { collectionLabel } from "@/lib/utils";
+import { collectionLabel, inputDate } from "@/lib/utils";
 
 function cell(value: unknown) { return `"${String(value ?? "").replaceAll('"', '""')}"`; }
 type RentalAllocationExport = { collectionId: string; invoiceNumber: string; chargeType: "RENT" | "SECURITY_DEPOSIT" | "OTHER" };
 
-export async function GET() {
+export async function GET(request: Request) {
   const user = await requireUser(Role.ADMIN);
+  const url = new URL(request.url);
+  const now = new Date();
+  const fromText = /^\d{4}-\d{2}-\d{2}$/.test(url.searchParams.get("from") ?? "") ? url.searchParams.get("from")! : `${now.getUTCFullYear()}-01-01`;
+  const toText = /^\d{4}-\d{2}-\d{2}$/.test(url.searchParams.get("to") ?? "") ? url.searchParams.get("to")! : inputDate(now);
+  const from = new Date(`${fromText}T00:00:00.000Z`);
+  const to = new Date(`${toText}T23:59:59.999Z`);
+  if (from > to) return new Response("Report start date must be on or before the end date.", { status: 400 });
+  const range = { gte: from, lte: to };
+
   const [payments, collections, refunds, expenses, payrolls, employeeLoans, employeeLoanRepayments, rentalAllocations] = await Promise.all([
-    prisma.payment.findMany({ where: { status: "ACTIVE" }, include: { homeowner: { include: { user: true } }, bill: true, allocations: { include: { bill: true }, orderBy: { bill: { billingMonth: "asc" } } } }, orderBy: { paymentDate: "desc" } }),
-    prisma.collection.findMany({ include: { homeowner: { include: { user: true } }, contractor: true }, orderBy: { collectionDate: "desc" } }),
-    prisma.bondRefund.findMany({ include: { collection: { include: { homeowner: { include: { user: true } }, contractor: true } } }, orderBy: { refundDate: "desc" } }),
-    prisma.expense.findMany({ include: { category: true }, orderBy: { expenseDate: "desc" } }),
-    prisma.payrollPeriod.findMany({ where: { status: { in: ["POSTED", "PAID"] } }, include: { payslips: { include: { employee: true } } }, orderBy: { payDate: "desc" } }),
-    prisma.employeeLoan.findMany({ where: { status: { not: "CANCELLED" } }, include: { employee: true }, orderBy: { issuedDate: "desc" } }),
-    prisma.payrollDeduction.findMany({ where: { employeeLoanId: { not: null }, payroll: { status: "PAID" } }, include: { employee: true, employeeLoan: true, payroll: true }, orderBy: { createdAt: "desc" } }),
-    prisma.$queryRaw<RentalAllocationExport[]>(Prisma.sql`SELECT a.collectionId,i.invoiceNumber,i.chargeType FROM RentalPaymentAllocation a JOIN RentalInvoice i ON i.tenantId=a.tenantId AND i.id=a.invoiceId WHERE a.tenantId=${user.tenantId}`),
+    prisma.payment.findMany({ where: { tenantId: user.tenantId, status: "ACTIVE", paymentDate: range }, include: { homeowner: { include: { user: true } }, bill: true, allocations: { include: { bill: true }, orderBy: { bill: { billingMonth: "asc" } } } }, orderBy: { paymentDate: "desc" } }),
+    prisma.collection.findMany({ where: { tenantId: user.tenantId, OR: [{ collectionDate: range }, { forfeitedAt: range }] }, include: { homeowner: { include: { user: true } }, contractor: true }, orderBy: { collectionDate: "desc" } }),
+    prisma.bondRefund.findMany({ where: { tenantId: user.tenantId, refundDate: range }, include: { collection: { include: { homeowner: { include: { user: true } }, contractor: true } } }, orderBy: { refundDate: "desc" } }),
+    prisma.expense.findMany({ where: { tenantId: user.tenantId, expenseDate: range }, include: { category: true }, orderBy: { expenseDate: "desc" } }),
+    prisma.payrollPeriod.findMany({ where: { tenantId: user.tenantId, payDate: range, status: { in: ["POSTED", "PAID"] } }, include: { payslips: { include: { employee: true } } }, orderBy: { payDate: "desc" } }),
+    prisma.employeeLoan.findMany({ where: { tenantId: user.tenantId, issuedDate: range, status: { not: "CANCELLED" } }, include: { employee: true }, orderBy: { issuedDate: "desc" } }),
+    prisma.payrollDeduction.findMany({ where: { tenantId: user.tenantId, employeeLoanId: { not: null }, payroll: { payDate: range, status: "PAID" } }, include: { employee: true, employeeLoan: true, payroll: true }, orderBy: { createdAt: "desc" } }),
+    prisma.$queryRaw<RentalAllocationExport[]>(Prisma.sql`SELECT a.collectionId,i.invoiceNumber,i.chargeType FROM RentalPaymentAllocation a JOIN RentalInvoice i ON i.tenantId=a.tenantId AND i.id=a.invoiceId JOIN Collection c ON c.tenantId=a.tenantId AND c.id=a.collectionId WHERE a.tenantId=${user.tenantId} AND c.collectionDate>=${from} AND c.collectionDate<=${to}`),
   ]);
   const rentalByCollection = new Map<string, RentalAllocationExport[]>();
   for (const allocation of rentalAllocations) rentalByCollection.set(allocation.collectionId, [...(rentalByCollection.get(allocation.collectionId) ?? []), allocation]);
@@ -37,8 +46,8 @@ export async function GET() {
       [item.id, item.receiptNumber ?? "", "Collection", "Monthly dues applied", item.homeowner.user.name, item.paymentDate.toISOString().slice(0, 10), item.method, item.referenceNumber ?? "", paymentAppliedAmount(item), paymentAllocationCoverageDisplay(item), "Income"],
       ...(paymentUnappliedCredit(item) > 0 ? [[`${item.id}-credit`, item.receiptNumber ?? "", "Collection", "Unapplied homeowner credit", item.homeowner.user.name, item.paymentDate.toISOString().slice(0, 10), item.method, item.referenceNumber ?? "", paymentUnappliedCredit(item), "", "Liability"]] : []),
     ]),
-    ...collections.map((item) => [item.id, item.receiptNumber ?? "", "Collection", collectionLabel(item.type, item.description), collectionPayerName(item), item.collectionDate.toISOString().slice(0, 10), item.method, item.referenceNumber ?? "", item.amount.toString(), collectionCoverage(item), collectionTreatment(item)]),
-    ...collections.filter((item) => Number(item.amountForfeited) > 0).map((item) => [`${item.id}-forfeiture`, "", "Forfeiture", collectionLabel(item.type), collectionPayerName(item), item.forfeitedAt?.toISOString().slice(0, 10) ?? "", "OTHER", "", item.amountForfeited.toString(), "", "Income"]),
+    ...collections.filter((item) => item.collectionDate >= from && item.collectionDate <= to).map((item) => [item.id, item.receiptNumber ?? "", "Collection", collectionLabel(item.type, item.description), collectionPayerName(item), item.collectionDate.toISOString().slice(0, 10), item.method, item.referenceNumber ?? "", item.amount.toString(), collectionCoverage(item), collectionTreatment(item)]),
+    ...collections.filter((item) => Number(item.amountForfeited) > 0 && item.forfeitedAt && item.forfeitedAt >= from && item.forfeitedAt <= to).map((item) => [`${item.id}-forfeiture`, "", "Forfeiture", collectionLabel(item.type), collectionPayerName(item), item.forfeitedAt?.toISOString().slice(0, 10) ?? "", "OTHER", "", item.amountForfeited.toString(), "", "Income"]),
     ...refunds.map((item) => { const source = collections.find((collection) => collection.id === item.collection.id); return [item.id, "", "Refund", collectionLabel(item.collection.type), source ? collectionPayerName(source) : item.collection.homeowner?.user.name ?? item.collection.contractor?.companyName ?? "Unknown", item.refundDate.toISOString().slice(0, 10), item.method, item.referenceNumber ?? "", `-${item.amount.toString()}`, "", "Liability reduction"]; }),
     ...expenses.map((item) => [item.id, item.voucherNumber ?? "", "Expense", item.category.name, item.payee, item.expenseDate.toISOString().slice(0, 10), item.method, item.referenceNumber ?? "", `-${item.amount.toString()}`, "", "Operating expense"]),
     ...payrolls.flatMap((period) => period.payslips.map((item) => [item.id, `PAY-${period.payDate.toISOString().slice(0, 10)}`, "Payroll", "Employee payroll", item.employee.name, period.payDate.toISOString().slice(0, 10), "OTHER", "", `-${(Number(item.grossPay) + Number(item.employerContribution)).toFixed(2)}`, "", "Posted payroll expense including employer contributions"])),
@@ -46,5 +55,5 @@ export async function GET() {
     ...employeeLoanRepayments.map((item) => [item.id, `PAY-${item.payroll.payDate.toISOString().slice(0, 10)}`, "Employee loan payroll repayment", item.employeeLoan?.type.replaceAll("_", " ") ?? "LOAN", item.employee.name, item.payroll.payDate.toISOString().slice(0, 10), "PAYROLL_DEDUCTION", "", item.amount.toString(), "", "Receivable reduction"]),
   ];
   const csv = rows.map((row) => row.map(cell).join(",")).join("\r\n");
-  return new Response(csv, { headers: { "Content-Type": "text/csv; charset=utf-8", "Content-Disposition": `attachment; filename="pagsibol-financial-transactions-${new Date().toISOString().slice(0, 10)}.csv"`, "Cache-Control": "no-store" } });
+  return new Response(csv, { headers: { "Content-Type": "text/csv; charset=utf-8", "Content-Disposition": `attachment; filename="pagsibol-financial-transactions-${fromText}-to-${toText}.csv"`, "Cache-Control": "no-store" } });
 }

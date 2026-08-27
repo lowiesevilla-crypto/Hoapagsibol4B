@@ -18,7 +18,7 @@ This register is the concise operational reference for completed, in-progress, p
 
 | Work Item | Priority | Status | Evidence / Note |
 |---|---:|---|---|
-| Protect post-rollback production baseline | P0 | VERIFIED | Current verified `main` includes Petty Cash PR #198, Payment Void PR #200, Refund PR #202, Online Payments PR #204, Financial Reports PR #206, and subsequent verified quality increments through UI Wave 3 Collections PR #232 merge `8f062d3901039c09e25fecb06b83f3688f0be07c`; post-merge HOAHub MySQL CI #1307 attempt 3 completed successfully including managed-production health verification |
+| Protect post-rollback production baseline | P0 | VERIFIED | Current verified `main` includes Petty Cash PR #198, Payment Void PR #200, Refund PR #202, Online Payments PR #204, Financial Reports PR #206, and subsequent verified quality increments through UI Wave 3 Payments PR #233 merge `e9a063b7846601184bf21c6308d523391cbc2cf7`; PR #233 exact head `d6b23730761162fa999822e312735c382555707b` passed MySQL CI #1308, Canva Visual Parity #425, Edge #18, Firefox #14 and Mobile Responsive #13 |
 | Product Quality Excellence Program documentation | P0 | VERIFIED | PR #190 merged to `main` |
 | Master Regression Matrix | P0 | VERIFIED | Added under `docs/quality/` by PR #190 |
 | Professional UI/UX Standard | P0 | VERIFIED | Added under `docs/quality/` by PR #190 |
@@ -45,14 +45,14 @@ This register is the concise operational reference for completed, in-progress, p
 | Android/iOS responsive browser evidence | P1 | VERIFIED | PR #222 exact head `54572b73aa9666f82373a5386c8d498483c3d17b` passed HOAHub MySQL CI #1292 + Canva Visual Parity #417 + Mobile Responsive Evidence #5 + Edge #10 + Firefox #6 and merged as `9622b67eef4e89d4fcf0abaf4119274ba3b50c70`; evidence is deterministic mobile emulation only, while real iOS Safari/WebKit and physical-device behavior remain a controlled UAT boundary |
 | UI Wave 1: Homeowners / Household / Employees | P1 | VERIFIED | Issue #223 completed. PR #224 Homeowners list/search merged as `77b3f39a8f41fef2748790c84dfabbf1413ad86d`; PR #225 Homeowner profile/household merged as `62f9b4af0f5ca3388ee14b2cf2432110c2429daf`; PR #226 Employees list/profile exact head `5573245133e835b7c1bf0a8cd4bfe5b6b178224a` passed MySQL CI #1298, Canva Visual Parity #420, Edge #13, Firefox #9, Mobile Responsive #8 and merged as `91fee2b3adf8f7d15cecc0dd109faed79c33f7c4` |
 | UI Wave 2: Billing | P1 | VERIFIED | Issue #227 completed. PR #228 Billing list/search merged as `3940dc97bade87ec8ed7044e8d3a5eebeed154c0`; PR #229 Billing rule/configuration merged as `3a3a7cb47f9b4f57913c20b4203f41313db4eaca`; PR #230 Billing detail/generation exact head `5ee699384f1ab776d19666f1610e7b0cd43ebb81` passed MySQL CI #1304, Canva Visual Parity #423, Edge #16, Firefox #12 and Mobile Responsive #11 and merged as `41a84494e7cc4564a152f685a23cf9b7969c4f4b` |
-| UI Wave 3: Collections / Payments / Receipts | P1 | IN_PROGRESS | Issue #231. Collections list/search completed by PR #232 exact head `8b8624ac8fa22855436daa3d8d039e886bfd0c4d`: MySQL CI #1306, Canva Visual Parity #424, Edge #17, Firefox #13 and Mobile Responsive #12 passed; merged as `8f062d3901039c09e25fecb06b83f3688f0be07c`; post-merge main CI #1307 attempt 3 passed managed-production health. Active branch `ui/wave3-payments-history-20260828` targets Payments list/history presentation only. |
+| UI Wave 3: Collections / Payments / Receipts | P1 | IN_PROGRESS | Issue #231. Collections list/search completed by PR #232 exact head `8b8624ac8fa22855436daa3d8d039e886bfd0c4d`: MySQL CI #1306, Canva Visual Parity #424, Edge #17, Firefox #13 and Mobile Responsive #12 passed; merged as `8f062d3901039c09e25fecb06b83f3688f0be07c`. Payments list/history completed by PR #233 exact head `d6b23730761162fa999822e312735c382555707b`: MySQL CI #1308, Canva Visual Parity #425, Edge #18, Firefox #14 and Mobile Responsive #13 passed; merged as `e9a063b7846601184bf21c6308d523391cbc2cf7`. Active branch `ui/wave3-receipts-detail-20260828` targets Receipts / payment detail presentation only. |
 | UI Wave 4: Documents | P1 | PENDING | Route/workflow-level implementation |
 | UI Wave 5: Operations | P1 | PENDING | Complaints, Vehicles, Contractors, Attendance |
 | UI Wave 6: Finance / Reports / Rental | P1 | PENDING | Final high-risk modernization wave after regression gates |
 
 ## Immediate Execution Order
 
-1. Continue UI Wave 3 under #231 with Payments list/history presentation as the next independently gated slice.
+1. Continue UI Wave 3 under #231 with Receipts / payment detail presentation as the next independently gated slice.
 2. When administrator prerequisites are supplied, execute the controlled authenticated non-destructive post-deploy UAT smoke under #194.
 3. Repository administrator enables `main` PR/required-check/force-push/delete protections under #194.
 4. Begin UI Wave 4 only after Collections / Payments / Receipts Wave 3 is closed.

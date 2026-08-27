@@ -162,7 +162,7 @@ try {
   homeownerPage.setDefaultTimeout(timeout);
   await homeownerPage.setViewport({ width: 390, height: 844, deviceScaleFactor: 1 });
   await login(homeownerPage, homeownerEmail, homeownerPassword, "/portal/");
-  await visitAndCheck(homeownerPage, "/portal", "Homeowner mobile portal");
+  await visitAndCheck(homeownerPage, "/portal/dashboard", "Homeowner mobile portal");
   await homeownerContext.close();
 
   console.log("WCAG critical-flow browser gate passed:");

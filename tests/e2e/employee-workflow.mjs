@@ -168,6 +168,11 @@ async function runEmployeeCreateAndEdit(browser) {
     );
     await expectText(page, employeeName, "newly created employee in the employee list");
 
+    await clearAndType(page, "input[name='q']", employeeNumber);
+    await clickAndWaitForNavigation(page, "button[type='submit']", "Search");
+    await expectText(page, "Showing 1-1 of 1", "server-side employee search result count");
+    await expectText(page, employeeName, "server-side employee search result");
+
     const created = await prisma.employeeProfile.findFirst({
       where: { tenantId: primaryTenantId, employeeNumber },
       include: { compensations: { orderBy: { effectiveFrom: "asc" } } },

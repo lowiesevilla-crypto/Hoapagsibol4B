@@ -59,6 +59,8 @@ jobs:
           cleanup() {
             kill "$APP_PID" 2>/dev/null || true
             pnpm e2e:cleanup || true
+            echo "--- HOAHub mobile server log ---"
+            cat /tmp/hoa-mobile-next.log || true
           }
           trap cleanup EXIT
           for attempt in {1..45}; do
@@ -66,5 +68,28 @@ jobs:
             sleep 2
           done
           curl --fail --silent http://127.0.0.1:3000/api/health
-          HOAHUB_E2E_MOBILE_PROFILE=android node --import ./tests/e2e/safe-browser-context-cleanup.mjs tests/e2e/wcag-critical-flow.mjs
-          HOAHUB_E2E_MOBILE_PROFILE=ios node --import ./tests/e2e/safe-browser-context-cleanup.mjs tests/e2e/wcag-critical-flow.mjs
+
+          set +e
+          HOAHUB_E2E_MOBILE_PROFILE=android node --import ./tests/e2e/safe-browser-context-cleanup.mjs tests/e2e/wcag-critical-flow.mjs 2>&1 | tee /tmp/hoa-mobile-android-e2e.log
+          ANDROID_STATUS=${PIPESTATUS[0]}
+          set -e
+          if [ "$ANDROID_STATUS" -ne 0 ]; then
+            exit "$ANDROID_STATUS"
+          fi
+
+          set +e
+          HOAHUB_E2E_MOBILE_PROFILE=ios node --import ./tests/e2e/safe-browser-context-cleanup.mjs tests/e2e/wcag-critical-flow.mjs 2>&1 | tee /tmp/hoa-mobile-ios-e2e.log
+          IOS_STATUS=${PIPESTATUS[0]}
+          set -e
+          exit "$IOS_STATUS"
+      - name: Upload mobile failure diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: hoa-mobile-failure-diagnostics
+          path: |
+            /tmp/hoa-mobile-android-e2e.log
+            /tmp/hoa-mobile-ios-e2e.log
+            /tmp/hoa-mobile-next.log
+          if-no-files-found: warn
+          retention-days: 3

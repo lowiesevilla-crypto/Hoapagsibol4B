@@ -87,4 +87,18 @@ jobs:
             sleep 2
           done
           curl --fail --silent http://127.0.0.1:3000/api/health
-          node --import ./tests/e2e/safe-browser-context-cleanup.mjs tests/e2e/wcag-critical-flow.mjs
+          set +e
+          node --import ./tests/e2e/safe-browser-context-cleanup.mjs tests/e2e/wcag-critical-flow.mjs 2>&1 | tee /tmp/hoa-edge-e2e.log
+          TEST_STATUS=${PIPESTATUS[0]}
+          set -e
+          exit "$TEST_STATUS"
+      - name: Upload Edge failure diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: hoa-edge-failure-diagnostics
+          path: |
+            /tmp/hoa-edge-e2e.log
+            /tmp/hoa-edge-next.log
+          if-no-files-found: warn
+          retention-days: 3

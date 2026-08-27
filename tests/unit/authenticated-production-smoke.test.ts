@@ -28,7 +28,7 @@ test("authenticated production smoke fails closed on business-data mutations", (
   assert.ok(script.includes('const safe = ["GET", "HEAD", "OPTIONS"].includes(method)'));
   assert.ok(script.includes('url.pathname === "/login" || url.pathname === "/api/auth/logout"'));
   assert.ok(script.includes('request.abort("blockedbyclient")'));
-  assert.ok(script.includes("assert.deepEqual(blockedMutations, [])"));
+  assert.ok(script.includes("assert.deepEqual(blockedMutations, [],"));
 });
 
 test("production UAT workflow requires controlled production credentials and homeowner selector", () => {

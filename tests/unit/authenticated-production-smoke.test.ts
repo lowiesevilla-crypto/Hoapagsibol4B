@@ -1,9 +1,9 @@
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
+import { readFileSync } from "node:fs";
 import test from "node:test";
 
-const script = await readFile("scripts/authenticated-production-smoke.mjs", "utf8");
-const workflow = await readFile(".github/workflows/authenticated-production-uat.yml", "utf8");
+const script = readFileSync("scripts/authenticated-production-smoke.mjs", "utf8");
+const workflow = readFileSync(".github/workflows/authenticated-production-uat.yml", "utf8");
 
 const requiredRoutes = [
   "/admin/dashboard",

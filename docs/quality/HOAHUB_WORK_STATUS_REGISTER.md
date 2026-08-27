@@ -18,7 +18,7 @@ This register is the concise operational reference for completed, in-progress, p
 
 | Work Item | Priority | Status | Evidence / Note |
 |---|---:|---|---|
-| Protect post-rollback production baseline | P0 | VERIFIED | Current verified `main` includes Petty Cash PR #198, Payment Void PR #200, Refund PR #202, Online Payments PR #204, Financial Reports PR #206, and subsequent verified quality increments through Edge PR #220 merge `16b4d256a4a3b805cb279e70bb52d7db8864b0cc` |
+| Protect post-rollback production baseline | P0 | VERIFIED | Current verified `main` includes Petty Cash PR #198, Payment Void PR #200, Refund PR #202, Online Payments PR #204, Financial Reports PR #206, and subsequent verified quality increments through Firefox PR #221 merge `ffb753b7085282d8b2827512bdb14e4cea1c1331` |
 | Product Quality Excellence Program documentation | P0 | VERIFIED | PR #190 merged to `main` |
 | Master Regression Matrix | P0 | VERIFIED | Added under `docs/quality/` by PR #190 |
 | Professional UI/UX Standard | P0 | VERIFIED | Added under `docs/quality/` by PR #190 |
@@ -41,8 +41,8 @@ This register is the concise operational reference for completed, in-progress, p
 | Bounded automatic/batch processing and failure isolation | P1 | VERIFIED | PR #215 exact head `1d2e4b3e779d4fd68951bf1d85493beb02305a5e` passed HOAHub MySQL CI #1260 + Canva Visual Parity #391 and merged as `d189466979df5de83ec0c5330b33e3a4f3b78152` |
 | WCAG 2.1 AA critical-flow gate | P1 | VERIFIED | PR #216 exact head `40bd7aad82911762ab6e491f7296a3569fa679de` passed HOAHub MySQL CI #1274 + Canva Visual Parity #404 and merged as `c79231c86e0c659130326046b5b338b815166620` |
 | Edge critical-flow browser evidence | P1 | VERIFIED | PR #220 exact head `6f6e3e62febcd61b584051e73d23594d400722ad` passed HOAHub MySQL CI #1284 + Canva Visual Parity #411 + HOAHub Edge Critical Flow #4 and merged as `16b4d256a4a3b805cb279e70bb52d7db8864b0cc` |
-| Firefox critical-flow browser evidence | P1 | IN_PROGRESS | Active branch `test/firefox-critical-flow-evidence-20260827` from verified Edge merge `16b4d256a4a3b805cb279e70bb52d7db8864b0cc`; requires exact-head HOAHub MySQL CI, Canva Visual Parity, and HOAHub Firefox Critical Flow |
-| Android/iOS browser evidence | P1 | PENDING | Follows Firefox completion; preserve distinction between deterministic automation and controlled real-device/manual UAT evidence |
+| Firefox critical-flow browser evidence | P1 | VERIFIED | PR #221 exact head `7cf132740996da10114440827064ce6a592a3f20` passed HOAHub MySQL CI #1286 + Canva Visual Parity #412 + HOAHub Firefox Critical Flow #1; Edge regression #5 also passed; merged as `ffb753b7085282d8b2827512bdb14e4cea1c1331` |
+| Android/iOS browser evidence | P1 | IN_PROGRESS | Active branch `test/mobile-browser-evidence-20260827` from verified Firefox merge `ffb753b7085282d8b2827512bdb14e4cea1c1331`; deterministic emulation may prove responsive/navigation/read-only behavior only; actual iOS Safari/WebKit and OS-native behaviors require a WebKit-capable environment or controlled real-device/manual UAT and must not be inferred from Chromium emulation |
 | UI Wave 1: Homeowners / Household / Employees | P1 | PENDING | Begin only after the agreed browser-compatibility sequence is complete and affected regression coverage remains green |
 | UI Wave 2: Billing | P1 | PENDING | Route/workflow-level implementation; no global wrapper rollout |
 | UI Wave 3: Collections / Payments / Receipts | P1 | PENDING | Route/workflow-level implementation |
@@ -52,11 +52,10 @@ This register is the concise operational reference for completed, in-progress, p
 
 ## Immediate Execution Order
 
-1. Complete Firefox critical-flow evidence under #196 with all exact-head gates green.
-2. Validate Android/iOS homeowner critical-flow evidence with automation/manual-UAT boundaries explicit.
-3. Configure controlled production UAT credentials and record the authenticated non-destructive production smoke under #194 when administrator prerequisites are available.
-4. Repository administrator enables `main` PR/required-check/force-push/delete protections under #194.
-5. Begin UI Wave 1 only after the browser sequence and affected regression gates are complete.
+1. Validate Android/iOS homeowner critical-flow evidence with automation/manual-UAT boundaries explicit.
+2. Configure controlled production UAT credentials and record the authenticated non-destructive production smoke under #194 when administrator prerequisites are available.
+3. Repository administrator enables `main` PR/required-check/force-push/delete protections under #194.
+4. Begin UI Wave 1 only after the browser sequence and affected regression gates are complete.
 
 ## Update Rule
 

@@ -18,6 +18,25 @@ export type RepositoryListFilters = {
   pageSize?: number;
 };
 
+export function repositoryDocumentWhere(tenantId: string, filters: RepositoryListFilters = {}): Prisma.RepositoryDocumentWhereInput {
+  const search = filters.search?.trim();
+  return {
+    tenantId,
+    ...(filters.categoryId ? { categoryId: filters.categoryId } : {}),
+    ...(filters.status ? { status: filters.status } : {}),
+    ...(filters.visibility ? { visibility: filters.visibility } : {}),
+    ...(search ? {
+      OR: [
+        { title: { contains: search } },
+        { description: { contains: search } },
+        { documentReference: { contains: search } },
+        { originalFileName: { contains: search } },
+        { searchableKeywords: { contains: search } },
+      ],
+    } : {}),
+  };
+}
+
 /**
  * Read surfaces may request taxonomy initialization, but only an actor who
  * actually has category-management permission is allowed to create defaults.
@@ -94,25 +113,7 @@ export async function listRepositoryDocuments(filters: RepositoryListFilters = {
   const { context } = await requireRepositoryRead();
   const page = Math.max(1, Math.floor(filters.page ?? 1));
   const pageSize = Math.min(100, Math.max(10, Math.floor(filters.pageSize ?? 25)));
-  const search = filters.search?.trim();
-
-  const where: Prisma.RepositoryDocumentWhereInput = {
-    tenantId: context.tenantId,
-    ...(filters.categoryId ? { categoryId: filters.categoryId } : {}),
-    ...(filters.status ? { status: filters.status } : {}),
-    ...(filters.visibility ? { visibility: filters.visibility } : {}),
-    ...(search
-      ? {
-          OR: [
-            { title: { contains: search } },
-            { description: { contains: search } },
-            { documentReference: { contains: search } },
-            { originalFileName: { contains: search } },
-            { searchableKeywords: { contains: search } },
-          ],
-        }
-      : {}),
-  };
+  const where = repositoryDocumentWhere(context.tenantId, filters);
 
   const [total, documents] = await Promise.all([
     prisma.repositoryDocument.count({ where }),

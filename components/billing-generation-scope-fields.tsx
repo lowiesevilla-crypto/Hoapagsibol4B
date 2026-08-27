@@ -95,8 +95,8 @@ export function BillingGenerationScopeFields({
   return <>
     <BillingAutomationFormLock scope="section" updateSectionDescription />
     <div>
-      <label className="label">Generation scope</label>
-      <select className="field" name="scope" value={scope} onChange={(event) => setScope(event.target.value as BillingGenerationScope)}>
+      <label className="label" htmlFor="billing-generation-scope">Generation scope</label>
+      <select id="billing-generation-scope" className="field" name="scope" value={scope} onChange={(event) => setScope(event.target.value as BillingGenerationScope)}>
         <option value="ALL">All eligible homeowners</option>
         <option value="HOMEOWNER">Individual homeowner</option>
         <option value="SELECTED">Selected homeowners</option>
@@ -106,9 +106,9 @@ export function BillingGenerationScopeFields({
     </div>
 
     {scope === "HOMEOWNER" && <div className="md:col-span-2">
-      <label className="label">Selected homeowner</label>
-      <div className="relative mb-2"><Search className="pointer-events-none absolute left-3.5 top-3 size-4 text-slate-400" /><input className="field pl-10" type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search name, block, lot, account, or email" autoComplete="off" /></div>
-      <select className="field" name="homeownerId" defaultValue={defaultHomeownerId ?? ""} required={scope === "HOMEOWNER"}>
+      <label className="label" htmlFor="billing-generation-homeowner">Selected homeowner</label>
+      <div className="relative mb-2"><Search className="pointer-events-none absolute left-3.5 top-3 size-4 text-slate-400" /><input aria-label="Search selected homeowner" className="field pl-10" type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search name, block, lot, account, or email" autoComplete="off" /></div>
+      <select id="billing-generation-homeowner" className="field" name="homeownerId" defaultValue={defaultHomeownerId ?? ""} required={scope === "HOMEOWNER"}>
         <option value="">Select homeowner</option>
         {matches.map((homeowner) => <option key={homeowner.id} value={homeowner.id}>{homeowner.label}</option>)}
       </select>
@@ -120,7 +120,7 @@ export function BillingGenerationScopeFields({
     {scope === "SELECTED" && <div className="md:col-span-3">
       {[...selectedIds].map((id) => <input key={id} type="hidden" name="homeownerIds" value={id} />)}
       <label className="label">Selected homeowners</label>
-      <div className="relative mb-2"><Search className="pointer-events-none absolute left-3.5 top-3 size-4 text-slate-400" /><input className="field pl-10" type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search name, block, lot, account, or email" autoComplete="off" /></div>
+      <div className="relative mb-2"><Search className="pointer-events-none absolute left-3.5 top-3 size-4 text-slate-400" /><input aria-label="Search selected homeowners" className="field pl-10" type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search name, block, lot, account, or email" autoComplete="off" /></div>
       <div className="max-h-72 overflow-y-auto rounded-xl border border-slate-200 bg-white p-2">
         {matches.map((homeowner) => <label key={homeowner.id} className="flex min-h-11 items-center gap-3 rounded-lg px-3 py-2 text-sm font-semibold hover:bg-slate-50">
           <input className="size-4 accent-pine-600" type="checkbox" value={homeowner.id} checked={selectedIds.has(homeowner.id)} onChange={(event) => {
@@ -141,16 +141,16 @@ export function BillingGenerationScopeFields({
     </div>}
 
     {scope === "BLOCK" && <div>
-      <label className="label">Block</label>
-      <select className="field" name="block" defaultValue={defaultBlock ?? ""} required={scope === "BLOCK"}>
+      <label className="label" htmlFor="billing-generation-block">Block</label>
+      <select id="billing-generation-block" className="field" name="block" defaultValue={defaultBlock ?? ""} required={scope === "BLOCK"}>
         <option value="">Select block</option>
         {blocks.map((block) => <option key={block} value={block}>Block {block}</option>)}
       </select>
     </div>}
 
     {scope === "PHASE" && <div>
-      <label className="label">Phase</label>
-      <select className="field" name="phase" defaultValue={defaultPhase ?? ""} required={scope === "PHASE"}>
+      <label className="label" htmlFor="billing-generation-phase">Phase</label>
+      <select id="billing-generation-phase" className="field" name="phase" defaultValue={defaultPhase ?? ""} required={scope === "PHASE"}>
         <option value="">Select phase</option>
         {phases.map((phase) => <option key={phase} value={phase}>{phase}</option>)}
       </select>

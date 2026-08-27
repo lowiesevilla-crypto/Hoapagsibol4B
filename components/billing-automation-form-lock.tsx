@@ -26,6 +26,43 @@ export function BillingAutomationFormLock({
     let locked = true;
     const description = updateSectionDescription ? target.querySelector("h2")?.parentElement?.querySelector("p") : null;
     const originalDescription = description?.textContent ?? "";
+    const generatedIds: HTMLElement[] = [];
+    const boundLabels: HTMLLabelElement[] = [];
+    const boundAriaLabels: HTMLElement[] = [];
+
+    const bindAccessibleLabels = () => {
+      if (!(scope === "section" && updateSectionDescription)) return;
+
+      document.querySelectorAll<HTMLLabelElement>("label").forEach((label, index) => {
+        if (label.htmlFor || label.querySelector("input, select, textarea")) return;
+        const parent = label.parentElement;
+        if (!parent) return;
+
+        const labelText = (label.textContent || "").replace(/\s+/g, " ").trim();
+        if (!labelText) return;
+
+        const controls = Array.from(parent.querySelectorAll<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>("input:not([type='hidden']), select, textarea"))
+          .filter((control) => !control.getAttribute("aria-labelledby") && !control.getAttribute("aria-label"));
+        if (!controls.length) return;
+
+        const searchControl = controls.find((control) => control instanceof HTMLInputElement && control.type === "search");
+        const primaryControl = controls.find((control) => control !== searchControl) ?? controls[0];
+
+        if (searchControl && searchControl !== primaryControl && !searchControl.getAttribute("aria-label")) {
+          searchControl.setAttribute("aria-label", `Search ${labelText}`);
+          boundAriaLabels.push(searchControl);
+        }
+
+        if (!primaryControl.id) {
+          primaryControl.id = `billing-accessibility-control-${index}`;
+          generatedIds.push(primaryControl);
+        }
+        label.htmlFor = primaryControl.id;
+        boundLabels.push(label);
+      });
+    };
+
+    bindAccessibleLabels();
 
     const lockControls = () => {
       target.querySelectorAll<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement | HTMLButtonElement>("input:not([type='hidden']), select, textarea, button").forEach((control) => {
@@ -85,6 +122,9 @@ export function BillingAutomationFormLock({
       target.removeEventListener("submit", blockSubmit, true);
       unlockControls();
       if (description && originalDescription) description.textContent = originalDescription;
+      boundLabels.forEach((label) => label.removeAttribute("for"));
+      boundAriaLabels.forEach((control) => control.removeAttribute("aria-label"));
+      generatedIds.forEach((control) => control.removeAttribute("id"));
     };
   }, [scope, updateSectionDescription]);
 

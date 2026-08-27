@@ -36,6 +36,8 @@ export function SearchableHomeownerSelect({
   const [remoteTotal, setRemoteTotal] = useState<number | null>(null);
   const [remoteReady, setRemoteReady] = useState(false);
   const [loading, setLoading] = useState(false);
+  const searchId = `${name}-search`;
+  const selectId = `${name}-select`;
 
   const localMatches = useMemo(() => {
     const term = normalizeSearch(query);
@@ -89,12 +91,12 @@ export function SearchableHomeownerSelect({
   const matches = remoteSearchActive && remoteReady ? remoteMatches : localMatches;
 
   return <div>
-    <label className="label">{label}</label>
+    <label className="label" htmlFor={selectId}>{label}</label>
     <div className="relative mb-2">
       <Search className="pointer-events-none absolute left-3.5 top-3 size-4 text-slate-400" />
-      <input className="field pl-10" type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder={placeholder} autoComplete="off" />
+      <input id={searchId} aria-label={`Search ${label.toLowerCase()}`} className="field pl-10" type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder={placeholder} autoComplete="off" />
     </div>
-    <select className="field" name={name} defaultValue={defaultValue} required={required}>
+    <select id={selectId} className="field" name={name} defaultValue={defaultValue} required={required}>
       <option value="">Select homeowner</option>
       {matches.map((homeowner) => <option key={homeowner.id} value={homeowner.id}>{homeowner.label}</option>)}
     </select>

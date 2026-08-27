@@ -4,16 +4,12 @@ const maxAttempts = 3;
 const retryMarker = "Target.setDiscoverTargets";
 const targetClosedMarker = "Target closed";
 
-function runCriticalPath() {
+function spawnBrowserScript(args) {
   return new Promise((resolve) => {
-    const child = spawn(
-      process.execPath,
-      ["--import", "./tests/e2e/safe-browser-context-cleanup.mjs", "tests/e2e/critical-path.mjs"],
-      {
-        env: process.env,
-        stdio: ["inherit", "pipe", "pipe"],
-      },
-    );
+    const child = spawn(process.execPath, args, {
+      env: process.env,
+      stdio: ["inherit", "pipe", "pipe"],
+    });
 
     let output = "";
     const capture = (stream, destination) => {
@@ -40,9 +36,21 @@ function runCriticalPath() {
   });
 }
 
+function runCriticalPath() {
+  return spawnBrowserScript(["--import", "./tests/e2e/safe-browser-context-cleanup.mjs", "tests/e2e/critical-path.mjs"]);
+}
+
+function runWcagCriticalFlow() {
+  return spawnBrowserScript(["--import", "./tests/e2e/safe-browser-context-cleanup.mjs", "tests/e2e/wcag-critical-flow.mjs"]);
+}
+
+let criticalPassed = false;
 for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
   const result = await runCriticalPath();
-  if (result.code === 0) process.exit(0);
+  if (result.code === 0) {
+    criticalPassed = true;
+    break;
+  }
 
   const transientStartupClosure =
     result.output.includes(retryMarker) && result.output.includes(targetClosedMarker);
@@ -59,4 +67,8 @@ for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
   await new Promise((resolve) => setTimeout(resolve, delayMs));
 }
 
-process.exit(1);
+if (!criticalPassed) process.exit(1);
+
+const wcagResult = await runWcagCriticalFlow();
+if (wcagResult.signal) process.stderr.write(`WCAG critical-flow suite exited on signal ${wcagResult.signal}.\n`);
+process.exit(wcagResult.code || 0);

@@ -28,6 +28,16 @@ async function resolveBrowserExecutable() {
     throw new Error("Microsoft Edge was requested for the critical-flow evidence run, but no Edge executable is available. Refusing to fall back to Chromium because that would invalidate Edge evidence.");
   }
 
+  if (requestedBrowser === "firefox") {
+    const firefoxCandidates = [
+      process.env.FIREFOX_BIN,
+      "/usr/bin/firefox",
+      "/usr/bin/firefox-esr",
+    ].filter(Boolean);
+    for (const candidate of firefoxCandidates) if (await pathExists(candidate)) return candidate;
+    throw new Error("Mozilla Firefox was requested for the critical-flow evidence run, but no Firefox executable is available. Refusing browser fallback because that would invalidate Firefox evidence.");
+  }
+
   if (requestedBrowser !== "chromium") {
     throw new Error(`Unsupported HOAHub E2E browser request: ${requestedBrowser}`);
   }
@@ -153,15 +163,18 @@ async function visitAndCheck(page, path, label) {
 }
 
 const executablePath = await resolveBrowserExecutable();
-const headlessMode = requestedBrowser === "edge" ? true : "shell";
+const headlessMode = requestedBrowser === "chromium" ? "shell" : true;
 const launchArgs = requestedBrowser === "edge"
   ? ["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage"]
-  : await puppeteer.defaultArgs({ args: chromium.args, headless: headlessMode });
+  : requestedBrowser === "firefox"
+    ? []
+    : await puppeteer.defaultArgs({ args: chromium.args, headless: headlessMode });
 console.log(`Running critical-flow accessibility evidence with ${requestedBrowser}: ${executablePath}`);
 const browser = await puppeteer.launch({
   executablePath,
   headless: headlessMode,
   args: launchArgs,
+  ...(requestedBrowser === "firefox" ? { browser: "firefox" } : {}),
 });
 
 try {
@@ -185,7 +198,8 @@ try {
   await visitAndCheck(homeownerPage, "/portal/dashboard", "Homeowner mobile portal");
   await homeownerContext.close();
 
-  console.log(`${requestedBrowser === "edge" ? "Edge" : "WCAG"} critical-flow browser gate passed:`);
+  const gateLabel = requestedBrowser === "edge" ? "Edge" : requestedBrowser === "firefox" ? "Firefox" : "WCAG";
+  console.log(`${gateLabel} critical-flow browser gate passed:`);
   console.log("- named visible buttons and links");
   console.log("- labeled visible form controls");
   console.log("- no duplicate ids or visible images missing alt");

@@ -26,6 +26,8 @@ jobs:
       ALLOWED_ORIGINS: http://127.0.0.1:3000
       CRON_SECRET: ci-test-only-cron-value-with-at-least-32-characters
       STORAGE_ROOT: /tmp/hoahub-storage
+      SEED_SYSTEM_ADMIN_EMAIL: ci-system@example.invalid
+      SEED_SYSTEM_ADMIN_PASSWORD: CI-Temporary-Password-2026!
       E2E_BASE_URL: http://127.0.0.1:3000
       E2E_COVERAGE_YEAR: "2099"
       E2E_COVERAGE_MONTH: "1"

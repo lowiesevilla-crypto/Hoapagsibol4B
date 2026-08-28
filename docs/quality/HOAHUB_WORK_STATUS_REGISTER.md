@@ -61,6 +61,20 @@ The HOAHub Product Quality & UX Excellence Program is **COMPLETED for the approv
 - `NOT_REQUIRED` means removed from the current Definition of Done, not silently treated as implemented.
 - Future optional hardening or presentation enhancements may be opened as new work without reopening the completed current program unless product scope is formally changed.
 
+## Independent Post-program Improvement Queue
+
+This queue is tracked in issue #254 and does **not** reopen the completed Product Quality & UX Excellence Program or change the `COMPLETED` disposition above.
+
+| Work Item | Status | Evidence / Note |
+|---|---|---|
+| Document Repository table usability | VERIFIED | PR #255 exact final head `b0ed2ca41567def2ba97b8cafeb7618676147272` passed MySQL CI #1342, Canva #444, Edge #37, Firefox #33 and Mobile #32; merged as `6ab8339c55c0dc32fb5b6765474b009ae4e6108a`; post-merge `main` MySQL CI #1343 passed. |
+| Billing setup collapsible sections | VERIFIED | PR #256 exact final head `c6f75f435cc939eaf17677229a542f1e779ed10b` passed MySQL CI #1345, Canva #446, Edge #39, Firefox #35 and Mobile #34; merged as `9dd05e52c368de95dbdbd519f6988f0e0459c899`; post-merge `main` MySQL CI #1346 passed including production smoke / critical browser suite and Hostinger managed-production/public-health verification. |
+| Admin Documents issued-table search / pagination / sticky actions | IN_PROGRESS | Active branch `ui/post-program-admin-documents-issued-table-20260828` started from verified `main` `9dd05e52c368de95dbdbd519f6988f0e0459c899`. Scope is tenant-scoped issued-document search, server pagination, sticky header, and always-visible actions; document authority/history/download authorization remain unchanged. |
+| Received-message popup / notification | PENDING | Next approved slice after issued-table verification. |
+| Admin add Household Member | PENDING | Preserve tenant scope, authorization, relationship rules and audit semantics. |
+| Homeowner Online Payment Status / history UX | PENDING | Preserve financial ledger, receipt, reconciliation, audit and gateway evidence; no destructive accounting deletion. |
+| Homeowner Account Information collapsible | PENDING | Presentation-only unless independently diagnosed behavior requires a narrow fix. |
+
 ## Update Rule
 
-If future work reopens this program, every material PR must record final status, PR number, exact head/merge SHA where relevant, test evidence, deployment/UAT result where required, and any remaining gap.
+Every material independent post-program PR must record final status, PR number, exact head/merge SHA where relevant, required gate evidence, post-merge deployment/health result, and any remaining gap. If future work formally reopens the completed quality program, the same evidence standard applies to its program status.

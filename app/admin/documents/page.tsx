@@ -38,6 +38,7 @@ type RequestRow = Prisma.DocumentRequestGetPayload<{
 }>;
 
 const requestPageSize = 15;
+const issuedPageSize = 15;
 const expectedDefinitions = [
   { code: "CERTIFICATE_OF_RESIDENCY", label: "Certificate of Residency", legacyType: DocumentType.CERTIFICATE_OF_RESIDENCY },
   { code: "CERTIFICATE_OF_INDIGENCY", label: "Certificate of Indigency", legacyType: null, aliases: ["CERTIFICATE_OF_IDIGENCY", "Certificate of Idigency"] },
@@ -69,7 +70,27 @@ export default async function AdminDocumentsPage({ searchParams }: { searchParam
     ...(q ? { OR: [{ documentNumber: { contains: q } }, { homeowner: { user: { name: { contains: q } } } }, { homeowner: { block: { contains: q } } }, { homeowner: { lot: { contains: q } } }] } : {}),
     ...(requestView === "needs-action" ? { AND: [documentRequestNeedsActionWhere(user.tenantId)] } : {}),
   };
-  const [definitions, legacyConfigs, legacyTemplates, requests, requestCount, issued] = await Promise.all([
+  const issuedWhere: Prisma.DocumentRequestWhereInput = {
+    tenantId: user.tenantId,
+    archivedAt: null,
+    generatedContent: { not: null },
+    ...(q ? {
+      OR: [
+        { documentNumber: { contains: q } },
+        { verificationCode: { contains: q } },
+        { purpose: { contains: q } },
+        { homeowner: { user: { name: { contains: q } } } },
+        { homeowner: { user: { email: { contains: q } } } },
+        { homeowner: { accountNumber: { contains: q } } },
+        { homeowner: { block: { contains: q } } },
+        { homeowner: { lot: { contains: q } } },
+        { definition: { displayName: { contains: q } } },
+        { definition: { code: { contains: q } } },
+        { configuration: { displayName: { contains: q } } },
+      ],
+    } : {}),
+  };
+  const [definitions, legacyConfigs, legacyTemplates, requests, requestCount, issued, issuedCount] = await Promise.all([
     prisma.documentDefinition.findMany({
       where: { tenantId: user.tenantId },
       include: {
@@ -84,11 +105,14 @@ export default async function AdminDocumentsPage({ searchParams }: { searchParam
     prisma.documentTemplate.findMany({ where: { tenantId: user.tenantId } }),
     prisma.documentRequest.findMany({ where: requestWhere, include: { homeowner: { include: { user: true } }, definition: true, configuration: true }, orderBy: { requestedAt: "desc" }, skip: (page - 1) * requestPageSize, take: requestPageSize }),
     prisma.documentRequest.count({ where: requestWhere }),
-    prisma.documentRequest.findMany({ where: { tenantId: user.tenantId, archivedAt: null, generatedContent: { not: null } }, include: { homeowner: { include: { user: true } }, definition: true, configuration: true }, orderBy: { generatedAt: "desc" }, take: 12 }),
+    prisma.documentRequest.findMany({ where: issuedWhere, include: { homeowner: { include: { user: true } }, definition: true, configuration: true }, orderBy: { generatedAt: "desc" }, skip: (page - 1) * issuedPageSize, take: issuedPageSize }),
+    prisma.documentRequest.count({ where: issuedWhere }),
   ]);
   const inventory = buildInventory(definitions, legacyConfigs, legacyTemplates);
   const requestPages = Math.max(1, Math.ceil(requestCount / requestPageSize));
+  const issuedPages = Math.max(1, Math.ceil(issuedCount / issuedPageSize));
   const filters = new URLSearchParams(Object.entries({ section: "requests", view: requestView, q, status: status || "", type: type || "", date: query.date || "" }).filter(([, value]) => value));
+  const issuedFilters = new URLSearchParams(Object.entries({ section: "issued", q }).filter(([, value]) => value));
   return <>
     <PageHeader eyebrow="Resident services" title="Document Management" description="Manage document types, templates, homeowner requests, and issued HOA documents from one tenant-scoped workspace." action={<div className="flex flex-wrap gap-2"><Link className="btn-secondary" href="/admin/documents/guide">Runbook</Link><Link className="btn-secondary" href="/admin/documents/archive">Archive</Link><Link className="btn-primary" href="/admin/documents/operations">Operations</Link></div>} />
     {query.notice === "legacy-templates" && <Notice kind="success">The legacy template screen now redirects here. Use Templates for draft, publishing, and version history.</Notice>}
@@ -97,7 +121,7 @@ export default async function AdminDocumentsPage({ searchParams }: { searchParam
     {section === "types" && <DocumentTypesSection definitions={definitions} inventory={inventory} />}
     {section === "templates" && <TemplatesSection definitions={definitions} />}
     {section === "requests" && <RequestsSection requests={requests} count={requestCount} page={page} pages={requestPages} filters={filters} query={query} status={status} type={type} q={q} view={requestView} />}
-    {section === "issued" && <IssuedSection issued={issued} />}
+    {section === "issued" && <IssuedSection issued={issued} count={issuedCount} page={page} pages={issuedPages} filters={issuedFilters} q={q} />}
   </>;
 }
 
@@ -159,8 +183,25 @@ function RequestsSection({ requests, count, page, pages, filters, query, status,
   </>;
 }
 
-function IssuedSection({ issued }: { issued: RequestRow[] }) {
-  return <section className="card p-0 sm:p-0"><div className="table-wrap rounded-none shadow-none"><table className="data-table min-w-[980px]"><thead><tr><th>Document no.</th><th>Homeowner</th><th>Document type</th><th>Status</th><th>Generated</th><th>Actions</th></tr></thead><tbody>{issued.map((item) => <tr key={item.id}><td className="font-mono text-xs font-bold">{item.documentNumber}</td><td>{item.homeowner.user.name}</td><td>{item.definition?.displayName || item.configuration?.displayName || documentTypeLabel(item.type)}</td><td><Status value={item.status} /></td><td>{item.generatedAt ? shortDate(item.generatedAt) : "Not recorded"}</td><td><div className="flex flex-wrap gap-2"><Link className="btn-secondary min-h-9 px-3 py-1.5 text-xs" href={`/documents/${item.id}`}>View</Link><Link className="btn-secondary min-h-9 px-3 py-1.5 text-xs" href={`/admin/documents/${item.id}`}>Manage</Link><a className="btn-secondary min-h-9 px-3 py-1.5 text-xs" href={`/documents/${item.id}/print`}>Print</a><a className="btn-primary min-h-9 px-3 py-1.5 text-xs" href={`/documents/${item.id}/pdf`}>Download PDF</a><a className="btn-secondary min-h-9 px-3 py-1.5 text-xs" href={`/documents/${item.id}/download`}>Download HTML</a>{item.verificationCode && <a className="btn-secondary min-h-9 px-3 py-1.5 text-xs" href={`/verify/documents/${item.verificationCode}`} target="_blank" rel="noreferrer">Verify</a>}</div></td></tr>)}{!issued.length && <tr><td colSpan={6} className="py-12 text-center text-slate-500">No issued documents found.</td></tr>}</tbody></table></div></section>;
+function IssuedSection({ issued, count, page, pages, filters, q }: { issued: RequestRow[]; count: number; page: number; pages: number; filters: URLSearchParams; q: string }) {
+  return <>
+    <form className="card mb-6" method="get">
+      <input type="hidden" name="section" value="issued" />
+      <label className="label" htmlFor="issued-document-search">Search issued documents</label>
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+        <input id="issued-document-search" className="field min-w-0 flex-1" type="search" name="q" defaultValue={q} placeholder="Document no., homeowner, account, block, lot, document type or verification code" />
+        <button className="btn-secondary min-h-11 px-5">Search</button>
+        {q && <Link className="btn-secondary inline-flex min-h-11 items-center justify-center px-5" href="/admin/documents?section=issued">Clear</Link>}
+      </div>
+      <p className="mt-2 text-xs text-slate-500">Search is tenant-scoped and matches issued-document metadata without changing document visibility, download authority, or historical evidence.</p>
+    </form>
+    <PaginationFocusTarget id="issued-document-table" label="Issued document table" />
+    <section className="card overflow-hidden p-0 sm:p-0">
+      <div className="flex flex-col gap-1 border-b border-slate-100 p-4 sm:flex-row sm:items-center sm:justify-between"><div><h2 className="font-black">Issued documents</h2><p className="text-sm text-slate-500">{count} document{count === 1 ? "" : "s"} found</p></div><p className="text-xs font-bold text-slate-500">Actions remain visible while the table scrolls</p></div>
+      <div className="table-wrap max-h-[70vh] rounded-none shadow-none"><table className="data-table min-w-[1180px]"><thead className="sticky top-0 z-20 bg-white shadow-sm"><tr><th>Document no.</th><th>Homeowner</th><th>Document type</th><th>Status</th><th>Generated</th><th className="sticky right-0 z-30 min-w-[420px] bg-white">Actions</th></tr></thead><tbody>{issued.map((item) => <tr key={item.id}><td className="font-mono text-xs font-bold">{item.documentNumber}</td><td>{item.homeowner.user.name}<span className="block text-xs text-slate-500">{item.homeowner.accountNumber ? `${item.homeowner.accountNumber} · ` : ""}B{item.homeowner.block} L{item.homeowner.lot}</span></td><td>{item.definition?.displayName || item.configuration?.displayName || documentTypeLabel(item.type)}</td><td><Status value={item.status} /></td><td>{item.generatedAt ? shortDate(item.generatedAt) : "Not recorded"}</td><td className="sticky right-0 z-10 bg-white"><div className="flex flex-nowrap gap-2"><Link className="btn-secondary min-h-9 shrink-0 px-3 py-1.5 text-xs" href={`/documents/${item.id}`}>View</Link><Link className="btn-secondary min-h-9 shrink-0 px-3 py-1.5 text-xs" href={`/admin/documents/${item.id}`}>Manage</Link><a className="btn-secondary min-h-9 shrink-0 px-3 py-1.5 text-xs" href={`/documents/${item.id}/print`}>Print</a><a className="btn-primary min-h-9 shrink-0 px-3 py-1.5 text-xs" href={`/documents/${item.id}/pdf`}>Download PDF</a><a className="btn-secondary min-h-9 shrink-0 px-3 py-1.5 text-xs" href={`/documents/${item.id}/download`}>Download HTML</a>{item.verificationCode && <a className="btn-secondary min-h-9 shrink-0 px-3 py-1.5 text-xs" href={`/verify/documents/${item.verificationCode}`} target="_blank" rel="noreferrer">Verify</a>}</div></td></tr>)}{!issued.length && <tr><td colSpan={6} className="py-12 text-center text-slate-500">{q ? "No issued documents match this tenant-scoped search." : "No issued documents found."}</td></tr>}</tbody></table></div>
+    </section>
+    {count > issuedPageSize && <nav className="mt-5 flex items-center justify-between"><Link className={`btn-secondary ${page <= 1 ? "pointer-events-none opacity-50" : ""}`} href={`?${filters.toString()}&page=${page - 1}#issued-document-table`}>Previous</Link><span className="text-sm font-bold">Page {page} of {pages}</span><Link className={`btn-secondary ${page >= pages ? "pointer-events-none opacity-50" : ""}`} href={`?${filters.toString()}&page=${page + 1}#issued-document-table`}>Next</Link></nav>}
+  </>;
 }
 
 function buildInventory(definitions: DefinitionRow[], legacyConfigs: { type: DocumentType; active: boolean; templateId: string | null }[], legacyTemplates: { type: DocumentType; active: boolean }[]) {

@@ -99,6 +99,7 @@ export default async function DocumentManagementPage({
     status: status || "",
     visibility: visibility || "",
   };
+  const activeFilterCount = [search, categoryId, status, visibility].filter(Boolean).length;
   const success = one(query.success);
   const error = one(query.error);
 
@@ -122,6 +123,16 @@ export default async function DocumentManagementPage({
     </section>
 
     <section className="mt-6 rounded-3xl border bg-white p-4 shadow-sm sm:p-5">
+      <div className="mb-4 flex flex-wrap items-start justify-between gap-3 border-b border-slate-100 pb-4">
+        <div>
+          <p className="text-sm font-black text-ink">Find association records</p>
+          <p className="mt-1 text-sm text-slate-500">Search and narrow the repository without changing document access or publication controls.</p>
+        </div>
+        <div className="flex flex-wrap items-center gap-2 text-xs font-bold">
+          <span className="rounded-full bg-slate-100 px-3 py-1.5 text-slate-700">{result.total} record{result.total === 1 ? "" : "s"}</span>
+          {activeFilterCount > 0 && <span className="rounded-full bg-pine-50 px-3 py-1.5 text-pine-700">{activeFilterCount} active filter{activeFilterCount === 1 ? "" : "s"}</span>}
+        </div>
+      </div>
       <form className="grid gap-3 lg:grid-cols-[minmax(260px,1fr)_220px_180px_180px_auto]" method="get">
         <label className="relative block">
           <span className="sr-only">Search documents</span>
@@ -135,8 +146,8 @@ export default async function DocumentManagementPage({
       </form>
     </section>
 
-    <div className="mt-5 flex flex-wrap items-center justify-between gap-3 text-sm text-slate-500">
-      <p><span className="font-black text-slate-800">{result.total}</span> document{result.total === 1 ? "" : "s"}</p>
+    <div className="mt-5 flex flex-wrap items-center justify-between gap-3 rounded-2xl bg-slate-50 px-4 py-3 text-sm text-slate-500">
+      <p><span className="font-black text-slate-800">{result.total}</span> document{result.total === 1 ? "" : "s"} in this result set</p>
       <p>Plan: <span className="font-bold text-slate-700">{entitlement.planCode || "Configured plan"}</span>{entitlement.storageLimitMb != null ? ` · ${entitlement.storageLimitMb.toLocaleString()} MB repository limit` : " · no configured storage limit"}</p>
     </div>
 
@@ -145,7 +156,7 @@ export default async function DocumentManagementPage({
         <div className="overflow-x-auto">
           <table className="w-full min-w-[1180px] text-sm">
             <thead className="bg-slate-50 text-left text-xs font-extrabold uppercase tracking-wider text-slate-500"><tr><th className="px-4 py-3">Document</th><th className="px-4 py-3">Category</th><th className="px-4 py-3">Reference</th><th className="px-4 py-3">Status</th><th className="px-4 py-3">Visibility</th><th className="px-4 py-3">Revision</th><th className="px-4 py-3">File</th><th className="px-4 py-3">Updated</th><th className="px-4 py-3">Actions</th></tr></thead>
-            <tbody>{result.documents.map((document) => <tr key={document.id} className="border-t align-top hover:bg-slate-50/70">
+            <tbody>{result.documents.map((document) => <tr key={document.id} className="border-t align-top transition-colors hover:bg-slate-50/80">
               <td className="max-w-xs px-4 py-4"><Link className="font-black text-ink hover:text-pine-700 hover:underline" href={`/admin/document-management/${document.id}`}>{document.title}</Link><p className="mt-1 truncate text-xs text-slate-500" title={document.originalFileName}>{document.description || document.originalFileName}</p></td>
               <td className="px-4 py-4"><p className="font-bold text-slate-700">{document.category.name}</p>{document.category.governanceControlled && <p className="mt-1 text-xs font-bold text-pine-700">Governed record</p>}</td>
               <td className="px-4 py-4 font-semibold text-slate-600">{document.documentReference || "—"}</td>
@@ -182,7 +193,7 @@ export default async function DocumentManagementPage({
       {canUpload && !search && !categoryId && !status && !visibility && <Link className="btn-primary mt-5 inline-flex items-center gap-2" href="/admin/document-management/upload"><Upload className="size-4" /> Upload first document</Link>}
     </section>}
 
-    {result.pageCount > 1 && <nav className="mt-6 flex items-center justify-between gap-3" aria-label="Document repository pages">
+    {result.pageCount > 1 && <nav className="mt-6 flex items-center justify-between gap-3 rounded-2xl border bg-white p-3 shadow-sm" aria-label="Document repository pages">
       {result.page > 1 ? <Link className="btn-secondary" href={pageHref(filters, result.page - 1)}>Previous</Link> : <span />}
       <p className="text-sm font-bold text-slate-600">Page {result.page} of {result.pageCount}</p>
       {result.page < result.pageCount ? <Link className="btn-secondary" href={pageHref(filters, result.page + 1)}>Next</Link> : <span />}

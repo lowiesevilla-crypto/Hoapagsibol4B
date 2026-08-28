@@ -51,8 +51,8 @@ export default async function VehiclesPage({ searchParams }: { searchParams: Pro
           <p className="mt-1 max-w-2xl text-sm text-slate-500">Search by homeowner, block/lot, plate, sticker, make, model, or color. Existing vehicle and sticker rules remain unchanged.</p>
         </div>
         <div className="w-full lg:max-w-md">
-          <label className="mb-1.5 flex items-center gap-2 text-xs font-bold uppercase tracking-wide text-slate-500" htmlFor="vehicle-search"><Search className="size-3.5" />Search vehicles</label>
-          <SearchInput id="vehicle-search" placeholder="Owner, plate, sticker, make or model" />
+          <p className="mb-1.5 flex items-center gap-2 text-xs font-bold uppercase tracking-wide text-slate-500"><Search className="size-3.5" />Search vehicles</p>
+          <SearchInput placeholder="Owner, plate, sticker, make or model" />
         </div>
       </div>
 

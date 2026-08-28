@@ -18,7 +18,7 @@ This register is the concise operational reference for completed, in-progress, p
 
 | Work Item | Priority | Status | Evidence / Note |
 |---|---:|---|---|
-| Protect post-rollback production baseline | P0 | VERIFIED | Current verified `main` includes Petty Cash PR #198, Payment Void PR #200, Refund PR #202, Online Payments PR #204, Financial Reports PR #206, and subsequent verified quality increments through actual UI Wave 4 Document request/detail PR #240 merge `b155d49f92c807472fbec8dae5b2e3fbc0fd62c7`; PR #240 exact final head `94034ab1366605878d71628a8d95381461f5fb0d` passed MySQL CI #1320, Canva Visual Parity #432, Edge #25, Firefox #21 and Mobile Responsive #20, and post-merge `main` MySQL CI #1321 passed |
+| Protect post-rollback production baseline | P0 | VERIFIED | Current verified `main` includes Petty Cash PR #198, Payment Void PR #200, Refund PR #202, Online Payments PR #204, Financial Reports PR #206, quality/scale/browser evidence through #222, UI Waves 1–5, and final Wave 5 Attendance merge `92cccb29a73391c4928480a60fbfa360e3302c48`; post-merge HOAHub MySQL CI #1335 passed including production smoke/critical browser suite and managed-production/public-health verification. |
 | Product Quality Excellence Program documentation | P0 | VERIFIED | PR #190 merged to `main` |
 | Master Regression Matrix | P0 | VERIFIED | Added under `docs/quality/` by PR #190 |
 | Professional UI/UX Standard | P0 | VERIFIED | Added under `docs/quality/` by PR #190 |
@@ -46,16 +46,16 @@ This register is the concise operational reference for completed, in-progress, p
 | UI Wave 1: Homeowners / Household / Employees | P1 | VERIFIED | Issue #223 completed. PR #224 Homeowners list/search merged as `77b3f39a8f41fef2748790c84dfabbf1413ad86d`; PR #225 Homeowner profile/household merged as `62f9b4af0f5ca3388ee14b2cf2432110c2429daf`; PR #226 Employees list/profile exact head `5573245133e835b7c1bf0a8cd4bfe5b6b178224a` passed MySQL CI #1298, Canva Visual Parity #420, Edge #13, Firefox #9, Mobile Responsive #8 and merged as `91fee2b3adf8f7d15cecc0dd109faed79c33f7c4` |
 | UI Wave 2: Billing | P1 | VERIFIED | Issue #227 completed. PR #228 Billing list/search merged as `3940dc97bade87ec8ed7044e8d3a5eebeed154c0`; PR #229 Billing rule/configuration merged as `3a3a7cb47f9b4f57913c20b4203f41313db4eaca`; PR #230 Billing detail/generation exact head `5ee699384f1ab776d19666f1610e7b0cd43ebb81` passed MySQL CI #1304, Canva Visual Parity #423, Edge #16, Firefox #12 and Mobile Responsive #11 and merged as `41a84494e7cc4564a152f685a23cf9b7969c4f4b` |
 | UI Wave 3: Collections / Payments / Receipts | P1 | VERIFIED | Issue #231 completed. PR #232 Collections list/search merged as `8f062d3901039c09e25fecb06b83f3688f0be07c`; PR #233 Payments list/history merged as `e9a063b7846601184bf21c6308d523391cbc2cf7`; PR #234 Receipts/payment detail exact head `d9e11d827f66c583c1fa62e10ee5757a4cab81d6` passed MySQL CI #1310, Canva Visual Parity #426, Edge #19, Firefox #15 and Mobile Responsive #14 and merged as `0f80c5e57d1ac3d882cac083a2b0588c2fc0b9e4` |
-| UI Wave 4: Documents | P1 | IN_PROGRESS | Issue #235. Documents list/library presentation VERIFIED by PR #238 exact final head `743c128b9694bfb8a3ec1a41f42a8dc4d4740886`; Document request/detail/preview VERIFIED by PR #240 exact final head `94034ab1366605878d71628a8d95381461f5fb0d`, which passed MySQL CI #1320, Canva #432, Edge #25, Firefox #21 and Mobile #20, merged as `b155d49f92c807472fbec8dae5b2e3fbc0fd62c7`, and post-merge MySQL CI #1321 passed. Active branch `ui/wave4-document-management-template-actual-20260828` targets the final safely separable Document Management/template presentation slice only. |
-| UI Wave 5: Operations | P1 | PENDING | Complaints, Vehicles, Contractors, Attendance |
-| UI Wave 6: Finance / Reports / Rental | P1 | PENDING | Final high-risk modernization wave after regression gates |
+| UI Wave 4: Documents | P1 | VERIFIED | Issue #235 completed. Actual product slices merged through Document Templates PR #243; final Wave 4 release baseline `14654f0e79e23ef5f682226bf85f41c7d1b1c278` passed post-merge MySQL CI #1327. Documentation-only PRs #236/#237 are not counted as product implementation. |
+| UI Wave 5: Operations | P1 | VERIFIED | Issue #244 completed. Complaints PR #245, Vehicles #246, Contractors #247, and Attendance #248 each passed exact-head MySQL + Canva + Edge + Firefox + Mobile gates; final Attendance exact head `b563faa8b8b8adeb6c06ca0413f08f880f955cb1` merged as `92cccb29a73391c4928480a60fbfa360e3302c48`, with post-merge MySQL CI #1335 PASS. |
+| UI Wave 6: Finance / Reports / Rental | P1 | IN_PROGRESS | Issue #249. Finance Reports presentation is active from verified `main` `92cccb29a73391c4928480a60fbfa360e3302c48`; next slices are Expenses and Rental-Reconciliation. Preserve all finance/report/payment/rental calculations and authority. |
 
 ## Immediate Execution Order
 
-1. Continue UI Wave 4 under #235 with the actual Document Management/template presentation slice from verified `main` `b155d49f92c807472fbec8dae5b2e3fbc0fd62c7`.
-2. When administrator prerequisites are supplied, execute the controlled authenticated non-destructive post-deploy UAT smoke under #194.
-3. Repository administrator enables `main` PR/required-check/force-push/delete protections under #194.
-4. Begin UI Wave 5 only after Documents Wave 4 is closed.
+1. Complete Wave 6 Finance Reports presentation under #249 from verified `main` `92cccb29a73391c4928480a60fbfa360e3302c48`; merge only after exact-head MySQL CI + Canva Visual Parity + Edge + Firefox + Mobile gates pass.
+2. Verify post-merge `main` release health, then proceed to Expenses followed by Rental-Reconciliation as separately gated slices.
+3. When administrator prerequisites are supplied, execute the controlled authenticated non-destructive post-deploy UAT smoke under #194.
+4. Repository administrator enables `main` PR/required-check/force-push/delete protections under #194.
 
 ## Update Rule
 

@@ -4,7 +4,7 @@ import type { ReactNode } from "react";
 const documentSections = [
   { label: "Document Types", description: "Catalog, visibility, workflow and fee setup", href: "/admin/documents?section=types" },
   { label: "Templates", description: "Published versions, drafts and template history", href: "/admin/documents?section=templates" },
-  { label: "Requests", description: "Review homeowner requests that need office action", href: "/admin/documents?section=requests" },
+  { label: "Requests", description: "Review homeowner requests that need office action", href: "/admin/documents?section=requests&view=all" },
   { label: "Issued Documents", description: "Open the latest generated and released documents", href: "/admin/documents?section=issued" },
 ];
 

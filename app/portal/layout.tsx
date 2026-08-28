@@ -4,6 +4,7 @@ import { Role } from "@prisma/client";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { AiFloatingShortcut } from "@/components/ai/ai-floating-shortcut";
+import { ChatUnreadNotifier } from "@/components/chat-unread-notifier";
 import { PortalBottomNavigation, PortalMobileHeader } from "@/components/portal-mobile-shell";
 import { Sidebar } from "@/components/sidebar";
 import { TransactionFeedback } from "@/components/transaction-feedback";
@@ -63,6 +64,7 @@ export default async function PortalLayout({ children }: { children: React.React
   return <div className="canva-portal-shell min-h-screen">
     <Sidebar user={user} links={links} roleLabel="Homeowner" association={association} initialChatUnreadCount={initialChatUnreadCount} desktopOnly />
     <PortalMobileHeader association={association} user={user} unreadCount={initialChatUnreadCount} routeTitles={mobileRouteTitles} showChat={navigation.hasChat} />
+    {navigation.hasChat && <ChatUnreadNotifier initialUnreadCount={initialChatUnreadCount} chatHref="/portal/chat" />}
     <Suspense><TransactionFeedback /></Suspense>
     <main className="mx-auto min-w-0 max-w-[1800px] px-4 pb-[calc(10.25rem+env(safe-area-inset-bottom))] pt-5 sm:px-7 lg:ml-[300px] lg:px-10 lg:py-9">{children}</main>
     {aiAvailable && <AiFloatingShortcut />}

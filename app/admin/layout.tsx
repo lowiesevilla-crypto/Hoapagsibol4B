@@ -4,6 +4,7 @@ import { Role } from "@prisma/client";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { AdminTopbar } from "@/components/admin-topbar";
+import { ChatUnreadNotifier } from "@/components/chat-unread-notifier";
 import { Sidebar } from "@/components/sidebar";
 import { adminLinks, adminShellLinks, platformLinks, systemAdminLinks, systemAdminShellLinks, type LinkItem } from "@/components/sidebar-links";
 import { TransactionFeedback } from "@/components/transaction-feedback";
@@ -34,10 +35,6 @@ export default async function AdminLayout({ children }: { children: React.ReactN
   const pathname = (await headers()).get("x-hoa-pathname") || "/admin/dashboard";
   if (!canAccessAdminPath(user.roles, pathname)) redirect(`${adminHomeForRole(user.roles)}?error=You%20do%20not%20have%20access%20to%20this%20module.`);
 
-  // Every tenant-facing admin role, including SUPER_ADMIN/PLATFORM_ADMIN when
-  // entering the tenant shell, sees only capabilities granted by that tenant's
-  // current active plan. Platform authority is exercised in /platform, not by
-  // bypassing tenant commercial entitlements inside /admin.
   const enabledModules = await getEnabledTenantModules(user.tenantId);
   const requestedModule = moduleForPath(pathname);
   if (requestedModule && !enabledModules.has(requestedModule)) redirect("/admin/dashboard?error=This%20module%20is%20not%20included%20in%20your%20active%20subscription%20plan.");
@@ -83,9 +80,6 @@ export default async function AdminLayout({ children }: { children: React.ReactN
   const linksWithPlatform = user.roles.includes(Role.SUPER_ADMIN) ? [...baseLinks, ...platformLinks] : baseLinks;
   const links = authorizedAdminLinks(linksWithPlatform);
 
-  // Command search receives the full authorized route catalog, not merely the
-  // intentionally compact sidebar. This keeps hidden/inaccessible modules out of
-  // search while making every permitted Admin workspace discoverable by keyboard.
   const commandBaseLinks = isSystemAdmin ? systemAdminLinks : adminLinks;
   const commandLinksWithPlatform = user.roles.includes(Role.SUPER_ADMIN) ? [...commandBaseLinks, ...platformLinks] : commandBaseLinks;
   const searchLinks = authorizedAdminLinks(commandLinksWithPlatform).map((item) => ({
@@ -99,6 +93,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
   const showDocumentRequestBadge = links.some((item) => item.href === requestBadgeHref);
   const linkBadges: Record<string, number> = showDocumentRequestBadge ? { [requestBadgeHref]: actionableDocumentRequests } : {};
   const sectionBadges: Record<string, number> = showDocumentRequestBadge ? { "Resident Services": actionableDocumentRequests } : {};
+  const hasChat = links.some((item) => item.icon === "chat" && item.href === "/admin/chat");
 
   return <div className="canva-tenant-shell min-h-screen print:bg-white">
     <div className="print:hidden">
@@ -111,6 +106,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
         linkBadges={linkBadges}
         sectionBadges={sectionBadges}
       />
+      {hasChat && <ChatUnreadNotifier initialUnreadCount={initialChatUnreadCount} chatHref="/admin/chat" />}
     </div>
     <Suspense><TransactionFeedback /></Suspense>
     <div className="min-w-0 lg:ml-[300px] print:ml-0">

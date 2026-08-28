@@ -1,6 +1,7 @@
 import { Role } from "@prisma/client";
 import { getAppUrl } from "@/lib/app-url";
 import { requireUser } from "@/lib/auth";
+import { hiddenHomeownerPaymentRequestIds } from "@/lib/services/homeowner-payment-history-visibility";
 import { reconcilePendingHomeownerPayMongoPayments } from "@/lib/services/homeowner-paymongo-reconciliation";
 
 export const dynamic = "force-dynamic";
@@ -35,8 +36,13 @@ export async function POST(request: Request) {
     tenantId: user.tenantId,
     homeownerId: user.homeownerProfile.id,
   });
+  const hiddenIds = await hiddenHomeownerPaymentRequestIds({
+    tenantId: user.tenantId,
+    actorId: user.id,
+    requestIds: payments.map((payment) => payment.requestId),
+  });
 
-  return Response.json({ ok: true, payments }, {
+  return Response.json({ ok: true, payments, hiddenRequestIds: [...hiddenIds] }, {
     headers: { "Cache-Control": "no-store, private, max-age=0" },
   });
 }

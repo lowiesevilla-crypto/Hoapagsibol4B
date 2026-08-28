@@ -51,31 +51,54 @@ export default async function BillingPage({ searchParams }: { searchParams: Prom
   return <><PageHeader eyebrow="Collections" title="Billing management" description="Generate dues, maintain bill details, and follow up outstanding accounts." action={<form action={sendRemindersAction}><SubmitButton className="btn-secondary"><BellRing className="size-4" /> Send due reminders</SubmitButton></form>} />
     {stringParam(query.error) && <div role="alert" className="mb-5 rounded-2xl border border-rose-200 bg-rose-50 p-4 text-sm font-semibold text-rose-800">{stringParam(query.error)}</div>}
     {previewError && <div role="alert" className="mb-5 rounded-2xl border border-rose-200 bg-rose-50 p-4 text-sm font-semibold text-rose-800">{previewError}</div>}
-    <section className="card mb-6">
-      <div className="mb-5 grid gap-3 lg:grid-cols-[1fr_auto] lg:items-start">
-        <div>
-          <h2 className="text-lg font-black">Billing generation</h2>
-          <p className="text-sm leading-6 text-slate-500">Preview first, then generate tenant-scoped monthly dues from the effective Billing Rule. Automatic scheduling remains deferred.</p>
-          <p className="mt-2 text-xs font-bold uppercase tracking-wider text-pine-700">Tenant: {tenant?.name ?? user.tenant.slug}</p>
+    <details className="card mb-6" open>
+      <summary className="cursor-pointer list-none">
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+          <div>
+            <h2 className="text-lg font-black">Billing generation</h2>
+            <p className="text-sm leading-6 text-slate-500">Preview first, then generate tenant-scoped monthly dues from the effective Billing Rule. Automatic scheduling remains deferred.</p>
+            <p className="mt-2 text-xs font-bold uppercase tracking-wider text-pine-700">Tenant: {tenant?.name ?? user.tenant.slug}</p>
+          </div>
+          <span className="text-xs font-black uppercase tracking-wider text-slate-500">Show / hide</span>
         </div>
-        <Link className="btn-secondary min-h-9 px-3 py-1.5 text-xs" href="/admin/settings/billing-rules">Manage billing rules</Link>
+      </summary>
+      <div className="mt-5 border-t border-slate-100 pt-5">
+        <div className="mb-5 flex justify-end">
+          <Link className="btn-secondary min-h-9 px-3 py-1.5 text-xs" href="/admin/settings/billing-rules">Manage billing rules</Link>
+        </div>
+        <form className="grid gap-4 md:grid-cols-3" method="get" action="/admin/billing">
+          <input type="hidden" name="preview" value="1" />
+          <div><label className="label" htmlFor="billing-coverage-month">Coverage month</label><select id="billing-coverage-month" className="field" name="coverageMonth" defaultValue={String(generationInput.coverageMonth)}>{Array.from({ length: 12 }, (_, index) => <option key={index + 1} value={index + 1}>{monthName(index + 1)}</option>)}</select></div>
+          <div><label className="label" htmlFor="billing-coverage-year">Coverage year</label><input id="billing-coverage-year" className="field" name="coverageYear" type="number" min="1900" max="2200" defaultValue={generationInput.coverageYear} required /></div>
+          <BillingGenerationScopeFields homeowners={homeownerOptions} blocks={blocks} phases={phases} defaultScope={generationInput.scope} defaultHomeownerId={generationInput.scope === "HOMEOWNER" ? generationInput.homeownerIds?.[0] : undefined} defaultHomeownerIds={generationInput.homeownerIds ?? []} defaultBlock={generationInput.block} defaultPhase={generationInput.phase} />
+          <div className="md:col-span-3"><SubmitButton>Preview Billing</SubmitButton></div>
+        </form>
+        {preview && <BillingPreview preview={preview} input={generationInput} tenantName={tenant?.name ?? user.tenant.slug} />}
       </div>
-      <form className="grid gap-4 md:grid-cols-3" method="get" action="/admin/billing">
-        <input type="hidden" name="preview" value="1" />
-        <div><label className="label" htmlFor="billing-coverage-month">Coverage month</label><select id="billing-coverage-month" className="field" name="coverageMonth" defaultValue={String(generationInput.coverageMonth)}>{Array.from({ length: 12 }, (_, index) => <option key={index + 1} value={index + 1}>{monthName(index + 1)}</option>)}</select></div>
-        <div><label className="label" htmlFor="billing-coverage-year">Coverage year</label><input id="billing-coverage-year" className="field" name="coverageYear" type="number" min="1900" max="2200" defaultValue={generationInput.coverageYear} required /></div>
-        <BillingGenerationScopeFields homeowners={homeownerOptions} blocks={blocks} phases={phases} defaultScope={generationInput.scope} defaultHomeownerId={generationInput.scope === "HOMEOWNER" ? generationInput.homeownerIds?.[0] : undefined} defaultHomeownerIds={generationInput.homeownerIds ?? []} defaultBlock={generationInput.block} defaultPhase={generationInput.phase} />
-        <div className="md:col-span-3"><SubmitButton>Preview Billing</SubmitButton></div>
-      </form>
-      {preview && <BillingPreview preview={preview} input={generationInput} tenantName={tenant?.name ?? user.tenant.slug} />}
-    </section>
-    <section className="mb-6 grid gap-5 xl:grid-cols-2">
-      <BillForm homeowners={homeowners} bill={editBill ?? undefined} searchQuery={billSearch} />
-    </section>
-    <section className="card mb-6"><div className="mb-5 flex items-start gap-3"><span className="grid size-10 place-items-center rounded-xl bg-leaf-50 text-leaf-700"><ShieldCheck className="size-5" /></span><div><h2 className="text-lg font-black">Monthly dues exemptions</h2><p className="text-sm text-slate-500">Quick-add a single-month exemption here, or manage full exemption periods in Finance settings.</p><Link className="mt-2 inline-flex text-xs font-bold text-pine-700 hover:underline" href="/admin/settings/billing-exemptions">Manage exemption periods</Link></div></div>
-      <form action={saveDuesExemptionAction} className="grid gap-4 sm:grid-cols-2 xl:grid-cols-[1.2fr_.7fr_1.5fr_auto] xl:items-end"><div><label className="label" htmlFor="billing-exemption-homeowner">Homeowner</label><select id="billing-exemption-homeowner" className="field" name="homeownerId" required><option value="">Select homeowner</option>{homeowners.map((homeowner) => <option key={homeowner.id} value={homeowner.id}>{homeowner.user.name} - B{homeowner.block} L{homeowner.lot}</option>)}</select></div><div><label className="label" htmlFor="billing-exemption-month">Exempt month</label><input id="billing-exemption-month" className="field" name="billingMonth" type="month" required /></div><div><label className="label" htmlFor="billing-exemption-reason">Reason / board approval</label><input id="billing-exemption-reason" className="field" name="reason" placeholder="Example: Board Resolution No. 2026-04" required /></div><SubmitButton>Add exemption</SubmitButton></form>
-      <div className="mt-5 overflow-x-auto rounded-xl border border-slate-200"><table className="data-table"><thead><tr><th>Homeowner</th><th>Exempt month</th><th>Reason</th><th>Approved by</th><th></th></tr></thead><tbody>{exemptions.map((item) => <tr key={item.id}><td className="font-bold">{item.homeowner.user.name}<span className="block text-xs font-normal text-slate-400">B{item.homeowner.block} L{item.homeowner.lot}</span></td><td>{monthLabel(item.billingMonth)}</td><td>{item.reason}</td><td>{item.createdBy.name}</td><td className="text-right"><form action={deleteDuesExemptionAction}><input type="hidden" name="id" value={item.id} /><DeleteButton label="Deactivate" /></form></td></tr>)}{!exemptions.length && <tr><td colSpan={5} className="py-8 text-center text-slate-500">No active monthly dues exemptions recorded.</td></tr>}</tbody></table></div>
-    </section>
+    </details>
+    <details className="mb-6 rounded-3xl border bg-white p-5 shadow-sm" open>
+      <summary className="cursor-pointer list-none">
+        <div className="flex items-start justify-between gap-4">
+          <div><h2 className="text-lg font-black">Create Individual Bill</h2><p className="mt-1 text-sm text-slate-500">Create or edit one tenant-scoped homeowner bill using the existing billing authority and validation rules.</p></div>
+          <span className="shrink-0 text-xs font-black uppercase tracking-wider text-slate-500">Show / hide</span>
+        </div>
+      </summary>
+      <div className="mt-5 border-t border-slate-100 pt-5">
+        <section className="grid gap-5 xl:grid-cols-2">
+          <BillForm homeowners={homeowners} bill={editBill ?? undefined} searchQuery={billSearch} />
+        </section>
+      </div>
+    </details>
+    <details className="card mb-6" open>
+      <summary className="cursor-pointer list-none">
+        <div className="flex items-start justify-between gap-4"><div className="flex items-start gap-3"><span className="grid size-10 place-items-center rounded-xl bg-leaf-50 text-leaf-700"><ShieldCheck className="size-5" /></span><div><h2 className="text-lg font-black">Monthly dues exemptions</h2><p className="text-sm text-slate-500">Quick-add a single-month exemption here, or manage full exemption periods in Finance settings.</p></div></div><span className="shrink-0 text-xs font-black uppercase tracking-wider text-slate-500">Show / hide</span></div>
+      </summary>
+      <div className="mt-5 border-t border-slate-100 pt-5">
+        <Link className="mb-4 inline-flex text-xs font-bold text-pine-700 hover:underline" href="/admin/settings/billing-exemptions">Manage exemption periods</Link>
+        <form action={saveDuesExemptionAction} className="grid gap-4 sm:grid-cols-2 xl:grid-cols-[1.2fr_.7fr_1.5fr_auto] xl:items-end"><div><label className="label" htmlFor="billing-exemption-homeowner">Homeowner</label><select id="billing-exemption-homeowner" className="field" name="homeownerId" required><option value="">Select homeowner</option>{homeowners.map((homeowner) => <option key={homeowner.id} value={homeowner.id}>{homeowner.user.name} - B{homeowner.block} L{homeowner.lot}</option>)}</select></div><div><label className="label" htmlFor="billing-exemption-month">Exempt month</label><input id="billing-exemption-month" className="field" name="billingMonth" type="month" required /></div><div><label className="label" htmlFor="billing-exemption-reason">Reason / board approval</label><input id="billing-exemption-reason" className="field" name="reason" placeholder="Example: Board Resolution No. 2026-04" required /></div><SubmitButton>Add exemption</SubmitButton></form>
+        <div className="mt-5 overflow-x-auto rounded-xl border border-slate-200"><table className="data-table"><thead><tr><th>Homeowner</th><th>Exempt month</th><th>Reason</th><th>Approved by</th><th></th></tr></thead><tbody>{exemptions.map((item) => <tr key={item.id}><td className="font-bold">{item.homeowner.user.name}<span className="block text-xs font-normal text-slate-400">B{item.homeowner.block} L{item.homeowner.lot}</span></td><td>{monthLabel(item.billingMonth)}</td><td>{item.reason}</td><td>{item.createdBy.name}</td><td className="text-right"><form action={deleteDuesExemptionAction}><input type="hidden" name="id" value={item.id} /><DeleteButton label="Deactivate" /></form></td></tr>)}{!exemptions.length && <tr><td colSpan={5} className="py-8 text-center text-slate-500">No active monthly dues exemptions recorded.</td></tr>}</tbody></table></div>
+      </div>
+    </details>
     <form className="mb-4 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm" method="get" action="/admin/billing">
       {edit && <input type="hidden" name="edit" value={edit} />}
       <label className="label" htmlFor="tenant-bill-search">Search all tenant billing records</label>

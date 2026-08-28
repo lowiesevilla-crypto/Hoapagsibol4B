@@ -153,7 +153,7 @@ const launchArgs = requestedBrowser === "edge"
       : await puppeteer.defaultArgs({ args: chromium.args, headless: headlessMode });
 console.log(`Running critical-flow accessibility evidence with ${requestedBrowser}: ${executablePath}`);
 console.log(`Mobile profile: ${mobileProfile} (${mobileProfiles[mobileProfile].label})`);
-const browser = await puppeteer.launch({ executablePath, headless: headlessMode, args: launchArgs, ...(requestedBrowser === "firefox" ? { browser: "firefox" } : {}) });
+const browser = await puppeteer.launch({ executablePath, headless: headlessMode, args: launchArgs, timeout, ...(requestedBrowser === "firefox" ? { browser: "firefox" } : {}) });
 
 try {
   const adminContext = await browser.createBrowserContext();

@@ -1,7 +1,7 @@
 # HOAHub Quality / UX Work Status Register
 
 Status: COMPLETED
-Last updated: 2026-08-28
+Last updated: 2026-08-29
 
 This register is the concise operational reference for completed, verified, and explicitly waived product-quality work.
 
@@ -69,11 +69,13 @@ This queue is tracked in issue #254 and does **not** reopen the completed Produc
 |---|---|---|
 | Document Repository table usability | VERIFIED | PR #255 exact final head `b0ed2ca41567def2ba97b8cafeb7618676147272` passed MySQL CI #1342, Canva #444, Edge #37, Firefox #33 and Mobile #32; merged as `6ab8339c55c0dc32fb5b6765474b009ae4e6108a`; post-merge `main` MySQL CI #1343 passed. |
 | Billing setup collapsible sections | VERIFIED | PR #256 exact final head `c6f75f435cc939eaf17677229a542f1e779ed10b` passed MySQL CI #1345, Canva #446, Edge #39, Firefox #35 and Mobile #34; merged as `9dd05e52c368de95dbdbd519f6988f0e0459c899`; post-merge `main` MySQL CI #1346 passed including production smoke / critical browser suite and Hostinger managed-production/public-health verification. |
-| Admin Documents issued-table search / pagination / sticky actions | IN_PROGRESS | Active branch `ui/post-program-admin-documents-issued-table-20260828` started from verified `main` `9dd05e52c368de95dbdbd519f6988f0e0459c899`. Scope is tenant-scoped issued-document search, server pagination, sticky header, and always-visible actions; document authority/history/download authorization remain unchanged. |
-| Received-message popup / notification | PENDING | Next approved slice after issued-table verification. |
-| Admin add Household Member | PENDING | Preserve tenant scope, authorization, relationship rules and audit semantics. |
-| Homeowner Online Payment Status / history UX | PENDING | Preserve financial ledger, receipt, reconciliation, audit and gateway evidence; no destructive accounting deletion. |
-| Homeowner Account Information collapsible | PENDING | Presentation-only unless independently diagnosed behavior requires a narrow fix. |
+| Admin Documents issued-table search / pagination / sticky actions | VERIFIED | PR #257 exact final head `8386393cb762e9d4eb2f0affce8a290b56fa81b7` passed MySQL CI #1347, Canva #447, Edge #40, Firefox #36 and Mobile #35; merged as `afe0e2c84d1f6851d6ce3e5d89f59ddfede22e16`; post-merge `main` MySQL CI #1348 passed including managed-production/public-health verification. |
+| Homeowner Online Payment Status collapsible | VERIFIED | PR #258 exact final head `54bc6f380106e422c84439021a6d21aee8807d47` passed MySQL CI #1349, Canva #448, Edge #41, Firefox #37 and Mobile #36; merged as `605fadd27b85c64fd208d4b129061cad12b1a79c`. Current `main` renders the homeowner PayMongo status as an expanded-by-default `<details open>` panel. |
+| Received-message popup / notification | VERIFIED | PR #259 exact final head `4857393028faed71542023deb8cef519161a3175` passed MySQL CI #1351, Canva #449, Edge #42, Firefox #38 and Mobile #37; merged as `f57a7c57e6cb6ec15314e8e13273397587b821a4`; post-merge `main` MySQL CI #1352 passed including production smoke / critical browser suite and managed-production/public-health verification. |
+| Admin add Household Member | VERIFIED | PR #260 exact final head `a9863d13855df58e67dd2b592ed1d5291a672da2` passed MySQL CI #1353, Canva #450, Edge #43, Firefox #39 and Mobile #38; merged as `d944ada9a375858f90609fc80412f096f1779f35`; post-merge `main` MySQL CI #1354 passed including managed-production/public-health verification. |
+| Homeowner Online Payment history safe hide/archive UX | VERIFIED | PR #262 exact final head `508a2b68e1350e5ce7e3a5f3a608ed7fe2374476` passed its required exact-head gates and merged as `b08271b95f4d86e7c9515c35735c06b3e125ce63`. Post-merge MySQL CI #1357 core verification passed; the first Hostinger release-marker attempt timed out because the managed deployment had not yet published the release marker, then the failed production job was rerun after inspection and passed with the expected release plus public production health. The homeowner action hides terminal PayMongo activity from the homeowner history while retaining authoritative payment, request, receipt, allocation, gateway, reconciliation and audit evidence. |
+| Homeowner Account Information collapsible | IN_PROGRESS | Active branch `ui/homeowner-account-information-collapsible-20260829` started from verified `main` `b08271b95f4d86e7c9515c35735c06b3e125ce63`. Scope is presentation-only: the homeowner profile account summary becomes collapsible and remains expanded by default; data authority and self-service controls are unchanged. |
+| Homeowner stale-PWA/client update-path investigation | PENDING | Verify why a supplied homeowner screen showed the pre-PR #258 PayMongo status layout despite current `main` using `<details open>`; fix only a demonstrated cache/update-path defect and preserve authenticated tenant routing. |
 
 ## Update Rule
 

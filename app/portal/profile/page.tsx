@@ -67,31 +67,38 @@ export default async function ProfilePage({ searchParams }: { searchParams: Prom
       {query.error && <div className="rounded-2xl border border-rose-200 bg-rose-50 p-4 text-sm font-semibold text-rose-800">{query.error}</div>}
       {query.success && <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-sm font-semibold text-emerald-800">{query.message || "Saved successfully."}</div>}
 
-      <section className="rounded-3xl border border-slate-200 bg-white p-4 shadow-soft sm:p-5">
-        <div className="flex items-center gap-4">
-          <ProfilePhotoUploader name={profile.user.name} initialVersion={photo?.updatedAt.toISOString() ?? null} />
-          <div className="min-w-0 flex-1">
-            <p className="text-xs font-black uppercase tracking-[0.14em] text-pine-700">Profile</p>
-            <h1 className="mt-1 break-words text-xl font-black leading-tight text-ink sm:text-2xl">{profile.user.name}</h1>
-            <p className="mt-1 text-sm font-semibold text-slate-500">Block {profile.block} · Lot {profile.lot}</p>
-            <div className="mt-2 flex flex-wrap gap-2">
-              <StatusBadge status={profile.status} />
-              {profile.activationStatus !== "ACTIVE" && <StatusBadge status={profile.activationStatus} />}
+      <details className="group overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-soft" open>
+        <summary className="flex min-h-16 cursor-pointer list-none items-center gap-3 px-4 py-3 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-pine-500 [&::-webkit-details-marker]:hidden sm:px-5">
+          <span className="grid size-10 shrink-0 place-items-center rounded-2xl bg-pine-50 text-pine-700"><BadgeInfo className="size-5" aria-hidden="true" /></span>
+          <div className="min-w-0 flex-1"><h2 className="font-black text-ink">Account Information</h2><p className="text-xs font-semibold text-slate-500">Profile, account number, property and monthly dues summary</p></div>
+          <ChevronDown className="size-5 shrink-0 text-slate-400 transition-transform group-open:rotate-180" aria-hidden="true" />
+        </summary>
+        <div className="border-t border-slate-100 p-4 sm:p-5">
+          <div className="flex items-center gap-4">
+            <ProfilePhotoUploader name={profile.user.name} initialVersion={photo?.updatedAt.toISOString() ?? null} />
+            <div className="min-w-0 flex-1">
+              <p className="text-xs font-black uppercase tracking-[0.14em] text-pine-700">Profile</p>
+              <h1 className="mt-1 break-words text-xl font-black leading-tight text-ink sm:text-2xl">{profile.user.name}</h1>
+              <p className="mt-1 text-sm font-semibold text-slate-500">Block {profile.block} · Lot {profile.lot}</p>
+              <div className="mt-2 flex flex-wrap gap-2">
+                <StatusBadge status={profile.status} />
+                {profile.activationStatus !== "ACTIVE" && <StatusBadge status={profile.activationStatus} />}
+              </div>
+            </div>
+          </div>
+
+          <div className="mt-4 grid grid-cols-2 gap-2 border-t border-slate-100 pt-4">
+            <div className="min-w-0 rounded-2xl bg-slate-50 px-3 py-3">
+              <p className="text-[11px] font-black uppercase tracking-wide text-slate-400">Account</p>
+              <p className="mt-1 truncate text-sm font-black text-slate-900">{homeownerAccountNumber(profile)}</p>
+            </div>
+            <div className="min-w-0 rounded-2xl bg-pine-50 px-3 py-3">
+              <p className="text-[11px] font-black uppercase tracking-wide text-pine-600">Monthly dues</p>
+              <p className="mt-1 text-sm font-black text-pine-900">{money(profile.monthlyDuesAmount)}</p>
             </div>
           </div>
         </div>
-
-        <div className="mt-4 grid grid-cols-2 gap-2 border-t border-slate-100 pt-4">
-          <div className="min-w-0 rounded-2xl bg-slate-50 px-3 py-3">
-            <p className="text-[11px] font-black uppercase tracking-wide text-slate-400">Account</p>
-            <p className="mt-1 truncate text-sm font-black text-slate-900">{homeownerAccountNumber(profile)}</p>
-          </div>
-          <div className="min-w-0 rounded-2xl bg-pine-50 px-3 py-3">
-            <p className="text-[11px] font-black uppercase tracking-wide text-pine-600">Monthly dues</p>
-            <p className="mt-1 text-sm font-black text-pine-900">{money(profile.monthlyDuesAmount)}</p>
-          </div>
-        </div>
-      </section>
+      </details>
 
       <details className="group overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-soft">
         <summary className="flex min-h-16 cursor-pointer list-none items-center gap-3 px-4 py-3 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-pine-500 [&::-webkit-details-marker]:hidden sm:px-5">

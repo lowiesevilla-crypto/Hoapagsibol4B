@@ -4,7 +4,7 @@ import { PageHeader } from "@/components/page-header";
 import { DeleteButton } from "@/components/ui";
 import { deleteEmployeeAction } from "@/lib/actions/employees";
 import { prisma } from "@/lib/db";
-import { requirePayrollAccess } from "@/lib/payroll-access";
+import { hasPayrollRole, payrollManageRoles, payrollWriteRoles, requirePayrollAccess } from "@/lib/payroll-access";
 
 function money(value: unknown) {
   return Number(value).toLocaleString("en-PH", { style: "currency", currency: "PHP" });
@@ -15,7 +15,7 @@ function dateLabel(value: Date | null) {
 }
 
 export default async function EditEmployeePage({ params }: { params: Promise<{ id: string }> }) {
-  const { user } = await requirePayrollAccess();
+  const { user, roles } = await requirePayrollAccess(payrollWriteRoles);
   const { id } = await params;
   const employee = await prisma.employeeProfile.findFirst({
     where: { id, tenantId: user.tenantId },
@@ -30,13 +30,15 @@ export default async function EditEmployeePage({ params }: { params: Promise<{ i
   });
   if (!employee) notFound();
 
+  const canDeleteEmployee = hasPayrollRole(roles, payrollManageRoles);
+
   return (
     <>
       <PageHeader
         eyebrow="Employees"
         title={employee.name}
         description={`${employee.employeeNumber} · ${employee.position}`}
-        action={<form action={deleteEmployeeAction}><input type="hidden" name="id" value={employee.id} /><DeleteButton label="Delete employee" /></form>}
+        action={canDeleteEmployee ? <form action={deleteEmployeeAction}><input type="hidden" name="id" value={employee.id} /><DeleteButton label="Delete employee" /></form> : undefined}
       />
       <EmployeeForm employee={employee} />
 

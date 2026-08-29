@@ -1,12 +1,20 @@
--- Production schema repair for EmployeeProfile.remarks.
+-- Production schema repair for the managed-production employee table.
 --
--- Current Prisma runtime writes the nullable `remarks` field to the mapped
--- `employees` table. Some already-running tenant databases predate that column,
--- which causes Employee create/edit to fail with MySQL error 1054.
+-- The production Employee save path currently writes a nullable `remarks`
+-- column to the legacy/mapped `employees` table. Some active tenant databases
+-- predate that column, which causes MySQL error 1054. Fresh CI databases use
+-- the canonical Prisma `EmployeeProfile` table and therefore do not contain
+-- the legacy `employees` table.
 --
--- Keep this additive and idempotent so environments that already received the
--- column through an earlier schema-sync path remain safe when migration history
--- is reconciled.
+-- Keep this repair additive and idempotent: alter only an existing `employees`
+-- table that is missing `remarks`; otherwise make no schema change.
+
+SET @employees_table_exists = (
+  SELECT COUNT(*)
+  FROM INFORMATION_SCHEMA.TABLES
+  WHERE TABLE_SCHEMA = DATABASE()
+    AND TABLE_NAME = 'employees'
+);
 
 SET @employee_remarks_exists = (
   SELECT COUNT(*)
@@ -17,7 +25,7 @@ SET @employee_remarks_exists = (
 );
 
 SET @employee_remarks_sql = IF(
-  @employee_remarks_exists = 0,
+  @employees_table_exists > 0 AND @employee_remarks_exists = 0,
   'ALTER TABLE `employees` ADD COLUMN `remarks` VARCHAR(191) NULL',
   'SELECT 1'
 );

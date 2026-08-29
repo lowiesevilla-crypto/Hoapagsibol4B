@@ -76,19 +76,25 @@ export default async function BillingPage({ searchParams }: { searchParams: Prom
         {preview && <BillingPreview preview={preview} input={generationInput} tenantName={tenant?.name ?? user.tenant.slug} />}
       </div>
     </details>
-    <details className="mb-6 rounded-3xl border bg-white p-5 shadow-sm" open>
-      <summary className="cursor-pointer list-none">
-        <div className="flex items-start justify-between gap-4">
-          <div><h2 className="text-lg font-black">Create Individual Bill</h2><p className="mt-1 text-sm text-slate-500">Create or edit one tenant-scoped homeowner bill using the existing billing authority and validation rules.</p></div>
-          <span className="shrink-0 text-xs font-black uppercase tracking-wider text-slate-500">Show / hide</span>
+    {editBill ? (
+      <section className="mb-6 grid gap-5 xl:grid-cols-2" aria-label="Edit billing record">
+        <BillForm homeowners={homeowners} bill={editBill} searchQuery={billSearch} />
+      </section>
+    ) : (
+      <details className="mb-6 rounded-3xl border bg-white p-5 shadow-sm" open>
+        <summary className="cursor-pointer list-none">
+          <div className="flex items-start justify-between gap-4">
+            <div><h2 className="text-lg font-black">Create Individual Bill</h2><p className="mt-1 text-sm text-slate-500">Create one tenant-scoped homeowner bill using the existing billing authority and validation rules.</p></div>
+            <span className="shrink-0 text-xs font-black uppercase tracking-wider text-slate-500">Show / hide</span>
+          </div>
+        </summary>
+        <div className="mt-5 border-t border-slate-100 pt-5">
+          <section className="grid gap-5 xl:grid-cols-2">
+            <BillForm homeowners={homeowners} searchQuery={billSearch} />
+          </section>
         </div>
-      </summary>
-      <div className="mt-5 border-t border-slate-100 pt-5">
-        <section className="grid gap-5 xl:grid-cols-2">
-          <BillForm homeowners={homeowners} bill={editBill ?? undefined} searchQuery={billSearch} />
-        </section>
-      </div>
-    </details>
+      </details>
+    )}
     <details className="card mb-6" open>
       <summary className="cursor-pointer list-none">
         <div className="flex items-start justify-between gap-4"><div className="flex items-start gap-3"><span className="grid size-10 place-items-center rounded-xl bg-leaf-50 text-leaf-700"><ShieldCheck className="size-5" /></span><div><h2 className="text-lg font-black">Monthly dues exemptions</h2><p className="text-sm text-slate-500">Quick-add a single-month exemption here, or manage full exemption periods in Finance settings.</p></div></div><span className="shrink-0 text-xs font-black uppercase tracking-wider text-slate-500">Show / hide</span></div>

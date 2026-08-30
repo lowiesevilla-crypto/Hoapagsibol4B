@@ -4,7 +4,7 @@ Task: `HOAHUB-UX-P0-001`
 
 Tracking issue: #273
 
-Status: IN PROGRESS — foundation VERIFIED and production-deployed, payment success/failure contract in candidate verification, rollout default off
+Status: IN PROGRESS — foundation and payment success/failure contract VERIFIED and production-deployed, rollout default off
 
 ## Active-tenant safety
 
@@ -24,7 +24,7 @@ HOAHub already serves an active tenant. This change is additive and preserves th
 
 ## Payment result-state increment
 
-- Candidate branch: `codex/payment-progress-result-state-20260831`.
+- PR #276 branch: `codex/payment-progress-result-state-20260831`.
 - Admin Record Payment now has a flagged structured Server Action result path beside the legacy redirecting action.
 - The legacy default-off path still redirects directly to `/receipts/payment/[id]` and remains the production behavior unless the flag target is explicitly enabled.
 - The flagged path reuses the same tenant-scoped payment service, idempotency-key replay handling, duplicate reference checks, notification side effects, and revalidation paths as the legacy action.
@@ -32,12 +32,16 @@ HOAHub already serves an active tenant. This change is additive and preserves th
 - On server-confirmed success, the enabled form renders an accessible status, drives the shared submit button to a verified 100% state, then opens the server-confirmed receipt. On validation or business-rule failure, the form renders an accessible alert and keeps the entered fields available for correction.
 - This increment does not expose a 75% payment stage because persistence still completes within one request and there is no separate durable processing checkpoint to report truthfully.
 
-Local candidate verification:
+Release evidence:
 
 - `pnpm test:unit -- homeowner-advance-payment` passed 482 unit tests.
 - `pnpm typecheck` passed.
 - `pnpm lint` passed.
 - `pnpm build` passed.
+- PR #276 exact head `616e07a422b7a20491864b77b7d7adf2ed469af6` passed HOAHub MySQL CI #1385, Canva Visual Parity #466, Edge Critical Flow #59, Firefox Critical Flow #55, and Mobile Responsive Evidence #54.
+- PR #276 merged to `main` as `111ceffa06a8b2fc1ec533e1158f3c7585091b24`.
+- Post-merge HOAHub MySQL CI #1386 passed the complete verification and critical browser suites, Hostinger managed-deployment wait, and public production-health verification.
+- Production deployment does not equal tenant rollout: the master switch remains default-off and no tenant target was enabled.
 
 ## Foundation release evidence
 
@@ -68,7 +72,6 @@ Never place credentials or tenant-private form data in this configuration.
 
 ## Remaining gates
 
-- Promote the payment result-state candidate only after exact-head PR CI, merge, and post-merge managed-production/public-health verification.
 - Add uncertain-response reconciliation before retry is enabled.
 - Add verified 75% status only where an action exposes a real server-processing checkpoint.
 - Add durable bulk-job progress for monthly billing and other batch operations.

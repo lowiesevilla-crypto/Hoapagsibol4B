@@ -6,12 +6,14 @@ This register is the current release-status snapshot for the active HOAHub produ
 
 ## Current production baseline
 
-- Production-verified `main`: `f3003f3602d68d0a7afd14fa64596de87b786554`.
+- Production-verified `main`: `111ceffa06a8b2fc1ec533e1158f3c7585091b24`.
 - Runtime source PR: #274 (`feat: add default-off action progress foundation`), exact head `51fe731f3751acc338595a418890adf2ffd635c6`.
 - Documentation source PR: #275 (`docs: record action progress foundation release`), exact head `5b1ef883d9dc0b528aec23f7f411ba191eb3677b`.
+- Runtime source PR: #276 (`feat: add payment action progress result state`), exact head `616e07a422b7a20491864b77b7d7adf2ed469af6`.
 - Required exact-head gates passed for #274: HOAHub MySQL CI #1381, Canva Visual Parity #464, Edge Critical Flow #57, Firefox Critical Flow #53, Mobile Responsive Evidence #52.
 - Required exact-head gates passed for #275: HOAHub MySQL CI #1383, Canva Visual Parity #465, Edge Critical Flow #58, Firefox Critical Flow #54, Mobile Responsive Evidence #53.
-- Post-merge HOAHub MySQL CI #1384 passed the complete verification suite, production smoke / critical browser suite, Hostinger managed-deployment wait, and public production-health verification for `f3003f3602d68d0a7afd14fa64596de87b786554`. The new feature flag remains default-off and no tenant rollout is active.
+- Required exact-head gates passed for #276: HOAHub MySQL CI #1385, Canva Visual Parity #466, Edge Critical Flow #59, Firefox Critical Flow #55, Mobile Responsive Evidence #54.
+- Post-merge HOAHub MySQL CI #1386 passed the complete verification suite, production smoke / critical browser suite, Hostinger managed-deployment wait, and public production-health verification for `111ceffa06a8b2fc1ec533e1158f3c7585091b24`. The new feature flag remains default-off and no tenant rollout is active.
 
 ## Verified release queue
 
@@ -32,7 +34,7 @@ The P1 improvement queue tracked by #254 is VERIFIED through item 10:
 
 ## Open / blocked work
 
-`HOAHUB-UX-P0-001` is `IN_PROGRESS` under issue #273. Its default-off, fail-closed shared action-progress/submission-lock foundation is VERIFIED and production-deployed by PR #274 / merge `bed4ca020e1c8dd50a4ff2ad48c66339ffe9adc2`; post-merge MySQL CI #1382 passed managed deployment and public health, and the documentation reconciliation merge `f3003f3602d68d0a7afd14fa64596de87b786554` also passed post-merge production health. Candidate branch `codex/payment-progress-result-state-20260831` adds a flagged Admin Record Payment success/failure result-state path while preserving the default legacy redirect flow; it is not merged or live until exact-head CI, merge, and post-merge production verification complete. Pilot wiring remains limited to Record Payment and monthly billing generation, and no tenant target is enabled. Uncertain-response reconciliation, durable bulk progress, remaining P0/P1 coverage, staging UAT, monitoring, rollback verification, and tenant-pilot authorization remain required; see `docs/quality/HOAHUB_ACTION_PROGRESS_IMPLEMENTATION.md`.
+`HOAHUB-UX-P0-001` is `IN_PROGRESS` under issue #273. Its default-off, fail-closed shared action-progress/submission-lock foundation is VERIFIED and production-deployed by PR #274 / merge `bed4ca020e1c8dd50a4ff2ad48c66339ffe9adc2`; the flagged Admin Record Payment success/failure result-state path is VERIFIED and production-deployed by PR #276 / merge `111ceffa06a8b2fc1ec533e1158f3c7585091b24`. Post-merge MySQL CI #1386 passed managed deployment and public health. Pilot wiring remains limited to Record Payment and monthly billing generation, and no tenant target is enabled. Uncertain-response reconciliation, durable bulk progress, remaining P0/P1 coverage, staging UAT, monitoring, rollback verification, and tenant-pilot authorization remain required; see `docs/quality/HOAHUB_ACTION_PROGRESS_IMPLEMENTATION.md`.
 
 Authenticated non-destructive production UAT remains tracked separately by #194. The repository already contains the bounded read-only harness (`scripts/authenticated-production-smoke.mjs`) and the manually dispatched production workflow (`.github/workflows/authenticated-production-uat.yml`). Live execution remains BLOCKED on administrator/environment provisioning of the dedicated UAT identity and controlled homeowner query expected by that workflow:
 

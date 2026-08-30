@@ -70,7 +70,27 @@ export function BillingAutomationFormLock({
       });
     };
 
+    const repairInvalidCoveragePeriod = () => {
+      const yearInput = target.querySelector<HTMLInputElement>("input[name='coverageYear']");
+      const monthSelect = target.querySelector<HTMLSelectElement>("select[name='coverageMonth']");
+      if (!yearInput && !monthSelect) return;
+
+      const parts = new Intl.DateTimeFormat("en-CA", {
+        timeZone: "Asia/Manila",
+        year: "numeric",
+        month: "2-digit",
+      }).formatToParts(new Date());
+      const currentYear = Number(parts.find((part) => part.type === "year")?.value ?? 0);
+      const currentMonth = Number(parts.find((part) => part.type === "month")?.value ?? 0);
+      const year = Number(yearInput?.value ?? 0);
+      const month = Number(monthSelect?.value ?? 0);
+
+      if (yearInput && (!Number.isInteger(year) || year < 1900 || year > 2200)) yearInput.value = String(currentYear);
+      if (monthSelect && (!Number.isInteger(month) || month < 1 || month > 12)) monthSelect.value = String(currentMonth);
+    };
+
     bindAccessibleLabels();
+    repairInvalidCoveragePeriod();
 
     const lockControls = () => {
       target.querySelectorAll<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement | HTMLButtonElement>("input:not([type='hidden']), select, textarea, button").forEach((control) => {

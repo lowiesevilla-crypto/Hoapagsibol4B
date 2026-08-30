@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { Archive, BellRing, Search, ShieldCheck } from "lucide-react";
-import { BillStatus, Prisma } from "@prisma/client";
+import { BillStatus, Prisma, TenantModule } from "@prisma/client";
 import { BillArchiveForm } from "@/components/bill-archive-form";
 import { BillingPreviewTable } from "@/components/billing-preview-table";
 import { BillingGenerationScopeFields } from "@/components/billing-generation-scope-fields";
@@ -13,6 +13,7 @@ import { generateBillingFromPreviewAction, refreshOverdueBills } from "@/lib/act
 import { sendRemindersAction } from "@/lib/actions/content";
 import { deleteDuesExemptionAction, saveDuesExemptionAction } from "@/lib/actions/exemptions";
 import { prisma } from "@/lib/db";
+import { isUxActionProgressEnabled } from "@/lib/feature-flags/ux-action-progress";
 import { billingGenerationScopes, previewBillingGeneration, type BillingGenerationInput, type BillingGenerationScope, type BillingGenerationSummary } from "@/lib/services/billing-rules";
 import { money, monthLabel, shortDate } from "@/lib/utils";
 
@@ -21,6 +22,7 @@ type BillingQuery = Record<string, string | string[] | undefined>;
 export default async function BillingPage({ searchParams }: { searchParams: Promise<BillingQuery> }) {
   const user = await refreshOverdueBills();
   const query = await searchParams;
+  const actionProgressEnabled = isUxActionProgressEnabled({ tenantId: user.tenantId, module: TenantModule.BILLING, role: user.role });
   const edit = stringParam(query.edit);
   const billSearch = stringParam(query.q).trim();
   const generationInput = generationInputFromQuery(user, query);
@@ -73,7 +75,7 @@ export default async function BillingPage({ searchParams }: { searchParams: Prom
           <BillingGenerationScopeFields homeowners={homeownerOptions} blocks={blocks} phases={phases} defaultScope={generationInput.scope} defaultHomeownerId={generationInput.scope === "HOMEOWNER" ? generationInput.homeownerIds?.[0] : undefined} defaultHomeownerIds={generationInput.homeownerIds ?? []} defaultBlock={generationInput.block} defaultPhase={generationInput.phase} />
           <div className="md:col-span-3"><SubmitButton>Preview Billing</SubmitButton></div>
         </form>
-        {preview && <BillingPreview preview={preview} input={generationInput} tenantName={tenant?.name ?? user.tenant.slug} />}
+        {preview && <BillingPreview preview={preview} input={generationInput} tenantName={tenant?.name ?? user.tenant.slug} actionProgressEnabled={actionProgressEnabled} />}
       </div>
     </details>
     {editBill ? (
@@ -124,7 +126,7 @@ export default async function BillingPage({ searchParams }: { searchParams: Prom
   </>;
 }
 
-function BillingPreview({ preview, input, tenantName }: { preview: BillingGenerationSummary; input: BillingGenerationInput; tenantName: string }) {
+function BillingPreview({ preview, input, tenantName, actionProgressEnabled }: { preview: BillingGenerationSummary; input: BillingGenerationInput; tenantName: string; actionProgressEnabled: boolean }) {
   return <div className="mt-6 border-t border-slate-100 pt-5">
     {!preview.rule && <div role="alert" className="mb-4 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm font-bold text-amber-900">No effective Billing Rule configured.</div>}
     <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
@@ -154,7 +156,7 @@ function BillingPreview({ preview, input, tenantName }: { preview: BillingGenera
         {input.scope === "HOMEOWNER" && <input type="hidden" name="homeownerId" value={input.homeownerIds?.[0] ?? ""} />}
         {input.block && <input type="hidden" name="block" value={input.block} />}
         {input.phase && <input type="hidden" name="phase" value={input.phase} />}
-        <SubmitButton className="btn-primary min-h-10 px-4 py-2 text-sm">Generate for Eligible Homeowners</SubmitButton>
+        <SubmitButton className="btn-primary min-h-10 px-4 py-2 text-sm" actionProgress={actionProgressEnabled} pendingLabel="Generating billing">Generate for Eligible Homeowners</SubmitButton>
       </form>
     </div>
     <BillingPreviewTable rows={preview.rows} />

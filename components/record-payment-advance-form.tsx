@@ -30,7 +30,7 @@ type OpenBillChoice = {
 type HomeownerSearchResponse = { homeowners?: HomeownerChoice[]; total?: number; hasMore?: boolean };
 type HomeownerDetailResponse = { homeowner?: HomeownerChoice; bills?: OpenBillChoice[]; error?: string };
 
-export function RecordPaymentAdvanceForm({ today, submissionKey }: { today: string; submissionKey: string }) {
+export function RecordPaymentAdvanceForm({ today, submissionKey, actionProgressEnabled = false }: { today: string; submissionKey: string; actionProgressEnabled?: boolean }) {
   const [todayYear, todayMonth] = today.split("-").map(Number);
   const [query, setQuery] = useState("");
   const [homeowners, setHomeowners] = useState<HomeownerChoice[]>([]);
@@ -202,7 +202,7 @@ export function RecordPaymentAdvanceForm({ today, submissionKey }: { today: stri
         {selectedHomeowner && receivedAmount > 0 && <div className="sm:col-span-2 rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm"><p className="flex justify-between"><span>Amount received</span><b>{peso(receivedAmount)}</b></p><p className="mt-1 flex justify-between"><span>Applied to current bills</span><b>{peso(appliedAmount)}</b></p><p className="mt-1 flex justify-between"><span>Advance / unapplied credit</span><b>{peso(unappliedCredit)}</b></p>{unappliedCredit > 0 && <p className="mt-3 rounded-lg bg-emerald-100 px-3 py-2 font-bold text-emerald-900">{peso(unappliedCredit)} will remain as Advance Monthly Dues Credit.</p>}</div>}
         <div className="sm:col-span-2"><label className="label" htmlFor="record-payment-reference">Reference number {referenceRequired && <span className="text-rose-600">*</span>}</label><input id="record-payment-reference" className="field" name="referenceNumber" required={referenceRequired} aria-required={referenceRequired} placeholder={referenceRequired ? "Required; must be unique" : "Optional for cash payments"} /></div>
         <div className="sm:col-span-2"><label className="label" htmlFor="record-payment-remarks">Remarks</label><input id="record-payment-remarks" className="field" name="remarks" placeholder="Optional notes shown in receipt audit trail" /></div>
-        <div className="sm:col-span-2"><SubmitButton disabled={!canSubmit}>Record payment - {peso(receivedAmount)}</SubmitButton></div>
+        <div className="sm:col-span-2"><SubmitButton disabled={!canSubmit} actionProgress={actionProgressEnabled} pendingLabel="Recording payment">Record payment - {peso(receivedAmount)}</SubmitButton></div>
       </div>
     </div>
   </form>;

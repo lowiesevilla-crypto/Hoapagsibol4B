@@ -18,6 +18,15 @@ test("automatic billing locks both bulk and individual manual generation control
   assert.match(lock, /blockSubmit/);
 });
 
+test("billing generation repairs invalid zero coverage defaults before the form can be used", () => {
+  assert.match(lock, /repairInvalidCoveragePeriod/);
+  assert.match(lock, /input\[name='coverageYear'\]/);
+  assert.match(lock, /select\[name='coverageMonth'\]/);
+  assert.match(lock, /timeZone: "Asia\/Manila"/);
+  assert.match(lock, /year < 1900 \|\| year > 2200/);
+  assert.match(lock, /month < 1 \|\| month > 12/);
+});
+
 test("automatic billing status is tenant scoped and treats a configured active automatic rule as ON", () => {
   assert.match(statusRoute, /requirePermission\(Permission\.BILLING_GENERATE\)/);
   assert.match(statusRoute, /tenantId: user\.tenantId/);

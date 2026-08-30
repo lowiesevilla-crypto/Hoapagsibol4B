@@ -15,6 +15,7 @@ type PaymentActivity = {
   financeStatus: "RECONCILED" | "NOT_POSTED";
   canResume: boolean;
   terminal: boolean;
+  receipts?: Array<{ kind: "payment" | "collection"; id: string; receiptNumber: string }>;
 };
 
 const toneClass = {
@@ -50,7 +51,7 @@ export function PayMongoPaymentStatusSync() {
       setUnavailable(false);
 
       const signature = payload.payments
-        .map((payment) => `${payment.requestId}:${payment.state}:${payment.financeStatus}`)
+        .map((payment) => `${payment.requestId}:${payment.state}:${payment.financeStatus}:${(payment.receipts || []).map((receipt) => receipt.id).join(",")}`)
         .join("|");
       const previous = window.sessionStorage.getItem(signatureStorageKey) || "";
       if (signature && signature !== previous) {
@@ -109,7 +110,7 @@ export function PayMongoPaymentStatusSync() {
       <div className="min-w-0">
         <p className="text-xs font-black uppercase tracking-[.14em] text-blue-700">PayMongo gateway</p>
         <h3 className="mt-1 font-black text-blue-950">Online payment status</h3>
-        <p className="mt-1 text-xs leading-5 text-blue-800">HOAHub checks PayMongo server-to-server. A browser redirect never marks a payment as paid.</p>
+        <p className="mt-1 text-xs leading-5 text-blue-800">HOAHub checks PayMongo server-to-server. A payment is shown as posted only after its HOAHub finance record and official receipt are present.</p>
       </div>
       <span className="grid size-10 shrink-0 place-items-center rounded-2xl bg-white text-blue-700 shadow-sm" aria-hidden="true"><ChevronDown className="size-5 transition-transform duration-200 group-open:rotate-180" /></span>
     </summary>
@@ -134,6 +135,7 @@ export function PayMongoPaymentStatusSync() {
             </div>
             <p className="mt-2 text-[11px] font-bold text-slate-500">Finance: {payment.financeStatus === "RECONCILED" ? "Posted and reconciled" : "Not posted"}</p>
             <div className="mt-2 flex flex-wrap gap-2">
+              {(payment.receipts || []).map((receipt) => <Link key={`${receipt.kind}-${receipt.id}`} href={`/receipts/${receipt.kind}/${receipt.id}`} target="_blank" className="inline-flex min-h-9 items-center rounded-xl border border-emerald-200 bg-emerald-50 px-3 text-xs font-black text-emerald-800">Receipt {receipt.receiptNumber}</Link>)}
               {payment.canResume && <Link href={`/portal/pay/paymongo-resume?requestId=${encodeURIComponent(payment.requestId)}`} className="inline-flex min-h-9 items-center rounded-xl bg-blue-700 px-3 text-xs font-black text-white">Continue / Retry Payment</Link>}
               {(payment.state === "CANCELLED" || payment.state === "EXPIRED" || payment.state === "FAILED") && <Link href="/portal/pay#qr-payment" className="inline-flex min-h-9 items-center rounded-xl bg-pine-700 px-3 text-xs font-black text-white">Start New Payment</Link>}
               {payment.terminal && <button type="button" onClick={() => void hideFromHistory(payment)} disabled={Boolean(hidingId)} className="inline-flex min-h-9 items-center rounded-xl border border-slate-200 bg-white px-3 text-xs font-black text-slate-600 disabled:opacity-50">{hidingId === payment.requestId ? "Removing…" : "Remove from my history"}</button>}

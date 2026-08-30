@@ -1,10 +1,9 @@
 "use client";
 
-import { useFormStatus } from "react-dom";
+import { ActionProgressButton } from "@/components/action-progress-button";
 
-export function SubmitButton({ children, className = "btn-primary", disabled = false }: { children: React.ReactNode; className?: string; disabled?: boolean }) {
-  const { pending } = useFormStatus();
-  return <button type="submit" className={className} disabled={pending || disabled}>{pending ? "Working..." : children}</button>;
+export function SubmitButton({ children, className = "btn-primary", disabled = false, actionProgress = false, pendingLabel = "Working" }: { children: React.ReactNode; className?: string; disabled?: boolean; actionProgress?: boolean; pendingLabel?: string }) {
+  return <ActionProgressButton className={className} disabled={disabled} enabled={actionProgress} pendingLabel={pendingLabel}>{children}</ActionProgressButton>;
 }
 
 export function DeleteButton({ label = "Delete" }: { label?: string }) {

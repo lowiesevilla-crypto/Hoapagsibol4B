@@ -31,6 +31,8 @@ The P1 improvement queue tracked by #254 is VERIFIED through item 10:
 
 ## Open / blocked work
 
+`HOAHUB-UX-P0-001` is `IN_PROGRESS` under issue #273. The current candidate is a default-off, fail-closed shared action-progress/submission-lock foundation with pilot wiring limited to Record Payment and monthly billing generation. It does not activate behavior for the active tenant. Exact-head CI, merge, staging UAT, monitoring, rollback verification, and explicit tenant-pilot authorization remain required; see `docs/quality/HOAHUB_ACTION_PROGRESS_IMPLEMENTATION.md`.
+
 Authenticated non-destructive production UAT remains tracked separately by #194. The repository already contains the bounded read-only harness (`scripts/authenticated-production-smoke.mjs`) and the manually dispatched production workflow (`.github/workflows/authenticated-production-uat.yml`). Live execution remains BLOCKED on administrator/environment provisioning of the dedicated UAT identity and controlled homeowner query expected by that workflow:
 
 - production secret `HOAHUB_UAT_ADMIN_EMAIL`

@@ -307,6 +307,12 @@ Applicable runtime candidates should pass dependency install/lockfile, lint, Pri
 10. Verify production separately.
 11. Never report deferred functionality as live.
 
+## Action Progress and Duplicate-Submission Rollout
+
+Task `HOAHUB-UX-P0-001` is tracked in issue #273. Its shared progress/submission-lock foundation is default-off behind `ux_action_progress_v1`; runtime activation requires the master switch plus a matching global/tenant/module/role target. Configuration absence or parse failure must stay disabled. Because HOAHub has an active tenant, never enable a tenant pilot or global rollout without exact-head gates, staging/UAT evidence, monitoring/rollback readiness, and explicit pilot authorization.
+
+Payment recording keeps `(tenantId, idempotencyKey)` database uniqueness and replay behavior; monthly billing keeps tenant/homeowner/charge/coverage duplicate protection. The shared UI may show only verified stages: 25% after native validation, 50% while the request is pending, 75% only with explicit server processing confirmation, and 100% only after explicit success. Never simulate progress. See `docs/quality/HOAHUB_ACTION_PROGRESS_IMPLEMENTATION.md`.
+
 ## Current Deferred / Planned Scope
 
 Unless a later merged change updates this file, these remain pending:

@@ -1,8 +1,8 @@
 # HOAHub Release Governance
 
-Status: ACTIVE
-Baseline: `main` @ `34e62289d35163e17ea835a76cf63b3c509e3eaa`
-Last updated: 2026-08-26
+Status: ACTIVE GOVERNANCE STANDARD
+Baseline: production-verified `main` @ `ea981e9f125a8d6246c05fd5c2005fbc1c4f5481` before this documentation reconciliation
+Last updated: 2026-08-30
 
 ## Purpose
 
@@ -10,13 +10,17 @@ Define the release controls required to protect active HOAHub tenants while cont
 
 ## Current Release Baseline
 
-The current production reference is the post-rollback `main` commit `34e62289d35163e17ea835a76cf63b3c509e3eaa`.
+The current production reference before this documentation reconciliation is `ea981e9f125a8d6246c05fd5c2005fbc1c4f5481`, the merge of PR #270. Post-merge HOAHub MySQL CI #1376 passed including production smoke / critical browser suite, Hostinger expected-release verification, and public production health.
 
-The rollback is important evidence: PR #189 attempted repository-wide interactive table standardization but was reverted after production breakage. Future UI changes must therefore minimize blast radius and carry workflow-specific regression evidence.
+PR #263 Homeowner Account Information was verified from exact head `bc8a2e58833903c44fd0d2bdf40116fcdb9091b3`, passed MySQL #1361, Canva #455, Edge #48, Firefox #44 and Mobile #43, merged as `007daf133caf2f8a57fb7dcf91f9ecd87cd13989`, and passed post-merge MySQL #1362.
+
+PR #270 corrected the reproducible repeated-update stale-PWA/client defect. Exact head `d3f20ef37b046a72ea8103b537ce2a86bf596190` passed MySQL #1375, Canva #461, Edge #54, Firefox #50 and Mobile #49; merge `ea981e9f125a8d6246c05fd5c2005fbc1c4f5481` passed post-merge MySQL #1376 and managed-production/public-health verification.
+
+The historical rollback of PR #189 remains important evidence: repository-wide behavioral UI standardization can create production regressions. Future UI changes must minimize blast radius and carry workflow-specific regression evidence.
 
 ## Current Strengths
 
-The existing HOAHub MySQL CI pipeline includes:
+The HOAHub release pipeline includes:
 
 - dependency installation from lockfile;
 - lint;
@@ -30,25 +34,27 @@ The existing HOAHub MySQL CI pipeline includes:
 - controlled Chromium;
 - production-mode smoke;
 - critical browser E2E;
+- Edge and Firefox critical-flow evidence where triggered;
+- Mobile Responsive Evidence where triggered;
 - managed Hostinger release marker verification after `main` push;
 - public production health verification.
 
 The Canva visual-parity workflow also captures real rendered application screenshots for selected routes.
 
-## P0 Governance Gap
+## Repository-Control Status
 
-The GitHub branch metadata reviewed on 2026-08-26 reports `main` is not protected and has no enforced required status checks at the branch-protection layer.
+GitHub `main` branch protection / required-check enforcement at the repository-policy layer remains **NOT_REQUIRED** unless separately re-approved by the product owner. This supersedes the original 2026-08-26 P0 governance-gap action list.
 
-Required administrative action:
+Operational release discipline remains mandatory even without repository-enforced branch protection:
 
-- require pull requests for normal changes to `main`;
-- require HOAHub MySQL CI before merge;
-- require relevant visual-parity check for UI changes where repository policy supports conditional enforcement;
-- prevent force-push/deletion of `main`;
-- require the exact current PR head to be green before merge;
-- define an emergency-break-glass process for urgent rollback only.
+- use pull requests for normal product changes;
+- require HOAHub MySQL CI and applicable visual/browser/mobile gates;
+- merge only the exact current PR head that passed required gates;
+- never treat a previous head's evidence as current;
+- verify the merged `main` release marker and production health before the next product mutation;
+- inspect and fix exact gate failures rather than bypassing or weakening tests.
 
-This repository policy change must be completed in GitHub administration because it is not implemented by application code.
+Authenticated non-destructive production smoke is separately reopened under issue #194. Repository-side preparation is ready, but live execution is `BLOCKED` until an administrator provisions a dedicated authorized production-smoke identity and protected environment secrets. Real tenant credentials or destructive substitute testing must not be used.
 
 ## Release Classification
 
@@ -88,7 +94,7 @@ Required evidence:
 - affected browser E2E;
 - tenant-scope/RBAC regression where applicable;
 - visual regression;
-- UAT tenant verification for production-critical screens;
+- controlled UAT tenant verification where provisioned for production-critical screens;
 - rollback plan.
 
 ### Class C — High Risk
@@ -116,9 +122,9 @@ Required evidence:
 - browser E2E for changed critical path;
 - exact financial assertions where applicable;
 - migration and recovery review;
-- production-like UAT;
+- controlled production-like UAT where configured;
 - deployment verification;
-- post-deploy authenticated smoke when applicable;
+- post-deploy authenticated smoke where applicable and available;
 - explicit rollback point.
 
 ## Mandatory PR Content
@@ -137,7 +143,7 @@ Every Class B/C PR should state:
 10. Tests added.
 11. Exact verification gates required.
 12. Rollback approach.
-13. Production UAT plan.
+13. Production UAT plan where applicable.
 
 ## Exact-Head Rule
 
@@ -174,7 +180,7 @@ Prefer expand/contract:
 
 Before production:
 
-- validate migration on realistic staging data;
+- validate migration on realistic disposable/staging data;
 - estimate lock/runtime impact;
 - confirm backup/recovery path;
 - reject destructive changes without an explicit recovery plan.
@@ -197,7 +203,7 @@ For applicable changes:
 - [ ] Visual parity reviewed for UI change.
 - [ ] Tenant/RBAC negative tests present for sensitive change.
 - [ ] Rollback plan documented.
-- [ ] UAT steps documented.
+- [ ] UAT steps documented where applicable.
 
 ## Post-Merge / Deployment Gate
 
@@ -208,7 +214,7 @@ Require, as applicable:
 1. Hostinger serves the expected merged release marker.
 2. Public `/api/health` succeeds.
 3. No immediate deployment/runtime error signal.
-4. Non-destructive authenticated UAT smoke completes for affected critical routes.
+4. Non-destructive authenticated UAT smoke completes for affected critical routes when the dedicated environment is provisioned.
 5. Financial/domain-specific reconciliation completes where necessary.
 6. Status is updated from `IMPLEMENTED` to `VERIFIED` only after required evidence exists.
 
@@ -222,11 +228,13 @@ Current baseline includes:
 - login page;
 - security headers;
 - unauthenticated route protection;
-- cron credential rejection.
+- cron credential rejection;
+- expected-release marker verification;
+- public production health.
 
 ### Tier 2 — Authenticated Non-Destructive
 
-Required future UAT tenant checks:
+Issue #194 scope once the dedicated authorized smoke identity and protected secrets are provisioned:
 
 - login;
 - dashboard;
@@ -239,6 +247,8 @@ Required future UAT tenant checks:
 - complaints;
 - report load;
 - logout/fresh login.
+
+Current status: `BLOCKED` on administrator/environment provisioning.
 
 ### Tier 3 — Controlled Mutation
 
@@ -286,9 +296,10 @@ Requirements:
 ## Release Status Vocabulary
 
 - `IMPLEMENTED` — merged/deployed or code exists, but required production/UAT evidence is incomplete.
-- `VERIFIED` — required automated, deployment, and UAT evidence passed.
+- `VERIFIED` — required applicable automated, deployment, and configured UAT evidence passed.
 - `ROLLED_BACK` — production change was intentionally reverted.
-- `BLOCKED` — release cannot proceed due to named failure/dependency.
+- `BLOCKED` — release evidence cannot proceed due to a named failure/dependency.
+- `NOT_REQUIRED` — explicitly waived from the applicable Definition of Done by product-owner decision.
 
 ## Required Release Record
 
@@ -302,11 +313,11 @@ For each material release record:
 - visual run/artifact where applicable;
 - deployment release marker;
 - production health result;
-- UAT result;
+- UAT result or named blocker;
 - defects found;
 - rollback/recovery notes;
 - final status.
 
 ## Governance Principle
 
-Green automation is necessary but not sufficient. Release confidence comes from combining deterministic tests, limited blast radius, deployment identity verification, controlled UAT, and explicit rollback readiness.
+Green automation is necessary but not sufficient. Release confidence comes from deterministic tests, limited blast radius, deployment identity verification, controlled UAT where provisioned, and explicit rollback readiness.

@@ -5,6 +5,8 @@ import { useEffect, useRef, useState } from "react";
 type AutomationStatus = {
   automatic: boolean;
   billingDay: number | null;
+  effectiveStartYear?: number | null;
+  effectiveStartMonth?: number | null;
 };
 
 export function BillingAutomationFormLock({
@@ -20,7 +22,13 @@ export function BillingAutomationFormLock({
 
   useEffect(() => {
     const marker = markerRef.current;
-    const target = scope === "section" ? marker?.closest("section") : marker?.closest("form");
+    // Billing generation was moved under a collapsible <details> container. The
+    // old section-only lookup silently found no target, leaving manual controls
+    // enabled. Fall back to the containing form so the safety lock survives
+    // presentation/layout refactors.
+    const target = scope === "section"
+      ? marker?.closest("section") ?? marker?.closest("form")
+      : marker?.closest("form");
     if (!target) return;
 
     let locked = true;
@@ -62,7 +70,27 @@ export function BillingAutomationFormLock({
       });
     };
 
+    const repairInvalidCoveragePeriod = () => {
+      const yearInput = target.querySelector<HTMLInputElement>("input[name='coverageYear']");
+      const monthSelect = target.querySelector<HTMLSelectElement>("select[name='coverageMonth']");
+      if (!yearInput && !monthSelect) return;
+
+      const parts = new Intl.DateTimeFormat("en-CA", {
+        timeZone: "Asia/Manila",
+        year: "numeric",
+        month: "2-digit",
+      }).formatToParts(new Date());
+      const currentYear = Number(parts.find((part) => part.type === "year")?.value ?? 0);
+      const currentMonth = Number(parts.find((part) => part.type === "month")?.value ?? 0);
+      const year = Number(yearInput?.value ?? 0);
+      const month = Number(monthSelect?.value ?? 0);
+
+      if (yearInput && (!Number.isInteger(year) || year < 1900 || year > 2200)) yearInput.value = String(currentYear);
+      if (monthSelect && (!Number.isInteger(month) || month < 1 || month > 12)) monthSelect.value = String(currentMonth);
+    };
+
     bindAccessibleLabels();
+    repairInvalidCoveragePeriod();
 
     const lockControls = () => {
       target.querySelectorAll<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement | HTMLButtonElement>("input:not([type='hidden']), select, textarea, button").forEach((control) => {
@@ -132,7 +160,7 @@ export function BillingAutomationFormLock({
     <div ref={markerRef} className="hidden" aria-hidden="true" />
     {status?.automatic && <div role="status" className="md:col-span-3 rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-sm font-semibold leading-6 text-emerald-900">
       <p className="font-black">Automatic billing is ON · Manual generation disabled</p>
-      <p className="mt-1">HOAHub will generate Monthly Dues automatically{status.billingDay ? ` on day ${status.billingDay}` : " on the configured billing day"}. Existing bills for the same homeowner and coverage month are skipped. Turn Automatic Billing OFF in Billing Rules before using manual generation.</p>
+      <p className="mt-1">HOAHub owns automatic Monthly Dues generation{status.billingDay ? ` on day ${status.billingDay}` : " on the configured billing day"}. Existing bills for the same homeowner and coverage month are skipped. Turn Automatic Billing OFF in Billing Rules before using manual generation.</p>
     </div>}
     {error && <div role="alert" className="md:col-span-3 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm font-semibold leading-6 text-amber-900">
       <p className="font-black">Manual generation temporarily locked</p>

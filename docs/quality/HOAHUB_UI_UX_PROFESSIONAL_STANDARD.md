@@ -1,8 +1,19 @@
 # HOAHub Professional UI/UX Standard
 
 Status: ACTIVE DESIGN / IMPLEMENTATION STANDARD
-Baseline: post-rollback `main` at `34e62289d35163e17ea835a76cf63b3c509e3eaa`
-Last updated: 2026-08-26
+Baseline: production-verified `main` at `ea981e9f125a8d6246c05fd5c2005fbc1c4f5481` before this documentation reconciliation
+Last updated: 2026-08-30
+
+## Current Reconciled Evidence
+
+This document remains an active design/implementation standard rather than an open delivery task. The approved Product Quality & UX Excellence Program is completed for its current scope, while this standard continues to govern future UI work.
+
+Recent evidence consistent with this standard includes:
+
+- PR #263 Homeowner Account Information collapsible: exact head `bc8a2e58833903c44fd0d2bdf40116fcdb9091b3` passed MySQL #1361, Canva #455, Edge #48, Firefox #44 and Mobile #43; merged as `007daf133caf2f8a57fb7dcf91f9ecd87cd13989`; post-merge MySQL #1362 passed.
+- PR #270 stale-PWA/client update fix: exact head `d3f20ef37b046a72ea8103b537ce2a86bf596190` passed MySQL #1375, Canva #461, Edge #54, Firefox #50 and Mobile #49; merged as `ea981e9f125a8d6246c05fd5c2005fbc1c4f5481`; post-merge MySQL #1376 and managed-production/public-health verification passed.
+
+These releases reinforce two standard requirements: presentation changes must preserve domain authority, and mobile/PWA behavior must provide reliable visibility of current deployed UI without weakening authenticated routing or tenant protections.
 
 ## Objective
 
@@ -332,6 +343,7 @@ No essential action may disappear simply because the viewport is smaller.
 - Use skeletons only where they improve perceived continuity.
 - Preserve filter/search context through loading.
 - Do not display stale totals as if current while refresh is pending.
+- PWA/service-worker update behavior must allow users to reach the current deployed client without repeated stale-update reload loops or weakened authenticated routing.
 
 ## Destructive Action Standard
 
@@ -362,6 +374,7 @@ Before a UI PR is ready:
 - [ ] Visual regression artifact captured for materially changed route.
 - [ ] Affected browser E2E passes.
 - [ ] No unrelated mass refactor included.
+- [ ] If a PWA/service worker is affected, repeated update/reload behavior is verified against the deployed client path.
 
 ## Rollout Rule
 

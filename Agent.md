@@ -1,6 +1,6 @@
 # HOAHub Agent Context
 
-Last updated: 2026-08-24
+Last updated: 2026-08-31
 
 ## Purpose
 
@@ -314,6 +314,8 @@ Task `HOAHUB-UX-P0-001` is tracked in issue #273. Its shared progress/submission
 Payment recording keeps `(tenantId, idempotencyKey)` database uniqueness and replay behavior; monthly billing keeps tenant/homeowner/charge/coverage duplicate protection. The shared UI may show only verified stages: 25% after native validation, 50% while the request is pending, 75% only with explicit server processing confirmation, and 100% only after explicit success. Never simulate progress. See `docs/quality/HOAHUB_ACTION_PROGRESS_IMPLEMENTATION.md`.
 
 Foundation evidence: PR #274 exact head `51fe731f3751acc338595a418890adf2ffd635c6` passed MySQL CI #1381, Canva #464, Edge #57, Firefox #53, and Mobile #52; merged as `bed4ca020e1c8dd50a4ff2ad48c66339ffe9adc2`. Post-merge MySQL CI #1382 passed managed deployment and public production health. This verifies the default-off foundation only, not tenant pilot activation or the remaining task scope.
+
+Payment result-state candidate: branch `codex/payment-progress-result-state-20260831` adds a flagged Admin Record Payment structured Server Action result beside the legacy redirecting action. The flagged path reuses the same tenant-scoped payment recording service, notification/revalidation side effects, duplicate reference checks, and idempotency replay, then returns explicit success/error state for the progress UI. The default-off legacy redirect remains production behavior unless an approved tenant/module/role target enables the flag. This candidate is not live until exact-head CI, merge, and post-merge production verification complete.
 
 ## Current Deferred / Planned Scope
 

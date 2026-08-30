@@ -2,28 +2,31 @@ import { BillingGenerationMode, RecurringChargeType } from "@prisma/client";
 import { NextResponse } from "next/server";
 import { requirePermission } from "@/lib/authorization/guards";
 import { Permission } from "@/lib/authorization/permissions";
-import { findEffectiveBillingRule } from "@/lib/services/billing-rules";
+import { prisma } from "@/lib/db";
 
 export async function GET() {
   const user = await requirePermission(Permission.BILLING_GENERATE);
-  const { year, month } = manilaPeriod(new Date());
-  const rule = await findEffectiveBillingRule(user.tenantId, RecurringChargeType.MONTHLY_DUES, year, month);
+  const rule = await prisma.billingRule.findFirst({
+    where: {
+      tenantId: user.tenantId,
+      recurringChargeType: RecurringChargeType.MONTHLY_DUES,
+      active: true,
+      generationMode: BillingGenerationMode.AUTOMATIC,
+    },
+    orderBy: [{ effectiveStartYear: "asc" }, { effectiveStartMonth: "asc" }, { createdAt: "asc" }],
+    select: {
+      id: true,
+      billingDay: true,
+      effectiveStartYear: true,
+      effectiveStartMonth: true,
+    },
+  });
 
   return NextResponse.json({
-    automatic: rule?.generationMode === BillingGenerationMode.AUTOMATIC,
+    automatic: Boolean(rule),
     billingDay: rule?.billingDay ?? null,
     ruleId: rule?.id ?? null,
-    coverageYear: year,
-    coverageMonth: month,
+    effectiveStartYear: rule?.effectiveStartYear ?? null,
+    effectiveStartMonth: rule?.effectiveStartMonth ?? null,
   });
-}
-
-function manilaPeriod(value: Date) {
-  const parts = new Intl.DateTimeFormat("en-CA", {
-    timeZone: "Asia/Manila",
-    year: "numeric",
-    month: "2-digit",
-  }).formatToParts(value);
-  const part = (type: Intl.DateTimeFormatPartTypes) => Number(parts.find((item) => item.type === type)?.value ?? 0);
-  return { year: part("year"), month: part("month") };
 }

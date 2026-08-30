@@ -9,11 +9,13 @@ const LEGACY_CACHE_NAME_PATTERN = /^(next-pwa|workbox|pwa|offline)(-|$)/i;
 const LEGACY_SERVICE_WORKER_PATH_PATTERN = /\/service-worker\.js$|\/workbox-/i;
 const DEVELOPMENT_HOAHUB_CACHE_PREFIX = "hoahub-pwa-";
 const HOAHUB_SERVICE_WORKER_PATH = "/sw.js";
+const PWA_UPDATE_RELOAD_KEY = "hoahub:pwa-update-reload-started";
 
 export function BrowserCacheRecovery() {
   const pathname = usePathname();
 
   useEffect(() => {
+    clearCompletedPwaUpdateReloadGuard();
     void removeStaleServiceWorkerCaches();
   }, []);
 
@@ -75,6 +77,14 @@ export function BrowserCacheRecovery() {
   }, [pathname]);
 
   return null;
+}
+
+function clearCompletedPwaUpdateReloadGuard() {
+  try {
+    window.sessionStorage.removeItem(PWA_UPDATE_RELOAD_KEY);
+  } catch {
+    // Restricted storage should not leave the current document unusable.
+  }
 }
 
 async function removeStaleServiceWorkerCaches() {

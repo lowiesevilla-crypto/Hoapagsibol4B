@@ -1,10 +1,14 @@
 import "server-only";
 
-import { PaymentRequestStatus, Prisma } from "@prisma/client";
+import { Prisma } from "@prisma/client";
 import { platformPrisma as prisma } from "@/lib/db";
 import { paymongoBatchId } from "@/lib/homeowner-paymongo-batch";
 import { PAYMONGO_PAYMENT_REQUEST_MARKER } from "@/lib/homeowner-payment-flow";
 import { classifyPayMongoGatewayState, paymongoGatewayPresentation } from "@/lib/paymongo-gateway-status";
+import {
+  getPayMongoCanonicalEvidenceBatch,
+  type PayMongoCanonicalReceipt,
+} from "@/lib/services/paymongo-canonical-evidence";
 import {
   reconcileHomeownerPayMongoCheckout,
   type TenantPayMongoPaymentActivity,
@@ -19,8 +23,12 @@ export type PayMongoOnlineReportQuery = {
   pageSize?: string;
 };
 
+export type PayMongoOnlineReportItem = TenantPayMongoPaymentActivity & {
+  receipts: PayMongoCanonicalReceipt[];
+};
+
 export type PayMongoOnlineReportPage = {
-  items: TenantPayMongoPaymentActivity[];
+  items: PayMongoOnlineReportItem[];
   page: number;
   pageSize: number;
   total: number;
@@ -114,19 +122,22 @@ export async function getTenantPayMongoOnlineReport(input: {
     };
   }
 
-  const leaders = await prisma.paymentRequest.findMany({
-    where: { tenantId: input.tenantId, id: { in: candidateLeaderIds } },
-    select: {
-      id: true,
-      homeownerId: true,
-      referenceNumber: true,
-      amount: true,
-      status: true,
-      reviewRemarks: true,
-      createdAt: true,
-      updatedAt: true,
-    },
-  });
+  const [leaders, initialEvidence] = await Promise.all([
+    prisma.paymentRequest.findMany({
+      where: { tenantId: input.tenantId, id: { in: candidateLeaderIds } },
+      select: {
+        id: true,
+        homeownerId: true,
+        referenceNumber: true,
+        amount: true,
+        status: true,
+        reviewRemarks: true,
+        createdAt: true,
+        updatedAt: true,
+      },
+    }),
+    getPayMongoCanonicalEvidenceBatch({ requestIds: candidateLeaderIds, tenantId: input.tenantId }),
+  ]);
   const leadersById = new Map(leaders.map((row) => [row.id, row]));
   type LeaderRow = (typeof leaders)[number];
 
@@ -134,10 +145,10 @@ export async function getTenantPayMongoOnlineReport(input: {
     .map((id) => leadersById.get(id))
     .filter((row): row is LeaderRow => Boolean(row));
   const tracked = orderedLeaders.length;
-  const reconciled = orderedLeaders.filter((row) => row.status === PaymentRequestStatus.APPROVED).length;
-  const filteredLeaders = orderedLeaders.filter((row) => {
-    if (finance === "RECONCILED") return row.status === PaymentRequestStatus.APPROVED;
-    if (finance === "NOT_POSTED") return row.status !== PaymentRequestStatus.APPROVED;
+  const initialReconciled = (leader: LeaderRow) => initialEvidence.get(leader.id)?.reconciled === true;
+  const filteredLeaders = orderedLeaders.filter((leader) => {
+    if (finance === "RECONCILED") return initialReconciled(leader);
+    if (finance === "NOT_POSTED") return !initialReconciled(leader);
     return true;
   });
 
@@ -161,7 +172,7 @@ export async function getTenantPayMongoOnlineReport(input: {
         label: presentation.label,
         tone: presentation.tone,
         localStatus: leader.status,
-        financeStatus: leader.status === PaymentRequestStatus.APPROVED ? "RECONCILED" as const : "NOT_POSTED" as const,
+        financeStatus: "NOT_POSTED" as const,
         canResume: presentation.canResume,
         terminal: presentation.terminal,
         createdAt: leader.createdAt.toISOString(),
@@ -176,6 +187,14 @@ export async function getTenantPayMongoOnlineReport(input: {
     activities.push(...await Promise.all(batch.map(reconcileLeader)));
   }
 
+  const pageEvidence = await getPayMongoCanonicalEvidenceBatch({
+    requestIds: pageLeaders.map((leader) => leader.id),
+    tenantId: input.tenantId,
+  });
+  const effectiveEvidence = new Map(initialEvidence);
+  for (const [requestId, evidence] of pageEvidence) effectiveEvidence.set(requestId, evidence);
+  const reconciled = orderedLeaders.filter((leader) => effectiveEvidence.get(leader.id)?.reconciled === true).length;
+
   const currentHomeownerIds = [...new Set(activities.map((row) => row.homeownerId))];
   const homeowners = currentHomeownerIds.length ? await prisma.homeownerProfile.findMany({
     where: { tenantId: input.tenantId, id: { in: currentHomeownerIds } },
@@ -183,10 +202,13 @@ export async function getTenantPayMongoOnlineReport(input: {
   }) : [];
   const homeownersById = new Map(homeowners.map((homeowner) => [homeowner.id, homeowner]));
 
-  const items: TenantPayMongoPaymentActivity[] = activities.map((row) => {
+  const items: PayMongoOnlineReportItem[] = activities.map((row) => {
     const homeowner = homeownersById.get(row.homeownerId);
+    const evidence = pageEvidence.get(row.requestId);
     return {
       ...row,
+      financeStatus: evidence?.reconciled ? "RECONCILED" : "NOT_POSTED",
+      receipts: evidence?.receipts || [],
       homeownerName: homeowner?.user.name || "Homeowner",
       property: homeowner ? `Block ${homeowner.block} · Lot ${homeowner.lot}` : "Property unavailable",
     };

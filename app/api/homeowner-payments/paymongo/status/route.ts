@@ -2,6 +2,7 @@ import { Role } from "@prisma/client";
 import { getAppUrl } from "@/lib/app-url";
 import { requireUser } from "@/lib/auth";
 import { prisma } from "@/lib/db";
+import { getPayMongoCanonicalEvidence } from "@/lib/services/paymongo-canonical-evidence";
 import {
   reconcileHomeownerPayMongoCheckout,
   reconcilePendingHomeownerPayMongoPayments,
@@ -38,7 +39,19 @@ export async function POST(request: Request) {
     tenantId: user.tenantId,
     homeownerId: user.homeownerProfile.id,
   });
-  const requestIds = payments.map((payment) => payment.requestId);
+  const withEvidence = await Promise.all(payments.map(async (payment) => {
+    const evidence = await getPayMongoCanonicalEvidence({
+      requestId: payment.requestId,
+      tenantId: user.tenantId,
+      homeownerId: user.homeownerProfile!.id,
+    });
+    return {
+      ...payment,
+      financeStatus: evidence.reconciled ? "RECONCILED" as const : "NOT_POSTED" as const,
+      receipts: evidence.receipts,
+    };
+  }));
+  const requestIds = withEvidence.map((payment) => payment.requestId);
   const hidden = requestIds.length
     ? await prisma.auditLog.findMany({
         where: {
@@ -57,7 +70,7 @@ export async function POST(request: Request) {
 
   return noStore(200, {
     ok: true,
-    payments: payments.filter((payment) => !hiddenIds.has(payment.requestId)),
+    payments: withEvidence.filter((payment) => !hiddenIds.has(payment.requestId)),
   });
 }
 
@@ -88,6 +101,13 @@ export async function DELETE(request: Request) {
     });
   }
 
+  const evidence = await getPayMongoCanonicalEvidence({
+    requestId: payment.requestId,
+    tenantId: user.tenantId,
+    homeownerId: user.homeownerProfile.id,
+  });
+  const financeStatus = evidence.reconciled ? "RECONCILED" : "NOT_POSTED";
+
   const existing = await prisma.auditLog.findFirst({
     where: {
       tenantId: user.tenantId,
@@ -114,7 +134,7 @@ export async function DELETE(request: Request) {
         metadata: {
           homeownerId: user.homeownerProfile.id,
           gatewayState: payment.state,
-          financeStatus: payment.financeStatus,
+          financeStatus,
           semantics: "HOMEOWNER_VISIBILITY_ONLY",
           retainedEvidence: true,
         },

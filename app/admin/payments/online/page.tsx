@@ -51,7 +51,7 @@ export default async function OnlinePaymentStatusPage({ searchParams }: { search
         <div><p className="text-xs font-black uppercase tracking-wider text-slate-500">Reconciled</p><p className="mt-1 text-2xl font-black text-emerald-700">{report.summary.reconciled}</p></div>
         <div><p className="text-xs font-black uppercase tracking-wider text-slate-500">Open / not posted</p><p className="mt-1 text-2xl font-black text-amber-700">{report.summary.open}</p></div>
       </div>
-      <p className="mt-4 text-xs leading-5 text-slate-600">The list reconciles only the current result page against PayMongo instead of loading an unbounded transaction history. Settlement detail remains read-only and tenant-scoped.</p>
+      <p className="mt-4 text-xs leading-5 text-slate-600">A payment is counted as reconciled only when the tenant-scoped HOAHub Payment or Collection record and its official receipt are present. The list reconciles only the current result page against PayMongo instead of loading an unbounded gateway transaction history.</p>
     </section>
 
     <form action="/admin/payments/online" className="card mb-6 grid gap-3 lg:grid-cols-[minmax(16rem,2fr)_minmax(12rem,1fr)_minmax(10rem,1fr)_minmax(10rem,1fr)_8rem_auto]">
@@ -96,8 +96,8 @@ export default async function OnlinePaymentStatusPage({ searchParams }: { search
       </div>
 
       {report.items.length === 0 ? <div className="px-6 py-14 text-center"><p className="font-black text-ink">No online payments match these filters.</p><p className="mt-1 text-sm text-slate-500">Clear the filters or change the date/status criteria.</p></div> : <div className="max-h-[70vh] overflow-auto">
-        <table className="data-table min-w-[1050px]">
-          <thead className="sticky top-0 z-10 bg-white shadow-sm"><tr><th>Homeowner</th><th>Reference</th><th className="text-right">Amount</th><th>Gateway status</th><th>Finance</th><th>Created</th><th>Settlement</th></tr></thead>
+        <table className="data-table min-w-[1120px]">
+          <thead className="sticky top-0 z-10 bg-white shadow-sm"><tr><th>Homeowner</th><th>Reference</th><th className="text-right">Amount</th><th>Gateway status</th><th>Finance</th><th>Created</th><th>Receipt / settlement</th></tr></thead>
           <tbody>{report.items.map((payment) => <tr key={payment.requestId} className="odd:bg-white even:bg-slate-50/60">
             <td><p className="font-bold text-ink">{payment.homeownerName}</p><p className="text-xs text-slate-500">{payment.property}</p></td>
             <td><p className="max-w-64 break-all font-mono text-xs">{payment.referenceNumber}</p><p className="mt-1 max-w-64 break-all font-mono text-[10px] text-slate-400">{payment.requestId}</p></td>
@@ -105,7 +105,10 @@ export default async function OnlinePaymentStatusPage({ searchParams }: { search
             <td><span className={`inline-flex whitespace-nowrap rounded-full px-2.5 py-1 text-xs font-black ${toneClass[payment.tone]}`}>{payment.label}</span></td>
             <td><span className={`inline-flex whitespace-nowrap rounded-full px-2.5 py-1 text-xs font-black ${payment.financeStatus === "RECONCILED" ? "bg-emerald-100 text-emerald-800" : "bg-slate-100 text-slate-700"}`}>{payment.financeStatus === "RECONCILED" ? "Posted & reconciled" : "Not posted"}</span></td>
             <td className="whitespace-nowrap">{shortDate(new Date(payment.createdAt))}</td>
-            <td><Link className="btn-secondary min-h-9 whitespace-nowrap px-3 py-1.5" href={`/admin/payments/online/${encodeURIComponent(payment.requestId)}`}>Trace settlement</Link></td>
+            <td><div className="flex min-w-44 flex-col gap-2">
+              {payment.receipts.map((receipt) => <Link key={`${receipt.kind}-${receipt.id}`} className="btn-secondary min-h-9 whitespace-nowrap px-3 py-1.5" href={`/receipts/${receipt.kind}/${receipt.id}`} target="_blank">Receipt {receipt.receiptNumber}</Link>)}
+              <Link className="btn-secondary min-h-9 whitespace-nowrap px-3 py-1.5" href={`/admin/payments/online/${encodeURIComponent(payment.requestId)}`}>Trace settlement</Link>
+            </div></td>
           </tr>)}</tbody>
         </table>
       </div>}

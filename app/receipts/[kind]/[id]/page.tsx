@@ -7,6 +7,7 @@ import { PrintButton } from "@/components/print-button";
 import { requireUser } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { homeownerAccountNumber, homeownerPropertyLabel } from "@/lib/homeowner-account";
+import { PAYMONGO_PAYMENT_REQUEST_MARKER } from "@/lib/homeowner-payment-flow";
 import { getPaymentReceiptData } from "@/lib/services/payment-receipt";
 import { getAssociationSettings } from "@/lib/system-settings";
 import { roleLabel } from "@/lib/tenant-roles";
@@ -54,6 +55,15 @@ export default async function ReceiptPage({ params }: { params: Promise<{ kind: 
       include: { homeowner: { include: { user: true } }, contractor: true, createdBy: true },
     });
     if (item) {
+      const linkedPayMongoRequest = await prisma.paymentRequest.findFirst({
+        where: {
+          tenantId: item.tenantId,
+          collectionId: item.id,
+          proofContentType: PAYMONGO_PAYMENT_REQUEST_MARKER,
+        },
+        select: { id: true },
+      });
+      const onlinePayment = Boolean(linkedPayMongoRequest);
       const category = item.payerType;
       const external = category === "RENTER" || category === "OTHER";
       const purpose = collectionLabel(item.type, item.description);
@@ -68,16 +78,16 @@ export default async function ReceiptPage({ params }: { params: Promise<{ kind: 
         account: external ? "Not applicable" : item.homeowner ? homeownerAccountNumber(item.homeowner) : item.contractor?.companyName ?? "Not applicable",
         purpose,
         amount: Number(item.amount),
-        method: item.method.replaceAll("_", " "),
+        method: onlinePayment ? (item.method === "GCASH" ? "GCash" : "PayMongo") : item.method.replaceAll("_", " "),
         reference: item.referenceNumber,
         remarks: item.remarks,
-        processorName: item.createdBy.name || "Authorized HOA Processor",
-        processorRole: roleLabel(item.createdBy.role),
+        processorName: onlinePayment ? "PayMongo" : item.createdBy.name || "Authorized HOA Processor",
+        processorRole: onlinePayment ? "PayMongo online payment processor" : roleLabel(item.createdBy.role),
         processedAt: item.createdAt,
-        processorTimestampLabel: "Recorded on",
+        processorTimestampLabel: onlinePayment ? "Payment verified on" : "Recorded on",
         payerAcknowledgedAt: item.createdAt,
-        payerAcknowledgementLabel: "Payment acknowledged on",
-        onlinePayment: false,
+        payerAcknowledgementLabel: onlinePayment ? "Online payment acknowledged on" : "Payment acknowledged on",
+        onlinePayment,
         status: "ACTIVE",
         allocations: [{ key: item.id, coverage: purpose, billType: purpose, amount: Number(item.amount), remainingBalance: null }],
         appliedAmount: Number(item.amount),

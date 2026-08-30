@@ -20,7 +20,9 @@ test("homeowner PayMongo history hide remains tenant/homeowner scoped and non-de
 test("hidden PayMongo status items are filtered only from the homeowner-visible status response", () => {
   assert.match(routeSource, /actorId: user\.id/);
   assert.match(routeSource, /correlationId: user\.homeownerProfile\.id/);
-  assert.match(routeSource, /payments\.filter\(\(payment\) => !hiddenIds\.has\(payment\.requestId\)\)/);
+  assert.match(routeSource, /payments\.map\(async \(payment\) =>/);
+  assert.match(routeSource, /getPayMongoCanonicalEvidence\(/);
+  assert.match(routeSource, /payments: withEvidence\.filter\(\(payment\) => !hiddenIds\.has\(payment\.requestId\)\)/);
 });
 
 test("homeowner status stays collapsible and exposes hide only for terminal activity", () => {

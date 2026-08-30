@@ -28,6 +28,21 @@ test("admin can record a pure advance monthly dues payment", () => {
   assert.match(recording, /allocations\.length/);
 });
 
+test("record payment progress keeps legacy redirects while adding flagged result state", () => {
+  assert.match(action, /recordHomeownerPaymentAction\(formData: FormData\)/);
+  assert.match(action, /redirect\(`\/receipts\/payment\/\$\{result\.confirmation\.paymentId\}`\)/);
+  assert.match(action, /recordHomeownerPaymentProgressAction/);
+  assert.match(action, /requireActionProgressFlag: true/);
+  assert.match(action, /isUxActionProgressEnabled\(\{ tenantId: admin\.tenantId, module: TenantModule\.BILLING, role: admin\.role \}\)/);
+  assert.match(action, /status: "success"/);
+  assert.match(action, /status: "error"/);
+  assert.match(recordForm, /useActionState\(recordHomeownerPaymentProgressAction, initialProgressState\)/);
+  assert.match(recordForm, /const formAction = actionProgressEnabled \? progressAction : recordHomeownerPaymentAction/);
+  assert.match(recordForm, /role="alert" aria-live="polite"/);
+  assert.match(recordForm, /role="status" aria-live="polite"/);
+  assert.match(recordForm, /success=\{actionProgressEnabled && progressState\.status === "success"\}/);
+});
+
 test("advance credit is applied automatically and can be maintained safely", () => {
   assert.match(credit, /applyHomeownerAdvanceCreditToOpenBills/);
   assert.match(credit, /paymentAllocation\.upsert/);

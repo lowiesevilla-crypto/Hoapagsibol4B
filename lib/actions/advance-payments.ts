@@ -1,26 +1,73 @@
 "use server";
 
-import { NotificationType, Prisma } from "@prisma/client";
+import { NotificationType, Prisma, TenantModule } from "@prisma/client";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { requirePermissions } from "@/lib/authorization/guards";
 import { Permission } from "@/lib/authorization/permissions";
 import { getAppUrl } from "@/lib/app-url";
 import { prisma } from "@/lib/db";
+import { isUxActionProgressEnabled } from "@/lib/feature-flags/ux-action-progress";
 import { paymentSchema } from "@/lib/validation";
 import { buildPaymentConfirmation, recordMonthlyDuesPayment } from "@/lib/services/payment-recording";
 import { sendEmailNotification } from "@/lib/services/notifications";
 
+export type RecordHomeownerPaymentProgressState = {
+  status: "idle" | "success" | "error";
+  message: string;
+  paymentId: string | null;
+  receiptUrl: string | null;
+  reused: boolean;
+};
+
 export async function recordHomeownerPaymentAction(formData: FormData) {
+  let result: Awaited<ReturnType<typeof recordHomeownerPaymentSubmission>>;
+  try {
+    result = await recordHomeownerPaymentSubmission(formData);
+  } catch (error) {
+    if (isNextRedirectError(error)) throw error;
+    redirect(`/admin/payments/record?error=${encodeURIComponent(paymentErrorMessage(error))}`);
+  }
+
+  redirect(`/receipts/payment/${result.confirmation.paymentId}`);
+}
+
+export async function recordHomeownerPaymentProgressAction(_previousState: RecordHomeownerPaymentProgressState, formData: FormData): Promise<RecordHomeownerPaymentProgressState> {
+  try {
+    const result = await recordHomeownerPaymentSubmission(formData, { requireActionProgressFlag: true });
+    const receiptUrl = `/receipts/payment/${result.confirmation.paymentId}`;
+    return {
+      status: "success",
+      message: result.confirmation.reused ? "Payment was already recorded. Opening the existing receipt." : "Payment recorded successfully. Opening receipt.",
+      paymentId: result.confirmation.paymentId,
+      receiptUrl,
+      reused: result.confirmation.reused,
+    };
+  } catch (error) {
+    if (isNextRedirectError(error)) throw error;
+    return {
+      status: "error",
+      message: paymentErrorMessage(error),
+      paymentId: null,
+      receiptUrl: null,
+      reused: false,
+    };
+  }
+}
+
+async function recordHomeownerPaymentSubmission(formData: FormData, options: { requireActionProgressFlag?: boolean } = {}) {
   const admin = await requirePermissions([Permission.PAYMENTS_RECORD, Permission.RECEIPTS_ISSUE]);
+  if (options.requireActionProgressFlag && !isUxActionProgressEnabled({ tenantId: admin.tenantId, module: TenantModule.BILLING, role: admin.role })) {
+    throw new Error("Action progress is not enabled for this tenant.");
+  }
   const parsed = paymentSchema.safeParse(Object.fromEntries(formData.entries()));
-  if (!parsed.success) redirect(`/admin/payments/record?error=${encodeURIComponent(parsed.error.issues[0]?.message || "Invalid payment details.")}`);
+  if (!parsed.success) throw new Error(parsed.error.issues[0]?.message || "Invalid payment details.");
   const data = parsed.data;
   const homeownerId = String(formData.get("homeownerId") || "").trim();
-  if (!homeownerId) redirect("/admin/payments/record?error=Select%20a%20homeowner.");
+  if (!homeownerId) throw new Error("Select a homeowner.");
   const billIds = [...new Set(formData.getAll("billIds").map(String).filter(Boolean))];
   const idempotencyKey = String(formData.get("idempotencyKey") || "").trim();
-  if (!idempotencyKey || idempotencyKey.length > 100) redirect("/admin/payments/record?error=Payment%20submission%20token%20is%20invalid.%20Refresh%20the%20form%20and%20try%20again.");
+  if (!idempotencyKey || idempotencyKey.length > 100) throw new Error("Payment submission token is invalid. Refresh the form and try again.");
 
   let confirmation: Awaited<ReturnType<typeof recordMonthlyDuesPayment>> | null = null;
   try {
@@ -47,7 +94,7 @@ export async function recordHomeownerPaymentAction(formData: FormData) {
       const existing = await prisma.payment.findFirst({ where: { tenantId: admin.tenantId, idempotencyKey }, include: { homeowner: { include: { user: true } }, allocations: true } });
       if (existing) confirmation = buildPaymentConfirmation(existing, true);
     }
-    if (!confirmation) redirect(`/admin/payments/record?error=${encodeURIComponent(error instanceof Error ? error.message : "Payment could not be recorded.")}`);
+    if (!confirmation) throw error;
   }
 
   if (confirmation && !confirmation.reused) {
@@ -74,7 +121,15 @@ export async function recordHomeownerPaymentAction(formData: FormData) {
   revalidatePath("/portal/payments");
   revalidatePath("/portal/dashboard");
   revalidatePath(`/admin/homeowners/${homeownerId}`);
-  if (!confirmation) redirect("/admin/payments/record?error=Payment%20could%20not%20be%20recorded.");
+  if (!confirmation) throw new Error("Payment could not be recorded.");
   revalidatePath(`/receipts/payment/${confirmation.paymentId}`);
-  redirect(`/receipts/payment/${confirmation.paymentId}`);
+  return { confirmation, homeownerId };
+}
+
+function paymentErrorMessage(error: unknown) {
+  return error instanceof Error ? error.message : "Payment could not be recorded.";
+}
+
+function isNextRedirectError(error: unknown) {
+  return Boolean(error && typeof error === "object" && "digest" in error && String((error as { digest?: unknown }).digest || "").startsWith("NEXT_REDIRECT"));
 }

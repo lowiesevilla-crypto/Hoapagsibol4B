@@ -5,6 +5,8 @@ import { useEffect, useRef, useState } from "react";
 type AutomationStatus = {
   automatic: boolean;
   billingDay: number | null;
+  effectiveStartYear?: number | null;
+  effectiveStartMonth?: number | null;
 };
 
 export function BillingAutomationFormLock({
@@ -20,7 +22,13 @@ export function BillingAutomationFormLock({
 
   useEffect(() => {
     const marker = markerRef.current;
-    const target = scope === "section" ? marker?.closest("section") : marker?.closest("form");
+    // Billing generation was moved under a collapsible <details> container. The
+    // old section-only lookup silently found no target, leaving manual controls
+    // enabled. Fall back to the containing form so the safety lock survives
+    // presentation/layout refactors.
+    const target = scope === "section"
+      ? marker?.closest("section") ?? marker?.closest("form")
+      : marker?.closest("form");
     if (!target) return;
 
     let locked = true;
@@ -132,7 +140,7 @@ export function BillingAutomationFormLock({
     <div ref={markerRef} className="hidden" aria-hidden="true" />
     {status?.automatic && <div role="status" className="md:col-span-3 rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-sm font-semibold leading-6 text-emerald-900">
       <p className="font-black">Automatic billing is ON · Manual generation disabled</p>
-      <p className="mt-1">HOAHub will generate Monthly Dues automatically{status.billingDay ? ` on day ${status.billingDay}` : " on the configured billing day"}. Existing bills for the same homeowner and coverage month are skipped. Turn Automatic Billing OFF in Billing Rules before using manual generation.</p>
+      <p className="mt-1">HOAHub owns automatic Monthly Dues generation{status.billingDay ? ` on day ${status.billingDay}` : " on the configured billing day"}. Existing bills for the same homeowner and coverage month are skipped. Turn Automatic Billing OFF in Billing Rules before using manual generation.</p>
     </div>}
     {error && <div role="alert" className="md:col-span-3 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm font-semibold leading-6 text-amber-900">
       <p className="font-black">Manual generation temporarily locked</p>

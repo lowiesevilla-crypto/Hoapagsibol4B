@@ -313,6 +313,8 @@ Task `HOAHUB-UX-P0-001` is tracked in issue #273. Its shared progress/submission
 
 Payment recording keeps `(tenantId, idempotencyKey)` database uniqueness and replay behavior; monthly billing keeps tenant/homeowner/charge/coverage duplicate protection. The shared UI may show only verified stages: 25% after native validation, 50% while the request is pending, 75% only with explicit server processing confirmation, and 100% only after explicit success. Never simulate progress. See `docs/quality/HOAHUB_ACTION_PROGRESS_IMPLEMENTATION.md`.
 
+Foundation evidence: PR #274 exact head `51fe731f3751acc338595a418890adf2ffd635c6` passed MySQL CI #1381, Canva #464, Edge #57, Firefox #53, and Mobile #52; merged as `bed4ca020e1c8dd50a4ff2ad48c66339ffe9adc2`. Post-merge MySQL CI #1382 passed managed deployment and public production health. This verifies the default-off foundation only, not tenant pilot activation or the remaining task scope.
+
 ## Current Deferred / Planned Scope
 
 Unless a later merged change updates this file, these remain pending:

@@ -4,7 +4,7 @@ Task: `HOAHUB-UX-P0-001`
 
 Tracking issue: #273
 
-Status: IN PROGRESS — foundation candidate, default off
+Status: IN PROGRESS — foundation VERIFIED and production-deployed, rollout default off
 
 ## Active-tenant safety
 
@@ -21,6 +21,13 @@ HOAHub already serves an active tenant. This change is additive and preserves th
 - Reduced-motion users retain percentage feedback without rotation; meaningful stage text uses a polite live region and the processing button exposes `aria-busy`.
 - Pilot integrations are limited to Admin Record Payment and Generate for Eligible Homeowners. With the default-off flag, both continue using the pre-existing `Working...` behavior.
 - Payment recording retains its tenant-scoped `(tenantId, idempotencyKey)` uniqueness and replay handling. Monthly billing retains its tenant/homeowner/charge/coverage duplicate protection.
+
+## Foundation release evidence
+
+- PR #274 exact head `51fe731f3751acc338595a418890adf2ffd635c6` passed HOAHub MySQL CI #1381, Canva Visual Parity #464, Edge Critical Flow #57, Firefox Critical Flow #53, and Mobile Responsive Evidence #52.
+- PR #274 merged to `main` as `bed4ca020e1c8dd50a4ff2ad48c66339ffe9adc2`.
+- Post-merge HOAHub MySQL CI #1382 passed the complete verification and critical browser suites, Hostinger managed-deployment wait, and public production-health verification.
+- Production deployment does not equal feature rollout: the master switch remains default-off and no tenant target was enabled.
 
 ## Configuration contract
 

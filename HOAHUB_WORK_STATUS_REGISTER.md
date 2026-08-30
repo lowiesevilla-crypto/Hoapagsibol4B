@@ -6,11 +6,11 @@ This register is the current release-status snapshot for the active HOAHub produ
 
 ## Current production baseline
 
-- Production-verified `main`: `ea981e9f125a8d6246c05fd5c2005fbc1c4f5481`.
-- Source PR: #270 (`fix: allow repeated PWA update reloads`).
-- Exact PR head: `d3f20ef37b046a72ea8103b537ce2a86bf596190`.
-- Required exact-head gates passed: HOAHub MySQL CI #1375, Canva Visual Parity #461, Edge Critical Flow #54, Firefox Critical Flow #50, Mobile Responsive Evidence #49.
-- Post-merge HOAHub MySQL CI #1376 passed the complete verification suite, production smoke / critical browser suite, Hostinger managed-deployment wait, and public production-health verification.
+- Production-verified `main`: `bed4ca020e1c8dd50a4ff2ad48c66339ffe9adc2`.
+- Source PR: #274 (`feat: add default-off action progress foundation`).
+- Exact PR head: `51fe731f3751acc338595a418890adf2ffd635c6`.
+- Required exact-head gates passed: HOAHub MySQL CI #1381, Canva Visual Parity #464, Edge Critical Flow #57, Firefox Critical Flow #53, Mobile Responsive Evidence #52.
+- Post-merge HOAHub MySQL CI #1382 passed the complete verification suite, production smoke / critical browser suite, Hostinger managed-deployment wait, and public production-health verification. The new feature flag remains default-off and no tenant rollout is active.
 
 ## Verified release queue
 
@@ -31,7 +31,7 @@ The P1 improvement queue tracked by #254 is VERIFIED through item 10:
 
 ## Open / blocked work
 
-`HOAHUB-UX-P0-001` is `IN_PROGRESS` under issue #273. The current candidate is a default-off, fail-closed shared action-progress/submission-lock foundation with pilot wiring limited to Record Payment and monthly billing generation. It does not activate behavior for the active tenant. Exact-head CI, merge, staging UAT, monitoring, rollback verification, and explicit tenant-pilot authorization remain required; see `docs/quality/HOAHUB_ACTION_PROGRESS_IMPLEMENTATION.md`.
+`HOAHUB-UX-P0-001` is `IN_PROGRESS` under issue #273. Its default-off, fail-closed shared action-progress/submission-lock foundation is VERIFIED and production-deployed by PR #274 / merge `bed4ca020e1c8dd50a4ff2ad48c66339ffe9adc2`; post-merge MySQL CI #1382 passed managed deployment and public health. Pilot wiring remains limited to Record Payment and monthly billing generation, and no tenant target is enabled. Explicit success/status contracts, uncertain-response reconciliation, durable bulk progress, remaining P0/P1 coverage, staging UAT, monitoring, rollback verification, and tenant-pilot authorization remain required; see `docs/quality/HOAHUB_ACTION_PROGRESS_IMPLEMENTATION.md`.
 
 Authenticated non-destructive production UAT remains tracked separately by #194. The repository already contains the bounded read-only harness (`scripts/authenticated-production-smoke.mjs`) and the manually dispatched production workflow (`.github/workflows/authenticated-production-uat.yml`). Live execution remains BLOCKED on administrator/environment provisioning of the dedicated UAT identity and controlled homeowner query expected by that workflow:
 

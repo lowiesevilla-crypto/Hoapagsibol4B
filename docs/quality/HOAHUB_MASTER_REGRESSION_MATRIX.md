@@ -1,12 +1,14 @@
 # HOAHub Master Regression Matrix
 
-Status: ACTIVE
-Baseline reviewed: `main` @ `34e62289d35163e17ea835a76cf63b3c509e3eaa`
-Last updated: 2026-08-26
+Status: ACTIVE RECONCILED QA REFERENCE
+Baseline reviewed: production-verified `main` @ `ea981e9f125a8d6246c05fd5c2005fbc1c4f5481` before this documentation reconciliation
+Last updated: 2026-08-30
 
 ## Purpose
 
-This matrix is the primary QA reference for what is verified, what has partial evidence, and what still requires automated or production UAT coverage. It is intentionally conservative: an area is not marked VERIFIED unless the required evidence is known.
+This matrix is the primary QA reference for what is verified, what has partial evidence, and what still requires controlled production UAT coverage. It remains conservative: an area is not marked VERIFIED unless the applicable evidence is known.
+
+The earlier 2026-08-26 matrix contained several `PENDING` / `IN_PROGRESS` entries that were subsequently completed. This reconciliation updates those entries from the verified PR/gate evidence recorded in `HOAHUB_WORK_STATUS_REGISTER.md` and issue #254.
 
 ## Evidence Legend
 
@@ -14,56 +16,63 @@ This matrix is the primary QA reference for what is verified, what has partial e
 - `PARTIAL` — some automated evidence exists but the full workflow is not covered.
 - `NO / PENDING` — no sufficient evidence found in the reviewed critical suites.
 - `N/A` — not applicable.
+- `BLOCKED` — accepted evidence step cannot execute until a named external dependency is supplied.
 
 ## Core Regression Matrix
 
 | Domain / Workflow | Unit / Static | DB Integration | Browser E2E / Verifier | Production UAT | Risk | Current Status | Next Action |
 |---|---|---|---|---|---|---|---|
 | Authentication / login | YES | YES | YES | PARTIAL | P0 | VERIFIED baseline | Keep stale-session/back-navigation regression mandatory |
-| Tenant isolation / authorization | YES | YES | YES for critical cases | PARTIAL | P0 | VERIFIED baseline for covered cases | Expand to every new financial/operational workflow |
-| Homeowner registration / activation | YES/PARTIAL | YES/PARTIAL | YES | PARTIAL | P0 | VERIFIED in CI | Add edit/deactivate/reactivate browser path |
-| Homeowner profile / household self-service | YES | PARTIAL | PARTIAL | PENDING | P1 | IMPLEMENTED | Add Admin + Homeowner browser CRUD regression |
+| Tenant isolation / authorization | YES | YES | YES for critical cases | PARTIAL | P0 | VERIFIED baseline for covered cases | Expand paired authorized/denied checks with every new sensitive workflow |
+| Homeowner registration / activation | YES/PARTIAL | YES/PARTIAL | YES | PARTIAL | P0 | VERIFIED in CI | Preserve activation/fresh-login coverage |
+| Homeowner profile / household self-service | YES | PARTIAL | YES targeted | PARTIAL | P1 | VERIFIED approved slices | PR #260 verified Admin add Household Member; PR #263 verified homeowner Account Information collapsible without changing profile authority |
 | Billing generation | YES | YES | YES | PARTIAL | P0 | VERIFIED in CI | Preserve idempotency and large-tenant scenarios |
-| Billing edit / maintenance | YES regression | PARTIAL | PENDING | PENDING | P0 | IMPLEMENTED | Add browser edit/save validation test |
-| Billing rules / automatic billing | YES | PARTIAL | PENDING | PENDING | P0 | IMPLEMENTED | Add scheduler/manual-lock browser + DB acceptance |
-| Record Payment | YES/PARTIAL | YES | YES | PARTIAL | P0 | VERIFIED in CI for cash critical path | Add payment-method and advance-credit browser cases |
-| Payment allocation / unapplied credit | YES | YES | PARTIAL | PENDING | P0 | VERIFIED service behavior | Add browser visibility and follow-on allocation evidence |
-| Payment void | YES/PARTIAL | YES | PENDING | PENDING | P0 | IMPLEMENTED | Add browser void + receipt/balance restoration path |
-| Payment refund | YES/PARTIAL | YES for homeowner refund | PENDING | PENDING | P0 | IMPLEMENTED | Add browser refund + finance audit path |
-| PayMongo online homeowner payment | YES/PARTIAL | YES reconciliation | PARTIAL | PENDING | P0 | IMPLEMENTED | Add controlled gateway/UAT evidence without live-data mutation |
-| PayMongo settlement trace/report | YES | PARTIAL | PENDING | PENDING | P0 | IMPLEMENTED | Add authenticated browser report/filter/trace UAT |
+| Billing edit / maintenance | YES regression | PARTIAL | YES through critical/release regression baseline | PARTIAL | P0 | VERIFIED current production path | Preserve edit prepopulation/save regression after collapsible UI changes |
+| Billing rules / automatic billing | YES | PARTIAL | PARTIAL | PENDING | P0 | IMPLEMENTED / targeted evidence | Keep scheduler/manual-lock and bounded-batch acceptance current |
+| Record Payment | YES/PARTIAL | YES | YES | PARTIAL | P0 | VERIFIED in CI for cash critical path | Add payment-method variants where changed |
+| Payment allocation / unapplied credit | YES | YES | PARTIAL | PENDING | P0 | VERIFIED service behavior | Keep allocation authority server-side |
+| Payment void | YES/PARTIAL | YES | YES critical regression | PARTIAL | P0 | VERIFIED | PR #200 exact-head regression evidence recorded in work-status register |
+| Payment refund | YES/PARTIAL | YES for homeowner refund | YES critical regression | PARTIAL | P0 | VERIFIED | PR #202 exact-head regression evidence recorded in work-status register |
+| PayMongo online homeowner payment | YES/PARTIAL | YES reconciliation | YES targeted | PENDING controlled live UAT | P0 | VERIFIED covered product paths | Do not use live tenant records for mutation testing |
+| PayMongo settlement trace/report | YES | PARTIAL | YES report/navigation regression | PENDING controlled live UAT | P0 | VERIFIED automated covered path | Controlled authenticated production evidence remains part of separate #194 scope where applicable |
 | Receipts / AR rendering | PARTIAL | YES through payment flow | YES for payment receipt | PARTIAL | P0 | VERIFIED critical path | Add print/export layout regression where changed |
-| Other Collections / bonds | YES/PARTIAL | YES refund/liability | PENDING | PENDING | P0 | IMPLEMENTED | Add browser collection + bond refund path |
-| Expenses | PARTIAL | PARTIAL | PENDING | PENDING | P1 | PARTIAL | Add create/edit/report regression |
-| Petty Cash | YES recent regressions | PARTIAL | PENDING | PENDING | P0 | IMPLEMENTED / evidence incomplete | Add create/edit/search/Enter/print browser suite |
-| Employee create | YES regression for nested transaction | PARTIAL | PENDING | PENDING | P0 | IMPLEMENTED | Add browser create and tenant-boundary confirmation |
-| Employee edit | PARTIAL | PARTIAL | PENDING | PENDING | P0 | PARTIAL | Add browser edit nullable/zero-field persistence test |
-| Attendance | PARTIAL | Not fully evidenced | PENDING | PENDING | P1 | PARTIAL | Add time/correction/approval browser regression |
-| Leave | PARTIAL | Not fully evidenced | PENDING | PENDING | P1 | PARTIAL | Add request/approval/denial browser regression |
-| Payroll | YES/PARTIAL | Not fully evidenced in current audit | PENDING | PENDING | P0 | PARTIAL | Build critical payroll browser and DB reconciliation suite |
-| Employee loans / cash advances | YES/PARTIAL | PARTIAL | PENDING | PENDING | P0 | PARTIAL | Add deduction-to-loan lifecycle regression |
-| Rental management | YES/PARTIAL | PARTIAL | PENDING | PENDING | P1 | PARTIAL | Add asset→agreement→billing→payment→reconciliation E2E |
-| Document requests | YES/PARTIAL | YES/PARTIAL | YES | PARTIAL | P0 | VERIFIED critical path | Expand payment-required/custom workflow variants |
+| Other Collections / bonds | YES/PARTIAL | YES refund/liability | PARTIAL | PENDING | P0 | IMPLEMENTED | Add lifecycle browser evidence when materially changed |
+| Expenses | PARTIAL | PARTIAL | PARTIAL | PENDING | P1 | PARTIAL / program presentation slice NOT_REQUIRED | Do not represent waived UI slice as implemented |
+| Petty Cash | YES recent regressions | PARTIAL | YES critical regression | PARTIAL | P0 | VERIFIED | PR #198 exact-head regression evidence recorded in work-status register |
+| Employee create | YES regression for nested transaction | PARTIAL | YES | PARTIAL | P0 | VERIFIED | PR #191 browser regression evidence retained |
+| Employee edit | YES/PARTIAL | PARTIAL | YES | PARTIAL | P0 | VERIFIED | Nullable/zero-field persistence browser regression retained |
+| Attendance | PARTIAL | PARTIAL | YES targeted | PARTIAL | P1 | VERIFIED approved UI/critical slice | PR #248 exact-head browser/mobile gates and post-merge baseline verified |
+| Leave | PARTIAL | PARTIAL | PARTIAL | PENDING | P1 | PARTIAL | Add request/approval/denial browser regression when changed |
+| Payroll | YES/PARTIAL | YES/PARTIAL | YES critical regression | PARTIAL | P0 | VERIFIED | PR #197 exact-head regression evidence recorded in work-status register |
+| Employee loans / cash advances | YES/PARTIAL | PARTIAL | PARTIAL | PENDING | P0 | PARTIAL | Add deduction-to-loan lifecycle regression when changed |
+| Rental management | YES/PARTIAL | PARTIAL | PARTIAL | PENDING | P1 | PARTIAL; presentation slice NOT_REQUIRED for completed Wave 6 | Keep domain authority unchanged; future scope may reopen separately |
+| Document requests | YES/PARTIAL | YES/PARTIAL | YES | PARTIAL | P0 | VERIFIED critical path | Expand payment-required/custom workflow variants when changed |
 | Document generation/download | YES/PARTIAL | YES | YES | PARTIAL | P0 | VERIFIED critical path | Preserve template/version/QR coverage |
-| Document Management repository | YES/PARTIAL | YES | YES dedicated E2E | PARTIAL | P1 | VERIFIED covered paths | Add large-library and permission matrix browser cases |
-| Complaints | YES verifier | PARTIAL | TARGETED verifier, full E2E pending | PENDING | P1 | PARTIAL | Add filing→assignment→resolution browser lifecycle |
+| Document Management repository | YES/PARTIAL | YES | YES dedicated E2E | PARTIAL | P1 | VERIFIED | Scale and usability evidence include PR #214 and post-program PR #255 |
+| Admin issued-document table | YES/PARTIAL | YES/PARTIAL | YES targeted | PARTIAL | P1 | VERIFIED | PR #257 verified search/pagination/sticky actions |
+| Complaints | YES verifier | PARTIAL | YES targeted | PARTIAL | P1 | VERIFIED approved operational slice | PR #245 / verifier evidence retained |
 | Announcements | PARTIAL | PARTIAL | YES publish + tenant visibility | PARTIAL | P1 | VERIFIED critical path | Add edit/delete/schedule/attachment where supported |
 | Events | PARTIAL | Not fully evidenced | PENDING | PENDING | P2 | PARTIAL | Add RSVP/attendance browser flow where live |
-| Vehicles | PARTIAL | Not fully evidenced | Auth-protection smoke only | PENDING | P1 | PARTIAL | Add registration/edit/sticker status E2E |
-| Contractors | PARTIAL | Not fully evidenced | PENDING | PENDING | P1 | PARTIAL | Add registration/permit/bond E2E |
-| Reports dashboard | YES/PARTIAL finance logic | YES finance | PENDING | PENDING | P0 | PARTIAL | Add date filters, totals and navigation browser coverage |
-| Report export PDF/CSV/DOCX | PARTIAL | PARTIAL | PENDING | PENDING | P0 | PARTIAL | Assert export uses same tenant/date accounting authority |
-| Platform tenant/subscription/entitlements | YES/PARTIAL | YES/PARTIAL | PARTIAL | PENDING | P1 | PARTIAL | Add create/edit/suspend/visibility browser flow |
+| Vehicles | PARTIAL | PARTIAL | YES targeted | PARTIAL | P1 | VERIFIED approved operational slice | PR #246 exact-head gates recorded |
+| Contractors | PARTIAL | PARTIAL | YES targeted | PARTIAL | P1 | VERIFIED approved operational slice | PR #247 exact-head gates recorded |
+| Reports dashboard | YES/PARTIAL finance logic | YES finance | YES targeted | PARTIAL | P0 | VERIFIED approved Financial Reports slice | PR #206 and Wave 6 Finance Reports evidence retained |
+| Report export PDF/CSV/DOCX | PARTIAL | PARTIAL | PARTIAL | PENDING | P0 | PARTIAL | Assert export uses same tenant/date accounting authority when changed |
+| Platform tenant/subscription/entitlements | YES/PARTIAL | YES/PARTIAL | PARTIAL | PENDING | P1 | PARTIAL | Add create/edit/suspend/visibility browser flow when changed |
 | AI assistant | YES | YES isolation/entitlement | YES dedicated E2E | PARTIAL | P1 | VERIFIED covered paths | Keep AI outage from blocking core modules |
-| Homeowner mobile/PWA shell | YES multiple verifiers | PARTIAL | YES | PARTIAL | P1 | VERIFIED covered paths | Continue mobile route-by-route protection |
-| Accessibility | NO formal complete gate | N/A | PENDING | PENDING | P1 | PENDING | Add WCAG 2.1 AA automation + manual keyboard review |
-| Cross-browser compatibility | N/A | N/A | Chromium-focused only | PENDING | P1 | PENDING | Add Edge/Firefox-compatible evidence strategy |
-| Large-tenant homeowner / finance / employee / document scale | YES bounded 5,001-homeowner, 2,001-row finance, 5,001-employee, and 5,001-document fixtures | PARTIAL | Employee search browser regression verified; document-library scale regression verified | PENDING | P0/P1 | VERIFIED scale fixtures | PR #211-#214 passed exact-head gates and merged; retain production UAT/performance monitoring gap |
-| Automatic/batch processing bounds and failure isolation | YES explicit 250/20/50 batch controls, row failure capture, duplicate prevention, completion audit | YES billing generation coverage | Existing billing browser chain | PENDING | P0/P1 | IN_PROGRESS | Exact batch/failure/idempotency contract gate is in progress; no production scheduler invocation |
-| Backup/restore | N/A | Not evidenced in current audit | N/A | PENDING | P0 | PENDING | Establish periodic restore evidence and release runbook |
-| Post-deploy authenticated smoke | YES source contract | N/A | YES read-only harness | PENDING live run | P0 | IMPLEMENTED | Configure protected UAT credentials and record controlled production evidence |
+| Homeowner mobile/PWA shell | YES multiple verifiers | PARTIAL | YES Edge/Firefox/Mobile | PARTIAL | P1 | VERIFIED | PR #270 corrected the reproducible repeated-update stale-client defect; exact head `d3f20ef37b046a72ea8103b537ce2a86bf596190` passed MySQL #1375, Canva #461, Edge #54, Firefox #50, Mobile #49; merge `ea981e9f125a8d6246c05fd5c2005fbc1c4f5481`, post-merge MySQL #1376 passed |
+| Homeowner Account Information collapsible | YES presentation contract | N/A | YES triggered browser/mobile gates | PARTIAL | P1 | VERIFIED | PR #263 exact head `bc8a2e58833903c44fd0d2bdf40116fcdb9091b3` passed MySQL #1361, Canva #455, Edge #48, Firefox #44, Mobile #43; merged as `007daf133caf2f8a57fb7dcf91f9ecd87cd13989`; post-merge MySQL #1362 passed |
+| Accessibility | YES critical-flow gate | N/A | YES | PARTIAL | P1 | VERIFIED critical-flow baseline | PR #216 established WCAG 2.1 AA critical-flow gate; continue route-specific review |
+| Cross-browser compatibility | N/A | N/A | YES Edge + Firefox | PARTIAL | P1 | VERIFIED critical-flow baseline | PR #220 Edge and PR #221 Firefox evidence retained |
+| Android/iOS responsive compatibility | N/A | N/A | YES Mobile Responsive Evidence | PARTIAL | P1 | VERIFIED critical-flow baseline | PR #222 responsive evidence retained and later UI PRs continued Mobile gate coverage |
+| Large-tenant homeowner / finance / employee / document scale | YES bounded 5,001-homeowner, 2,001-row finance, 5,001-employee, and 5,001-document fixtures | PARTIAL | YES selected search/library paths | PENDING production performance UAT | P0/P1 | VERIFIED scale fixtures | PR #211–#214 passed exact-head gates and merged; retain production monitoring gap |
+| Automatic/batch processing bounds and failure isolation | YES explicit bounded controls and failure capture | YES billing generation coverage | Existing billing browser chain | PENDING production scheduler invocation | P0/P1 | VERIFIED automated contract | PR #215 exact head passed required gates; no production scheduler mutation required for verification |
+| Backup/restore | N/A | Not evidenced in current audit | N/A | PENDING | P0 | PENDING | Establish periodic restore evidence and release runbook separately |
+| Post-deploy authenticated smoke | YES source contract / repository preparation | N/A | YES read-only harness | BLOCKED live run | P0 | BLOCKED | Issue #194 requires administrator provisioning of dedicated authorized production-smoke identity and protected environment secrets; no real tenant credentials or destructive substitute testing |
+| GitHub `main` branch protection | N/A | N/A | N/A | N/A | P0 | NOT_REQUIRED | Repository-control hardening remains waived unless separately re-approved; exact-head merge discipline remains operational |
 
-## P0 Browser Scenarios to Add First
+## P0 Browser Scenarios of Record
+
+The original priority scenarios are retained as regression contracts. Their current evidence state is reflected in the matrix above.
 
 ### BR-E2E-EMP-001 — Employee Create
 
@@ -104,7 +113,7 @@ This matrix is the primary QA reference for what is verified, what has partial e
 
 ### BR-E2E-PMT-VOID-001 — Payment Void
 
-- Create deterministic test payment.
+- Create deterministic disposable test payment.
 - Void using authorized role.
 - Confirm balance restoration.
 - Confirm receipt status/history.
@@ -113,7 +122,7 @@ This matrix is the primary QA reference for what is verified, what has partial e
 
 ### BR-E2E-PMT-REFUND-001 — Refund
 
-- Create refundable test case.
+- Create refundable disposable test case.
 - Perform partial/full valid refund.
 - Verify finance/liability/balance result.
 - Reject over-refund and cross-tenant identifiers.
@@ -137,23 +146,23 @@ This matrix is the primary QA reference for what is verified, what has partial e
 
 ## Production Smoke Matrix
 
-The production smoke suite must remain non-destructive unless an explicitly isolated UAT tenant is used.
+The production smoke suite must remain non-destructive unless an explicitly isolated UAT tenant is used. Current authenticated live execution is blocked under #194 pending administrator-provisioned secrets.
 
 | Check | Required | Mutation? |
 |---|---:|---:|
 | `/api/health` database status | YES | No |
 | Login page and security headers | YES | No |
-| Tenant Admin login to UAT account | YES | Session only |
-| Dashboard renders | YES | No |
-| Homeowner search/profile opens | YES | No |
-| Billing page/search | YES | No |
-| Payment history | YES | No |
-| Online Payments report | YES | No |
-| Employee list/profile | YES | No |
-| Document request list | YES | No |
-| Complaint list | YES | No |
-| Financial report loads | YES | No |
-| Logout and fresh login | YES | Session only |
+| Dedicated smoke identity login | YES once provisioned | Session only |
+| Dashboard renders | YES once provisioned | No |
+| Homeowner search/profile opens | YES once provisioned | No |
+| Billing page/search | YES once provisioned | No |
+| Payment history | YES once provisioned | No |
+| Online Payments report | YES once provisioned | No |
+| Employee list/profile | YES once provisioned | No |
+| Document request list | YES once provisioned | No |
+| Complaint list | YES once provisioned | No |
+| Financial report loads | YES once provisioned | No |
+| Logout and fresh login | YES once provisioned | Session only |
 
 ## Regression Quality Rules
 
@@ -170,4 +179,4 @@ The production smoke suite must remain non-destructive unless an explicitly isol
 
 ## Completion Rule
 
-A row moves to `VERIFIED` only after its applicable automated and approved-environment evidence is linked. Passing CI for unrelated suites is not sufficient.
+A row moves to `VERIFIED` only after its applicable automated and approved-environment evidence is linked. A row may remain `BLOCKED` where the only missing step requires an administrator-controlled environment/identity that is not available. Passing CI for unrelated suites is not sufficient.

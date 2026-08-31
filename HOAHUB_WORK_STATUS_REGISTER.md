@@ -6,16 +6,18 @@ This register is the current release-status snapshot for the active HOAHub produ
 
 ## Current production baseline
 
-- Production-verified `main`: `8435bca3f162e1b364032effb746140d7397c35b`.
+- Production-verified `main`: `2f2e29dffa009b673b26c59fef2271c24c8b5075`.
 - Runtime source PR: #274 (`feat: add default-off action progress foundation`), exact head `51fe731f3751acc338595a418890adf2ffd635c6`.
 - Documentation source PR: #275 (`docs: record action progress foundation release`), exact head `5b1ef883d9dc0b528aec23f7f411ba191eb3677b`.
 - Runtime source PR: #276 (`feat: add payment action progress result state`), exact head `616e07a422b7a20491864b77b7d7adf2ed469af6`.
 - Runtime hotfix PR: #277 (`hotfix: restore automatic billing manual-generation lock`), exact head `230703de5c0c06d76999d0818207dfad044e6748`.
+- Documentation source PR: #279 (`docs: record payment progress and billing lock release evidence`), exact head `1928cb52e76e9dbede2e066eae2b77787d9bc1d4`.
 - Required exact-head gates passed for #274: HOAHub MySQL CI #1381, Canva Visual Parity #464, Edge Critical Flow #57, Firefox Critical Flow #53, Mobile Responsive Evidence #52.
 - Required exact-head gates passed for #275: HOAHub MySQL CI #1383, Canva Visual Parity #465, Edge Critical Flow #58, Firefox Critical Flow #54, Mobile Responsive Evidence #53.
 - Required exact-head gates passed for #276: HOAHub MySQL CI #1385, Canva Visual Parity #466, Edge Critical Flow #59, Firefox Critical Flow #55, Mobile Responsive Evidence #54.
 - Required exact-head gates passed for #277: HOAHub MySQL CI #1388, Canva Visual Parity #467, Edge Critical Flow #60, Firefox Critical Flow #56, Mobile Responsive Evidence #55.
-- Post-merge HOAHub MySQL CI #1390 passed the complete verification suite, production smoke / critical browser suite, Hostinger managed-deployment wait, and public production-health verification for `8435bca3f162e1b364032effb746140d7397c35b`. User-provided Hostinger dashboard evidence also showed `8435bca3` current and completed on 2026-08-31 08:02 Asia/Manila. The new feature flag remains default-off and no tenant rollout is active.
+- Required exact-head gates passed for #279: HOAHub MySQL CI #1391, Canva Visual Parity #470, Edge Critical Flow #63, Firefox Critical Flow #59, Mobile Responsive Evidence #58.
+- Post-merge HOAHub MySQL CI #1392 passed the complete verification suite, production smoke / critical browser suite, Hostinger managed-deployment wait, and public production-health verification for `2f2e29dffa009b673b26c59fef2271c24c8b5075`. User-provided Hostinger dashboard evidence also showed `2f2e29df` current and completed on 2026-08-31 17:24 Asia/Manila. The new feature flag remains default-off and no tenant rollout is active.
 
 ## Verified release queue
 

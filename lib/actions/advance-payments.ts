@@ -55,11 +55,51 @@ export async function recordHomeownerPaymentProgressAction(_previousState: Recor
   }
 }
 
-async function recordHomeownerPaymentSubmission(formData: FormData, options: { requireActionProgressFlag?: boolean } = {}) {
-  const admin = await requirePermissions([Permission.PAYMENTS_RECORD, Permission.RECEIPTS_ISSUE]);
-  if (options.requireActionProgressFlag && !isUxActionProgressEnabled({ tenantId: admin.tenantId, module: TenantModule.BILLING, role: admin.role })) {
-    throw new Error("Action progress is not enabled for this tenant.");
+export async function reconcileHomeownerPaymentProgressAction(_previousState: RecordHomeownerPaymentProgressState, formData: FormData): Promise<RecordHomeownerPaymentProgressState> {
+  try {
+    const admin = await requirePaymentProgressAdmin();
+    const idempotencyKey = String(formData.get("idempotencyKey") || "").trim();
+    if (!idempotencyKey || idempotencyKey.length > 100) throw new Error("Payment submission token is invalid. Refresh the form and try again.");
+
+    const existing = await prisma.payment.findFirst({
+      where: { tenantId: admin.tenantId, idempotencyKey },
+      include: { homeowner: { include: { user: true } }, allocations: true },
+    });
+
+    if (!existing) {
+      return {
+        status: "error",
+        message: "No recorded payment was found for this submission token yet. Review the details, then retry only if the payment was not already receipted elsewhere.",
+        paymentId: null,
+        receiptUrl: null,
+        reused: false,
+      };
+    }
+
+    const confirmation = buildPaymentConfirmation(existing, true);
+    return {
+      status: "success",
+      message: "This payment was already recorded. Opening the existing receipt.",
+      paymentId: confirmation.paymentId,
+      receiptUrl: `/receipts/payment/${confirmation.paymentId}`,
+      reused: true,
+    };
+  } catch (error) {
+    if (isNextRedirectError(error)) throw error;
+    return {
+      status: "error",
+      message: paymentErrorMessage(error),
+      paymentId: null,
+      receiptUrl: null,
+      reused: false,
+    };
   }
+}
+
+async function recordHomeownerPaymentSubmission(formData: FormData, options: { requireActionProgressFlag?: boolean } = {}) {
+  const admin = options.requireActionProgressFlag
+    ? await requirePaymentProgressAdmin()
+    : await requirePermissions([Permission.PAYMENTS_RECORD, Permission.RECEIPTS_ISSUE]);
   const parsed = paymentSchema.safeParse(Object.fromEntries(formData.entries()));
   if (!parsed.success) throw new Error(parsed.error.issues[0]?.message || "Invalid payment details.");
   const data = parsed.data;
@@ -124,6 +164,14 @@ async function recordHomeownerPaymentSubmission(formData: FormData, options: { r
   if (!confirmation) throw new Error("Payment could not be recorded.");
   revalidatePath(`/receipts/payment/${confirmation.paymentId}`);
   return { confirmation, homeownerId };
+}
+
+async function requirePaymentProgressAdmin() {
+  const admin = await requirePermissions([Permission.PAYMENTS_RECORD, Permission.RECEIPTS_ISSUE]);
+  if (!isUxActionProgressEnabled({ tenantId: admin.tenantId, module: TenantModule.BILLING, role: admin.role })) {
+    throw new Error("Action progress is not enabled for this tenant.");
+  }
+  return admin;
 }
 
 function paymentErrorMessage(error: unknown) {

@@ -3,7 +3,7 @@
 import { Check, Search, UserRound } from "lucide-react";
 import { useActionState, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { recordHomeownerPaymentAction, recordHomeownerPaymentProgressAction, type RecordHomeownerPaymentProgressState } from "@/lib/actions/advance-payments";
+import { reconcileHomeownerPaymentProgressAction, recordHomeownerPaymentAction, recordHomeownerPaymentProgressAction, type RecordHomeownerPaymentProgressState } from "@/lib/actions/advance-payments";
 import { SubmitButton } from "@/components/ui";
 import { paymentCoverageMonths } from "@/lib/payment-coverage";
 import { paymentMethodRequiresReference } from "@/lib/payment-methods";
@@ -38,6 +38,8 @@ export function RecordPaymentAdvanceForm({ today, submissionKey, actionProgressE
   const router = useRouter();
   const statusRef = useRef<HTMLParagraphElement>(null);
   const [progressState, progressAction] = useActionState(recordHomeownerPaymentProgressAction, initialProgressState);
+  const [reconciliationState, reconciliationAction] = useActionState(reconcileHomeownerPaymentProgressAction, initialProgressState);
+  const [activeProgressSource, setActiveProgressSource] = useState<"record" | "reconciliation">("record");
   const [todayYear, todayMonth] = today.split("-").map(Number);
   const [query, setQuery] = useState("");
   const [homeowners, setHomeowners] = useState<HomeownerChoice[]>([]);
@@ -133,20 +135,24 @@ export function RecordPaymentAdvanceForm({ today, submissionKey, actionProgressE
   const selectedName = selectedHomeowner?.name ?? "";
   const canSubmit = Boolean(selectedHomeowner && receivedAmount > 0 && !loadingBills);
   const formAction = actionProgressEnabled ? progressAction : recordHomeownerPaymentAction;
+  const activeProgressState = activeProgressSource === "reconciliation" ? reconciliationState : progressState;
 
   function toggleBill(bill: OpenBillChoice) {
     setSelectedIds((current) => current.includes(bill.id) ? current.filter((id) => id !== bill.id) : [...current, bill.id]);
   }
 
   useEffect(() => {
-    if (!actionProgressEnabled || progressState.status === "idle") return;
+    if (!actionProgressEnabled || activeProgressState.status === "idle") return;
     statusRef.current?.focus();
-    if (progressState.status !== "success" || !progressState.receiptUrl) return;
-    const redirectTimer = window.setTimeout(() => router.push(progressState.receiptUrl!), SUCCESS_RECEIPT_REDIRECT_DELAY_MS);
+    if (activeProgressState.status !== "success" || !activeProgressState.receiptUrl) return;
+    const redirectTimer = window.setTimeout(() => router.push(activeProgressState.receiptUrl!), SUCCESS_RECEIPT_REDIRECT_DELAY_MS);
     return () => window.clearTimeout(redirectTimer);
-  }, [actionProgressEnabled, progressState.receiptUrl, progressState.status, router]);
+  }, [actionProgressEnabled, activeProgressState.receiptUrl, activeProgressState.status, router]);
 
-  return <form action={formAction} className="card mb-6">
+  return <form action={formAction} className="card mb-6" onSubmit={(event) => {
+    const submitter = (event.nativeEvent as SubmitEvent).submitter as HTMLElement | null;
+    setActiveProgressSource(submitter?.dataset.statusCheck === "true" ? "reconciliation" : "record");
+  }}>
     <input type="hidden" name="idempotencyKey" value={submissionKey} />
     <input type="hidden" name="homeownerId" value={selectedHomeowner?.id ?? ""} />
     {selectedIds.map((id) => <input key={id} type="hidden" name="billIds" value={id} />)}
@@ -155,8 +161,8 @@ export function RecordPaymentAdvanceForm({ today, submissionKey, actionProgressE
       <h2 className="text-lg font-black">Record a payment</h2>
       <p className="text-sm text-slate-500">Search any active homeowner in this tenant. Homeowners with zero balance can still make an advance Monthly Dues payment.</p>
     </div>
-    {actionProgressEnabled && progressState.status === "error" && <p ref={statusRef} tabIndex={-1} role="alert" aria-live="polite" className="mb-4 rounded-xl bg-rose-50 p-3 text-sm font-semibold text-rose-800">{progressState.message}</p>}
-    {actionProgressEnabled && progressState.status === "success" && <p ref={statusRef} tabIndex={-1} role="status" aria-live="polite" className="mb-4 rounded-xl bg-emerald-50 p-3 text-sm font-semibold text-emerald-800">{progressState.message}</p>}
+    {actionProgressEnabled && activeProgressState.status === "error" && <div className="mb-4 rounded-xl bg-rose-50 p-3 text-sm font-semibold text-rose-800"><p ref={statusRef} tabIndex={-1} role="alert" aria-live="polite">{activeProgressState.message}</p><button type="submit" formAction={reconciliationAction} data-status-check="true" className="btn-secondary mt-3 min-h-9 px-3 py-1.5 text-xs">Check payment status before retry</button></div>}
+    {actionProgressEnabled && activeProgressState.status === "success" && <p ref={statusRef} tabIndex={-1} role="status" aria-live="polite" className="mb-4 rounded-xl bg-emerald-50 p-3 text-sm font-semibold text-emerald-800">{activeProgressState.message}</p>}
 
     <div className="grid gap-5 xl:grid-cols-[1.15fr_1fr]">
       <div>
@@ -220,7 +226,7 @@ export function RecordPaymentAdvanceForm({ today, submissionKey, actionProgressE
         {selectedHomeowner && receivedAmount > 0 && <div className="sm:col-span-2 rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm"><p className="flex justify-between"><span>Amount received</span><b>{peso(receivedAmount)}</b></p><p className="mt-1 flex justify-between"><span>Applied to current bills</span><b>{peso(appliedAmount)}</b></p><p className="mt-1 flex justify-between"><span>Advance / unapplied credit</span><b>{peso(unappliedCredit)}</b></p>{unappliedCredit > 0 && <p className="mt-3 rounded-lg bg-emerald-100 px-3 py-2 font-bold text-emerald-900">{peso(unappliedCredit)} will remain as Advance Monthly Dues Credit.</p>}</div>}
         <div className="sm:col-span-2"><label className="label" htmlFor="record-payment-reference">Reference number {referenceRequired && <span className="text-rose-600">*</span>}</label><input id="record-payment-reference" className="field" name="referenceNumber" required={referenceRequired} aria-required={referenceRequired} placeholder={referenceRequired ? "Required; must be unique" : "Optional for cash payments"} /></div>
         <div className="sm:col-span-2"><label className="label" htmlFor="record-payment-remarks">Remarks</label><input id="record-payment-remarks" className="field" name="remarks" placeholder="Optional notes shown in receipt audit trail" /></div>
-        <div className="sm:col-span-2"><SubmitButton disabled={!canSubmit} actionProgress={actionProgressEnabled} pendingLabel="Recording payment" success={actionProgressEnabled && progressState.status === "success"}>Record payment - {peso(receivedAmount)}</SubmitButton></div>
+        <div className="sm:col-span-2"><SubmitButton disabled={!canSubmit} actionProgress={actionProgressEnabled} pendingLabel="Recording payment" success={actionProgressEnabled && activeProgressState.status === "success"}>Record payment - {peso(receivedAmount)}</SubmitButton></div>
       </div>
     </div>
   </form>;

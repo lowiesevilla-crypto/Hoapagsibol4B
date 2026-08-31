@@ -4,7 +4,7 @@ Task: `HOAHUB-UX-P0-001`
 
 Tracking issue: #273
 
-Status: IN PROGRESS — foundation and payment success/failure contract VERIFIED and production-deployed, rollout default off
+Status: IN PROGRESS — foundation and payment success/failure contract VERIFIED and production-deployed, payment uncertain-response reconciliation implemented pending exact-head gates, rollout default off
 
 ## Active-tenant safety
 
@@ -31,6 +31,16 @@ HOAHub already serves an active tenant. This change is additive and preserves th
 - The structured action enforces the same `ux_action_progress_v1` tenant/module/role resolver server-side before returning progress-specific state.
 - On server-confirmed success, the enabled form renders an accessible status, drives the shared submit button to a verified 100% state, then opens the server-confirmed receipt. On validation or business-rule failure, the form renders an accessible alert and keeps the entered fields available for correction.
 - This increment does not expose a 75% payment stage because persistence still completes within one request and there is no separate durable processing checkpoint to report truthfully.
+
+## Payment uncertain-response reconciliation increment
+
+- Branch: `codex/payment-progress-reconciliation-20260831`.
+- The flagged Admin Record Payment path now includes a read-only reconciliation action for the same tenant-scoped submission token before an administrator retries after an error or uncertain response.
+- Reconciliation requires the same `PAYMENTS_RECORD` and `RECEIPTS_ISSUE` authority and the same server-side `ux_action_progress_v1` tenant/module/role resolver as the progress result action.
+- The lookup is scoped to `(tenantId, idempotencyKey)` and does not create, update, void, allocate, notify, or revalidate payment records.
+- If the payment already exists, the UI reports that the payment was recorded and opens the existing receipt. If no payment is found, the UI tells the administrator to review details and retry only if the payment was not already receipted elsewhere.
+- The legacy redirecting production path is unchanged while the rollout flag remains disabled.
+- This increment still does not expose a 75% payment stage because the reconciliation check is a post-response read, not a durable processing checkpoint.
 
 Release evidence:
 
@@ -72,7 +82,7 @@ Never place credentials or tenant-private form data in this configuration.
 
 ## Remaining gates
 
-- Add uncertain-response reconciliation before retry is enabled.
+- Verify payment uncertain-response reconciliation through local tests, exact-head CI, post-merge managed deployment, and public production health.
 - Add verified 75% status only where an action exposes a real server-processing checkpoint.
 - Add durable bulk-job progress for monthly billing and other batch operations.
 - Extend server-side idempotency, database uniqueness, and privacy-safe observability to every remaining P0/P1 action after individual authority review.

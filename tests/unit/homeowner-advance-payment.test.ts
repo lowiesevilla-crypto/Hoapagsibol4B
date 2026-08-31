@@ -32,15 +32,20 @@ test("record payment progress keeps legacy redirects while adding flagged result
   assert.match(action, /recordHomeownerPaymentAction\(formData: FormData\)/);
   assert.match(action, /redirect\(`\/receipts\/payment\/\$\{result\.confirmation\.paymentId\}`\)/);
   assert.match(action, /recordHomeownerPaymentProgressAction/);
+  assert.match(action, /reconcileHomeownerPaymentProgressAction/);
   assert.match(action, /requireActionProgressFlag: true/);
   assert.match(action, /isUxActionProgressEnabled\(\{ tenantId: admin\.tenantId, module: TenantModule\.BILLING, role: admin\.role \}\)/);
+  assert.match(action, /where: \{ tenantId: admin\.tenantId, idempotencyKey \}/);
   assert.match(action, /status: "success"/);
   assert.match(action, /status: "error"/);
   assert.match(recordForm, /useActionState\(recordHomeownerPaymentProgressAction, initialProgressState\)/);
+  assert.match(recordForm, /useActionState\(reconcileHomeownerPaymentProgressAction, initialProgressState\)/);
   assert.match(recordForm, /const formAction = actionProgressEnabled \? progressAction : recordHomeownerPaymentAction/);
+  assert.match(recordForm, /data-status-check="true"/);
+  assert.match(recordForm, /Check payment status before retry/);
   assert.match(recordForm, /role="alert" aria-live="polite"/);
   assert.match(recordForm, /role="status" aria-live="polite"/);
-  assert.match(recordForm, /success=\{actionProgressEnabled && progressState\.status === "success"\}/);
+  assert.match(recordForm, /success=\{actionProgressEnabled && activeProgressState\.status === "success"\}/);
 });
 
 test("advance credit is applied automatically and can be maintained safely", () => {

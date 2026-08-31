@@ -318,6 +318,8 @@ Foundation evidence: PR #274 exact head `51fe731f3751acc338595a418890adf2ffd635c
 
 Payment result-state evidence: PR #276 exact head `616e07a422b7a20491864b77b7d7adf2ed469af6` passed MySQL CI #1385, Canva #466, Edge #59, Firefox #55, and Mobile #54; merged as `111ceffa06a8b2fc1ec533e1158f3c7585091b24`. Post-merge MySQL CI #1386 passed managed deployment and public production health. The flagged Admin Record Payment structured Server Action result path reuses the same tenant-scoped payment recording service, notification/revalidation side effects, duplicate reference checks, and idempotency replay, then returns explicit success/error state for the progress UI. The default-off legacy redirect remains production behavior unless an approved tenant/module/role target enables the flag.
 
+Status evidence documentation for the payment-progress and automatic-billing-lock releases was reconciled in PR #279. Exact head `1928cb52e76e9dbede2e066eae2b77787d9bc1d4` passed MySQL CI #1391, Canva #470, Edge #63, Firefox #59, and Mobile #58; merged as `2f2e29dffa009b673b26c59fef2271c24c8b5075`. Post-merge MySQL CI #1392 passed managed deployment and public production health, and user-provided Hostinger dashboard evidence showed `2f2e29df` current and completed. This updates evidence only; tenant rollout remains disabled.
+
 ## Current Deferred / Planned Scope
 
 Unless a later merged change updates this file, these remain pending:

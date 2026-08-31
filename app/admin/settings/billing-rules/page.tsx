@@ -7,6 +7,7 @@ import { ConfirmSubmitButton, SubmitButton } from "@/components/ui";
 import { deactivateBillingRuleAction, saveBillingRuleAction } from "@/lib/actions/billing-rules";
 import { requireBillingSettingsAccess } from "@/lib/billing-access";
 import { prisma } from "@/lib/db";
+import { getManilaClock } from "@/lib/manila-time";
 import { findEffectiveBillingRule } from "@/lib/services/billing-rules";
 import { money, shortDate } from "@/lib/utils";
 
@@ -28,8 +29,8 @@ const MONTH_NAMES = [
 export default async function BillingRulesPage({ searchParams }: { searchParams: Promise<{ edit?: string; error?: string; field?: string; fieldMessage?: string; success?: string }> }) {
   const user = await requireBillingSettingsAccess();
   const query = await searchParams;
-  const today = new Date();
-  const currentRule = await findEffectiveBillingRule(user.tenantId, RecurringChargeType.MONTHLY_DUES, today.getUTCFullYear(), today.getUTCMonth() + 1);
+  const currentPeriod = getManilaClock();
+  const currentRule = await findEffectiveBillingRule(user.tenantId, RecurringChargeType.MONTHLY_DUES, currentPeriod.year, currentPeriod.month);
   const [rules, editRule] = await Promise.all([
     prisma.billingRule.findMany({ where: { tenantId: user.tenantId, recurringChargeType: RecurringChargeType.MONTHLY_DUES }, include: { createdBy: true, updatedBy: true }, orderBy: [{ effectiveStartYear: "desc" }, { effectiveStartMonth: "desc" }, { createdAt: "desc" }] }),
     query.edit ? prisma.billingRule.findFirst({ where: { id: query.edit, tenantId: user.tenantId } }) : null,
@@ -59,14 +60,14 @@ export default async function BillingRulesPage({ searchParams }: { searchParams:
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         <Field label="Amount" error={fieldError("amount")}><input className="field" name="amount" type="number" min="0.01" step="0.01" defaultValue={editRule ? String(editRule.amount) : ""} required /></Field>
         <Field label="Frequency" error={fieldError("billingFrequency")}><select className="field" name="billingFrequency" defaultValue={editRule?.billingFrequency ?? BillingFrequency.MONTHLY}>{Object.values(BillingFrequency).map((item) => <option key={item} value={item}>{label(item)}</option>)}</select></Field>
-        <BillingAutomationToggle defaultAutomatic={editRule?.generationMode === "AUTOMATIC"} defaultBillingDay={editRule?.billingDay ?? 1} modeError={fieldError("generationMode")} dayError={fieldError("billingDay")} />
+        <BillingAutomationToggle key={editRule?.id ?? "new"} defaultAutomatic={editRule?.generationMode === "AUTOMATIC"} defaultBillingDay={editRule?.billingDay ?? 1} modeError={fieldError("generationMode")} dayError={fieldError("billingDay")} />
         <Field label="Due day" error={fieldError("dueDay")}><input className="field" name="dueDay" type="number" min="1" max="31" defaultValue={editRule?.dueDay ?? 15} required /></Field>
         <Field label="Grace days" error={fieldError("gracePeriodDays")}><input className="field" name="gracePeriodDays" type="number" min="0" max="365" defaultValue={editRule?.gracePeriodDays ?? 0} required /></Field>
         <Field label="Penalty type" error={fieldError("penaltyType")}><select className="field" name="penaltyType" defaultValue={editRule?.penaltyType ?? BillingPenaltyType.NONE}>{Object.values(BillingPenaltyType).map((item) => <option key={item} value={item}>{label(item)}</option>)}</select></Field>
         <Field label="Penalty value" error={fieldError("penaltyValue")}><input className="field" name="penaltyValue" type="number" min="0" step="0.01" defaultValue={editRule ? String(editRule.penaltyValue) : "0"} required /></Field>
         <Field label="Penalty frequency" error={fieldError("penaltyFrequency")}><select className="field" name="penaltyFrequency" defaultValue={editRule?.penaltyFrequency ?? BillingPenaltyFrequency.NONE}>{Object.values(BillingPenaltyFrequency).map((item) => <option key={item} value={item}>{label(item)}</option>)}</select></Field>
-        <Field label="Start month" error={fieldError("effectiveStartMonth")}><select className="field" name="effectiveStartMonth" defaultValue={String(editRule?.effectiveStartMonth ?? today.getUTCMonth() + 1)}>{monthOptions()}</select></Field>
-        <Field label="Start year" error={fieldError("effectiveStartYear")}><input className="field" name="effectiveStartYear" type="number" min="1900" max="2200" defaultValue={editRule?.effectiveStartYear ?? today.getUTCFullYear()} required /></Field>
+        <Field label="Start month" error={fieldError("effectiveStartMonth")}><select className="field" name="effectiveStartMonth" defaultValue={String(editRule?.effectiveStartMonth ?? currentPeriod.month)}>{monthOptions()}</select></Field>
+        <Field label="Start year" error={fieldError("effectiveStartYear")}><input className="field" name="effectiveStartYear" type="number" min="1900" max="2200" defaultValue={editRule?.effectiveStartYear ?? currentPeriod.year} required /></Field>
         <Field label="End month" error={fieldError("effectiveEndMonth")}><select className="field" name="effectiveEndMonth" defaultValue={nullableNumberValue(editRule?.effectiveEndMonth)}><option value="">Open ended</option>{monthOptions()}</select></Field>
         <Field label="End year" error={fieldError("effectiveEndYear")}><input className="field" name="effectiveEndYear" type="number" min="1900" max="2200" defaultValue={nullableNumberValue(editRule?.effectiveEndYear)} placeholder="Open ended" /></Field>
         <Field label="Resolution reference" error={fieldError("resolutionReference")}><input className="field" name="resolutionReference" defaultValue={editRule?.resolutionReference ?? ""} placeholder="Board Resolution No. 2026-04" required /></Field>

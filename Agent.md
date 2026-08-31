@@ -1,6 +1,6 @@
 # HOAHub Agent Context
 
-Last updated: 2026-08-31
+Last updated: 2026-09-01
 
 ## Purpose
 
@@ -104,6 +104,7 @@ Homeowner UI is phone/PWA-first: safe areas, approximately 48px touch targets wh
 - Exempt homeowners are skipped.
 - Large communities are processed in bounded batches.
 - While tenant Monthly Dues automatic billing is configured as AUTOMATIC, manual bulk and individual generation are disabled in UI and blocked server-side for covered periods. Billing Management UI locking must fail closed across layout changes and use tenant-scoped automatic-rule authority, including future-effective automatic rules. Invalid or empty manual coverage month/year query values must be repaired to the current Asia/Manila period before generation controls render. Existing bills may still be maintained through authorized maintenance actions.
+- Billing Rules UI must resolve the current effective period and new-rule defaults from the Asia/Manila business calendar, not UTC. When an administrator changes the rule being edited, Automatic Billing mode and billing day controls must synchronize to that selected persisted rule so stale client state cannot submit a different generation mode or billing day.
 
 ## Admin Advance Monthly Dues
 

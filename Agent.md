@@ -103,7 +103,7 @@ Homeowner UI is phone/PWA-first: safe areas, approximately 48px touch targets wh
 - Automatic generation is idempotent. Existing same-period Monthly Dues bills are skipped using tenant + homeowner + charge type + coverage year/month identity.
 - Exempt homeowners are skipped.
 - Large communities are processed in bounded batches.
-- While the effective rule is AUTOMATIC, manual bulk and individual generation are disabled in UI and blocked server-side. Existing bills may still be maintained through authorized maintenance actions.
+- While tenant Monthly Dues automatic billing is configured as AUTOMATIC, manual bulk and individual generation are disabled in UI and blocked server-side for covered periods. Billing Management UI locking must fail closed across layout changes and use tenant-scoped automatic-rule authority, including future-effective automatic rules. Invalid or empty manual coverage month/year query values must be repaired to the current Asia/Manila period before generation controls render. Existing bills may still be maintained through authorized maintenance actions.
 
 ## Admin Advance Monthly Dues
 
@@ -267,6 +267,7 @@ Payroll, salary, deductions, loans/cash advances, corrections, and payslips are 
 - Billing Edit Save month validation is fixed in PR #176. Exact implementation head `7d7eb1ce9e3b2edacd84aed2348e2401ea4195be` passed HOAHub MySQL CI #1150 and Canva Visual Parity #330, then merged to `main` at `230d3d09f268fd8aeb201898597ac0c08c6affe8`. The server now accepts the `YYYY-MM` value submitted by the HTML month control while rejecting impossible months. See `docs/billing/BILLING_EDIT_SAVE_MONTH_VALIDATION_HOTFIX.md`.
 - Petty Cash Voucher edit prefill and Enter-to-select behavior is fixed in PR #175. Refreshed exact head `a4ffe36f182f069f3e2c0fdca41f010fbbdf0bea` passed HOAHub MySQL CI #1152 and Canva Visual Parity #331, then merged to `main` at `70eda4af51759b491a0ab2380b03a8fc1c76e7c4`. See `docs/petty-cash/PETTY_CASH_VOUCHER_EDIT_PREFILL_HOTFIX.md`.
 - These repository changes are merged and verified by exact-head CI. Do not report them as Hostinger production-deployed until the managed deployment/release marker and authenticated production UAT confirm the merged `main` commit.
+- Automatic Billing manual-generation lock is fixed in PR #277. Exact implementation head `230703de5c0c06d76999d0818207dfad044e6748` passed HOAHub MySQL CI #1388, Canva #467, Edge #60, Firefox #56, and Mobile #55, then merged to `main` at `8435bca3f162e1b364032effb746140d7397c35b`. Post-merge MySQL CI #1390 passed managed deployment and public production health, and user-provided Hostinger dashboard evidence showed `8435bca3` current and completed. The hotfix restores fail-closed manual-generation locking inside collapsible Billing Management, detects active/future-effective AUTOMATIC Monthly Dues rules for UI locking, and repairs invalid zero/out-of-range generation periods. It does not change the automatic billing algorithm or prove a 5,001-homeowner automatic cycle under cron budget.
 
 ## AI Governance
 
@@ -315,7 +316,7 @@ Payment recording keeps `(tenantId, idempotencyKey)` database uniqueness and rep
 
 Foundation evidence: PR #274 exact head `51fe731f3751acc338595a418890adf2ffd635c6` passed MySQL CI #1381, Canva #464, Edge #57, Firefox #53, and Mobile #52; merged as `bed4ca020e1c8dd50a4ff2ad48c66339ffe9adc2`. Post-merge MySQL CI #1382 passed managed deployment and public production health. This verifies the default-off foundation only, not tenant pilot activation or the remaining task scope.
 
-Payment result-state candidate: branch `codex/payment-progress-result-state-20260831` adds a flagged Admin Record Payment structured Server Action result beside the legacy redirecting action. The flagged path reuses the same tenant-scoped payment recording service, notification/revalidation side effects, duplicate reference checks, and idempotency replay, then returns explicit success/error state for the progress UI. The default-off legacy redirect remains production behavior unless an approved tenant/module/role target enables the flag. This candidate is not live until exact-head CI, merge, and post-merge production verification complete.
+Payment result-state evidence: PR #276 exact head `616e07a422b7a20491864b77b7d7adf2ed469af6` passed MySQL CI #1385, Canva #466, Edge #59, Firefox #55, and Mobile #54; merged as `111ceffa06a8b2fc1ec533e1158f3c7585091b24`. Post-merge MySQL CI #1386 passed managed deployment and public production health. The flagged Admin Record Payment structured Server Action result path reuses the same tenant-scoped payment recording service, notification/revalidation side effects, duplicate reference checks, and idempotency replay, then returns explicit success/error state for the progress UI. The default-off legacy redirect remains production behavior unless an approved tenant/module/role target enables the flag.
 
 ## Current Deferred / Planned Scope
 

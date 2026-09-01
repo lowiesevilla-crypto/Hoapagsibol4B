@@ -21,21 +21,23 @@ export async function startBillingGenerationJobAction(formData: FormData) {
     redirect("/admin/billing?error=Durable%20billing%20progress%20is%20currently%20disabled%20for%20this%20tenant.%20Refresh%20the%20page%20before%20trying%20again.");
   }
 
+  let jobId = "";
   try {
     const input = parseGenerationForm(admin, formData);
     await assertManualGenerationAllowed(admin.tenantId, input.coverageYear, input.coverageMonth);
     const idempotencyKey = String(formData.get("idempotencyKey") || "");
     const { job } = await createBillingGenerationJob(input, idempotencyKey);
+    jobId = job.id;
 
     after(async () => {
       await processBillingGenerationJob(job.id, admin).catch(() => undefined);
     });
 
     revalidatePath("/admin/billing");
-    redirect(`/admin/billing?billingJob=${encodeURIComponent(job.id)}`);
   } catch (error) {
     redirect(`/admin/billing?error=${encodeURIComponent(error instanceof Error ? error.message : "Billing generation job could not be started.")}`);
   }
+  redirect(`/admin/billing?billingJob=${encodeURIComponent(jobId)}`);
 }
 
 async function assertManualGenerationAllowed(tenantId: string, coverageYear: number, coverageMonth: number) {

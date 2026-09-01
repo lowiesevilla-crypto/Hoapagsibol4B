@@ -13,7 +13,6 @@ import {
 import { platformPrisma } from "@/lib/db";
 import {
   createBillingGenerationJob,
-  getBillingGenerationJobView,
   processBillingGenerationJob,
 } from "@/lib/services/billing-generation-jobs";
 import { runWithTenant } from "@/lib/tenant-context";
@@ -277,7 +276,7 @@ test("manual billing durably processes 5,001 homeowners with truthful progress a
     coverageMonth: billingMonth,
     scope: "ALL",
   }, `${runId}-manual-all-request-0002`));
-  const repeatedView = await withBillingTenant(() => getBillingGenerationJobView(repeatedManualRun.job.id, tenantId));
+  const repeatedView = await withBillingTenant(() => processBillingGenerationJob(repeatedManualRun.job.id, actor));
   assert.ok(repeatedView);
   assert.equal(repeatedView?.status, BillingGenerationJobStatus.SUCCEEDED);
   assert.equal(repeatedView?.completed, activeFixtureCount);

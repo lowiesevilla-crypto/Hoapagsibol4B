@@ -426,7 +426,9 @@ function serializeBillingJob(job: {
 }
 
 function isTerminalStatus(status: BillingGenerationJobStatus) {
-  return [BillingGenerationJobStatus.SUCCEEDED, BillingGenerationJobStatus.PARTIAL, BillingGenerationJobStatus.FAILED].includes(status);
+  return status === BillingGenerationJobStatus.SUCCEEDED
+    || status === BillingGenerationJobStatus.PARTIAL
+    || status === BillingGenerationJobStatus.FAILED;
 }
 
 function normalizeIdempotencyKey(value: string) {

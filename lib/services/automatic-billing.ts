@@ -73,28 +73,25 @@ export async function runAutomaticBillingForTenant(tenantId: string, now = new D
     return result;
   }
 
-  // Catch up after the configured day if a scheduled run was missed. Duplicate
-  // constraints and the completed-run audit make this safe to call every day.
+  // Catch up after the configured day if a scheduled run was missed. Every run
+  // reconciles the current eligible population so late activations and prior
+  // row-level failures are picked up. Database uniqueness plus duplicate checks
+  // make repeated reconciliation safe for homeowners already billed this month.
   result.monthlyDues.dueToday = clock.day >= rule.billingDay;
   if (result.monthlyDues.dueToday) {
-    const completed = await hasCompletedMonthlyDuesRun(tenantId, rule.id, clock.year, clock.month);
-    if (completed) {
-      result.monthlyDues.skippedReason = "Automatic monthly dues already completed for this billing month.";
-    } else {
-      const dues = await runAutomaticMonthlyDues(actor, clock.year, clock.month);
-      Object.assign(result.monthlyDues, dues);
-      await prisma.auditLog.create({
-        data: {
-          tenantId,
-          actorId: actor.id,
-          module: "BILLING",
-          action: dues.failed === 0 ? "AUTOMATIC_MONTHLY_DUES_COMPLETED" : "AUTOMATIC_MONTHLY_DUES_PARTIAL",
-          entityType: "BillingRule",
-          entityId: rule.id,
-          metadata: { period, billingDay: rule.billingDay, batchSize: HOMEOWNER_BATCH_SIZE, ...dues },
-        },
-      });
-    }
+    const dues = await runAutomaticMonthlyDues(actor, clock.year, clock.month);
+    Object.assign(result.monthlyDues, dues);
+    await prisma.auditLog.create({
+      data: {
+        tenantId,
+        actorId: actor.id,
+        module: "BILLING",
+        action: dues.failed === 0 ? "AUTOMATIC_MONTHLY_DUES_COMPLETED" : "AUTOMATIC_MONTHLY_DUES_PARTIAL",
+        entityType: "BillingRule",
+        entityId: rule.id,
+        metadata: { period, billingDay: rule.billingDay, batchSize: HOMEOWNER_BATCH_SIZE, reconciliation: true, ...dues },
+      },
+    });
   } else {
     result.monthlyDues.skippedReason = `Scheduled for day ${rule.billingDay} of the month.`;
   }
@@ -275,26 +272,10 @@ async function resolveAutomationActor(tenantId: string): Promise<AutomationActor
   return actor;
 }
 
-async function hasCompletedMonthlyDuesRun(tenantId: string, ruleId: string, year: number, month: number) {
-  const { start, end } = manilaMonthUtcBounds(year, month);
-  return Boolean(await prisma.auditLog.findFirst({
-    where: { tenantId, module: "BILLING", action: "AUTOMATIC_MONTHLY_DUES_COMPLETED", entityType: "BillingRule", entityId: ruleId, createdAt: { gte: start, lt: end } },
-    select: { id: true },
-  }));
-}
-
 function manilaClock(value: Date) {
   const parts = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Manila", year: "numeric", month: "2-digit", day: "2-digit" }).formatToParts(value);
   const get = (type: Intl.DateTimeFormatPartTypes) => Number(parts.find((part) => part.type === type)?.value ?? 0);
   return { year: get("year"), month: get("month"), day: get("day") };
-}
-
-function manilaMonthUtcBounds(year: number, month: number) {
-  const offsetMs = 8 * 60 * 60 * 1000;
-  return {
-    start: new Date(Date.UTC(year, month - 1, 1) - offsetMs),
-    end: new Date(Date.UTC(year, month, 1) - offsetMs),
-  };
 }
 
 function dayInMonth(year: number, month: number, day: number) {

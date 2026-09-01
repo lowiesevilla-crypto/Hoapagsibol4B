@@ -105,24 +105,32 @@ export async function runAutomaticBillingForTenant(tenantId: string, now = new D
 }
 
 async function runAutomaticMonthlyDues(actor: AutomationActor, year: number, month: number) {
-  const homeowners = await prisma.homeownerProfile.findMany({
-    where: { tenantId: actor.tenantId, status: "ACTIVE" },
-    select: { id: true },
-    orderBy: { id: "asc" },
-  });
+  let eligible = 0;
   let created = 0;
   let duplicates = 0;
   let exemptions = 0;
   let failed = 0;
-  for (let index = 0; index < homeowners.length; index += HOMEOWNER_BATCH_SIZE) {
-    const homeownerIds = homeowners.slice(index, index + HOMEOWNER_BATCH_SIZE).map((item) => item.id);
+  let cursor: string | undefined;
+  while (true) {
+    const homeowners = await prisma.homeownerProfile.findMany({
+      where: { tenantId: actor.tenantId, status: "ACTIVE" },
+      select: { id: true },
+      orderBy: { id: "asc" },
+      take: HOMEOWNER_BATCH_SIZE,
+      ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
+    });
+    if (!homeowners.length) break;
+    const homeownerIds = homeowners.map((item) => item.id);
+    eligible += homeownerIds.length;
     const batch = await generateBillingFromRules({ actor, coverageYear: year, coverageMonth: month, scope: "SELECTED", homeownerIds });
     created += batch.createdCount;
     duplicates += batch.duplicateCount;
     exemptions += batch.exemptCount;
     failed += batch.failedCount;
+    cursor = homeownerIds.at(-1);
+    if (homeowners.length < HOMEOWNER_BATCH_SIZE) break;
   }
-  return { eligible: homeowners.length, created, duplicates, exemptions, failed };
+  return { eligible, created, duplicates, exemptions, failed };
 }
 
 async function runAutomaticRentalBilling(tenantId: string, actor: AutomationActor, year: number, month: number, currentDay: number) {

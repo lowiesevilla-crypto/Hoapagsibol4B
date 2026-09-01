@@ -1,0 +1,67 @@
+enum BillingGenerationJobStatus {
+  QUEUED
+  RUNNING
+  SUCCEEDED
+  PARTIAL
+  FAILED
+}
+
+enum BillingGenerationJobItemStatus {
+  PENDING
+  SUCCEEDED
+  SKIPPED
+  FAILED
+}
+
+model BillingGenerationJob {
+  id                 String                      @id @default(cuid())
+  tenantId           String
+  actorId            String
+  reference          String                      @db.VarChar(64)
+  idempotencyKeyHash String                      @db.VarChar(64)
+  coverageYear       Int
+  coverageMonth      Int
+  scope              String                      @db.VarChar(20)
+  targetFilter       Json?
+  total              Int                         @default(0)
+  completed          Int                         @default(0)
+  succeeded          Int                         @default(0)
+  failed             Int                         @default(0)
+  skipped            Int                         @default(0)
+  status             BillingGenerationJobStatus  @default(QUEUED)
+  leaseToken         String?                     @db.VarChar(64)
+  leaseExpiresAt     DateTime?
+  lastError          String?                     @db.Text
+  retryOfJobId       String?
+  startedAt          DateTime?
+  heartbeatAt        DateTime?
+  completedAt        DateTime?
+  metadata           Json?
+  createdAt          DateTime                    @default(now())
+  updatedAt          DateTime                    @updatedAt
+  items              BillingGenerationJobItem[]
+
+  @@unique([tenantId, id])
+  @@unique([tenantId, reference])
+  @@unique([tenantId, idempotencyKeyHash])
+  @@index([tenantId, status, updatedAt])
+  @@index([tenantId, coverageYear, coverageMonth])
+  @@index([tenantId, retryOfJobId])
+}
+
+model BillingGenerationJobItem {
+  id          String                         @id @default(cuid())
+  tenantId    String
+  jobId       String
+  homeownerId String
+  status      BillingGenerationJobItemStatus @default(PENDING)
+  message     String?                        @db.Text
+  attempts    Int                            @default(0)
+  createdAt   DateTime                       @default(now())
+  updatedAt   DateTime                       @updatedAt
+  job         BillingGenerationJob           @relation(fields: [tenantId, jobId], references: [tenantId, id], onDelete: Cascade, onUpdate: Cascade)
+
+  @@unique([jobId, homeownerId])
+  @@index([tenantId, jobId, status])
+  @@index([tenantId, homeownerId])
+}

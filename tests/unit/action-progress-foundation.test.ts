@@ -42,12 +42,17 @@ test("submission lock accepts one in-flight entry and releases only explicitly",
   assert.equal(lock.acquire(), true);
 });
 
-test("shared component exposes truthful verified stages and accessibility behavior", () => {
+test("shared component exposes truthful verified stages and durable billing progress", () => {
   const component = readFileSync("components/action-progress-button.tsx", "utf8");
   const payment = readFileSync("components/record-payment-advance-form.tsx", "utf8");
   const billing = readFileSync("app/admin/billing/page.tsx", "utf8");
   const billingProgress = readFileSync("components/billing-generation-progress-form.tsx", "utf8");
+  const jobProgress = readFileSync("components/billing-generation-job-progress.tsx", "utf8");
   const billingActions = readFileSync("lib/actions/billing.ts", "utf8");
+  const billingJobs = readFileSync("lib/services/billing-generation-jobs.ts", "utf8");
+  const jobRoute = readFileSync("app/api/admin/billing/jobs/[jobId]/route.ts", "utf8");
+  const retryRoute = readFileSync("app/api/admin/billing/jobs/[jobId]/retry/route.ts", "utf8");
+
   assert.match(component, /pending \? 50 : accepted \? 25 : 0/);
   assert.match(component, /confirmedProcessing \? 75/);
   assert.match(component, /success \? 100/);
@@ -57,11 +62,28 @@ test("shared component exposes truthful verified stages and accessibility behavi
   assert.match(payment, /pendingLabel="Recording payment"/);
   assert.match(billing, /BillingGenerationProgressForm/);
   assert.match(billing, /key=\{billingGenerationProgressKey\(input\)\}/);
-  assert.match(billingProgress, /pendingLabel="Generating billing"/);
-  assert.match(billingProgress, /success=\{actionProgressEnabled && state\.status === "success"\}/);
-  assert.match(billingActions, /generateBillingFromPreviewProgressAction/);
-  assert.match(billingActions, /requireActionProgressFlag/);
+
+  assert.match(billingProgress, /name="idempotencyKey"/);
+  assert.match(billingProgress, /window\.crypto\.randomUUID\(\)/);
+  assert.match(billingProgress, /pendingLabel=\{actionProgressEnabled \? "Starting billing job" : "Generating billing"\}/);
+  assert.match(billingProgress, /confirmedProcessing=\{actionProgressEnabled && state\.status === "accepted"\}/);
+  assert.match(billingProgress, /\/admin\/billing\/jobs\/\$\{encodeURIComponent\(state\.jobId\)\}/);
+
+  assert.match(billingActions, /createBillingGenerationJob/);
+  assert.match(billingActions, /processBillingGenerationJob/);
+  assert.match(billingActions, /after\(async \(\) =>/);
   assert.match(billingActions, /if \(isNextRedirectError\(error\)\) throw error/);
   assert.match(billingActions, /TenantModule\.BILLING/);
-  assert.match(billingActions, /duplicateCount: result\.duplicateCount/);
+
+  assert.match(billingJobs, /Math\.floor\(\(safeCompleted \/ total\) \* 100\)/);
+  assert.match(billingJobs, /billingJobProcessBatchSize = 250/);
+  assert.match(billingJobs, /idempotencyKeyHash/);
+  assert.match(billingJobs, /BillingGenerationJobItemStatus\.FAILED/);
+  assert.match(billingJobs, /retryFailedOnly/);
+  assert.match(jobProgress, /job\.completed\.toLocaleString\(\).*job\.total\.toLocaleString\(\)/s);
+  assert.match(jobProgress, /No simulated time-based progress is used/);
+  assert.match(jobProgress, /Retry creates a new job containing only failed homeowner records/);
+  assert.match(jobRoute, /requirePermission\(Permission\.BILLING_GENERATE\)/);
+  assert.match(jobRoute, /getBillingGenerationJobView\(jobId, admin\.tenantId\)/);
+  assert.match(retryRoute, /createFailedBillingGenerationRetry/);
 });

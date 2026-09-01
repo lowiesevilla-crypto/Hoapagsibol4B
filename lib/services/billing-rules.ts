@@ -7,7 +7,7 @@ type Actor = { id: string; tenantId: string; name: string; email: string };
 type HomeownerCandidate = Prisma.HomeownerProfileGetPayload<{ include: { user: true } }>;
 
 const billingWriteBatchSize = 250;
-const billingAuditBatchSize = 50;
+const billingAuditBatchSize = 250;
 const billingNotificationBatchSize = 50;
 
 export const billingGenerationScopes = ["ALL", "HOMEOWNER", "SELECTED", "BLOCK", "PHASE"] as const;
@@ -456,15 +456,13 @@ async function processInBatches<T>(items: T[], batchSize: number, worker: (item:
 
 async function recordGenerationRowAudits(input: BillingGenerationInput, rule: NonNullable<Awaited<ReturnType<typeof findEffectiveBillingRule>>>, rows: BillingGenerationRow[]) {
   const auditableRows = rows.filter((row) => row.action === "SKIP_EXEMPT" || row.action === "SKIP_DUPLICATE" || row.action === "ERROR");
-  await processInBatches(auditableRows, billingAuditBatchSize, async (row) => {
-    if (row.action === "SKIP_EXEMPT") {
-      await prisma.auditLog.create({ data: { tenantId: input.actor.tenantId, actorId: input.actor.id, module: "BILLING", action: "BILLING_SKIPPED_EXEMPTION", entityType: "DuesExemption", entityId: row.exemptionId, metadata: generationAuditMetadata(input, rule, { homeownerId: row.homeownerId, homeownerName: row.homeownerName, reason: row.exemptionStatus }) } });
-    } else if (row.action === "SKIP_DUPLICATE") {
-      await prisma.auditLog.create({ data: { tenantId: input.actor.tenantId, actorId: input.actor.id, module: "BILLING", action: "DUPLICATE_BILLING_PREVENTED", entityType: "HomeownerProfile", entityId: row.homeownerId, metadata: generationAuditMetadata(input, rule, { homeownerName: row.homeownerName, duplicateStatus: row.duplicateStatus }) } });
-    } else {
-      await prisma.auditLog.create({ data: { tenantId: input.actor.tenantId, actorId: input.actor.id, module: "BILLING", action: "BILLING_GENERATION_ROW_FAILED", entityType: "HomeownerProfile", entityId: row.homeownerId, metadata: generationAuditMetadata(input, rule, { homeownerName: row.homeownerName, error: row.message }) } });
-    }
-  });
+  for (let index = 0; index < auditableRows.length; index += billingAuditBatchSize) {
+    await prisma.auditLog.createMany({ data: auditableRows.slice(index, index + billingAuditBatchSize).map((row) => {
+      if (row.action === "SKIP_EXEMPT") return { tenantId: input.actor.tenantId, actorId: input.actor.id, module: "BILLING", action: "BILLING_SKIPPED_EXEMPTION", entityType: "DuesExemption", entityId: row.exemptionId, metadata: generationAuditMetadata(input, rule, { homeownerId: row.homeownerId, homeownerName: row.homeownerName, reason: row.exemptionStatus }) };
+      if (row.action === "SKIP_DUPLICATE") return { tenantId: input.actor.tenantId, actorId: input.actor.id, module: "BILLING", action: "DUPLICATE_BILLING_PREVENTED", entityType: "HomeownerProfile", entityId: row.homeownerId, metadata: generationAuditMetadata(input, rule, { homeownerName: row.homeownerName, duplicateStatus: row.duplicateStatus }) };
+      return { tenantId: input.actor.tenantId, actorId: input.actor.id, module: "BILLING", action: "BILLING_GENERATION_ROW_FAILED", entityType: "HomeownerProfile", entityId: row.homeownerId, metadata: generationAuditMetadata(input, rule, { homeownerName: row.homeownerName, error: row.message }) };
+    }) });
+  }
 }
 
 async function sendBillingNotifications(homeowners: Array<{ homeownerId: string; homeownerName: string; amount: number }>, tenantId: string, billingMonth: Date, dueDate: Date) {

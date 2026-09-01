@@ -9,6 +9,7 @@ type HomeownerCandidate = Prisma.HomeownerProfileGetPayload<{ include: { user: t
 const billingWriteBatchSize = 250;
 const billingAuditBatchSize = 250;
 const billingNotificationBatchSize = 50;
+const billingCandidatePageSize = 500;
 
 export const billingGenerationScopes = ["ALL", "HOMEOWNER", "SELECTED", "BLOCK", "PHASE"] as const;
 export type BillingGenerationScope = (typeof billingGenerationScopes)[number];
@@ -362,11 +363,23 @@ async function billingCandidates(input: BillingGenerationInput) {
   if (input.scope === "SELECTED") where.id = { in: input.homeownerIds ?? [] };
   if (input.scope === "BLOCK") where.block = input.block ?? "";
   if (input.scope === "PHASE") where.phase = input.phase ?? "";
-  return prisma.homeownerProfile.findMany({
-    where,
-    include: { user: true },
-    orderBy: [{ block: "asc" }, { lot: "asc" }, { user: { name: "asc" } }],
-  }) as Promise<HomeownerCandidate[]>;
+
+  const candidates: HomeownerCandidate[] = [];
+  let cursor: string | undefined;
+  while (true) {
+    const page = await prisma.homeownerProfile.findMany({
+      where,
+      include: { user: true },
+      orderBy: [{ block: "asc" }, { lot: "asc" }, { user: { name: "asc" } }, { id: "asc" }],
+      take: billingCandidatePageSize,
+      ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
+    }) as HomeownerCandidate[];
+    candidates.push(...page);
+    if (page.length < billingCandidatePageSize) break;
+    cursor = page.at(-1)?.id;
+    if (!cursor) break;
+  }
+  return candidates;
 }
 
 function validateBillingGenerationInput(input: BillingGenerationInput) {

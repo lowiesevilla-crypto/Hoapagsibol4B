@@ -3,6 +3,7 @@
 import { BillStatus, NotificationType, PaymentRequestStatus, Prisma, RecurringChargeType, TenantModule } from "@prisma/client";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
+import { after } from "next/server";
 import { requirePermission } from "@/lib/authorization/guards";
 import { Permission } from "@/lib/authorization/permissions";
 import { getAppUrl } from "@/lib/app-url";
@@ -11,6 +12,7 @@ import { isUxActionProgressEnabled } from "@/lib/feature-flags/ux-action-progres
 import { billSchema } from "@/lib/validation";
 import { sendEmailNotification } from "@/lib/services/notifications";
 import { billingGenerationScopes, findEffectiveBillingRule, generateBillingFromRules, generateMonthlyDuesFromRules, periodFromDate, type BillingGenerationScope } from "@/lib/services/billing-rules";
+import { billingGenerationProgressPercent, createBillingGenerationJob, processBillingGenerationJob } from "@/lib/services/billing-generation-jobs";
 
 function normalizedMonth(value: string) {
   return new Date(`${value.slice(0, 7)}-01T00:00:00.000Z`);
@@ -99,18 +101,56 @@ export async function generateBillingFromPreviewAction(formData: FormData) {
 }
 
 export type GenerateBillingProgressState = {
-  status: "idle" | "success" | "error";
+  status: "idle" | "accepted" | "success" | "error";
   message: string;
   createdCount: number;
   duplicateCount: number;
   exemptCount: number;
   failedCount: number;
+  jobId?: string;
+  jobReference?: string;
+  total?: number;
+  completed?: number;
+  succeeded?: number;
+  skipped?: number;
+  percent?: number;
 };
 
 export async function generateBillingFromPreviewProgressAction(_previousState: GenerateBillingProgressState, formData: FormData): Promise<GenerateBillingProgressState> {
   try {
-    const completed = await generateBillingSubmission(formData, { requireActionProgressFlag: true });
-    return { status: "success", message: completed.message, ...completed.counts };
+    const admin = await requirePermission(Permission.BILLING_GENERATE);
+    if (!isUxActionProgressEnabled({ tenantId: admin.tenantId, module: TenantModule.BILLING, role: admin.role })) {
+      throw new Error("Action progress is not enabled for this tenant.");
+    }
+    const input = parseGenerationForm(admin, formData);
+    await assertManualGenerationAllowed(admin.tenantId, input.coverageYear, input.coverageMonth);
+    const idempotencyKey = String(formData.get("idempotencyKey") || "");
+    const { job } = await createBillingGenerationJob(input, idempotencyKey);
+    const percent = billingGenerationProgressPercent(job.completed, job.total);
+    const terminalSuccess = job.status === "SUCCEEDED";
+
+    after(async () => {
+      await processBillingGenerationJob(job.id, admin).catch(() => undefined);
+      revalidateBillingGenerationPaths(input.homeownerIds);
+    });
+
+    return {
+      status: terminalSuccess ? "success" : "accepted",
+      message: terminalSuccess
+        ? `${job.reference} completed. ${job.completed} of ${job.total} target records are complete.`
+        : `${job.reference} accepted. ${job.completed} of ${job.total} target records are already classified; remaining records will continue in bounded background batches.`,
+      createdCount: job.succeeded,
+      duplicateCount: 0,
+      exemptCount: 0,
+      failedCount: job.failed,
+      jobId: job.id,
+      jobReference: job.reference,
+      total: job.total,
+      completed: job.completed,
+      succeeded: job.succeeded,
+      skipped: job.skipped,
+      percent,
+    };
   } catch (error) {
     if (isNextRedirectError(error)) throw error;
     return {
@@ -128,11 +168,8 @@ function isNextRedirectError(error: unknown) {
   return Boolean(error && typeof error === "object" && "digest" in error && String((error as { digest?: unknown }).digest || "").startsWith("NEXT_REDIRECT"));
 }
 
-async function generateBillingSubmission(formData: FormData, options: { requireActionProgressFlag?: boolean } = {}) {
+async function generateBillingSubmission(formData: FormData) {
   const admin = await requirePermission(Permission.BILLING_GENERATE);
-  if (options.requireActionProgressFlag && !isUxActionProgressEnabled({ tenantId: admin.tenantId, module: TenantModule.BILLING, role: admin.role })) {
-    throw new Error("Action progress is not enabled for this tenant.");
-  }
   const input = parseGenerationForm(admin, formData);
   await assertManualGenerationAllowed(admin.tenantId, input.coverageYear, input.coverageMonth);
   const result = await generateBillingFromRules(input);

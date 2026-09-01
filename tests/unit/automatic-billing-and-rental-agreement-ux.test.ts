@@ -10,7 +10,7 @@ const automationTogglePath = new URL("../../components/billing-automation-toggle
 const rentalActionsPath = new URL("../../components/rental-record-actions.tsx", import.meta.url);
 const agreementViewPath = new URL("../../app/admin/rentals/agreements/[id]/page.tsx", import.meta.url);
 
-test("automatic billing is tenant scheduled, bounded for large homeowner populations, idempotent, and Manila-calendar based", async () => {
+test("automatic billing is tenant scheduled, bounded for large homeowner populations, idempotent, reconciling, and Manila-calendar based", async () => {
   const [service, monthlyCron, dailyCron] = await Promise.all([
     readFile(servicePath, "utf8"),
     readFile(monthlyCronPath, "utf8"),
@@ -22,6 +22,8 @@ test("automatic billing is tenant scheduled, bounded for large homeowner populat
   assert.match(service, /timeZone: "Asia\/Manila"/);
   assert.match(service, /scope: "SELECTED", homeownerIds/);
   assert.match(service, /AUTOMATIC_MONTHLY_DUES_COMPLETED/);
+  assert.match(service, /reconciliation: true/);
+  assert.doesNotMatch(service, /hasCompletedMonthlyDuesRun|already completed for this billing month/);
   assert.match(service, /INSERT IGNORE INTO RentalInvoice/);
   assert.match(service, /a\.billingDay<=\$\{currentDay\}/);
   assert.match(service, /Prisma\.TransactionIsolationLevel\.Serializable/);

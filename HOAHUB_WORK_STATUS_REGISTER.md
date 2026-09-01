@@ -6,20 +6,16 @@ This register is the current release-status snapshot for the active HOAHub produ
 
 ## Current production baseline
 
-- Production-verified `main`: `117339d1488a2dc77b7b181f831c58adc6396d73`.
-- Action-progress foundation PR #274 exact head `51fe731f3751acc338595a418890adf2ffd635c6` is VERIFIED and production-deployed.
-- Payment result-state PR #276 exact head `616e07a422b7a20491864b77b7d7adf2ed469af6` is VERIFIED and production-deployed.
-- Automatic Billing manual-generation lock hotfix PR #277 exact head `230703de5c0c06d76999d0818207dfad044e6748` is VERIFIED and production-deployed.
-- Payment uncertain-response reconciliation PR #281 exact head `92e8fdbe88920442c4859b52cc81b664f45bcdbd` passed HOAHub MySQL CI #1395, Canva Visual Parity #472, Edge Critical Flow #65, Firefox Critical Flow #61, and Mobile Responsive Evidence #60; merged as `c43895cab823ec2d01538c28c372a628644d4379`; post-merge verification plus Hostinger managed-production/public-health verification passed.
-- Automatic Billing 5,001-homeowner proof PR #283 exact head `704f97151e9290e43edd1353e43392afe270b21d` passed HOAHub MySQL CI #1408, Canva Visual Parity #483, Edge Critical Flow #76, Firefox Critical Flow #72, and Mobile Responsive Evidence #71; merged as `117339d1488a2dc77b7b181f831c58adc6396d73`.
-- Post-merge HOAHub MySQL CI #1409 passed the complete verification suite and production smoke / critical browser suite for `117339d1488a2dc77b7b181f831c58adc6396d73`; Hostinger managed-deployment wait and public production-health verification also passed.
+- Production-verified `main`: `9f58fb2ac9df352ce86972076815ff93f8bfdb48` from PR #286 (`Fix billing progress review edge cases`).
+- PR #286 exact head `2c8f8f7017a5793bacb973f6657880a847a1acae` passed HOAHub MySQL CI #1414, Canva Visual Parity #486, Edge Critical Flow #79, Firefox Critical Flow #75, and Mobile Responsive Evidence #74 before merge.
+- Post-merge HOAHub MySQL CI #1415 run `33474363771` passed the complete verification suite, database integrations, typecheck, production build, production smoke / critical browser suite, Hostinger managed-deployment verification, and public production health for `9f58fb2ac9df352ce86972076815ff93f8bfdb48`.
 - The `ux_action_progress_v1` feature flag remains default-off and no active tenant rollout is enabled.
 
-## Verified release queue
+## Completed / verified programs
 
-The P0 functional regression queue tracked by #193 is VERIFIED: Payroll, Petty Cash, Payment Void, Refund, Online Payments reporting/settlement trace, and Financial Reports.
+The P0 functional regression queue tracked by #193 is COMPLETED and VERIFIED: Payroll, Petty Cash, Payment Void, Refund, Online Payments reporting/settlement trace, and Financial Reports.
 
-The P1 improvement queue tracked by #254 is VERIFIED through item 10:
+The P1 post-program improvement queue tracked by #254 is COMPLETED. Verified delivery includes:
 
 1. Final documentation baseline — PR #253.
 2. Document Repository table usability — PR #255.
@@ -30,36 +26,67 @@ The P1 improvement queue tracked by #254 is VERIFIED through item 10:
 7. Admin add Household Member — PR #260.
 8. Homeowner Online Payment history safe hide/archive UX — PR #262.
 9. Homeowner Account Information collapsible — PR #263.
-10. Stale PWA/client update-path defect — PR #270. The confirmed defect was a session-scoped reload guard that remained set after a completed service-worker update and could suppress a later update reload in the same browser session. The corrected path clears only the completed HOAHub update-reload marker on the newly loaded document and retains duplicate-reload protection for the active update.
-11. Final work-status/documentation reconciliation — ACTIVE on `codex/final-work-status-reconciliation-20260901`; close #254 only after this exact head passes required gates, merges, and post-merge verification succeeds.
+10. Stale PWA/client update-path correction — PR #270.
+11. Final repository documentation reconciliation — PR #284. Issue #254 was closed as completed on 2026-09-01.
 
-Automatic Billing 5,001-homeowner end-to-end proof tracked by #278 is VERIFIED and completed through PR #283. The approved harness now proves bounded generation at 5,001 active homeowners, duplicate prevention, retry/completion behavior, isolated row failure, notification failure persistence, rental billing-day correctness, rental retry idempotency, oldest-due-first advance-credit allocation, and second-tenant isolation. This proof does not enable action-progress rollout for any tenant.
+Automatic Billing 5,001-homeowner end-to-end proof tracked by #278 is VERIFIED and completed through PR #283. The approved disposable MySQL harness proves bounded automatic Monthly Dues generation at 5,001 active homeowners, duplicate prevention, retry/completion behavior, row-failure isolation, notification-failure persistence, rental billing-day correctness, rental retry idempotency, oldest-due-first advance-credit allocation, and second-tenant isolation.
 
-## Open / blocked work
+## Action-progress program — issue #273
 
-`HOAHUB-UX-P0-001` remains `IN_PROGRESS` under issue #273. Its default-off, fail-closed shared action-progress/submission-lock foundation is VERIFIED and production-deployed by PR #274 / merge `bed4ca020e1c8dd50a4ff2ad48c66339ffe9adc2`; the flagged Admin Record Payment success/failure result-state path is VERIFIED and production-deployed by PR #276 / merge `111ceffa06a8b2fc1ec533e1158f3c7585091b24`; payment uncertain-response reconciliation is VERIFIED and production-deployed by PR #281 / merge `c43895cab823ec2d01538c28c372a628644d4379`. Pilot wiring remains limited and no tenant target is enabled. Durable bulk progress, remaining P0/P1 action coverage, staging UAT, monitoring, rollback verification, and tenant-pilot authorization remain required; see `docs/quality/HOAHUB_ACTION_PROGRESS_IMPLEMENTATION.md`.
+`HOAHUB-UX-P0-001` remains `IN_PROGRESS`.
 
-Automatic Billing manual-generation lock hotfix #277 remains VERIFIED and production-deployed by merge `8435bca3f162e1b364032effb746140d7397c35b`; post-merge MySQL CI #1390 passed managed deployment and public health. The later PR #283 evidence now separately proves the 5,001-homeowner automatic generation path. The manual-generation UI continues to fail closed while an active automatic Monthly Dues rule governs the tenant and does not alter the underlying automatic billing authority.
+Verified production increments:
 
-Authenticated non-destructive production UAT remains tracked separately by #194. The repository already contains the bounded read-only harness (`scripts/authenticated-production-smoke.mjs`) and the manually dispatched production workflow (`.github/workflows/authenticated-production-uat.yml`). Live execution remains BLOCKED on administrator/environment provisioning of the dedicated UAT identity and controlled homeowner query expected by that workflow:
+- Shared default-off action-progress/submission-lock foundation — PR #274.
+- Admin Record Payment server-confirmed result state — PR #276.
+- Payment uncertain-response reconciliation before retry — PR #281.
+- Monthly Billing server-confirmed result state — PR #285, exact head `12a737312fbfb5ec35f91faebaf82f0f984ee8d5`, which passed MySQL #1412, Canva #485, Edge #78, Firefox #74, and Mobile #73 and merged as `e744afe0a8589f9be45da9ceb745a14a5a0f4a29`.
+- Billing progress review corrections — PR #286. The correction resets flagged billing-result state when preview inputs change and preserves framework authorization/session redirects rather than converting them into recoverable billing errors.
 
-- production secret `HOAHUB_UAT_ADMIN_EMAIL`
-- production secret `HOAHUB_UAT_ADMIN_PASSWORD`
-- production environment variable `HOAHUB_UAT_HOMEOWNER_QUERY`
+Still open under #273:
 
-Credentials, tokens, cookies, or tenant-private payloads must never be committed, placed in issue text, or substituted with live tenant-user credentials. Production UAT must remain non-destructive and must not create, edit, delete, post, void, refund, settle, approve, generate, or otherwise mutate tenant business data.
+- Durable bulk-job progress for Monthly Billing with persisted `total`, `completed`, `succeeded`, `failed`, status, and job reference.
+- Actual bulk percentage `floor(completed / total * 100)` that survives refresh, reconnection, and navigation.
+- Failed-record-only retry without repeating successful business results.
+- Remaining P0/P1 financial and operational action coverage, server idempotency/uniqueness review, privacy-safe observability, concurrency/slow-network/two-tab testing, accessibility, selected-tenant staging UAT, monitoring, rollback verification, and explicit product-owner pilot authorization.
 
-Repository branch-protection hardening remains outside the currently approved #194 scope unless separately re-approved.
+No tenant target is enabled while these gates remain incomplete.
+
+## Manual Billing 5,000+ scale qualification
+
+Automatic Billing is production-proven at 5,001 homeowners, but that evidence must not be silently treated as a separate proof of the administrator-triggered Manual Billing user flow.
+
+The manual Monthly Billing path uses the same tenant-scoped billing generation engine and bounded persistence controls, so the implementation is architecturally positioned for large tenants. However, a dedicated 5,001-homeowner Manual Billing integration qualification is now required before the manual UI path is labeled 5,000+ production-proven. The qualification must use disposable CI/staging data and verify:
+
+- a manual Billing Rule / manual generation flow for at least 5,001 ACTIVE homeowners;
+- expected bills created while exemptions, pre-existing duplicates, and invalid/skipped records are handled correctly;
+- repeat submission creates no prohibited duplicate bills;
+- bounded batching and acceptable runtime/memory behavior;
+- row-level failure isolation and persisted succeeded/failed counts;
+- tenant isolation with a second tenant;
+- compatibility with the durable #273 progress contract so the UI reports truthful `completed / total` progress for large manual runs.
+
+This qualification is the next billing-scale acceptance item and must pass before enabling durable bulk progress for an active tenant.
+
+## Blocked external dependency
+
+Authenticated non-destructive production UAT remains tracked separately by #194. The repository already contains the bounded read-only harness and manually dispatched workflow. Live execution remains BLOCKED on administrator/environment provisioning of the dedicated UAT identity and controlled homeowner query expected by that workflow:
+
+- `HOAHUB_UAT_ADMIN_EMAIL`
+- `HOAHUB_UAT_ADMIN_PASSWORD`
+- `HOAHUB_UAT_HOMEOWNER_QUERY`
+
+Real tenant credentials and destructive substitute testing are prohibited.
 
 ## Release governance
 
 - Never merge a stale or red head.
 - Required CI evidence must belong to the exact current PR head SHA.
 - Any failed gate must be inspected to the exact failing job/step, corrected at root cause, pushed as a new head, and re-run.
-- After merge, verify the merged `main` release with HOAHub MySQL CI plus managed-production/public-health verification before moving to the next product mutation.
-- Preserve tenant isolation, RBAC, finance/payroll/payment/document authority, audit semantics, and existing live-tenant business behavior.
+- After merge, verify the merged `main` release with HOAHub MySQL CI plus managed-production/public-health verification before the next production mutation.
+- Preserve tenant isolation, RBAC, financial/document authority, audit semantics, duplicate protection, and live-tenant business behavior.
 - Do not use destructive production test data or weaken security/CI gates to obtain a pass.
 
 ## Current execution state
 
-Production `main` is verified through automatic-billing scale PR #283 and post-merge MySQL CI #1409. The next repository step is final #254 documentation reconciliation on `codex/final-work-status-reconciliation-20260901`. After that exact head passes, merges, and post-merge health is verified, close #254 and continue issue #273 with the next bounded default-off increment: durable bulk-job progress for monthly billing. The separate #194 authenticated production UAT remains blocked on administrator/environment provisioning; no repository-side workaround is authorized.
+Current production is verified at `9f58fb2ac9df352ce86972076815ff93f8bfdb48` through post-merge MySQL CI #1415 and Hostinger/public-health verification. The obsolete experimental Hostinger marker branch must not be merged as-is because the current managed-deployment gate is already green. The active engineering priority is issue #273: reconcile durable Monthly Billing progress onto the current PR #285/#286 baseline and include explicit 5,001-homeowner Manual Billing scale evidence before any tenant pilot. Issue #194 remains blocked on administrator-provisioned UAT credentials/environment inputs.

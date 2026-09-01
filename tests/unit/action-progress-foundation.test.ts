@@ -80,7 +80,7 @@ test("shared component exposes truthful verified stages and durable billing prog
   assert.match(billingJobs, /idempotencyKeyHash/);
   assert.match(billingJobs, /BillingGenerationJobItemStatus\.FAILED/);
   assert.match(billingJobs, /retryFailedOnly/);
-  assert.match(jobProgress, /job\.completed\.toLocaleString\(\).*job\.total\.toLocaleString\(\)/s);
+  assert.match(jobProgress, /job\.completed\.toLocaleString\(\)[\s\S]*job\.total\.toLocaleString\(\)/);
   assert.match(jobProgress, /No simulated time-based progress is used/);
   assert.match(jobProgress, /Retry creates a new job containing only failed homeowner records/);
   assert.match(jobRoute, /requirePermission\(Permission\.BILLING_GENERATE\)/);

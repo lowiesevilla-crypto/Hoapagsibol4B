@@ -61,7 +61,7 @@ export async function createBillingGenerationJob(input: BillingGenerationInput, 
 
   const preview = await previewBillingGeneration(input);
   const initialItems = preview.rows.map((row) => initialItemState(row));
-  const succeeded = initialItems.filter((item) => item.status === BillingGenerationJobItemStatus.SUCCEEDED).length;
+  const succeeded = 0;
   const failed = initialItems.filter((item) => item.status === BillingGenerationJobItemStatus.FAILED).length;
   const skipped = initialItems.filter((item) => item.status === BillingGenerationJobItemStatus.SKIPPED).length;
   const completed = succeeded + failed + skipped;

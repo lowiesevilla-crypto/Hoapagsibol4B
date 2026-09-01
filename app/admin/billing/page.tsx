@@ -149,10 +149,14 @@ function BillingPreview({ preview, input, tenantName, actionProgressEnabled }: {
     </div>
     <div className="mt-5 flex flex-col justify-between gap-3 lg:flex-row lg:items-center">
       <div><h3 className="font-black">Preview details</h3><p className="text-sm text-slate-500">{preview.scopeLabel}</p></div>
-      <BillingGenerationProgressForm actionProgressEnabled={actionProgressEnabled} coverageYear={input.coverageYear} coverageMonth={input.coverageMonth} scope={input.scope} homeownerIds={input.homeownerIds ?? []} block={input.block} phase={input.phase} />
+      <BillingGenerationProgressForm key={billingGenerationProgressKey(input)} actionProgressEnabled={actionProgressEnabled} coverageYear={input.coverageYear} coverageMonth={input.coverageMonth} scope={input.scope} homeownerIds={input.homeownerIds ?? []} block={input.block} phase={input.phase} />
     </div>
     <BillingPreviewTable rows={preview.rows} />
   </div>;
+}
+
+function billingGenerationProgressKey(input: BillingGenerationInput) {
+  return [input.coverageYear, input.coverageMonth, input.scope, ...(input.homeownerIds ?? []), input.block ?? "", input.phase ?? ""].join(":");
 }
 
 function PreviewStat({ label, value }: { label: string; value: React.ReactNode }) {

@@ -56,10 +56,12 @@ test("shared component exposes truthful verified stages and accessibility behavi
   assert.match(component, /motion-reduce:animate-none/);
   assert.match(payment, /pendingLabel="Recording payment"/);
   assert.match(billing, /BillingGenerationProgressForm/);
+  assert.match(billing, /key=\{billingGenerationProgressKey\(input\)\}/);
   assert.match(billingProgress, /pendingLabel="Generating billing"/);
   assert.match(billingProgress, /success=\{actionProgressEnabled && state\.status === "success"\}/);
   assert.match(billingActions, /generateBillingFromPreviewProgressAction/);
   assert.match(billingActions, /requireActionProgressFlag/);
+  assert.match(billingActions, /if \(isNextRedirectError\(error\)\) throw error/);
   assert.match(billingActions, /TenantModule\.BILLING/);
   assert.match(billingActions, /duplicateCount: result\.duplicateCount/);
 });

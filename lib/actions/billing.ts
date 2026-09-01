@@ -112,6 +112,7 @@ export async function generateBillingFromPreviewProgressAction(_previousState: G
     const completed = await generateBillingSubmission(formData, { requireActionProgressFlag: true });
     return { status: "success", message: completed.message, ...completed.counts };
   } catch (error) {
+    if (isNextRedirectError(error)) throw error;
     return {
       status: "error",
       message: error instanceof Error ? error.message : "Billing generation failed.",
@@ -121,6 +122,10 @@ export async function generateBillingFromPreviewProgressAction(_previousState: G
       failedCount: 0,
     };
   }
+}
+
+function isNextRedirectError(error: unknown) {
+  return Boolean(error && typeof error === "object" && "digest" in error && String((error as { digest?: unknown }).digest || "").startsWith("NEXT_REDIRECT"));
 }
 
 async function generateBillingSubmission(formData: FormData, options: { requireActionProgressFlag?: boolean } = {}) {

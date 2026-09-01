@@ -1,11 +1,12 @@
 import { BillStatus, HomeownerStatus, NotificationType, Prisma, RecurringChargeType } from "@prisma/client";
+import { randomUUID } from "node:crypto";
 import { getAppUrl } from "@/lib/app-url";
 import { prisma } from "@/lib/db";
 
 type Actor = { id: string; tenantId: string; name: string; email: string };
 type HomeownerCandidate = Prisma.HomeownerProfileGetPayload<{ include: { user: true } }>;
 
-const billingWriteBatchSize = 20;
+const billingWriteBatchSize = 250;
 const billingAuditBatchSize = 50;
 const billingNotificationBatchSize = 50;
 
@@ -223,46 +224,44 @@ async function buildBillingGeneration(input: BillingGenerationInput, options: { 
 
   if (options.persist && rule && dueDate) {
     const createRows = rows.filter((row) => row.action === "CREATE");
-    await processInBatches(createRows, billingWriteBatchSize, async (row) => {
+    for (let index = 0; index < createRows.length; index += billingWriteBatchSize) {
+      const batch = createRows.slice(index, index + billingWriteBatchSize);
+      const prepared = batch.map((row) => ({ row, id: randomUUID() }));
       try {
-        await prisma.$transaction(async (tx) => {
-          const duplicate = await tx.bill.findFirst({
-            where: { tenantId: input.actor.tenantId, homeownerId: row.homeownerId, recurringChargeType: RecurringChargeType.MONTHLY_DUES, coverageYear: input.coverageYear, coverageMonth: input.coverageMonth },
-            select: { id: true },
-          });
-          if (duplicate) {
-            row.action = "SKIP_DUPLICATE";
-            row.duplicateStatus = "Duplicate exists";
-            row.message = "A bill already exists for this homeowner, charge type, and coverage period.";
-            return;
-          }
-          const bill = await tx.bill.create({
-            data: {
-              tenantId: input.actor.tenantId,
-              homeownerId: row.homeownerId,
-              billingMonth,
-              recurringChargeType: RecurringChargeType.MONTHLY_DUES,
-              coverageYear: input.coverageYear,
-              coverageMonth: input.coverageMonth,
-              billingRuleId: rule.id,
-              billingRuleSnapshot: ruleSnapshot(rule),
-              resolutionReference: rule.resolutionReference,
-              dueDate,
-              amount,
-              penalty: 0,
-              totalAmount: amount,
-              balance: amount,
-              status: BillStatus.UNPAID,
-              notes: `Generated from ${rule.resolutionReference}.`,
-            },
-          });
-          row.billId = bill.id;
-        }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
-      } catch (error) {
-        row.action = "ERROR";
-        row.message = error instanceof Error ? error.message : "Billing record could not be created.";
+        await prisma.bill.createMany({
+          data: prepared.map(({ row, id }) => ({
+            id,
+            tenantId: input.actor.tenantId,
+            homeownerId: row.homeownerId,
+            billingMonth,
+            recurringChargeType: RecurringChargeType.MONTHLY_DUES,
+            coverageYear: input.coverageYear,
+            coverageMonth: input.coverageMonth,
+            billingRuleId: rule.id,
+            billingRuleSnapshot: ruleSnapshot(rule),
+            resolutionReference: rule.resolutionReference,
+            dueDate,
+            amount,
+            penalty: 0,
+            totalAmount: amount,
+            balance: amount,
+            status: BillStatus.UNPAID,
+            notes: `Generated from ${rule.resolutionReference}.`,
+          })),
+          skipDuplicates: true,
+        });
+        const inserted = new Set((await prisma.bill.findMany({
+          where: { tenantId: input.actor.tenantId, id: { in: prepared.map((item) => item.id) } },
+          select: { id: true },
+        })).map((bill) => bill.id));
+        for (const item of prepared) {
+          if (inserted.has(item.id)) item.row.billId = item.id;
+          else markDuplicate(item.row);
+        }
+      } catch {
+        for (const item of prepared) await persistBillingRowWithIsolation(item.row, item.id, input, rule, billingMonth, dueDate, amount);
       }
-    });
+    }
     await recordGenerationRowAudits(input, rule, rows);
     await prisma.auditLog.create({
       data: {
@@ -306,6 +305,55 @@ async function buildBillingGeneration(input: BillingGenerationInput, options: { 
     totalBilledAmount: summary.totalBilledAmount,
     rows,
   };
+}
+
+function markDuplicate(row: BillingGenerationRow) {
+  row.action = "SKIP_DUPLICATE";
+  row.duplicateStatus = "Duplicate exists";
+  row.message = "A bill already exists for this homeowner, charge type, and coverage period.";
+}
+
+async function persistBillingRowWithIsolation(
+  row: BillingGenerationRow,
+  id: string,
+  input: BillingGenerationInput,
+  rule: NonNullable<Awaited<ReturnType<typeof findEffectiveBillingRule>>>,
+  billingMonth: Date,
+  dueDate: Date,
+  amount: number,
+) {
+  try {
+    await prisma.$transaction(async (tx) => {
+      const duplicate = await tx.bill.findFirst({
+        where: { tenantId: input.actor.tenantId, homeownerId: row.homeownerId, recurringChargeType: RecurringChargeType.MONTHLY_DUES, coverageYear: input.coverageYear, coverageMonth: input.coverageMonth },
+        select: { id: true },
+      });
+      if (duplicate) return markDuplicate(row);
+      await tx.bill.create({ data: {
+        id,
+        tenantId: input.actor.tenantId,
+        homeownerId: row.homeownerId,
+        billingMonth,
+        recurringChargeType: RecurringChargeType.MONTHLY_DUES,
+        coverageYear: input.coverageYear,
+        coverageMonth: input.coverageMonth,
+        billingRuleId: rule.id,
+        billingRuleSnapshot: ruleSnapshot(rule),
+        resolutionReference: rule.resolutionReference,
+        dueDate,
+        amount,
+        penalty: 0,
+        totalAmount: amount,
+        balance: amount,
+        status: BillStatus.UNPAID,
+        notes: `Generated from ${rule.resolutionReference}.`,
+      } });
+      row.billId = id;
+    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+  } catch (error) {
+    row.action = "ERROR";
+    row.message = error instanceof Error ? error.message : "Billing record could not be created.";
+  }
 }
 
 async function billingCandidates(input: BillingGenerationInput) {

@@ -50,6 +50,7 @@ HOAHub already serves an active tenant. This change is additive and preserves th
 - The structured action repeats the existing `BILLING_GENERATE` permission check and additionally enforces the server-side `ux_action_progress_v1` tenant/module/role resolver.
 - Existing Billing Rule resolution, automatic/manual mode guard, tenant isolation, database uniqueness, and duplicate-skip behavior are unchanged. A repeated request continues to produce no prohibited duplicate billing rows.
 - This increment does not claim a 75% stage or durable `completed / total` background-job progress. Those require a separately persisted job/checkpoint contract and remain open.
+- PR #285 merged as `e744afe0a8589f9be45da9ceb745a14a5a0f4a29` after exact head `12a737312fbfb5ec35f91faebaf82f0f984ee8d5` passed MySQL #1412, Canva #485, Edge #78, Firefox #74, and Mobile #73. Post-merge review identified two edge-case corrections—resetting result state when preview inputs change and preserving framework authorization redirects—which are active on `fix/billing-progress-review-20260901` before this increment is marked VERIFIED.
 
 ## Payment reconciliation release evidence
 

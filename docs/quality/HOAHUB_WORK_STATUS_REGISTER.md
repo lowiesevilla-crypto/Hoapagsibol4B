@@ -1,7 +1,7 @@
 # HOAHub Quality / UX Work Status Register
 
 Status: COMPLETED
-Last updated: 2026-08-30
+Last updated: 2026-09-01
 
 This register is the concise operational reference for completed, verified, explicitly waived, and separately blocked product-quality work.
 
@@ -19,7 +19,7 @@ This register is the concise operational reference for completed, verified, expl
 
 | Work Item | Priority | Status | Evidence / Note |
 |---|---:|---|---|
-| Protect post-rollback production baseline | P0 | VERIFIED | Current verified `main` includes Petty Cash PR #198, Payment Void PR #200, Refund PR #202, Online Payments PR #204, Financial Reports PR #206, quality/scale/browser evidence through #222, UI Waves 1–5, Wave 6 Finance Reports PR #251, and the subsequently verified post-program improvements through PR #270. Current production-verified baseline before this documentation reconciliation is `ea981e9f125a8d6246c05fd5c2005fbc1c4f5481`; post-merge MySQL CI #1376 passed including production smoke / critical browser suite and Hostinger managed-production/public-health verification. |
+| Protect post-rollback production baseline | P0 | VERIFIED | Current verified `main` includes Petty Cash PR #198, Payment Void PR #200, Refund PR #202, Online Payments PR #204, Financial Reports PR #206, quality/scale/browser evidence through #222, UI Waves 1–5, Wave 6 Finance Reports PR #251, the verified post-program improvements through PR #270, action-progress payment reconciliation PR #281, and 5,001-homeowner automatic-billing proof PR #283. Current production-verified baseline is `117339d1488a2dc77b7b181f831c58adc6396d73`; post-merge HOAHub MySQL CI #1409 passed the complete verification and production smoke / critical browser suite, and Hostinger managed-production/public-health verification passed. |
 | Product Quality Excellence Program documentation | P0 | VERIFIED | PR #190 merged to `main`; final disposition is COMPLETED for the approved program scope. |
 | Master Regression Matrix | P0 | VERIFIED | Added under `docs/quality/` by PR #190; current reconciliation records later verified browser/scale/post-program evidence and the separate #194 blocker. |
 | Professional UI/UX Standard | P0 | VERIFIED | Added under `docs/quality/` by PR #190; remains an active implementation standard, not an open delivery task. |
@@ -34,13 +34,14 @@ This register is the concise operational reference for completed, verified, expl
 | Online Payments report browser regression | P0 | VERIFIED | PR #204 exact head `042c7494fe2367e8d28e6115bf532e413354089a` passed HOAHub MySQL CI #1241 + Canva Visual Parity #381 and merged as `6939533b69b229186eb3b64ea9f786ec9f34fa88`. |
 | Financial Reports browser regression | P0 | VERIFIED | PR #206 exact head `42e65793f606217744040e3127782bddc14909b3` passed HOAHub MySQL CI #1243 + Canva Visual Parity #382 and merged as `96ff7d4546904a285d720b9d4c6a7bb770bf04c1`; post-merge CI #1244 verify passed. |
 | Authenticated post-deploy production smoke | P0 | BLOCKED | Issue #194 was re-approved/reopened on 2026-08-29 for authenticated non-destructive production smoke only. Repository-side preparation is ready, but live execution is blocked on administrator provisioning of a dedicated authorized smoke identity and protected production-environment secrets. Real tenant credentials and destructive substitute testing are prohibited. This separate blocker does not reopen the already-completed Product Quality & UX Excellence Program. |
-| Truthful action progress and duplicate-submission rollout | P0/P1 | IN_PROGRESS | Issue #273 / `HOAHUB-UX-P0-001`. The default-off foundation is VERIFIED: PR #274 exact head `51fe731f3751acc338595a418890adf2ffd635c6` passed MySQL #1381, Canva #464, Edge #57, Firefox #53, and Mobile #52; merged as `bed4ca020e1c8dd50a4ff2ad48c66339ffe9adc2`; post-merge MySQL #1382 passed managed deployment/public health. Payment uncertain-response reconciliation is implemented on branch `codex/payment-progress-reconciliation-20260831` pending exact-head gates. No tenant is enabled. Bulk progress, remaining action coverage, staging/UAT, monitoring, rollback verification, and pilot authorization remain open. |
+| Truthful action progress and duplicate-submission rollout | P0/P1 | IN_PROGRESS | Issue #273 / `HOAHUB-UX-P0-001`. Foundation PR #274 and payment result-state PR #276 are VERIFIED. Payment uncertain-response reconciliation PR #281 exact head `92e8fdbe88920442c4859b52cc81b664f45bcdbd` passed MySQL #1395, Canva #472, Edge #65, Firefox #61, and Mobile #60; merged as `c43895cab823ec2d01538c28c372a628644d4379`; post-merge verification and Hostinger production health passed. No tenant is enabled. Durable bulk progress, remaining P0/P1 action coverage, staging/UAT, monitoring, rollback verification, and pilot authorization remain open. |
 | GitHub `main` branch protection / required checks | P0 | NOT_REQUIRED | Repository-control / branch-protection hardening remains waived / NOT_REQUIRED unless separately re-approved. Exact-head CI/merge discipline continues operationally. |
 | 5,000+ homeowner large-volume QA pack | P1 | VERIFIED | PR #211 exact head `417036126607b21345f1be2adff16cd7328fa1f7` passed HOAHub MySQL CI #1252 + Canva Visual Parity #387 and merged as `e5d690cbb28434e1c00063e5934d409787a77f63`. |
 | High-volume bills / payments / collections QA pack | P1 | VERIFIED | PR #212 exact head `2b46bd46b618c38cdb795f60d45809475d8259a9` passed HOAHub MySQL CI #1254 + Canva Visual Parity #388 and merged as `6cf0ac462fb65537a0aeb21b1e0ed0b947ae3a5e`. |
 | 5,000+ employee directory scale | P1 | VERIFIED | PR #213 exact head `530eee02f360b9509e8fc0c28c085e2be8a80687` passed HOAHub MySQL CI #1256 + Canva Visual Parity #389 and merged as `08be4d9680a24b71d69093dc7d2b69102eab5542`. |
 | 5,000+ Document Management library scale | P1 | VERIFIED | PR #214 exact head `81b6ef2a673e8230dcee6329549c686945f4375e` passed HOAHub MySQL CI #1258 + Canva Visual Parity #390 and merged as `938b19a502c41fddbcf0b4ab8cab6210108e4b24`. |
 | Bounded automatic/batch processing and failure isolation | P1 | VERIFIED | PR #215 exact head `1d2e4b3e779d4fd68951bf1d85493beb02305a5e` passed HOAHub MySQL CI #1260 + Canva Visual Parity #391 and merged as `d189466979df5de83ec0c5330b33e3a4f3b78152`. |
+| 5,001-homeowner automatic billing end-to-end proof | P0 | VERIFIED | Issue #278 completed by PR #283. Exact head `704f97151e9290e43edd1353e43392afe270b21d` passed MySQL #1408, Canva #483, Edge #76, Firefox #72, and Mobile #71; merged as `117339d1488a2dc77b7b181f831c58adc6396d73`. Post-merge MySQL #1409 passed the complete verification and production smoke / critical browser suite, and Hostinger managed-production/public-health verification passed. Evidence covers bounded generation at 5,001 homeowners, duplicate prevention, retries/completion audit, failure isolation, rental billing correctness, advance-credit allocation, and second-tenant isolation under the approved test harness. |
 | WCAG 2.1 AA critical-flow gate | P1 | VERIFIED | PR #216 exact head `40bd7aad82911762ab6e491f7296a3569fa679de` passed HOAHub MySQL CI #1274 + Canva Visual Parity #404 and merged as `c79231c86e0c659130326046b5b338b815166620`. |
 | Edge critical-flow browser evidence | P1 | VERIFIED | PR #220 exact head `6f6e3e62febcd61b584051e73d23594d400722ad` passed HOAHub MySQL CI #1284 + Canva Visual Parity #411 + HOAHub Edge Critical Flow #4 and merged as `16b4d256a4a3b805cb279e70bb52d7db8864b0cc`. |
 | Firefox critical-flow browser evidence | P1 | VERIFIED | PR #221 exact head `7cf132740996da10114440827064ce6a592a3f20` passed HOAHub MySQL CI #1286 + Canva Visual Parity #412 + HOAHub Firefox Critical Flow #1; Edge regression #5 also passed; merged as `ffb753b7085282d8b2827512bdb14e4cea1c1331`. |
@@ -80,9 +81,11 @@ This queue is tracked in issue #254 and does **not** reopen the completed Produc
 
 ## Queue Disposition
 
-Issue #254 delivery items 1–10 are VERIFIED. The only repository work remaining for that queue is this final documentation reconciliation; once this documentation change passes exact-head gates, merges, and post-merge verification succeeds, issue #254 is eligible to close as `completed`.
+Issue #254 delivery items 1–10 are VERIFIED. This final documentation-reconciliation branch is the closing repository item for that queue. After this exact branch head passes the required gates, merges, and post-merge verification succeeds, issue #254 should be closed as `completed` without reopening the already completed Product Quality & UX Excellence Program.
 
-The only separately tracked incomplete approved release-hardening task is issue #194 authenticated non-destructive production smoke, which is `BLOCKED` on administrator/environment provisioning and is not part of issue #254.
+The separately tracked incomplete approved release-hardening task is issue #194 authenticated non-destructive production smoke, which is `BLOCKED` on administrator/environment provisioning and is not part of issue #254.
+
+Issue #273 remains an independent P0/P1 rollout task. Its foundation and payment reconciliation increments are verified, but durable bulk-job progress, remaining action coverage, selected-tenant staging/UAT, monitoring, rollback verification, and product-owner pilot authorization remain open. The feature flag remains default-off for active tenants.
 
 ## Update Rule
 

@@ -4,7 +4,7 @@ Task: `HOAHUB-UX-P0-001`
 
 Tracking issue: #273
 
-Status: IN PROGRESS — foundation and payment contracts VERIFIED and production-deployed; billing generation result-state implemented pending exact-head gates; rollout remains default off
+Status: IN PROGRESS — foundation, payment contracts, and billing generation result-state VERIFIED and production-deployed; rollout remains default off
 
 ## Active-tenant safety
 
@@ -50,7 +50,10 @@ HOAHub already serves an active tenant. This change is additive and preserves th
 - The structured action repeats the existing `BILLING_GENERATE` permission check and additionally enforces the server-side `ux_action_progress_v1` tenant/module/role resolver.
 - Existing Billing Rule resolution, automatic/manual mode guard, tenant isolation, database uniqueness, and duplicate-skip behavior are unchanged. A repeated request continues to produce no prohibited duplicate billing rows.
 - This increment does not claim a 75% stage or durable `completed / total` background-job progress. Those require a separately persisted job/checkpoint contract and remain open.
-- PR #285 merged as `e744afe0a8589f9be45da9ceb745a14a5a0f4a29` after exact head `12a737312fbfb5ec35f91faebaf82f0f984ee8d5` passed MySQL #1412, Canva #485, Edge #78, Firefox #74, and Mobile #73. Post-merge review identified two edge-case corrections—resetting result state when preview inputs change and preserving framework authorization redirects—which are active on `fix/billing-progress-review-20260901` before this increment is marked VERIFIED.
+- PR #285 merged as `e744afe0a8589f9be45da9ceb745a14a5a0f4a29` after exact head `12a737312fbfb5ec35f91faebaf82f0f984ee8d5` passed MySQL #1412, Canva #485, Edge #78, Firefox #74, and Mobile #73.
+- Corrective PR #286 resets result state when preview inputs change and preserves framework authorization redirects. Exact head `2c8f8f7017a5793bacb973f6657880a847a1acae` passed MySQL #1414, Canva #486, Edge #79, Firefox #75, and Mobile #74; merged as `9f58fb2ac9df352ce86972076815ff93f8bfdb48`.
+- Post-merge HOAHub MySQL CI #1415 passed the complete verification and critical-browser suite. Its `Verify Hostinger managed production` job passed the managed deployment wait and public production-health check for `9f58fb2ac9df352ce86972076815ff93f8bfdb48`.
+- Production deployment does not equal tenant rollout: the master switch remains default-off and no tenant target was enabled.
 
 ## Payment reconciliation release evidence
 
@@ -107,7 +110,6 @@ Never place credentials or tenant-private form data in this configuration.
 
 ## Remaining gates
 
-- Verify the billing generation result-state increment through local tests, exact-head CI, post-merge managed deployment, and public production health.
 - Add verified 75% status only where an action exposes a real server-processing checkpoint.
 - Add durable bulk-job progress for monthly billing and other batch operations, including total/completed/succeeded/failed state that survives refresh/reconnection.
 - Extend server-side idempotency, database uniqueness, and privacy-safe observability to every remaining P0/P1 action after individual authority review.

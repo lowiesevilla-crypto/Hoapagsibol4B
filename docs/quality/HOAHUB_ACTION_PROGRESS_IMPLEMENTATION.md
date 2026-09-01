@@ -4,7 +4,7 @@ Task: `HOAHUB-UX-P0-001`
 
 Tracking issue: #273
 
-Status: IN PROGRESS — foundation, payment success/failure contract, and payment uncertain-response reconciliation VERIFIED and production-deployed; rollout remains default off
+Status: IN PROGRESS — foundation and payment contracts VERIFIED and production-deployed; billing generation result-state implemented pending exact-head gates; rollout remains default off
 
 ## Active-tenant safety
 
@@ -41,6 +41,15 @@ HOAHub already serves an active tenant. This change is additive and preserves th
 - If the payment already exists, the UI reports that the payment was recorded and opens the existing receipt. If no payment is found, the UI tells the administrator to review details and retry only if the payment was not already receipted elsewhere.
 - The legacy redirecting production path is unchanged while the rollout flag remains disabled.
 - This increment still does not expose a 75% payment stage because the reconciliation check is a post-response read, not a durable processing checkpoint.
+
+## Billing generation result-state increment
+
+- Branch: `codex/action-progress-charge-20260901`.
+- The flagged monthly billing generation path returns a structured, server-confirmed success or recoverable error result instead of relying on a redirect.
+- The enabled UI reaches 100% only after `generateBillingFromRules` returns its persisted created, duplicate, exempt, and failed counts; the default-off path retains the existing redirect contract.
+- The structured action repeats the existing `BILLING_GENERATE` permission check and additionally enforces the server-side `ux_action_progress_v1` tenant/module/role resolver.
+- Existing Billing Rule resolution, automatic/manual mode guard, tenant isolation, database uniqueness, and duplicate-skip behavior are unchanged. A repeated request continues to produce no prohibited duplicate billing rows.
+- This increment does not claim a 75% stage or durable `completed / total` background-job progress. Those require a separately persisted job/checkpoint contract and remain open.
 
 ## Payment reconciliation release evidence
 
@@ -97,6 +106,7 @@ Never place credentials or tenant-private form data in this configuration.
 
 ## Remaining gates
 
+- Verify the billing generation result-state increment through local tests, exact-head CI, post-merge managed deployment, and public production health.
 - Add verified 75% status only where an action exposes a real server-processing checkpoint.
 - Add durable bulk-job progress for monthly billing and other batch operations, including total/completed/succeeded/failed state that survives refresh/reconnection.
 - Extend server-side idempotency, database uniqueness, and privacy-safe observability to every remaining P0/P1 action after individual authority review.

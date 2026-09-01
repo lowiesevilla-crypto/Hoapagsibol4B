@@ -4,12 +4,13 @@ import { BillStatus, Prisma, TenantModule } from "@prisma/client";
 import { BillArchiveForm } from "@/components/bill-archive-form";
 import { BillingPreviewTable } from "@/components/billing-preview-table";
 import { BillingGenerationScopeFields } from "@/components/billing-generation-scope-fields";
+import { BillingGenerationProgressForm } from "@/components/billing-generation-progress-form";
 import { BillForm } from "@/components/bill-form";
 import { BillRemarks } from "@/components/bill-remarks";
 import { PageHeader } from "@/components/page-header";
 import { StatusBadge } from "@/components/status-badge";
 import { DeleteButton, SubmitButton } from "@/components/ui";
-import { generateBillingFromPreviewAction, refreshOverdueBills } from "@/lib/actions/billing";
+import { refreshOverdueBills } from "@/lib/actions/billing";
 import { sendRemindersAction } from "@/lib/actions/content";
 import { deleteDuesExemptionAction, saveDuesExemptionAction } from "@/lib/actions/exemptions";
 import { prisma } from "@/lib/db";
@@ -148,16 +149,7 @@ function BillingPreview({ preview, input, tenantName, actionProgressEnabled }: {
     </div>
     <div className="mt-5 flex flex-col justify-between gap-3 lg:flex-row lg:items-center">
       <div><h3 className="font-black">Preview details</h3><p className="text-sm text-slate-500">{preview.scopeLabel}</p></div>
-      <form action={generateBillingFromPreviewAction}>
-        <input type="hidden" name="coverageYear" value={input.coverageYear} />
-        <input type="hidden" name="coverageMonth" value={input.coverageMonth} />
-        <input type="hidden" name="scope" value={input.scope} />
-        {input.homeownerIds?.map((id) => <input key={id} type="hidden" name="homeownerIds" value={id} />)}
-        {input.scope === "HOMEOWNER" && <input type="hidden" name="homeownerId" value={input.homeownerIds?.[0] ?? ""} />}
-        {input.block && <input type="hidden" name="block" value={input.block} />}
-        {input.phase && <input type="hidden" name="phase" value={input.phase} />}
-        <SubmitButton className="btn-primary min-h-10 px-4 py-2 text-sm" actionProgress={actionProgressEnabled} pendingLabel="Generating billing">Generate for Eligible Homeowners</SubmitButton>
-      </form>
+      <BillingGenerationProgressForm actionProgressEnabled={actionProgressEnabled} coverageYear={input.coverageYear} coverageMonth={input.coverageMonth} scope={input.scope} homeownerIds={input.homeownerIds ?? []} block={input.block} phase={input.phase} />
     </div>
     <BillingPreviewTable rows={preview.rows} />
   </div>;

@@ -7,9 +7,11 @@ import {
   Prisma,
   RecurringChargeType,
   Role,
+  TenantModule,
 } from "@prisma/client";
 import { platformPrisma } from "@/lib/db";
 import { runAutomaticBillingForTenant } from "@/lib/services/automatic-billing";
+import { runWithTenant } from "@/lib/tenant-context";
 
 const runId = `automatic-billing-5001-${process.pid}`;
 const tenantId = `${runId}-tenant`;
@@ -25,6 +27,13 @@ const billingMonth = 9;
 const billingMonthDate = new Date(Date.UTC(billingYear, billingMonth - 1, 1));
 const dueDate = new Date(Date.UTC(billingYear, billingMonth - 1, 15));
 const schedulerNow = new Date("2026-09-14T16:05:00.000Z"); // Sep 15, 00:05 Asia/Manila.
+
+function runBilling(tenantId: string) {
+  return runWithTenant(tenantId, () => runAutomaticBillingForTenant(tenantId, schedulerNow), {
+    role: Role.BILLING_MANAGER,
+    enabledModules: [TenantModule.BILLING],
+  });
+}
 
 function userId(index: number) {
   return `${runId}-user-${String(index).padStart(5, "0")}`;
@@ -191,7 +200,7 @@ after(async () => {
 test("automatic billing reconciles 5,001 active homeowners without duplicate billing and remains safe for late eligibility", async () => {
   const heapBefore = process.memoryUsage().heapUsed;
   const startedAt = performance.now();
-  const first = await runAutomaticBillingForTenant(tenantId, schedulerNow);
+  const first = await runBilling(tenantId);
   const firstRuntimeMs = performance.now() - startedAt;
   const heapAfter = process.memoryUsage().heapUsed;
 
@@ -211,7 +220,7 @@ test("automatic billing reconciles 5,001 active homeowners without duplicate bil
   assert.equal(firstNotificationCount, 4_999, "Exactly one notification log must be created for every newly created bill.");
   assert.ok(firstCompletionAudit, "The completed reconciliation must be auditable.");
 
-  const repeated = await runAutomaticBillingForTenant(tenantId, schedulerNow);
+  const repeated = await runBilling(tenantId);
   assert.equal(repeated.monthlyDues.created, 0);
   assert.equal(repeated.monthlyDues.duplicates, 5_000);
   assert.equal(repeated.monthlyDues.exemptions, 1);
@@ -220,7 +229,7 @@ test("automatic billing reconciles 5,001 active homeowners without duplicate bil
   assert.equal(await platformPrisma.notificationLog.count({ where: { tenantId } }), firstNotificationCount, "A same-month reconciliation must not send duplicate billing notifications.");
 
   await platformPrisma.homeownerProfile.update({ where: { id: homeownerId(lateIndex) }, data: { status: HomeownerStatus.ACTIVE } });
-  const lateEligibility = await runAutomaticBillingForTenant(tenantId, schedulerNow);
+  const lateEligibility = await runBilling(tenantId);
   assert.equal(lateEligibility.monthlyDues.eligible, activeFixtureCount + 1);
   assert.equal(lateEligibility.monthlyDues.created, 1, "A homeowner becoming eligible after a completed run must be billed on the next reconciliation.");
   assert.equal(lateEligibility.monthlyDues.duplicates, 5_000);
@@ -243,7 +252,7 @@ test("automatic billing reconciles 5,001 active homeowners without duplicate bil
   assert.equal(duplicateGroups.length, 0, "The database must contain no duplicate homeowner/charge/coverage rows.");
   assert.equal(isolationCountBefore, 0, "Running the scale tenant must not contaminate another tenant.");
 
-  const isolationRun = await runAutomaticBillingForTenant(isolationTenantId, schedulerNow);
+  const isolationRun = await runBilling(isolationTenantId);
   assert.equal(isolationRun.monthlyDues.created, 1);
   assert.equal(isolationRun.monthlyDues.failed, 0);
   assert.equal(await platformPrisma.bill.count({ where: { tenantId: isolationTenantId, coverageYear: billingYear, coverageMonth: billingMonth } }), 1);

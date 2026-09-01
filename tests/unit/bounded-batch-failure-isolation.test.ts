@@ -11,7 +11,8 @@ test("automatic billing and downstream writes use explicit bounded batch sizes",
     readFile(billingRulesPath, "utf8"),
   ]);
   assert.match(automaticBilling, /HOMEOWNER_BATCH_SIZE = 250/);
-  assert.match(automaticBilling, /homeowners\.slice\(index, index \+ HOMEOWNER_BATCH_SIZE\)/);
+  assert.match(automaticBilling, /take: HOMEOWNER_BATCH_SIZE/);
+  assert.match(automaticBilling, /cursor: \{ id: cursor \}, skip: 1/);
   assert.match(billingRules, /billingWriteBatchSize = 20/);
   assert.match(billingRules, /billingAuditBatchSize = 50/);
   assert.match(billingRules, /billingNotificationBatchSize = 50/);

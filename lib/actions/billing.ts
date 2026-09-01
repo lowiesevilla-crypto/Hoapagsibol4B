@@ -1,12 +1,13 @@
 "use server";
 
-import { BillStatus, NotificationType, PaymentRequestStatus, Prisma, RecurringChargeType } from "@prisma/client";
+import { BillStatus, NotificationType, PaymentRequestStatus, Prisma, RecurringChargeType, TenantModule } from "@prisma/client";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { requirePermission } from "@/lib/authorization/guards";
 import { Permission } from "@/lib/authorization/permissions";
 import { getAppUrl } from "@/lib/app-url";
 import { prisma } from "@/lib/db";
+import { isUxActionProgressEnabled } from "@/lib/feature-flags/ux-action-progress";
 import { billSchema } from "@/lib/validation";
 import { sendEmailNotification } from "@/lib/services/notifications";
 import { billingGenerationScopes, findEffectiveBillingRule, generateBillingFromRules, generateMonthlyDuesFromRules, periodFromDate, type BillingGenerationScope } from "@/lib/services/billing-rules";
@@ -87,30 +88,62 @@ export async function generateMonthlyBillsAction(formData: FormData) {
 }
 
 export async function generateBillingFromPreviewAction(formData: FormData) {
-  const admin = await requirePermission(Permission.BILLING_GENERATE);
   let redirectUrl = "/admin/billing?success=generated";
   try {
-    const input = parseGenerationForm(admin, formData);
-    await assertManualGenerationAllowed(admin.tenantId, input.coverageYear, input.coverageMonth);
-    const result = await generateBillingFromRules(input);
-    const ruleLabel = result.rule?.resolutionReference ?? "no rule";
-    const message = `${result.createdCount} bill(s) generated for ${periodLabel(input.coverageYear, input.coverageMonth)} from ${ruleLabel}. ${result.exemptCount} exempt, ${result.duplicateCount} duplicate, ${result.failedCount} failed.`;
-    revalidatePath("/admin/billing");
-    revalidatePath("/admin/payments");
-    revalidatePath("/admin/payments/record");
-    revalidatePath("/admin/payments/requests");
-    revalidatePath("/admin/payments/active");
-    revalidatePath("/admin/payments/history");
-    revalidatePath("/admin/dashboard");
-    revalidatePath("/portal/billing");
-    revalidatePath("/portal/pay");
-    revalidatePath("/portal/payments");
-    input.homeownerIds?.forEach((id) => revalidatePath(`/admin/homeowners/${id}`));
-    redirectUrl = `/admin/billing?success=generated&message=${encodeURIComponent(message)}&billingGenerated=1&coverageYear=${input.coverageYear}&coverageMonth=${input.coverageMonth}&scope=${input.scope}${input.homeownerIds?.[0] ? `&homeownerId=${encodeURIComponent(input.homeownerIds[0])}` : ""}`;
+    const completed = await generateBillingSubmission(formData);
+    redirectUrl = `${completed.returnUrl}&message=${encodeURIComponent(completed.message)}`;
   } catch (error) {
     redirect(`/admin/billing?error=${encodeURIComponent(error instanceof Error ? error.message : "Billing generation failed.")}`);
   }
   redirect(redirectUrl);
+}
+
+export type GenerateBillingProgressState = {
+  status: "idle" | "success" | "error";
+  message: string;
+  createdCount: number;
+  duplicateCount: number;
+  exemptCount: number;
+  failedCount: number;
+};
+
+export async function generateBillingFromPreviewProgressAction(_previousState: GenerateBillingProgressState, formData: FormData): Promise<GenerateBillingProgressState> {
+  try {
+    const completed = await generateBillingSubmission(formData, { requireActionProgressFlag: true });
+    return { status: "success", message: completed.message, ...completed.counts };
+  } catch (error) {
+    return {
+      status: "error",
+      message: error instanceof Error ? error.message : "Billing generation failed.",
+      createdCount: 0,
+      duplicateCount: 0,
+      exemptCount: 0,
+      failedCount: 0,
+    };
+  }
+}
+
+async function generateBillingSubmission(formData: FormData, options: { requireActionProgressFlag?: boolean } = {}) {
+  const admin = await requirePermission(Permission.BILLING_GENERATE);
+  if (options.requireActionProgressFlag && !isUxActionProgressEnabled({ tenantId: admin.tenantId, module: TenantModule.BILLING, role: admin.role })) {
+    throw new Error("Action progress is not enabled for this tenant.");
+  }
+  const input = parseGenerationForm(admin, formData);
+  await assertManualGenerationAllowed(admin.tenantId, input.coverageYear, input.coverageMonth);
+  const result = await generateBillingFromRules(input);
+  const ruleLabel = result.rule?.resolutionReference ?? "no rule";
+  const message = `${result.createdCount} bill(s) generated for ${periodLabel(input.coverageYear, input.coverageMonth)} from ${ruleLabel}. ${result.exemptCount} exempt, ${result.duplicateCount} duplicate, ${result.failedCount} failed.`;
+  revalidateBillingGenerationPaths(input.homeownerIds);
+  return {
+    message,
+    counts: { createdCount: result.createdCount, duplicateCount: result.duplicateCount, exemptCount: result.exemptCount, failedCount: result.failedCount },
+    returnUrl: `/admin/billing?success=generated&billingGenerated=1&coverageYear=${input.coverageYear}&coverageMonth=${input.coverageMonth}&scope=${input.scope}${input.homeownerIds?.[0] ? `&homeownerId=${encodeURIComponent(input.homeownerIds[0])}` : ""}`,
+  };
+}
+
+function revalidateBillingGenerationPaths(homeownerIds: string[] | undefined) {
+  ["/admin/billing", "/admin/payments", "/admin/payments/record", "/admin/payments/requests", "/admin/payments/active", "/admin/payments/history", "/admin/dashboard", "/portal/billing", "/portal/pay", "/portal/payments"].forEach((path) => revalidatePath(path));
+  homeownerIds?.forEach((id) => revalidatePath(`/admin/homeowners/${id}`));
 }
 
 async function assertManualGenerationAllowed(tenantId: string, coverageYear: number, coverageMonth: number) {

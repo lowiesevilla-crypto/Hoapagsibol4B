@@ -46,6 +46,8 @@ test("shared component exposes truthful verified stages and accessibility behavi
   const component = readFileSync("components/action-progress-button.tsx", "utf8");
   const payment = readFileSync("components/record-payment-advance-form.tsx", "utf8");
   const billing = readFileSync("app/admin/billing/page.tsx", "utf8");
+  const billingProgress = readFileSync("components/billing-generation-progress-form.tsx", "utf8");
+  const billingActions = readFileSync("lib/actions/billing.ts", "utf8");
   assert.match(component, /pending \? 50 : accepted \? 25 : 0/);
   assert.match(component, /confirmedProcessing \? 75/);
   assert.match(component, /success \? 100/);
@@ -53,5 +55,11 @@ test("shared component exposes truthful verified stages and accessibility behavi
   assert.match(component, /aria-live="polite"/);
   assert.match(component, /motion-reduce:animate-none/);
   assert.match(payment, /pendingLabel="Recording payment"/);
-  assert.match(billing, /pendingLabel="Generating billing"/);
+  assert.match(billing, /BillingGenerationProgressForm/);
+  assert.match(billingProgress, /pendingLabel="Generating billing"/);
+  assert.match(billingProgress, /success=\{actionProgressEnabled && state\.status === "success"\}/);
+  assert.match(billingActions, /generateBillingFromPreviewProgressAction/);
+  assert.match(billingActions, /requireActionProgressFlag/);
+  assert.match(billingActions, /TenantModule\.BILLING/);
+  assert.match(billingActions, /duplicateCount: result\.duplicateCount/);
 });

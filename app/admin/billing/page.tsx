@@ -1,7 +1,9 @@
+import { randomUUID } from "node:crypto";
 import Link from "next/link";
 import { Archive, BellRing, Search, ShieldCheck } from "lucide-react";
 import { BillStatus, Prisma, TenantModule } from "@prisma/client";
 import { BillArchiveForm } from "@/components/bill-archive-form";
+import { BillingGenerationJobProgress } from "@/components/billing-generation-job-progress";
 import { BillingPreviewTable } from "@/components/billing-preview-table";
 import { BillingGenerationScopeFields } from "@/components/billing-generation-scope-fields";
 import { BillForm } from "@/components/bill-form";
@@ -10,6 +12,7 @@ import { PageHeader } from "@/components/page-header";
 import { StatusBadge } from "@/components/status-badge";
 import { DeleteButton, SubmitButton } from "@/components/ui";
 import { generateBillingFromPreviewAction, refreshOverdueBills } from "@/lib/actions/billing";
+import { startBillingGenerationJobAction } from "@/lib/actions/billing-progress";
 import { sendRemindersAction } from "@/lib/actions/content";
 import { deleteDuesExemptionAction, saveDuesExemptionAction } from "@/lib/actions/exemptions";
 import { prisma } from "@/lib/db";
@@ -19,11 +22,14 @@ import { money, monthLabel, shortDate } from "@/lib/utils";
 
 type BillingQuery = Record<string, string | string[] | undefined>;
 
+export const maxDuration = 300;
+
 export default async function BillingPage({ searchParams }: { searchParams: Promise<BillingQuery> }) {
   const user = await refreshOverdueBills();
   const query = await searchParams;
   const actionProgressEnabled = isUxActionProgressEnabled({ tenantId: user.tenantId, module: TenantModule.BILLING, role: user.role });
   const edit = stringParam(query.edit);
+  const billingJobId = stringParam(query.billingJob);
   const billSearch = stringParam(query.q).trim();
   const generationInput = generationInputFromQuery(user, query);
   const [homeowners, bills, archivedBills, editBill, exemptions, tenant] = await Promise.all([
@@ -53,12 +59,13 @@ export default async function BillingPage({ searchParams }: { searchParams: Prom
   return <><PageHeader eyebrow="Collections" title="Billing management" description="Generate dues, maintain bill details, and follow up outstanding accounts." action={<form action={sendRemindersAction}><SubmitButton className="btn-secondary"><BellRing className="size-4" /> Send due reminders</SubmitButton></form>} />
     {stringParam(query.error) && <div role="alert" className="mb-5 rounded-2xl border border-rose-200 bg-rose-50 p-4 text-sm font-semibold text-rose-800">{stringParam(query.error)}</div>}
     {previewError && <div role="alert" className="mb-5 rounded-2xl border border-rose-200 bg-rose-50 p-4 text-sm font-semibold text-rose-800">{previewError}</div>}
+    {billingJobId && <BillingGenerationJobProgress jobId={billingJobId} retryEnabled={actionProgressEnabled} />}
     <details className="card mb-6" open>
       <summary className="cursor-pointer list-none">
         <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
           <div>
             <h2 className="text-lg font-black">Billing generation</h2>
-            <p className="text-sm leading-6 text-slate-500">Preview first, then generate tenant-scoped monthly dues from the effective Billing Rule. Automatic scheduling remains deferred.</p>
+            <p className="text-sm leading-6 text-slate-500">Preview first, then generate tenant-scoped monthly dues from the effective Billing Rule. Automatic rules are handled by the scheduler; manual generation is disabled while Automatic Billing is on.</p>
             <p className="mt-2 text-xs font-bold uppercase tracking-wider text-pine-700">Tenant: {tenant?.name ?? user.tenant.slug}</p>
           </div>
           <span className="text-xs font-black uppercase tracking-wider text-slate-500">Show / hide</span>
@@ -148,15 +155,16 @@ function BillingPreview({ preview, input, tenantName, actionProgressEnabled }: {
     </div>
     <div className="mt-5 flex flex-col justify-between gap-3 lg:flex-row lg:items-center">
       <div><h3 className="font-black">Preview details</h3><p className="text-sm text-slate-500">{preview.scopeLabel}</p></div>
-      <form action={generateBillingFromPreviewAction}>
+      <form action={actionProgressEnabled ? startBillingGenerationJobAction : generateBillingFromPreviewAction}>
         <input type="hidden" name="coverageYear" value={input.coverageYear} />
         <input type="hidden" name="coverageMonth" value={input.coverageMonth} />
         <input type="hidden" name="scope" value={input.scope} />
+        {actionProgressEnabled && <input type="hidden" name="idempotencyKey" value={randomUUID()} />}
         {input.homeownerIds?.map((id) => <input key={id} type="hidden" name="homeownerIds" value={id} />)}
         {input.scope === "HOMEOWNER" && <input type="hidden" name="homeownerId" value={input.homeownerIds?.[0] ?? ""} />}
         {input.block && <input type="hidden" name="block" value={input.block} />}
         {input.phase && <input type="hidden" name="phase" value={input.phase} />}
-        <SubmitButton className="btn-primary min-h-10 px-4 py-2 text-sm" actionProgress={actionProgressEnabled} pendingLabel="Generating billing">Generate for Eligible Homeowners</SubmitButton>
+        <SubmitButton className="btn-primary min-h-10 px-4 py-2 text-sm" actionProgress={actionProgressEnabled} pendingLabel={actionProgressEnabled ? "Starting billing job" : "Generating billing"}>Generate for Eligible Homeowners</SubmitButton>
       </form>
     </div>
     <BillingPreviewTable rows={preview.rows} />

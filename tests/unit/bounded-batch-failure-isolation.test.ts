@@ -25,12 +25,13 @@ test("one billing-row or notification failure is isolated and counted without un
   assert.match(billingRules, /Billing persistence must not fail because an email provider is unavailable/);
 });
 
-test("automatic billing retry safety relies on tenant-period duplicate checks and completion audit", async () => {
+test("automatic billing retry safety reconciles eligible homeowners and relies on tenant-period duplicate checks", async () => {
   const [automaticBilling, billingRules] = await Promise.all([
     readFile(automaticBillingPath, "utf8"),
     readFile(billingRulesPath, "utf8"),
   ]);
-  assert.match(automaticBilling, /hasCompletedMonthlyDuesRun\(tenantId, rule\.id, clock\.year, clock\.month\)/);
+  assert.match(automaticBilling, /reconciliation: true/);
+  assert.doesNotMatch(automaticBilling, /hasCompletedMonthlyDuesRun|already completed for this billing month/);
   assert.match(automaticBilling, /AUTOMATIC_MONTHLY_DUES_COMPLETED/);
   assert.match(billingRules, /tenantId: input\.actor\.tenantId, homeownerId: row\.homeownerId, recurringChargeType: RecurringChargeType\.MONTHLY_DUES, coverageYear: input\.coverageYear, coverageMonth: input\.coverageMonth/);
   assert.match(billingRules, /row\.action = "SKIP_DUPLICATE"/);

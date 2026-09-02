@@ -46,7 +46,7 @@ Verified production increments:
 - Monthly Billing server-confirmed result state — PR #285, exact head `12a737312fbfb5ec35f91faebaf82f0f984ee8d5`, which passed MySQL #1412, Canva #485, Edge #78, Firefox #74, and Mobile #73 and merged as `e744afe0a8589f9be45da9ceb745a14a5a0f4a29`.
 - Billing progress review corrections — PR #286. The correction resets flagged billing-result state when preview inputs change and preserves framework authorization/session redirects rather than converting them into recoverable billing errors.
 - Durable Manual Billing progress and 5,001-homeowner Manual Billing qualification — PR #289.
-- Production automatic billing scheduler code — PR #290. The scheduler runs daily at 00:15 Asia/Manila and posts only to `/api/cron/monthly-dues` with the cron bearer secret. The first activation attempt was added by PR #291 and is blocked on production GitHub environment secret configuration.
+- Production automatic billing scheduler code — PR #290. The scheduler runs daily at 00:15 Asia/Manila and posts only to `/api/cron/monthly-dues` with the cron bearer secret. PR #291 added the first activation trigger, and scheduler run #1 attempt 2 is verified after GitHub `production` environment `CRON_SECRET` configuration.
 
 Still open under #273:
 

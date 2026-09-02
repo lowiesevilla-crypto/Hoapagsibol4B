@@ -89,7 +89,7 @@ PR #289 verifies this contract for Manual Billing. Progress must survive refresh
 
 The billing-rule screenshot showed Monthly Dues automatic billing enabled for day 2. The application-side generation service was already idempotent, Manila-calendar based, tenant-scoped, and duplicate-safe, but production needed an external scheduler to invoke `/api/cron/monthly-dues`.
 
-PR #290 added `HOAHub Automatic Billing Scheduler` with a daily 00:15 Asia/Manila schedule, production environment, `HOSTINGER_APP_URL`, `CRON_SECRET`, and a narrow POST to `/api/cron/monthly-dues`. PR #291 added a one-time activation trigger for changes to the scheduler workflow file. Activation run #1 fired after PR #291 merged, but failed before tenant data was touched because GitHub's `production` environment had `HOSTINGER_APP_URL` and an empty `CRON_SECRET`. Configure the GitHub `production` environment `CRON_SECRET` to match the deployed app cron secret, then rerun the scheduler or allow the next daily run.
+PR #290 added `HOAHub Automatic Billing Scheduler` with a daily 00:15 Asia/Manila schedule, production environment, `HOSTINGER_APP_URL`, `CRON_SECRET`, and a narrow POST to `/api/cron/monthly-dues`. PR #291 added a one-time activation trigger for changes to the scheduler workflow file. Activation run #1 initially failed before tenant data was touched because GitHub's `production` environment had `HOSTINGER_APP_URL` and an empty `CRON_SECRET`; after the environment secret was configured, run #1 attempt 2 passed, POSTed to `/api/cron/monthly-dues`, and logged `Automatic billing reconciliation completed; tenants processed: 4.` Secrets were masked and no tenant-private identifiers were exposed.
 
 ## Configuration contract
 
@@ -115,6 +115,5 @@ Never place credentials or tenant-private form data in this configuration.
 
 - Add a verified 75% standard-action stage only where an action exposes a real server-processing checkpoint.
 - Extend server-side idempotency, database uniqueness, and privacy-safe observability to every remaining P0/P1 action after individual authority review.
-- Configure GitHub `production` environment `CRON_SECRET` for the production automatic billing scheduler, then rerun and verify aggregate-only tenant processing.
 - Complete concurrency, slow-network, timeout, two-tab, accessibility, selected-tenant staging, monitoring, rollback, and product-owner pilot evidence.
 - Do not enable the flag for an active tenant until the applicable increment has exact-head CI, staging UAT, operational monitoring, and explicit pilot authorization.

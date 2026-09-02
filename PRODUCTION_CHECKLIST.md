@@ -22,6 +22,7 @@
 - [ ] `ALLOWED_ORIGINS` contains only approved HTTPS origins.
 - [ ] `AUTH_SECRET` is unique and at least 32 random characters.
 - [ ] `CRON_SECRET` is different from `AUTH_SECRET`.
+- [ ] GitHub `production` environment secret `CRON_SECRET` is configured and matches the deployed app's `CRON_SECRET` so scheduled billing can authenticate to `/api/cron/monthly-dues`.
 - [ ] Session duration is approved.
 - [ ] Facebook/payment secrets are present only when those integrations are enabled.
 - [ ] `OPENAI_API_KEY` is configured as a server-side Hostinger secret when AI Assistance is enabled.
@@ -81,7 +82,8 @@
 ## Scheduled operations
 
 - [ ] Daily maintenance cron configured at the intended UTC time.
-- [ ] Monthly dues cron configured for day 1 and approved due day.
+- [ ] HOAHub Automatic Billing Scheduler passes in GitHub Actions and runs daily at 00:15 Asia/Manila.
+- [ ] Monthly dues automatic billing rule configured for the approved due day.
 - [ ] Dues exemptions tested before enabling monthly automation.
 - [ ] Cron audit entries and email logs reviewed after the first run.
 - [ ] Hostinger automatic daily database/site backups enabled.

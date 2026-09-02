@@ -1,0 +1,58 @@
+name: HOAHub Automatic Billing Scheduler
+
+on:
+  schedule:
+    # 00:15 Asia/Manila every day. The service safely catches up after a rule's
+    # configured billing day and database uniqueness prevents duplicate bills.
+    - cron: "15 16 * * *"
+  workflow_dispatch:
+
+concurrency:
+  group: hoahub-production-automatic-billing
+  cancel-in-progress: false
+
+jobs:
+  run-automatic-billing:
+    name: Run production automatic billing
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: production
+    env:
+      HOSTINGER_APP_URL: ${{ secrets.HOSTINGER_APP_URL }}
+      CRON_SECRET: ${{ secrets.CRON_SECRET }}
+    steps:
+      - name: Validate scheduler configuration
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          if [ -z "${HOSTINGER_APP_URL:-}" ] || [ -z "${CRON_SECRET:-}" ]; then
+            echo "::error::HOSTINGER_APP_URL and CRON_SECRET must be configured in the production environment."
+            exit 1
+          fi
+
+      - name: Run tenant automatic billing reconciliation
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          RESPONSE_FILE="${RUNNER_TEMP}/automatic-billing-response.json"
+          STATUS="$(curl --silent --show-error --max-time 330 \
+            --output "${RESPONSE_FILE}" \
+            --write-out '%{http_code}' \
+            --request POST \
+            --header "Authorization: Bearer ${CRON_SECRET}" \
+            --header 'Content-Type: application/json' \
+            "${HOSTINGER_APP_URL%/}/api/cron/monthly-dues")"
+
+          if [ "${STATUS}" -lt 200 ] || [ "${STATUS}" -ge 300 ]; then
+            FAILURE_COUNT="$(jq '[.results[]? | select(has("error"))] | length' "${RESPONSE_FILE}" 2>/dev/null || echo unknown)"
+            echo "::error::Automatic billing returned HTTP ${STATUS}; failed tenant count: ${FAILURE_COUNT}."
+            exit 1
+          fi
+
+          OK="$(jq -r '.ok // false' "${RESPONSE_FILE}")"
+          TENANTS_PROCESSED="$(jq -r '.tenantsProcessed // 0' "${RESPONSE_FILE}")"
+          if [ "${OK}" != "true" ]; then
+            echo "::error::Automatic billing did not report success; tenants processed: ${TENANTS_PROCESSED}."
+            exit 1
+          fi
+          echo "Automatic billing reconciliation completed; tenants processed: ${TENANTS_PROCESSED}."

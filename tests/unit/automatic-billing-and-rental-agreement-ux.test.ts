@@ -5,16 +5,18 @@ import test from "node:test";
 const servicePath = new URL("../../lib/services/automatic-billing.ts", import.meta.url);
 const monthlyCronPath = new URL("../../app/api/cron/monthly-dues/route.ts", import.meta.url);
 const dailyCronPath = new URL("../../app/api/cron/daily/route.ts", import.meta.url);
+const productionSchedulerPath = new URL("../../.github/workflows/automatic-billing-scheduler.yml", import.meta.url);
 const billingSettingsPath = new URL("../../app/admin/settings/billing-rules/page.tsx", import.meta.url);
 const automationTogglePath = new URL("../../components/billing-automation-toggle.tsx", import.meta.url);
 const rentalActionsPath = new URL("../../components/rental-record-actions.tsx", import.meta.url);
 const agreementViewPath = new URL("../../app/admin/rentals/agreements/[id]/page.tsx", import.meta.url);
 
 test("automatic billing is tenant scheduled, bounded for large homeowner populations, idempotent, reconciling, and Manila-calendar based", async () => {
-  const [service, monthlyCron, dailyCron] = await Promise.all([
+  const [service, monthlyCron, dailyCron, productionScheduler] = await Promise.all([
     readFile(servicePath, "utf8"),
     readFile(monthlyCronPath, "utf8"),
     readFile(dailyCronPath, "utf8"),
+    readFile(productionSchedulerPath, "utf8"),
   ]);
   assert.match(service, /HOMEOWNER_BATCH_SIZE = 250/);
   assert.match(service, /generationMode === BillingGenerationMode\.AUTOMATIC/);
@@ -30,6 +32,13 @@ test("automatic billing is tenant scheduled, bounded for large homeowner populat
   assert.match(service, /description='Rental payment'/);
   assert.match(monthlyCron, /runAutomaticBillingForTenant/);
   assert.match(dailyCron, /runAutomaticBillingForTenant/);
+  assert.match(productionScheduler, /cron: "15 16 \* \* \*"/);
+  assert.match(productionScheduler, /environment: production/);
+  assert.match(productionScheduler, /secrets\.HOSTINGER_APP_URL/);
+  assert.match(productionScheduler, /secrets\.CRON_SECRET/);
+  assert.match(productionScheduler, /api\/cron\/monthly-dues/);
+  assert.doesNotMatch(productionScheduler, /api\/cron\/daily/);
+  assert.match(productionScheduler, /cancel-in-progress: false/);
 });
 
 test("tenant billing settings use the Manila period and keep the automatic editor synchronized", async () => {

@@ -33,6 +33,7 @@ test("automatic billing is tenant scheduled, bounded for large homeowner populat
   assert.match(monthlyCron, /runAutomaticBillingForTenant/);
   assert.match(dailyCron, /runAutomaticBillingForTenant/);
   assert.match(productionScheduler, /cron: "15 16 \* \* \*"/);
+  assert.match(productionScheduler, /push:[\s\S]*branches: \[main\][\s\S]*automatic-billing-scheduler\.yml/);
   assert.match(productionScheduler, /environment: production/);
   assert.match(productionScheduler, /secrets\.HOSTINGER_APP_URL/);
   assert.match(productionScheduler, /secrets\.CRON_SECRET/);

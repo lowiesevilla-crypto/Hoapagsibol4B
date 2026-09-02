@@ -1,6 +1,10 @@
 name: HOAHub Automatic Billing Scheduler
 
 on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/automatic-billing-scheduler.yml"
   schedule:
     # 00:15 Asia/Manila every day. The service safely catches up after a rule's
     # configured billing day and database uniqueness prevents duplicate bills.

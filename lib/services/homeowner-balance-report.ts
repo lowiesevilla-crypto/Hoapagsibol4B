@@ -23,53 +23,83 @@ export type HomeownerBalanceReportRow = {
   remarks: string;
 };
 
+// lib/db.ts intentionally applies a safety default of take=500 to tenant-model
+// findMany calls that do not set take explicitly. Reports must therefore page
+// explicitly so large tenants are never silently truncated at 500 homeowners.
+export const HOMEOWNER_BALANCE_REPORT_BATCH_SIZE = 500;
+
 export async function getHomeownerBalanceReport(tenantId: string, fromInput?: string | null, toInput?: string | null, statusInput?: string | null) {
   const { from, to, fromText, toText } = parseReportDateRange(fromInput, toInput);
   const status = parseHomeownerBalanceStatus(statusInput);
-  const homeowners = await prisma.homeownerProfile.findMany({
-    where: {
-      tenantId,
-      ...(status === "ALL" ? {} : { status }),
-    },
-    include: {
-      user: true,
-      bills: {
-        where: {
-          tenantId,
-          archivedAt: null,
-          recurringChargeType: RecurringChargeType.MONTHLY_DUES,
-          billingMonth: { gte: from, lte: to },
-        },
-        orderBy: [{ billingMonth: "asc" }, { dueDate: "asc" }],
-      },
-    },
-    orderBy: [{ status: "asc" }, { user: { name: "asc" } }, { block: "asc" }, { lot: "asc" }],
-  });
+  const where = {
+    tenantId,
+    ...(status === "ALL" ? {} : { status }),
+  };
 
-  const rows: HomeownerBalanceReportRow[] = homeowners.map((homeowner) => {
-    const totalBill = roundMoney(homeowner.bills.reduce((sum, bill) => sum + Number(bill.totalAmount), 0));
-    const totalPaid = roundMoney(homeowner.bills.reduce((sum, bill) => sum + Number(bill.amountPaid), 0));
-    const currentBalance = roundMoney(homeowner.bills.reduce((sum, bill) => sum + Number(bill.balance), 0));
-    const billCount = homeowner.bills.length;
-    const paidBillCount = homeowner.bills.filter((bill) => Number(bill.balance) <= 0).length;
-    return {
-      homeownerId: homeowner.id,
-      accountNumber: homeownerAccountNumber(homeowner),
-      homeownerName: homeowner.user.name,
-      email: homeowner.user.email,
-      block: homeowner.block,
-      lot: homeowner.lot,
-      phase: homeowner.phase ?? "",
-      status: homeowner.status,
-      monthlyDuesAmount: Number(homeowner.monthlyDuesAmount),
-      totalBill,
-      totalPaid,
-      currentBalance,
-      billCount,
-      paidBillCount,
-      remarks: homeownerBalanceRemarks({ status: homeowner.status, billCount, paidBillCount, currentBalance }),
-    };
-  });
+  const expectedHomeownerCount = await prisma.homeownerProfile.count({ where });
+  const rows: HomeownerBalanceReportRow[] = [];
+  let cursor: string | undefined;
+
+  while (true) {
+    const homeowners = await prisma.homeownerProfile.findMany({
+      where,
+      include: {
+        user: true,
+        bills: {
+          where: {
+            tenantId,
+            archivedAt: null,
+            recurringChargeType: RecurringChargeType.MONTHLY_DUES,
+            billingMonth: { gte: from, lte: to },
+          },
+          orderBy: [{ billingMonth: "asc" }, { dueDate: "asc" }],
+        },
+      },
+      orderBy: { id: "asc" },
+      take: HOMEOWNER_BALANCE_REPORT_BATCH_SIZE,
+      ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
+    });
+
+    for (const homeowner of homeowners) {
+      const totalBill = roundMoney(homeowner.bills.reduce((sum, bill) => sum + Number(bill.totalAmount), 0));
+      const totalPaid = roundMoney(homeowner.bills.reduce((sum, bill) => sum + Number(bill.amountPaid), 0));
+      const currentBalance = roundMoney(homeowner.bills.reduce((sum, bill) => sum + Number(bill.balance), 0));
+      const billCount = homeowner.bills.length;
+      const paidBillCount = homeowner.bills.filter((bill) => Number(bill.balance) <= 0).length;
+      rows.push({
+        homeownerId: homeowner.id,
+        accountNumber: homeownerAccountNumber(homeowner),
+        homeownerName: homeowner.user.name,
+        email: homeowner.user.email,
+        block: homeowner.block,
+        lot: homeowner.lot,
+        phase: homeowner.phase ?? "",
+        status: homeowner.status,
+        monthlyDuesAmount: Number(homeowner.monthlyDuesAmount),
+        totalBill,
+        totalPaid,
+        currentBalance,
+        billCount,
+        paidBillCount,
+        remarks: homeownerBalanceRemarks({ status: homeowner.status, billCount, paidBillCount, currentBalance }),
+      });
+    }
+
+    if (homeowners.length < HOMEOWNER_BALANCE_REPORT_BATCH_SIZE) break;
+    cursor = homeowners[homeowners.length - 1]?.id;
+    if (!cursor) break;
+  }
+
+  if (rows.length !== expectedHomeownerCount) {
+    throw new Error(`Homeowner balance report integrity check failed: expected ${expectedHomeownerCount} homeowner(s), retrieved ${rows.length}. Please retry the export.`);
+  }
+
+  rows.sort((a, b) =>
+    a.status.localeCompare(b.status) ||
+    a.homeownerName.localeCompare(b.homeownerName) ||
+    a.block.localeCompare(b.block, undefined, { numeric: true }) ||
+    a.lot.localeCompare(b.lot, undefined, { numeric: true }),
+  );
 
   const totals = rows.reduce((summary, row) => ({
     homeowners: summary.homeowners + 1,

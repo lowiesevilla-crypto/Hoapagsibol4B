@@ -12,7 +12,7 @@ import { collectionLabel, inputDate, money, monthLabel, shortDate } from "@/lib/
 
 type RentalAllocationAccountingRow = { collectionId: string; amount: Prisma.Decimal | number | string; chargeType: string };
 
-export default async function ReportsPage({ searchParams }: { searchParams: Promise<{ from?: string; to?: string }> }) {
+export default async function ReportsPage({ searchParams }: { searchParams: Promise<{ from?: string; to?: string; homeownerStatus?: string }> }) {
   const user = await requireUser(Role.ADMIN);
   const filters = await searchParams;
   const now = new Date();
@@ -76,7 +76,9 @@ export default async function ReportsPage({ searchParams }: { searchParams: Prom
   const expenseBreakdown = new Map<string, number>();
   for (const item of expenses) expenseBreakdown.set(item.category.name, (expenseBreakdown.get(item.category.name) ?? 0) + Number(item.amount));
 
+  const homeownerStatus = ["ACTIVE", "INACTIVE"].includes(filters.homeownerStatus ?? "") ? filters.homeownerStatus! : "ALL";
   const reportQuery = `from=${fromText}&to=${toText}`;
+  const homeownerBalanceQuery = `${reportQuery}&status=${homeownerStatus}`;
   return <>
     <PageHeader eyebrow="Financials" title="HOA financial reports" description={`Review verified financial statements and supporting schedules for ${shortDate(from)} to ${shortDate(to)}.`} action={<div className="flex flex-wrap gap-2"><a className="btn-primary" href={`/admin/reports/pdf?${reportQuery}`}><Download className="size-4" /> PDF report</a><a className="btn-secondary" href={`/admin/reports/docx?${reportQuery}`}><FileText className="size-4" /> Word report</a><a className="btn-secondary" href={`/admin/reports/export?${reportQuery}`}><Download className="size-4" /> CSV</a></div>} />
 
@@ -89,6 +91,31 @@ export default async function ReportsPage({ searchParams }: { searchParams: Prom
         <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Admin finance workspace</p>
       </div>
       <form className="grid gap-4 sm:grid-cols-[1fr_1fr_auto] sm:items-end"><div><label className="label">From</label><input className="field" name="from" type="date" defaultValue={fromText} required /></div><div><label className="label">To</label><input className="field" name="to" type="date" defaultValue={toText} required /></div><button className="btn-primary w-full sm:w-auto">Generate report</button></form>
+    </section>
+
+    <section className="card mb-6">
+      <div className="mb-4">
+        <h2 className="font-black text-slate-900">Downloadable report center</h2>
+        <p className="text-sm text-slate-500">Generate tenant-scoped CSV reports for homeowner balances and transaction history using the selected date range.</p>
+      </div>
+      <form className="grid gap-4 sm:grid-cols-[1fr_1fr_1fr_auto] sm:items-end">
+        <div><label className="label">From</label><input className="field" name="from" type="date" defaultValue={fromText} required /></div>
+        <div><label className="label">To</label><input className="field" name="to" type="date" defaultValue={toText} required /></div>
+        <div><label className="label">Homeowner status</label><select className="field" name="homeownerStatus" defaultValue={homeownerStatus}><option value="ALL">Active and inactive</option><option value="ACTIVE">Active homeowners only</option><option value="INACTIVE">Inactive homeowners only</option></select></div>
+        <button className="btn-primary w-full sm:w-auto">Generate report</button>
+      </form>
+      <div className="mt-5 grid gap-4 lg:grid-cols-2">
+        <article className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+          <h3 className="font-black text-slate-900">Homeowner Monthly Dues Balance Report</h3>
+          <p className="mt-1 text-sm text-slate-600">Includes homeowner name, block, lot, Monthly Due amount, Total Bill, Total Paid, Current Balance, and consolidated remarks.</p>
+          <a className="btn-secondary mt-4 inline-flex" href={`/admin/reports/homeowner-balances/export?${homeownerBalanceQuery}`}><Download className="size-4" /> Download homeowner balances</a>
+        </article>
+        <article className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+          <h3 className="font-black text-slate-900">Transaction History Report</h3>
+          <p className="mt-1 text-sm text-slate-600">Includes all tenant transactions in the date range with payment type, mode of payment, amount, balance, receipt number, and remarks.</p>
+          <a className="btn-secondary mt-4 inline-flex" href={`/admin/reports/transactions/export?${reportQuery}`}><Download className="size-4" /> Download transaction history</a>
+        </article>
+      </div>
     </section>
 
     <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">

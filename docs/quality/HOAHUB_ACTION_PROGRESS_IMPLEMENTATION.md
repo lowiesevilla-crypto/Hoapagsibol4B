@@ -4,7 +4,7 @@ Task: `HOAHUB-UX-P0-001`
 
 Tracking issue: #273
 
-Status: IN PROGRESS — foundation, payment result/reconciliation, and billing server-confirmed result state are VERIFIED and production-deployed; durable bulk progress and rollout gates remain open; rollout remains default off
+Status: IN PROGRESS — foundation, payment result/reconciliation, billing server-confirmed result state, and durable Manual Billing progress are VERIFIED and production-deployed; remaining action coverage and rollout gates remain open; rollout remains default off
 
 ## Active-tenant safety
 
@@ -35,7 +35,7 @@ HOAHub serves an active tenant. This enhancement remains additive and preserves 
 - Lookup is scoped to `(tenantId, idempotencyKey)` and does not create, update, void, allocate, notify, or revalidate payments.
 - Exact head `92e8fdbe88920442c4859b52cc81b664f45bcdbd` passed MySQL #1395, Canva #472, Edge #65, Firefox #61, and Mobile #60; merge `c43895cab823ec2d01538c28c372a628644d4379`; post-merge verification and Hostinger/public health passed.
 
-### Monthly Billing server-confirmed result state — PR #285 / #286
+### Monthly Billing server-confirmed and durable result state — PR #285 / #286 / #289
 
 - PR #285 introduced a default-off structured result path for `Generate for Eligible Homeowners`.
 - The flagged UI reaches 100% only after `generateBillingFromRules` returns persisted created, duplicate, exempt, and failed counts.
@@ -46,7 +46,9 @@ HOAHub serves an active tenant. This enhancement remains additive and preserves 
 - PR #286 corrected two post-merge review edge cases: the flagged billing result state is remounted when preview inputs change so an earlier 100% state cannot disable a new preview, and framework authorization/session redirects are rethrown instead of being converted to inline billing errors.
 - PR #286 exact head `2c8f8f7017a5793bacb973f6657880a847a1acae` passed MySQL #1414, Canva #486, Edge #79, Firefox #75, and Mobile #74; merged as `9f58fb2ac9df352ce86972076815ff93f8bfdb48`.
 - Post-merge MySQL CI #1415 run `33474363771` passed the full verification suite, production smoke / critical browser suite, Hostinger managed-deployment wait, and public production health.
-- This increment still does not claim durable `completed / total` background-job progress. That is the next bounded #273 increment.
+- PR #289 added durable Manual Billing job progress with persisted total/completed/succeeded/failed counts, a durable job reference, actual `floor(completed / total * 100)` progress, and failed-record-only retry.
+- PR #289 exact head `8017230a88f7251a8e865b26a1be97a60f8715d9` passed MySQL #1424, Canva #494, Edge #87, Firefox #83, and Mobile #82; merged as `614e6af11045c79d6113b40d3eb5162740977a64`.
+- Post-merge MySQL #1425 passed, and the inspected Hostinger release-marker delay was rerun successfully.
 
 ## Billing scale evidence
 
@@ -57,27 +59,15 @@ HOAHub serves an active tenant. This enhancement remains additive and preserves 
 - Post-merge MySQL #1409 plus Hostinger/public health passed.
 - Evidence covers bounded automatic generation, duplicate prevention, retry/completion behavior, failure isolation, rental billing correctness, advance-credit allocation, and second-tenant isolation.
 
-### Manual Billing — explicit 5,001-homeowner qualification REQUIRED
+### Manual Billing — VERIFIED at 5,001 homeowners
 
-The Admin-triggered Manual Billing flow uses the same tenant-scoped generation engine and bounded write controls as the automatic path, but automatic-billing evidence must not be used as a substitute for a dedicated Manual Billing acceptance run.
+The Admin-triggered Manual Billing flow now has its own dedicated 5,001-homeowner qualification and no longer borrows evidence from Automatic Billing.
 
-Before large-tenant manual billing is labeled 5,000+ production-proven or enabled with durable progress for an active tenant, CI/staging must prove the manual flow with at least 5,001 ACTIVE homeowners and verify:
+PR #289 verifies disposable MySQL execution with at least 5,001 ACTIVE homeowners through the manual generation path. Evidence covers exemptions, pre-existing duplicates, repeat submission duplicate protection, bounded 250-record processing, injected row failure isolation, persisted truthful counts, failed-record-only retry, and second-tenant isolation. The feature flag remains disabled for active tenants until staging/UAT, monitoring, rollback verification, and product-owner pilot authorization are separately completed.
 
-- manual Monthly Dues generation through the actual manual generation service path;
-- exemptions and pre-existing duplicates are skipped correctly;
-- repeat/manual retry produces no prohibited duplicate bills;
-- bounded write/audit/notification work and acceptable runtime/memory behavior;
-- injected row failure is isolated without rolling back successful rows;
-- persisted created/succeeded/failed counts reconcile to the target population;
-- a second tenant cannot read, mutate, block, or contaminate the first tenant's run;
-- the durable progress contract reports actual `floor(completed / total * 100)` and remains readable after refresh/reconnection/navigation;
-- retry is limited to failed records only after a partial result.
+## Durable bulk progress contract — verified for Manual Billing
 
-The durable-billing implementation and the 5,001-homeowner manual qualification should ship together as one bounded #273 increment so scale safety and truthful progress are proven on the same exact release head.
-
-## Durable bulk progress contract — next increment
-
-For Monthly Billing and other large batch operations, the implementation must persist and expose:
+For Manual Billing and later large batch operations, the implementation must persist and expose:
 
 - job reference;
 - tenant ID and authorized actor identity;
@@ -93,7 +83,13 @@ User-visible percentage is computed as:
 
 `floor(completed records / total records × 100)`
 
-Progress must survive refresh, reconnection, and navigation. A user may leave the Billing page and later inspect the same job. The UI must not reach 100% before the durable job reaches a terminal server-confirmed state.
+PR #289 verifies this contract for Manual Billing. Progress must survive refresh, reconnection, and navigation. A user may leave the Billing page and later inspect the same job. The UI must not reach 100% before the durable job reaches a terminal server-confirmed state.
+
+## Production automatic billing scheduler
+
+The billing-rule screenshot showed Monthly Dues automatic billing enabled for day 2. The application-side generation service was already idempotent, Manila-calendar based, tenant-scoped, and duplicate-safe, but production needed an external scheduler to invoke `/api/cron/monthly-dues`.
+
+PR #290 added `HOAHub Automatic Billing Scheduler` with a daily 00:15 Asia/Manila schedule, production environment, `HOSTINGER_APP_URL`, `CRON_SECRET`, and a narrow POST to `/api/cron/monthly-dues`. PR #291 added a one-time activation trigger for changes to the scheduler workflow file. Activation run #1 fired after PR #291 merged, but failed before tenant data was touched because GitHub's `production` environment had `HOSTINGER_APP_URL` and an empty `CRON_SECRET`. Configure the GitHub `production` environment `CRON_SECRET` to match the deployed app cron secret, then rerun the scheduler or allow the next daily run.
 
 ## Configuration contract
 
@@ -117,9 +113,8 @@ Never place credentials or tenant-private form data in this configuration.
 
 ## Remaining gates
 
-- Implement and verify durable Monthly Billing progress with persisted total/completed/succeeded/failed state and failed-only retry.
-- Add the dedicated 5,001-homeowner Manual Billing qualification on the same generation path.
 - Add a verified 75% standard-action stage only where an action exposes a real server-processing checkpoint.
 - Extend server-side idempotency, database uniqueness, and privacy-safe observability to every remaining P0/P1 action after individual authority review.
+- Configure GitHub `production` environment `CRON_SECRET` for the production automatic billing scheduler, then rerun and verify aggregate-only tenant processing.
 - Complete concurrency, slow-network, timeout, two-tab, accessibility, selected-tenant staging, monitoring, rollback, and product-owner pilot evidence.
 - Do not enable the flag for an active tenant until the applicable increment has exact-head CI, staging UAT, operational monitoring, and explicit pilot authorization.

@@ -13,6 +13,18 @@ import { resolveTenant, tenantCanSignIn } from "@/lib/tenant";
 const PASSKEY_TIMEOUT_MS = 60_000;
 const CHALLENGE_TTL_MS = 5 * 60_000;
 export const PASSKEY_DOMAIN_CONFIGURATION_ERROR = "Passkey enrollment requires localhost during local testing or a secure HTTPS domain in production.";
+export const PASSKEY_NOT_REGISTERED_ERROR = "This saved passkey is no longer registered with HOAHub. Choose another saved passkey, or sign in with your password and register a new passkey.";
+export const PASSKEY_TENANT_MISMATCH_ERROR = "This passkey belongs to another HOA account. Choose the passkey registered for this community, or use the universal HOAHub login.";
+
+export class PasskeyAuthenticationError extends Error {
+  constructor(
+    public readonly code: "CREDENTIAL_NOT_REGISTERED" | "TENANT_MISMATCH",
+    message: string,
+  ) {
+    super(message);
+    this.name = "PasskeyAuthenticationError";
+  }
+}
 
 export type WebAuthnRpConfig = {
   rpName: string;
@@ -44,18 +56,19 @@ export function passkeyChallengeHash(value: string) {
   return createHash("sha256").update(value).digest("hex");
 }
 
-export async function generatePasskeyRegistrationOptions(input: { userId: string; tenantId: string; name: string; email: string }) {
+export async function generatePasskeyRegistrationOptions(input: { userId: string; tenantId: string; name: string; email: string; tenantSlug?: string }) {
   const rp = passkeyRp();
   const existing = await prisma.userPasskeyCredential.findMany({
     where: { tenantId: input.tenantId, userId: input.userId },
     select: { credentialId: true, transports: true },
   });
+  const tenantLabel = input.tenantSlug?.trim();
   const options = await generateRegistrationOptions({
     rpName: rp.rpName,
     rpID: rp.rpID,
     userID: Buffer.from(input.userId),
-    userName: input.email,
-    userDisplayName: input.name,
+    userName: tenantLabel ? `${input.email} · ${tenantLabel}` : input.email,
+    userDisplayName: tenantLabel ? `${input.name} · ${tenantLabel}` : input.name,
     timeout: PASSKEY_TIMEOUT_MS,
     attestationType: "none",
     authenticatorSelection: { residentKey: "preferred", userVerification: "preferred" },
@@ -234,13 +247,22 @@ export async function generatePasskeyDiscoveryAuthenticationOptions() {
   });
 }
 
-export async function verifyPasskeyAuthentication(input: { response: AuthenticationResponseJSON; discoveryChallengeHash?: string }) {
+export async function verifyPasskeyAuthentication(input: { response: AuthenticationResponseJSON; discoveryChallengeHash?: string; expectedTenantSlug?: string }) {
   const credentialRecord = await platformPrisma.userPasskeyCredential.findUnique({
     where: { credentialId: input.response.id },
     include: { user: { include: { tenant: { include: { advisories: { where: { active: true }, orderBy: { createdAt: "desc" }, take: 1 }, moduleEntitlements: true } }, homeownerProfile: true } } },
   });
-  const homeownerProfile = credentialRecord?.user.homeownerProfile;
-  if (!credentialRecord || !credentialRecord.user.active || credentialRecord.user.role !== Role.HOMEOWNER || homeownerProfile?.activationStatus !== HomeownerActivationStatus.ACTIVE || homeownerProfile?.emailStatus !== HomeownerEmailVerificationStatus.VERIFIED || !homeownerProfile?.activatedAt) {
+  if (!credentialRecord) {
+    throw new PasskeyAuthenticationError("CREDENTIAL_NOT_REGISTERED", PASSKEY_NOT_REGISTERED_ERROR);
+  }
+
+  const expectedTenantSlug = input.expectedTenantSlug?.trim().toLowerCase();
+  if (expectedTenantSlug && credentialRecord.user.tenant.slug.toLowerCase() !== expectedTenantSlug) {
+    throw new PasskeyAuthenticationError("TENANT_MISMATCH", PASSKEY_TENANT_MISMATCH_ERROR);
+  }
+
+  const homeownerProfile = credentialRecord.user.homeownerProfile;
+  if (!credentialRecord.user.active || credentialRecord.user.role !== Role.HOMEOWNER || homeownerProfile?.activationStatus !== HomeownerActivationStatus.ACTIVE || homeownerProfile?.emailStatus !== HomeownerEmailVerificationStatus.VERIFIED || !homeownerProfile?.activatedAt) {
     throw new Error("Passkey authentication could not be verified.");
   }
   if (!tenantCanSignIn(credentialRecord.user.tenant)) throw new Error(credentialRecord.user.tenant.advisories[0]?.message || "This HOA portal is currently unavailable.");

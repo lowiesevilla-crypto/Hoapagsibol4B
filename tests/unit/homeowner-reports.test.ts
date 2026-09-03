@@ -53,6 +53,8 @@ test("homeowner balance report is tenant scoped and includes name, block, lot an
   assert.match(balanceService, /receiptNumber/);
   assert.match(balanceService, /paymentDate/);
   assert.match(balanceService, /Number\(allocation\.amount\)/);
+  assert.match(balanceService, /coverageLabel/);
+  assert.match(balanceService, /paymentCoverageLabel/);
   assert.match(balanceService, /status: PaymentStatus\.ACTIVE/);
 });
 
@@ -66,14 +68,14 @@ test("homeowner balance export explicitly paginates beyond the tenant-model 500-
   assert.match(balanceService, /integrity check failed/);
 });
 
-test("payment remarks contain receipt, payment date, amount and Full Paid or Partial", () => {
+test("payment remarks contain receipt, payment date, amount, coverage and Full Paid or Partial", () => {
   const remarks = formatBillPaymentRemarks(1000, [
-    { paymentId: "p1", receiptNumber: "OR-100", paymentDate: new Date("2026-08-05T00:00:00.000Z"), amount: 400 },
-    { paymentId: "p2", receiptNumber: "OR-101", paymentDate: new Date("2026-08-10T00:00:00.000Z"), amount: 600 },
+    { paymentId: "p1", receiptNumber: "OR-100", paymentDate: new Date("2026-08-05T00:00:00.000Z"), amount: 400, coverage: "August 2026" },
+    { paymentId: "p2", receiptNumber: "OR-101", paymentDate: new Date("2026-08-10T00:00:00.000Z"), amount: 600, coverage: "August 2026" },
   ]);
   assert.deepEqual(remarks, [
-    "Receipt No. OR-100 | Date of Payment 2026-08-05 | Amount PHP 400.00 | Partial",
-    "Receipt No. OR-101 | Date of Payment 2026-08-10 | Amount PHP 600.00 | Full Paid",
+    "Receipt No. OR-100 | Date of Payment 2026-08-05 | Amount PHP 400.00 | Payment Coverage: August 2026 | Partial",
+    "Receipt No. OR-101 | Date of Payment 2026-08-10 | Amount PHP 600.00 | Payment Coverage: August 2026 | Full Paid",
   ]);
   assert.equal(homeownerPaymentRemarks([]), "None Payment");
   assert.equal(homeownerPaymentRemarks(remarks), remarks.join("\n"));

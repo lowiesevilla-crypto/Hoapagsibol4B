@@ -1,15 +1,15 @@
 # HOAHub Work Status Register
 
-_Last reconciled: 2026-09-02 (Asia/Manila)_
+_Last reconciled: 2026-09-03 (Asia/Manila)_
 
 This register is the current release-status snapshot for the active HOAHub production-quality program. It records only evidence-backed status and does not replace issue-specific acceptance criteria.
 
 ## Current production baseline
 
-- Production-verified `main`: `6c6da059011ca29c429f6e4396d243478579b28a` from PR #291 (`Activate production automatic billing scheduler`). PR #291 exact head `6108cb120cac463d9a89c85d5b98a19eddb39bf6` passed HOAHub MySQL CI #1428, Canva Visual Parity #496, Edge Critical Flow #89, Firefox Critical Flow #85, and Mobile Responsive Evidence #84 before merge.
-- Last fully production-verified `main`: `e2248a53ce14595e3a7d61db4dc3b7264988629c` from PR #290 (`Add production automatic billing scheduler`). PR #290 exact head `c00758b4c0e444c262d2216d0a807f33d9581e66` passed HOAHub MySQL CI #1426, Canva Visual Parity #495, Edge Critical Flow #88, Firefox Critical Flow #84, and Mobile Responsive Evidence #83 before merge; post-merge HOAHub MySQL CI #1427 passed including Hostinger managed-production and public-health verification.
-- Post-merge HOAHub MySQL CI #1429 passed after rerunning a transient employee-workflow browser navigation abort. The passing attempt completed the full verification suite, production smoke / critical browser suite, Hostinger managed-deployment verification, and public production health for `6c6da059011ca29c429f6e4396d243478579b28a`.
-- The new automatic-billing scheduler activation run #1 initially failed before touching tenant data because GitHub's `production` environment had `HOSTINGER_APP_URL` but an empty `CRON_SECRET`; after `CRON_SECRET` was configured, run #1 attempt 2 passed and reconciled 4 tenants with aggregate-only logging.
+- Current production-verified `main`: `4ffe5f13f407ede8fdee4990ba048243a08b6f3c` from PR #297 (`Add homeowner balance to Record Payment drilldown`). PR #297 exact head `3af2174d55af42464441d447d6e5d78b64fd59f8` passed HOAHub MySQL CI #1451, Canva Visual Parity #509, Edge Critical Flow #102, Firefox Critical Flow #98, and Mobile Responsive Evidence #97 before merge.
+- Post-merge HOAHub MySQL CI #1452, run `33708913075`, passed on exact `main` commit `4ffe5f13f407ede8fdee4990ba048243a08b6f3c`, including unit/integration verification, typecheck, build, production smoke / critical browser suite, Hostinger managed-production verification, and public production health.
+- The report enhancement chain is production-verified through PR #293 (Homeowner Balance + Transaction History Reports), PR #294 (>500 homeowner pagination safety), PR #295 (board-review XLSX, payment remarks and coverage), PR #296 (tenant-wide wildcard search + 25-row pagination), and PR #297 (clickable Homeowner → Record Payment drilldown with automatic homeowner/open-bill selection).
+- Production automatic billing remains verified. Scheduler run #1 attempt 2 passed after GitHub's `production` environment `CRON_SECRET` was configured and reconciled 4 tenants with aggregate-only logging.
 - The `ux_action_progress_v1` feature flag remains default-off and no active tenant rollout is enabled.
 
 ## Completed / verified programs
@@ -34,6 +34,8 @@ Automatic Billing 5,001-homeowner end-to-end proof tracked by #278 is VERIFIED a
 
 Durable Manual Billing progress and dedicated 5,001-homeowner proof tracked by #273 is VERIFIED through PR #289. Exact head `8017230a88f7251a8e865b26a1be97a60f8715d9` passed HOAHub MySQL CI #1424, Canva Visual Parity #494, Edge Critical Flow #87, Firefox Critical Flow #83, and Mobile Responsive Evidence #82; merged as `614e6af11045c79d6113b40d3eb5162740977a64`. Post-merge HOAHub MySQL CI #1425 passed, and the initially delayed Hostinger production marker was inspected and the failed production job rerun successfully. Evidence covers persisted truthful counts, 250-record batching, duplicate/exemption handling, failed-record-only retry, 5,001 active homeowners, and second-tenant isolation.
 
+The urgent Reports expansion requested on 2026-09-02/03 is now VERIFIED in production through PRs #293–#297. The current Homeowner Monthly Dues Balance Report provides tenant-scoped full-volume data, Excel workbook output with Summary & Analytics, receipt/date/amount/payment-coverage remarks, wildcard search over the complete selected tenant/status scope, 25-row preview pagination, and clickable active homeowner names that open Record Payment. Record Payment re-validates the homeowner against the authenticated tenant and ACTIVE status, automatically loads/selects all open billings, initializes the payment amount to the open selected total, and derives payment coverage while preserving administrator review before submission. Transaction History remains a separate report view.
+
 ## Action-progress program — issue #273
 
 `HOAHUB-UX-P0-001` remains `IN_PROGRESS`.
@@ -50,14 +52,18 @@ Verified production increments:
 
 Still open under #273:
 
-- Production automatic billing scheduler activation is verified: run #1 attempt 2 passed after GitHub `production` environment secret `CRON_SECRET` was configured and reconciled 4 tenants.
-- Remaining P0/P1 financial and operational action coverage, server idempotency/uniqueness review, privacy-safe observability, concurrency/slow-network/two-tab testing, accessibility, selected-tenant staging UAT, monitoring, rollback verification, and explicit product-owner pilot authorization.
+- Remaining P0/P1 financial and operational action coverage.
+- Server idempotency/uniqueness review across remaining mutation surfaces.
+- Privacy-safe observability.
+- Concurrency, slow-network, and two-tab testing.
+- Accessibility for remaining action-progress surfaces.
+- Selected-tenant staging UAT, monitoring, rollback verification, and explicit product-owner pilot authorization.
 
 No tenant target is enabled while these gates remain incomplete.
 
 ## Manual Billing 5,000+ scale qualification
 
-Manual Billing is now independently production-proven at 5,001 homeowners through PR #289. The evidence uses disposable MySQL data and verifies the administrator-triggered generation path with durable job progress, truthful `completed / total` counts, bounded 250-record batches, duplicate/exemption handling, failed-record-only retry, row-level failure isolation, and second-tenant isolation. The active-tenant rollout flag remains disabled until staging/UAT, monitoring, rollback, and product-owner pilot authorization are separately completed.
+Manual Billing is independently production-proven at 5,001 homeowners through PR #289. The evidence uses disposable MySQL data and verifies the administrator-triggered generation path with durable job progress, truthful `completed / total` counts, bounded 250-record batches, duplicate/exemption handling, failed-record-only retry, row-level failure isolation, and second-tenant isolation. The active-tenant rollout flag remains disabled until staging/UAT, monitoring, rollback, and product-owner pilot authorization are separately completed.
 
 ## Automatic Billing production trigger
 
@@ -86,4 +92,4 @@ Real tenant credentials and destructive substitute testing are prohibited.
 
 ## Current execution state
 
-Current production is verified at `6c6da059011ca29c429f6e4396d243478579b28a` through post-merge MySQL CI #1429 and Hostinger/public-health verification. Automatic-billing scheduler activation is verified by scheduler run #1 attempt 2, which reconciled 4 tenants. The urgent Reports > Generate Report expansion is IMPLEMENTED on branch `feature/homeowner-transaction-reports-20260902`: tenant-scoped CSV exports now cover homeowner Monthly Dues balances with homeowner name/block/lot/status/date-range filtering and transaction history with payment type, mode, amount, balance, receipt, reference, and remarks; exact-head CI, merge, and post-merge production verification remain pending before VERIFIED status. The active engineering priority remains issue #273 for remaining action coverage and tenant pilot readiness; issue #194 remains blocked on administrator-provisioned UAT credentials/environment inputs.
+Current production is VERIFIED at `4ffe5f13f407ede8fdee4990ba048243a08b6f3c` through post-merge HOAHub MySQL CI #1452 / run `33708913075` and Hostinger/public-health verification. The Homeowner Balance → Record Payment drilldown is complete and production-deployed. The active engineering priority returns to issue #273 for remaining action-progress coverage and tenant pilot readiness. Issue #194 remains BLOCKED on administrator-provisioned UAT credentials/environment inputs and must not be bypassed with real tenant credentials or destructive substitute testing.

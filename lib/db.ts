@@ -1,6 +1,7 @@
 import { Prisma, PrismaClient, Role, TenantModule } from "@prisma/client";
 import { jwtVerify } from "jose";
 import { cookies } from "next/headers";
+import { effectiveRolesForUser, isPlatformRoleSet } from "@/lib/authorization/effective-access";
 import { currentTenantContext, setTenantContext } from "@/lib/tenant-context";
 
 const globalForPrisma = globalThis as unknown as { prisma?: PrismaClient };
@@ -23,11 +24,22 @@ async function resolveRequestTenantContext() {
     const tenantSlug = typeof payload.tenantSlug === "string" ? payload.tenantSlug : "";
     const role = payload.role as Role;
     if (!userId || !tenantId || !tenantSlug || !Object.values(Role).includes(role)) return null;
-    const user = await basePrisma.user.findFirst({ where: { id: userId, tenantId, role, active: true, tenant: { slug: tenantSlug, status: "ACTIVE", subscriptionStatus: { not: "CANCELLED" } } }, select: { id: true } });
+    const user = await basePrisma.user.findFirst({
+      where: { id: userId, tenantId, active: true, tenant: { slug: tenantSlug } },
+      select: {
+        id: true,
+        role: true,
+        tenant: { select: { status: true, subscriptionStatus: true } },
+        userRoleAssignments: { where: { active: true }, select: { role: true, active: true } },
+      },
+    });
     if (!user) return null;
-    const platform = role === Role.SUPER_ADMIN || role === Role.PLATFORM_ADMIN;
+    const effectiveRoles = effectiveRolesForUser(user.role, user.userRoleAssignments);
+    if (!effectiveRoles.includes(role)) return null;
+    const platform = isPlatformRoleSet(effectiveRoles);
+    if (!platform && (user.tenant.status !== "ACTIVE" || user.tenant.subscriptionStatus === "CANCELLED")) return null;
     const enabledModules = platform ? undefined : new Set((await basePrisma.tenantModuleEntitlement.findMany({ where: { tenantId, enabled: true }, select: { module: true } })).map((item) => item.module));
-    return setTenantContext({ tenantId, role, platform, enabledModules });
+    return setTenantContext({ tenantId, role, roles: effectiveRoles, platform, enabledModules });
   } catch {
     return null;
   }

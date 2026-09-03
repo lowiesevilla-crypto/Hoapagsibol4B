@@ -80,6 +80,26 @@ type DashboardEventRecord = {
   imageUrl: string | null;
 };
 
+const TRANSIENT_DASHBOARD_READ_CODES = new Set(["P1001", "P1002", "P2024"]);
+
+function databaseErrorCode(error: unknown) {
+  if (!error || typeof error !== "object" || !("code" in error)) return undefined;
+  const code = (error as { code?: unknown }).code;
+  return typeof code === "string" ? code : undefined;
+}
+
+async function retryTransientDashboardRead<T>(operation: string, task: () => Promise<T>) {
+  try {
+    return await task();
+  } catch (error) {
+    const errorCode = databaseErrorCode(error);
+    if (!errorCode || !TRANSIENT_DASHBOARD_READ_CODES.has(errorCode)) throw error;
+    console.warn("[portal-dashboard] retrying transient read once", { operation, errorCode });
+    await new Promise((resolve) => setTimeout(resolve, 80));
+    return task();
+  }
+}
+
 async function traceDashboardOperation<T>(operation: string, task: () => Promise<T>) {
   try {
     return await task();
@@ -87,6 +107,7 @@ async function traceDashboardOperation<T>(operation: string, task: () => Promise
     console.error("[portal-dashboard] render operation failed", {
       operation,
       errorName: error instanceof Error ? error.name : typeof error,
+      errorCode: databaseErrorCode(error),
     });
     throw error;
   }
@@ -104,6 +125,7 @@ async function optionalDashboardOperation<T>(
     console.error("[portal-dashboard] optional operation failed", {
       operation,
       errorName: error instanceof Error ? error.name : typeof error,
+      errorCode: databaseErrorCode(error),
     });
     degradedOperations.push(operation);
     return fallback;
@@ -151,7 +173,7 @@ export default async function PortalDashboard() {
 
   const [soa, openBills, latestPayment, recentPaymentRequests, documentRequests, complaints, announcement, events] = await Promise.all([
     billingEnabled
-      ? optionalDashboardOperation("statementOfAccount", () => getStatementOfAccount(profile.id, profile.tenantId, getAppUrl()), null, degradedOperations)
+      ? optionalDashboardOperation("statementOfAccount", () => retryTransientDashboardRead("statementOfAccount", () => getStatementOfAccount(profile.id, profile.tenantId, getAppUrl())), null, degradedOperations)
       : Promise.resolve(null),
     billingEnabled
       ? optionalDashboardOperation("openBills", () => prisma.bill.findMany({

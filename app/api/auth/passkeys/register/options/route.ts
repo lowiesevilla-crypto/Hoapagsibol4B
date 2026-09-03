@@ -11,6 +11,7 @@ export async function POST() {
       userId: user.id,
       name: user.name,
       email: user.email,
+      tenantSlug: user.tenant.slug,
     });
     return NextResponse.json(options);
   } catch (error) {

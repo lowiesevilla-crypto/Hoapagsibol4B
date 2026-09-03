@@ -25,6 +25,11 @@ test("Platform Admin tenant lifecycle separates deactivation from permanent dele
   assert.match(service, /confirmationWord\.trim\(\)\.toUpperCase\(\) !== "DELETE"/);
   assert.match(service, /Prisma\.dmmf\.datamodel\.models/);
   assert.match(service, /field\.name === "tenantId"/);
+  assert.match(service, /documentDefinition\.updateMany/);
+  assert.match(service, /where: \{ tenantId: tenant\.id \}/);
+  assert.match(service, /assignedTemplateVersionId: null/);
+  assert.match(service, /workflowDefinitionId: null/);
+  assert.match(service, /deleteMany\(\{ where: \{ tenantId: tenant\.id \} \}\)/);
   assert.match(service, /TENANT_HARD_DELETED/);
   assert.match(actions, /deleteTenantLifecycleAction/);
   assert.match(page, /Permanently delete tenant and all tenant data/);

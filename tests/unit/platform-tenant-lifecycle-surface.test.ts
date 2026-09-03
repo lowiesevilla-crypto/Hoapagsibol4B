@@ -18,6 +18,9 @@ test("Platform Admin tenant lifecycle separates deactivation from permanent dele
   assert.match(service, /userSession\.updateMany/);
   assert.match(service, /dataRetention: "RETAIN_ALL"/);
   assert.match(service, /subscriptionStatusRetained: true/);
+  assert.match(service, /tenantSuspensionRecord\.findFirst/);
+  assert.match(service, /TenantStatus\.SUSPENDED/);
+  assert.match(service, /commercialSuspensionRetained/);
   assert.match(service, /Deactivate the tenant before permanent deletion/);
   assert.match(service, /confirmationWord\.trim\(\)\.toUpperCase\(\) !== "DELETE"/);
   assert.match(service, /Prisma\.dmmf\.datamodel\.models/);
@@ -25,6 +28,7 @@ test("Platform Admin tenant lifecycle separates deactivation from permanent dele
   assert.match(service, /TENANT_HARD_DELETED/);
   assert.match(actions, /deleteTenantLifecycleAction/);
   assert.match(page, /Permanently delete tenant and all tenant data/);
+  assert.match(page, /active commercial suspension remains enforced/);
   assert.match(page, /Deactivate the tenant first/);
   assert.match(tabs, /\/lifecycle/);
 });

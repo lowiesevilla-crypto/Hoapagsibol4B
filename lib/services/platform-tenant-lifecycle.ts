@@ -125,6 +125,21 @@ export async function hardDeletePlatformTenant(input: {
 
   const models = tenantOwnedModels();
   const result = await prisma.$transaction(async (tx) => {
+    // DocumentDefinition intentionally points back to its selected template
+    // version and workflow with Restrict FKs, while template sets/versions point
+    // to the definition. That creates a valid runtime cycle which must be
+    // detached before the tenant-scoped purge can delete the whole graph.
+    // This update is strictly scoped to the target tenant and remains inside the
+    // same transaction, so another tenant's document configuration is untouched
+    // and any later purge failure rolls the detachment back automatically.
+    const detachedDocumentDefinitions = await tx.documentDefinition.updateMany({
+      where: { tenantId: tenant.id },
+      data: {
+        assignedTemplateVersionId: null,
+        workflowDefinitionId: null,
+      },
+    });
+
     const pending = new Set(models);
     const deletedByModel: Record<string, number> = {};
 
@@ -166,6 +181,9 @@ export async function hardDeletePlatformTenant(input: {
           deletedTenantName: tenant.name,
           deletedTenantSlug: tenant.slug,
           deletionMode: "PERMANENT_TENANT_PURGE",
+          purgePreparation: {
+            detachedDocumentDefinitions: detachedDocumentDefinitions.count,
+          },
           deletedByModel,
         },
       },

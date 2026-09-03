@@ -45,7 +45,7 @@ export default async function TenantLifecyclePage({
           <h1 className="text-3xl font-black text-slate-950">Tenant Lifecycle</h1>
           <p className="mt-2 max-w-3xl text-slate-600">Deactivate access without losing data, reactivate an inactive tenant, or permanently purge an offboarded tenant.</p>
         </div>
-        <span className={`rounded-full px-4 py-2 text-sm font-black ${inactive ? "bg-slate-200 text-slate-800" : "bg-emerald-100 text-emerald-800"}`}>{tenant.status}</span>
+        <span className={`rounded-full px-4 py-2 text-sm font-black ${inactive ? "bg-slate-200 text-slate-800" : tenant.status === TenantStatus.SUSPENDED ? "bg-amber-100 text-amber-900" : "bg-emerald-100 text-emerald-800"}`}>{tenant.status}</span>
       </div>
 
       <PlatformTenantTabs tenantId={tenant.id} active="lifecycle" />
@@ -67,7 +67,7 @@ export default async function TenantLifecyclePage({
           <h2 className="mt-1 text-xl font-black text-slate-950">{inactive ? "Reactivate tenant" : "Deactivate tenant"}</h2>
           <p className="mt-2 text-sm leading-6 text-slate-600">
             {inactive
-              ? "Reactivation restores tenant service access. Existing users, transactions, documents, billing history, configuration, and subscription records stay exactly where they were."
+              ? "Reactivation restores the tenant to the correct service state without restoring deleted data because no data was deleted. Existing users, transactions, documents, billing history, configuration, and subscription records stay intact. Any active commercial suspension remains enforced."
               : "Deactivation immediately blocks tenant service access and revokes active sessions. Users, transactions, documents, billing history, setup, configuration, and subscription records are retained."}
           </p>
           <div className="mt-4 rounded-xl bg-slate-50 p-4 text-sm text-slate-700">

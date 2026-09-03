@@ -29,12 +29,17 @@ export function filterHomeownerBalanceRows<T extends SearchableHomeownerBalanceR
 
   const terms = normalizedSearch.split(/\s+/).filter(Boolean);
   return rows.filter((row) => {
+    const block = String(row.block);
+    const lot = String(row.lot);
     const haystack = normalizeSearchText([
       row.homeownerName,
       row.accountNumber ?? "",
-      `block ${row.block}`,
-      `lot ${row.lot}`,
-      `block ${row.block} lot ${row.lot}`,
+      `block ${block}`,
+      `blk ${block}`,
+      `lot ${lot}`,
+      `block ${block} lot ${lot}`,
+      `blk ${block} lot ${lot}`,
+      `b${block} l${lot}`,
       row.phase ? `phase ${row.phase}` : "",
     ].join(" "));
 

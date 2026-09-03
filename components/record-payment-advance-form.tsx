@@ -30,13 +30,20 @@ type OpenBillChoice = {
 
 type HomeownerSearchResponse = { homeowners?: HomeownerChoice[]; total?: number; hasMore?: boolean };
 type HomeownerDetailResponse = { homeowner?: HomeownerChoice; bills?: OpenBillChoice[]; error?: string };
+type RecordPaymentAdvanceFormProps = {
+  today: string;
+  submissionKey: string;
+  actionProgressEnabled?: boolean;
+  initialHomeownerId?: string;
+};
 
 const initialProgressState: RecordHomeownerPaymentProgressState = { status: "idle", message: "", paymentId: null, receiptUrl: null, reused: false };
 const SUCCESS_RECEIPT_REDIRECT_DELAY_MS = 650;
 
-export function RecordPaymentAdvanceForm({ today, submissionKey, actionProgressEnabled = false }: { today: string; submissionKey: string; actionProgressEnabled?: boolean }) {
+export function RecordPaymentAdvanceForm({ today, submissionKey, actionProgressEnabled = false, initialHomeownerId }: RecordPaymentAdvanceFormProps) {
   const router = useRouter();
   const statusRef = useRef<HTMLParagraphElement>(null);
+  const preloadedHomeownerIdRef = useRef<string | null>(null);
   const [progressState, progressAction] = useActionState(recordHomeownerPaymentProgressAction, initialProgressState);
   const [reconciliationState, reconciliationAction] = useActionState(reconcileHomeownerPaymentProgressAction, initialProgressState);
   const [activeProgressSource, setActiveProgressSource] = useState<"record" | "reconciliation">("record");
@@ -55,6 +62,8 @@ export function RecordPaymentAdvanceForm({ today, submissionKey, actionProgressE
   const [coverageFromYear, setCoverageFromYear] = useState(todayYear);
   const [coverageToMonth, setCoverageToMonth] = useState(todayMonth);
   const [coverageToYear, setCoverageToYear] = useState(todayYear);
+  const [preselectingHomeowner, setPreselectingHomeowner] = useState(Boolean(initialHomeownerId));
+  const [preselectionError, setPreselectionError] = useState("");
   const referenceRequired = paymentMethodRequiresReference(method);
   const selectedBills = bills.filter((bill) => selectedIds.includes(bill.id));
   const selectedTotal = selectedBills.reduce((sum, bill) => sum + bill.balance, 0);
@@ -90,12 +99,64 @@ export function RecordPaymentAdvanceForm({ today, submissionKey, actionProgressE
   }, [query]);
 
   useEffect(() => {
+    const homeownerId = initialHomeownerId?.trim();
+    if (!homeownerId) {
+      setPreselectingHomeowner(false);
+      return;
+    }
+
+    const controller = new AbortController();
+    void (async () => {
+      setPreselectingHomeowner(true);
+      setPreselectionError("");
+      setLoadingBills(true);
+      try {
+        const response = await fetch(`/api/admin/payments/record-options?homeownerId=${encodeURIComponent(homeownerId)}`, { signal: controller.signal, headers: { Accept: "application/json" } });
+        const payload = await response.json() as HomeownerDetailResponse;
+        if (!response.ok || !payload.homeowner) throw new Error(payload.error || "Homeowner could not be loaded.");
+
+        const openBills = Array.isArray(payload.bills) ? payload.bills : [];
+        preloadedHomeownerIdRef.current = payload.homeowner.id;
+        setSelectedHomeowner(payload.homeowner);
+        setQuery(payload.homeowner.name);
+        setBills(openBills);
+        setSelectedIds(openBills.map((bill) => bill.id));
+        const total = openBills.reduce((sum, bill) => sum + bill.balance, 0);
+        setAmount(total > 0 ? total.toFixed(2) : "");
+      } catch (error) {
+        if (!controller.signal.aborted) {
+          setSelectedHomeowner(null);
+          setBills([]);
+          setSelectedIds([]);
+          setAmount("");
+          setPreselectionError(error instanceof Error && error.message === "Homeowner not found."
+            ? "The selected homeowner is not active or is unavailable in this tenant. Search for another active homeowner."
+            : "The selected homeowner could not be loaded. Search for the homeowner manually before recording payment.");
+        }
+      } finally {
+        if (!controller.signal.aborted) {
+          setLoadingBills(false);
+          setPreselectingHomeowner(false);
+        }
+      }
+    })();
+
+    return () => controller.abort();
+  }, [initialHomeownerId]);
+
+  useEffect(() => {
     if (!selectedHomeowner) {
       setBills([]);
       setSelectedIds([]);
       setAmount("");
       return;
     }
+
+    if (preloadedHomeownerIdRef.current === selectedHomeowner.id) {
+      preloadedHomeownerIdRef.current = null;
+      return;
+    }
+
     const controller = new AbortController();
     void (async () => {
       setLoadingBills(true);
@@ -133,12 +194,17 @@ export function RecordPaymentAdvanceForm({ today, submissionKey, actionProgressE
   }, [selectedBillingMonths]);
 
   const selectedName = selectedHomeowner?.name ?? "";
-  const canSubmit = Boolean(selectedHomeowner && receivedAmount > 0 && !loadingBills);
+  const canSubmit = Boolean(selectedHomeowner && receivedAmount > 0 && !loadingBills && !preselectingHomeowner);
   const formAction = actionProgressEnabled ? progressAction : recordHomeownerPaymentAction;
   const activeProgressState = activeProgressSource === "reconciliation" ? reconciliationState : progressState;
 
   function toggleBill(bill: OpenBillChoice) {
     setSelectedIds((current) => current.includes(bill.id) ? current.filter((id) => id !== bill.id) : [...current, bill.id]);
+  }
+
+  function selectHomeowner(homeowner: HomeownerChoice) {
+    setPreselectionError("");
+    setSelectedHomeowner(homeowner);
   }
 
   useEffect(() => {
@@ -171,11 +237,14 @@ export function RecordPaymentAdvanceForm({ today, submissionKey, actionProgressE
           <Search className="pointer-events-none absolute left-3.5 top-3 size-4 text-slate-400" />
           <input id="record-payment-homeowner-search" className="field pl-10" type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search name, account number, block, lot, or email" autoComplete="off" />
         </div>
+        {preselectingHomeowner && <p className="mt-2 rounded-lg bg-sky-50 px-3 py-2 text-xs font-semibold text-sky-800" role="status" aria-live="polite">Loading homeowner and available billings from the Homeowner Balance Report...</p>}
+        {preselectionError && <p className="mt-2 rounded-lg bg-rose-50 px-3 py-2 text-xs font-semibold text-rose-800" role="alert">{preselectionError}</p>}
+        {!preselectingHomeowner && initialHomeownerId && selectedHomeowner?.id === initialHomeownerId && <p className="mt-2 rounded-lg bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-800">Homeowner loaded from the Homeowner Balance Report. All available open billings are selected automatically; review them before recording payment.</p>}
         <p className="mt-1 text-xs font-semibold text-slate-500">{loadingHomeowners ? "Loading active homeowners..." : homeownerTotal > homeowners.length ? `Showing ${homeowners.length} of ${homeownerTotal} matches. Keep typing to narrow the result.` : `${homeownerTotal} active homeowner${homeownerTotal === 1 ? "" : "s"} found.`}</p>
         <div className="mt-2 max-h-72 overflow-y-auto rounded-xl border border-slate-200 bg-slate-50/70 p-1.5">
           {homeowners.map((homeowner) => {
             const selected = selectedHomeowner?.id === homeowner.id;
-            return <button key={homeowner.id} type="button" onClick={() => setSelectedHomeowner(homeowner)} className={`flex w-full items-center gap-3 rounded-lg p-3 text-left transition ${selected ? "bg-pine-600 text-white shadow-md" : "hover:bg-white"}`}>
+            return <button key={homeowner.id} type="button" onClick={() => selectHomeowner(homeowner)} className={`flex w-full items-center gap-3 rounded-lg p-3 text-left transition ${selected ? "bg-pine-600 text-white shadow-md" : "hover:bg-white"}`}>
               <span className={`grid size-9 shrink-0 place-items-center rounded-lg ${selected ? "bg-white/15" : "bg-pine-50 text-pine-700"}`}>{selected ? <Check className="size-4" /> : <UserRound className="size-4" />}</span>
               <span className="min-w-0 flex-1">
                 <span className="block truncate text-sm font-black">{homeowner.name}</span>

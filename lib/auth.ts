@@ -137,19 +137,27 @@ export async function readSession(): Promise<SessionPayload | null> {
 
 export async function sessionIsCurrent(session: SessionPayload) {
   const sessionRoles = session.roles ?? [session.role];
-  setTenantContext({ tenantId: session.tenantId, role: session.role, roles: sessionRoles, platform: isPlatformRoleSet(sessionRoles) });
+  const sessionPlatform = isPlatformRoleSet(sessionRoles);
+  setTenantContext({ tenantId: session.tenantId, role: session.role, roles: sessionRoles, platform: sessionPlatform });
   const user = await prisma.user.findFirst({
     where: {
       id: session.userId,
       tenantId: session.tenantId,
       active: true,
-      tenant: { slug: session.tenantSlug, status: "ACTIVE", subscriptionStatus: { not: "CANCELLED" } },
+      tenant: { slug: session.tenantSlug },
     },
-    select: { id: true, role: true, userRoleAssignments: { where: { active: true }, select: { role: true, active: true } } },
+    select: {
+      id: true,
+      role: true,
+      tenant: { select: { status: true, subscriptionStatus: true } },
+      userRoleAssignments: { where: { active: true }, select: { role: true, active: true } },
+    },
   });
   if (!user || !sessionRoles.includes(session.role)) return false;
   const effectiveRoles = effectiveRolesForUser(user.role, user.userRoleAssignments);
   if (!effectiveRoles.includes(session.role)) return false;
+  const platform = isPlatformRoleSet(effectiveRoles);
+  if (!platform && (user.tenant.status !== "ACTIVE" || user.tenant.subscriptionStatus === "CANCELLED")) return false;
   if (session.roleSnapshot && session.roleSnapshot !== roleSnapshotForRoles(effectiveRoles)) return false;
   if (!session.sessionId) return false;
   const activeSession = await prisma.userSession.findFirst({
@@ -186,6 +194,7 @@ export async function requireUser(requiredRole?: Role) {
 
   const roles = effectiveRolesForUser(user.role, user.userRoleAssignments);
   const roleSnapshot = roleSnapshotForRoles(roles);
+  const platform = isPlatformRoleSet(roles);
   if (!roles.includes(session.role)) redirect("/login");
   if (session.roleSnapshot && session.roleSnapshot !== roleSnapshot) redirect("/login");
   if (!session.sessionId) redirect("/login");
@@ -197,10 +206,9 @@ export async function requireUser(requiredRole?: Role) {
   if (!activeSession) redirect("/login");
   await prisma.userSession.update({ where: { id: activeSession.id }, data: { lastSeenAt: new Date() } }).catch(() => undefined);
 
-  if (user.tenant.status !== "ACTIVE" || user.tenant.subscriptionStatus === "CANCELLED") redirect(`/${session.tenantSlug}/login?error=tenant-inactive`);
+  if (!platform && (user.tenant.status !== "ACTIVE" || user.tenant.subscriptionStatus === "CANCELLED")) redirect(`/${session.tenantSlug}/login?error=tenant-inactive`);
   if (requiredRole && !canUseAssignedRole(roles, requiredRole)) redirect(homeForRole(primaryRoleForRoles(roles, user.role)));
 
-  const platform = isPlatformRoleSet(roles);
   const permissions = permissionsForRoles(roles);
   if (!platform) {
     const enabledModules = await getEnabledTenantModules(user.tenantId);

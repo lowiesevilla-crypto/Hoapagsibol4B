@@ -14,13 +14,13 @@ import { prisma } from "@/lib/db";
 import {
   assignTenantSubscription,
   generatePlatformInvoice,
-  recordPlatformManualPayment,
   reinstateTenantCommercially,
   saveTenantBillingProfile,
   suspendTenantCommercially,
 } from "@/lib/services/platform-billing";
 import { createTenantAgreementDraft } from "@/lib/services/platform-agreements";
 import { sendPlatformInvoiceEmail } from "@/lib/services/platform-invoice-email";
+import { recordPlatformManualPaymentSafe } from "@/lib/services/platform-manual-payment";
 
 function clean(value: FormDataEntryValue | null) {
   return String(value || "").trim();
@@ -183,7 +183,7 @@ export async function recordPlatformManualPaymentAction(formData: FormData) {
   const method = clean(formData.get("method")) as PlatformPaymentMethod;
   if (!Object.values(PlatformPaymentMethod).includes(method)) redirect(`/platform/tenants/${tenantId}/billing?error=Select%20a%20valid%20payment%20method.`);
   try {
-    await recordPlatformManualPayment({ tenantId, invoiceId, amount: numberValue(formData.get("amount")), method, referenceNumber: clean(formData.get("referenceNumber")), actorId: actor.id });
+    await recordPlatformManualPaymentSafe({ tenantId, invoiceId, amount: numberValue(formData.get("amount")), method, referenceNumber: clean(formData.get("referenceNumber")), actorId: actor.id });
   } catch (error) {
     redirect(`/platform/tenants/${tenantId}/billing?error=${encodeURIComponent(error instanceof Error ? error.message : "Payment recording failed.")}`);
   }

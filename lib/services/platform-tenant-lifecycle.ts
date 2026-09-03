@@ -1,6 +1,6 @@
 import "server-only";
 
-import { Prisma, TenantStatus } from "@prisma/client";
+import { Prisma, TenantStatus, TenantSubscriptionStatus } from "@prisma/client";
 import { platformPrisma as prisma } from "@/lib/db";
 
 type DeleteManyDelegate = {
@@ -77,9 +77,16 @@ export async function reactivatePlatformTenant(input: { tenantId: string; actorI
   if (tenant.status !== TenantStatus.INACTIVE) return tenant;
 
   return prisma.$transaction(async (tx) => {
+    const activeSuspension = await tx.tenantSuspensionRecord.findFirst({
+      where: { tenantId: tenant.id, reinstatedAt: null },
+      select: { id: true },
+    });
+    const restoredStatus = activeSuspension || tenant.subscriptionStatus === TenantSubscriptionStatus.SUSPENDED
+      ? TenantStatus.SUSPENDED
+      : TenantStatus.ACTIVE;
     const updated = await tx.tenant.update({
       where: { id: tenant.id },
-      data: { status: TenantStatus.ACTIVE },
+      data: { status: restoredStatus },
     });
     await tx.auditLog.create({
       data: {
@@ -91,7 +98,9 @@ export async function reactivatePlatformTenant(input: { tenantId: string; actorI
         entityId: tenant.id,
         metadata: {
           previousStatus: tenant.status,
+          restoredStatus,
           subscriptionStatusRetained: true,
+          commercialSuspensionRetained: restoredStatus === TenantStatus.SUSPENDED,
           dataRestoredFromDeletion: false,
         },
       },

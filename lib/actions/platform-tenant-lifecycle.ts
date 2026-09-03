@@ -30,7 +30,7 @@ export async function deactivateTenantLifecycleAction(formData: FormData) {
   const tenantId = clean(formData.get("tenantId"));
   if (!tenantId) redirect("/platform/tenants?error=Tenant%20not%20found.");
   try {
-    await deactivatePlatformTenant({ tenantId, actorId: actor.id });
+    await deactivatePlatformTenant({ tenantId, actorId: actor.id, actorTenantId: actor.tenantId });
   } catch (error) {
     redirect(lifecycleErrorPath(tenantId, error));
   }

@@ -242,7 +242,7 @@ async function resolveLoginUser(input: {
   if (tenant && !tenantCanSignIn(tenant)) return { error: tenant.advisories[0]?.message || "This HOA portal is currently unavailable." } as const;
   const users = await platformPrisma.user.findMany({
     where: {
-      ...(tenant ? { tenantId: tenant.id } : { tenant: { status: "ACTIVE", subscriptionStatus: { not: "CANCELLED" } } }),
+      ...(tenant ? { tenantId: tenant.id } : {}),
       active: true,
       ...(input.identifierType === "email"
         ? { email: input.identifier }
@@ -256,8 +256,9 @@ async function resolveLoginUser(input: {
     orderBy: [{ tenant: { name: "asc" } }, { name: "asc" }],
   });
   const authorized = users.filter((candidate) => {
-    if (!tenantCanSignIn(candidate.tenant)) return false;
     const roles = effectiveRolesForUser(candidate.role, candidate.userRoleAssignments);
+    const platform = isPlatformRoleSet(roles);
+    if (!platform && !tenantCanSignIn(candidate.tenant)) return false;
     if (!roles.includes(Role.HOMEOWNER)) return input.identifierType === "email";
     if (!candidate.homeownerProfile) return input.identifierType === "email";
     return candidate.homeownerProfile.status === "ACTIVE"
@@ -273,7 +274,9 @@ async function resolveLoginUser(input: {
 
   // A verified email is the cross-tenant identity key. A valid password for any
   // linked active account proves the identity, then the user explicitly chooses
-  // which isolated tenant/account session to open.
+  // which isolated tenant/account session to open. Platform identities are
+  // deliberately independent of the operational state of the tenant record that
+  // anchors their user row, so Platform Admin cannot be locked out by offboarding.
   const selectable = input.identifierType === "email" ? authorized : passwordMatches;
 
   if (selectable.length > 1) {
@@ -302,7 +305,6 @@ async function resolveVerifiedLoginChoice(userId: string): Promise<SuccessfulLog
     where: {
       id: userId,
       active: true,
-      tenant: { status: "ACTIVE", subscriptionStatus: { not: "CANCELLED" } },
     },
     include: {
       homeownerProfile: true,
@@ -310,8 +312,10 @@ async function resolveVerifiedLoginChoice(userId: string): Promise<SuccessfulLog
       tenant: { include: { advisories: { where: { active: true }, orderBy: { createdAt: "desc" }, take: 1 }, moduleEntitlements: true } },
     },
   });
-  if (!user || !tenantCanSignIn(user.tenant)) return null;
+  if (!user) return null;
   const roles = effectiveRolesForUser(user.role, user.userRoleAssignments);
+  const platform = isPlatformRoleSet(roles);
+  if (!platform && !tenantCanSignIn(user.tenant)) return null;
   if (roles.includes(Role.HOMEOWNER) && user.homeownerProfile) {
     const profile = user.homeownerProfile;
     if (profile.status !== "ACTIVE"

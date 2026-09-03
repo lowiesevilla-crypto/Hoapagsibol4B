@@ -20,7 +20,18 @@ test("universal login searches the complete authorized identity set without a hi
   const resolver = auth.slice(resolverStart, resolverEnd);
 
   assert.doesNotMatch(resolver, /\btake:\s*50\b/, "universal identity discovery must not silently cap matching accounts");
-  assert.match(resolver, /tenant:\s*\{\s*status:\s*"ACTIVE",\s*subscriptionStatus:\s*\{\s*not:\s*"CANCELLED"\s*\}\s*\}/);
+  assert.doesNotMatch(
+    resolver,
+    /tenant:\s*\{\s*status:\s*"ACTIVE",\s*subscriptionStatus:\s*\{\s*not:\s*"CANCELLED"\s*\}\s*\}/,
+    "universal discovery must not pre-filter platform identities by the operational state of their control tenant",
+  );
+  assert.match(resolver, /const roles = effectiveRolesForUser\(candidate\.role, candidate\.userRoleAssignments\)/);
+  assert.match(resolver, /const platform = isPlatformRoleSet\(roles\)/);
+  assert.match(
+    resolver,
+    /if \(!platform && !tenantCanSignIn\(candidate\.tenant\)\) return false/,
+    "non-platform identities must still require an eligible active tenant",
+  );
   assert.match(resolver, /candidate\.homeownerProfile\.status === "ACTIVE"/);
   assert.match(resolver, /candidate\.homeownerProfile\.emailStatus === "VERIFIED"/);
   assert.match(resolver, /candidate\.homeownerProfile\.activationStatus === HomeownerActivationStatus\.ACTIVE/);

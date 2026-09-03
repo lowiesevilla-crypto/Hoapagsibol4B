@@ -21,6 +21,9 @@ test("Platform Admin tenant lifecycle separates deactivation from permanent dele
   assert.match(service, /tenantSuspensionRecord\.findFirst/);
   assert.match(service, /TenantStatus\.SUSPENDED/);
   assert.match(service, /commercialSuspensionRetained/);
+  assert.match(service, /control tenant cannot deactivate itself/);
+  assert.match(service, /tenant\.id === input\.actorTenantId/);
+  assert.match(actions, /actorTenantId: actor\.tenantId/);
   assert.match(service, /Deactivate the tenant before permanent deletion/);
   assert.match(service, /confirmationWord\.trim\(\)\.toUpperCase\(\) !== "DELETE"/);
   assert.match(service, /Prisma\.dmmf\.datamodel\.models/);

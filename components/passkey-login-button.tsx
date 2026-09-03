@@ -31,7 +31,7 @@ export function PasskeyLoginButton({ formRef }: { formRef: RefObject<HTMLFormEle
       const verifyResponse = await fetch("/api/auth/passkeys/login/verify", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ response }),
+        body: JSON.stringify({ response, tenantSlug }),
       });
       const result = await verifyResponse.json();
       if (!verifyResponse.ok) throw new Error(result.error || "Passkey login failed.");

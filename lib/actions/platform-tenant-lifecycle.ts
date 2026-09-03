@@ -59,6 +59,8 @@ export async function deleteTenantLifecycleAction(formData: FormData) {
   const actor = await requirePlatformLifecycleUser();
   const tenantId = clean(formData.get("tenantId"));
   if (!tenantId) redirect("/platform/tenants?error=Tenant%20not%20found.");
+
+  let deletedTenantName = "Tenant";
   try {
     const deleted = await hardDeletePlatformTenant({
       tenantId,
@@ -67,10 +69,12 @@ export async function deleteTenantLifecycleAction(formData: FormData) {
       confirmationSlug: clean(formData.get("confirmationSlug")),
       confirmationWord: clean(formData.get("confirmationWord")),
     });
-    revalidatePath("/platform/tenants");
-    revalidatePath("/platform/subscriptions");
-    redirect(`/platform/tenants?success=${encodeURIComponent(`${deleted.deletedTenantName} was permanently deleted with its tenant-owned records, transactions, and configuration.`)}`);
+    deletedTenantName = deleted.deletedTenantName;
   } catch (error) {
     redirect(lifecycleErrorPath(tenantId, error));
   }
+
+  revalidatePath("/platform/tenants");
+  revalidatePath("/platform/subscriptions");
+  redirect(`/platform/tenants?success=${encodeURIComponent(`${deletedTenantName} was permanently deleted with its tenant-owned records, transactions, and configuration.`)}`);
 }

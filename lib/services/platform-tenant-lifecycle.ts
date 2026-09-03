@@ -36,9 +36,12 @@ function isForeignKeyConstraint(error: unknown) {
   return error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2003";
 }
 
-export async function deactivatePlatformTenant(input: { tenantId: string; actorId: string }) {
+export async function deactivatePlatformTenant(input: { tenantId: string; actorId: string; actorTenantId: string }) {
   const tenant = await prisma.tenant.findUnique({ where: { id: input.tenantId } });
   if (!tenant) throw new Error("Tenant not found.");
+  if (tenant.id === input.actorTenantId) {
+    throw new Error("The Platform Admin control tenant cannot deactivate itself. Use a separate Platform Admin control identity to manage this tenant.");
+  }
   if (tenant.status === TenantStatus.INACTIVE) return tenant;
 
   const changedAt = new Date();

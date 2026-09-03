@@ -3,6 +3,11 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 import { HomeownerStatus } from "@prisma/client";
 import {
+  HOMEOWNER_BALANCE_PREVIEW_PAGE_SIZE,
+  filterHomeownerBalanceRows,
+  paginateHomeownerBalanceRows,
+} from "../../lib/homeowner-balance-preview";
+import {
   HOMEOWNER_BALANCE_REPORT_BATCH_SIZE,
   formatBillPaymentRemarks,
   homeownerPaymentRemarks,
@@ -66,6 +71,41 @@ test("homeowner balance export explicitly paginates beyond the tenant-model 500-
   assert.match(balanceService, /cursor: \{ id: cursor \}, skip: 1/);
   assert.match(balanceService, /rows\.length !== expectedHomeownerCount/);
   assert.match(balanceService, /integrity check failed/);
+});
+
+test("homeowner balance preview wildcard-searches the full tenant result set before pagination", () => {
+  const rows = [
+    { homeownerName: "Juan Dela Cruz", accountNumber: "HO-001", block: "12", lot: "5", phase: "1" },
+    { homeownerName: "Maria Santos", accountNumber: "HO-002", block: "12", lot: "9", phase: "1" },
+    { homeownerName: "José Garcia", accountNumber: "HO-003", block: "3", lot: "5", phase: "2" },
+  ];
+
+  assert.deepEqual(filterHomeownerBalanceRows(rows, "juan").map((row) => row.accountNumber), ["HO-001"]);
+  assert.deepEqual(filterHomeownerBalanceRows(rows, "dela 12").map((row) => row.accountNumber), ["HO-001"]);
+  assert.deepEqual(filterHomeownerBalanceRows(rows, "block 12 lot 5").map((row) => row.accountNumber), ["HO-001"]);
+  assert.deepEqual(filterHomeownerBalanceRows(rows, "12 9").map((row) => row.accountNumber), ["HO-002"]);
+  assert.deepEqual(filterHomeownerBalanceRows(rows, "jose garc").map((row) => row.accountNumber), ["HO-003"]);
+
+  const manyRows = Array.from({ length: 61 }, (_, index) => ({
+    homeownerName: `Resident ${index + 1}`,
+    accountNumber: `HO-${String(index + 1).padStart(3, "0")}`,
+    block: String(Math.floor(index / 10) + 1),
+    lot: String(index + 1),
+  }));
+  const allMatches = filterHomeownerBalanceRows(manyRows, "resident");
+  const pageThree = paginateHomeownerBalanceRows(allMatches, "3");
+
+  assert.equal(HOMEOWNER_BALANCE_PREVIEW_PAGE_SIZE, 25);
+  assert.equal(pageThree.totalRows, 61);
+  assert.equal(pageThree.totalPages, 3);
+  assert.equal(pageThree.page, 3);
+  assert.equal(pageThree.startIndex, 51);
+  assert.equal(pageThree.endIndex, 61);
+  assert.equal(pageThree.rows.length, 11);
+  assert.match(balancePage, /filterHomeownerBalanceRows\(report\.rows, search\)/);
+  assert.match(balancePage, /paginateHomeownerBalanceRows\(filteredRows, filters\.page\)/);
+  assert.match(balancePage, /Search homeowners by name, block, or lot/);
+  assert.match(balancePage, /Wildcard\/partial search scans every homeowner/);
 });
 
 test("payment remarks contain receipt, payment date, amount, coverage and Full Paid or Partial", () => {

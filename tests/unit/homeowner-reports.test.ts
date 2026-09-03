@@ -22,6 +22,9 @@ const balancePage = readFileSync("app/admin/reports/homeowner-balances/page.tsx"
 const transactionPage = readFileSync("app/admin/reports/transactions/page.tsx", "utf8");
 const balanceRoute = readFileSync("app/admin/reports/homeowner-balances/export/route.ts", "utf8");
 const transactionRoute = readFileSync("app/admin/reports/transactions/export/route.ts", "utf8");
+const recordPaymentPage = readFileSync("app/admin/payments/record/page.tsx", "utf8");
+const recordPaymentForm = readFileSync("components/record-payment-advance-form.tsx", "utf8");
+const recordPaymentOptionsRoute = readFileSync("app/api/admin/payments/record-options/route.ts", "utf8");
 const balanceService = readFileSync("lib/services/homeowner-balance-report.ts", "utf8");
 const transactionService = readFileSync("lib/services/transaction-history-report.ts", "utf8");
 const dbSource = readFileSync("lib/db.ts", "utf8");
@@ -106,6 +109,21 @@ test("homeowner balance preview wildcard-searches the full tenant result set bef
   assert.match(balancePage, /paginateHomeownerBalanceRows\(filteredRows, filters\.page\)/);
   assert.match(balancePage, /Search homeowners by name, block, or lot/);
   assert.match(balancePage, /Wildcard\/partial search scans every homeowner/);
+});
+
+test("active homeowner names drill into Record Payment with homeowner and open billings preselected", () => {
+  assert.match(balancePage, /row\.status === "ACTIVE"/);
+  assert.match(balancePage, /\/admin\/payments\/record\?homeownerId=\$\{encodeURIComponent\(row\.homeownerId\)\}/);
+  assert.match(balancePage, /inactive homeowner records remain read-only/i);
+  assert.match(recordPaymentPage, /homeownerId\?: string/);
+  assert.match(recordPaymentPage, /initialHomeownerId=\{initialHomeownerId\}/);
+  assert.match(recordPaymentForm, /initialHomeownerId\?: string/);
+  assert.match(recordPaymentForm, /record-options\?homeownerId=\$\{encodeURIComponent\(homeownerId\)\}/);
+  assert.match(recordPaymentForm, /setSelectedHomeowner\(payload\.homeowner\)/);
+  assert.match(recordPaymentForm, /setQuery\(payload\.homeowner\.name\)/);
+  assert.match(recordPaymentForm, /setSelectedIds\(openBills\.map\(\(bill\) => bill\.id\)\)/);
+  assert.match(recordPaymentForm, /setAmount\(total > 0 \? total\.toFixed\(2\) : ""\)/);
+  assert.match(recordPaymentOptionsRoute, /where: \{ id: homeownerId, tenantId: admin\.tenantId, status: "ACTIVE" \}/);
 });
 
 test("payment remarks contain receipt, payment date, amount, coverage and Full Paid or Partial", () => {

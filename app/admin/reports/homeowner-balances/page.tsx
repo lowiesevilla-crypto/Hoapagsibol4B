@@ -58,7 +58,7 @@ export default async function HomeownerBalanceReportPage({ searchParams }: { sea
 
     <section className="rounded-2xl border border-slate-200 bg-white shadow-sm">
       <div className="flex flex-col gap-2 border-b border-slate-200 p-4 sm:flex-row sm:items-end sm:justify-between sm:p-5">
-        <div><h2 className="font-black text-slate-900">Homeowner balance preview</h2><p className="text-sm text-slate-500">Payment remarks show official receipt number, payment date, amount, and Full Paid or Partial status. Accounts without a recorded payment show None Payment.</p></div>
+        <div><h2 className="font-black text-slate-900">Homeowner balance preview</h2><p className="text-sm text-slate-500">Payment remarks show official receipt number, payment date, amount, payment coverage, and Full Paid or Partial status per receipt/application. Accounts without a recorded payment show None Payment.</p></div>
         {report.rows.length > previewRows.length ? <p className="text-xs font-semibold text-slate-500">Previewing 100 of {report.rows.length}; workbook contains all rows.</p> : <p className="text-xs font-semibold text-slate-500">{report.rows.length} homeowner(s)</p>}
       </div>
       <div className="overflow-x-auto">

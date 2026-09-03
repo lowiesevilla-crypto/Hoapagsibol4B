@@ -10,7 +10,8 @@ The Homeowner Monthly Dues Balance Report is being enhanced as a dedicated tenan
 - Transaction History Report has its own view under Reports.
 - HOA Financial Report no longer embeds the homeowner balance and transaction download center.
 - Monthly Dues Balance workbook exports all homeowners matching the authenticated tenant/status filter using explicit 500-record cursor pagination with a final integrity count check.
-- Payment remarks include Receipt No., Date of Payment, Amount, and Full Paid or Partial status using active payment/allocation records associated with selected Monthly Dues bills.
+- Payment remarks include Receipt No., Date of Payment, Amount, Payment Coverage, and Full Paid or Partial status using active payment/allocation records associated with selected Monthly Dues bills.
+- Payment Coverage is shown per receipt/application, using the allocation coverage label when available and the stored/fallback Monthly Dues coverage for legacy direct bill payments.
 - Homeowners without a recorded payment in the selected Monthly Dues billing period show `None Payment`.
 - XLSX Sheet 1 contains homeowner Monthly Dues balance details and payment remarks.
 - XLSX Sheet 2 is `Summary & Analytics` for HOA Board Review, including executive summary, KPIs, payment-standing analytics, block-level collection analytics, top outstanding homeowner accounts, and board-review notes.

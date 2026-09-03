@@ -25,6 +25,18 @@ No tenant ID is accepted from the browser. The homeowner ID is only a lookup hin
 
 Homeowner preview wildcard search and pagination PR #296 was merged to `main` as `aa2e8a3852780dca164573a32f5d09d86853f4bb`. Post-merge HOAHub MySQL CI #1450 completed successfully, including managed production verification.
 
+## Verification evidence
+
+- PR #297 exact head: `3af2174d55af42464441d447d6e5d78b64fd59f8`.
+- HOAHub MySQL CI #1451 — run `33707826548` — PASSED.
+- HOAHub Canva Visual Parity #509 — run `33707826600` — PASSED.
+- HOAHub Edge Critical Flow #102 — run `33707826546` — PASSED.
+- HOAHub Firefox Critical Flow #98 — run `33707826702` — PASSED.
+- HOAHub Mobile Responsive Evidence #97 — run `33707826639` — PASSED.
+- PR #297 was squash-merged to `main` as `4ffe5f13f407ede8fdee4990ba048243a08b6f3c`.
+- Post-merge HOAHub MySQL CI #1452 — run `33708913075` — PASSED on that exact `main` commit.
+- Post-merge verification included lint, Prisma validation/generation/migration, seed, unit tests, database finance integration, functional verification, typecheck, build, controlled Chromium production smoke / critical browser suite, Hostinger managed-production verification, and public production health.
+
 ## Verification state
 
-IMPLEMENTED on `feature/homeowner-balance-click-to-record-payment-20260903`. Exact-head CI, merge, and post-merge production verification are required before VERIFIED status.
+VERIFIED and production-deployed on `main` at `4ffe5f13f407ede8fdee4990ba048243a08b6f3c`.

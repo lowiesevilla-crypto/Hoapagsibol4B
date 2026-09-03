@@ -1,7 +1,8 @@
 import { HomeownerStatus, PaymentStatus, RecurringChargeType } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { homeownerAccountNumber } from "@/lib/homeowner-account";
-import { inputDate } from "@/lib/utils";
+import { paymentCoverageLabel } from "@/lib/payment-coverage";
+import { inputDate, monthLabel } from "@/lib/utils";
 
 export type HomeownerBalanceStatusFilter = "ALL" | HomeownerStatus;
 export type HomeownerPaymentStanding = "FULL_PAID" | "PARTIAL" | "NONE_PAYMENT" | "NO_BILL";
@@ -55,6 +56,7 @@ type PaymentDetail = {
   receiptNumber: string | null;
   paymentDate: Date;
   amount: number;
+  coverage: string;
 };
 
 // lib/db.ts intentionally applies a safety default of take=500 to tenant-model
@@ -122,6 +124,7 @@ export async function getHomeownerBalanceReport(tenantId: string, fromInput?: st
             receiptNumber: allocation.payment.receiptNumber,
             paymentDate: allocation.payment.paymentDate,
             amount: Number(allocation.amount),
+            coverage: allocation.coverageLabel?.trim() || monthLabel(bill.billingMonth),
           });
         }
         for (const payment of bill.payments) {
@@ -131,6 +134,7 @@ export async function getHomeownerBalanceReport(tenantId: string, fromInput?: st
               receiptNumber: payment.receiptNumber,
               paymentDate: payment.paymentDate,
               amount: Number(payment.amount),
+              coverage: paymentCoverageLabel({ ...payment, billingMonth: bill.billingMonth }),
             });
           }
         }
@@ -225,7 +229,7 @@ export function formatBillPaymentRemarks(billTotal: number, details: PaymentDeta
   return sorted.map((detail) => {
     applied = roundMoney(applied + detail.amount);
     const paymentStatus = applied >= roundMoney(billTotal) ? "Full Paid" : "Partial";
-    return `Receipt No. ${detail.receiptNumber || "N/A"} | Date of Payment ${inputDate(detail.paymentDate)} | Amount ${formatPhp(detail.amount)} | ${paymentStatus}`;
+    return `Receipt No. ${detail.receiptNumber || "N/A"} | Date of Payment ${inputDate(detail.paymentDate)} | Amount ${formatPhp(detail.amount)} | Payment Coverage: ${detail.coverage} | ${paymentStatus}`;
   });
 }
 

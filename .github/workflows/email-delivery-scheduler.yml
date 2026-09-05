@@ -1,0 +1,63 @@
+name: HOAHub Protected Email Delivery Scheduler
+
+on:
+  schedule:
+    # Drain the durable bulk-email queue in small server-controlled batches.
+    # Application delivery remains fail-closed unless EMAIL_BULK_DELIVERY_ENABLED=true.
+    - cron: "*/15 * * * *"
+  workflow_dispatch:
+
+concurrency:
+  group: hoahub-production-email-delivery
+  cancel-in-progress: false
+
+jobs:
+  deliver-email:
+    name: Drain protected email queue
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: production
+    env:
+      HOSTINGER_APP_URL: ${{ secrets.HOSTINGER_APP_URL }}
+      CRON_SECRET: ${{ secrets.CRON_SECRET }}
+    steps:
+      - name: Validate scheduler configuration
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          if [ -z "${HOSTINGER_APP_URL:-}" ] || [ -z "${CRON_SECRET:-}" ]; then
+            echo "::error::HOSTINGER_APP_URL and CRON_SECRET must be configured in the production environment."
+            exit 1
+          fi
+
+      - name: Drain protected email queue
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          RESPONSE_FILE="${RUNNER_TEMP}/email-delivery-response.json"
+          STATUS="$(curl --silent --show-error --max-time 330 \
+            --output "${RESPONSE_FILE}" \
+            --write-out '%{http_code}' \
+            --request POST \
+            --header "Authorization: Bearer ${CRON_SECRET}" \
+            --header 'Content-Type: application/json' \
+            "${HOSTINGER_APP_URL%/}/api/cron/email-delivery")"
+
+          if [ "${STATUS}" -lt 200 ] || [ "${STATUS}" -ge 300 ]; then
+            echo "::error::Protected email delivery returned HTTP ${STATUS}."
+            exit 1
+          fi
+
+          OK="$(jq -r '.ok // false' "${RESPONSE_FILE}")"
+          ENABLED="$(jq -r '.enabled // false' "${RESPONSE_FILE}")"
+          TENANTS="$(jq -r '.tenantsProcessed // 0' "${RESPONSE_FILE}")"
+          SENT="$(jq -r '.sent // 0' "${RESPONSE_FILE}")"
+          SKIPPED="$(jq -r '.skipped // 0' "${RESPONSE_FILE}")"
+          FAILED="$(jq -r '.failed // 0' "${RESPONSE_FILE}")"
+          REMAINING="$(jq -r '.remaining // 0' "${RESPONSE_FILE}")"
+          CIRCUITS="$(jq -r '.circuitOpenTenants // 0' "${RESPONSE_FILE}")"
+          if [ "${OK}" != "true" ]; then
+            echo "::error::Protected email queue worker reported tenant processing failures."
+            exit 1
+          fi
+          echo "Protected email queue completed; enabled=${ENABLED}; tenants=${TENANTS}; sent=${SENT}; skipped=${SKIPPED}; failed=${FAILED}; remaining=${REMAINING}; circuits=${CIRCUITS}."

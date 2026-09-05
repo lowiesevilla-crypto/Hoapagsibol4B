@@ -1,10 +1,6 @@
 name: HOAHub Protected Email Delivery Scheduler
 
 on:
-  push:
-    branches: [main]
-    paths:
-      - ".github/workflows/email-delivery-scheduler.yml"
   schedule:
     # Drain the durable bulk-email queue in small server-controlled batches.
     # Application delivery remains fail-closed unless EMAIL_BULK_DELIVERY_ENABLED=true.

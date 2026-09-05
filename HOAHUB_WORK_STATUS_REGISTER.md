@@ -1,102 +1,69 @@
 # HOAHub Work Status Register
 
-_Last reconciled: 2026-09-05 (Asia/Manila)_
+_Last reconciled: 2026-09-06 (Asia/Manila)_
 
-This register is the current release-status snapshot for the active HOAHub production-quality program. It records only evidence-backed status and does not replace issue-specific acceptance criteria.
+This register is the current evidence-backed release snapshot for the active HOAHub production-quality program. It does not replace issue-specific acceptance criteria. A capability is called production-verified only after the exact PR head passes required PR gates, the PR is merged with exact-head protection, and the merged `main` SHA passes HOAHub MySQL CI plus Hostinger managed-production/public-health verification.
 
 ## Current production baseline
 
-- Current production-verified `main`: `e14495a437613da9c77ad5863f779b8aa9eb6f80` from PR #306 (`P0: protect outbound email from invalid recipients and SMTP suspension`).
-- PR #306 exact head `5e675b46205eb3fb7db2929a5d9ccca228b79afc` passed the required exact-head PR gates: HOAHub MySQL CI #1477 / run `33969580285`, Canva Visual Parity, Edge Critical Flow, Firefox Critical Flow, and Mobile Responsive Evidence. The MySQL gate included unit tests, database integration tests, typecheck, build, and the production smoke / critical browser suite.
-- PR #306 merged as `e14495a437613da9c77ad5863f779b8aa9eb6f80`. Post-merge HOAHub MySQL CI #1478 / run `33970326509` passed on that exact `main` SHA. The first Hostinger managed-production verification attempt timed out because `release.txt` remained unavailable for the full ten-minute gate; the failed job was inspected and the same merged SHA was re-verified without a code change. The rerun confirmed Hostinger serving release marker `e14495a43761` and public `/api/health` passed.
-- Bulk billing/reminder SMTP delivery remains deliberately fail-closed through `EMAIL_BULK_DELIVERY_ENABLED=false`. Queue creation remains active, but bulk SMTP must not be enabled until the mailbox/provider is restored, Mail Settings **Verify Connection** succeeds, and a one-to-three known-valid-recipient canary is clean.
-- The previous production baseline, PR #305 (`Urgent: add agreement dates, trial terms, setup fee, and HOAHub convenience fee`), is also production-verified. Exact PR head `d395bac62c0dea7bac1a3bc1dcfbea56f707f05f` merged as `5d4ff7473b0aa435a9f8650eaa298289bbf7666a`; post-merge HOAHub MySQL CI #1474 / run `33966192780` passed the full verification chain plus Hostinger managed-production and public-health verification.
-- PR #305 production-verifies explicit Agreement Start Date and End Date, Free Trial Days with Subscription Plan default fallback, Subscription Plan setup-fee snapshotting, the standard HOAHub Convenience Fee of PHP 2.00 per successfully processed transaction, explicit mutual-agreement confirmation for a different convenience-fee rate, immutable delivered/executed agreement protection, and legal-template v1.1 staged as `PENDING_LEGAL_APPROVAL`. It intentionally does not mutate live billing automation fields such as `TenantSubscription.startedAt`, `trialEndsAt`, or `nextBillingDate`.
-- The report enhancement chain remains production-verified through PR #293 (Homeowner Balance + Transaction History Reports), PR #294 (>500 homeowner pagination safety), PR #295 (board-review XLSX, payment remarks and coverage), PR #296 (tenant-wide wildcard search + 25-row pagination), and PR #297 (clickable Homeowner → Record Payment drilldown with automatic homeowner/open-bill selection).
-- Production automatic billing remains verified. Scheduler run #1 attempt 2 passed after GitHub's `production` environment `CRON_SECRET` was configured and reconciled four tenants with aggregate-only logging.
-- The `ux_action_progress_v1` feature flag remains default-off; this status register does not claim an active tenant pilot.
+- Current production-verified `main`: `f98bf3db72e91ec611b9715bf074480377453409`, merged from PR #308 (`Rental: add homeowner asset reservations with concurrency safety`).
+- PR #308 exact head `6fc6a498786f1ca44ec6b7ed1b4bf5f53fa87a63` passed all required exact-head PR gates: HOAHub MySQL CI, Canva Visual Parity, Edge Critical Flow, Firefox Critical Flow, and Mobile Responsive Evidence. The MySQL gate included lint, Prisma validation/generation/migration, seed, unit tests, full integration tests, homeowner mobile verifiers, typecheck, build, and the production smoke / critical browser suite.
+- PR #308 merged as `f98bf3db72e91ec611b9715bf074480377453409` using expected-head protection. Post-merge HOAHub MySQL CI #1483 / run `33998180744` passed on that exact `main` SHA, including the new rental-reservation MySQL integration evidence. Hostinger served the expected release and public `/api/health` passed.
+- The previous documentation reconciliation PR #307 merged as `4a59b3b652b3bd6ec16f1ea66ca3ca9809b281d8`; post-merge HOAHub MySQL CI #1480 was fully green before PR #308 work began.
+- Bulk billing/reminder SMTP delivery remains deliberately fail-closed through `EMAIL_BULK_DELIVERY_ENABLED=false`. Queue creation remains active, but bulk SMTP must not be enabled until the mailbox/provider is restored, Mail Settings **Verify Connection** succeeds, and a controlled one-to-three known-valid-recipient canary is clean.
+- The `ux_action_progress_v1` feature flag remains default-off unless a separate controlled rollout authorizes a tenant target.
 
 ## Completed / verified programs
 
-The P0 functional regression queue tracked by #193 is COMPLETED and VERIFIED: Payroll, Petty Cash, Payment Void, Refund, Online Payments reporting/settlement trace, and Financial Reports.
+- P0 functional regression queue #193: COMPLETED / VERIFIED — Payroll, Petty Cash, Payment Void, Refund, Online Payments reporting/settlement trace, and Financial Reports.
+- P1 post-program improvement queue #254: COMPLETED — documentation baseline, document-table usability, billing/document/payment collapsibles, messaging notification UX, household-member administration, safe homeowner payment-history hide/archive, account-information UX, PWA recovery, and final reconciliation through PR #284.
+- Automatic Billing 5,001-homeowner qualification #278: VERIFIED through PR #283 — bounded batching, duplicate prevention, retry/completion behavior, row-failure isolation, rental billing-day correctness, rental retry idempotency, oldest-due-first advance-credit allocation, and second-tenant isolation.
+- Durable Manual Billing 5,001-homeowner qualification: VERIFIED through PR #289 — durable truthful progress, 250-record batching, duplicate/exemption handling, failed-record-only retry, row-failure isolation, and second-tenant isolation.
+- Automatic Billing production trigger: VERIFIED through PRs #290/#291 and successful scheduler execution using the protected cron endpoint.
+- Reports expansion: VERIFIED in production through PRs #293–#297 — Homeowner Monthly Dues Balance and Transaction History reporting, full-volume tenant scope, XLSX output, wildcard search, pagination, payment remarks/coverage, and Homeowner → Record Payment drilldown.
+- Platform Admin lifecycle/manual subscription payments: VERIFIED through PR #299 — deactivation/reactivation/permanent-delete safeguards and concurrency-safe manual subscription payment posting.
+- Platform Agreement commercial terms: VERIFIED through PR #305 — explicit agreement Start/End dates, Free Trial Days with plan fallback, setup-fee snapshot, standard PHP 2.00 HOAHub Convenience Fee, explicit mutual-agreement confirmation for a different rate, immutable delivered/executed copies, and legal-template v1.1 staged for legal approval. Billing scheduler fields are not silently mutated by agreement issuance.
+- P0 Email Delivery Safety Hotfix: VERIFIED through PR #306 — invalid-recipient preflight, tenant-scoped suppression, provider circuit breaking, durable queueing, serialized/paced bulk delivery, protected Platform Invoice email, privacy-safe audit data, and authenticated queue scheduler. Deployment does not authorize bulk SMTP enablement.
+- Rental Asset Reservations: VERIFIED in production through PR #308 — homeowner `/portal/rentals` inventory/reserve/cancel flow, tenant `AVAILABLE` inventory filtering, private reservation-owner handling in the homeowner portal, Admin Asset reservation owner/status visibility, tenant-scoped composite foreign keys, database-enforced one-active-reservation-per-asset, `SERIALIZABLE` + `FOR UPDATE` mutation protection, audit trail, cancellation history, replacement reservation after cancellation, and second-tenant/cross-tenant FK isolation evidence.
 
-The P1 post-program improvement queue tracked by #254 is COMPLETED. Verified delivery includes:
+## Issue #273 reconciliation
 
-1. Final documentation baseline — PR #253.
-2. Document Repository table usability — PR #255.
-3. Billing collapsible sections — PR #256.
-4. Admin Documents issued-table usability — PR #257.
-5. Homeowner Online Payment Status collapsible — PR #258.
-6. Messaging received-message popup/notification — PR #259.
-7. Admin add Household Member — PR #260.
-8. Homeowner Online Payment history safe hide/archive UX — PR #262.
-9. Homeowner Account Information collapsible — PR #263.
-10. Stale PWA/client update-path correction — PR #270.
-11. Final repository documentation reconciliation — PR #284. Issue #254 was closed as completed on 2026-09-01.
+GitHub issue #273 (`HOAHUB-UX-P0-001: truthful action progress and duplicate-submission protection`) is CLOSED / completed. The historical rollout flag remains default-off; issue closure does not itself authorize a tenant pilot.
 
-Automatic Billing 5,001-homeowner end-to-end proof tracked by #278 is VERIFIED and completed through PR #283. The approved disposable MySQL harness proves bounded automatic Monthly Dues generation at 5,001 active homeowners, duplicate prevention, retry/completion behavior, row-failure isolation, notification-failure persistence, rental billing-day correctness, rental retry idempotency, oldest-due-first advance-credit allocation, and second-tenant isolation.
+Evidence-backed increments retained for history include PRs #274, #276, #281, #285, #286, #289, #290, and #291.
 
-Durable Manual Billing progress and dedicated 5,001-homeowner proof are VERIFIED through PR #289. Exact head `8017230a88f7251a8e865b26a1be97a60f8715d9` passed HOAHub MySQL CI #1424, Canva Visual Parity #494, Edge Critical Flow #87, Firefox Critical Flow #83, and Mobile Responsive Evidence #82; merged as `614e6af11045c79d6113b40d3eb5162740977a64`. Post-merge HOAHub MySQL CI #1425 passed, and the initially delayed Hostinger production marker was inspected and the failed production job rerun successfully. Evidence covers persisted truthful counts, 250-record batching, duplicate/exemption handling, failed-record-only retry, 5,001 active homeowners, and second-tenant isolation.
+## Issue #146 — Finance & Rental hardening
 
-The urgent Reports expansion requested on 2026-09-02/03 is VERIFIED in production through PRs #293–#297. The Homeowner Monthly Dues Balance Report provides tenant-scoped full-volume data, Excel workbook output with Summary & Analytics, receipt/date/amount/payment-coverage remarks, wildcard search over the complete selected tenant/status scope, 25-row preview pagination, and clickable active homeowner names that open Record Payment. Record Payment re-validates the homeowner against the authenticated tenant and ACTIVE status, automatically loads/selects all open billings, initializes the payment amount to the open selected total, and derives payment coverage while preserving administrator review before submission. Transaction History remains a separate report view.
+Issue #146 remains OPEN while its full six-point scope is reconciled against current production evidence.
 
-Platform Admin tenant lifecycle and manual tenant subscription payment handling remain VERIFIED in production through PR #299. Deactivation retains tenant-owned data while revoking active sessions, permanent deletion requires an inactive tenant plus explicit confirmation and preserves normal FK protections outside the privileged purge, and manual subscription payments use an internal unique reference with concurrency-safe invoice balance updates.
+Production evidence now covers the previously missing **Rental Asset Reservations** requirement through PR #308:
 
-The Platform Agreement commercial-term enhancement is VERIFIED in production through PR #305. New legal template v1.1 remains subject to the existing legal approval/activation workflow; existing signed/delivered agreements are not retroactively modified.
+- Homeowners can view tenant `AVAILABLE` rental assets and reserve an unreserved asset.
+- Exactly one active reservation per tenant asset is enforced at the database layer and by serialized row-locking mutations.
+- Admin Rental Asset actions display active reservation status and homeowner identity with Block/Lot context.
+- Homeowner views do not expose another homeowner's identity.
+- Reservation create/cancel operations are tenant-scoped and audited.
+- MySQL integration proves concurrent competition, cancellation/replacement behavior, and cross-tenant FK isolation.
 
-The P0 Email Delivery Safety Hotfix is VERIFIED in production through PR #306. Confirmed protections include zero SMTP for HOAHub placeholder/malformed/reserved-domain recipients, tenant-scoped permanent-recipient suppression, provider circuit breaking, durable billing/reminder queueing, serialized paced bulk delivery, protected Platform Invoice delivery, privacy-safe audit metadata, tenant-scoped processing, and an authenticated scheduled queue worker. Code deployment does not authorize bulk SMTP rollout; `EMAIL_BULK_DELIVERY_ENABLED=false` remains the required production state until provider restoration and canary approval.
+Repository/status evidence also shows substantial prior delivery for #146 automatic billing, financial reporting, Admin advance-credit behavior, and focused Rental Agreement UX. The next clearly actionable gap identified in the current homeowner payment surface is **#146 item 4 — Homeowner advance Monthly Dues payment**. Current `/portal/pay` is built around existing open bills, and the current PayMongo homeowner form receives `openBills`; the approved #146 requirement instead calls for homeowner-selected coverage **From/To month**, server-side amount calculation from effective Monthly Dues rules, online posting as homeowner advance credit, and automatic future allocation.
 
-## Action-progress program — issue #273 reconciliation
-
-GitHub issue #273 (`HOAHUB-UX-P0-001: truthful action progress and duplicate-submission protection`) is **CLOSED / completed** as of 2026-09-01. The prior status-register statement that it remained `IN_PROGRESS` was stale and is superseded by this reconciliation.
-
-Evidence-backed production increments retained for history:
-
-- Shared default-off action-progress/submission-lock foundation — PR #274.
-- Admin Record Payment server-confirmed result state — PR #276.
-- Payment uncertain-response reconciliation before retry — PR #281.
-- Monthly Billing server-confirmed result state — PR #285.
-- Billing progress review corrections — PR #286.
-- Durable Manual Billing progress and 5,001-homeowner Manual Billing qualification — PR #289.
-- Production automatic billing scheduler code — PR #290 and activation trigger PR #291.
-
-Issue closure is recorded as repository state; it does not by itself establish that every historical pilot/UAT note in the original issue body was executed. The `ux_action_progress_v1` rollout remains default-off unless separately enabled under controlled authorization.
-
-## Manual Billing 5,000+ scale qualification
-
-Manual Billing is independently production-proven at 5,001 homeowners through PR #289. The evidence uses disposable MySQL data and verifies the administrator-triggered generation path with durable job progress, truthful `completed / total` counts, bounded 250-record batches, duplicate/exemption handling, failed-record-only retry, row-level failure isolation, and second-tenant isolation.
-
-## Automatic Billing production trigger
-
-PR #290 added the production GitHub Actions scheduler for 00:15 Asia/Manila daily, calling only `/api/cron/monthly-dues`. PR #291 added the first activation trigger on the scheduler workflow file path.
-
-Activation status: VERIFIED. Scheduler run #1 on main `6c6da059011ca29c429f6e4396d243478579b28a` initially failed in `Validate scheduler configuration` because `CRON_SECRET` was empty in GitHub's `production` environment. After the environment secret was configured, run #1 attempt 2 passed, POSTed to `/api/cron/monthly-dues`, and logged `Automatic billing reconciliation completed; tenants processed: 4.` The log masks secrets and exposes no tenant-private identifiers.
+Do not close #146 until that homeowner-advance flow and the remaining six-point acceptance reconciliation have exact evidence.
 
 ## Blocked external dependency
 
 Authenticated non-destructive production smoke remains tracked by open issue #194. Repository-side preparation exists, but live execution remains BLOCKED on administrator/account-level provisioning of a dedicated authorized production-smoke identity and corresponding protected GitHub production-environment credentials. Real tenant credentials and destructive substitute testing are prohibited.
-
-## Next actionable product task
-
-Open issue #146 (`Finance & Rental hardening: automatic billing, advance dues, reports, reservations, agreement UX`) remains the next actionable product task. Repository review confirms that the clearly missing implementation is **Rental Asset Reservations**:
-
-- Homeowners must be able to view tenant `AVAILABLE` rental assets and reserve an asset.
-- One active reservation per asset must be enforced concurrency-safely.
-- Admin Rental Asset view must show the reserved homeowner and reservation status.
-- Tenant isolation and an audit trail are mandatory.
-
-The current rental persistence contains `RentalAsset`, `Renter`, `RentalAgreement`, `RentalInvoice`, and `RentalPaymentAllocation` but no reservation table. The next controlled implementation therefore adds a tenant-scoped reservation persistence layer, homeowner reserve/cancel flow, Admin Asset reservation visibility, database uniqueness/concurrency protection, and regression evidence before issue #146 is re-evaluated for closure.
 
 ## Release governance
 
 - Never merge a stale or red head.
 - Required CI evidence must belong to the exact current PR head SHA.
 - Any failed gate must be inspected to the exact failing job/step, corrected at root cause, pushed as a new head, and re-run.
-- After merge, verify the merged `main` release with HOAHub MySQL CI plus managed-production/public-health verification before the next production mutation.
-- A managed-production timeout must be inspected before retry. A retry is acceptable only when the exact already-merged SHA is unchanged and the failure is external deployment-marker timing rather than a code/test defect.
-- Preserve tenant isolation, RBAC, financial/document authority, audit semantics, duplicate protection, and live-tenant business behavior.
+- Merge only with expected-head/exact-head protection after every required gate is green.
+- After merge, verify the merged `main` release with HOAHub MySQL CI plus Hostinger managed-production/public-health verification before the next production mutation.
+- A managed-production timeout must be inspected before retry. A same-SHA retry is acceptable only when the failure is external deployment-marker timing rather than a code/test defect.
+- Preserve tenant isolation, RBAC, financial/document authority, audit semantics, duplicate protection, receipt uniqueness, idempotency, and live-tenant business behavior.
 - Do not use destructive production test data or weaken security/CI gates to obtain a pass.
 
 ## Current execution state
 
-Current production is VERIFIED at `e14495a437613da9c77ad5863f779b8aa9eb6f80` through post-merge HOAHub MySQL CI #1478 / run `33970326509`, exact-release Hostinger verification, and public production health. PR #306 is deployed with bulk email delivery still fail-closed. PR #305 Platform Agreement commercial terms are also production-verified through CI #1474 / run `33966192780`. Issue #273 is closed/completed and is no longer the active engineering priority. The next actionable product task is issue #146 Rental Asset Reservations. Issue #194 remains externally blocked on dedicated production-smoke identity/credential provisioning and must not be bypassed.
+Current production is VERIFIED at `f98bf3db72e91ec611b9715bf074480377453409` through post-merge HOAHub MySQL CI #1483 / run `33998180744`, Hostinger expected-release verification, and public production health. PR #308 Rental Asset Reservations is complete and production-deployed. Issue #146 remains open; the next actionable implementation is **Homeowner advance Monthly Dues payment (item 4)**. Issue #194 remains externally blocked and must not be bypassed. Email bulk delivery remains fail-closed pending provider restoration and controlled canary approval.

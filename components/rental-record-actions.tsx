@@ -7,6 +7,8 @@ import {
   updateRentalAssetAction,
   updateRenterAction,
 } from "@/lib/actions/rental-maintenance";
+import { getAdminRentalAssetReservationSummary } from "@/lib/services/rental-reservations";
+import { shortDate } from "@/lib/utils";
 
 type AssetActionRecord = {
   id: string;
@@ -43,8 +45,22 @@ type AgreementActionRecord = {
   canDelete: boolean;
 };
 
-export function RentalAssetActions({ asset }: { asset: AssetActionRecord }) {
-  return <div className="flex min-w-28 flex-col gap-2">
+export async function RentalAssetActions({ asset }: { asset: AssetActionRecord }) {
+  const reservation = await getAdminRentalAssetReservationSummary(asset.id);
+  const hasActiveReservation = Boolean(reservation.reservationId);
+  const canDelete = asset.canDelete && reservation.historyCount === 0;
+
+  return <div className="flex min-w-48 flex-col gap-2">
+    {hasActiveReservation ? (
+      <div className="rounded-lg border border-amber-200 bg-amber-50 px-2.5 py-2 text-[11px] leading-4 text-amber-950">
+        <p className="font-black uppercase tracking-wide">Reserved · {reservation.status}</p>
+        <p className="font-bold">{reservation.homeownerName || "Homeowner"}</p>
+        {(reservation.block || reservation.lot) && <p>Block {reservation.block || "-"} · Lot {reservation.lot || "-"}</p>}
+        {reservation.reservedAt && <p>Reserved {shortDate(reservation.reservedAt)}</p>}
+      </div>
+    ) : (
+      <span className="text-[11px] font-semibold text-slate-400">No active reservation</span>
+    )}
     <details>
       <summary className="cursor-pointer text-xs font-bold text-sky-700">Edit</summary>
       <form action={updateRentalAssetAction} className="mt-2 min-w-72 space-y-2 rounded-xl border border-slate-200 bg-white p-3 shadow-lg">
@@ -53,12 +69,12 @@ export function RentalAssetActions({ asset }: { asset: AssetActionRecord }) {
         <label className="label">Name<input className="field" name="name" defaultValue={asset.name} required /></label>
         <label className="label">Location<input className="field" name="location" defaultValue={asset.location ?? ""} /></label>
         <label className="label">Default monthly rate<input className="field" name="defaultRate" type="number" min="0" step="0.01" defaultValue={asset.defaultRate.toFixed(2)} required /></label>
-        {asset.status === "OCCUPIED" ? <><input type="hidden" name="status" value="OCCUPIED" /><p className="text-xs font-semibold text-slate-500">Status is locked to Occupied while an agreement is active.</p></> : <label className="label">Status<select className="field" name="status" defaultValue={asset.status}><option value="AVAILABLE">Available</option><option value="INACTIVE">Inactive</option></select></label>}
+        {asset.status === "OCCUPIED" ? <><input type="hidden" name="status" value="OCCUPIED" /><p className="text-xs font-semibold text-slate-500">Status is locked to Occupied while an agreement is active.</p></> : hasActiveReservation ? <><input type="hidden" name="status" value={asset.status} /><p className="text-xs font-semibold text-amber-700">Status is locked while a homeowner reservation is active.</p></> : <label className="label">Status<select className="field" name="status" defaultValue={asset.status}><option value="AVAILABLE">Available</option><option value="INACTIVE">Inactive</option></select></label>}
         <label className="label">Notes<textarea className="field min-h-16" name="notes" defaultValue={asset.notes ?? ""} /></label>
         <SubmitButton className="btn-primary w-full">Save changes</SubmitButton>
       </form>
     </details>
-    {asset.canDelete ? <form action={deleteRentalAssetAction}><input type="hidden" name="assetId" value={asset.id} /><DeleteButton /></form> : <span className="text-[11px] font-semibold text-slate-400">History protected</span>}
+    {canDelete ? <form action={deleteRentalAssetAction}><input type="hidden" name="assetId" value={asset.id} /><DeleteButton /></form> : <span className="text-[11px] font-semibold text-slate-400">History protected</span>}
   </div>;
 }
 

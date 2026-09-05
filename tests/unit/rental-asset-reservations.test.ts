@@ -16,7 +16,7 @@ const adminActions = source("components/rental-record-actions.tsx");
 
 test("rental reservation migration enforces one ACTIVE hold per tenant asset at the database layer", () => {
   assert.match(migration, /CREATE TABLE `RentalAssetReservation`/);
-  assert.match(migration, /GENERATED ALWAYS AS[\s\S]*status` = 'ACTIVE'[\s\S]*assetId` ELSE NULL/);
+  assert.match(migration, /`activeAssetKey` VARCHAR\(191\) NULL/);
   assert.match(migration, /UNIQUE INDEX `RentalAssetReservation_tenantId_activeAssetKey_key` \(`tenantId`,`activeAssetKey`\)/);
   assert.match(migration, /FOREIGN KEY \(`tenantId`,`assetId`\) REFERENCES `RentalAsset`\(`tenantId`,`id`\)/);
   assert.match(migration, /FOREIGN KEY \(`tenantId`,`homeownerId`\) REFERENCES `HomeownerProfile`\(`tenantId`,`id`\)/);
@@ -29,6 +29,8 @@ test("homeowner reservation mutations are tenant-scoped, serialized, locked, ide
   assert.match(actions, /FOR UPDATE/);
   assert.match(actions, /Prisma\.TransactionIsolationLevel\.Serializable/);
   assert.match(actions, /active\.homeownerId === profile\.id/);
+  assert.match(actions, /'ACTIVE',\$\{assetId\},NOW\(3\)/);
+  assert.match(actions, /activeAssetKey=NULL/);
   assert.match(actions, /CREATE_RENTAL_ASSET_RESERVATION/);
   assert.match(actions, /CANCEL_RENTAL_ASSET_RESERVATION/);
   assert.ok(actions.includes("WHERE tenantId=${profile.tenantId} AND id=${reservationId} AND homeownerId=${profile.id} AND status='ACTIVE'"));

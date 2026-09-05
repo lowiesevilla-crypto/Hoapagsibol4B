@@ -44,7 +44,7 @@ async function createHomeowner(tenantId: string, userId: string, homeownerId: st
       address: `${suffix} Reservation Test Street`,
       block: `B-${suffix}`,
       lot: `L-${suffix}`,
-      phone: `09${suffix.padStart(9, "0").slice(-9)}`,
+      phone: `0900000${suffix.replace(/\D/g, "").padStart(4, "0")}`,
       monthlyDuesAmount: new Prisma.Decimal("500.00"),
     },
   });
@@ -60,8 +60,8 @@ async function createAsset(tenantId: string, id: string, code: string) {
 async function insertReservation(tenantId: string, assetId: string, homeownerId: string) {
   const id = randomUUID();
   await platformPrisma.$executeRaw(Prisma.sql`
-    INSERT INTO RentalAssetReservation (tenantId,id,assetId,homeownerId,status,reservedAt,createdAt,updatedAt)
-    VALUES (${tenantId},${id},${assetId},${homeownerId},'ACTIVE',NOW(3),NOW(3),NOW(3))
+    INSERT INTO RentalAssetReservation (tenantId,id,assetId,homeownerId,status,activeAssetKey,reservedAt,createdAt,updatedAt)
+    VALUES (${tenantId},${id},${assetId},${homeownerId},'ACTIVE',${assetId},NOW(3),NOW(3),NOW(3))
   `);
   return id;
 }
@@ -104,7 +104,8 @@ test("database enforces one active rental reservation per asset and tenant-scope
   const nextHomeowner = firstWinner.homeownerId === homeownerA1 ? homeownerA2 : homeownerA1;
 
   await platformPrisma.$executeRaw(Prisma.sql`
-    UPDATE RentalAssetReservation SET status='CANCELLED',cancelledAt=NOW(3),updatedAt=NOW(3)
+    UPDATE RentalAssetReservation
+    SET status='CANCELLED',activeAssetKey=NULL,cancelledAt=NOW(3),updatedAt=NOW(3)
     WHERE tenantId=${tenantA} AND id=${firstWinner.id}
   `);
   const replacementId = await insertReservation(tenantA, assetA1, nextHomeowner);

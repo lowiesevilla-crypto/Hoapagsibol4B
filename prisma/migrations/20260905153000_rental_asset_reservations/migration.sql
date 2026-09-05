@@ -1,6 +1,7 @@
 -- Rental Asset Reservations: tenant-scoped homeowner holds on AVAILABLE rental inventory.
--- The generated activeAssetKey plus tenant-scoped unique index is the database-level
--- concurrency backstop: terminal history rows resolve to NULL and do not block later holds.
+-- activeAssetKey is stored explicitly by reservation mutations: ACTIVE rows set it to assetId;
+-- terminal rows clear it to NULL. The tenant-scoped unique index is the database-level
+-- concurrency backstop while preserving cancellation/fulfillment history.
 
 CREATE TABLE `RentalAssetReservation` (
   `tenantId` VARCHAR(191) NOT NULL,
@@ -8,14 +9,12 @@ CREATE TABLE `RentalAssetReservation` (
   `assetId` VARCHAR(191) NOT NULL,
   `homeownerId` VARCHAR(191) NOT NULL,
   `status` ENUM('ACTIVE','CANCELLED','FULFILLED') NOT NULL DEFAULT 'ACTIVE',
+  `activeAssetKey` VARCHAR(191) NULL,
   `reservedAt` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
   `cancelledAt` DATETIME(3) NULL,
   `fulfilledAt` DATETIME(3) NULL,
   `createdAt` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
   `updatedAt` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
-  `activeAssetKey` VARCHAR(191) GENERATED ALWAYS AS (
-    CASE WHEN `status` = 'ACTIVE' THEN `assetId` ELSE NULL END
-  ) STORED,
   PRIMARY KEY (`id`),
   UNIQUE INDEX `RentalAssetReservation_tenantId_id_key` (`tenantId`,`id`),
   UNIQUE INDEX `RentalAssetReservation_tenantId_activeAssetKey_key` (`tenantId`,`activeAssetKey`),

@@ -67,9 +67,9 @@ export async function reserveRentalAssetAction(formData: FormData) {
     const reservationId = randomUUID();
     await db.$executeRaw(Prisma.sql`
       INSERT INTO RentalAssetReservation
-        (tenantId,id,assetId,homeownerId,status,reservedAt,createdAt,updatedAt)
+        (tenantId,id,assetId,homeownerId,status,activeAssetKey,reservedAt,createdAt,updatedAt)
       VALUES
-        (${profile.tenantId},${reservationId},${assetId},${profile.id},'ACTIVE',NOW(3),NOW(3),NOW(3))
+        (${profile.tenantId},${reservationId},${assetId},${profile.id},'ACTIVE',${assetId},NOW(3),NOW(3),NOW(3))
     `);
     await db.auditLog.create({
       data: {
@@ -118,7 +118,7 @@ export async function cancelRentalAssetReservationAction(formData: FormData) {
 
     await db.$executeRaw(Prisma.sql`
       UPDATE RentalAssetReservation
-      SET status='CANCELLED',cancelledAt=NOW(3),updatedAt=NOW(3)
+      SET status='CANCELLED',activeAssetKey=NULL,cancelledAt=NOW(3),updatedAt=NOW(3)
       WHERE tenantId=${profile.tenantId} AND id=${reservationId} AND homeownerId=${profile.id} AND status='ACTIVE'
     `);
     await db.auditLog.create({

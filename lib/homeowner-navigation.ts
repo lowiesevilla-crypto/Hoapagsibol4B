@@ -42,7 +42,7 @@ export const homeownerPrimaryDestinations: HomeownerPrimaryDestination[] = [
     href: "/portal/pay",
     icon: "payments",
     module: TenantModule.BILLING,
-    prefixes: ["/portal/pay", "/portal/billing", "/portal/soa", "/portal/payments", "/portal/collections"],
+    prefixes: ["/portal/pay", "/portal/billing", "/portal/soa", "/portal/payments", "/portal/collections", "/portal/rentals"],
   },
   {
     id: "requests",
@@ -76,6 +76,7 @@ export const homeownerSidebarLinks: HomeownerNavigationLink[] = [
   { href: "/portal/soa", label: "Statement of Account", icon: "reports", section: "Payments", module: TenantModule.BILLING, description: "Download your SOA" },
   { href: "/portal/payments", label: "Payment history", icon: "payments", section: "Payments", module: TenantModule.BILLING, description: "View recorded payments" },
   { href: "/portal/collections", label: "Collections & bonds", icon: "collections", section: "Payments", module: TenantModule.BILLING, description: "Track other collections" },
+  { href: "/portal/rentals", label: "Rental reservations", icon: "collections", section: "Payments", module: TenantModule.BILLING, description: "Reserve available HOA rental assets" },
   { href: "/portal/requests", label: "Requests", icon: "documents", section: "Resident Services", description: "Documents and complaints" },
   { href: "/portal/documents", label: "Document Requests", icon: "documents", section: "Resident Services", module: TenantModule.DOCUMENTS, description: "Request or view documents" },
   { href: "/portal/complaints", label: "My Complaints", icon: "complaints", section: "Resident Services", module: TenantModule.COMPLAINTS, description: "Track submitted concerns" },

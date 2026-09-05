@@ -99,6 +99,7 @@ export async function generateTenantAgreementAction(formData: FormData) {
   let agreement;
   try {
     agreement = await createTenantAgreementDraft({ tenantId, actorId: actor.id });
+    agreement = await ensureAgreementOneTimeFeeSnapshot({ agreementId: agreement.id, actorId: actor.id });
     agreement = await applyAgreementIssueCommercialTerms({
       agreementId: agreement.id,
       actorId: actor.id,

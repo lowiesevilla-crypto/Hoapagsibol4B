@@ -101,7 +101,11 @@ test("platform invoices email a signed view-and-pay link with HOAHub SMTP", asyn
     source("lib/actions/platform-billing.ts"),
     source("app/api/cron/daily/route.ts"),
   ]);
-  assert.match(mailer, /getMailConfiguration\(BOOTSTRAP_TENANT_ID\)/);
+  // Platform billing must still use HOAHub's bootstrap SMTP identity, but all
+  // sends now pass through the centralized protected gateway rather than
+  // reading/using Nodemailer configuration directly in this service.
+  assert.match(mailer, /sendProtectedRawEmail/);
+  assert.match(mailer, /tenantId:\s*BOOTSTRAP_TENANT_ID/);
   assert.match(mailer, /platformInvoicePaymentUrl\(invoice\.id\)/);
   assert.match(mailer, /View &amp; Pay Invoice/);
   assert.match(mailer, /PLATFORM_INVOICE_EMAIL_/);

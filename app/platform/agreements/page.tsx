@@ -5,6 +5,7 @@ import {
   activateAgreementTemplateAction,
   generateTenantAgreementAction,
 } from "@/lib/actions/platform-agreements";
+import { ensureAgreementTemplateV11 } from "@/lib/services/platform-agreement-template-v11";
 import { listPlatformAgreementDashboard } from "@/lib/services/platform-agreements";
 
 export default async function PlatformAgreementsPage({
@@ -13,6 +14,7 @@ export default async function PlatformAgreementsPage({
   searchParams: Promise<{ success?: string; error?: string }>;
 }) {
   const query = await searchParams;
+  await ensureAgreementTemplateV11();
   const { templates, agreements, subscriptions } = await listPlatformAgreementDashboard();
   const version = templates.flatMap((template) => template.versions).sort((a, b) => b.versionNumber - a.versionNumber)[0];
   const signed = agreements.filter((agreement) => agreement.status === TenantAgreementStatus.SIGNED).length;
@@ -82,14 +84,56 @@ export default async function PlatformAgreementsPage({
 
         <article className="rounded-2xl border bg-white p-5 sm:p-6">
           <h2 className="text-xl font-black">Issue tenant agreement</h2>
-          <p className="mt-1 text-sm text-slate-500">Generates an immutable agreement from the tenant&apos;s current subscription, billing identity, plan, price, term, modules, and HOAHub issuer profile.</p>
-          <form action={generateTenantAgreementAction} className="mt-5">
-            <label><span className="label">Active tenant subscription</span><select className="field" name="tenantId" required defaultValue=""><option value="" disabled>Select tenant</option>{subscriptions.map((subscription) => <option key={subscription.id} value={subscription.tenantId}>{subscription.tenant.name} · {subscription.plan.name} · {subscription.billingFrequency}</option>)}</select></label>
-            <button className="btn-primary mt-4 w-full">Generate / open agreement</button>
+          <p className="mt-1 text-sm text-slate-500">Set the exact agreement term and trial before generation. The selected plan&apos;s one-time setup fee is copied automatically into the immutable Commercial Order.</p>
+          <form action={generateTenantAgreementAction} className="mt-5 space-y-4">
+            <label>
+              <span className="label">Active tenant subscription</span>
+              <select className="field" name="tenantId" required defaultValue="">
+                <option value="" disabled>Select tenant</option>
+                {subscriptions.map((subscription) => (
+                  <option key={subscription.id} value={subscription.tenantId}>
+                    {subscription.tenant.name} · {subscription.plan.name} · {subscription.billingFrequency} · Trial {subscription.plan.trialDays}d · Setup {new Intl.NumberFormat("en-PH", { style: "currency", currency: subscription.currency || subscription.plan.currency || "PHP", maximumFractionDigits: 2 }).format(Number(subscription.plan.setupFee || 0))}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <div className="grid gap-3 sm:grid-cols-2">
+              <label>
+                <span className="label">Agreement Start Date</span>
+                <input className="field" type="date" name="startDate" required />
+              </label>
+              <label>
+                <span className="label">Agreement End Date</span>
+                <input className="field" type="date" name="endDate" required />
+              </label>
+              <label>
+                <span className="label">Free Trial Days</span>
+                <input className="field" type="number" name="freeTrialDays" min="0" max="3650" step="1" placeholder="Blank = plan default" />
+                <span className="mt-1 block text-xs text-slate-500">Leave blank to use the Free Trial Days configured in the selected subscription plan.</span>
+              </label>
+              <label>
+                <span className="label">HOAHub Convenience Fee / Transaction</span>
+                <input className="field" type="number" name="convenienceFeePerTransaction" min="0" step="0.01" defaultValue="2.00" required />
+                <span className="mt-1 block text-xs text-slate-500">Standard HOAHub rate: ₱2.00 per successfully processed transaction.</span>
+              </label>
+            </div>
+
+            <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-xs text-slate-600">
+              <p><span className="font-black text-slate-800">One-time setup fee:</span> automatically snapshotted from the selected Subscription Plan. It is not manually entered here.</p>
+              <p className="mt-1"><span className="font-black text-slate-800">Alternate convenience fee:</span> may be used only when HOAHub and the HOA have mutually agreed to the different rate.</p>
+            </div>
+
+            <label className="flex items-start gap-3 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm font-semibold text-amber-950">
+              <input className="mt-0.5 size-5" type="checkbox" name="mutualFeeAgreementConfirmed" />
+              <span>I confirm that if I enter a convenience fee other than the standard ₱2.00 rate, the alternate rate is supported by a mutual written or electronically executed agreement between HOAHub and the HOA.</span>
+            </label>
+
+            <button className="btn-primary w-full">Generate / open agreement</button>
           </form>
           <div className="mt-5 rounded-xl bg-blue-50 p-4 text-sm text-blue-950">
             <p className="font-black">Execution control</p>
-            <p className="mt-1">If the master template is still pending legal approval, HOAHub creates a viewable DRAFT only. It cannot be sent or signed until the exact template version is activated.</p>
+            <p className="mt-1">If the newest master template is still pending legal approval, that template remains unavailable for electronic execution until the exact version is activated. Issued agreement dates, trial days, setup fee, and convenience fee are snapshotted and cannot be changed after delivery or execution.</p>
           </div>
         </article>
       </section>

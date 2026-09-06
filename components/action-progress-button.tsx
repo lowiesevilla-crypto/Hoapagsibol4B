@@ -40,16 +40,18 @@ export function ActionProgressButton({
     setAccepted(false);
   }, [pending]);
 
-  if (!enabled) {
-    return <button type="submit" className={className} disabled={pending || disabled}>{pending ? `${pendingLabel}…` : children}</button>;
-  }
-
-  const processing = accepted || pending || confirmedProcessing;
+  // The feature flag only controls the existing advanced/durable progress
+  // workflow. Basic immediate feedback and duplicate-click protection remain
+  // available even when that workflow is disabled, so business logic and form
+  // actions do not need to change just to make the first click visible.
+  const advancedProcessing = enabled && confirmedProcessing;
+  const completed = enabled && success;
+  const processing = accepted || pending || advancedProcessing;
 
   return <button
     type="submit"
     className={className}
-    disabled={disabled || accepted || pending || confirmedProcessing || success}
+    disabled={disabled || accepted || pending || advancedProcessing || completed}
     aria-busy={processing || undefined}
     onClick={(event) => {
       const form = event.currentTarget.form;
@@ -65,7 +67,7 @@ export function ActionProgressButton({
       setAccepted(true);
     }}
   >
-    {success
+    {completed
       ? <><Check className="size-4" aria-hidden="true" /> <span role="status" aria-live="polite" aria-atomic="true">{pendingLabel} complete</span></>
       : processing
         ? <><LoaderCircle className="size-4 animate-spin motion-reduce:animate-none" aria-hidden="true" /> <span role="status" aria-live="polite" aria-atomic="true">{pendingLabel}…</span></>

@@ -34,15 +34,17 @@ const FALSE_VALUES = new Set(["0", "false", "no", "off"]);
 /**
  * Visible action progress is safe presentation-layer feedback, so it is on by
  * default. Operations can still disable it immediately with the master switch.
- * When an explicit rollout target configuration is supplied, selectors are
- * ANDed and narrow rules are evaluated from last to first.
+ * Target configuration is honored only when the master switch is explicitly
+ * enabled, which prevents stale rollout targets from hiding feedback when the
+ * environment variable is absent.
  */
 export function isUxActionProgressEnabled(target: FlagTarget, environment?: FlagEnvironment) {
   const source = environment ?? process.env;
   const master = source.UX_ACTION_PROGRESS_V1_ENABLED?.trim().toLowerCase() ?? "";
 
+  if (!master) return true;
   if (FALSE_VALUES.has(master)) return false;
-  if (master && !TRUE_VALUES.has(master)) return false;
+  if (!TRUE_VALUES.has(master)) return false;
 
   const rawTargets = source.UX_ACTION_PROGRESS_V1_TARGETS?.trim();
   if (!rawTargets) return true;

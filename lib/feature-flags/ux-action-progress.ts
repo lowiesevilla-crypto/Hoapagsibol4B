@@ -28,28 +28,16 @@ type FlagEnvironment = {
   UX_ACTION_PROGRESS_V1_TARGETS?: string;
 };
 
-const TRUE_VALUES = new Set(["1", "true", "yes", "on"]);
-const FALSE_VALUES = new Set(["0", "false", "no", "off"]);
-
 /**
- * Visible action progress is safe presentation-layer feedback, so it is on by
- * default. Operations can still disable it immediately with the master switch.
- * Target configuration is honored only when the master switch is explicitly
- * enabled, which prevents stale rollout targets from hiding feedback when the
- * environment variable is absent.
+ * Default-off, fail-closed rollout resolver. The master switch is an immediate
+ * rollback control. Target lists are ANDed; explicit rules are evaluated from
+ * last to first so a narrow tenant/module/role override can supersede global.
  */
 export function isUxActionProgressEnabled(target: FlagTarget, environment?: FlagEnvironment) {
   const source = environment ?? process.env;
-  const master = source.UX_ACTION_PROGRESS_V1_ENABLED?.trim().toLowerCase() ?? "";
+  if (source.UX_ACTION_PROGRESS_V1_ENABLED?.trim().toLowerCase() !== "true") return false;
 
-  if (!master) return true;
-  if (FALSE_VALUES.has(master)) return false;
-  if (!TRUE_VALUES.has(master)) return false;
-
-  const rawTargets = source.UX_ACTION_PROGRESS_V1_TARGETS?.trim();
-  if (!rawTargets) return true;
-
-  const config = parseTargetConfig(rawTargets);
+  const config = parseTargetConfig(source.UX_ACTION_PROGRESS_V1_TARGETS);
   if (!config) return false;
 
   for (const rule of [...(config.rules ?? [])].reverse()) {
@@ -59,19 +47,15 @@ export function isUxActionProgressEnabled(target: FlagTarget, environment?: Flag
   if (config.global === true) return true;
 
   const selectors = [config.tenantIds, config.modules, config.roles].filter((values): values is string[] => Array.isArray(values) && values.length > 0);
-  if (selectors.length) {
-    return matchesList(config.tenantIds, target.tenantId)
-      && matchesList(config.modules, target.module)
-      && matchesList(config.roles, target.role);
-  }
+  if (!selectors.length) return false;
 
-  // A rule-only rollout must not spill over to unmatched tenants or roles.
-  if (config.rules?.length) return false;
-
-  return true;
+  return matchesList(config.tenantIds, target.tenantId)
+    && matchesList(config.modules, target.module)
+    && matchesList(config.roles, target.role);
 }
 
-function parseTargetConfig(value: string): TargetConfig | null {
+function parseTargetConfig(value: string | undefined): TargetConfig | null {
+  if (!value) return null;
   try {
     const parsed = JSON.parse(value) as unknown;
     if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return null;

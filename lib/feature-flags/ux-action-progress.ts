@@ -28,16 +28,26 @@ type FlagEnvironment = {
   UX_ACTION_PROGRESS_V1_TARGETS?: string;
 };
 
+const TRUE_VALUES = new Set(["1", "true", "yes", "on"]);
+const FALSE_VALUES = new Set(["0", "false", "no", "off"]);
+
 /**
- * Default-off, fail-closed rollout resolver. The master switch is an immediate
- * rollback control. Target lists are ANDed; explicit rules are evaluated from
- * last to first so a narrow tenant/module/role override can supersede global.
+ * Visible action progress is safe presentation-layer feedback, so it is on by
+ * default. Operations can still disable it immediately with the master switch.
+ * When an explicit rollout target configuration is supplied, selectors are
+ * ANDed and narrow rules are evaluated from last to first.
  */
 export function isUxActionProgressEnabled(target: FlagTarget, environment?: FlagEnvironment) {
   const source = environment ?? process.env;
-  if (source.UX_ACTION_PROGRESS_V1_ENABLED?.trim().toLowerCase() !== "true") return false;
+  const master = source.UX_ACTION_PROGRESS_V1_ENABLED?.trim().toLowerCase() ?? "";
 
-  const config = parseTargetConfig(source.UX_ACTION_PROGRESS_V1_TARGETS);
+  if (FALSE_VALUES.has(master)) return false;
+  if (master && !TRUE_VALUES.has(master)) return false;
+
+  const rawTargets = source.UX_ACTION_PROGRESS_V1_TARGETS?.trim();
+  if (!rawTargets) return true;
+
+  const config = parseTargetConfig(rawTargets);
   if (!config) return false;
 
   for (const rule of [...(config.rules ?? [])].reverse()) {
@@ -47,15 +57,19 @@ export function isUxActionProgressEnabled(target: FlagTarget, environment?: Flag
   if (config.global === true) return true;
 
   const selectors = [config.tenantIds, config.modules, config.roles].filter((values): values is string[] => Array.isArray(values) && values.length > 0);
-  if (!selectors.length) return false;
+  if (selectors.length) {
+    return matchesList(config.tenantIds, target.tenantId)
+      && matchesList(config.modules, target.module)
+      && matchesList(config.roles, target.role);
+  }
 
-  return matchesList(config.tenantIds, target.tenantId)
-    && matchesList(config.modules, target.module)
-    && matchesList(config.roles, target.role);
+  // A rule-only rollout must not spill over to unmatched tenants or roles.
+  if (config.rules?.length) return false;
+
+  return true;
 }
 
-function parseTargetConfig(value: string | undefined): TargetConfig | null {
-  if (!value) return null;
+function parseTargetConfig(value: string): TargetConfig | null {
   try {
     const parsed = JSON.parse(value) as unknown;
     if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return null;

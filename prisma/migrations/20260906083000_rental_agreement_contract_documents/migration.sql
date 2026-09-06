@@ -84,3 +84,56 @@ JOIN `Renter` r ON r.`tenantId`=a.`tenantId` AND r.`id`=a.`renterId`
 JOIN `Tenant` t ON t.`id`=a.`tenantId`
 LEFT JOIN `HomeownerProfile` h ON h.`tenantId`=r.`tenantId` AND h.`id`=r.`homeownerId`
 LEFT JOIN `User` u ON u.`id`=h.`userId`;
+
+-- Every newly activated agreement is born with a frozen contract snapshot, even if a caller
+-- bypasses the normal server action. RentalAgreement is created ACTIVE in the current workflow.
+CREATE TRIGGER `RentalAgreement_contract_document_after_insert`
+AFTER INSERT ON `RentalAgreement`
+FOR EACH ROW
+INSERT INTO `RentalAgreementDocument`
+  (`tenantId`,`id`,`agreementId`,`version`,`contractNumber`,`snapshot`,`generatedAt`,`createdAt`,`updatedAt`)
+SELECT
+  NEW.`tenantId`,
+  UUID(),
+  NEW.`id`,
+  1,
+  CONCAT('RA-', DATE_FORMAT(NEW.`startDate`, '%Y'), '-', UPPER(RIGHT(REPLACE(NEW.`id`, '-', ''), 12))),
+  JSON_OBJECT(
+    'agreementId', NEW.`id`,
+    'associationName', t.`name`,
+    'associationShortName', t.`shortName`,
+    'associationAddress', t.`address`,
+    'associationContactNumber', t.`contactNumber`,
+    'associationEmail', t.`email`,
+    'associationSecRegistrationNumber', t.`secRegistrationNumber`,
+    'associationTinNumber', t.`tinNumber`,
+    'renterName', r.`fullName`,
+    'renterEmail', r.`email`,
+    'renterPhone', r.`phone`,
+    'renterAddress', r.`address`,
+    'homeownerId', r.`homeownerId`,
+    'homeownerName', u.`name`,
+    'homeownerAccountNumber', h.`accountNumber`,
+    'homeownerBlock', h.`block`,
+    'homeownerLot', h.`lot`,
+    'assetCode', ra.`code`,
+    'assetName', ra.`name`,
+    'assetType', ra.`type`,
+    'assetLocation', ra.`location`,
+    'startDate', DATE_FORMAT(NEW.`startDate`, '%Y-%m-%d'),
+    'endDate', IF(NEW.`endDate` IS NULL, NULL, DATE_FORMAT(NEW.`endDate`, '%Y-%m-%d')),
+    'monthlyRate', CAST(NEW.`monthlyRate` AS CHAR),
+    'securityDeposit', CAST(NEW.`securityDeposit` AS CHAR),
+    'billingDay', NEW.`billingDay`,
+    'dueDay', NEW.`dueDay`,
+    'notes', NEW.`notes`
+  ),
+  CURRENT_TIMESTAMP(3),
+  CURRENT_TIMESTAMP(3),
+  CURRENT_TIMESTAMP(3)
+FROM `RentalAsset` ra
+JOIN `Renter` r ON r.`tenantId`=NEW.`tenantId` AND r.`id`=NEW.`renterId`
+JOIN `Tenant` t ON t.`id`=NEW.`tenantId`
+LEFT JOIN `HomeownerProfile` h ON h.`tenantId`=r.`tenantId` AND h.`id`=r.`homeownerId`
+LEFT JOIN `User` u ON u.`id`=h.`userId`
+WHERE ra.`tenantId`=NEW.`tenantId` AND ra.`id`=NEW.`assetId`;

@@ -6,11 +6,12 @@ import { isUxActionProgressEnabled, UX_ACTION_PROGRESS_FLAG } from "../../lib/fe
 
 const target = { tenantId: "tenant-a", module: "BILLING", role: "BILLING_MANAGER" };
 
-test("ux_action_progress_v1 is default-off and fails closed", () => {
+test("ux_action_progress_v1 preserves the existing default-off fail-closed rollout", () => {
   assert.equal(UX_ACTION_PROGRESS_FLAG, "ux_action_progress_v1");
   assert.equal(isUxActionProgressEnabled(target, {}), false);
-  assert.equal(isUxActionProgressEnabled(target, { UX_ACTION_PROGRESS_V1_ENABLED: "true", UX_ACTION_PROGRESS_V1_TARGETS: "not-json" }), false);
+  assert.equal(isUxActionProgressEnabled(target, { UX_ACTION_PROGRESS_V1_ENABLED: "true" }), false);
   assert.equal(isUxActionProgressEnabled(target, { UX_ACTION_PROGRESS_V1_ENABLED: "false", UX_ACTION_PROGRESS_V1_TARGETS: '{"global":true}' }), false);
+  assert.equal(isUxActionProgressEnabled(target, { UX_ACTION_PROGRESS_V1_ENABLED: "true", UX_ACTION_PROGRESS_V1_TARGETS: "not-json" }), false);
 });
 
 test("rollout targeting requires every configured tenant/module/role selector", () => {
@@ -33,6 +34,15 @@ test("a narrow ordered rule can disable a target while global rollout is active"
   assert.equal(isUxActionProgressEnabled({ ...target, tenantId: "tenant-b" }, environment), true);
 });
 
+test("a rule-only rollout stays closed for unmatched tenants", () => {
+  const environment = {
+    UX_ACTION_PROGRESS_V1_ENABLED: "true",
+    UX_ACTION_PROGRESS_V1_TARGETS: JSON.stringify({ rules: [{ tenantId: "tenant-a", module: "BILLING", enabled: true }] }),
+  };
+  assert.equal(isUxActionProgressEnabled(target, environment), true);
+  assert.equal(isUxActionProgressEnabled({ ...target, tenantId: "tenant-b" }, environment), false);
+});
+
 test("submission lock accepts one in-flight entry and releases only explicitly", () => {
   const lock = createSubmissionLock();
   assert.equal(lock.acquire(), true);
@@ -42,8 +52,9 @@ test("submission lock accepts one in-flight entry and releases only explicitly",
   assert.equal(lock.acquire(), true);
 });
 
-test("shared component exposes truthful verified stages and durable billing progress", () => {
+test("shared action progress is immediate even when advanced workflow progress is disabled", () => {
   const component = readFileSync("components/action-progress-button.tsx", "utf8");
+  const ui = readFileSync("components/ui.tsx", "utf8");
   const payment = readFileSync("components/record-payment-advance-form.tsx", "utf8");
   const billing = readFileSync("app/admin/billing/page.tsx", "utf8");
   const billingProgress = readFileSync("components/billing-generation-progress-form.tsx", "utf8");
@@ -53,13 +64,24 @@ test("shared component exposes truthful verified stages and durable billing prog
   const jobRoute = readFileSync("app/api/admin/billing/jobs/[jobId]/route.ts", "utf8");
   const retryRoute = readFileSync("app/api/admin/billing/jobs/[jobId]/retry/route.ts", "utf8");
 
-  assert.match(component, /pending \? 50 : accepted \? 25 : 0/);
-  assert.match(component, /confirmedProcessing \? 75/);
-  assert.match(component, /success \? 100/);
+  assert.match(component, /const advancedProcessing = enabled && confirmedProcessing/);
+  assert.match(component, /const completed = enabled && success/);
+  assert.match(component, /const processing = accepted \|\| pending \|\| advancedProcessing/);
+  assert.match(component, /disabled=\{disabled \|\| accepted \|\| pending \|\| advancedProcessing \|\| completed\}/);
+  assert.match(component, /window\.requestAnimationFrame\(\(\) => setAccepted\(true\)\)/);
   assert.match(component, /aria-busy/);
   assert.match(component, /aria-live="polite"/);
+  assert.match(component, /aria-atomic="true"/);
   assert.match(component, /motion-reduce:animate-none/);
+  assert.doesNotMatch(component, /percentage/);
+  assert.doesNotMatch(component, /100%|75%|50%|25%/);
+  assert.match(ui, /actionProgress = true/);
+  assert.match(ui, /pendingLabel = "Processing request"/);
+  assert.match(payment, /const formAction = actionProgressEnabled \? progressAction : recordHomeownerPaymentAction/);
+  assert.match(payment, /actionProgress=\{actionProgressEnabled\}/);
   assert.match(payment, /pendingLabel="Recording payment"/);
+  assert.match(billing, /sendRemindersAction/);
+  assert.match(billing, /<SubmitButton className="btn-secondary"><BellRing/);
   assert.match(billing, /BillingGenerationProgressForm/);
   assert.match(billing, /key=\{billingGenerationProgressKey\(input\)\}/);
 
@@ -86,4 +108,24 @@ test("shared component exposes truthful verified stages and durable billing prog
   assert.match(jobRoute, /requirePermission\(Permission\.BILLING_GENERATE\)/);
   assert.match(jobRoute, /getBillingGenerationJobView\(jobId, admin\.tenantId\)/);
   assert.match(retryRoute, /createFailedBillingGenerationRetry/);
+});
+
+test("global navigation feedback covers internal links and GET queries without touching POST actions", () => {
+  const navigation = readFileSync("components/navigation-progress.tsx", "utf8");
+  const layout = readFileSync("app/layout.tsx", "utf8");
+  const routeLoading = readFileSync("app/loading.tsx", "utf8");
+
+  assert.match(layout, /<NavigationProgress \/>/);
+  assert.match(navigation, /document\.addEventListener\("click", onClick, true\)/);
+  assert.match(navigation, /document\.addEventListener\("submit", onSubmit, true\)/);
+  assert.match(navigation, /form\.getAttribute\("method"\)/);
+  assert.match(navigation, /if \(method !== "get"\) return/);
+  assert.match(navigation, /destination\.origin !== window\.location\.origin/);
+  assert.match(navigation, /blockDuplicate\(event\)/);
+  assert.match(navigation, /Opening \$\{readableLabel\}…/);
+  assert.match(navigation, /Loading results…/);
+  assert.match(navigation, /animate-spin/);
+  assert.match(navigation, /aria-live="polite"/);
+  assert.doesNotMatch(navigation, /%/);
+  assert.match(routeLoading, /Loading HOAHub…/);
 });

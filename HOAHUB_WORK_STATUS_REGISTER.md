@@ -35,19 +35,27 @@ Evidence-backed increments retained for history include PRs #274, #276, #281, #2
 
 ## Issue #146 — Finance & Rental hardening
 
-Issue #146 remains OPEN while its six-point scope is completed and reconciled against production evidence.
+A **current-production code audit was performed on 2026-09-06 before continuing implementation specifically to avoid redundant changes to live-tenant functionality**. The audit treats current `main` code and merged-release evidence as authoritative rather than relying only on stale task descriptions.
 
-Production evidence currently covers:
+### Six-item implementation audit
 
-- Item 1 Automatic Billing — tenant ON/OFF + billing day, scheduled Monthly Dues and Rental billing, idempotency, bounded 5,001-homeowner qualification, retry/failure isolation and production scheduler evidence through PRs #147, #277, #283, #290 and #291.
-- Item 2 Financial Reports — From/To activity, Income/Expenses/Liabilities/Cash Movement/Receivables and detailed collection/payment-path reporting through the financial-report program and PRs #293–#297.
-- Item 3 Admin advance Monthly Dues — all-active-homeowner search including zero balance, pure advance credit, serializable/idempotent PaymentAllocation behavior and oldest-due-first future application through PR #149 and subsequent regression coverage.
-- Item 5 Rental Asset Reservations — concurrency-safe tenant-scoped homeowner reservations and Admin visibility through PR #308.
-- Item 6 Rental Agreement UX — compact list/focused detail-edit workflow, now extended with official contract generation and signed-copy handling through PR #310.
+1. **Automatic Billing — COMPLETE / PRODUCTION-VERIFIED.** PR #147 implemented the tenant ON/OFF switch, Monthly Dues billing day, scheduled Monthly Dues and per-agreement Rental billing, due-only/idempotent execution, bounded processing, tenant isolation, duplicate protection and audit behavior. PRs #148/#277 hardened manual-generation exclusion, PR #283 proved the 5,001-homeowner path, and PRs #290/#291 plus the successful production scheduler run verified the production trigger. No duplicate implementation is required.
 
-The remaining actionable gap is **item 4 — Homeowner advance Monthly Dues payment**. The approved requirement is homeowner-selected coverage **From/To month**, an authoritative server-side amount calculated from effective Monthly Dues rules, online payment posted as unapplied homeowner advance credit, and automatic allocation to future Monthly Dues bills. Existing `/portal/pay` currently supports online settlement of existing open bills but not this future-period advance flow.
+2. **Financial Reports — CORE COMPLETE / PRODUCTION-VERIFIED; one narrow acceptance subclause remains unresolved.** Existing production code already applies From/To ranges to financial activity and provides Income, Expenses, Liabilities, Cash Movement and Receivables. `lib/services/financial-report.ts` separates Monthly Dues recognized/applied income from unapplied homeowner credit, rental income/advance credit/security-deposit liabilities, refundable bonds, payroll/operating expense, employee loans, cash movement and receivables. PR #206 added deterministic tenant-isolation/date-range regression evidence, and PRs #293–#297 added the separate board/transaction reports. Current Transaction History identifies `Online Payment` vs `Admin Recorded Payment` and reports PayMongo Online vs stored payment mode. **Do not rebuild these reports.** The only issue-#146 item-2 subclause not fully satisfied by current code is gateway-rail attribution: the PayMongo webhook currently preserves GCash as `PaymentMethod.GCASH` but maps other source types such as Maya/QR Ph to `OTHER`, so those exact rails cannot always be surfaced later even when the webhook contains the source evidence. Any follow-up must be limited to preserving/reporting that exact evidence without rewriting the financial statements.
 
-Do not close #146 until item 4 is production-verified and the final six-point acceptance reconciliation confirms no unresolved requirement.
+3. **Admin advance Monthly Dues — COMPLETE / PRODUCTION-VERIFIED.** PR #149 made Record Payment homeowner-first for all ACTIVE tenant homeowners including zero-balance accounts, allowed pure advance credit, and added oldest-due-first future allocation. Current `lib/services/homeowner-credit.ts` uses tenant-scoped `PaymentAllocation` uniqueness and `SERIALIZABLE` reconciliation. Daily maintenance runs automatic billing before advance-credit reconciliation. No duplicate implementation is required.
+
+4. **Homeowner self-service advance Monthly Dues — GENUINE BASELINE GAP; PR #311 IN PROGRESS.** Current production `/portal/pay` only lets a homeowner pay existing open Monthly Dues bills; the production transaction-type list has no Advance Monthly Dues option, and the production PayMongo action requires one or more bill IDs. Therefore homeowner-selected future From/To coverage with server-authoritative rule pricing is not already present on `main`. PR #311 is the controlled implementation for this exact missing requirement and must not be called complete until exact-head CI, merge and production verification pass.
+
+5. **Rental Asset Reservations — COMPLETE / PRODUCTION-VERIFIED.** PR #308 provides homeowner AVAILABLE-asset visibility, concurrency-safe one-active-reservation enforcement, Admin reservation owner/status visibility, tenant isolation, audit trail and MySQL concurrency evidence. No duplicate implementation is required.
+
+6. **Rental Agreement UX — COMPLETE / PRODUCTION-VERIFIED.** PR #147 removed broad inline agreement editing from the list and added the focused agreement detail/edit route. PR #310 extends the same focused flow with immutable generated contracts and signed-copy handling. No duplicate implementation is required.
+
+### Remaining #146 work after audit
+
+- Finish and production-verify PR #311 for item 4 only.
+- Then address **only** the narrow item-2 PayMongo rail-evidence retention/reporting gap if it remains after PR #311; do not redesign or duplicate the already verified Financial Reports implementation.
+- Close #146 only after both points have exact production evidence.
 
 ## Blocked external dependency
 
@@ -55,6 +63,7 @@ Authenticated non-destructive production smoke remains tracked by open issue #19
 
 ## Release governance
 
+- Audit current production code/history before opening a new implementation task. If a requirement is already implemented and production-verified, record it complete instead of changing it again.
 - Never merge a stale or red head.
 - Required CI evidence must belong to the exact current PR head SHA.
 - Any failed gate must be inspected to the exact failing job/step, corrected at root cause, pushed as a new head, and re-run.
@@ -66,4 +75,4 @@ Authenticated non-destructive production smoke remains tracked by open issue #19
 
 ## Current execution state
 
-Current production is VERIFIED at `d79c88074b833b4c760a28d74d3962f557a0c231` through post-merge HOAHub MySQL CI #1493 / run `34005745930`, Hostinger expected-release verification, and public production health. PR #310 Rental Agreements & Contracts is complete and production-deployed. Work has moved to **issue #146 item 4 — Homeowner advance Monthly Dues payment**, on a controlled branch from the exact verified production baseline. Issue #194 remains externally blocked and must not be bypassed. Email bulk delivery remains fail-closed pending provider restoration and controlled canary approval.
+Current production is VERIFIED at `d79c88074b833b4c760a28d74d3962f557a0c231` through post-merge HOAHub MySQL CI #1493 / run `34005745930`, Hostinger expected-release verification, and public production health. The code-first #146 audit confirms items 1, 3, 5 and 6 are already complete and must not be reimplemented; item 2's financial-statement/reporting core is also complete, with only the specific PayMongo Maya/QR Ph rail-attribution subclause unresolved. Item 4 is genuinely absent from the production baseline and is being implemented by PR #311. Issue #194 remains externally blocked and must not be bypassed. Email bulk delivery remains fail-closed pending provider restoration and controlled canary approval.

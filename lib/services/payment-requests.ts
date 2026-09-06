@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { CollectionType, DocumentRequestStatus, PaymentRequestStatus, PaymentRequestType, PayerType, Prisma, RefundStatus, Role } from "@prisma/client";
 import { platformPrisma } from "@/lib/db";
+import { parseHomeownerAdvanceDuesDescription } from "@/lib/homeowner-advance-dues";
 import { isPayMongoPaymentRequest } from "@/lib/homeowner-payment-flow";
 import { buildPaymentCoverage } from "@/lib/payment-coverage";
 import { recalculateBillFromActivePayments } from "@/lib/services/payment-ledger";
@@ -34,6 +35,90 @@ export async function approvePaymentRequest(requestId: string, reviewerId?: stri
 
     const paymentDate = request.paymentDate;
     if (request.type === PaymentRequestType.MONTHLY_DUES) {
+      const advance = !request.billId ? parseHomeownerAdvanceDuesDescription(request.description) : null;
+      if (advance) {
+        if (!isPayMongoPaymentRequest(request) || !options?.allowGatewayConfirmation) {
+          throw new Error("Advance Monthly Dues credit requires verified PayMongo gateway confirmation.");
+        }
+        const amount = Number(request.amount);
+        if (!Number.isFinite(amount) || amount <= 0) throw new Error("Advance Monthly Dues payment amount is invalid.");
+        if (request.referenceNumber) {
+          const activeDuplicate = await tx.payment.findFirst({ where: { tenantId: request.tenantId, referenceNumber: request.referenceNumber, status: "ACTIVE" }, select: { id: true } });
+          if (activeDuplicate) throw new Error("This payment reference number has already been recorded.");
+        }
+        const receiptNumber = await allocateReceiptNumber(tx as unknown as Prisma.TransactionClient, request.tenantId, paymentDate, "MD");
+        const payment = await tx.payment.create({
+          data: {
+            tenantId: request.tenantId,
+            billId: null,
+            homeownerId: request.homeownerId,
+            amount,
+            paymentDate,
+            method: request.method,
+            referenceNumber: request.referenceNumber,
+            paymentBatchId: randomUUID(),
+            idempotencyKey: `payment-request:${request.id}`,
+            ...advance.coverage,
+            remarks: [request.payerNotes, reviewRemarks, "Advance Monthly Dues Credit"].filter(Boolean).join("\n"),
+            receiptNumber,
+            proofUrl: request.proofImageUrl,
+            proofFileName: request.proofFileName,
+            proofContentType: request.proofContentType,
+            proofFileSize: request.proofFileSize,
+            processedById: reviewerId ?? null,
+          },
+        });
+        await tx.auditLog.create({
+          data: {
+            tenantId: request.tenantId,
+            actorId: reviewerId ?? null,
+            module: "PAYMENTS",
+            action: "RECORD_HOMEOWNER_ADVANCE_DUES_PAYMENT",
+            entityType: "Payment",
+            entityId: payment.id,
+            metadata: {
+              receiptNumber,
+              source: "PAYMONGO_HOMEOWNER_ADVANCE_DUES",
+              paymentType: "MONTHLY_DUES_ADVANCE_CREDIT",
+              homeownerId: request.homeownerId,
+              totalAmount: amount,
+              appliedAmount: 0,
+              unappliedCredit: amount,
+              coverageFrom: advance.from,
+              coverageTo: advance.to,
+              coverageStart: advance.coverage.coverageStart,
+              coverageEnd: advance.coverage.coverageEnd,
+              coverageMonths: advance.coverage.coverageMonths,
+              paymentCoverageDisplay: advance.coverage.paymentCoverageDisplay,
+              timestamp: new Date().toISOString(),
+            },
+          },
+        });
+        const approved = await tx.paymentRequest.update({
+          where: { id: request.id },
+          data: { status: PaymentRequestStatus.APPROVED, reviewedById: reviewerId ?? null, reviewedAt: new Date(), reviewRemarks: reviewRemarks || null, paymentId: payment.id },
+        });
+        await tx.auditLog.create({
+          data: {
+            tenantId: request.tenantId,
+            actorId: reviewerId ?? null,
+            module: "PAYMENTS",
+            action: "APPROVE_PAYMENT_REQUEST",
+            entityType: "PaymentRequest",
+            entityId: request.id,
+            metadata: {
+              oldValue: { status: request.status },
+              newValue: { status: "APPROVED", paymentId: payment.id, receiptNumber },
+              remarks: reviewRemarks,
+              gatewayConfirmed: true,
+              recordedAsUnappliedCredit: true,
+              advanceCoverage: { from: advance.from, to: advance.to },
+            },
+          },
+        });
+        return approved;
+      }
+
       if (!request.billId) throw new Error("Payment request is missing a bill.");
       const bill = await tx.bill.findUnique({ where: { id: request.billId } });
       if (!bill || bill.tenantId !== request.tenantId || bill.homeownerId !== request.homeownerId) throw new Error("The selected bill does not belong to this homeowner.");

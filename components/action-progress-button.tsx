@@ -61,10 +61,11 @@ export function ActionProgressButton({
         event.stopPropagation();
         return;
       }
-      // Render feedback immediately after the first accepted click. The lock
-      // remains synchronous so rapid repeat clicks cannot submit twice before
-      // React exposes the form's pending state.
-      setAccepted(true);
+      // Keep the synchronous lock authoritative for rapid repeat clicks, then
+      // render the disabled loading state on the next frame. Deferring the
+      // state update preserves the browser's native submit default action for
+      // server-action forms while still making feedback visible immediately.
+      window.requestAnimationFrame(() => setAccepted(true));
     }}
   >
     {completed

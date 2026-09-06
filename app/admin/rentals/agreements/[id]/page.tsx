@@ -60,7 +60,7 @@ export default async function RentalAgreementPage({ params, searchParams }: { pa
   const agreement = rows[0];
   if (!agreement) notFound();
   const contract = await getRentalAgreementContractForViewer({ tenantId: admin.tenantId, agreementId: id, canReadAllRentalAgreements: true });
-  const canDelete = Number(agreement.invoiceCount) === 0;
+  const canDelete = Number(agreement.invoiceCount) === 0 && !contract;
   const today = inputDate(new Date());
 
   return <>
@@ -127,7 +127,7 @@ export default async function RentalAgreementPage({ params, searchParams }: { pa
       <aside className="space-y-5">
         <div className="card"><p className="eyebrow">Financial terms</p><dl className="mt-3 space-y-3 text-sm"><Row label="Monthly rent" value={money(agreement.monthlyRate)} /><Row label="Security deposit" value={money(agreement.securityDeposit)} /><Row label="Billing day" value={`Day ${agreement.billingDay}`} /><Row label="Due day" value={`Day ${agreement.dueDay}`} /></dl></div>
         {agreement.status === "ACTIVE" && <form action={endRentalAgreementAction} className="card space-y-3"><input type="hidden" name="agreementId" value={agreement.id} /><input type="hidden" name="returnToAgreement" value="1" /><div><p className="eyebrow">Close occupancy</p><h2 className="font-black">End agreement</h2><p className="text-sm text-slate-500">Ending releases the asset back to Available while preserving the contract, financial history and signed copy.</p></div><label className="label">End date<input className="field" type="date" name="endDate" min={inputDate(agreement.startDate)} defaultValue={today} required /></label><SubmitButton className="btn-secondary w-full">End agreement</SubmitButton></form>}
-        <div className="card"><p className="eyebrow">Record protection</p>{canDelete ? <form action={deleteRentalAgreementAction} className="mt-3"><input type="hidden" name="agreementId" value={agreement.id} /><DeleteButton label="Delete agreement" /></form> : <p className="mt-2 text-sm font-semibold text-slate-500">This agreement has invoice/deposit history and cannot be deleted. End it instead to preserve the audit trail.</p>}</div>
+        <div className="card"><p className="eyebrow">Record protection</p>{canDelete ? <form action={deleteRentalAgreementAction} className="mt-3"><input type="hidden" name="agreementId" value={agreement.id} /><DeleteButton label="Delete agreement" /></form> : <p className="mt-2 text-sm font-semibold text-slate-500">This agreement has an official contract and/or invoice/deposit history and cannot be deleted. End it instead to preserve the audit and legal record.</p>}</div>
       </aside>
     </section>
   </>;

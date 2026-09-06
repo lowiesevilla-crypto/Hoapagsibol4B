@@ -137,3 +137,23 @@ JOIN `Tenant` t ON t.`id`=NEW.`tenantId`
 LEFT JOIN `HomeownerProfile` h ON h.`tenantId`=r.`tenantId` AND h.`id`=r.`homeownerId`
 LEFT JOIN `User` u ON u.`id`=h.`userId`
 WHERE ra.`tenantId`=NEW.`tenantId` AND ra.`id`=NEW.`assetId`;
+
+-- Converting a homeowner hold to an ACTIVE agreement preserves reservation history instead of deleting it.
+-- This BEFORE INSERT trigger runs in the same statement transaction, so a failed agreement insert also rolls back the fulfillment update.
+CREATE TRIGGER `RentalAgreement_fulfill_reservation_before_insert`
+BEFORE INSERT ON `RentalAgreement`
+FOR EACH ROW
+UPDATE `RentalAssetReservation` reservation
+JOIN `Renter` renter
+  ON renter.`tenantId`=NEW.`tenantId`
+  AND renter.`id`=NEW.`renterId`
+  AND renter.`homeownerId`=reservation.`homeownerId`
+SET
+  reservation.`status`='FULFILLED',
+  reservation.`activeAssetKey`=NULL,
+  reservation.`fulfilledAt`=CURRENT_TIMESTAMP(3),
+  reservation.`updatedAt`=CURRENT_TIMESTAMP(3)
+WHERE reservation.`tenantId`=NEW.`tenantId`
+  AND reservation.`assetId`=NEW.`assetId`
+  AND reservation.`status`='ACTIVE'
+  AND NEW.`status`='ACTIVE';

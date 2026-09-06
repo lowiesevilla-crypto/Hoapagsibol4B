@@ -6,14 +6,11 @@ import { isUxActionProgressEnabled, UX_ACTION_PROGRESS_FLAG } from "../../lib/fe
 
 const target = { tenantId: "tenant-a", module: "BILLING", role: "BILLING_MANAGER" };
 
-test("ux_action_progress_v1 is visible by default with an explicit kill switch", () => {
+test("ux_action_progress_v1 preserves the existing default-off fail-closed rollout", () => {
   assert.equal(UX_ACTION_PROGRESS_FLAG, "ux_action_progress_v1");
-  assert.equal(isUxActionProgressEnabled(target, {}), true);
-  assert.equal(isUxActionProgressEnabled(target, { UX_ACTION_PROGRESS_V1_ENABLED: "true" }), true);
-  assert.equal(isUxActionProgressEnabled(target, { UX_ACTION_PROGRESS_V1_ENABLED: "on" }), true);
+  assert.equal(isUxActionProgressEnabled(target, {}), false);
+  assert.equal(isUxActionProgressEnabled(target, { UX_ACTION_PROGRESS_V1_ENABLED: "true" }), false);
   assert.equal(isUxActionProgressEnabled(target, { UX_ACTION_PROGRESS_V1_ENABLED: "false", UX_ACTION_PROGRESS_V1_TARGETS: '{"global":true}' }), false);
-  assert.equal(isUxActionProgressEnabled(target, { UX_ACTION_PROGRESS_V1_ENABLED: "off" }), false);
-  assert.equal(isUxActionProgressEnabled(target, { UX_ACTION_PROGRESS_V1_ENABLED: "invalid" }), false);
   assert.equal(isUxActionProgressEnabled(target, { UX_ACTION_PROGRESS_V1_ENABLED: "true", UX_ACTION_PROGRESS_V1_TARGETS: "not-json" }), false);
 });
 
@@ -55,7 +52,7 @@ test("submission lock accepts one in-flight entry and releases only explicitly",
   assert.equal(lock.acquire(), true);
 });
 
-test("shared action progress is immediate, truthful, accessible, and does not simulate percentages", () => {
+test("shared action progress is immediate even when advanced workflow progress is disabled", () => {
   const component = readFileSync("components/action-progress-button.tsx", "utf8");
   const ui = readFileSync("components/ui.tsx", "utf8");
   const payment = readFileSync("components/record-payment-advance-form.tsx", "utf8");
@@ -67,8 +64,10 @@ test("shared action progress is immediate, truthful, accessible, and does not si
   const jobRoute = readFileSync("app/api/admin/billing/jobs/[jobId]/route.ts", "utf8");
   const retryRoute = readFileSync("app/api/admin/billing/jobs/[jobId]/retry/route.ts", "utf8");
 
-  assert.match(component, /const processing = accepted \|\| pending \|\| confirmedProcessing/);
-  assert.match(component, /disabled=\{disabled \|\| accepted \|\| pending \|\| confirmedProcessing \|\| success\}/);
+  assert.match(component, /const advancedProcessing = enabled && confirmedProcessing/);
+  assert.match(component, /const completed = enabled && success/);
+  assert.match(component, /const processing = accepted \|\| pending \|\| advancedProcessing/);
+  assert.match(component, /disabled=\{disabled \|\| accepted \|\| pending \|\| advancedProcessing \|\| completed\}/);
   assert.match(component, /setAccepted\(true\)/);
   assert.match(component, /aria-busy/);
   assert.match(component, /aria-live="polite"/);
@@ -78,6 +77,8 @@ test("shared action progress is immediate, truthful, accessible, and does not si
   assert.doesNotMatch(component, /100%|75%|50%|25%/);
   assert.match(ui, /actionProgress = true/);
   assert.match(ui, /pendingLabel = "Processing request"/);
+  assert.match(payment, /const formAction = actionProgressEnabled \? progressAction : recordHomeownerPaymentAction/);
+  assert.match(payment, /actionProgress=\{actionProgressEnabled\}/);
   assert.match(payment, /pendingLabel="Recording payment"/);
   assert.match(billing, /sendRemindersAction/);
   assert.match(billing, /<SubmitButton className="btn-secondary"><BellRing/);

@@ -1,9 +1,10 @@
 "use client";
 
 import { ChevronDown, CircleDollarSign, CreditCard, ShieldCheck } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useFormStatus } from "react-dom";
 import { createHomeownerPayMongoCheckoutAction } from "@/lib/actions/homeowner-paymongo";
+import { HOMEOWNER_ADVANCE_DUES_TRANSACTION_TYPE } from "@/lib/homeowner-advance-dues";
 
 export type PayMongoOpenBill = {
   id: string;
@@ -23,8 +24,25 @@ export type PayMongoDocumentFeePayment = {
   statusLabel: string;
 };
 
+type AdvanceDuesQuote = {
+  from: string;
+  to: string;
+  monthCount: number;
+  coverageLabel: string;
+  total: number;
+  lines: Array<{
+    key: string;
+    label: string;
+    amount: number;
+    exempt: boolean;
+    exemptionReason: string | null;
+    resolutionReference: string | null;
+  }>;
+};
+
 const transactionTypes = [
   { value: "MONTHLY_DUES", label: "Monthly Dues" },
+  { value: HOMEOWNER_ADVANCE_DUES_TRANSACTION_TYPE, label: "Advance Monthly Dues" },
   { value: "GATE_PASS", label: "Gate Pass" },
   { value: "STICKER", label: "Vehicle Sticker" },
   { value: "MEMBERSHIP", label: "Membership" },
@@ -44,6 +62,11 @@ export function PayMongoHomeownerFormClient({
   const [transactionType, setTransactionType] = useState(documentPayment ? "DOCUMENT_FEE" : "MONTHLY_DUES");
   const [selectedBills, setSelectedBills] = useState<string[]>([]);
   const [amount, setAmount] = useState("");
+  const [advanceFrom, setAdvanceFrom] = useState("");
+  const [advanceTo, setAdvanceTo] = useState("");
+  const [advanceQuote, setAdvanceQuote] = useState<AdvanceDuesQuote | null>(null);
+  const [advanceQuoteError, setAdvanceQuoteError] = useState("");
+  const [advanceQuoteLoading, setAdvanceQuoteLoading] = useState(false);
   const pesoFormatter = useMemo(() => new Intl.NumberFormat("en-PH", { style: "currency", currency: "PHP" }), []);
   const selectedTotal = useMemo(
     () => openBills.filter((bill) => selectedBills.includes(bill.id)).reduce((sum, bill) => sum + bill.balance, 0),
@@ -51,9 +74,43 @@ export function PayMongoHomeownerFormClient({
   );
   const selectedTotalLabel = pesoFormatter.format(selectedTotal);
   const isMonthlyDues = transactionType === "MONTHLY_DUES" && !documentPayment;
-  const displayAmount = documentPayment?.amountLabel || (isMonthlyDues ? selectedTotalLabel : pesoFormatter.format(Number(amount) || 0));
-  const canSubmit = documentPayment ? true : isMonthlyDues ? selectedBills.length > 0 : Number(amount) > 0;
+  const isAdvanceDues = transactionType === HOMEOWNER_ADVANCE_DUES_TRANSACTION_TYPE && !documentPayment;
+  const displayAmount = documentPayment?.amountLabel
+    || (isMonthlyDues ? selectedTotalLabel : isAdvanceDues ? pesoFormatter.format(advanceQuote?.total || 0) : pesoFormatter.format(Number(amount) || 0));
+  const canSubmit = documentPayment ? true : isMonthlyDues ? selectedBills.length > 0 : isAdvanceDues ? Boolean(advanceQuote && !advanceQuoteLoading) : Number(amount) > 0;
   const platformFeeEnabled = platformFeeAmountPesos > 0;
+
+  useEffect(() => {
+    if (!isAdvanceDues || !advanceFrom || !advanceTo) {
+      setAdvanceQuote(null);
+      setAdvanceQuoteError("");
+      setAdvanceQuoteLoading(false);
+      return;
+    }
+    const controller = new AbortController();
+    const timer = window.setTimeout(async () => {
+      setAdvanceQuoteLoading(true);
+      setAdvanceQuote(null);
+      setAdvanceQuoteError("");
+      try {
+        const response = await fetch(`/api/homeowner-payments/advance-dues-quote?from=${encodeURIComponent(advanceFrom)}&to=${encodeURIComponent(advanceTo)}`, {
+          cache: "no-store",
+          signal: controller.signal,
+        });
+        const payload = await response.json() as AdvanceDuesQuote & { error?: string };
+        if (!response.ok) throw new Error(payload.error || "Advance Monthly Dues quote could not be calculated.");
+        setAdvanceQuote(payload);
+      } catch (error) {
+        if (!controller.signal.aborted) setAdvanceQuoteError(error instanceof Error ? error.message : "Advance Monthly Dues quote could not be calculated.");
+      } finally {
+        if (!controller.signal.aborted) setAdvanceQuoteLoading(false);
+      }
+    }, 250);
+    return () => {
+      window.clearTimeout(timer);
+      controller.abort();
+    };
+  }, [advanceFrom, advanceTo, isAdvanceDues]);
 
   function toggleBill(id: string) {
     setSelectedBills((current) => current.includes(id) ? current.filter((item) => item !== id) : [...current, id]);
@@ -87,7 +144,7 @@ export function PayMongoHomeownerFormClient({
           <p className="mt-4 whitespace-pre-wrap rounded-xl bg-white p-3 text-sm font-semibold text-slate-700">{documentPayment.purpose}</p>
         </div> : <div className="sm:col-span-2 rounded-2xl border border-blue-100 bg-white p-3 shadow-sm">
           <label className="mb-2 block text-xs font-black uppercase tracking-[.14em] text-blue-800" htmlFor="paymongoTransactionType">Transaction type</label>
-          <select id="paymongoTransactionType" className="field" name="transactionType" value={transactionType} onChange={(event) => { setTransactionType(event.target.value); setSelectedBills([]); setAmount(""); }} required>
+          <select id="paymongoTransactionType" className="field" name="transactionType" value={transactionType} onChange={(event) => { setTransactionType(event.target.value); setSelectedBills([]); setAmount(""); setAdvanceQuote(null); setAdvanceQuoteError(""); }} required>
             {transactionTypes.map((type) => <option value={type.value} key={type.value}>{type.label}</option>)}
           </select>
         </div>}
@@ -108,10 +165,23 @@ export function PayMongoHomeownerFormClient({
                 <span className="text-right font-black">{bill.balanceLabel}</span>
               </label>;
             })}
-            {!openBills.length && <p className="rounded-xl bg-white px-3 py-10 text-center text-sm text-slate-500">No unpaid monthly dues are available for online payment.</p>}
+            {!openBills.length && <p className="rounded-xl bg-white px-3 py-10 text-center text-sm text-slate-500">No unpaid monthly dues are available. You can still choose <b>Advance Monthly Dues</b> above to prepay eligible future coverage.</p>}
           </div>
           {selectedBills.length > 0 && <div className="mt-3 rounded-2xl border border-blue-100 bg-blue-50 p-3 text-sm font-bold text-blue-950">Selected coverage: {selectedBills.length} billing item{selectedBills.length === 1 ? "" : "s"} totaling {selectedTotalLabel}. The server rechecks ownership, balance, and payment status before creating checkout.</div>}
           {openBills.some((bill) => bill.hasPendingRequest) && <p className="mt-2 text-xs font-semibold leading-5 text-slate-500">A billing item with a payment already in progress cannot be selected again. Use <b>Continue Payment</b> from Payment Status to resume it.</p>}
+        </div> : isAdvanceDues ? <div className="sm:col-span-2 rounded-2xl border border-blue-100 bg-blue-50/30 p-3 sm:p-4">
+          <div className="mb-4"><p className="text-xs font-black uppercase tracking-[.14em] text-blue-800">Future Monthly Dues coverage</p><h3 className="mt-1 text-lg font-black text-slate-950">Choose From / To month</h3><p className="mt-1 text-xs leading-5 text-slate-600">HOAHub calculates the amount from this association&apos;s effective Monthly Dues rules. You cannot type or override the amount. Existing billing periods must be paid from Monthly Dues instead.</p></div>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div><label className="label" htmlFor="advanceFromMonth">From month</label><input id="advanceFromMonth" className="field" name="advanceFromMonth" type="month" value={advanceFrom} onChange={(event) => setAdvanceFrom(event.target.value)} required /></div>
+            <div><label className="label" htmlFor="advanceToMonth">To month</label><input id="advanceToMonth" className="field" name="advanceToMonth" type="month" value={advanceTo} onChange={(event) => setAdvanceTo(event.target.value)} required /></div>
+          </div>
+          {advanceQuoteLoading && <div className="mt-3 rounded-2xl border border-blue-100 bg-white p-3 text-sm font-bold text-blue-900" role="status">Calculating the authoritative Monthly Dues amount…</div>}
+          {advanceQuoteError && <div className="mt-3 rounded-2xl border border-rose-200 bg-rose-50 p-3 text-sm font-bold text-rose-800" role="alert">{advanceQuoteError}</div>}
+          {advanceQuote && <div className="mt-4 space-y-3">
+            <div className="rounded-2xl border border-blue-100 bg-white p-4"><div className="flex flex-wrap items-end justify-between gap-3"><div><p className="text-[10px] font-black uppercase tracking-widest text-blue-700">Advance coverage</p><p className="mt-1 font-black text-slate-950">{advanceQuote.coverageLabel}</p><p className="mt-1 text-xs font-semibold text-slate-500">{advanceQuote.monthCount} month{advanceQuote.monthCount === 1 ? "" : "s"}; exempt months are shown at PHP 0.</p></div><p className="text-2xl font-black text-blue-950">{pesoFormatter.format(advanceQuote.total)}</p></div></div>
+            <div className="grid max-h-64 gap-2 overflow-y-auto rounded-2xl border border-slate-200 bg-slate-50/60 p-2">{advanceQuote.lines.map((line) => <div key={line.key} className="flex items-center justify-between gap-3 rounded-xl bg-white p-3 text-sm"><div><p className="font-black text-slate-950">{line.label}</p><p className="text-xs font-semibold text-slate-500">{line.exempt ? `Exempt · ${line.exemptionReason || "Active exemption"}` : line.resolutionReference || "Effective Monthly Dues rule"}</p></div><p className="font-black text-slate-950">{pesoFormatter.format(line.amount)}</p></div>)}</div>
+            <p className="rounded-2xl border border-emerald-200 bg-emerald-50 p-3 text-xs font-bold leading-5 text-emerald-900">After PayMongo verifies payment, HOAHub records this as homeowner advance credit. Future Monthly Dues bills automatically consume available credit oldest-first; the daily reconciliation remains a recovery safeguard.</p>
+          </div>}
         </div> : documentPayment ? null : <>
           <div><label className="label" htmlFor="paymongoAmount">Amount</label><input id="paymongoAmount" className="field" name="amount" type="number" min="0.01" step="0.01" value={amount} onChange={(event) => setAmount(event.target.value)} required /></div>
           <div><label className="label" htmlFor="paymongoDescription">Description</label><input id="paymongoDescription" className="field" name="description" placeholder={transactionType === "OTHER" ? "Required for Other Payment" : "Optional"} required={transactionType === "OTHER"} /></div>

@@ -9,6 +9,7 @@ function source(path: string) {
 
 const migration = source("prisma/migrations/20260906083000_rental_agreement_contract_documents/migration.sql");
 const service = source("lib/services/rental-agreement-contracts.ts");
+const rentalActions = source("lib/actions/rentals.ts");
 const uploadAction = source("lib/actions/rental-agreement-contracts.ts");
 const contractRoute = source("app/api/rentals/agreements/[id]/contract/route.ts");
 const signedRoute = source("app/api/rentals/agreements/[id]/signed/route.ts");
@@ -16,23 +17,29 @@ const adminPage = source("app/admin/rentals/agreements/[id]/page.tsx");
 const portalPage = source("app/portal/rentals/page.tsx");
 const morePage = source("app/portal/more/page.tsx");
 
-test("rental contract migration creates immutable tenant-scoped documents and backfills existing agreements", () => {
+test("rental contract migration creates immutable tenant-scoped documents and backfills existing agreements without privileged triggers", () => {
   assert.match(migration, /CREATE TABLE `RentalAgreementDocument`/);
   assert.match(migration, /UNIQUE INDEX `RentalAgreementDocument_tenantId_agreementId_version_key` \(`tenantId`,`agreementId`,`version`\)/);
   assert.match(migration, /FOREIGN KEY \(`tenantId`,`agreementId`\) REFERENCES `RentalAgreement`\(`tenantId`,`id`\)/);
   assert.match(migration, /Backfill all existing agreements/);
   assert.match(migration, /INSERT INTO `RentalAgreementDocument`[\s\S]*FROM `RentalAgreement` a/);
-  assert.match(migration, /CREATE TRIGGER `RentalAgreement_contract_document_after_insert`/);
+  assert.doesNotMatch(migration, /CREATE\s+TRIGGER/i);
+  assert.match(migration, /does not require MySQL SUPER privileges/);
 });
 
-test("agreement activation fulfills the matching homeowner reservation without deleting reservation history", () => {
-  assert.match(migration, /CREATE TRIGGER `RentalAgreement_fulfill_reservation_before_insert`/);
-  assert.match(migration, /reservation\.`status`='FULFILLED'/);
-  assert.match(migration, /reservation\.`activeAssetKey`=NULL/);
-  assert.match(migration, /reservation\.`fulfilledAt`=CURRENT_TIMESTAMP\(3\)/);
-  assert.match(migration, /renter\.`homeownerId`=reservation\.`homeownerId`/);
-  assert.match(migration, /reservation\.`tenantId`=NEW\.`tenantId`/);
-  assert.match(migration, /reservation\.`assetId`=NEW\.`assetId`/);
+test("agreement activation fulfills the matching homeowner reservation inside the existing serialized transaction", () => {
+  assert.match(rentalActions, /Prisma\.TransactionIsolationLevel\.Serializable/);
+  assert.ok(rentalActions.includes("WHERE tenantId=${admin.tenantId} AND assetId=${assetId} AND status='ACTIVE'"));
+  assert.match(rentalActions, /FOR UPDATE/);
+  assert.match(rentalActions, /reservation\.homeownerId !== renter\.homeownerId/);
+  assert.match(rentalActions, /SET status='FULFILLED',activeAssetKey=NULL,fulfilledAt=NOW\(3\),updatedAt=NOW\(3\)/);
+  assert.ok(rentalActions.includes("WHERE tenantId=${admin.tenantId} AND id=${reservation.id} AND assetId=${assetId}"));
+  assert.ok(rentalActions.includes("AND homeownerId=${renter.homeownerId} AND status='ACTIVE'"));
+  assert.match(rentalActions, /FULFILL_RENTAL_ASSET_RESERVATION/);
+  assert.match(rentalActions, /createRentalAgreementContractSnapshot\(db/);
+  assert.match(rentalActions, /tenantId: admin\.tenantId/);
+  assert.match(rentalActions, /agreementId/);
+  assert.match(rentalActions, /generatedById: admin\.id/);
 });
 
 test("contract access is tenant-scoped and homeowner access is restricted to the linked renter", () => {
@@ -74,6 +81,7 @@ test("admin agreement screen exposes generated contract actions and signed uploa
   assert.match(adminPage, /contract\?format=print/);
   assert.match(adminPage, /uploadSignedRentalAgreementAction/);
   assert.match(adminPage, /signedAgreement/);
+  assert.match(adminPage, /Number\(agreement\.invoiceCount\) === 0 && !contract/);
 });
 
 test("homeowner rental screen exposes only the homeowner's linked agreements and contract downloads", () => {

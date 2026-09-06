@@ -82,7 +82,12 @@ export function NavigationProgress() {
       if (event.defaultPrevented) return;
       const form = event.target;
       if (!(form instanceof HTMLFormElement)) return;
-      if ((form.method || "get").toLowerCase() !== "get") return;
+      // Read the HTML attribute rather than the named DOM property. Controls
+      // such as <select name="method"> can shadow form.method and turn it into
+      // an element instead of a string, which must never break POST/server-action
+      // submissions while this GET-only progress listener is installed.
+      const method = (form.getAttribute("method") || "get").toLowerCase();
+      if (method !== "get") return;
       if (form.target && form.target !== "_self") return;
 
       if (pendingRef.current) {

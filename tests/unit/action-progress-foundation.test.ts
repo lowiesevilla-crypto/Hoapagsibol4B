@@ -118,7 +118,8 @@ test("global navigation feedback covers internal links and GET queries without t
   assert.match(layout, /<NavigationProgress \/>/);
   assert.match(navigation, /document\.addEventListener\("click", onClick, true\)/);
   assert.match(navigation, /document\.addEventListener\("submit", onSubmit, true\)/);
-  assert.match(navigation, /toLowerCase\(\) !== "get"/);
+  assert.match(navigation, /form\.getAttribute\("method"\)/);
+  assert.match(navigation, /if \(method !== "get"\) return/);
   assert.match(navigation, /destination\.origin !== window\.location\.origin/);
   assert.match(navigation, /blockDuplicate\(event\)/);
   assert.match(navigation, /Opening \$\{readableLabel\}…/);

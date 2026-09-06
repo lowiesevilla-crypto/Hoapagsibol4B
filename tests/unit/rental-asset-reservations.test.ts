@@ -36,13 +36,14 @@ test("homeowner reservation mutations are tenant-scoped, serialized, locked, ide
   assert.ok(actions.includes("WHERE tenantId=${profile.tenantId} AND id=${reservationId} AND homeownerId=${profile.id} AND status='ACTIVE'"));
 });
 
-test("homeowner rental inventory exposes only tenant AVAILABLE assets and hides other homeowner identity", () => {
+test("homeowner rental inventory exposes only tenant AVAILABLE assets and never renders another homeowner identity", () => {
   assert.ok(portalPage.includes("WHERE ra.tenantId=${profile.tenantId} AND ra.status='AVAILABLE'"));
   assert.match(portalPage, /reservationHomeownerId === profile\.id/);
-  assert.match(portalPage, /Other homeowners can see that an asset is reserved, but they cannot see who reserved it/);
   assert.doesNotMatch(portalPage, /reservationHomeownerName/);
   assert.match(portalPage, /reserveRentalAssetAction/);
   assert.match(portalPage, /cancelRentalAssetReservationAction/);
+  assert.match(portalPage, /Reserved by you/);
+  assert.match(portalPage, /Reserved/);
 });
 
 test("rental reservations are discoverable only with BILLING entitlement and remain under Payments navigation", () => {

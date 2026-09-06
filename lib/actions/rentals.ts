@@ -7,6 +7,7 @@ import { redirect } from "next/navigation";
 import { requirePermission } from "@/lib/authorization/guards";
 import { Permission } from "@/lib/authorization/permissions";
 import { prisma } from "@/lib/db";
+import { createRentalAgreementContractSnapshot } from "@/lib/services/rental-agreement-contracts";
 
 const ASSET_TYPES = new Set(["STALL", "PARKING", "SPACE", "OTHER"]);
 const ASSET_STATUSES = new Set(["AVAILABLE", "OCCUPIED", "INACTIVE"]);
@@ -15,6 +16,7 @@ const RENTER_STATUSES = new Set(["ACTIVE", "INACTIVE"]);
 type IdRow = { id: string };
 type AssetLockRow = { id: string; status: string; code: string };
 type RenterLockRow = { id: string; status: string; homeownerId: string | null; fullName: string };
+type ReservationLockRow = { id: string; homeownerId: string; status: string };
 type AgreementInvoiceRow = {
   id: string;
   assetCode: string;
@@ -116,6 +118,7 @@ function revalidateRentalPages() {
   revalidatePath("/admin/reports");
   revalidatePath("/admin/reports/dashboard");
   revalidatePath("/admin/dashboard");
+  revalidatePath("/portal/rentals");
 }
 
 export async function saveRentalAssetAction(formData: FormData) {
@@ -169,6 +172,7 @@ export async function saveRentalAgreementAction(formData: FormData) {
   const securityDeposit = moneyValue(formData, "securityDeposit", "security deposit", true);
   const billingDay = dayValue(formData, "billingDay", "Billing day");
   const dueDay = dayValue(formData, "dueDay", "Due day");
+  const notes = optionalText(formData, "notes");
   const agreementId = randomUUID();
 
   await prisma.$transaction(async (tx) => {
@@ -182,10 +186,51 @@ export async function saveRentalAgreementAction(formData: FormData) {
     if (!renter || renter.status !== "ACTIVE") throw new Error("Choose an active renter in this association.");
     const active = await db.$queryRaw<IdRow[]>(Prisma.sql`SELECT id FROM RentalAgreement WHERE tenantId=${admin.tenantId} AND assetId=${assetId} AND status='ACTIVE' LIMIT 1 FOR UPDATE`);
     if (active.length) throw new Error("This asset already has an active rental agreement.");
+
+    const reservations = await db.$queryRaw<ReservationLockRow[]>(Prisma.sql`
+      SELECT id,homeownerId,status
+      FROM RentalAssetReservation
+      WHERE tenantId=${admin.tenantId} AND assetId=${assetId} AND status='ACTIVE'
+      LIMIT 1
+      FOR UPDATE
+    `);
+    const reservation = reservations[0] ?? null;
+    if (reservation && (!renter.homeownerId || reservation.homeownerId !== renter.homeownerId)) {
+      throw new Error("This asset is reserved by another homeowner. Use the renter linked to that reservation or cancel the reservation before creating a different agreement.");
+    }
+
     await db.$executeRaw(Prisma.sql`
       INSERT INTO RentalAgreement (tenantId,id,assetId,renterId,startDate,endDate,monthlyRate,billingDay,dueDay,securityDeposit,status,notes,createdAt,updatedAt)
-      VALUES (${admin.tenantId},${agreementId},${assetId},${renterId},${startDate},${endDate},${monthlyRate},${billingDay},${dueDay},${securityDeposit},'ACTIVE',${optionalText(formData,"notes")},NOW(3),NOW(3))
+      VALUES (${admin.tenantId},${agreementId},${assetId},${renterId},${startDate},${endDate},${monthlyRate},${billingDay},${dueDay},${securityDeposit},'ACTIVE',${notes},NOW(3),NOW(3))
     `);
+
+    if (reservation && renter.homeownerId) {
+      const fulfilled = await db.$executeRaw(Prisma.sql`
+        UPDATE RentalAssetReservation
+        SET status='FULFILLED',activeAssetKey=NULL,fulfilledAt=NOW(3),updatedAt=NOW(3)
+        WHERE tenantId=${admin.tenantId} AND id=${reservation.id} AND assetId=${assetId}
+          AND homeownerId=${renter.homeownerId} AND status='ACTIVE'
+      `);
+      if (fulfilled !== 1) throw new Error("The homeowner reservation changed while the agreement was being activated. Retry the agreement activation.");
+      await db.auditLog.create({
+        data: {
+          tenantId: admin.tenantId,
+          actorId: admin.id,
+          module: "RENTALS",
+          action: "FULFILL_RENTAL_ASSET_RESERVATION",
+          entityType: "RentalAssetReservation",
+          entityId: reservation.id,
+          metadata: { agreementId, assetId, homeownerId: renter.homeownerId, priorStatus: "ACTIVE", status: "FULFILLED" },
+        },
+      });
+    }
+
+    await createRentalAgreementContractSnapshot(db, {
+      tenantId: admin.tenantId,
+      agreementId,
+      generatedById: admin.id,
+    });
+
     await db.$executeRaw(Prisma.sql`UPDATE RentalAsset SET status='OCCUPIED',updatedAt=NOW(3) WHERE tenantId=${admin.tenantId} AND id=${assetId}`);
     if (securityDeposit > 0) {
       const depositId = randomUUID();
@@ -195,7 +240,7 @@ export async function saveRentalAgreementAction(formData: FormData) {
         VALUES (${admin.tenantId},${depositId},${agreementId},${number},'SECURITY_DEPOSIT',${startDate},${startDate},${startDate},${securityDeposit},0,${securityDeposit},'OPEN','Refundable rental security deposit',NOW(3),NOW(3))
       `);
     }
-    await db.auditLog.create({ data: { tenantId: admin.tenantId, actorId: admin.id, module: "RENTALS", action: "CREATE_RENTAL_AGREEMENT", entityType: "RentalAgreement", entityId: agreementId, metadata: { assetId, renterId, monthlyRate, securityDeposit, billingDay, dueDay, startDate: startDate.toISOString(), endDate: endDate?.toISOString() ?? null } } });
+    await db.auditLog.create({ data: { tenantId: admin.tenantId, actorId: admin.id, module: "RENTALS", action: "CREATE_RENTAL_AGREEMENT", entityType: "RentalAgreement", entityId: agreementId, metadata: { assetId, renterId, monthlyRate, securityDeposit, billingDay, dueDay, startDate: startDate.toISOString(), endDate: endDate?.toISOString() ?? null, reservationId: reservation?.id ?? null } } });
   }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
 
   revalidateRentalPages();

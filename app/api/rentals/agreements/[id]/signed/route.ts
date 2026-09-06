@@ -11,6 +11,12 @@ function safeDownloadName(value: string) {
   return path.basename(value).replace(/["\r\n]/g, "_").slice(0, 180) || "signed-rental-agreement.pdf";
 }
 
+function responseArrayBuffer(bytes: Uint8Array) {
+  const body = new Uint8Array(bytes.byteLength);
+  body.set(bytes);
+  return body.buffer;
+}
+
 export async function GET(_request: Request, { params }: { params: Promise<{ id: string }> }) {
   const user = await requireUser();
   const { id } = await params;
@@ -27,9 +33,9 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
   if (storedName !== contract.signedStoredName) return Response.json({ error: "Signed rental agreement path is invalid." }, { status: 400 });
   try {
     const filePath = await locateTenantUpload(user.tenant.slug, "rentals", id, "signed", storedName);
-    const bytes = new Uint8Array(await readFile(filePath));
+    const fileBytes = await readFile(filePath);
     const originalName = safeDownloadName(contract.signedOriginalName || `signed-${contract.contractNumber}`);
-    return new Response(bytes, {
+    return new Response(responseArrayBuffer(fileBytes), {
       headers: {
         "Content-Type": contract.signedContentType,
         "Content-Disposition": `attachment; filename="${originalName}"`,

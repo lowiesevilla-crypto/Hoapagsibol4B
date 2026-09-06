@@ -5,9 +5,11 @@ import { CollectionType, PaymentMethod, PaymentRequestStatus, PaymentRequestType
 import { redirect } from "next/navigation";
 import { requireUser } from "@/lib/auth";
 import { prisma } from "@/lib/db";
+import { HOMEOWNER_ADVANCE_DUES_TRANSACTION_TYPE } from "@/lib/homeowner-advance-dues";
 import { paymongoBatchDescription } from "@/lib/homeowner-paymongo-batch";
 import { PAYMONGO_PAYMENT_REQUEST_MARKER } from "@/lib/homeowner-payment-flow";
 import { canSubmitDocumentFeePayment, documentFeePaymentPurpose, documentRequestPublicReference } from "@/lib/services/document-fee-payments";
+import { quoteHomeownerAdvanceDues } from "@/lib/services/homeowner-advance-dues";
 import { getHomeownerPaymentConfig } from "@/lib/services/homeowner-payment-config";
 import { createHomeownerPayMongoCheckout } from "@/lib/services/homeowner-paymongo";
 
@@ -50,7 +52,63 @@ export async function createHomeownerPayMongoCheckoutAction(formData: FormData) 
       proofFileSize: null,
     } as const);
 
-    if (transactionType === PaymentRequestType.MONTHLY_DUES) {
+    if (transactionType === HOMEOWNER_ADVANCE_DUES_TRANSACTION_TYPE) {
+      const quote = await quoteHomeownerAdvanceDues({
+        tenantId: user.tenantId,
+        homeownerId: user.homeownerProfile.id,
+        from: String(formData.get("advanceFromMonth") || ""),
+        to: String(formData.get("advanceToMonth") || ""),
+      });
+      const existing = await prisma.paymentRequest.findFirst({
+        where: {
+          tenantId: user.tenantId,
+          homeownerId: user.homeownerProfile.id,
+          type: PaymentRequestType.MONTHLY_DUES,
+          billId: null,
+          status: PaymentRequestStatus.PENDING_REVIEW,
+          proofContentType: PAYMONGO_PAYMENT_REQUEST_MARKER,
+          description: quote.description,
+        },
+        select: { id: true, amount: true },
+      });
+      if (existing && Math.abs(Number(existing.amount) - quote.total) > 0.009) {
+        throw new Error("An Advance Monthly Dues checkout for this coverage is already in progress using an earlier rule amount. Finish or cancel that checkout before requesting a new quote.");
+      }
+      if (existing) {
+        requestId = existing.id;
+      } else {
+        requestId = randomUUID();
+        await prisma.paymentRequest.create({
+          data: {
+            ...gatewayFields(requestId),
+            type: PaymentRequestType.MONTHLY_DUES,
+            billId: null,
+            description: quote.description,
+            amount: quote.total,
+            payerNotes: `PayMongo Online advance Monthly Dues · ${quote.coverageLabel}`,
+          },
+        });
+        await prisma.auditLog.create({
+          data: {
+            tenantId: user.tenantId,
+            actorId: user.id,
+            module: "PAYMENTS",
+            action: "CREATE_HOMEOWNER_ADVANCE_DUES_CHECKOUT",
+            entityType: "PaymentRequest",
+            entityId: requestId,
+            metadata: {
+              homeownerId: user.homeownerProfile.id,
+              coverageFrom: quote.from,
+              coverageTo: quote.to,
+              coverageLabel: quote.coverageLabel,
+              monthCount: quote.monthCount,
+              amount: quote.total,
+              source: "PAYMONGO_HOMEOWNER",
+            },
+          },
+        });
+      }
+    } else if (transactionType === PaymentRequestType.MONTHLY_DUES) {
       const billIds = formData.getAll("billIds").map(String).map((value) => value.trim()).filter(Boolean);
       if (!billIds.length) throw new Error("Select at least one unpaid monthly dues record.");
       const uniqueBillIds = [...new Set(billIds)];

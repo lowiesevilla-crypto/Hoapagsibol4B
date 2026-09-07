@@ -110,16 +110,21 @@ test("shared action progress is immediate even when advanced workflow progress i
   assert.match(retryRoute, /createFailedBillingGenerationRetry/);
 });
 
-test("global navigation feedback covers internal links and GET queries without touching POST actions", () => {
+test("global navigation feedback covers internal links and explicit GET queries without touching React actions", () => {
   const navigation = readFileSync("components/navigation-progress.tsx", "utf8");
   const layout = readFileSync("app/layout.tsx", "utf8");
   const routeLoading = readFileSync("app/loading.tsx", "utf8");
+  const documentRequestForm = readFileSync("components/document-request-form.tsx", "utf8");
+  const portalDocuments = readFileSync("app/portal/documents/page.tsx", "utf8");
 
   assert.match(layout, /<NavigationProgress \/>/);
   assert.match(navigation, /document\.addEventListener\("click", onClick, true\)/);
   assert.match(navigation, /document\.addEventListener\("submit", onSubmit, true\)/);
-  assert.match(navigation, /form\.getAttribute\("method"\)/);
+  assert.match(navigation, /form\.getAttribute\("method"\)\?\.trim\(\)\.toLowerCase\(\)/);
   assert.match(navigation, /if \(method !== "get"\) return/);
+  assert.match(documentRequestForm, /action=\{submitAction\}/);
+  assert.doesNotMatch(documentRequestForm, /method="get"/);
+  assert.match(portalDocuments, /<form[^>]*method="get"/);
   assert.match(navigation, /destination\.origin !== window\.location\.origin/);
   assert.match(navigation, /blockDuplicate\(event\)/);
   assert.match(navigation, /Opening \$\{readableLabel\}…/);

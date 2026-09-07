@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import test from "node:test";
 import { createSubmissionLock } from "../../lib/action-progress/submission-lock";
 import { isUxActionProgressEnabled, UX_ACTION_PROGRESS_FLAG } from "../../lib/feature-flags/ux-action-progress";
@@ -113,7 +113,6 @@ test("shared action progress is immediate even when advanced workflow progress i
 test("global navigation feedback covers internal links and explicit GET queries without touching React actions", () => {
   const navigation = readFileSync("components/navigation-progress.tsx", "utf8");
   const layout = readFileSync("app/layout.tsx", "utf8");
-  const routeLoading = readFileSync("app/loading.tsx", "utf8");
   const documentRequestForm = readFileSync("components/document-request-form.tsx", "utf8");
   const portalDocuments = readFileSync("app/portal/documents/page.tsx", "utf8");
 
@@ -132,5 +131,5 @@ test("global navigation feedback covers internal links and explicit GET queries 
   assert.match(navigation, /animate-spin/);
   assert.match(navigation, /aria-live="polite"/);
   assert.doesNotMatch(navigation, /%/);
-  assert.match(routeLoading, /Loading HOAHub…/);
+  assert.equal(existsSync("app/loading.tsx"), false, "Root route loading must not replace active server-action forms during redirects.");
 });

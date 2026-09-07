@@ -27,10 +27,18 @@ export function ActionProgressButton({
   const { pending } = useFormStatus();
   const lock = useRef(createSubmissionLock());
   const sawPending = useRef(false);
+  const pendingSafetyTimeout = useRef<number | null>(null);
   const [accepted, setAccepted] = useState(false);
+
+  function clearPendingSafetyTimeout() {
+    if (pendingSafetyTimeout.current === null) return;
+    window.clearTimeout(pendingSafetyTimeout.current);
+    pendingSafetyTimeout.current = null;
+  }
 
   useEffect(() => {
     if (pending) {
+      clearPendingSafetyTimeout();
       sawPending.current = true;
       return;
     }
@@ -39,6 +47,10 @@ export function ActionProgressButton({
     sawPending.current = false;
     setAccepted(false);
   }, [pending]);
+
+  useEffect(() => {
+    return () => clearPendingSafetyTimeout();
+  }, []);
 
   // The feature flag only controls the existing advanced/durable progress
   // workflow. Basic immediate feedback and duplicate-click protection remain
@@ -66,6 +78,12 @@ export function ActionProgressButton({
       // state update preserves the browser's native submit default action for
       // server-action forms while still making feedback visible immediately.
       window.requestAnimationFrame(() => setAccepted(true));
+      pendingSafetyTimeout.current = window.setTimeout(() => {
+        if (sawPending.current) return;
+        lock.current.release();
+        setAccepted(false);
+        pendingSafetyTimeout.current = null;
+      }, 1500);
     }}
   >
     {completed

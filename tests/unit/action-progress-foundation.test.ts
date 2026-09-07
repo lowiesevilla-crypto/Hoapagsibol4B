@@ -69,6 +69,11 @@ test("shared action progress is immediate even when advanced workflow progress i
   assert.match(component, /const processing = accepted \|\| pending \|\| advancedProcessing/);
   assert.match(component, /disabled=\{disabled \|\| accepted \|\| pending \|\| advancedProcessing \|\| completed\}/);
   assert.match(component, /window\.requestAnimationFrame\(\(\) => setAccepted\(true\)\)/);
+  assert.match(component, /pendingSafetyTimeout/);
+  assert.match(component, /clearPendingSafetyTimeout\(\)/);
+  assert.match(component, /if \(sawPending\.current\) return/);
+  assert.match(component, /lock\.current\.release\(\)/);
+  assert.match(component, /setAccepted\(false\)/);
   assert.match(component, /aria-busy/);
   assert.match(component, /aria-live="polite"/);
   assert.match(component, /aria-atomic="true"/);

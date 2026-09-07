@@ -77,6 +77,7 @@ test("shared action progress is immediate even when advanced workflow progress i
   assert.match(component, /aria-busy/);
   assert.match(component, /aria-live="polite"/);
   assert.match(component, /aria-atomic="true"/);
+  assert.doesNotMatch(component, /<span role="status" aria-live="polite" aria-atomic="true">\{pendingLabel\}…<\/span>/);
   assert.match(component, /motion-reduce:animate-none/);
   assert.doesNotMatch(component, /percentage/);
   assert.doesNotMatch(component, /100%|75%|50%|25%/);

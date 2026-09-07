@@ -82,11 +82,13 @@ export function NavigationProgress() {
       if (event.defaultPrevented) return;
       const form = event.target;
       if (!(form instanceof HTMLFormElement)) return;
-      // Read the HTML attribute rather than the named DOM property. Controls
-      // such as <select name="method"> can shadow form.method and turn it into
-      // an element instead of a string, which must never break POST/server-action
-      // submissions while this GET-only progress listener is installed.
-      const method = (form.getAttribute("method") || "get").toLowerCase();
+      // Fail closed: only forms that explicitly declare method="get" are
+      // navigation/search submissions. React/Next action forms can omit the
+      // HTML method attribute even though React submits them as POST actions;
+      // treating a missing method as GET would overlay/block those workflows.
+      // Reading the attribute also avoids controls named "method" shadowing
+      // the HTMLFormElement.method DOM property.
+      const method = form.getAttribute("method")?.trim().toLowerCase();
       if (method !== "get") return;
       if (form.target && form.target !== "_self") return;
 

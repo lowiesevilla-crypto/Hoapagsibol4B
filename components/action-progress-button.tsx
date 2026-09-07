@@ -89,7 +89,7 @@ export function ActionProgressButton({
     {completed
       ? <><Check className="size-4" aria-hidden="true" /> <span role="status" aria-live="polite" aria-atomic="true">{pendingLabel} complete</span></>
       : processing
-        ? <><LoaderCircle className="size-4 animate-spin motion-reduce:animate-none" aria-hidden="true" /> <span role="status" aria-live="polite" aria-atomic="true">{pendingLabel}…</span></>
+        ? <><LoaderCircle className="size-4 animate-spin motion-reduce:animate-none" aria-hidden="true" /> <span aria-live="polite" aria-atomic="true">{pendingLabel}…</span></>
         : children}
   </button>;
 }

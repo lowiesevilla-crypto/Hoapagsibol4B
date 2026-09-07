@@ -2,7 +2,7 @@
 
 import { ActionProgressButton } from "@/components/action-progress-button";
 
-export function SubmitButton({ children, className = "btn-primary", disabled = false, actionProgress = false, pendingLabel = "Working", confirmedProcessing = false, success = false }: { children: React.ReactNode; className?: string; disabled?: boolean; actionProgress?: boolean; pendingLabel?: string; confirmedProcessing?: boolean; success?: boolean }) {
+export function SubmitButton({ children, className = "btn-primary", disabled = false, actionProgress = true, pendingLabel = "Processing request", confirmedProcessing = false, success = false }: { children: React.ReactNode; className?: string; disabled?: boolean; actionProgress?: boolean; pendingLabel?: string; confirmedProcessing?: boolean; success?: boolean }) {
   return <ActionProgressButton className={className} disabled={disabled} enabled={actionProgress} pendingLabel={pendingLabel} confirmedProcessing={confirmedProcessing} success={success}>{children}</ActionProgressButton>;
 }
 

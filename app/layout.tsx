@@ -1,7 +1,9 @@
+import { Suspense } from "react";
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import "./canva-parity.css";
 import { BrowserCacheRecovery } from "@/components/browser-cache-recovery";
+import { NavigationProgress } from "@/components/navigation-progress";
 import { PublicPwaInstallBanner } from "@/components/public-pwa-install-banner";
 import { PwaInstallProvider } from "@/components/pwa-install-provider";
 
@@ -38,5 +40,5 @@ export const viewport: Viewport = {
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
-  return <html lang="en" className="overflow-x-hidden" data-scroll-behavior="smooth"><body><BrowserCacheRecovery /><PwaInstallProvider>{children}<PublicPwaInstallBanner /></PwaInstallProvider></body></html>;
+  return <html lang="en" className="overflow-x-hidden" data-scroll-behavior="smooth"><body><BrowserCacheRecovery /><PwaInstallProvider><Suspense fallback={null}><NavigationProgress /></Suspense>{children}<PublicPwaInstallBanner /></PwaInstallProvider></body></html>;
 }

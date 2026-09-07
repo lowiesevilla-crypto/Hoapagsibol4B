@@ -190,7 +190,12 @@ async function runAdminFlow(browser) {
     await page.select("select[name='method']", "CASH");
     await clickAndWaitForNavigation(page, "button[type='submit']", /Record payment/i);
     assert.ok(new URL(page.url()).pathname.startsWith("/receipts/payment/"), `Expected payment receipt redirect, received ${page.url()}`);
+    await expectText(page, "Receipt No.", "payment receipt page");
     await expectText(page, homeownerName);
+    await page.waitForFunction(
+      () => /AR-MD-\d{4}-\d{7}/.test(document.body?.textContent || ""),
+      { timeout },
+    );
     const receiptBody = await pageText(page);
     const receiptNumber = receiptBody.match(/AR-MD-\d{4}-\d{7}/)?.[0];
     assert.ok(receiptNumber, `Expected an official monthly-dues receipt number on ${page.url()}`);

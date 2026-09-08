@@ -1,6 +1,6 @@
 import "server-only";
 
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import {
   HomeownerActivationBulkItemStatus,
   HomeownerActivationBulkJobStatus,
@@ -39,7 +39,7 @@ type RequestJobInput = {
 };
 
 export async function requestHomeownerActivationBulkJob(input: RequestJobInput) {
-  const idempotencyKey = safeIdempotencyKey(input.idempotencyKey);
+  const idempotencyKey = hashedIdempotencyKey(input.tenantId, input.idempotencyKey);
   const existing = await prisma.homeownerActivationBulkJob.findUnique({
     where: { tenantId_idempotencyKey: { tenantId: input.tenantId, idempotencyKey } },
   });
@@ -83,7 +83,7 @@ export async function requestHomeownerActivationBulkJob(input: RequestJobInput) 
           metadata: {
             selectionMode: input.selectionMode,
             totalTargets: targetIds.length,
-            idempotencyKey,
+            idempotencyKeyHash: idempotencyKey,
           },
         },
       });
@@ -200,7 +200,7 @@ export async function createFailedHomeownerActivationBulkRetry(input: {
   sourceJobId: string;
   idempotencyKey: string;
 }) {
-  const idempotencyKey = safeIdempotencyKey(input.idempotencyKey);
+  const idempotencyKey = hashedIdempotencyKey(input.tenantId, input.idempotencyKey);
   const existing = await prisma.homeownerActivationBulkJob.findUnique({
     where: { tenantId_idempotencyKey: { tenantId: input.tenantId, idempotencyKey } },
   });
@@ -257,7 +257,7 @@ export async function createFailedHomeownerActivationBulkRetry(input: {
           action: "HOMEOWNER_ACTIVATION_BULK_FAILED_ONLY_RETRY_QUEUED",
           entityType: "HomeownerActivationBulkJob",
           entityId: job.id,
-          metadata: { retryFailedOnly: true, sourceJobId: source.id, totalTargets: failedItems.length, idempotencyKey },
+          metadata: { retryFailedOnly: true, sourceJobId: source.id, totalTargets: failedItems.length, idempotencyKeyHash: idempotencyKey },
         },
       });
       return job;
@@ -444,10 +444,10 @@ async function refreshJobCounters(tenantId: string, jobId: string, leaseOwner: s
   return getHomeownerActivationBulkJobProgress(tenantId, jobId);
 }
 
-function safeIdempotencyKey(value: string) {
+function hashedIdempotencyKey(tenantId: string, value: string) {
   const normalized = String(value || "").trim();
   if (!normalized || normalized.length > 191) throw new Error("A valid idempotency key is required.");
-  return normalized;
+  return createHash("sha256").update(`${tenantId}:${normalized}`, "utf8").digest("hex");
 }
 
 function boundedInteger(value: number | undefined, fallback: number, min: number, max: number) {

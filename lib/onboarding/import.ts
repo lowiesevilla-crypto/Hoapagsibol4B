@@ -321,12 +321,14 @@ async function applyClientScaleRows(
         accountNumberProvided: Boolean(item.row.accountNumber),
         emailProvided,
         activationDeferred: emailProvided,
+        remarks: item.row.remarks,
       },
     });
 
     if (item.row.openingBalance > 0 && item.row.openingBalanceAsOf) {
       const period = new Date(Date.UTC(item.row.openingBalanceAsOf.getUTCFullYear(), item.row.openingBalanceAsOf.getUTCMonth(), 1));
       const dueDate = new Date(Date.UTC(period.getUTCFullYear(), period.getUTCMonth() + 1, 0));
+      const openingBalanceRemarks = item.row.remarks || `Tenant onboarding opening balance from ${input.fileName}`;
       const billId = randomUUID();
       const migrationId = randomUUID();
       billRows.push({
@@ -343,7 +345,7 @@ async function applyClientScaleRows(
         balance: item.row.openingBalance,
         dueDate,
         status: dueDate < today ? BillStatus.OVERDUE : BillStatus.UNPAID,
-        notes: `[MIGRATED][OPENING_BALANCE] Tenant onboarding import ${validation.fileHash.slice(0, 12)}`,
+        notes: openingBalanceRemarks,
       });
       migrationRows.push({
         id: migrationId,
@@ -353,7 +355,7 @@ async function applyClientScaleRows(
         homeownerId: item.homeownerId,
         period,
         amount: item.row.openingBalance,
-        remarks: `Tenant onboarding opening balance from ${input.fileName}`,
+        remarks: openingBalanceRemarks,
         postedRecordType: "Bill",
         postedRecordId: billId,
         dedupeKey: `ONBOARDING|${validation.fileHash}|${item.row.rowNumber}|DUES_OPENING_BALANCE`,
@@ -463,6 +465,7 @@ async function applyInlineRows(
     if (item.row.openingBalance > 0 && item.row.openingBalanceAsOf) {
       const period = new Date(Date.UTC(item.row.openingBalanceAsOf.getUTCFullYear(), item.row.openingBalanceAsOf.getUTCMonth(), 1));
       const dueDate = new Date(Date.UTC(period.getUTCFullYear(), period.getUTCMonth() + 1, 0));
+      const openingBalanceRemarks = item.row.remarks || `Tenant onboarding opening balance from ${input.fileName}`;
       const bill = await tx.bill.create({
         data: {
           tenantId: input.tenantId,
@@ -477,7 +480,7 @@ async function applyInlineRows(
           balance: item.row.openingBalance,
           dueDate,
           status: dueDate < startOfTodayUtc() ? BillStatus.OVERDUE : BillStatus.UNPAID,
-          notes: `[MIGRATED][OPENING_BALANCE] Tenant onboarding import ${validation.fileHash.slice(0, 12)}`,
+          notes: openingBalanceRemarks,
         },
       });
       const migration = await tx.dataMigration.create({
@@ -488,7 +491,7 @@ async function applyInlineRows(
           homeowner: { connect: { id: homeowner.id } },
           period,
           amount: item.row.openingBalance,
-          remarks: `Tenant onboarding opening balance from ${input.fileName}`,
+          remarks: openingBalanceRemarks,
           postedRecordType: "Bill",
           postedRecordId: bill.id,
           dedupeKey: `ONBOARDING|${validation.fileHash}|${item.row.rowNumber}|DUES_OPENING_BALANCE`,
@@ -524,6 +527,7 @@ async function applyInlineRows(
           accountNumberProvided: Boolean(item.row.accountNumber),
           emailProvided,
           activationDeferred: false,
+          remarks: item.row.remarks,
         },
       },
     });

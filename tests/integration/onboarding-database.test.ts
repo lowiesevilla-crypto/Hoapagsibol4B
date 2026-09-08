@@ -34,6 +34,7 @@ const importCsv = csvRows([
     "",
     "1250.50",
     "2026-07-31",
+    "Board verified legacy resident",
   ],
   [
     "Imported Homeowner Without Email",
@@ -49,6 +50,7 @@ const importCsv = csvRows([
     "600.00",
     "",
     "0.00",
+    "",
     "",
   ],
 ]);
@@ -173,10 +175,12 @@ test("apply creates activation-only and no-email homeowners atomically", async (
   assert.equal(Number(bill.balance), 1250.5);
   assert.equal(bill.coverageYear, 2026);
   assert.equal(bill.coverageMonth, 7);
+  assert.equal(bill.notes, "Board verified legacy resident");
 
   const migration = await platformPrisma.dataMigration.findFirstOrThrow({ where: { tenantId: tenantAId, homeownerId: user.homeownerProfile!.id } });
   assert.equal(migration.kind, "DUES_OPENING_BALANCE");
   assert.equal(migration.postedRecordId, bill.id);
+  assert.equal(migration.remarks, "Board verified legacy resident");
 
   const setting = await platformPrisma.systemSetting.findFirstOrThrow({ where: { tenantId: tenantAId, key: "TENANT_ONBOARDING_V1" } });
   const state = JSON.parse(setting.value ?? "{}") as { import?: { appliedAt?: string; importedRows?: number; openingBalancesPosted?: number } };
@@ -184,9 +188,10 @@ test("apply creates activation-only and no-email homeowners atomically", async (
   assert.equal(state.import?.importedRows, 2);
   assert.equal(state.import?.openingBalancesPosted, 1);
 
-  const auditActions = await platformPrisma.auditLog.findMany({ where: { tenantId: tenantAId, module: "ONBOARDING" }, select: { action: true } });
+  const auditActions = await platformPrisma.auditLog.findMany({ where: { tenantId: tenantAId, module: "ONBOARDING" }, select: { action: true, metadata: true } });
   assert.equal(auditActions.filter((entry) => entry.action === "HOMEOWNER_IMPORTED").length, 2);
   assert.equal(auditActions.some((entry) => entry.action === "HOMEOWNER_IMPORT_APPLIED"), true);
+  assert.match(JSON.stringify(auditActions.filter((entry) => entry.action === "HOMEOWNER_IMPORTED")), /Board verified legacy resident/);
 
   assert.equal(await platformPrisma.bill.count({ where: { tenantId: tenantBId } }), 0);
   assert.equal(await platformPrisma.dataMigration.count({ where: { tenantId: tenantBId } }), 0);

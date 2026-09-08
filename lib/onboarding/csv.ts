@@ -19,7 +19,9 @@ export const ONBOARDING_HOMEOWNER_COLUMNS = [
   "accountNumber",
   "openingBalance",
   "openingBalanceAsOf",
+  "remarks",
 ] as const;
+const OPTIONAL_ONBOARDING_HOMEOWNER_COLUMNS = new Set<string>(["remarks"]);
 
 export type OnboardingHomeownerRow = {
   rowNumber: number;
@@ -37,6 +39,7 @@ export type OnboardingHomeownerRow = {
   accountNumber: string | null;
   openingBalance: number;
   openingBalanceAsOf: Date | null;
+  remarks: string | null;
 };
 
 export type OnboardingImportError = {
@@ -71,6 +74,7 @@ export function onboardingHomeownerTemplateCsv() {
       "",
       "0.00",
       "",
+      "Optional migration note",
     ].map(csvCell).join(","),
   ].join("\n");
 }
@@ -86,7 +90,7 @@ export function parseOnboardingHomeownerCsv(input: string): ParsedOnboardingCsv 
   const matrix = parseCsvMatrix(normalized);
   const headers = (matrix.shift() ?? []).map((header) => header.trim());
   const errors: OnboardingImportError[] = [];
-  const missing = ONBOARDING_HOMEOWNER_COLUMNS.filter((column) => !headers.includes(column));
+  const missing = ONBOARDING_HOMEOWNER_COLUMNS.filter((column) => !OPTIONAL_ONBOARDING_HOMEOWNER_COLUMNS.has(column) && !headers.includes(column));
   for (const column of missing) errors.push({ rowNumber: null, field: column, message: `Missing required column: ${column}.` });
   if (!matrix.length) errors.push({ rowNumber: null, field: null, message: "CSV file does not contain data rows." });
   if (matrix.length > ONBOARDING_HOMEOWNER_MAX_ROWS) errors.push({ rowNumber: null, field: null, message: `A single onboarding import is limited to ${ONBOARDING_HOMEOWNER_MAX_ROWS} homeowner rows.` });
@@ -131,6 +135,9 @@ export function parseOnboardingHomeownerCsv(input: string): ParsedOnboardingCsv 
     if (accountNumber && seenAccounts.has(accountNumber)) rowErrors.push({ rowNumber, field: "accountNumber", message: "Duplicate account number inside this file." });
     if (accountNumber) seenAccounts.add(accountNumber);
 
+    const remarks = raw.remarks || null;
+    if (remarks && remarks.length > 1000) rowErrors.push({ rowNumber, field: "remarks", message: "Remarks must not exceed 1,000 characters." });
+
     errors.push(...rowErrors);
     if (!rowErrors.length) {
       parsedRows.push({
@@ -149,6 +156,7 @@ export function parseOnboardingHomeownerCsv(input: string): ParsedOnboardingCsv 
         accountNumber,
         openingBalance: openingBalance!,
         openingBalanceAsOf,
+        remarks,
       });
     }
   });

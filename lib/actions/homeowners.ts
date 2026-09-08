@@ -12,7 +12,7 @@ import { homeownerAccountNumber } from "@/lib/homeowner-account";
 import { homeownerSchema } from "@/lib/validation";
 import { generateUniqueHomeownerAccountNumber } from "@/lib/services/homeowner-account-number";
 import { createHomeownerActivationCredential, sendHomeownerActivationEmail } from "@/lib/services/homeowner-activation";
-import { homeownerDigitalActivationEligibility, maskAccountNumber, nextInvitationStatus } from "@/lib/services/homeowner-digital-activation";
+import { homeownerActivationReissueEligibility, homeownerDigitalActivationEligibility, maskAccountNumber, nextInvitationStatus } from "@/lib/services/homeowner-digital-activation";
 import { sendEmailNotification } from "@/lib/services/notifications";
 import { getPasswordPolicy } from "@/lib/system-settings";
 import { runWithTenant } from "@/lib/tenant-context";
@@ -197,7 +197,7 @@ export async function deleteHomeownerAction(formData: FormData) {
 export async function regenerateHomeownerActivationAction(formData: FormData) {
   const admin = await requireHomeownerActivationAdmin();
   const id = String(formData.get("id") || "");
-  const result = await sendActivationInvitation(admin, id, "HOMEOWNER_ACTIVATION_REGENERATED");
+  const result = await sendActivationInvitation(admin, id, "HOMEOWNER_ACTIVATION_REISSUED", "reissue");
   if (!result.ok) throw new Error(result.reason);
   revalidatePath("/admin/homeowners");
   revalidatePath(`/admin/homeowners/${id}`);
@@ -207,7 +207,7 @@ export async function regenerateHomeownerActivationAction(formData: FormData) {
 export async function sendHomeownerActivationInvitationAction(formData: FormData) {
   const admin = await requireHomeownerActivationAdmin();
   const id = String(formData.get("id") || "");
-  const result = await sendActivationInvitation(admin, id, "HOMEOWNER_ACTIVATION_INVITATION_SENT");
+  const result = await sendActivationInvitation(admin, id, "HOMEOWNER_ACTIVATION_INVITATION_SENT", "firstTime");
   if (!result.ok) throw new Error(result.reason);
   revalidatePath("/admin/homeowners");
   revalidatePath(`/admin/homeowners/${id}`);
@@ -438,7 +438,7 @@ export async function bulkSendHomeownerActivationInvitationsAction(formData: For
   for (let index = 0; index < homeowners.length; index += BULK_INVITATION_BATCH_SIZE) {
     const batch = homeowners.slice(index, index + BULK_INVITATION_BATCH_SIZE);
     for (const homeowner of batch) {
-      const result = await sendActivationInvitation(admin, homeowner.id, "HOMEOWNER_ACTIVATION_BULK_INVITATION_SENT", homeowner);
+      const result = await sendActivationInvitation(admin, homeowner.id, "HOMEOWNER_ACTIVATION_BULK_INVITATION_SENT", "firstTime", homeowner);
       if (result.ok) sent++;
       else if (result.skipped) skipped++;
       else failed++;
@@ -464,11 +464,12 @@ async function sendActivationInvitation(
   admin: { id: string; tenantId: string },
   homeownerId: string,
   auditAction: string,
+  mode: "firstTime" | "reissue",
   loadedProfile?: Prisma.HomeownerProfileGetPayload<{ include: { user: true } }>,
 ) {
   const profile = loadedProfile ?? await prisma.homeownerProfile.findFirst({ where: { id: homeownerId, tenantId: admin.tenantId }, include: { user: true } });
   if (!profile) return { ok: false, skipped: true, reason: "Homeowner not found." } as const;
-  const eligibility = homeownerDigitalActivationEligibility(profile);
+  const eligibility = mode === "firstTime" ? homeownerDigitalActivationEligibility(profile) : homeownerActivationReissueEligibility(profile);
   if (!eligibility.eligible) return { ok: false, skipped: true, reason: eligibility.reason } as const;
   const accountNumber = homeownerAccountNumber(profile);
   try {
@@ -486,7 +487,7 @@ async function sendActivationInvitation(
           action: auditAction,
           entityType: "User",
           entityId: profile.userId,
-          metadata: { homeownerId: profile.id, accountMasked: maskAccountNumber(accountNumber) },
+          metadata: { homeownerId: profile.id, accountMasked: maskAccountNumber(accountNumber), activationSendMode: mode },
         },
       });
       return created;

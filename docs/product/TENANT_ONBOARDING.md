@@ -67,6 +67,7 @@ Optional columns:
 - `accountNumber`
 - `openingBalance`
 - `openingBalanceAsOf`
+- `remarks`
 
 Rules:
 
@@ -74,6 +75,7 @@ Rules:
 - Account numbers are automatically allocated when blank.
 - Supplied account numbers must be globally unused 11-digit values that do not start with zero.
 - Opening balances require an `openingBalanceAsOf` date in `YYYY-MM-DD` format.
+- Remarks are optional beginning-balance notes. When `openingBalance` is greater than zero, the remark is saved as the opening-balance bill note so it is visible in Billing; it is also retained in the onboarding audit trail. Remarks may not exceed 1,000 characters.
 - Money fields allow no more than two decimal places.
 - A single file supports up to 500 rows and 2 MB.
 - Duplicate email and block/lot checks are tenant-scoped.

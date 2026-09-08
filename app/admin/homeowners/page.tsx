@@ -13,7 +13,7 @@ import { requireUser } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { homeownerAccountNumber } from "@/lib/homeowner-account";
 import { homeownerSearchWhere } from "@/lib/homeowner-admin-search";
-import { activationInvitationExpiresAt, deliveryStatusLabel, digitalActivationLabel, homeownerDigitalActivationEligibility, maskAccountNumber, maskEmail } from "@/lib/services/homeowner-digital-activation";
+import { activationInvitationExpiresAt, deliveryStatusLabel, digitalActivationLabel, homeownerActivationReissueEligibility, homeownerDigitalActivationEligibility, maskAccountNumber, maskEmail } from "@/lib/services/homeowner-digital-activation";
 import { money } from "@/lib/utils";
 
 type HomeownerQuery = {
@@ -126,17 +126,22 @@ export default async function HomeownersPage({ searchParams }: { searchParams: P
       <input type="hidden" name="pageSize" value={pageSize} />
       <div className="mb-4 flex flex-wrap items-center gap-3 rounded-xl border bg-white p-3">
         <HomeownerActivationBulkSubmitButton
-          mode="selected"
+          intent="firstTime:selected"
           className="btn-primary min-h-9 px-3 py-1.5 text-xs"
           message="Queue activation invitations for the selected first-time eligible homeowners?"
-        >Send selected eligible</HomeownerActivationBulkSubmitButton>
+        >Send selected first-time eligible</HomeownerActivationBulkSubmitButton>
         <HomeownerActivationBulkSubmitButton
-          mode="filtered"
+          intent="reissue:selected"
+          className="btn-secondary min-h-9 px-3 py-1.5 text-xs"
+          message="Reissue activation invitations for the selected invited or expired homeowners who are not activated?"
+        >Reissue selected invited/expired</HomeownerActivationBulkSubmitButton>
+        <HomeownerActivationBulkSubmitButton
+          intent="firstTime:filtered"
           className="btn-secondary min-h-9 px-3 py-1.5 text-xs"
           disabled={eligibleFilteredCount === 0}
           message={`Queue activation invitations for all ${eligibleFilteredCount.toLocaleString("en-PH")} first-time eligible homeowners matching the current filters?`}
         >Select & send all {eligibleFilteredCount.toLocaleString("en-PH")} eligible matching filters</HomeownerActivationBulkSubmitButton>
-        <p className="basis-full text-xs font-semibold text-slate-500">Select individual homeowners, use Select page, or send to all first-time eligible homeowners matching the current filters. The server resolves the final tenant-scoped recipient set and processes it in background batches. Previously invited homeowners are never silently reissued.</p>
+        <p className="basis-full text-xs font-semibold text-slate-500">First-time sending and reissue are separate actions. Reissue is selected-only for already invited or expired homeowners, and activated digital accounts are excluded.</p>
         <div className="basis-full rounded-xl bg-slate-50 p-3">
           <p className="text-xs font-black uppercase tracking-wider text-slate-500">Current filter confirmation preview</p>
           <div className="mt-2 grid gap-2 sm:grid-cols-3 xl:grid-cols-6">
@@ -149,13 +154,14 @@ export default async function HomeownersPage({ searchParams }: { searchParams: P
           </div>
         </div>
       </div>
-      <div className="table-wrap"><table className="data-table min-w-[1150px]"><thead><tr><th><HomeownerActivationPageSelectAll formId={activationBulkFormId} /></th><th>Homeowner</th><th>Masked Account</th><th>Property</th><th>Monthly dues</th><th>Operational Status</th><th>Digital Account Activation</th><th>Latest Delivery</th><th></th></tr></thead><tbody>
+      <div className="table-wrap"><table className="data-table min-w-[1200px]"><thead><tr><th><div className="grid gap-2"><HomeownerActivationPageSelectAll formId={activationBulkFormId} label="First-time page" ariaLabel="Select all first-time eligible homeowners on this page" /><HomeownerActivationPageSelectAll formId={activationBulkFormId} inputName="reissueHomeownerId" label="Reissue page" ariaLabel="Select all reissue eligible homeowners on this page" /></div></th><th>Homeowner</th><th>Masked Account</th><th>Property</th><th>Monthly dues</th><th>Operational Status</th><th>Digital Account Activation</th><th>Latest Delivery</th><th></th></tr></thead><tbody>
       {homeowners.map((homeowner) => {
         const accountNumber = homeownerAccountNumber(homeowner);
         const eligibility = homeownerDigitalActivationEligibility(homeowner);
+        const reissueEligibility = homeownerActivationReissueEligibility(homeowner);
         const expiration = activationInvitationExpiresAt(homeowner);
         const delivery = latestDeliveryByUserId.get(homeowner.userId) ?? null;
-        return <tr key={homeowner.id}><td>{eligibility.eligible && <input aria-label={`Select ${homeowner.user.name}`} name="homeownerId" type="checkbox" value={homeowner.id} />}</td><td><p className="font-bold">{homeowner.user.name}</p><p className="text-xs text-slate-400">{maskEmail(homeowner.user.email)}</p></td><td className="font-mono text-xs font-bold">{maskAccountNumber(accountNumber)}</td><td>Block {homeowner.block}, Lot {homeowner.lot}</td><td className="font-bold">{money(homeowner.monthlyDuesAmount)}</td><td><StatusBadge status={homeowner.status} /></td><td><p className="font-bold">{digitalActivationLabel(homeowner.activationStatus)}</p><p className="text-xs text-slate-400">{emailLabel(homeowner.emailStatus)}</p><p className="text-xs text-slate-400">Sent: {homeowner.activationSentAt ? homeowner.activationSentAt.toLocaleDateString("en-PH") : "Not sent"}</p><p className="text-xs text-slate-400">Expires: {expiration ? expiration.toLocaleDateString("en-PH") : "Not set"}</p><p className={`mt-1 text-xs font-semibold ${eligibility.eligible ? "text-emerald-700" : "text-slate-400"}`}>{eligibility.reason}</p></td><td><p className="font-bold">{deliveryStatusLabel(delivery)}</p>{delivery?.errorMessage && <p className="text-xs text-rose-600">{delivery.errorMessage}</p>}</td><td className="text-right"><Link className="font-bold text-pine-600 hover:underline" href={`/admin/homeowners/${homeowner.id}`}>View & edit</Link></td></tr>;
+        return <tr key={homeowner.id}><td><div className="grid gap-2">{eligibility.eligible && <label className="inline-flex items-center gap-2 text-[11px] font-bold text-emerald-700"><input aria-label={`Select ${homeowner.user.name} for first-time activation`} name="homeownerId" type="checkbox" value={homeowner.id} /> First-time</label>}{reissueEligibility.eligible && <label className="inline-flex items-center gap-2 text-[11px] font-bold text-amber-700"><input aria-label={`Select ${homeowner.user.name} for activation reissue`} name="reissueHomeownerId" type="checkbox" value={homeowner.id} /> Reissue</label>}</div></td><td><p className="font-bold">{homeowner.user.name}</p><p className="text-xs text-slate-400">{maskEmail(homeowner.user.email)}</p></td><td className="font-mono text-xs font-bold">{maskAccountNumber(accountNumber)}</td><td>Block {homeowner.block}, Lot {homeowner.lot}</td><td className="font-bold">{money(homeowner.monthlyDuesAmount)}</td><td><StatusBadge status={homeowner.status} /></td><td><p className="font-bold">{digitalActivationLabel(homeowner.activationStatus)}</p><p className="text-xs text-slate-400">{emailLabel(homeowner.emailStatus)}</p><p className="text-xs text-slate-400">Sent: {homeowner.activationSentAt ? homeowner.activationSentAt.toLocaleDateString("en-PH") : "Not sent"}</p><p className="text-xs text-slate-400">Expires: {expiration ? expiration.toLocaleDateString("en-PH") : "Not set"}</p><p className={`mt-1 text-xs font-semibold ${eligibility.eligible ? "text-emerald-700" : reissueEligibility.eligible ? "text-amber-700" : "text-slate-400"}`}>{eligibility.eligible ? eligibility.reason : reissueEligibility.reason}</p></td><td><p className="font-bold">{deliveryStatusLabel(delivery)}</p>{delivery?.errorMessage && <p className="text-xs text-rose-600">{delivery.errorMessage}</p>}</td><td className="text-right"><Link className="font-bold text-pine-600 hover:underline" href={`/admin/homeowners/${homeowner.id}`}>View & edit</Link></td></tr>;
       })}
       {!homeowners.length && <tr><td colSpan={9} className="py-12 text-center text-slate-500">No homeowners match the selected filters.</td></tr>}
     </tbody></table></div>

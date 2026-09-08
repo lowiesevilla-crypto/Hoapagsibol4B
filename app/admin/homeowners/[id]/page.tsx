@@ -10,7 +10,7 @@ import { cancelHomeownerActivationAction, deleteHomeownerAction, disableHomeowne
 import { requireUser } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { homeownerAccountNumber } from "@/lib/homeowner-account";
-import { activationInvitationExpiresAt, deliveryStatusLabel, digitalActivationLabel, homeownerDigitalActivationEligibility, homeownerHasCompletedDigitalActivation, maskAccountNumber, maskEmail, type HomeownerDeliveryStatus } from "@/lib/services/homeowner-digital-activation";
+import { activationInvitationExpiresAt, deliveryStatusLabel, digitalActivationLabel, homeownerActivationReissueEligibility, homeownerDigitalActivationEligibility, homeownerHasCompletedDigitalActivation, maskAccountNumber, maskEmail, type HomeownerDeliveryStatus } from "@/lib/services/homeowner-digital-activation";
 import { canValidateHouseholdMembers, householdMemberEligibility, householdMemberValidationLabel, householdMemberValidationStatus } from "@/lib/services/household-member-eligibility";
 import { shortDate } from "@/lib/utils";
 
@@ -42,6 +42,7 @@ export default async function EditHomeownerPage({ params, searchParams }: { para
   const activationComplete = homeownerHasCompletedDigitalActivation(homeowner);
   const digitallyDisabled = homeowner.activationStatus === "DISABLED" || !homeowner.user.active;
   const activationEligibility = homeownerDigitalActivationEligibility(homeowner);
+  const reissueEligibility = homeownerActivationReissueEligibility(homeowner);
   const invitationExpiration = activationInvitationExpiresAt(homeowner);
   const [latestDelivery, latestCredential, activeSessionCount, latestDisabledAudit] = await Promise.all([
     prisma.notificationLog.findFirst({
@@ -93,9 +94,8 @@ export default async function EditHomeownerPage({ params, searchParams }: { para
       {digitallyDisabled ? <p className="mb-4 rounded-xl bg-amber-50 p-3 text-sm font-semibold text-amber-900">Digital Access Disabled. Enable digital access to restore the appropriate recovery path for this homeowner.</p> : <p className={`mb-4 rounded-xl p-3 text-sm font-semibold ${activationEligibility.eligible ? "bg-emerald-50 text-emerald-800" : homeowner.user.email.trim() ? "bg-slate-50 text-slate-600" : "bg-amber-50 text-amber-800"}`}>{activationEligibility.reason}</p>}
       {latestDelivery?.status === "FAILED" && <p className="mb-4 rounded-xl bg-rose-50 p-3 text-sm font-semibold text-rose-700">Latest activation email delivery failed. Review Mail Settings or server email logs, then retry.</p>}
       <div className="flex flex-wrap gap-3">
-        {!digitallyDisabled && !activationComplete && activationEligibility.eligible && !homeowner.activationSentAt && <form action={sendHomeownerActivationInvitationAction}><input type="hidden" name="id" value={homeowner.id} /><ConfirmSubmitButton className="btn-primary" message="Send first-time activation invitation?">Send Activation Invitation</ConfirmSubmitButton></form>}
-        {!digitallyDisabled && !activationComplete && activationEligibility.eligible && homeowner.activationSentAt && <form action={sendHomeownerActivationInvitationAction}><input type="hidden" name="id" value={homeowner.id} /><ConfirmSubmitButton className="btn-primary" message="Resend activation invitation?">Resend Invitation</ConfirmSubmitButton></form>}
-        {!digitallyDisabled && !activationComplete && activationEligibility.eligible && <form action={regenerateHomeownerActivationAction}><input type="hidden" name="id" value={homeowner.id} /><ConfirmSubmitButton className="btn-secondary" message="Regenerate the temporary password and email a fresh activation invitation?">Regenerate & Email Activation</ConfirmSubmitButton></form>}
+        {!digitallyDisabled && !activationComplete && activationEligibility.eligible && <form action={sendHomeownerActivationInvitationAction}><input type="hidden" name="id" value={homeowner.id} /><ConfirmSubmitButton className="btn-primary" message="Send first-time activation invitation?">Send Activation Invitation</ConfirmSubmitButton></form>}
+        {!digitallyDisabled && !activationComplete && reissueEligibility.eligible && <form action={regenerateHomeownerActivationAction}><input type="hidden" name="id" value={homeowner.id} /><ConfirmSubmitButton className="btn-secondary" message="Explicitly revoke unused activation credentials and email a fresh activation invitation?">Reissue Activation Invitation</ConfirmSubmitButton></form>}
         {!digitallyDisabled && !activationComplete && homeowner.activationStatus !== "CANCELLED" && <form action={cancelHomeownerActivationAction}><input type="hidden" name="id" value={homeowner.id} /><ConfirmSubmitButton className="btn-secondary" message="Cancel activation and revoke unused temporary credentials?">Cancel Activation</ConfirmSubmitButton></form>}
         {!digitallyDisabled && activationComplete && <form action={sendHomeownerPasswordResetEmailAction}><input type="hidden" name="id" value={homeowner.id} /><ConfirmSubmitButton className="btn-secondary" message="Send a password reset email to the registered homeowner email?">Send Password Reset</ConfirmSubmitButton></form>}
         {!digitallyDisabled && activationComplete && <form action={revokeHomeownerDigitalSessionsAction}><input type="hidden" name="id" value={homeowner.id} /><ConfirmSubmitButton className="btn-secondary" message="Revoke active sessions for this homeowner?">Revoke Sessions</ConfirmSubmitButton></form>}
@@ -103,6 +103,7 @@ export default async function EditHomeownerPage({ params, searchParams }: { para
         {digitallyDisabled && <form action={enableHomeownerDigitalAccessAction}><input type="hidden" name="id" value={homeowner.id} /><input type="hidden" name="reason" value="Digital access enabled by HOA administrator from homeowner profile." /><ConfirmSubmitButton className="btn-primary" message="Enable digital access? The homeowner must sign in again, and no session will be created automatically.">Enable Digital Access</ConfirmSubmitButton></form>}
       </div>
       {!digitallyDisabled && !activationEligibility.eligible && !activationComplete && <ActionHint>{homeowner.user.email.trim() ? "Resolve the eligibility reason above before sending an activation invitation." : "Activation unavailable. A registered email is required before a first-time invitation can be sent."}</ActionHint>}
+      {!digitallyDisabled && reissueEligibility.eligible && !activationComplete && <ActionHint>Reissue is separate from first-time sending. It revokes unused activation credentials and creates a fresh invitation only after admin confirmation.</ActionHint>}
       {!digitallyDisabled && activationComplete && activeSessionCount === 0 && <ActionHint>Digital access is active. This homeowner must sign in again before a new session exists.</ActionHint>}
       {!digitallyDisabled && activationComplete && activeSessionCount > 0 && <ActionHint>This homeowner has completed first-time activation. Use password-reset email or session revocation for account recovery and security support.</ActionHint>}
       {digitallyDisabled && <ActionHint>The recovery action is available above. Enabling a completed account preserves its password and passkeys; enabling an uncompleted account restores invitation eligibility.</ActionHint>}

@@ -50,7 +50,23 @@ export function homeownerDigitalActivationEligibility(homeowner: HomeownerDigita
   if (!/^[1-9][0-9]{10}$/.test(homeowner.accountNumber || "")) return { eligible: false, reason: "Valid 11-digit account number is missing." };
   if (homeownerHasCompletedDigitalActivation(homeowner)) return { eligible: false, reason: "Digital account is already activated." };
   if (homeowner.activationStatus === HomeownerActivationStatus.DISABLED) return { eligible: false, reason: "Digital access is disabled." };
+  if (homeowner.activationStatus === HomeownerActivationStatus.CANCELLED) return { eligible: false, reason: "Activation invitation was cancelled. Use the explicit reissue action if a replacement invitation is required." };
+  if (homeowner.activationSentAt || homeowner.activationStatus !== HomeownerActivationStatus.NOT_INVITED) {
+    return { eligible: false, reason: "Activation invitation was already issued. Use the explicit resend/reissue action if a replacement is required." };
+  }
   return { eligible: true, reason: "Eligible for first-time digital activation invitation." };
+}
+
+export function homeownerActivationReissueEligibility(homeowner: HomeownerDigitalActivationProfile) {
+  if (homeowner.tenantId === "") return { eligible: false, reason: "Homeowner tenant is missing." };
+  if (homeowner.status !== "ACTIVE") return { eligible: false, reason: "Operational homeowner record is not active." };
+  if (!homeowner.user.active) return { eligible: false, reason: "Digital user access is disabled." };
+  if (!hasHomeownerContactEmail(homeowner.user.email)) return { eligible: false, reason: "Registered email is missing." };
+  if (!/^[1-9][0-9]{10}$/.test(homeowner.accountNumber || "")) return { eligible: false, reason: "Valid 11-digit account number is missing." };
+  if (homeownerHasCompletedDigitalActivation(homeowner)) return { eligible: false, reason: "Digital account is already activated. Use password reset for account recovery." };
+  if (homeowner.activationStatus === HomeownerActivationStatus.DISABLED) return { eligible: false, reason: "Digital access is disabled." };
+  if (homeowner.activationStatus === HomeownerActivationStatus.NOT_INVITED && !homeowner.activationSentAt) return { eligible: false, reason: "Use first-time activation invitation for never-invited homeowners." };
+  return { eligible: true, reason: "Eligible for explicit activation reissue." };
 }
 
 export function nextInvitationStatus(current: HomeownerActivationStatus | string) {
@@ -83,7 +99,7 @@ export function maskAccountNumber(value?: string | null) {
 
 export function deliveryStatusLabel(delivery: HomeownerDeliveryStatus) {
   if (!delivery) return "No delivery attempt";
-  if (delivery.status === "SENT") return delivery.sentAt ? `Sent ${delivery.sentAt.toLocaleDateString("en-PH")}` : "Sent";
+  if (delivery.status === "SENT") return delivery.sentAt ? `Provider accepted ${delivery.sentAt.toLocaleDateString("en-PH")}` : "Provider accepted";
   if (delivery.status === "FAILED") return "Failed";
   return String(delivery.status).replaceAll("_", " ").toLowerCase().replace(/\b\w/g, (char) => char.toUpperCase());
 }

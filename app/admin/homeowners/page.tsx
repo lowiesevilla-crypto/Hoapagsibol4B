@@ -1,11 +1,14 @@
+import { randomUUID } from "node:crypto";
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { HomeownerActivationStatus, HomeownerStatus, NotificationType, Prisma, Role } from "@prisma/client";
 import { ChevronLeft, ChevronRight, Plus } from "lucide-react";
+import { HomeownerActivationBulkProgress } from "@/components/homeowner-activation-bulk-progress";
+import { HomeownerActivationBulkSubmitButton } from "@/components/homeowner-activation-bulk-submit-button";
+import { HomeownerActivationPageSelectAll } from "@/components/homeowner-activation-page-select-all";
 import { PageHeader } from "@/components/page-header";
 import { StatusBadge } from "@/components/status-badge";
-import { ConfirmSubmitButton } from "@/components/ui";
-import { bulkSendHomeownerActivationInvitationsAction } from "@/lib/actions/homeowners";
+import { queueHomeownerActivationBulkJobAction } from "@/lib/actions/homeowner-activation-bulk";
 import { requireUser } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { homeownerAccountNumber } from "@/lib/homeowner-account";
@@ -19,9 +22,11 @@ type HomeownerQuery = {
   digital?: string;
   page?: string;
   pageSize?: string;
+  activationJob?: string;
 };
 
 const pageSizes = [25, 50, 100];
+const activationBulkFormId = "homeowner-activation-bulk-form";
 const digitalFilters = [
   ["all", "All"],
   ["not_invited", "Not Invited"],
@@ -53,11 +58,14 @@ export default async function HomeownersPage({ searchParams }: { searchParams: P
     homeownerSearchWhere(query.q || ""),
   ].filter((part) => Object.keys(part).length);
   const filteredWhere: Prisma.HomeownerProfileWhereInput = { AND: filterParts };
+  const filteredEligibleWhere: Prisma.HomeownerProfileWhereInput = { AND: [filteredWhere, eligibleWhere()] };
   const skip = (page - 1) * pageSize;
+  const idempotencyKey = randomUUID();
 
-  const [totalCount, filteredCount, homeowners, summary] = await Promise.all([
+  const [totalCount, filteredCount, eligibleFilteredCount, homeowners, summary, confirmationBreakdown] = await Promise.all([
     prisma.homeownerProfile.count({ where: baseWhere }),
     prisma.homeownerProfile.count({ where: filteredWhere }),
+    prisma.homeownerProfile.count({ where: filteredEligibleWhere }),
     prisma.homeownerProfile.findMany({
       where: filteredWhere,
       include: { user: true, _count: { select: { bills: true } } },
@@ -66,6 +74,7 @@ export default async function HomeownersPage({ searchParams }: { searchParams: P
       take: pageSize,
     }),
     homeownerSummary(user.tenantId),
+    homeownerActivationConfirmationBreakdown(filteredWhere),
   ]);
   const recipientIds = homeowners.map((homeowner) => homeowner.userId);
   const deliveryLogs = recipientIds.length ? await prisma.notificationLog.findMany({
@@ -90,6 +99,8 @@ export default async function HomeownersPage({ searchParams }: { searchParams: P
       <SummaryCard label="Disabled / Suspended Digital Access" value={summary.disabled} />
     </section>
 
+    <HomeownerActivationBulkProgress jobId={query.activationJob} />
+
     <form className="card mb-5 grid gap-3 md:grid-cols-2 xl:grid-cols-[1fr_180px_240px_150px_auto]">
       <input aria-label="Search homeowners" className="field" name="q" type="search" defaultValue={query.q || ""} placeholder="Search name, email, account number, block or lot" />
       <select aria-label="Operational status" className="field" name="status" defaultValue={operationalStatus}>
@@ -106,12 +117,39 @@ export default async function HomeownersPage({ searchParams }: { searchParams: P
       <div className="flex gap-2"><button className="btn-primary">Apply</button><Link className="btn-secondary" href="/admin/homeowners">Reset</Link></div>
     </form>
 
-    <form action={bulkSendHomeownerActivationInvitationsAction}>
-      <div className="mb-4 flex flex-wrap gap-3 rounded-xl border bg-white p-3">
-        <ConfirmSubmitButton className="btn-primary min-h-9 px-3 py-1.5 text-xs" name="mode" value="selected" message="Send activation invitations to selected eligible homeowners?">Send to selected eligible homeowners</ConfirmSubmitButton>
-        <p className="text-xs font-semibold text-slate-500">Only checked eligible homeowners on this page will be processed. Ineligible records remain visible with a reason.</p>
+    <form id={activationBulkFormId} action={queueHomeownerActivationBulkJobAction}>
+      <input type="hidden" name="idempotencyKey" value={idempotencyKey} />
+      <input type="hidden" name="q" value={query.q || ""} />
+      <input type="hidden" name="status" value={operationalStatus} />
+      <input type="hidden" name="digital" value={digitalFilter} />
+      <input type="hidden" name="page" value={safePage} />
+      <input type="hidden" name="pageSize" value={pageSize} />
+      <div className="mb-4 flex flex-wrap items-center gap-3 rounded-xl border bg-white p-3">
+        <HomeownerActivationBulkSubmitButton
+          mode="selected"
+          className="btn-primary min-h-9 px-3 py-1.5 text-xs"
+          message="Queue activation invitations for the selected first-time eligible homeowners?"
+        >Send selected eligible</HomeownerActivationBulkSubmitButton>
+        <HomeownerActivationBulkSubmitButton
+          mode="filtered"
+          className="btn-secondary min-h-9 px-3 py-1.5 text-xs"
+          disabled={eligibleFilteredCount === 0}
+          message={`Queue activation invitations for all ${eligibleFilteredCount.toLocaleString("en-PH")} first-time eligible homeowners matching the current filters?`}
+        >Select & send all {eligibleFilteredCount.toLocaleString("en-PH")} eligible matching filters</HomeownerActivationBulkSubmitButton>
+        <p className="basis-full text-xs font-semibold text-slate-500">Select individual homeowners, use Select page, or send to all first-time eligible homeowners matching the current filters. The server resolves the final tenant-scoped recipient set and processes it in background batches. Previously invited homeowners are never silently reissued.</p>
+        <div className="basis-full rounded-xl bg-slate-50 p-3">
+          <p className="text-xs font-black uppercase tracking-wider text-slate-500">Current filter confirmation preview</p>
+          <div className="mt-2 grid gap-2 sm:grid-cols-3 xl:grid-cols-6">
+            <PreviewCount label="Eligible" value={confirmationBreakdown.eligible} tone="text-emerald-700" />
+            <PreviewCount label="Already invited" value={confirmationBreakdown.alreadyInvited} />
+            <PreviewCount label="Activated" value={confirmationBreakdown.activated} />
+            <PreviewCount label="Missing email" value={confirmationBreakdown.missingEmail} tone="text-amber-700" />
+            <PreviewCount label="Disabled" value={confirmationBreakdown.disabled} tone="text-rose-700" />
+            <PreviewCount label="Other blocked" value={confirmationBreakdown.otherBlocked} />
+          </div>
+        </div>
       </div>
-      <div className="table-wrap"><table className="data-table min-w-[1150px]"><thead><tr><th></th><th>Homeowner</th><th>Masked Account</th><th>Property</th><th>Monthly dues</th><th>Operational Status</th><th>Digital Account Activation</th><th>Latest Delivery</th><th></th></tr></thead><tbody>
+      <div className="table-wrap"><table className="data-table min-w-[1150px]"><thead><tr><th><HomeownerActivationPageSelectAll formId={activationBulkFormId} /></th><th>Homeowner</th><th>Masked Account</th><th>Property</th><th>Monthly dues</th><th>Operational Status</th><th>Digital Account Activation</th><th>Latest Delivery</th><th></th></tr></thead><tbody>
       {homeowners.map((homeowner) => {
         const accountNumber = homeownerAccountNumber(homeowner);
         const eligibility = homeownerDigitalActivationEligibility(homeowner);
@@ -153,7 +191,8 @@ function eligibleWhere(): Prisma.HomeownerProfileWhereInput {
   return {
     status: HomeownerStatus.ACTIVE,
     accountNumber: { not: null },
-    activationStatus: { notIn: [HomeownerActivationStatus.ACTIVE, HomeownerActivationStatus.CANCELLED, HomeownerActivationStatus.DISABLED] },
+    activationStatus: HomeownerActivationStatus.NOT_INVITED,
+    activationSentAt: null,
     user: { active: true, email: { not: "" } },
   };
 }
@@ -170,8 +209,48 @@ async function homeownerSummary(tenantId: string) {
   return { total, eligible, invitationSent, activated, missingEmail, disabled };
 }
 
+async function homeownerActivationConfirmationBreakdown(filteredWhere: Prisma.HomeownerProfileWhereInput) {
+  const disabledWhere: Prisma.HomeownerProfileWhereInput = { OR: [{ status: HomeownerStatus.INACTIVE }, { activationStatus: HomeownerActivationStatus.DISABLED }, { user: { active: false } }] };
+  const missingEmailWhere: Prisma.HomeownerProfileWhereInput = { user: { active: true, email: "" } };
+  const activatedWhere: Prisma.HomeownerProfileWhereInput = { user: { active: true }, activationStatus: HomeownerActivationStatus.ACTIVE };
+  const alreadyInvitedWhere: Prisma.HomeownerProfileWhereInput = {
+    user: { active: true, email: { not: "" } },
+    activationStatus: {
+      in: [
+        HomeownerActivationStatus.INVITATION_SENT,
+        HomeownerActivationStatus.PENDING_ACTIVATION,
+        HomeownerActivationStatus.ACTIVATION_IN_PROGRESS,
+        HomeownerActivationStatus.EMAIL_PENDING_VERIFICATION,
+        HomeownerActivationStatus.PASSWORD_CREATION_REQUIRED,
+        HomeownerActivationStatus.EXPIRED,
+        HomeownerActivationStatus.CANCELLED,
+      ],
+    },
+  };
+  const buckets = [
+    eligibleWhere(),
+    disabledWhere,
+    missingEmailWhere,
+    activatedWhere,
+    alreadyInvitedWhere,
+  ];
+  const [eligible, disabled, missingEmail, activated, alreadyInvited, otherBlocked] = await Promise.all([
+    prisma.homeownerProfile.count({ where: { AND: [filteredWhere, eligibleWhere()] } }),
+    prisma.homeownerProfile.count({ where: { AND: [filteredWhere, disabledWhere] } }),
+    prisma.homeownerProfile.count({ where: { AND: [filteredWhere, { NOT: [disabledWhere] }, missingEmailWhere] } }),
+    prisma.homeownerProfile.count({ where: { AND: [filteredWhere, { NOT: [disabledWhere, missingEmailWhere] }, activatedWhere] } }),
+    prisma.homeownerProfile.count({ where: { AND: [filteredWhere, { NOT: [disabledWhere, missingEmailWhere, activatedWhere] }, alreadyInvitedWhere] } }),
+    prisma.homeownerProfile.count({ where: { AND: [filteredWhere, { NOT: buckets }] } }),
+  ]);
+  return { eligible, alreadyInvited, activated, missingEmail, disabled, otherBlocked };
+}
+
 function SummaryCard({ label, value }: { label: string; value: number }) {
   return <div className="rounded-xl border bg-white p-4"><p className="text-xs font-black uppercase tracking-wider text-slate-400">{label}</p><p className="mt-2 text-2xl font-black text-pine-800">{value.toLocaleString("en-PH")}</p></div>;
+}
+
+function PreviewCount({ label, value, tone = "text-slate-700" }: { label: string; value: number; tone?: string }) {
+  return <div className="rounded-lg bg-white px-3 py-2"><p className="text-[11px] font-bold uppercase tracking-wider text-slate-400">{label}</p><p className={`mt-1 text-lg font-black ${tone}`}>{value.toLocaleString("en-PH")}</p></div>;
 }
 
 function PaginationLink({ children, disabled, query, page }: { children: ReactNode; disabled: boolean; query: HomeownerQuery; page: number }) {

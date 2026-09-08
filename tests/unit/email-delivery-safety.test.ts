@@ -8,6 +8,8 @@ import {
 } from "../../lib/services/email-delivery-safety";
 
 const notifications = readFileSync("lib/services/notifications.ts", "utf8");
+const deliverability = readFileSync("lib/services/email-deliverability.ts", "utf8");
+const settingsPage = readFileSync("app/admin/settings/page.tsx", "utf8");
 const platformInvoiceEmail = readFileSync("lib/services/platform-invoice-email.ts", "utf8");
 const workerRoute = readFileSync("app/api/cron/email-delivery/route.ts", "utf8");
 const scheduler = readFileSync(".github/workflows/email-delivery-scheduler.yml", "utf8");
@@ -73,4 +75,14 @@ test("protected queue endpoint and scheduler are tenant-bounded and fail closed 
   assert.match(workerRoute, /EMAIL_BULK_DELIVERY_ENABLED === "true"/);
   assert.match(scheduler, /api\/cron\/email-delivery/);
   assert.match(scheduler, /cancel-in-progress: false/);
+});
+
+test("mail settings surface deliverability authentication before bulk activation rollout", () => {
+  assert.match(deliverability, /resolveTxt/);
+  assert.match(deliverability, /SPF/);
+  assert.match(deliverability, /DKIM/);
+  assert.match(deliverability, /DMARC/);
+  assert.match(settingsPage, /assessEmailDeliverability/);
+  assert.match(settingsPage, /Inbox placement readiness/);
+  assert.match(settingsPage, /Do not enable bulk activation delivery/);
 });

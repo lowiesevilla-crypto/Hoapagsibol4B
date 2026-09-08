@@ -12,7 +12,7 @@ import { homeownerAccountNumber } from "@/lib/homeowner-account";
 import { homeownerSchema } from "@/lib/validation";
 import { generateUniqueHomeownerAccountNumber } from "@/lib/services/homeowner-account-number";
 import { createHomeownerActivationCredential, sendHomeownerActivationEmail } from "@/lib/services/homeowner-activation";
-import { homeownerDigitalActivationEligibility, maskAccountNumber, nextInvitationStatus } from "@/lib/services/homeowner-digital-activation";
+import { homeownerActivationReissueEligibility, homeownerDigitalActivationEligibility, maskAccountNumber, nextInvitationStatus } from "@/lib/services/homeowner-digital-activation";
 import { sendEmailNotification } from "@/lib/services/notifications";
 import { getPasswordPolicy } from "@/lib/system-settings";
 import { runWithTenant } from "@/lib/tenant-context";
@@ -197,7 +197,7 @@ export async function deleteHomeownerAction(formData: FormData) {
 export async function regenerateHomeownerActivationAction(formData: FormData) {
   const admin = await requireHomeownerActivationAdmin();
   const id = String(formData.get("id") || "");
-  const result = await sendActivationInvitation(admin, id, "HOMEOWNER_ACTIVATION_REGENERATED");
+  const result = await sendActivationInvitation(admin, id, "HOMEOWNER_ACTIVATION_REISSUED", "reissue");
   if (!result.ok) throw new Error(result.reason);
   revalidatePath("/admin/homeowners");
   revalidatePath(`/admin/homeowners/${id}`);
@@ -207,7 +207,7 @@ export async function regenerateHomeownerActivationAction(formData: FormData) {
 export async function sendHomeownerActivationInvitationAction(formData: FormData) {
   const admin = await requireHomeownerActivationAdmin();
   const id = String(formData.get("id") || "");
-  const result = await sendActivationInvitation(admin, id, "HOMEOWNER_ACTIVATION_INVITATION_SENT");
+  const result = await sendActivationInvitation(admin, id, "HOMEOWNER_ACTIVATION_INVITATION_SENT", "firstTime");
   if (!result.ok) throw new Error(result.reason);
   revalidatePath("/admin/homeowners");
   revalidatePath(`/admin/homeowners/${id}`);
@@ -438,7 +438,7 @@ export async function bulkSendHomeownerActivationInvitationsAction(formData: For
   for (let index = 0; index < homeowners.length; index += BULK_INVITATION_BATCH_SIZE) {
     const batch = homeowners.slice(index, index + BULK_INVITATION_BATCH_SIZE);
     for (const homeowner of batch) {
-      const result = await sendActivationInvitation(admin, homeowner.id, "HOMEOWNER_ACTIVATION_BULK_INVITATION_SENT", homeowner);
+      const result = await sendActivationInvitation(admin, homeowner.id, "HOMEOWNER_ACTIVATION_BULK_INVITATION_SENT", "firstTime", homeowner);
       if (result.ok) sent++;
       else if (result.skipped) skipped++;
       else failed++;
@@ -464,11 +464,12 @@ async function sendActivationInvitation(
   admin: { id: string; tenantId: string },
   homeownerId: string,
   auditAction: string,
+  mode: "firstTime" | "reissue",
   loadedProfile?: Prisma.HomeownerProfileGetPayload<{ include: { user: true } }>,
 ) {
   const profile = loadedProfile ?? await prisma.homeownerProfile.findFirst({ where: { id: homeownerId, tenantId: admin.tenantId }, include: { user: true } });
   if (!profile) return { ok: false, skipped: true, reason: "Homeowner not found." } as const;
-  const eligibility = homeownerDigitalActivationEligibility(profile);
+  const eligibility = mode === "firstTime" ? homeownerDigitalActivationEligibility(profile) : homeownerActivationReissueEligibility(profile);
   if (!eligibility.eligible) return { ok: false, skipped: true, reason: eligibility.reason } as const;
   const accountNumber = homeownerAccountNumber(profile);
   try {
@@ -486,12 +487,12 @@ async function sendActivationInvitation(
           action: auditAction,
           entityType: "User",
           entityId: profile.userId,
-          metadata: { homeownerId: profile.id, accountMasked: maskAccountNumber(accountNumber) },
+          metadata: { homeownerId: profile.id, accountMasked: maskAccountNumber(accountNumber), activationSendMode: mode },
         },
       });
       return created;
     });
-    await sendHomeownerActivationEmail({
+    const notification = await sendHomeownerActivationEmail({
       tenantId: admin.tenantId,
       userId: profile.userId,
       name: profile.user.name,
@@ -502,7 +503,31 @@ async function sendActivationInvitation(
       expiresAt: activation.expiresAt,
       actorId: admin.id,
     });
-    return { ok: true } as const;
+    const deliveryStatus = "status" in notification ? notification.status : NotificationStatus.FAILED;
+    if (deliveryStatus === NotificationStatus.SENT) return { ok: true } as const;
+    await prisma.auditLog.create({
+      data: {
+        tenantId: admin.tenantId,
+        actorId: admin.id,
+        module: "AUTH",
+        action: "HOMEOWNER_ACTIVATION_INVITATION_DELIVERY_NOT_ACCEPTED",
+        entityType: "User",
+        entityId: profile.userId,
+        metadata: {
+          homeownerId: profile.id,
+          notificationId: notification.id,
+          status: deliveryStatus,
+          errorCategory: activationInvitationDeliveryErrorCategory("errorMessage" in notification ? notification.errorMessage : null),
+        },
+      },
+    });
+    return {
+      ok: false,
+      skipped: deliveryStatus === NotificationStatus.SKIPPED,
+      reason: deliveryStatus === NotificationStatus.SKIPPED
+        ? "Activation email was skipped by delivery safety controls. Review the homeowner email and mail settings before retrying."
+        : "Activation email was not accepted by the configured provider. Review Mail Settings before retrying.",
+    } as const;
   } catch (error) {
     await prisma.auditLog.create({
       data: {
@@ -536,6 +561,15 @@ function passwordResetFingerprint(value: string) {
 function safeDigitalAccessReason(value: FormDataEntryValue | null, fallback: string) {
   const text = String(value || "").replace(/[\r\n\t]+/g, " ").replace(/\s+/g, " ").trim();
   return (text || fallback).slice(0, 240);
+}
+
+function activationInvitationDeliveryErrorCategory(message?: string | null) {
+  const normalized = String(message || "").toLowerCase();
+  if (!normalized) return null;
+  if (normalized.includes("suppressed")) return "RECIPIENT_SUPPRESSED";
+  if (normalized.includes("inactive") || normalized.includes("outside the tenant")) return "RECIPIENT_SCOPE";
+  if (normalized.includes("configured") || normalized.includes("smtp")) return "MAIL_CONFIGURATION";
+  return "DELIVERY_NOT_ACCEPTED";
 }
 
 function passwordResetEmailErrorCategory(message: string) {

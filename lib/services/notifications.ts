@@ -144,6 +144,7 @@ function debugMailConfiguration(operation: "send" | "verify", config: MailConfig
 
 export async function sendEmailNotification(input: EmailInput) {
   const validation = validateEmailRecipient(input.email);
+  const metadataActionUrl = notificationMetadataActionUrl(input.type, input.actionUrl);
   const baseMetadata: Record<string, unknown> = {
     deliverySafetyVersion: 1,
     emailFingerprint: validation.fingerprint,
@@ -151,7 +152,9 @@ export async function sendEmailNotification(input: EmailInput) {
     validationCode: validation.code,
     heading: input.heading || null,
     actionLabel: input.actionLabel || null,
-    actionUrl: input.actionUrl || null,
+    actionUrl: metadataActionUrl,
+    actionUrlRedacted: Boolean(input.actionUrl && !metadataActionUrl),
+    actionPath: redactedActionPath(input.actionUrl),
     retryAttempts: 0,
   };
 
@@ -415,6 +418,21 @@ export function emailHtml(input: Pick<EmailInput, "subject" | "message" | "headi
 
 function brandedEmailMessage(message: string, association: Awaited<ReturnType<typeof getAssociationSettings>>) {
   return `${message}\n\n--\n${association.name}${association.address ? `\n${association.address}` : ""}${association.contactNumber ? `\nContact: ${association.contactNumber}` : ""}${association.email ? `\nSupport: ${association.email}` : ""}`;
+}
+
+function notificationMetadataActionUrl(type: NotificationType, actionUrl?: string) {
+  if (!actionUrl) return null;
+  return QUEUED_NOTIFICATION_TYPES.has(type) ? actionUrl : null;
+}
+
+function redactedActionPath(actionUrl?: string) {
+  if (!actionUrl) return null;
+  try {
+    const parsed = new URL(actionUrl, getAppUrl());
+    return parsed.pathname;
+  } catch {
+    return null;
+  }
 }
 
 async function updateNotificationDelivery(tenantId: string, id: string, delivery: ProtectedRawEmailResult, metadata: Record<string, unknown>) {

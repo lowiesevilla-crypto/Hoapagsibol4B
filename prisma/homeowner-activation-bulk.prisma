@@ -1,0 +1,67 @@
+enum HomeownerActivationBulkJobStatus {
+  QUEUED
+  RUNNING
+  SUCCEEDED
+  PARTIAL
+  FAILED
+}
+
+enum HomeownerActivationBulkItemStatus {
+  PENDING
+  PROCESSING
+  ACCEPTED
+  SKIPPED
+  FAILED
+}
+
+enum HomeownerActivationBulkSelectionMode {
+  SELECTED
+  FILTERED
+}
+
+model HomeownerActivationBulkJob {
+  id              String                              @id @default(cuid())
+  tenantId        String
+  initiatedById   String
+  idempotencyKey  String
+  selectionMode   HomeownerActivationBulkSelectionMode
+  filterSnapshot  Json?
+  status          HomeownerActivationBulkJobStatus    @default(QUEUED)
+  totalTargets    Int                                 @default(0)
+  eligibleCount   Int                                 @default(0)
+  queuedCount     Int                                 @default(0)
+  processedCount  Int                                 @default(0)
+  acceptedCount   Int                                 @default(0)
+  skippedCount    Int                                 @default(0)
+  failedCount     Int                                 @default(0)
+  lastError       String?                             @db.Text
+  leaseOwner      String?
+  leaseExpiresAt  DateTime?
+  startedAt       DateTime?
+  completedAt     DateTime?
+  createdAt       DateTime                            @default(now())
+  updatedAt       DateTime                            @updatedAt
+
+  @@unique([tenantId, idempotencyKey])
+  @@index([tenantId, status, createdAt])
+  @@index([status, leaseExpiresAt])
+  @@index([tenantId, initiatedById, createdAt])
+}
+
+model HomeownerActivationBulkItem {
+  id              String                            @id @default(cuid())
+  tenantId        String
+  jobId           String
+  homeownerId     String
+  status          HomeownerActivationBulkItemStatus @default(PENDING)
+  notificationId  String?
+  reason          String?                           @db.Text
+  attemptedAt     DateTime?
+  completedAt     DateTime?
+  createdAt       DateTime                          @default(now())
+  updatedAt       DateTime                          @updatedAt
+
+  @@unique([tenantId, jobId, homeownerId])
+  @@index([tenantId, jobId, status, createdAt])
+  @@index([tenantId, homeownerId, status])
+}

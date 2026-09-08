@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 import { HomeownerActivationStatus, HomeownerEmailVerificationStatus, HomeownerStatus } from "@prisma/client";
 import {
+  homeownerActivationReissueEligibility,
   homeownerDigitalActivationEligibility,
   type HomeownerDigitalActivationProfile,
 } from "@/lib/services/homeowner-digital-activation";
@@ -54,6 +55,22 @@ test("first-time activation eligibility rejects activated and disabled homeowner
   })).eligible, false);
   assert.equal(homeownerDigitalActivationEligibility(homeowner({
     activationStatus: HomeownerActivationStatus.DISABLED,
+  })).eligible, false);
+});
+
+test("explicit activation reissue is separate from first-time eligibility", () => {
+  assert.equal(homeownerActivationReissueEligibility(homeowner()).eligible, false);
+  assert.equal(homeownerActivationReissueEligibility(homeowner({
+    activationStatus: HomeownerActivationStatus.EXPIRED,
+    activationSentAt: new Date(Date.now() - 8 * 24 * 60 * 60 * 1000),
+  })).eligible, true);
+  assert.equal(homeownerActivationReissueEligibility(homeowner({
+    activationStatus: HomeownerActivationStatus.CANCELLED,
+    activationSentAt: new Date(),
+  })).eligible, true);
+  assert.equal(homeownerActivationReissueEligibility(homeowner({
+    activationStatus: HomeownerActivationStatus.ACTIVE,
+    activatedAt: new Date(),
   })).eligible, false);
 });
 

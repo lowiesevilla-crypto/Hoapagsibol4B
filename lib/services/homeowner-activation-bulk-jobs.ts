@@ -21,6 +21,7 @@ const JOB_LEASE_MS = 2 * 60 * 1000;
 const DEFAULT_BATCH_SIZE = 25;
 const MAX_BATCH_SIZE = 100;
 const MAX_SELECTED_IDS = 100;
+const TARGET_RESOLUTION_BATCH_SIZE = 500;
 
 type FilterSnapshot = {
   q?: string;
@@ -294,8 +295,24 @@ async function resolveEligibleTargets(input: Omit<RequestJobInput, "idempotencyK
     where,
     select: { id: true },
     orderBy: { id: "asc" },
+    take: TARGET_RESOLUTION_BATCH_SIZE,
   });
-  return rows.map((row) => row.id);
+  const ids = rows.map((row) => row.id);
+  let cursor = ids.at(-1);
+  while (cursor && rows.length === TARGET_RESOLUTION_BATCH_SIZE) {
+    const nextRows = await prisma.homeownerProfile.findMany({
+      where,
+      select: { id: true },
+      orderBy: { id: "asc" },
+      cursor: { id: cursor },
+      skip: 1,
+      take: TARGET_RESOLUTION_BATCH_SIZE,
+    });
+    ids.push(...nextRows.map((row) => row.id));
+    cursor = nextRows.at(-1)?.id;
+    if (nextRows.length < TARGET_RESOLUTION_BATCH_SIZE) break;
+  }
+  return ids;
 }
 
 function firstTimeEligibilityWhere(tenantId: string, filters?: FilterSnapshot): Prisma.HomeownerProfileWhereInput {

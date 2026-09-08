@@ -20,13 +20,15 @@ test("onboarding template is versioned and never contains a password column", ()
   const template = onboardingHomeownerTemplateCsv();
   assert.equal(ONBOARDING_HOMEOWNER_COLUMNS.includes("accountNumber"), true);
   assert.equal(ONBOARDING_HOMEOWNER_COLUMNS.includes("openingBalance"), true);
+  assert.equal(ONBOARDING_HOMEOWNER_COLUMNS.includes("remarks"), true);
+  assert.equal(template.split("\n")[0].endsWith(",remarks"), true);
   assert.equal(template.split("\n")[0].includes("password"), false);
 });
 
-test("valid homeowner CSV parses quoted fields, cents, and optional opening balance", () => {
+test("valid homeowner CSV parses quoted fields, cents, optional opening balance, and remarks", () => {
   const csv = [
     ONBOARDING_HOMEOWNER_COLUMNS.join(","),
-    '"Juan, Jr.",juan@example.com,09171234567,"123 Main Street",4,12,Phase 1,HOUSE_AND_LOT,OWNER_OCCUPIED,ACTIVE,500.25,12345678901,1250.50,2026-07-31',
+    '"Juan, Jr.",juan@example.com,09171234567,"123 Main Street",4,12,Phase 1,HOUSE_AND_LOT,OWNER_OCCUPIED,ACTIVE,500.25,12345678901,1250.50,2026-07-31,"Legacy owner, board verified"',
   ].join("\n");
   const parsed = parseOnboardingHomeownerCsv(csv);
   assert.deepEqual(parsed.errors, []);
@@ -35,7 +37,27 @@ test("valid homeowner CSV parses quoted fields, cents, and optional opening bala
   assert.equal(parsed.rows[0].monthlyDuesAmount, 500.25);
   assert.equal(parsed.rows[0].openingBalance, 1250.5);
   assert.equal(parsed.rows[0].openingBalanceAsOf?.toISOString().slice(0, 10), "2026-07-31");
+  assert.equal(parsed.rows[0].remarks, "Legacy owner, board verified");
   assert.match(parsed.fileHash, /^[a-f0-9]{64}$/);
+});
+
+test("older onboarding v2.0 files without remarks remain accepted", () => {
+  const legacyColumns = ONBOARDING_HOMEOWNER_COLUMNS.filter((column) => column !== "remarks");
+  const csv = [
+    legacyColumns.join(","),
+    "Legacy Homeowner,legacy@example.com,09171234567,123 Main Street,4,12,Phase 1,HOUSE_AND_LOT,OWNER_OCCUPIED,ACTIVE,500.00,,0.00,",
+  ].join("\n");
+  const parsed = parseOnboardingHomeownerCsv(csv);
+  assert.deepEqual(parsed.errors, []);
+  assert.equal(parsed.rows.length, 1);
+  assert.equal(parsed.rows[0].remarks, null);
+});
+
+test("onboarding limits imported remarks to audit-safe length", () => {
+  const csv = [ONBOARDING_HOMEOWNER_COLUMNS.join(","), `Long Remarks,long@example.com,09171234567,123 Main Street,4,12,Phase 1,HOUSE_AND_LOT,OWNER_OCCUPIED,ACTIVE,500.00,,0.00,,${"x".repeat(1001)}`].join("\n");
+  const parsed = parseOnboardingHomeownerCsv(csv);
+  assert.equal(parsed.rows.length, 0);
+  assert.ok(parsed.errors.some((error) => error.field === "remarks" && /1,000/.test(error.message)));
 });
 
 test("blank homeowner email is accepted for later tenant-admin registration", () => {
@@ -65,6 +87,7 @@ test("onboarding accepts a client-scale file above 2,050 homeowners and keeps a 
     "500.00",
     "",
     "0.00",
+    "",
     "",
   ].join(",");
 

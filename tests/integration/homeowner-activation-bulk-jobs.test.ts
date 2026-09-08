@@ -233,6 +233,71 @@ test("failed-only activation retry creates a new job without accepted or skipped
   assert.deepEqual(retryItems.map((item) => item.homeownerId), [homeownerId(3)]);
 });
 
+test("selected activation reissue queues only previously invited homeowners who are not activated", async () => {
+  await platformPrisma.user.createMany({
+    data: [
+      { id: `${runId}-reissue-user-expired`, tenantId, name: "Expired Activation Owner", email: `${runId}-expired@example.com`, passwordHash: "integration-test-only", role: Role.HOMEOWNER },
+      { id: `${runId}-reissue-user-active`, tenantId, name: "Activated Owner", email: `${runId}-activated@example.com`, passwordHash: "integration-test-only", role: Role.HOMEOWNER },
+    ],
+  });
+  await platformPrisma.homeownerProfile.createMany({
+    data: [
+      {
+        id: `${runId}-homeowner-reissue-expired`,
+        tenantId,
+        userId: `${runId}-reissue-user-expired`,
+        address: "10 Expired Street",
+        block: "R",
+        lot: "1",
+        phone: "09991111111",
+        accountNumber: "91234567890",
+        monthlyDuesAmount: new Prisma.Decimal("100.00"),
+        status: HomeownerStatus.ACTIVE,
+        activationStatus: HomeownerActivationStatus.EXPIRED,
+        emailStatus: HomeownerEmailVerificationStatus.UNVERIFIED,
+        activationSentAt: new Date(Date.now() - 8 * 24 * 60 * 60 * 1000),
+      },
+      {
+        id: `${runId}-homeowner-reissue-active`,
+        tenantId,
+        userId: `${runId}-reissue-user-active`,
+        address: "11 Activated Street",
+        block: "R",
+        lot: "2",
+        phone: "09992222222",
+        accountNumber: "92345678901",
+        monthlyDuesAmount: new Prisma.Decimal("100.00"),
+        status: HomeownerStatus.ACTIVE,
+        activationStatus: HomeownerActivationStatus.ACTIVE,
+        emailStatus: HomeownerEmailVerificationStatus.VERIFIED,
+        activationSentAt: new Date(Date.now() - 10 * 24 * 60 * 60 * 1000),
+        activatedAt: new Date(),
+      },
+    ],
+  });
+
+  const firstTimeJob = await runWithTenant(tenantId, () => requestHomeownerActivationBulkJob({
+    tenantId,
+    initiatedById: actorId,
+    idempotencyKey: `${runId}-reissue-first-time-reject`,
+    selectionMode: HomeownerActivationBulkSelectionMode.SELECTED,
+    selectedHomeownerIds: [`${runId}-homeowner-reissue-expired`],
+  }), { role: Role.ADMIN });
+  assert.equal(firstTimeJob.totalTargets, 0);
+
+  const reissueJob = await runWithTenant(tenantId, () => requestHomeownerActivationBulkJob({
+    tenantId,
+    initiatedById: actorId,
+    idempotencyKey: `${runId}-reissue-selected`,
+    selectionMode: HomeownerActivationBulkSelectionMode.SELECTED,
+    sendMode: "reissue",
+    selectedHomeownerIds: [`${runId}-homeowner-reissue-expired`, `${runId}-homeowner-reissue-active`],
+  }), { role: Role.ADMIN });
+  assert.equal(reissueJob.totalTargets, 1);
+  const reissueItems = await platformPrisma.homeownerActivationBulkItem.findMany({ where: { tenantId, jobId: reissueJob.id }, select: { homeownerId: true } });
+  assert.deepEqual(reissueItems.map((item) => item.homeownerId), [`${runId}-homeowner-reissue-expired`]);
+});
+
 test("concurrent activation workers cannot claim the same queued job twice", async () => {
   await platformPrisma.homeownerActivationBulkJob.updateMany({
     where: { tenantId, status: { in: [HomeownerActivationBulkJobStatus.QUEUED, HomeownerActivationBulkJobStatus.RUNNING] } },

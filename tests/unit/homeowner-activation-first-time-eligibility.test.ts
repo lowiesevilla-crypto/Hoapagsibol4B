@@ -85,6 +85,16 @@ test("bulk activation page shows server-side confirmation buckets before queuein
   assert.match(homeownersPage, /homeownerActivationConfirmationBreakdown/);
 });
 
+test("homeowner list exposes explicit selected-only reissue separate from first-time send", () => {
+  assert.match(homeownersPage, /name="reissueHomeownerId"/);
+  assert.match(homeownersPage, /intent="reissue:selected"/);
+  assert.match(homeownersPage, /Reissue selected invited\/expired/);
+  assert.match(homeownersPage, /activated digital accounts are excluded/);
+  assert.match(activationBulkJobs, /activationSendMode/);
+  assert.match(activationBulkJobs, /HOMEOWNER_ACTIVATION_BULK_REISSUE_CREATED/);
+  assert.doesNotMatch(activationBulkJobs, /reissue[\s\S]{0,120}HomeownerActivationBulkSelectionMode\.FILTERED/);
+});
+
 test("failed-only retry for activation bulk jobs cannot resend accepted recipients", () => {
   assert.match(activationBulkJobs, /createFailedHomeownerActivationBulkRetry/);
   assert.match(activationBulkJobs, /status: HomeownerActivationBulkItemStatus\.FAILED/);

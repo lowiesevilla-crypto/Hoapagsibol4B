@@ -6,7 +6,7 @@ import { useFormStatus } from "react-dom";
 
 type Props = {
   children: React.ReactNode;
-  mode: "selected" | "filtered";
+  intent: "firstTime:selected" | "firstTime:filtered" | "reissue:selected";
   message: string;
   className?: string;
   pendingLabel?: string;
@@ -15,7 +15,7 @@ type Props = {
 
 export function HomeownerActivationBulkSubmitButton({
   children,
-  mode,
+  intent,
   message,
   className = "btn-primary",
   pendingLabel = "Queueing activation job",
@@ -40,8 +40,8 @@ export function HomeownerActivationBulkSubmitButton({
   const processing = pending || accepted;
   return <button
     type="submit"
-    name="mode"
-    value={mode}
+    name="intent"
+    value={intent}
     className={className}
     disabled={disabled || processing}
     aria-busy={processing || undefined}

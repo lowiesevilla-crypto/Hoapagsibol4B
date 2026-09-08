@@ -36,15 +36,15 @@ This register tracks implementation against `HOAHUB_HOMEOWNER_ACTIVATION_EMAIL_A
 | Accurate provider-accepted wording | COMPLETE (CODE) | Admin UI no longer claims SMTP acceptance equals mailbox delivery | Delivery webhook remains pending |
 | Feature-gated rollout | COMPLETE (CODE) | Queue action and worker are disabled unless production env flag is explicitly enabled | Keep disabled until all gates pass |
 | Initial first-time eligibility unit tests | COMPLETE (CODE) | Never invited / already invited / expired / activated / disabled cases | Broader integration tests |
-| Secure activation/reset URL metadata redaction | PENDING / BLOCKER | Current notification metadata still persists `actionUrl`, including secure action URLs | Remove token-bearing URLs from persisted ordinary metadata; add regression test |
-| Legacy individual-send result truthfulness | PENDING / BLOCKER | New bulk worker checks notification status; existing individual action still needs FAILED/SKIPPED handling verification/fix | Correct result accounting + regression test |
-| Detailed confirmation preview by skip reason | PENDING | Global count exists but confirmation does not yet show matching/eligible/already-invited/activated/email-missing/disabled breakdown | Add server preview + confirmation UI |
-| Explicit resend/reissue workflow | PENDING | First-time flow now refuses previously issued invitations; existing reissue action needs explicit policy/tests/UI alignment | Implement and test expired/failed/cancelled reissue rules |
+| Secure activation/reset URL metadata redaction | COMPLETE (CODE) | Security-sensitive action URLs are redacted from ordinary notification metadata; only queued billing/reminder metadata keeps action URLs needed by the worker | CI regression gate |
+| Legacy individual-send result truthfulness | COMPLETE (CODE) | Single-homeowner activation action treats FAILED/SKIPPED as not accepted and records delivery-not-accepted audit metadata | CI regression gate |
+| Detailed confirmation preview by skip reason | COMPLETE (CODE) | Homeowner list shows eligible/already-invited/activated/missing-email/disabled/other-blocked counts for current filters | Browser/UI evidence |
+| Explicit resend/reissue workflow | COMPLETE (CODE) | First-time send and reissue use separate server eligibility checks; reissue is explicit, audited, and revokes unused credentials | Browser/UI evidence |
 | Raw idempotency key hashing at rest | PENDING HARDENING | Current job schema stores normalized key for uniqueness | Align with billing job pattern using SHA-256 tenant-scoped hash before merge if feasible |
 | Job lease release/concurrency proof | PENDING HARDENING | Lease-based claim exists | Add concurrent worker test and ensure lease is released promptly between successful batches |
 | 2,000-recipient scale proof | PENDING | Architecture supports filtered job item creation | Add DB-backed scale test |
 | 5,000+ recipient scale proof | PENDING / BLOCKER | Bounded worker/job architecture implemented | Add 5,001-recipient creation/processing simulation without real SMTP |
-| Retry failed-only without resending successful recipients | PENDING | Manual-review fail-safe exists for ambiguous processing | Add explicit failed-only retry design/tests before exposing retry UI |
+| Retry failed-only without resending successful recipients | COMPLETE (CODE) | Retry route creates a new tenant-scoped job from `FAILED` items only and leaves provider-accepted recipients out of the retry set | DB-backed retry proof |
 | SPF validation | OPERATIONAL / PENDING | Requirements documented | Verify live production DNS against actual provider |
 | DKIM validation | OPERATIONAL / PENDING | Requirements documented | Verify selector/key and passing signature |
 | DMARC validation/alignment | OPERATIONAL / PENDING | Requirements documented | Verify policy and From-domain alignment |
@@ -59,15 +59,12 @@ This register tracks implementation against `HOAHUB_HOMEOWNER_ACTIVATION_EMAIL_A
 
 **DO NOT MERGE / DO NOT ENABLE BULK DELIVERY YET.**
 
-The architecture and core admin workflow are now staged safely behind a disabled-by-default feature gate. Production enablement remains blocked by secure URL metadata redaction, legacy send-result truthfulness, dedicated tenant/concurrency/scale regression tests, completion of all CI gates, and live sender-authentication/deliverability validation.
+The architecture and core admin workflow are now staged safely behind a disabled-by-default feature gate. Production enablement remains blocked by dedicated tenant/concurrency/scale regression evidence, completion of all CI gates, and live sender-authentication/deliverability validation.
 
 ## Next implementation sequence
 
 1. Close CI failures on the exact branch head until the current code is green.
-2. Remove token-bearing action URLs from persisted ordinary notification metadata and add a regression test.
-3. Correct legacy individual activation delivery result accounting and test FAILED/SKIPPED behavior.
-4. Add server-side confirmation preview breakdown and explicit resend/reissue rules.
-5. Add database-backed tenant isolation, duplicate-submission, concurrent-worker, and 5,001-recipient scale tests.
-6. Complete all UI/browser gates.
-7. Validate SPF, DKIM, DMARC alignment, Return-Path and provider reputation in production infrastructure.
-8. Perform a controlled canary with the bulk feature flag enabled only after evidence is complete.
+2. Add database-backed tenant isolation, duplicate-submission, concurrent-worker, failed-only retry, and 5,001-recipient scale tests.
+3. Complete all UI/browser gates.
+4. Validate SPF, DKIM, DMARC alignment, Return-Path and provider reputation in production infrastructure.
+5. Perform a controlled canary with the bulk feature flag enabled only after evidence is complete.

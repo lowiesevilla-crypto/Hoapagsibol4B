@@ -57,6 +57,18 @@ export function homeownerDigitalActivationEligibility(homeowner: HomeownerDigita
   return { eligible: true, reason: "Eligible for first-time digital activation invitation." };
 }
 
+export function homeownerActivationReissueEligibility(homeowner: HomeownerDigitalActivationProfile) {
+  if (homeowner.tenantId === "") return { eligible: false, reason: "Homeowner tenant is missing." };
+  if (homeowner.status !== "ACTIVE") return { eligible: false, reason: "Operational homeowner record is not active." };
+  if (!homeowner.user.active) return { eligible: false, reason: "Digital user access is disabled." };
+  if (!hasHomeownerContactEmail(homeowner.user.email)) return { eligible: false, reason: "Registered email is missing." };
+  if (!/^[1-9][0-9]{10}$/.test(homeowner.accountNumber || "")) return { eligible: false, reason: "Valid 11-digit account number is missing." };
+  if (homeownerHasCompletedDigitalActivation(homeowner)) return { eligible: false, reason: "Digital account is already activated. Use password reset for account recovery." };
+  if (homeowner.activationStatus === HomeownerActivationStatus.DISABLED) return { eligible: false, reason: "Digital access is disabled." };
+  if (homeowner.activationStatus === HomeownerActivationStatus.NOT_INVITED && !homeowner.activationSentAt) return { eligible: false, reason: "Use first-time activation invitation for never-invited homeowners." };
+  return { eligible: true, reason: "Eligible for explicit activation reissue." };
+}
+
 export function nextInvitationStatus(current: HomeownerActivationStatus | string) {
   if (current === HomeownerActivationStatus.EMAIL_PENDING_VERIFICATION) return HomeownerActivationStatus.EMAIL_PENDING_VERIFICATION;
   if (current === HomeownerActivationStatus.PASSWORD_CREATION_REQUIRED) return HomeownerActivationStatus.PASSWORD_CREATION_REQUIRED;

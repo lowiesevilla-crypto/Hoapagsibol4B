@@ -12,8 +12,8 @@ test("finance navigation exposes billing management as a Finance-owned view", ()
   assert.equal(financeBillingEntries.length, 2);
 });
 
-test("billing managers land on and can access the Finance billing management view", () => {
-  assert.equal(adminHomeForRole(Role.BILLING_MANAGER), "/admin/finance/billing");
+test("billing managers keep their existing landing route and can access the Finance billing management view", () => {
+  assert.equal(adminHomeForRole(Role.BILLING_MANAGER), "/admin/billing");
   assert.equal(canAccessAdminPath(Role.BILLING_MANAGER, "/admin/finance/billing"), true);
   assert.equal(canAccessAdminPath(Role.STAFF, "/admin/finance/billing"), false);
 });

@@ -17,11 +17,17 @@ function normalizeSearchText(value: unknown) {
     .trim();
 }
 
+function compactSearchText(value: unknown) {
+  return normalizeSearchText(value).replace(/\s+/g, "");
+}
+
 /**
  * Wild/partial search across the complete tenant-scoped report result set.
  * Every normalized search token must appear somewhere in the homeowner name,
  * account number, block, lot, or phase haystack. Filtering intentionally occurs
  * before pagination so a match on any report row can be found regardless of page.
+ * A compact haystack is also checked so exact Block/Lot searches still work when
+ * user-entered spacing or punctuation differs from the stored property values.
  */
 export function filterHomeownerBalanceRows<T extends SearchableHomeownerBalanceRow>(rows: T[], rawSearch?: string | null): T[] {
   const normalizedSearch = normalizeSearchText(rawSearch);
@@ -39,11 +45,14 @@ export function filterHomeownerBalanceRows<T extends SearchableHomeownerBalanceR
       `lot ${lot}`,
       `block ${block} lot ${lot}`,
       `blk ${block} lot ${lot}`,
+      `block ${block} / lot ${lot}`,
+      `${block} / ${lot}`,
       `b${block} l${lot}`,
       row.phase ? `phase ${row.phase}` : "",
     ].join(" "));
+    const compactHaystack = compactSearchText(haystack);
 
-    return terms.every((term) => haystack.includes(term));
+    return terms.every((term) => haystack.includes(term) || compactHaystack.includes(compactSearchText(term)));
   });
 }
 

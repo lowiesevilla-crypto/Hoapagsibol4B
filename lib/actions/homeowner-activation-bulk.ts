@@ -12,17 +12,22 @@ export async function queueHomeownerActivationBulkJobAction(formData: FormData) 
     redirect(buildReturnUrl(formData, { error: "Bulk activation delivery is staged but not enabled for production rollout yet." }));
   }
 
-  const mode = String(formData.get("mode") || "selected") === "filtered"
+  const intent = parseIntent(formData);
+  const mode = intent.selection === "filtered"
     ? HomeownerActivationBulkSelectionMode.FILTERED
     : HomeownerActivationBulkSelectionMode.SELECTED;
   const idempotencyKey = String(formData.get("idempotencyKey") || "").trim();
   if (!idempotencyKey) throw new Error("Bulk activation request is missing an idempotency key. Refresh the page and try again.");
 
+  if (intent.sendMode === "reissue" && mode !== HomeownerActivationBulkSelectionMode.SELECTED) {
+    redirect(buildReturnUrl(formData, { error: "Activation reissue is selected-only so already invited homeowners are never reissued by a broad filter." }));
+  }
+  const selectedFieldName = intent.sendMode === "reissue" ? "reissueHomeownerId" : "homeownerId";
   const selectedHomeownerIds = mode === HomeownerActivationBulkSelectionMode.SELECTED
-    ? formData.getAll("homeownerId").map((value) => String(value)).filter(Boolean)
+    ? formData.getAll(selectedFieldName).map((value) => String(value)).filter(Boolean)
     : [];
   if (mode === HomeownerActivationBulkSelectionMode.SELECTED && !selectedHomeownerIds.length) {
-    redirect(buildReturnUrl(formData, { error: "Select at least one first-time eligible homeowner." }));
+    redirect(buildReturnUrl(formData, { error: intent.sendMode === "reissue" ? "Select at least one invited or expired homeowner to reissue." : "Select at least one first-time eligible homeowner." }));
   }
 
   const job = await requestHomeownerActivationBulkJob({
@@ -30,6 +35,7 @@ export async function queueHomeownerActivationBulkJobAction(formData: FormData) 
     initiatedById: admin.id,
     idempotencyKey,
     selectionMode: mode,
+    sendMode: intent.sendMode,
     selectedHomeownerIds,
     filters: {
       q: String(formData.get("q") || ""),
@@ -43,9 +49,17 @@ export async function queueHomeownerActivationBulkJobAction(formData: FormData) 
     activationJob: job.id,
     success: "bulkActivationQueued",
     message: job.totalTargets
-      ? `Activation job queued for ${job.totalTargets} first-time eligible homeowner${job.totalTargets === 1 ? "" : "s"}.`
-      : "No first-time eligible homeowners matched this request.",
+      ? `Activation ${intent.sendMode === "reissue" ? "reissue" : "first-time"} job queued for ${job.totalTargets} homeowner${job.totalTargets === 1 ? "" : "s"}.`
+      : intent.sendMode === "reissue" ? "No reissue-eligible homeowners matched this request." : "No first-time eligible homeowners matched this request.",
   }));
+}
+
+function parseIntent(formData: FormData): { sendMode: "firstTime" | "reissue"; selection: "selected" | "filtered" } {
+  const raw = String(formData.get("intent") || "");
+  if (raw === "firstTime:filtered") return { sendMode: "firstTime", selection: "filtered" };
+  if (raw === "reissue:selected") return { sendMode: "reissue", selection: "selected" };
+  if (String(formData.get("mode") || "") === "filtered") return { sendMode: "firstTime", selection: "filtered" };
+  return { sendMode: "firstTime", selection: "selected" };
 }
 
 function buildReturnUrl(formData: FormData, additions: Record<string, string>) {

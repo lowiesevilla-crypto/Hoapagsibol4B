@@ -21,9 +21,11 @@ export async function POST(request: Request) {
   });
 
   const limit = boundedInteger(process.env.EMAIL_DELIVERY_BATCH_SIZE, 25, 1, 100);
+  const activationBulkEnabled = process.env.HOMEOWNER_ACTIVATION_BULK_DELIVERY_ENABLED === "true";
   const activationBatchSize = boundedInteger(process.env.HOMEOWNER_ACTIVATION_BULK_BATCH_SIZE, 25, 1, 100);
   const aggregate = {
     enabled: process.env.EMAIL_BULK_DELIVERY_ENABLED === "true",
+    activationBulkEnabled,
     tenantsProcessed: 0,
     tenantsFailed: 0,
     processed: 0,
@@ -43,7 +45,9 @@ export async function POST(request: Request) {
         tenant.id,
         async () => {
           const emailQueue = await processQueuedEmailNotifications(tenant.id, { limit });
-          const activationJob = await processNextHomeownerActivationBulkJob(tenant.id, { batchSize: activationBatchSize });
+          const activationJob = activationBulkEnabled
+            ? await processNextHomeownerActivationBulkJob(tenant.id, { batchSize: activationBatchSize })
+            : null;
           return { emailQueue, activationJob };
         },
         { enabledModules: modules },

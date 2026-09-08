@@ -1,9 +1,12 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { HomeownerActivationStatus, HomeownerEmailVerificationStatus, HomeownerStatus } from "@prisma/client";
-import { homeownerDigitalActivationEligibility } from "@/lib/services/homeowner-digital-activation";
+import {
+  homeownerDigitalActivationEligibility,
+  type HomeownerDigitalActivationProfile,
+} from "@/lib/services/homeowner-digital-activation";
 
-function homeowner(overrides: Record<string, unknown> = {}) {
+function homeowner(overrides: Partial<HomeownerDigitalActivationProfile> = {}): HomeownerDigitalActivationProfile {
   return {
     tenantId: "tenant-a",
     accountNumber: "12345678901",
@@ -14,7 +17,7 @@ function homeowner(overrides: Record<string, unknown> = {}) {
     activatedAt: null,
     user: { active: true, email: "owner@example.com" },
     ...overrides,
-  } as any;
+  };
 }
 
 test("first-time activation eligibility accepts only never-invited active homeowners", () => {

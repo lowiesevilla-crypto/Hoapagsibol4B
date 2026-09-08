@@ -14,6 +14,7 @@ import { platformPrisma } from "@/lib/db";
 import {
   createFailedHomeownerActivationBulkRetry,
   getHomeownerActivationBulkJobProgress,
+  processNextHomeownerActivationBulkJob,
   requestHomeownerActivationBulkJob,
 } from "@/lib/services/homeowner-activation-bulk-jobs";
 import { runWithTenant } from "@/lib/tenant-context";
@@ -228,4 +229,29 @@ test("failed-only activation retry creates a new job without accepted or skipped
   assert.equal(retry.status, HomeownerActivationBulkJobStatus.QUEUED);
   const retryItems = await platformPrisma.homeownerActivationBulkItem.findMany({ where: { tenantId, jobId: retry.id }, select: { homeownerId: true } });
   assert.deepEqual(retryItems.map((item) => item.homeownerId), [homeownerId(3)]);
+});
+
+test("concurrent activation workers cannot claim the same queued job twice", async () => {
+  const job = await platformPrisma.homeownerActivationBulkJob.create({
+    data: {
+      tenantId,
+      initiatedById: actorId,
+      idempotencyKey: `${runId}-concurrent-worker`,
+      selectionMode: HomeownerActivationBulkSelectionMode.SELECTED,
+      status: HomeownerActivationBulkJobStatus.QUEUED,
+      totalTargets: 0,
+      eligibleCount: 0,
+      queuedCount: 0,
+    },
+  });
+
+  const [first, second] = await Promise.all([
+    runWithTenant(tenantId, () => processNextHomeownerActivationBulkJob(tenantId), { role: Role.ADMIN }),
+    runWithTenant(tenantId, () => processNextHomeownerActivationBulkJob(tenantId), { role: Role.ADMIN }),
+  ]);
+  const results = [first, second].filter(Boolean);
+
+  assert.equal(results.length, 1, "Only one worker should claim a queued activation job.");
+  assert.equal(results[0]?.id, job.id);
+  assert.equal(results[0]?.status, HomeownerActivationBulkJobStatus.SUCCEEDED);
 });

@@ -1,7 +1,7 @@
 "use client";
 
-import { CheckCircle2, LoaderCircle, TriangleAlert } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { CheckCircle2, LoaderCircle, RotateCcw, TriangleAlert } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 type Job = {
   id: string;
@@ -27,6 +27,8 @@ const terminal = new Set(["SUCCEEDED", "PARTIAL", "FAILED"]);
 export function HomeownerActivationBulkProgress({ jobId }: Props) {
   const [job, setJob] = useState<Job | null>(null);
   const [loadError, setLoadError] = useState("");
+  const [retrying, setRetrying] = useState(false);
+  const retryKeyRef = useRef("");
 
   useEffect(() => {
     if (!jobId) return;
@@ -66,14 +68,41 @@ export function HomeownerActivationBulkProgress({ jobId }: Props) {
   if (!job) return <div className="mb-4 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm font-semibold text-amber-800">{loadError}</div>;
 
   const isTerminal = terminal.has(job.status);
+  const canRetryFailed = isTerminal && job.failedCount > 0;
   const Icon = job.status === "SUCCEEDED" ? CheckCircle2 : job.status === "FAILED" || job.status === "PARTIAL" ? TriangleAlert : LoaderCircle;
+  async function retryFailed() {
+    if (!job || retrying || !canRetryFailed) return;
+    setRetrying(true);
+    setLoadError("");
+    if (!retryKeyRef.current) retryKeyRef.current = window.crypto.randomUUID();
+    try {
+      const response = await fetch(`/api/admin/homeowners/activation-jobs/${encodeURIComponent(job.id)}/retry`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ idempotencyKey: retryKeyRef.current }),
+      });
+      const payload = await response.json() as { jobId?: string; error?: string };
+      if (!response.ok || !payload.jobId) throw new Error(payload.error || "Failed activation records could not be retried.");
+      window.location.href = `/admin/homeowners?activationJob=${encodeURIComponent(payload.jobId)}&success=bulkActivationRetry&message=${encodeURIComponent(`Retry queued for ${job.failedCount} failed activation record${job.failedCount === 1 ? "" : "s"}.`)}`;
+    } catch (error) {
+      setLoadError(error instanceof Error ? error.message : "Failed activation records could not be retried.");
+      setRetrying(false);
+    }
+  }
+
   return <section className="mb-5 rounded-xl border bg-white p-4" aria-live="polite">
     <div className="flex flex-wrap items-center justify-between gap-3">
       <div>
         <p className="text-xs font-black uppercase tracking-wider text-slate-400">Homeowner activation bulk job</p>
         <p className="mt-1 flex items-center gap-2 font-black text-pine-800"><Icon className={`size-4 ${isTerminal ? "" : "animate-spin"}`} /> {statusLabel(job.status)}</p>
       </div>
-      <p className="text-2xl font-black text-pine-800">{percent}%</p>
+      <div className="flex flex-wrap items-center gap-2">
+        {canRetryFailed && <button type="button" className="btn-secondary min-h-10 px-4" disabled={retrying} onClick={retryFailed}>
+          {retrying ? <LoaderCircle className="size-4 animate-spin motion-reduce:animate-none" /> : <RotateCcw className="size-4" />}
+          {retrying ? "Starting retry..." : `Retry ${job.failedCount.toLocaleString("en-PH")} failed only`}
+        </button>}
+        <p className="text-2xl font-black text-pine-800">{percent}%</p>
+      </div>
     </div>
     <div className="mt-3 h-2 overflow-hidden rounded-full bg-slate-100" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={percent}>
       <div className="h-full rounded-full bg-pine-600 transition-[width]" style={{ width: `${percent}%` }} />
@@ -85,7 +114,7 @@ export function HomeownerActivationBulkProgress({ jobId }: Props) {
       <Metric label="Skipped" value={job.skippedCount.toLocaleString("en-PH")} />
       <Metric label="Failed / review" value={job.failedCount.toLocaleString("en-PH")} />
     </div>
-    <p className="mt-3 text-xs font-semibold text-slate-500">Provider accepted means the configured mail provider accepted the message; it does not claim mailbox delivery unless delivery webhooks confirm it.</p>
+    <p className="mt-3 text-xs font-semibold text-slate-500">Provider accepted means the configured mail provider accepted the message; it does not claim mailbox delivery unless delivery webhooks confirm it. Failed-only retry creates a new job containing failed records only.</p>
     {job.lastError && <p className="mt-2 text-xs font-semibold text-rose-700">{job.lastError}</p>}
     {loadError && <p className="mt-2 text-xs font-semibold text-amber-700">Progress refresh warning: {loadError}</p>}
   </section>;

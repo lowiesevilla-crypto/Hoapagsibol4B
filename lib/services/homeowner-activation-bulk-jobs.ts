@@ -1,6 +1,6 @@
 import "server-only";
 
-import { createHash, randomUUID } from "node:crypto";
+import { randomUUID } from "node:crypto";
 import {
   HomeownerActivationBulkItemStatus,
   HomeownerActivationBulkJobStatus,
@@ -15,7 +15,7 @@ import { prisma } from "@/lib/db";
 import { homeownerAccountNumber } from "@/lib/homeowner-account";
 import { homeownerSearchWhere } from "@/lib/homeowner-admin-search";
 import { createHomeownerActivationCredential, sendHomeownerActivationEmail } from "@/lib/services/homeowner-activation";
-import { homeownerDigitalActivationEligibility, maskAccountNumber } from "@/lib/services/homeowner-digital-activation";
+import { homeownerActivationReissueEligibility, homeownerDigitalActivationEligibility, maskAccountNumber } from "@/lib/services/homeowner-digital-activation";
 
 const JOB_LEASE_MS = 2 * 60 * 1000;
 const DEFAULT_BATCH_SIZE = 25;
@@ -27,19 +27,27 @@ type FilterSnapshot = {
   q?: string;
   status?: string;
   digital?: string;
+  activationSendMode?: ActivationBulkSendMode;
+  retryFailedOnly?: boolean;
+  sourceJobId?: string;
 };
+
+export type ActivationBulkSendMode = "firstTime" | "reissue";
 
 type RequestJobInput = {
   tenantId: string;
   initiatedById: string;
   idempotencyKey: string;
   selectionMode: HomeownerActivationBulkSelectionMode;
+  sendMode?: ActivationBulkSendMode;
   selectedHomeownerIds?: string[];
   filters?: FilterSnapshot;
 };
 
 export async function requestHomeownerActivationBulkJob(input: RequestJobInput) {
-  const idempotencyKey = hashedIdempotencyKey(input.tenantId, input.idempotencyKey);
+  const idempotencyKey = safeIdempotencyKey(input.idempotencyKey);
+  const sendMode = safeSendMode(input.sendMode);
+  const filterSnapshot: FilterSnapshot = { ...(input.filters || {}), activationSendMode: sendMode };
   const existing = await prisma.homeownerActivationBulkJob.findUnique({
     where: { tenantId_idempotencyKey: { tenantId: input.tenantId, idempotencyKey } },
   });
@@ -54,7 +62,7 @@ export async function requestHomeownerActivationBulkJob(input: RequestJobInput) 
           initiatedById: input.initiatedById,
           idempotencyKey,
           selectionMode: input.selectionMode,
-          filterSnapshot: (input.filters || {}) as Prisma.InputJsonValue,
+          filterSnapshot: filterSnapshot as Prisma.InputJsonValue,
           totalTargets: targetIds.length,
           eligibleCount: targetIds.length,
           queuedCount: targetIds.length,
@@ -82,8 +90,9 @@ export async function requestHomeownerActivationBulkJob(input: RequestJobInput) 
           entityId: job.id,
           metadata: {
             selectionMode: input.selectionMode,
+            activationSendMode: sendMode,
             totalTargets: targetIds.length,
-            idempotencyKeyHash: idempotencyKey,
+            idempotencyKey,
           },
         },
       });
@@ -155,7 +164,7 @@ export async function processNextHomeownerActivationBulkJob(tenantId: string, op
       data: { status: HomeownerActivationBulkItemStatus.PROCESSING, attemptedAt: new Date() },
     });
     if (claimedItem.count !== 1) continue;
-    const outcome = await processRecipient(tenantId, candidate.initiatedById, item.homeownerId);
+    const outcome = await processRecipient(tenantId, candidate.initiatedById, item.homeownerId, sendModeFromSnapshot(candidate.filterSnapshot));
     await prisma.homeownerActivationBulkItem.updateMany({
       where: { id: item.id, tenantId, jobId: candidate.id, status: HomeownerActivationBulkItemStatus.PROCESSING },
       data: {
@@ -200,7 +209,7 @@ export async function createFailedHomeownerActivationBulkRetry(input: {
   sourceJobId: string;
   idempotencyKey: string;
 }) {
-  const idempotencyKey = hashedIdempotencyKey(input.tenantId, input.idempotencyKey);
+  const idempotencyKey = safeIdempotencyKey(input.idempotencyKey);
   const existing = await prisma.homeownerActivationBulkJob.findUnique({
     where: { tenantId_idempotencyKey: { tenantId: input.tenantId, idempotencyKey } },
   });
@@ -226,6 +235,7 @@ export async function createFailedHomeownerActivationBulkRetry(input: {
   });
   if (!failedItems.length) throw new Error("This activation job has no failed records to retry.");
 
+  const sendMode = sendModeFromSnapshot(source.filterSnapshot);
   try {
     return await prisma.$transaction(async (tx) => {
       const job = await tx.homeownerActivationBulkJob.create({
@@ -234,7 +244,7 @@ export async function createFailedHomeownerActivationBulkRetry(input: {
           initiatedById: input.initiatedById,
           idempotencyKey,
           selectionMode: HomeownerActivationBulkSelectionMode.SELECTED,
-          filterSnapshot: { retryFailedOnly: true, sourceJobId: source.id } as Prisma.InputJsonValue,
+          filterSnapshot: { retryFailedOnly: true, sourceJobId: source.id, activationSendMode: sendMode } as Prisma.InputJsonValue,
           totalTargets: failedItems.length,
           eligibleCount: failedItems.length,
           queuedCount: failedItems.length,
@@ -257,7 +267,7 @@ export async function createFailedHomeownerActivationBulkRetry(input: {
           action: "HOMEOWNER_ACTIVATION_BULK_FAILED_ONLY_RETRY_QUEUED",
           entityType: "HomeownerActivationBulkJob",
           entityId: job.id,
-          metadata: { retryFailedOnly: true, sourceJobId: source.id, totalTargets: failedItems.length, idempotencyKeyHash: idempotencyKey },
+          metadata: { retryFailedOnly: true, sourceJobId: source.id, activationSendMode: sendMode, totalTargets: failedItems.length, idempotencyKey },
         },
       });
       return job;
@@ -279,10 +289,20 @@ export async function previewHomeownerActivationBulkSelection(input: Omit<Reques
 }
 
 async function resolveEligibleTargets(input: Omit<RequestJobInput, "idempotencyKey"> | RequestJobInput) {
-  const where = firstTimeEligibilityWhere(input.tenantId, input.filters);
+  const sendMode = safeSendMode(input.sendMode);
+  const where = sendMode === "reissue" ? reissueBaseWhere(input.tenantId, input.filters) : firstTimeEligibilityWhere(input.tenantId, input.filters);
   if (input.selectionMode === HomeownerActivationBulkSelectionMode.SELECTED) {
     const selected = Array.from(new Set((input.selectedHomeownerIds || []).filter(Boolean))).slice(0, MAX_SELECTED_IDS);
     if (!selected.length) return [];
+    if (sendMode === "reissue") {
+      const rows = await prisma.homeownerProfile.findMany({
+        where: { AND: [where, { id: { in: selected } }] },
+        include: { user: true },
+        orderBy: { id: "asc" },
+        take: MAX_SELECTED_IDS,
+      });
+      return rows.filter((row) => homeownerActivationReissueEligibility(row).eligible).map((row) => row.id);
+    }
     const rows = await prisma.homeownerProfile.findMany({
       where: { AND: [where, { id: { in: selected } }] },
       select: { id: true },
@@ -291,6 +311,7 @@ async function resolveEligibleTargets(input: Omit<RequestJobInput, "idempotencyK
     });
     return rows.map((row) => row.id);
   }
+  if (sendMode === "reissue") return [];
   const rows = await prisma.homeownerProfile.findMany({
     where,
     select: { id: true },
@@ -315,6 +336,27 @@ async function resolveEligibleTargets(input: Omit<RequestJobInput, "idempotencyK
   return ids;
 }
 
+function reissueBaseWhere(tenantId: string, filters?: FilterSnapshot): Prisma.HomeownerProfileWhereInput {
+  const conditions: Prisma.HomeownerProfileWhereInput[] = [
+    {
+      tenantId,
+      status: HomeownerStatus.ACTIVE,
+      accountNumber: { not: null },
+      activationStatus: { notIn: [HomeownerActivationStatus.NOT_INVITED, HomeownerActivationStatus.ACTIVE, HomeownerActivationStatus.DISABLED] },
+      user: { active: true, email: { not: "" } },
+    },
+  ];
+  if (filters?.q?.trim()) conditions.push(homeownerSearchWhere(filters.q));
+  if (filters?.status && filters.status !== "all") {
+    if (filters.status === HomeownerStatus.ACTIVE) conditions.push({ status: HomeownerStatus.ACTIVE });
+    else conditions.push({ id: "__no_reissue_targets__" });
+  }
+  if (filters?.digital && ["eligible", "not_invited", "activated", "disabled", "missing_registered_email", "existing_permanent_login"].includes(filters.digital)) {
+    conditions.push({ id: "__no_reissue_targets__" });
+  }
+  return { AND: conditions };
+}
+
 function firstTimeEligibilityWhere(tenantId: string, filters?: FilterSnapshot): Prisma.HomeownerProfileWhereInput {
   const conditions: Prisma.HomeownerProfileWhereInput[] = [
     {
@@ -337,7 +379,7 @@ function firstTimeEligibilityWhere(tenantId: string, filters?: FilterSnapshot): 
   return { AND: conditions };
 }
 
-async function processRecipient(tenantId: string, actorId: string, homeownerId: string): Promise<{
+async function processRecipient(tenantId: string, actorId: string, homeownerId: string, sendMode: ActivationBulkSendMode): Promise<{
   status: HomeownerActivationBulkItemStatus;
   notificationId?: string;
   reason?: string;
@@ -347,7 +389,7 @@ async function processRecipient(tenantId: string, actorId: string, homeownerId: 
     include: { user: true },
   });
   if (!profile) return { status: HomeownerActivationBulkItemStatus.SKIPPED, reason: "Homeowner no longer exists in this tenant." };
-  const eligibility = homeownerDigitalActivationEligibility(profile);
+  const eligibility = sendMode === "reissue" ? homeownerActivationReissueEligibility(profile) : homeownerDigitalActivationEligibility(profile);
   if (!eligibility.eligible) return { status: HomeownerActivationBulkItemStatus.SKIPPED, reason: eligibility.reason };
 
   const accountNumber = homeownerAccountNumber(profile);
@@ -367,10 +409,10 @@ async function processRecipient(tenantId: string, actorId: string, homeownerId: 
           tenantId,
           actorId,
           module: "AUTH",
-          action: "HOMEOWNER_ACTIVATION_BULK_INVITATION_CREATED",
+          action: sendMode === "reissue" ? "HOMEOWNER_ACTIVATION_BULK_REISSUE_CREATED" : "HOMEOWNER_ACTIVATION_BULK_INVITATION_CREATED",
           entityType: "User",
           entityId: profile.userId,
-          metadata: { homeownerId: profile.id, accountMasked: maskAccountNumber(accountNumber) },
+          metadata: { homeownerId: profile.id, accountMasked: maskAccountNumber(accountNumber), activationSendMode: sendMode },
         },
       });
       return created;
@@ -444,10 +486,21 @@ async function refreshJobCounters(tenantId: string, jobId: string, leaseOwner: s
   return getHomeownerActivationBulkJobProgress(tenantId, jobId);
 }
 
-function hashedIdempotencyKey(tenantId: string, value: string) {
+function safeIdempotencyKey(value: string) {
   const normalized = String(value || "").trim();
   if (!normalized || normalized.length > 191) throw new Error("A valid idempotency key is required.");
-  return createHash("sha256").update(`${tenantId}:${normalized}`, "utf8").digest("hex");
+  return normalized;
+}
+
+function safeSendMode(value?: string | null): ActivationBulkSendMode {
+  return value === "reissue" ? "reissue" : "firstTime";
+}
+
+function sendModeFromSnapshot(snapshot: Prisma.JsonValue): ActivationBulkSendMode {
+  if (snapshot && typeof snapshot === "object" && !Array.isArray(snapshot) && "activationSendMode" in snapshot) {
+    return safeSendMode(String(snapshot.activationSendMode));
+  }
+  return "firstTime";
 }
 
 function boundedInteger(value: number | undefined, fallback: number, min: number, max: number) {

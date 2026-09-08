@@ -193,6 +193,85 @@ export async function getHomeownerActivationBulkJobProgress(tenantId: string, jo
   });
 }
 
+export async function createFailedHomeownerActivationBulkRetry(input: {
+  tenantId: string;
+  initiatedById: string;
+  sourceJobId: string;
+  idempotencyKey: string;
+}) {
+  const idempotencyKey = safeIdempotencyKey(input.idempotencyKey);
+  const existing = await prisma.homeownerActivationBulkJob.findUnique({
+    where: { tenantId_idempotencyKey: { tenantId: input.tenantId, idempotencyKey } },
+  });
+  if (existing) return existing;
+
+  const source = await prisma.homeownerActivationBulkJob.findFirst({
+    where: { id: input.sourceJobId, tenantId: input.tenantId },
+  });
+  if (!source) throw new Error("Activation bulk job was not found.");
+  const terminalStatuses = new Set<HomeownerActivationBulkJobStatus>([
+    HomeownerActivationBulkJobStatus.SUCCEEDED,
+    HomeownerActivationBulkJobStatus.PARTIAL,
+    HomeownerActivationBulkJobStatus.FAILED,
+  ]);
+  if (!terminalStatuses.has(source.status)) {
+    throw new Error("Only a completed activation job can be retried.");
+  }
+
+  const failedItems = await prisma.homeownerActivationBulkItem.findMany({
+    where: { tenantId: input.tenantId, jobId: source.id, status: HomeownerActivationBulkItemStatus.FAILED },
+    select: { homeownerId: true },
+    orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+  });
+  if (!failedItems.length) throw new Error("This activation job has no failed records to retry.");
+
+  try {
+    return await prisma.$transaction(async (tx) => {
+      const job = await tx.homeownerActivationBulkJob.create({
+        data: {
+          tenantId: input.tenantId,
+          initiatedById: input.initiatedById,
+          idempotencyKey,
+          selectionMode: HomeownerActivationBulkSelectionMode.SELECTED,
+          filterSnapshot: { retryFailedOnly: true, sourceJobId: source.id } as Prisma.InputJsonValue,
+          totalTargets: failedItems.length,
+          eligibleCount: failedItems.length,
+          queuedCount: failedItems.length,
+          status: HomeownerActivationBulkJobStatus.QUEUED,
+        },
+      });
+      await tx.homeownerActivationBulkItem.createMany({
+        data: failedItems.map((item) => ({
+          tenantId: input.tenantId,
+          jobId: job.id,
+          homeownerId: item.homeownerId,
+        })),
+        skipDuplicates: true,
+      });
+      await tx.auditLog.create({
+        data: {
+          tenantId: input.tenantId,
+          actorId: input.initiatedById,
+          module: "AUTH",
+          action: "HOMEOWNER_ACTIVATION_BULK_FAILED_ONLY_RETRY_QUEUED",
+          entityType: "HomeownerActivationBulkJob",
+          entityId: job.id,
+          metadata: { retryFailedOnly: true, sourceJobId: source.id, totalTargets: failedItems.length, idempotencyKey },
+        },
+      });
+      return job;
+    });
+  } catch (error) {
+    if (isUniqueCollision(error)) {
+      const concurrent = await prisma.homeownerActivationBulkJob.findUnique({
+        where: { tenantId_idempotencyKey: { tenantId: input.tenantId, idempotencyKey } },
+      });
+      if (concurrent) return concurrent;
+    }
+    throw error;
+  }
+}
+
 export async function previewHomeownerActivationBulkSelection(input: Omit<RequestJobInput, "idempotencyKey">) {
   const ids = await resolveEligibleTargets(input);
   return { eligible: ids.length };

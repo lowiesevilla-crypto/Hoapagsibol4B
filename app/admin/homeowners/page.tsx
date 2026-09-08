@@ -1,12 +1,14 @@
+import { randomUUID } from "node:crypto";
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { HomeownerActivationStatus, HomeownerStatus, NotificationType, Prisma, Role } from "@prisma/client";
 import { ChevronLeft, ChevronRight, Plus } from "lucide-react";
+import { HomeownerActivationBulkProgress } from "@/components/homeowner-activation-bulk-progress";
+import { HomeownerActivationBulkSubmitButton } from "@/components/homeowner-activation-bulk-submit-button";
 import { HomeownerActivationPageSelectAll } from "@/components/homeowner-activation-page-select-all";
 import { PageHeader } from "@/components/page-header";
 import { StatusBadge } from "@/components/status-badge";
-import { ConfirmSubmitButton } from "@/components/ui";
-import { bulkSendHomeownerActivationInvitationsAction } from "@/lib/actions/homeowners";
+import { queueHomeownerActivationBulkJobAction } from "@/lib/actions/homeowner-activation-bulk";
 import { requireUser } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { homeownerAccountNumber } from "@/lib/homeowner-account";
@@ -20,6 +22,7 @@ type HomeownerQuery = {
   digital?: string;
   page?: string;
   pageSize?: string;
+  activationJob?: string;
 };
 
 const pageSizes = [25, 50, 100];
@@ -55,11 +58,14 @@ export default async function HomeownersPage({ searchParams }: { searchParams: P
     homeownerSearchWhere(query.q || ""),
   ].filter((part) => Object.keys(part).length);
   const filteredWhere: Prisma.HomeownerProfileWhereInput = { AND: filterParts };
+  const filteredEligibleWhere: Prisma.HomeownerProfileWhereInput = { AND: [filteredWhere, eligibleWhere()] };
   const skip = (page - 1) * pageSize;
+  const idempotencyKey = randomUUID();
 
-  const [totalCount, filteredCount, homeowners, summary] = await Promise.all([
+  const [totalCount, filteredCount, eligibleFilteredCount, homeowners, summary] = await Promise.all([
     prisma.homeownerProfile.count({ where: baseWhere }),
     prisma.homeownerProfile.count({ where: filteredWhere }),
+    prisma.homeownerProfile.count({ where: filteredEligibleWhere }),
     prisma.homeownerProfile.findMany({
       where: filteredWhere,
       include: { user: true, _count: { select: { bills: true } } },
@@ -92,6 +98,8 @@ export default async function HomeownersPage({ searchParams }: { searchParams: P
       <SummaryCard label="Disabled / Suspended Digital Access" value={summary.disabled} />
     </section>
 
+    <HomeownerActivationBulkProgress jobId={query.activationJob} />
+
     <form className="card mb-5 grid gap-3 md:grid-cols-2 xl:grid-cols-[1fr_180px_240px_150px_auto]">
       <input aria-label="Search homeowners" className="field" name="q" type="search" defaultValue={query.q || ""} placeholder="Search name, email, account number, block or lot" />
       <select aria-label="Operational status" className="field" name="status" defaultValue={operationalStatus}>
@@ -108,10 +116,26 @@ export default async function HomeownersPage({ searchParams }: { searchParams: P
       <div className="flex gap-2"><button className="btn-primary">Apply</button><Link className="btn-secondary" href="/admin/homeowners">Reset</Link></div>
     </form>
 
-    <form id={activationBulkFormId} action={bulkSendHomeownerActivationInvitationsAction}>
-      <div className="mb-4 flex flex-wrap gap-3 rounded-xl border bg-white p-3">
-        <ConfirmSubmitButton className="btn-primary min-h-9 px-3 py-1.5 text-xs" name="mode" value="selected" message="Send activation invitations to selected eligible homeowners?">Send to selected eligible homeowners</ConfirmSubmitButton>
-        <p className="text-xs font-semibold text-slate-500">Select individual homeowners or use Select page. Only first-time eligible homeowners will be processed. Previously invited homeowners require the explicit resend/reissue flow.</p>
+    <form id={activationBulkFormId} action={queueHomeownerActivationBulkJobAction}>
+      <input type="hidden" name="idempotencyKey" value={idempotencyKey} />
+      <input type="hidden" name="q" value={query.q || ""} />
+      <input type="hidden" name="status" value={operationalStatus} />
+      <input type="hidden" name="digital" value={digitalFilter} />
+      <input type="hidden" name="page" value={safePage} />
+      <input type="hidden" name="pageSize" value={pageSize} />
+      <div className="mb-4 flex flex-wrap items-center gap-3 rounded-xl border bg-white p-3">
+        <HomeownerActivationBulkSubmitButton
+          mode="selected"
+          className="btn-primary min-h-9 px-3 py-1.5 text-xs"
+          message="Queue activation invitations for the selected first-time eligible homeowners?"
+        >Send selected eligible</HomeownerActivationBulkSubmitButton>
+        <HomeownerActivationBulkSubmitButton
+          mode="filtered"
+          className="btn-secondary min-h-9 px-3 py-1.5 text-xs"
+          disabled={eligibleFilteredCount === 0}
+          message={`Queue activation invitations for all ${eligibleFilteredCount.toLocaleString("en-PH")} first-time eligible homeowners matching the current filters?`}
+        >Select & send all {eligibleFilteredCount.toLocaleString("en-PH")} eligible matching filters</HomeownerActivationBulkSubmitButton>
+        <p className="basis-full text-xs font-semibold text-slate-500">Select individual homeowners, use Select page, or send to all first-time eligible homeowners matching the current filters. The server resolves the final tenant-scoped recipient set and processes it in background batches. Previously invited homeowners are never silently reissued.</p>
       </div>
       <div className="table-wrap"><table className="data-table min-w-[1150px]"><thead><tr><th><HomeownerActivationPageSelectAll formId={activationBulkFormId} /></th><th>Homeowner</th><th>Masked Account</th><th>Property</th><th>Monthly dues</th><th>Operational Status</th><th>Digital Account Activation</th><th>Latest Delivery</th><th></th></tr></thead><tbody>
       {homeowners.map((homeowner) => {

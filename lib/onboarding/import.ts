@@ -321,6 +321,7 @@ async function applyClientScaleRows(
         accountNumberProvided: Boolean(item.row.accountNumber),
         emailProvided,
         activationDeferred: emailProvided,
+        remarks: item.row.remarks,
       },
     });
 
@@ -524,6 +525,7 @@ async function applyInlineRows(
           accountNumberProvided: Boolean(item.row.accountNumber),
           emailProvided,
           activationDeferred: false,
+          remarks: item.row.remarks,
         },
       },
     });

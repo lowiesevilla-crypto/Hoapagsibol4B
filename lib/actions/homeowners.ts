@@ -491,7 +491,7 @@ async function sendActivationInvitation(
       });
       return created;
     });
-    await sendHomeownerActivationEmail({
+    const notification = await sendHomeownerActivationEmail({
       tenantId: admin.tenantId,
       userId: profile.userId,
       name: profile.user.name,
@@ -502,7 +502,31 @@ async function sendActivationInvitation(
       expiresAt: activation.expiresAt,
       actorId: admin.id,
     });
-    return { ok: true } as const;
+    const deliveryStatus = "status" in notification ? notification.status : NotificationStatus.FAILED;
+    if (deliveryStatus === NotificationStatus.SENT) return { ok: true } as const;
+    await prisma.auditLog.create({
+      data: {
+        tenantId: admin.tenantId,
+        actorId: admin.id,
+        module: "AUTH",
+        action: "HOMEOWNER_ACTIVATION_INVITATION_DELIVERY_NOT_ACCEPTED",
+        entityType: "User",
+        entityId: profile.userId,
+        metadata: {
+          homeownerId: profile.id,
+          notificationId: notification.id,
+          status: deliveryStatus,
+          errorCategory: activationInvitationDeliveryErrorCategory("errorMessage" in notification ? notification.errorMessage : null),
+        },
+      },
+    });
+    return {
+      ok: false,
+      skipped: deliveryStatus === NotificationStatus.SKIPPED,
+      reason: deliveryStatus === NotificationStatus.SKIPPED
+        ? "Activation email was skipped by delivery safety controls. Review the homeowner email and mail settings before retrying."
+        : "Activation email was not accepted by the configured provider. Review Mail Settings before retrying.",
+    } as const;
   } catch (error) {
     await prisma.auditLog.create({
       data: {
@@ -536,6 +560,15 @@ function passwordResetFingerprint(value: string) {
 function safeDigitalAccessReason(value: FormDataEntryValue | null, fallback: string) {
   const text = String(value || "").replace(/[\r\n\t]+/g, " ").replace(/\s+/g, " ").trim();
   return (text || fallback).slice(0, 240);
+}
+
+function activationInvitationDeliveryErrorCategory(message?: string | null) {
+  const normalized = String(message || "").toLowerCase();
+  if (!normalized) return null;
+  if (normalized.includes("suppressed")) return "RECIPIENT_SUPPRESSED";
+  if (normalized.includes("inactive") || normalized.includes("outside the tenant")) return "RECIPIENT_SCOPE";
+  if (normalized.includes("configured") || normalized.includes("smtp")) return "MAIL_CONFIGURATION";
+  return "DELIVERY_NOT_ACCEPTED";
 }
 
 function passwordResetEmailErrorCategory(message: string) {

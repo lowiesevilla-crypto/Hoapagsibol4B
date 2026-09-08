@@ -21,6 +21,9 @@ import { runWithTenant } from "@/lib/tenant-context";
 const runId = `activation-bulk-${process.pid}`;
 const tenantId = `${runId}-tenant`;
 const isolationTenantId = `${runId}-isolation`;
+const scaleTenantId = `${runId}-scale`;
+const scaleActorId = `${runId}-scale-actor`;
+const scaleFixtureCount = 5_001;
 const actorId = `${runId}-actor`;
 const isolationActorId = `${runId}-isolation-actor`;
 
@@ -33,7 +36,7 @@ function homeownerId(index: number) {
 }
 
 async function cleanFixtures() {
-  const tenantIds = [tenantId, isolationTenantId];
+  const tenantIds = [tenantId, isolationTenantId, scaleTenantId];
   await platformPrisma.homeownerActivationBulkItem.deleteMany({ where: { tenantId: { in: tenantIds } } });
   await platformPrisma.homeownerActivationBulkJob.deleteMany({ where: { tenantId: { in: tenantIds } } });
   await platformPrisma.auditLog.deleteMany({ where: { tenantId: { in: tenantIds } } });
@@ -110,6 +113,75 @@ test("activation bulk request is tenant-scoped and idempotent", async () => {
 
   const hidden = await runWithTenant(isolationTenantId, () => getHomeownerActivationBulkJobProgress(isolationTenantId, first.id), { role: Role.ADMIN });
   assert.equal(hidden, null, "Activation jobs must not be readable from another tenant.");
+});
+
+test("activation bulk queues 5,001 first-time eligible homeowners without sending inline email", async () => {
+  await platformPrisma.tenant.create({
+    data: { id: scaleTenantId, name: "Activation Bulk Scale Tenant", shortName: "ABS", slug: `${runId}-scale` },
+  });
+  await platformPrisma.user.create({
+    data: { id: scaleActorId, tenantId: scaleTenantId, name: "Scale Activation Admin", email: `${runId}-scale-admin@example.invalid`, passwordHash: "integration-test-only", role: Role.ADMIN },
+  });
+
+  const users: Prisma.UserCreateManyInput[] = Array.from({ length: scaleFixtureCount }, (_, offset) => {
+    const index = offset + 1;
+    const ordinal = String(index).padStart(4, "0");
+    return {
+      id: `${runId}-scale-user-${ordinal}`,
+      tenantId: scaleTenantId,
+      name: `Activation Scale Homeowner ${ordinal}`,
+      email: `${runId}-scale-owner-${ordinal}@example.com`,
+      passwordHash: "integration-test-only",
+      role: Role.HOMEOWNER,
+    };
+  });
+  const profiles: Prisma.HomeownerProfileCreateManyInput[] = Array.from({ length: scaleFixtureCount }, (_, offset) => {
+    const index = offset + 1;
+    const ordinal = String(index).padStart(4, "0");
+    return {
+      id: `${runId}-scale-homeowner-${ordinal}`,
+      tenantId: scaleTenantId,
+      userId: `${runId}-scale-user-${ordinal}`,
+      address: `${ordinal} Activation Scale Street`,
+      block: "S",
+      lot: String(index),
+      phone: `09${String(index).padStart(9, "0")}`,
+      accountNumber: `8${String(index).padStart(10, "0")}`,
+      monthlyDuesAmount: new Prisma.Decimal("100.00"),
+      status: HomeownerStatus.ACTIVE,
+      activationStatus: HomeownerActivationStatus.NOT_INVITED,
+      emailStatus: HomeownerEmailVerificationStatus.UNVERIFIED,
+      activationSentAt: null,
+    };
+  });
+  for (let offset = 0; offset < scaleFixtureCount; offset += 500) {
+    await platformPrisma.user.createMany({ data: users.slice(offset, offset + 500) });
+    await platformPrisma.homeownerProfile.createMany({ data: profiles.slice(offset, offset + 500) });
+  }
+
+  const startedAt = performance.now();
+  const job = await runWithTenant(scaleTenantId, () => requestHomeownerActivationBulkJob({
+    tenantId: scaleTenantId,
+    initiatedById: scaleActorId,
+    idempotencyKey: `${runId}-scale-5001`,
+    selectionMode: HomeownerActivationBulkSelectionMode.FILTERED,
+    filters: { status: "all", digital: "eligible" },
+  }), { role: Role.ADMIN });
+  const duplicate = await runWithTenant(scaleTenantId, () => requestHomeownerActivationBulkJob({
+    tenantId: scaleTenantId,
+    initiatedById: scaleActorId,
+    idempotencyKey: `${runId}-scale-5001`,
+    selectionMode: HomeownerActivationBulkSelectionMode.FILTERED,
+    filters: { status: "all", digital: "eligible" },
+  }), { role: Role.ADMIN });
+
+  assert.equal(duplicate.id, job.id);
+  assert.equal(job.totalTargets, scaleFixtureCount);
+  assert.equal(job.queuedCount, scaleFixtureCount);
+  assert.equal(job.status, HomeownerActivationBulkJobStatus.QUEUED);
+  assert.equal(await platformPrisma.homeownerActivationBulkItem.count({ where: { tenantId: scaleTenantId, jobId: job.id } }), scaleFixtureCount);
+  assert.equal(await platformPrisma.notificationLog.count({ where: { tenantId: scaleTenantId } }), 0, "Queue creation must not send or log SMTP delivery attempts.");
+  assert.ok(performance.now() - startedAt < 60_000, "5,001-homeowner activation queue creation exceeded the 60-second target in CI.");
 });
 
 test("failed-only activation retry creates a new job without accepted or skipped recipients", async () => {

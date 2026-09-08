@@ -12,6 +12,7 @@ const adminRoutePermissions: readonly [string, PermissionValue][] = [
   ["/admin/onboarding", Permission.TENANT_SETTINGS_MANAGE],
   ["/admin/settings/billing-rules", Permission.BILLING_MANAGE],
   ["/admin/settings/billing-exemptions", Permission.BILLING_MANAGE],
+  ["/admin/finance/billing", Permission.BILLING_MANAGE],
   ["/admin/settings", Permission.TENANT_SETTINGS_MANAGE],
   ["/admin/homeowners", Permission.HOMEOWNERS_MANAGE],
   ["/admin/workforce", Permission.PAYROLL_MANAGE],

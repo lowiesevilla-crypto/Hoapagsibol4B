@@ -6,6 +6,7 @@ import { moduleForPath } from "@/lib/module-routing";
 test("all exposed tenant finance workspaces remain inside the BILLING plan capability", () => {
   for (const path of [
     "/admin/billing",
+    "/admin/finance/billing",
     "/admin/settings/billing-rules",
     "/admin/settings/billing-exemptions",
     "/admin/settings/payments",

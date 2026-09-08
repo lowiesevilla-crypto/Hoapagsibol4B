@@ -8,6 +8,10 @@ import { requestHomeownerActivationBulkJob } from "@/lib/services/homeowner-acti
 
 export async function queueHomeownerActivationBulkJobAction(formData: FormData) {
   const admin = await requireUser(Role.ADMIN);
+  if (process.env.HOMEOWNER_ACTIVATION_BULK_DELIVERY_ENABLED !== "true") {
+    redirect(buildReturnUrl(formData, { error: "Bulk activation delivery is staged but not enabled for production rollout yet." }));
+  }
+
   const mode = String(formData.get("mode") || "selected") === "filtered"
     ? HomeownerActivationBulkSelectionMode.FILTERED
     : HomeownerActivationBulkSelectionMode.SELECTED;

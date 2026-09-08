@@ -18,7 +18,7 @@ const rules: Array<[string, TenantModule]> = [
   // by the plan's BILLING capability. Petty Cash adds its independent sellable
   // feature entitlement on top of this finance dependency.
   ["/admin/settings/billing-rules", TenantModule.BILLING], ["/admin/settings/billing-exemptions", TenantModule.BILLING], ["/admin/settings/payments", TenantModule.BILLING],
-  ["/admin/billing", TenantModule.BILLING], ["/admin/payments", TenantModule.BILLING], ["/admin/receipts", TenantModule.BILLING], ["/admin/collections", TenantModule.BILLING], ["/admin/rentals", TenantModule.BILLING], ["/admin/expenses", TenantModule.BILLING], ["/admin/petty-cash", TenantModule.BILLING], ["/admin/data", TenantModule.BILLING],
+  ["/admin/finance/billing", TenantModule.BILLING], ["/admin/billing", TenantModule.BILLING], ["/admin/payments", TenantModule.BILLING], ["/admin/receipts", TenantModule.BILLING], ["/admin/collections", TenantModule.BILLING], ["/admin/rentals", TenantModule.BILLING], ["/admin/expenses", TenantModule.BILLING], ["/admin/petty-cash", TenantModule.BILLING], ["/admin/data", TenantModule.BILLING],
   ["/api/payments", TenantModule.BILLING],
   ...homeownerModuleRules,
 ];

@@ -9,6 +9,7 @@ import { saveSystemSettingsAction, sendTestEmailAction } from "@/lib/actions/set
 import { requireUser } from "@/lib/auth";
 import { getAppUrl } from "@/lib/app-url";
 import { allSettingFields, BOOTSTRAP_TENANT_ID, getSystemSettingMap, maskedSecret, settingSections } from "@/lib/system-settings";
+import { assessEmailDeliverability } from "@/lib/services/email-deliverability";
 import { getMailConfiguration } from "@/lib/services/notifications";
 import { shortDate } from "@/lib/utils";
 
@@ -24,6 +25,9 @@ const icons = {
 export default async function SystemSettingsPage({ searchParams }: { searchParams: Promise<{ error?: string; success?: string; message?: string }> }) {
   const user = await requireUser(Role.SYSTEM_ADMIN);
   const [settings, query, mail] = await Promise.all([getSystemSettingMap(user.tenantId), searchParams, getMailConfiguration(user.tenantId)]);
+  const deliverability = await assessEmailDeliverability(mail, {
+    dkimSelector: settings.get(`${SystemSettingCategory.EMAIL}.MAIL_DKIM_SELECTOR`)?.value?.trim() || undefined,
+  });
   const environmentAliases: Record<string, string[]> = {
     MAIL_HOST: ["SMTP_HOST"], MAIL_PORT: ["SMTP_PORT"], MAIL_ENCRYPTION: ["SMTP_ENCRYPTION"],
     MAIL_USERNAME: ["SMTP_USERNAME"], MAIL_PASSWORD: ["SMTP_PASSWORD"],
@@ -83,6 +87,22 @@ export default async function SystemSettingsPage({ searchParams }: { searchParam
         <div><p className="text-xs font-black uppercase tracking-[.16em] text-pine-700">SMTP verification</p><h2 className="mt-1 text-lg font-black">Send test email</h2><p className="mt-1 text-sm leading-6 text-slate-600">Current provider: <b>{mail.provider}</b>. Connection status: <b>{mail.configured ? "ready for testing" : "credentials or sender settings missing"}</b>. Credential source: <b>{mail.credentialSource}</b>. Effective sender: <b>{mail.fromAddress}</b>{mail.senderAddressAdjusted ? " (matched automatically to the authenticated Hostinger mailbox)" : ""}. Passwords are never displayed or returned by the server.</p></div>
         <form action={sendTestEmailAction} className="grid min-w-0 gap-3 sm:grid-cols-[minmax(220px,1fr)_auto]"><div><label className="label" htmlFor="test-email">Test recipient</label><input id="test-email" className="field" name="email" type="email" defaultValue={mail.fromAddress} placeholder="admin@example.com" required /></div><div className="sm:self-end"><SubmitButton>Send test email</SubmitButton></div></form>
       </div>
+    </section>
+
+    <section className="card mb-6 border-amber-100 bg-amber-50/50">
+      <div className="mb-4">
+        <p className="text-xs font-black uppercase tracking-[.16em] text-amber-700">Inbox placement readiness</p>
+        <h2 className="mt-1 text-lg font-black">Email authentication checks</h2>
+        <p className="mt-1 text-sm leading-6 text-slate-600">These checks do not send email or change activation behavior. Use them to confirm SPF, DKIM, DMARC, sender alignment, and secure activation links before increasing HOAHub email volume.</p>
+      </div>
+      <div className="grid gap-3 lg:grid-cols-5">
+        {deliverability.checks.map((check) => <div key={check.key} className="rounded-2xl bg-white p-3 shadow-sm">
+          <span className={`badge ${check.status === "PASS" ? "badge-success" : check.status === "FAIL" ? "badge-danger" : "badge-warning"}`}>{check.status}</span>
+          <h3 className="mt-3 font-black text-slate-800">{check.label}</h3>
+          <p className="mt-1 text-xs leading-5 text-slate-600">{check.message}</p>
+        </div>)}
+      </div>
+      {!deliverability.releaseReady && <p className="mt-4 rounded-2xl bg-white p-3 text-sm font-semibold text-amber-900">Do not enable bulk activation delivery until every authentication check is green and a small production canary reaches inboxes reliably.</p>}
     </section>
 
     <section className="card mb-6">

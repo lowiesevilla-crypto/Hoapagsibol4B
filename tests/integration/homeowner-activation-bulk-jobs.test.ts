@@ -114,6 +114,7 @@ test("activation bulk request is tenant-scoped and idempotent", async () => {
 
   const hidden = await runWithTenant(isolationTenantId, () => getHomeownerActivationBulkJobProgress(isolationTenantId, first.id), { role: Role.ADMIN });
   assert.equal(hidden, null, "Activation jobs must not be readable from another tenant.");
+  await platformPrisma.homeownerActivationBulkJob.update({ where: { id: first.id }, data: { status: HomeownerActivationBulkJobStatus.SUCCEEDED, completedAt: new Date() } });
 });
 
 test("activation bulk queues 5,001 first-time eligible homeowners without sending inline email", async () => {
@@ -183,6 +184,7 @@ test("activation bulk queues 5,001 first-time eligible homeowners without sendin
   assert.equal(await platformPrisma.homeownerActivationBulkItem.count({ where: { tenantId: scaleTenantId, jobId: job.id } }), scaleFixtureCount);
   assert.equal(await platformPrisma.notificationLog.count({ where: { tenantId: scaleTenantId } }), 0, "Queue creation must not send or log SMTP delivery attempts.");
   assert.ok(performance.now() - startedAt < 60_000, "5,001-homeowner activation queue creation exceeded the 60-second target in CI.");
+  await platformPrisma.homeownerActivationBulkJob.update({ where: { id: job.id }, data: { status: HomeownerActivationBulkJobStatus.SUCCEEDED, completedAt: new Date() } });
 });
 
 test("failed-only activation retry creates a new job without accepted or skipped recipients", async () => {
@@ -232,6 +234,10 @@ test("failed-only activation retry creates a new job without accepted or skipped
 });
 
 test("concurrent activation workers cannot claim the same queued job twice", async () => {
+  await platformPrisma.homeownerActivationBulkJob.updateMany({
+    where: { tenantId, status: { in: [HomeownerActivationBulkJobStatus.QUEUED, HomeownerActivationBulkJobStatus.RUNNING] } },
+    data: { status: HomeownerActivationBulkJobStatus.SUCCEEDED, completedAt: new Date() },
+  });
   const job = await platformPrisma.homeownerActivationBulkJob.create({
     data: {
       tenantId,

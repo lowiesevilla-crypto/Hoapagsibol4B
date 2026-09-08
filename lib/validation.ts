@@ -28,6 +28,7 @@ export const emailSettingsSchema = z.object({
   MAIL_PASSWORD: z.string().max(1024).optional(),
   MAIL_FROM_NAME: z.string().trim().min(2).max(100),
   MAIL_FROM_ADDRESS: z.string().trim().toLowerCase().email("Enter a valid sender email address."),
+  MAIL_DKIM_SELECTOR: z.string().trim().regex(/^[A-Za-z0-9_-]*$/, "DKIM selector may contain letters, numbers, underscores, or hyphens only.").max(100).optional(),
   PASSWORD_RESET_EXPIRY_MINUTES: z.coerce.number().int().min(30).max(60),
   PASSWORD_MIN_LENGTH: z.coerce.number().int().min(8).max(72),
   PASSWORD_REQUIRE_UPPERCASE: z.enum(["true", "false"]),

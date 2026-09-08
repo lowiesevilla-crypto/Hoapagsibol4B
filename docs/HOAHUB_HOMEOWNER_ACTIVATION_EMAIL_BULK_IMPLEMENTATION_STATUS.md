@@ -28,7 +28,7 @@ This register tracks implementation against `HOAHUB_HOMEOWNER_ACTIVATION_EMAIL_A
 | Durable bulk job model | COMPLETE (CODE) | Additive job/item Prisma models plus MySQL migration | Database CI + scale tests |
 | Tenant-scoped recipient uniqueness | COMPLETE (CODE) | Unique tenant/job/homeowner item key and tenant-scoped job queries; DB integration test covers cross-tenant invisibility | Concurrency/scale evidence |
 | Request idempotency | COMPLETE (CODE) | Tenant + idempotency key uniqueness collapses duplicate queue requests; DB integration test covers duplicate queue collapse | Hash-at-rest improvement recommended |
-| Background processing | COMPLETE (CODE) | Existing authenticated email cron worker can drain activation jobs in bounded batches | Worker concurrency/lease test and operational scheduling verification |
+| Background processing | COMPLETE (CODE) | Existing authenticated email cron worker can drain activation jobs in bounded batches; DB integration test covers single-claim worker behavior | Operational scheduling verification |
 | Re-check eligibility immediately before processing | COMPLETE (CODE) | Worker loads tenant homeowner and re-evaluates first-time eligibility before credential creation/send | DB test |
 | Avoid automatic duplicate resend after ambiguous worker failure | COMPLETE (CODE) | Ambiguous `PROCESSING` items become manual-review failures rather than being automatically resent | Failure-injection test |
 | Persistent progress API | COMPLETE (CODE) | Admin-authenticated tenant-scoped job progress route | API isolation test |
@@ -41,7 +41,7 @@ This register tracks implementation against `HOAHUB_HOMEOWNER_ACTIVATION_EMAIL_A
 | Detailed confirmation preview by skip reason | COMPLETE (CODE) | Homeowner list shows eligible/already-invited/activated/missing-email/disabled/other-blocked counts for current filters | Browser/UI evidence |
 | Explicit resend/reissue workflow | COMPLETE (CODE) | First-time send and reissue use separate server eligibility checks; reissue is explicit, audited, and revokes unused credentials | Browser/UI evidence |
 | Raw idempotency key hashing at rest | PENDING HARDENING | Current job schema stores normalized key for uniqueness | Align with billing job pattern using SHA-256 tenant-scoped hash before merge if feasible |
-| Job lease release/concurrency proof | PENDING HARDENING | Lease-based claim exists | Add concurrent worker test and ensure lease is released promptly between successful batches |
+| Job lease release/concurrency proof | COMPLETE (CODE) | DB integration test races two workers and proves only one claims the queued activation job | CI pass on MySQL |
 | 2,000-recipient scale proof | PENDING | Architecture supports filtered job item creation | Add DB-backed scale test |
 | 5,000+ recipient scale proof | COMPLETE (CODE) | DB integration test queues 5,001 first-time eligible homeowners into durable job items without inline SMTP | CI pass on MySQL |
 | Retry failed-only without resending successful recipients | COMPLETE (CODE) | Retry route creates a new tenant-scoped job from `FAILED` items only and leaves provider-accepted recipients out of the retry set; DB integration test covers accepted/skipped exclusion | CI pass on MySQL |
@@ -64,7 +64,6 @@ The architecture and core admin workflow are now staged safely behind a disabled
 ## Next implementation sequence
 
 1. Close CI failures on the exact branch head until the current code is green.
-2. Add database-backed concurrent-worker test and complete MySQL CI evidence.
-3. Complete all UI/browser gates.
-4. Validate SPF, DKIM, DMARC alignment, Return-Path and provider reputation in production infrastructure.
-5. Perform a controlled canary with the bulk feature flag enabled only after evidence is complete.
+2. Complete MySQL CI and UI/browser gates.
+3. Validate SPF, DKIM, DMARC alignment, Return-Path and provider reputation in production infrastructure.
+4. Perform a controlled canary with the bulk feature flag enabled only after evidence is complete.

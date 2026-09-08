@@ -2,6 +2,7 @@ import Link from "next/link";
 import type { ReactNode } from "react";
 import { HomeownerActivationStatus, HomeownerStatus, NotificationType, Prisma, Role } from "@prisma/client";
 import { ChevronLeft, ChevronRight, Plus } from "lucide-react";
+import { HomeownerActivationPageSelectAll } from "@/components/homeowner-activation-page-select-all";
 import { PageHeader } from "@/components/page-header";
 import { StatusBadge } from "@/components/status-badge";
 import { ConfirmSubmitButton } from "@/components/ui";
@@ -22,6 +23,7 @@ type HomeownerQuery = {
 };
 
 const pageSizes = [25, 50, 100];
+const activationBulkFormId = "homeowner-activation-bulk-form";
 const digitalFilters = [
   ["all", "All"],
   ["not_invited", "Not Invited"],
@@ -106,12 +108,12 @@ export default async function HomeownersPage({ searchParams }: { searchParams: P
       <div className="flex gap-2"><button className="btn-primary">Apply</button><Link className="btn-secondary" href="/admin/homeowners">Reset</Link></div>
     </form>
 
-    <form action={bulkSendHomeownerActivationInvitationsAction}>
+    <form id={activationBulkFormId} action={bulkSendHomeownerActivationInvitationsAction}>
       <div className="mb-4 flex flex-wrap gap-3 rounded-xl border bg-white p-3">
         <ConfirmSubmitButton className="btn-primary min-h-9 px-3 py-1.5 text-xs" name="mode" value="selected" message="Send activation invitations to selected eligible homeowners?">Send to selected eligible homeowners</ConfirmSubmitButton>
-        <p className="text-xs font-semibold text-slate-500">Only checked eligible homeowners on this page will be processed. Ineligible records remain visible with a reason.</p>
+        <p className="text-xs font-semibold text-slate-500">Select individual homeowners or use Select page. Only first-time eligible homeowners will be processed. Previously invited homeowners require the explicit resend/reissue flow.</p>
       </div>
-      <div className="table-wrap"><table className="data-table min-w-[1150px]"><thead><tr><th></th><th>Homeowner</th><th>Masked Account</th><th>Property</th><th>Monthly dues</th><th>Operational Status</th><th>Digital Account Activation</th><th>Latest Delivery</th><th></th></tr></thead><tbody>
+      <div className="table-wrap"><table className="data-table min-w-[1150px]"><thead><tr><th><HomeownerActivationPageSelectAll formId={activationBulkFormId} /></th><th>Homeowner</th><th>Masked Account</th><th>Property</th><th>Monthly dues</th><th>Operational Status</th><th>Digital Account Activation</th><th>Latest Delivery</th><th></th></tr></thead><tbody>
       {homeowners.map((homeowner) => {
         const accountNumber = homeownerAccountNumber(homeowner);
         const eligibility = homeownerDigitalActivationEligibility(homeowner);
@@ -153,7 +155,8 @@ function eligibleWhere(): Prisma.HomeownerProfileWhereInput {
   return {
     status: HomeownerStatus.ACTIVE,
     accountNumber: { not: null },
-    activationStatus: { notIn: [HomeownerActivationStatus.ACTIVE, HomeownerActivationStatus.CANCELLED, HomeownerActivationStatus.DISABLED] },
+    activationStatus: HomeownerActivationStatus.NOT_INVITED,
+    activationSentAt: null,
     user: { active: true, email: { not: "" } },
   };
 }

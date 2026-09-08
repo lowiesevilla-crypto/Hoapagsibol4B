@@ -9,6 +9,9 @@ import {
 } from "@/lib/services/homeowner-digital-activation";
 
 const homeownersPage = readFileSync("app/admin/homeowners/page.tsx", "utf8");
+const activationBulkJobs = readFileSync("lib/services/homeowner-activation-bulk-jobs.ts", "utf8");
+const activationBulkRetryRoute = readFileSync("app/api/admin/homeowners/activation-jobs/[id]/retry/route.ts", "utf8");
+const activationBulkProgress = readFileSync("components/homeowner-activation-bulk-progress.tsx", "utf8");
 
 function homeowner(overrides: Partial<HomeownerDigitalActivationProfile> = {}): HomeownerDigitalActivationProfile {
   return {
@@ -80,4 +83,14 @@ test("bulk activation page shows server-side confirmation buckets before queuein
   assert.match(homeownersPage, /Missing email/);
   assert.match(homeownersPage, /Other blocked/);
   assert.match(homeownersPage, /homeownerActivationConfirmationBreakdown/);
+});
+
+test("failed-only retry for activation bulk jobs cannot resend accepted recipients", () => {
+  assert.match(activationBulkJobs, /createFailedHomeownerActivationBulkRetry/);
+  assert.match(activationBulkJobs, /status: HomeownerActivationBulkItemStatus\.FAILED/);
+  assert.doesNotMatch(activationBulkJobs, /status: HomeownerActivationBulkItemStatus\.ACCEPTED[\s\S]{0,240}createMany/);
+  assert.match(activationBulkJobs, /retryFailedOnly: true/);
+  assert.match(activationBulkRetryRoute, /HOMEOWNER_ACTIVATION_BULK_DELIVERY_ENABLED/);
+  assert.match(activationBulkRetryRoute, /createFailedHomeownerActivationBulkRetry/);
+  assert.match(activationBulkProgress, /Retry .* failed only/);
 });

@@ -21,6 +21,50 @@ function compactSearchText(value: unknown) {
   return normalizeSearchText(value).replace(/\s+/g, "");
 }
 
+function parseExplicitPropertySearch(normalizedSearch: string) {
+  const tokens = normalizedSearch.split(/\s+/).filter(Boolean);
+  const consumed = new Set<number>();
+  let block: string | undefined;
+  let lot: string | undefined;
+
+  for (let index = 0; index < tokens.length; index += 1) {
+    const token = tokens[index];
+    const next = tokens[index + 1];
+    if ((token === "block" || token === "blk") && next) {
+      block = compactSearchText(next);
+      consumed.add(index);
+      consumed.add(index + 1);
+      index += 1;
+      continue;
+    }
+    if (token === "lot" && next) {
+      lot = compactSearchText(next);
+      consumed.add(index);
+      consumed.add(index + 1);
+      index += 1;
+      continue;
+    }
+
+    const blockMatch = token.match(/^b([a-z0-9]+)$/);
+    if (blockMatch?.[1]) {
+      block = blockMatch[1];
+      consumed.add(index);
+      continue;
+    }
+    const lotMatch = token.match(/^l([a-z0-9]+)$/);
+    if (lotMatch?.[1]) {
+      lot = lotMatch[1];
+      consumed.add(index);
+    }
+  }
+
+  return {
+    block,
+    lot,
+    residualTerms: tokens.filter((_, index) => !consumed.has(index)),
+  };
+}
+
 /**
  * Wild/partial search across the complete tenant-scoped report result set.
  * Every normalized search token must appear somewhere in the homeowner name,
@@ -33,10 +77,14 @@ export function filterHomeownerBalanceRows<T extends SearchableHomeownerBalanceR
   const normalizedSearch = normalizeSearchText(rawSearch);
   if (!normalizedSearch) return rows;
 
-  const terms = normalizedSearch.split(/\s+/).filter(Boolean);
+  const propertySearch = parseExplicitPropertySearch(normalizedSearch);
+  const terms = propertySearch.residualTerms.length ? propertySearch.residualTerms : normalizedSearch.split(/\s+/).filter(Boolean);
   return rows.filter((row) => {
     const block = String(row.block);
     const lot = String(row.lot);
+    if (propertySearch.block && !compactSearchText(block).includes(propertySearch.block)) return false;
+    if (propertySearch.lot && !compactSearchText(lot).includes(propertySearch.lot)) return false;
+
     const haystack = normalizeSearchText([
       row.homeownerName,
       row.accountNumber ?? "",
@@ -52,7 +100,7 @@ export function filterHomeownerBalanceRows<T extends SearchableHomeownerBalanceR
     ].join(" "));
     const compactHaystack = compactSearchText(haystack);
 
-    return terms.every((term) => haystack.includes(term) || compactHaystack.includes(compactSearchText(term)));
+    return terms.length === 0 || terms.every((term) => haystack.includes(term) || compactHaystack.includes(compactSearchText(term)));
   });
 }
 

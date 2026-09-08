@@ -1,10 +1,13 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test from "node:test";
 import { HomeownerActivationStatus, HomeownerEmailVerificationStatus, HomeownerStatus } from "@prisma/client";
 import {
   homeownerDigitalActivationEligibility,
   type HomeownerDigitalActivationProfile,
 } from "@/lib/services/homeowner-digital-activation";
+
+const homeownersPage = readFileSync("app/admin/homeowners/page.tsx", "utf8");
 
 function homeowner(overrides: Partial<HomeownerDigitalActivationProfile> = {}): HomeownerDigitalActivationProfile {
   return {
@@ -52,4 +55,12 @@ test("first-time activation eligibility rejects activated and disabled homeowner
   assert.equal(homeownerDigitalActivationEligibility(homeowner({
     activationStatus: HomeownerActivationStatus.DISABLED,
   })).eligible, false);
+});
+
+test("bulk activation page shows server-side confirmation buckets before queueing", () => {
+  assert.match(homeownersPage, /Current filter confirmation preview/);
+  assert.match(homeownersPage, /Already invited/);
+  assert.match(homeownersPage, /Missing email/);
+  assert.match(homeownersPage, /Other blocked/);
+  assert.match(homeownersPage, /homeownerActivationConfirmationBreakdown/);
 });

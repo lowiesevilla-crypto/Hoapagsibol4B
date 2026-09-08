@@ -43,7 +43,7 @@ This register tracks implementation against `HOAHUB_HOMEOWNER_ACTIVATION_EMAIL_A
 | Raw idempotency key hashing at rest | PENDING HARDENING | Current job schema stores normalized key for uniqueness | Align with billing job pattern using SHA-256 tenant-scoped hash before merge if feasible |
 | Job lease release/concurrency proof | PENDING HARDENING | Lease-based claim exists | Add concurrent worker test and ensure lease is released promptly between successful batches |
 | 2,000-recipient scale proof | PENDING | Architecture supports filtered job item creation | Add DB-backed scale test |
-| 5,000+ recipient scale proof | PENDING / BLOCKER | Bounded worker/job architecture implemented | Add 5,001-recipient creation/processing simulation without real SMTP |
+| 5,000+ recipient scale proof | COMPLETE (CODE) | DB integration test queues 5,001 first-time eligible homeowners into durable job items without inline SMTP | CI pass on MySQL |
 | Retry failed-only without resending successful recipients | COMPLETE (CODE) | Retry route creates a new tenant-scoped job from `FAILED` items only and leaves provider-accepted recipients out of the retry set; DB integration test covers accepted/skipped exclusion | CI pass on MySQL |
 | SPF validation | OPERATIONAL / PENDING | Requirements documented | Verify live production DNS against actual provider |
 | DKIM validation | OPERATIONAL / PENDING | Requirements documented | Verify selector/key and passing signature |
@@ -64,7 +64,7 @@ The architecture and core admin workflow are now staged safely behind a disabled
 ## Next implementation sequence
 
 1. Close CI failures on the exact branch head until the current code is green.
-2. Add database-backed concurrent-worker and 5,001-recipient scale tests.
+2. Add database-backed concurrent-worker test and complete MySQL CI evidence.
 3. Complete all UI/browser gates.
 4. Validate SPF, DKIM, DMARC alignment, Return-Path and provider reputation in production infrastructure.
 5. Perform a controlled canary with the bulk feature flag enabled only after evidence is complete.

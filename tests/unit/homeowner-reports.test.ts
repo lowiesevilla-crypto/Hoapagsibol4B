@@ -81,6 +81,8 @@ test("homeowner balance preview wildcard-searches the full tenant result set bef
     { homeownerName: "Juan Dela Cruz", accountNumber: "HO-001", block: "12", lot: "5", phase: "1" },
     { homeownerName: "Maria Santos", accountNumber: "HO-002", block: "12", lot: "9", phase: "1" },
     { homeownerName: "José Garcia", accountNumber: "HO-003", block: "3", lot: "5", phase: "2" },
+    { homeownerName: "Ana Reyes", accountNumber: "HO-004", block: "15-A", lot: "10-B", phase: "2" },
+    { homeownerName: "Pedro Ramos", accountNumber: "HO-005", block: "1", lot: "2", phase: "3" },
   ];
 
   assert.deepEqual(filterHomeownerBalanceRows(rows, "juan").map((row) => row.accountNumber), ["HO-001"]);
@@ -88,6 +90,11 @@ test("homeowner balance preview wildcard-searches the full tenant result set bef
   assert.deepEqual(filterHomeownerBalanceRows(rows, "block 12 lot 5").map((row) => row.accountNumber), ["HO-001"]);
   assert.deepEqual(filterHomeownerBalanceRows(rows, "12 9").map((row) => row.accountNumber), ["HO-002"]);
   assert.deepEqual(filterHomeownerBalanceRows(rows, "jose garc").map((row) => row.accountNumber), ["HO-003"]);
+  assert.deepEqual(filterHomeownerBalanceRows(rows, "Block 15A Lot 10B").map((row) => row.accountNumber), ["HO-004"]);
+  assert.deepEqual(filterHomeownerBalanceRows(rows, "15A/10B").map((row) => row.accountNumber), ["HO-004"]);
+  assert.deepEqual(filterHomeownerBalanceRows(rows, "B15A L10B").map((row) => row.accountNumber), ["HO-004"]);
+  assert.deepEqual(filterHomeownerBalanceRows(rows, "Block 1, Lot 2").map((row) => row.accountNumber), ["HO-005"]);
+  assert.deepEqual(filterHomeownerBalanceRows(rows, "block 1 lot 2").map((row) => row.accountNumber), ["HO-005"]);
 
   const manyRows = Array.from({ length: 61 }, (_, index) => ({
     homeownerName: `Resident ${index + 1}`,

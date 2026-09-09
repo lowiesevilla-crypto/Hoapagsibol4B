@@ -77,12 +77,13 @@ test("protected queue endpoint and scheduler are tenant-bounded and fail closed 
   assert.match(scheduler, /cancel-in-progress: false/);
 });
 
-test("mail settings surface deliverability authentication before bulk activation rollout", () => {
+test("mail settings surface simple deliverability guidance before high-volume activation sending", () => {
   assert.match(deliverability, /resolveTxt/);
   assert.match(deliverability, /SPF/);
   assert.match(deliverability, /DKIM/);
   assert.match(deliverability, /DMARC/);
   assert.match(settingsPage, /assessEmailDeliverability/);
   assert.match(settingsPage, /Inbox placement readiness/);
-  assert.match(settingsPage, /Do not enable bulk activation delivery/);
+  assert.match(settingsPage, /Send a test email first/);
+  assert.match(settingsPage, /Fix the failed email checks above/);
 });

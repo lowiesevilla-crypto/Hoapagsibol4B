@@ -107,7 +107,9 @@ export default async function SystemSettingsPage({ searchParams }: { searchParam
         <p className="font-black text-slate-900">Hostinger values for hoahub.tech</p>
         <p className="mt-1">Use DKIM selectors <b>hostingermail-a,hostingermail-b,hostingermail-c</b>. DMARC DNS TXT host is <b>_dmarc</b> with value <b>v=DMARC1; p=none</b>.</p>
       </div>}
-      {!deliverability.releaseReady && <p className="mt-4 rounded-2xl bg-white p-3 text-sm font-semibold text-amber-900">Do not enable bulk activation delivery until every authentication check is green and a small production canary reaches inboxes reliably.</p>}
+      {deliverability.releaseReady
+        ? <p className="mt-4 rounded-2xl bg-white p-3 text-sm font-semibold text-emerald-800">Email authentication is configured. Send a test email first, then send a small homeowner activation canary before sending many activation emails.</p>
+        : <p className="mt-4 rounded-2xl bg-white p-3 text-sm font-semibold text-amber-900">Fix the failed email checks above before sending many activation emails.</p>}
     </section>
 
     <section className="card mb-6">

@@ -77,7 +77,7 @@ function dmarcCheck(senderDomain: string, records: string[] | null, configuredDm
   if (configuredDmarcRecord && normalizeDmarc(configuredDmarcRecord) !== normalizeDmarc(dmarc)) {
     return { key: "dmarc", label: "DMARC", status: "WARN", message: "Live DMARC DNS exists but differs from the saved reference value in Mail Settings." };
   }
-  if (/\bp=none\b/i.test(dmarc)) return { key: "dmarc", label: "DMARC", status: "WARN", message: "DMARC exists with p=none. This is acceptable for monitoring, but quarantine/reject gives stronger domain protection." };
+  if (/\bp=none\b/i.test(dmarc)) return { key: "dmarc", label: "DMARC", status: "PASS", message: "DMARC is configured for monitoring. This is OK for current sending and inbox testing." };
   return { key: "dmarc", label: "DMARC", status: "PASS", message: "DMARC record is present with an enforcing policy." };
 }
 

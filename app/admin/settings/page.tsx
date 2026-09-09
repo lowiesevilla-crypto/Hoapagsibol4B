@@ -26,7 +26,8 @@ export default async function SystemSettingsPage({ searchParams }: { searchParam
   const user = await requireUser(Role.SYSTEM_ADMIN);
   const [settings, query, mail] = await Promise.all([getSystemSettingMap(user.tenantId), searchParams, getMailConfiguration(user.tenantId)]);
   const deliverability = await assessEmailDeliverability(mail, {
-    dkimSelector: settings.get(`${SystemSettingCategory.EMAIL}.MAIL_DKIM_SELECTOR`)?.value?.trim() || undefined,
+    dkimSelectors: settings.get(`${SystemSettingCategory.EMAIL}.MAIL_DKIM_SELECTOR`)?.value?.trim() || undefined,
+    configuredDmarcRecord: settings.get(`${SystemSettingCategory.EMAIL}.MAIL_DMARC_RECORD`)?.value?.trim() || undefined,
   });
   const environmentAliases: Record<string, string[]> = {
     MAIL_HOST: ["SMTP_HOST"], MAIL_PORT: ["SMTP_PORT"], MAIL_ENCRYPTION: ["SMTP_ENCRYPTION"],
@@ -102,6 +103,10 @@ export default async function SystemSettingsPage({ searchParams }: { searchParam
           <p className="mt-1 text-xs leading-5 text-slate-600">{check.message}</p>
         </div>)}
       </div>
+      {deliverability.senderDomain === "hoahub.tech" && <div className="mt-4 rounded-2xl bg-white p-3 text-sm text-slate-700">
+        <p className="font-black text-slate-900">Hostinger values for hoahub.tech</p>
+        <p className="mt-1">Use DKIM selectors <b>hostingermail-a,hostingermail-b,hostingermail-c</b>. DMARC DNS TXT host is <b>_dmarc</b> with value <b>v=DMARC1; p=none</b>.</p>
+      </div>}
       {!deliverability.releaseReady && <p className="mt-4 rounded-2xl bg-white p-3 text-sm font-semibold text-amber-900">Do not enable bulk activation delivery until every authentication check is green and a small production canary reaches inboxes reliably.</p>}
     </section>
 

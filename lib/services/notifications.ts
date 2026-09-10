@@ -233,7 +233,7 @@ export async function sendProtectedRawEmail(input: {
   if (await isRecipientSuppressed(input.tenantId, validation.fingerprint)) {
     return { status: "SKIPPED", maskedRecipient: validation.maskedEmail, message: "Recipient is suppressed because a previous delivery was permanently rejected." };
   }
-  if (await isProviderCircuitOpen(input.tenantId)) {
+  if (await isEmailProviderCircuitOpen(input.tenantId)) {
     return { status: "SKIPPED", maskedRecipient: validation.maskedEmail, failureKind: "PROVIDER_CIRCUIT", message: "Email provider circuit is temporarily open; SMTP was not contacted." };
   }
 
@@ -246,7 +246,7 @@ export async function sendProtectedRawEmail(input: {
 
   return runSerializedSmtp(async () => {
     // Recheck the persistent circuit after waiting for another local send.
-    if (await isProviderCircuitOpen(input.tenantId)) {
+    if (await isEmailProviderCircuitOpen(input.tenantId)) {
       return { status: "SKIPPED", maskedRecipient: validation.maskedEmail, failureKind: "PROVIDER_CIRCUIT", message: "Email provider circuit is temporarily open; SMTP was not contacted." };
     }
     try {
@@ -260,6 +260,7 @@ export async function sendProtectedRawEmail(input: {
         text: input.text,
         html: input.html,
       });
+      await closeProviderCircuit(input.tenantId, "SMTP message accepted successfully.");
       return { status: "SENT", maskedRecipient: validation.maskedEmail, providerMessageId: result.messageId };
     } catch (error) {
       const failure = classifyMailFailure(error);
@@ -274,7 +275,7 @@ export async function processQueuedEmailNotifications(tenantId: string, options?
   const enabled = process.env.EMAIL_BULK_DELIVERY_ENABLED === "true";
   if (!enabled) {
     const remaining = await prisma.notificationLog.count({ where: { tenantId, channel: NotificationChannel.EMAIL, status: NotificationStatus.QUEUED, type: { in: [...QUEUED_NOTIFICATION_TYPES] } } });
-    return { enabled: false, processed: 0, sent: 0, failed: 0, skipped: 0, requeued: 0, remaining, circuitOpen: await isProviderCircuitOpen(tenantId) };
+    return { enabled: false, processed: 0, sent: 0, failed: 0, skipped: 0, requeued: 0, remaining, circuitOpen: await isEmailProviderCircuitOpen(tenantId) };
   }
 
   const requested = options?.limit ?? Number(process.env.EMAIL_DELIVERY_BATCH_SIZE || 25);
@@ -292,7 +293,7 @@ export async function processQueuedEmailNotifications(tenantId: string, options?
   let failed = 0;
   let skipped = 0;
   let requeued = 0;
-  let circuitOpen = await isProviderCircuitOpen(tenantId);
+  let circuitOpen = await isEmailProviderCircuitOpen(tenantId);
   if (!circuitOpen) {
     for (const log of logs) {
       const metadata = metadataRecord(log.metadata);
@@ -375,7 +376,7 @@ export async function processQueuedEmailNotifications(tenantId: string, options?
   }
 
   const remaining = await prisma.notificationLog.count({ where: { tenantId, channel: NotificationChannel.EMAIL, status: NotificationStatus.QUEUED, type: { in: [...QUEUED_NOTIFICATION_TYPES] } } });
-  return { enabled: true, processed, sent, failed, skipped, requeued, remaining, circuitOpen: circuitOpen || await isProviderCircuitOpen(tenantId) };
+  return { enabled: true, processed, sent, failed, skipped, requeued, remaining, circuitOpen: circuitOpen || await isEmailProviderCircuitOpen(tenantId) };
 }
 
 export async function verifyMailConnection(tenantId: string) {
@@ -495,7 +496,7 @@ async function suppressRecipient(tenantId: string, validation: ReturnType<typeof
   });
 }
 
-async function isProviderCircuitOpen(tenantId: string) {
+export async function isEmailProviderCircuitOpen(tenantId: string) {
   const latest = await platformPrisma.auditLog.findFirst({
     where: {
       tenantId,

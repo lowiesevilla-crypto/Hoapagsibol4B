@@ -14,8 +14,14 @@ import {
 import { prisma } from "@/lib/db";
 import { homeownerAccountNumber } from "@/lib/homeowner-account";
 import { homeownerSearchWhere } from "@/lib/homeowner-admin-search";
-import { createHomeownerActivationCredential, sendHomeownerActivationEmail } from "@/lib/services/homeowner-activation";
+import {
+  createHomeownerActivationCredential,
+  finalizeAcceptedHomeownerActivationCredential,
+  revokeUnacceptedHomeownerActivationCredential,
+  sendHomeownerActivationEmail,
+} from "@/lib/services/homeowner-activation";
 import { homeownerActivationReissueEligibility, homeownerDigitalActivationEligibility, maskAccountNumber } from "@/lib/services/homeowner-digital-activation";
+import { isEmailProviderCircuitOpen } from "@/lib/services/notifications";
 
 const JOB_LEASE_MS = 2 * 60 * 1000;
 const DEFAULT_BATCH_SIZE = 25;
@@ -167,6 +173,20 @@ export async function processNextHomeownerActivationBulkJob(tenantId: string, op
     });
     if (claimedItem.count !== 1) continue;
     const outcome = await processRecipient(tenantId, candidate.initiatedById, item.homeownerId, sendModeFromSnapshot(candidate.filterSnapshot));
+    if (outcome.providerCircuitOpen && outcome.status === HomeownerActivationBulkItemStatus.PENDING) {
+      await prisma.homeownerActivationBulkItem.updateMany({
+        where: { id: item.id, tenantId, jobId: candidate.id, status: HomeownerActivationBulkItemStatus.PROCESSING },
+        data: {
+          status: HomeownerActivationBulkItemStatus.PENDING,
+          reason: outcome.reason,
+        },
+      });
+      await prisma.homeownerActivationBulkJob.updateMany({
+        where: { id: candidate.id, tenantId, leaseOwner },
+        data: { lastError: outcome.reason || "Email provider circuit is open. Delivery will resume after SMTP is healthy." },
+      });
+      break;
+    }
     await prisma.homeownerActivationBulkItem.updateMany({
       where: { id: item.id, tenantId, jobId: candidate.id, status: HomeownerActivationBulkItemStatus.PROCESSING },
       data: {
@@ -176,6 +196,13 @@ export async function processNextHomeownerActivationBulkJob(tenantId: string, op
         completedAt: new Date(),
       },
     });
+    if (outcome.providerCircuitOpen) {
+      await prisma.homeownerActivationBulkJob.updateMany({
+        where: { id: candidate.id, tenantId, leaseOwner },
+        data: { lastError: outcome.reason || "Email provider circuit opened. Remaining activation emails are still queued." },
+      });
+      break;
+    }
   }
 
   return refreshJobCounters(tenantId, candidate.id, leaseOwner);
@@ -188,6 +215,7 @@ export async function drainHomeownerActivationBulkJobs(tenantId: string, options
     const progress = await processNextHomeownerActivationBulkJob(tenantId, { batchSize: options?.batchSize });
     if (!progress) break;
     lastJob = progress;
+    if (/provider circuit/i.test(progress.lastError || "")) break;
     if (!["QUEUED", "RUNNING"].includes(progress.status) || progress.queuedCount <= 0) break;
   }
   return lastJob;
@@ -403,7 +431,15 @@ async function processRecipient(tenantId: string, actorId: string, homeownerId: 
   status: HomeownerActivationBulkItemStatus;
   notificationId?: string;
   reason?: string;
+  providerCircuitOpen?: boolean;
 }> {
+  if (await isEmailProviderCircuitOpen(tenantId)) {
+    return {
+      status: HomeownerActivationBulkItemStatus.PENDING,
+      providerCircuitOpen: true,
+      reason: "Email provider circuit is temporarily open; activation delivery is paused and SMTP was not contacted.",
+    };
+  }
   const profile = await prisma.homeownerProfile.findFirst({
     where: { id: homeownerId, tenantId },
     include: { user: true },
@@ -413,30 +449,9 @@ async function processRecipient(tenantId: string, actorId: string, homeownerId: 
   if (!eligibility.eligible) return { status: HomeownerActivationBulkItemStatus.SKIPPED, reason: eligibility.reason };
 
   const accountNumber = homeownerAccountNumber(profile);
+  let activation: Awaited<ReturnType<typeof createHomeownerActivationCredential>> | null = null;
   try {
-    const activation = await prisma.$transaction(async (tx) => {
-      const created = await createHomeownerActivationCredential({ tenantId, userId: profile.userId, createdById: actorId, tx });
-      await tx.homeownerProfile.update({
-        where: { tenantId_id: { tenantId, id: profile.id } },
-        data: {
-          activationStatus: HomeownerActivationStatus.INVITATION_SENT,
-          emailStatus: HomeownerEmailVerificationStatus.UNVERIFIED,
-          activationSentAt: new Date(),
-        },
-      });
-      await tx.auditLog.create({
-        data: {
-          tenantId,
-          actorId,
-          module: "AUTH",
-          action: sendMode === "reissue" ? "HOMEOWNER_ACTIVATION_BULK_REISSUE_CREATED" : "HOMEOWNER_ACTIVATION_BULK_INVITATION_CREATED",
-          entityType: "User",
-          entityId: profile.userId,
-          metadata: { homeownerId: profile.id, accountMasked: maskAccountNumber(accountNumber), activationSendMode: sendMode },
-        },
-      });
-      return created;
-    });
+    activation = await createHomeownerActivationCredential({ tenantId, userId: profile.userId, createdById: actorId, revokeExisting: false });
 
     const delivery = await sendHomeownerActivationEmail({
       tenantId,
@@ -450,7 +465,42 @@ async function processRecipient(tenantId: string, actorId: string, homeownerId: 
       actorId,
     });
     if ("status" in delivery && delivery.status === NotificationStatus.SENT) {
+      await prisma.$transaction(async (tx) => {
+        if (!activation) throw new Error("Activation credential was not created.");
+        await finalizeAcceptedHomeownerActivationCredential({ tenantId, userId: profile.userId, credentialId: activation.credentialId, emailVerificationTokenId: activation.emailVerificationTokenId, tx });
+        await tx.homeownerProfile.update({
+          where: { tenantId_id: { tenantId, id: profile.id } },
+          data: {
+            activationStatus: HomeownerActivationStatus.INVITATION_SENT,
+            emailStatus: HomeownerEmailVerificationStatus.UNVERIFIED,
+            activationSentAt: new Date(),
+          },
+        });
+        await tx.auditLog.create({
+          data: {
+            tenantId,
+            actorId,
+            module: "AUTH",
+            action: sendMode === "reissue" ? "HOMEOWNER_ACTIVATION_BULK_REISSUE_CREATED" : "HOMEOWNER_ACTIVATION_BULK_INVITATION_CREATED",
+            entityType: "User",
+            entityId: profile.userId,
+            metadata: { homeownerId: profile.id, accountMasked: maskAccountNumber(accountNumber), activationSendMode: sendMode },
+          },
+        });
+      });
       return { status: HomeownerActivationBulkItemStatus.ACCEPTED, notificationId: "id" in delivery ? String(delivery.id) : undefined };
+    }
+    if (activation) await revokeUnacceptedHomeownerActivationCredential({ tenantId, userId: profile.userId, credentialId: activation.credentialId, emailVerificationTokenId: activation.emailVerificationTokenId }).catch(() => undefined);
+    const deliveryStatus = "status" in delivery ? delivery.status : NotificationStatus.FAILED;
+    if ("metadata" in delivery && deliveryFailureKind(delivery.metadata) === "PROVIDER_CIRCUIT") {
+      return {
+        status: deliveryStatus === NotificationStatus.SKIPPED ? HomeownerActivationBulkItemStatus.PENDING : HomeownerActivationBulkItemStatus.FAILED,
+        notificationId: "id" in delivery ? String(delivery.id) : undefined,
+        providerCircuitOpen: true,
+        reason: deliveryStatus === NotificationStatus.SKIPPED
+          ? "Email provider circuit is temporarily open; activation delivery is paused and SMTP was not contacted."
+          : "Email provider circuit opened after SMTP rejected the activation email. Remaining activation emails are still queued.",
+      };
     }
     if ("status" in delivery && delivery.status === NotificationStatus.SKIPPED) {
       return { status: HomeownerActivationBulkItemStatus.SKIPPED, notificationId: "id" in delivery ? String(delivery.id) : undefined, reason: "Email delivery was skipped by delivery safety controls." };
@@ -461,11 +511,18 @@ async function processRecipient(tenantId: string, actorId: string, homeownerId: 
       reason: "Email was not accepted by the configured provider. Explicit review/reissue is required.",
     };
   } catch (error) {
+    if (activation) await revokeUnacceptedHomeownerActivationCredential({ tenantId, userId: profile.userId, credentialId: activation.credentialId, emailVerificationTokenId: activation.emailVerificationTokenId }).catch(() => undefined);
     return {
       status: HomeownerActivationBulkItemStatus.FAILED,
       reason: error instanceof Error ? error.message.slice(0, 300) : "Activation invitation processing failed.",
     };
   }
+}
+
+function deliveryFailureKind(metadata: unknown) {
+  return metadata && typeof metadata === "object" && !Array.isArray(metadata) && "lastFailureKind" in metadata
+    ? String(metadata.lastFailureKind || "")
+    : "";
 }
 
 async function refreshJobCounters(tenantId: string, jobId: string, leaseOwner: string) {
@@ -498,6 +555,7 @@ async function refreshJobCounters(tenantId: string, jobId: string, leaseOwner: s
       acceptedCount: accepted,
       skippedCount: skipped,
       failedCount: failed,
+      lastError: terminal && !failed && !skipped ? null : undefined,
       completedAt: terminal ? now : null,
       leaseOwner: null,
       leaseExpiresAt: null,

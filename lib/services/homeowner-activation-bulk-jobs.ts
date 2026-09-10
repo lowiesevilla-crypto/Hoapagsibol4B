@@ -20,6 +20,7 @@ import { homeownerActivationReissueEligibility, homeownerDigitalActivationEligib
 const JOB_LEASE_MS = 2 * 60 * 1000;
 const DEFAULT_BATCH_SIZE = 25;
 const MAX_BATCH_SIZE = 100;
+const DEFAULT_DRAIN_MAX_BATCHES = 20;
 const MAX_SELECTED_IDS = 100;
 const TARGET_RESOLUTION_BATCH_SIZE = 500;
 
@@ -177,6 +178,18 @@ export async function processNextHomeownerActivationBulkJob(tenantId: string, op
   }
 
   return refreshJobCounters(tenantId, candidate.id, leaseOwner);
+}
+
+export async function drainHomeownerActivationBulkJobs(tenantId: string, options?: { batchSize?: number; maxBatches?: number }) {
+  const maxBatches = boundedInteger(options?.maxBatches, DEFAULT_DRAIN_MAX_BATCHES, 1, 200);
+  let lastJob = null as Awaited<ReturnType<typeof getHomeownerActivationBulkJobProgress>>;
+  for (let batch = 0; batch < maxBatches; batch++) {
+    const progress = await processNextHomeownerActivationBulkJob(tenantId, { batchSize: options?.batchSize });
+    if (!progress) break;
+    lastJob = progress;
+    if (!["QUEUED", "RUNNING"].includes(progress.status) || progress.queuedCount <= 0) break;
+  }
+  return lastJob;
 }
 
 export async function getHomeownerActivationBulkJobProgress(tenantId: string, jobId: string) {
@@ -479,8 +492,8 @@ async function refreshJobCounters(tenantId: string, jobId: string, leaseOwner: s
       skippedCount: skipped,
       failedCount: failed,
       completedAt: terminal ? now : null,
-      leaseOwner: terminal ? null : leaseOwner,
-      leaseExpiresAt: terminal ? null : new Date(now.getTime() + JOB_LEASE_MS),
+      leaseOwner: null,
+      leaseExpiresAt: null,
     },
   });
   return getHomeownerActivationBulkJobProgress(tenantId, jobId);

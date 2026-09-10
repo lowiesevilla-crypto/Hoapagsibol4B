@@ -1,7 +1,7 @@
 import { after, NextResponse } from "next/server";
 import { Role } from "@prisma/client";
 import { requireUser } from "@/lib/auth";
-import { createFailedHomeownerActivationBulkRetry, processNextHomeownerActivationBulkJob } from "@/lib/services/homeowner-activation-bulk-jobs";
+import { createFailedHomeownerActivationBulkRetry, drainHomeownerActivationBulkJobs } from "@/lib/services/homeowner-activation-bulk-jobs";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
@@ -30,7 +30,11 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       idempotencyKey,
     });
     after(async () => {
-      await processNextHomeownerActivationBulkJob(admin.tenantId).catch(() => undefined);
+      await drainHomeownerActivationBulkJobs(admin.tenantId).catch((error) => {
+        console.error("[homeowner-activation-bulk] failed-only retry drain failed", {
+          error: error instanceof Error ? error.message.replace(/[\r\n]+/g, " ").slice(0, 300) : "Unknown activation bulk worker error",
+        });
+      });
     });
     return NextResponse.json({ jobId: job.id }, { status: 202 });
   } catch (error) {

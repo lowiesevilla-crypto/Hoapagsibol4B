@@ -10,6 +10,8 @@ import {
 
 const homeownersPage = readFileSync("app/admin/homeowners/page.tsx", "utf8");
 const activationBulkJobs = readFileSync("lib/services/homeowner-activation-bulk-jobs.ts", "utf8");
+const activationBulkAction = readFileSync("lib/actions/homeowner-activation-bulk.ts", "utf8");
+const activationBulkProgressRoute = readFileSync("app/api/admin/homeowners/activation-jobs/[id]/route.ts", "utf8");
 const activationBulkRetryRoute = readFileSync("app/api/admin/homeowners/activation-jobs/[id]/retry/route.ts", "utf8");
 const activationBulkProgress = readFileSync("components/homeowner-activation-bulk-progress.tsx", "utf8");
 
@@ -103,4 +105,14 @@ test("failed-only retry for activation bulk jobs cannot resend accepted recipien
   assert.match(activationBulkRetryRoute, /HOMEOWNER_ACTIVATION_BULK_DELIVERY_ENABLED/);
   assert.match(activationBulkRetryRoute, /createFailedHomeownerActivationBulkRetry/);
   assert.match(activationBulkProgress, /Retry .* failed only/);
+});
+
+test("queued activation bulk jobs are drained and resumable after refresh", () => {
+  assert.match(activationBulkJobs, /drainHomeownerActivationBulkJobs/);
+  assert.match(activationBulkJobs, /leaseOwner: null/);
+  assert.match(activationBulkJobs, /leaseExpiresAt: null/);
+  assert.match(activationBulkAction, /after\(async \(\) =>/);
+  assert.match(activationBulkAction, /drainHomeownerActivationBulkJobs/);
+  assert.match(activationBulkProgressRoute, /queuedCount > 0/);
+  assert.match(activationBulkProgressRoute, /drainHomeownerActivationBulkJobs/);
 });

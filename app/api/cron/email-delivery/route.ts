@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { authorizeCron } from "@/lib/cron-auth";
 import { platformPrisma } from "@/lib/db";
-import { processNextHomeownerActivationBulkJob } from "@/lib/services/homeowner-activation-bulk-jobs";
+import { drainHomeownerActivationBulkJobs } from "@/lib/services/homeowner-activation-bulk-jobs";
 import { processQueuedEmailNotifications } from "@/lib/services/notifications";
 import { runWithTenant } from "@/lib/tenant-context";
 
@@ -46,7 +46,7 @@ export async function POST(request: Request) {
         async () => {
           const emailQueue = await processQueuedEmailNotifications(tenant.id, { limit });
           const activationJob = activationBulkEnabled
-            ? await processNextHomeownerActivationBulkJob(tenant.id, { batchSize: activationBatchSize })
+            ? await drainHomeownerActivationBulkJobs(tenant.id, { batchSize: activationBatchSize, maxBatches: 4 })
             : null;
           return { emailQueue, activationJob };
         },

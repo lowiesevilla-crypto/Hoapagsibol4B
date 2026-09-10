@@ -14,6 +14,8 @@ const activationBulkAction = readFileSync("lib/actions/homeowner-activation-bulk
 const activationBulkProgressRoute = readFileSync("app/api/admin/homeowners/activation-jobs/[id]/route.ts", "utf8");
 const activationBulkRetryRoute = readFileSync("app/api/admin/homeowners/activation-jobs/[id]/retry/route.ts", "utf8");
 const activationBulkProgress = readFileSync("components/homeowner-activation-bulk-progress.tsx", "utf8");
+const homeownerActivation = readFileSync("lib/services/homeowner-activation.ts", "utf8");
+const homeownerActions = readFileSync("lib/actions/homeowners.ts", "utf8");
 
 function homeowner(overrides: Partial<HomeownerDigitalActivationProfile> = {}): HomeownerDigitalActivationProfile {
   return {
@@ -116,4 +118,14 @@ test("queued activation bulk jobs are drained and resumable after refresh", () =
   assert.match(activationBulkAction, /drainHomeownerActivationBulkJobs/);
   assert.match(activationBulkProgressRoute, /queuedCount > 0/);
   assert.match(activationBulkProgressRoute, /drainHomeownerActivationBulkJobs/);
+});
+
+test("activation send dates are committed only after provider acceptance", () => {
+  assert.match(homeownerActivation, /revokeExisting\?: boolean/);
+  assert.match(homeownerActivation, /finalizeAcceptedHomeownerActivationCredential/);
+  assert.match(homeownerActivation, /revokeUnacceptedHomeownerActivationCredential/);
+  assert.match(activationBulkJobs, /delivery\.status === NotificationStatus\.SENT[\s\S]+activationSentAt: new Date\(\)/);
+  assert.match(homeownerActions, /deliveryStatus === NotificationStatus\.SENT[\s\S]+activationSentAt: new Date\(\)/);
+  assert.match(activationBulkJobs, /providerCircuitOpen[\s\S]+HomeownerActivationBulkItemStatus\.PENDING/);
+  assert.match(activationBulkJobs, /isEmailProviderCircuitOpen/);
 });

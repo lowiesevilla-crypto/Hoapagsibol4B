@@ -22,11 +22,13 @@ import { runWithTenant } from "@/lib/tenant-context";
 const runId = `activation-bulk-${process.pid}`;
 const tenantId = `${runId}-tenant`;
 const isolationTenantId = `${runId}-isolation`;
+const circuitTenantId = `${runId}-circuit`;
 const scaleTenantId = `${runId}-scale`;
 const scaleActorId = `${runId}-scale-actor`;
 const scaleFixtureCount = 5_001;
 const actorId = `${runId}-actor`;
 const isolationActorId = `${runId}-isolation-actor`;
+const circuitActorId = `${runId}-circuit-actor`;
 
 function userId(index: number) {
   return `${runId}-user-${index}`;
@@ -37,7 +39,7 @@ function homeownerId(index: number) {
 }
 
 async function cleanFixtures() {
-  const tenantIds = [tenantId, isolationTenantId, scaleTenantId];
+  const tenantIds = [tenantId, isolationTenantId, circuitTenantId, scaleTenantId];
   await platformPrisma.homeownerActivationBulkItem.deleteMany({ where: { tenantId: { in: tenantIds } } });
   await platformPrisma.homeownerActivationBulkJob.deleteMany({ where: { tenantId: { in: tenantIds } } });
   await platformPrisma.auditLog.deleteMany({ where: { tenantId: { in: tenantIds } } });
@@ -52,12 +54,14 @@ before(async () => {
     data: [
       { id: tenantId, name: "Activation Bulk Tenant", shortName: "ABT", slug: `${runId}-tenant` },
       { id: isolationTenantId, name: "Activation Bulk Isolation", shortName: "ABI", slug: `${runId}-isolation` },
+      { id: circuitTenantId, name: "Activation Circuit Tenant", shortName: "ABC", slug: `${runId}-circuit` },
     ],
   });
   await platformPrisma.user.createMany({
     data: [
       { id: actorId, tenantId, name: "Activation Admin", email: `${runId}-admin@example.invalid`, passwordHash: "integration-test-only", role: Role.ADMIN },
       { id: isolationActorId, tenantId: isolationTenantId, name: "Isolation Admin", email: `${runId}-isolation@example.invalid`, passwordHash: "integration-test-only", role: Role.ADMIN },
+      { id: circuitActorId, tenantId: circuitTenantId, name: "Circuit Admin", email: `${runId}-circuit@example.invalid`, passwordHash: "integration-test-only", role: Role.ADMIN },
       ...Array.from({ length: 3 }, (_, offset) => ({
         id: userId(offset + 1),
         tenantId,
@@ -85,6 +89,61 @@ before(async () => {
       activationSentAt: null,
     })),
   });
+});
+
+test("activation bulk pauses queued recipients while provider circuit is open", async () => {
+  await platformPrisma.user.createMany({
+    data: [1, 2].map((index) => ({
+      id: `${runId}-circuit-user-${index}`,
+      tenantId: circuitTenantId,
+      name: `Circuit Owner ${index}`,
+      email: `${runId}-circuit-owner-${index}@example.com`,
+      passwordHash: "integration-test-only",
+      role: Role.HOMEOWNER,
+    })),
+  });
+  await platformPrisma.homeownerProfile.createMany({
+    data: [1, 2].map((index) => ({
+      id: `${runId}-circuit-homeowner-${index}`,
+      tenantId: circuitTenantId,
+      userId: `${runId}-circuit-user-${index}`,
+      address: `${index} Circuit Street`,
+      block: "C",
+      lot: String(index),
+      phone: `0999333333${index}`,
+      accountNumber: `6${String(index).padStart(10, "0")}`,
+      monthlyDuesAmount: new Prisma.Decimal("100.00"),
+      status: HomeownerStatus.ACTIVE,
+      activationStatus: HomeownerActivationStatus.NOT_INVITED,
+      emailStatus: HomeownerEmailVerificationStatus.UNVERIFIED,
+      activationSentAt: null,
+    })),
+  });
+  await platformPrisma.auditLog.create({
+    data: {
+      tenantId: circuitTenantId,
+      module: "EMAIL",
+      action: "EMAIL_PROVIDER_CIRCUIT_OPENED",
+      entityType: "EmailProviderCircuit",
+      entityId: circuitTenantId,
+      metadata: { retryAfter: new Date(Date.now() + 60 * 60 * 1000).toISOString(), reason: "Integration test circuit" },
+    },
+  });
+  const job = await runWithTenant(circuitTenantId, () => requestHomeownerActivationBulkJob({
+    tenantId: circuitTenantId,
+    initiatedById: circuitActorId,
+    idempotencyKey: `${runId}-circuit-pause`,
+    selectionMode: HomeownerActivationBulkSelectionMode.SELECTED,
+    selectedHomeownerIds: [`${runId}-circuit-homeowner-1`, `${runId}-circuit-homeowner-2`],
+  }), { role: Role.ADMIN });
+
+  const progress = await runWithTenant(circuitTenantId, () => processNextHomeownerActivationBulkJob(circuitTenantId, { batchSize: 2 }), { role: Role.ADMIN });
+  assert.equal(progress?.status, HomeownerActivationBulkJobStatus.RUNNING);
+  assert.equal(progress?.processedCount, 0);
+  assert.equal(progress?.queuedCount, 2);
+  assert.match(progress?.lastError || "", /provider circuit/i);
+  assert.equal(await platformPrisma.homeownerActivationBulkItem.count({ where: { tenantId: circuitTenantId, jobId: job.id, status: HomeownerActivationBulkItemStatus.SKIPPED } }), 0);
+  assert.equal(await platformPrisma.homeownerActivationCredential.count({ where: { tenantId: circuitTenantId } }), 0);
 });
 
 after(async () => {

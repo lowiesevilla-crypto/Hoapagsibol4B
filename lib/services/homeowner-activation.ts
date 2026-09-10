@@ -16,6 +16,8 @@ const ACTIVATION_DERIVATION_LABEL = "hoahub-homeowner-activation-v1";
 const GENERIC_EMAIL_VERIFICATION_ERROR = "This email verification link is invalid or no longer active. Ask HOA staff to send a new activation invitation.";
 
 export type ActivationCredentialResult = {
+  credentialId: string;
+  emailVerificationTokenId: string;
   temporaryPassword: string;
   expiresAt: Date;
   emailVerificationToken: string;
@@ -67,20 +69,23 @@ export async function createHomeownerActivationCredential(input: {
   userId: string;
   createdById?: string | null;
   tx?: Prisma.TransactionClient | unknown;
+  revokeExisting?: boolean;
 }): Promise<ActivationCredentialResult> {
   const db = (input.tx ?? prisma) as Prisma.TransactionClient;
   const emailVerificationToken = randomBytes(32).toString("base64url");
   const temporaryPassword = temporaryActivationPasswordForVerificationToken(emailVerificationToken);
   const expiresAt = new Date(Date.now() + ACTIVATION_TTL_DAYS * 24 * 60 * 60 * 1000);
-  await db.homeownerActivationCredential.updateMany({
-    where: { tenantId: input.tenantId, userId: input.userId, usedAt: null, revokedAt: null },
-    data: { revokedAt: new Date() },
-  });
-  await db.homeownerEmailVerificationToken.updateMany({
-    where: { tenantId: input.tenantId, userId: input.userId, usedAt: null },
-    data: { usedAt: new Date() },
-  });
-  await db.homeownerActivationCredential.create({
+  if (input.revokeExisting !== false) {
+    await db.homeownerActivationCredential.updateMany({
+      where: { tenantId: input.tenantId, userId: input.userId, usedAt: null, revokedAt: null },
+      data: { revokedAt: new Date() },
+    });
+    await db.homeownerEmailVerificationToken.updateMany({
+      where: { tenantId: input.tenantId, userId: input.userId, usedAt: null },
+      data: { usedAt: new Date() },
+    });
+  }
+  const credential = await db.homeownerActivationCredential.create({
     data: {
       tenantId: input.tenantId,
       user: { connect: { id: input.userId } },
@@ -89,7 +94,7 @@ export async function createHomeownerActivationCredential(input: {
       expiresAt,
     },
   });
-  await db.homeownerEmailVerificationToken.create({
+  const token = await db.homeownerEmailVerificationToken.create({
     data: {
       tenantId: input.tenantId,
       user: { connect: { id: input.userId } },
@@ -97,7 +102,45 @@ export async function createHomeownerActivationCredential(input: {
       expiresAt,
     },
   });
-  return { temporaryPassword, expiresAt, emailVerificationToken };
+  return { credentialId: credential.id, emailVerificationTokenId: token.id, temporaryPassword, expiresAt, emailVerificationToken };
+}
+
+export async function finalizeAcceptedHomeownerActivationCredential(input: {
+  tenantId: string;
+  userId: string;
+  credentialId: string;
+  emailVerificationTokenId: string;
+  tx?: Prisma.TransactionClient | unknown;
+}) {
+  const db = (input.tx ?? prisma) as Prisma.TransactionClient;
+  const now = new Date();
+  await db.homeownerActivationCredential.updateMany({
+    where: { tenantId: input.tenantId, userId: input.userId, usedAt: null, revokedAt: null, id: { not: input.credentialId } },
+    data: { revokedAt: now },
+  });
+  await db.homeownerEmailVerificationToken.updateMany({
+    where: { tenantId: input.tenantId, userId: input.userId, usedAt: null, id: { not: input.emailVerificationTokenId } },
+    data: { usedAt: now },
+  });
+}
+
+export async function revokeUnacceptedHomeownerActivationCredential(input: {
+  tenantId: string;
+  userId: string;
+  credentialId: string;
+  emailVerificationTokenId: string;
+  tx?: Prisma.TransactionClient | unknown;
+}) {
+  const db = (input.tx ?? prisma) as Prisma.TransactionClient;
+  const now = new Date();
+  await db.homeownerActivationCredential.updateMany({
+    where: { id: input.credentialId, tenantId: input.tenantId, userId: input.userId, usedAt: null, revokedAt: null },
+    data: { revokedAt: now },
+  });
+  await db.homeownerEmailVerificationToken.updateMany({
+    where: { id: input.emailVerificationTokenId, tenantId: input.tenantId, userId: input.userId, usedAt: null },
+    data: { usedAt: now },
+  });
 }
 
 export async function sendHomeownerActivationEmail(input: {

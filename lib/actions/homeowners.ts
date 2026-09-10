@@ -11,7 +11,12 @@ import { prisma } from "@/lib/db";
 import { homeownerAccountNumber } from "@/lib/homeowner-account";
 import { homeownerSchema } from "@/lib/validation";
 import { generateUniqueHomeownerAccountNumber } from "@/lib/services/homeowner-account-number";
-import { createHomeownerActivationCredential, sendHomeownerActivationEmail } from "@/lib/services/homeowner-activation";
+import {
+  createHomeownerActivationCredential,
+  finalizeAcceptedHomeownerActivationCredential,
+  revokeUnacceptedHomeownerActivationCredential,
+  sendHomeownerActivationEmail,
+} from "@/lib/services/homeowner-activation";
 import { homeownerActivationReissueEligibility, homeownerDigitalActivationEligibility, maskAccountNumber, nextInvitationStatus } from "@/lib/services/homeowner-digital-activation";
 import { sendEmailNotification } from "@/lib/services/notifications";
 import { getPasswordPolicy } from "@/lib/system-settings";
@@ -472,26 +477,9 @@ async function sendActivationInvitation(
   const eligibility = mode === "firstTime" ? homeownerDigitalActivationEligibility(profile) : homeownerActivationReissueEligibility(profile);
   if (!eligibility.eligible) return { ok: false, skipped: true, reason: eligibility.reason } as const;
   const accountNumber = homeownerAccountNumber(profile);
+  let activation: Awaited<ReturnType<typeof createHomeownerActivationCredential>> | null = null;
   try {
-    const activation = await prisma.$transaction(async (tx) => {
-      const created = await createHomeownerActivationCredential({ tenantId: admin.tenantId, userId: profile.userId, createdById: admin.id, tx });
-      await tx.homeownerProfile.update({
-        where: { tenantId_id: { tenantId: admin.tenantId, id: profile.id } },
-        data: { activationStatus: nextInvitationStatus(profile.activationStatus), emailStatus: HomeownerEmailVerificationStatus.UNVERIFIED, activationSentAt: new Date() },
-      });
-      await tx.auditLog.create({
-        data: {
-          tenantId: admin.tenantId,
-          actorId: admin.id,
-          module: "AUTH",
-          action: auditAction,
-          entityType: "User",
-          entityId: profile.userId,
-          metadata: { homeownerId: profile.id, accountMasked: maskAccountNumber(accountNumber), activationSendMode: mode },
-        },
-      });
-      return created;
-    });
+    activation = await createHomeownerActivationCredential({ tenantId: admin.tenantId, userId: profile.userId, createdById: admin.id, revokeExisting: false });
     const notification = await sendHomeownerActivationEmail({
       tenantId: admin.tenantId,
       userId: profile.userId,
@@ -504,7 +492,29 @@ async function sendActivationInvitation(
       actorId: admin.id,
     });
     const deliveryStatus = "status" in notification ? notification.status : NotificationStatus.FAILED;
-    if (deliveryStatus === NotificationStatus.SENT) return { ok: true } as const;
+    if (deliveryStatus === NotificationStatus.SENT) {
+      await prisma.$transaction(async (tx) => {
+        if (!activation) throw new Error("Activation credential was not created.");
+        await finalizeAcceptedHomeownerActivationCredential({ tenantId: admin.tenantId, userId: profile.userId, credentialId: activation.credentialId, emailVerificationTokenId: activation.emailVerificationTokenId, tx });
+        await tx.homeownerProfile.update({
+          where: { tenantId_id: { tenantId: admin.tenantId, id: profile.id } },
+          data: { activationStatus: nextInvitationStatus(profile.activationStatus), emailStatus: HomeownerEmailVerificationStatus.UNVERIFIED, activationSentAt: new Date() },
+        });
+        await tx.auditLog.create({
+          data: {
+            tenantId: admin.tenantId,
+            actorId: admin.id,
+            module: "AUTH",
+            action: auditAction,
+            entityType: "User",
+            entityId: profile.userId,
+            metadata: { homeownerId: profile.id, accountMasked: maskAccountNumber(accountNumber), activationSendMode: mode },
+          },
+        });
+      });
+      return { ok: true } as const;
+    }
+    if (activation) await revokeUnacceptedHomeownerActivationCredential({ tenantId: admin.tenantId, userId: profile.userId, credentialId: activation.credentialId, emailVerificationTokenId: activation.emailVerificationTokenId }).catch(() => undefined);
     await prisma.auditLog.create({
       data: {
         tenantId: admin.tenantId,
@@ -529,6 +539,7 @@ async function sendActivationInvitation(
         : "Activation email was not accepted by the configured provider. Review Mail Settings before retrying.",
     } as const;
   } catch (error) {
+    if (activation) await revokeUnacceptedHomeownerActivationCredential({ tenantId: admin.tenantId, userId: profile.userId, credentialId: activation.credentialId, emailVerificationTokenId: activation.emailVerificationTokenId }).catch(() => undefined);
     await prisma.auditLog.create({
       data: {
         tenantId: admin.tenantId,

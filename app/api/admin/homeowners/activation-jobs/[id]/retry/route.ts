@@ -1,7 +1,7 @@
 import { after, NextResponse } from "next/server";
 import { Role } from "@prisma/client";
 import { requireUser } from "@/lib/auth";
-import { createFailedHomeownerActivationBulkRetry, drainHomeownerActivationBulkJobs } from "@/lib/services/homeowner-activation-bulk-jobs";
+import { createReviewHomeownerActivationBulkRetry, drainHomeownerActivationBulkJobs } from "@/lib/services/homeowner-activation-bulk-jobs";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
@@ -23,7 +23,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   if (!idempotencyKey.trim()) return NextResponse.json({ error: "Retry request is missing an idempotency key." }, { status: 400 });
 
   try {
-    const job = await createFailedHomeownerActivationBulkRetry({
+    const job = await createReviewHomeownerActivationBulkRetry({
       tenantId: admin.tenantId,
       initiatedById: admin.id,
       sourceJobId: id,
@@ -31,7 +31,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     });
     after(async () => {
       await drainHomeownerActivationBulkJobs(admin.tenantId).catch((error) => {
-        console.error("[homeowner-activation-bulk] failed-only retry drain failed", {
+        console.error("[homeowner-activation-bulk] review-only retry drain failed", {
           error: error instanceof Error ? error.message.replace(/[\r\n]+/g, " ").slice(0, 300) : "Unknown activation bulk worker error",
         });
       });

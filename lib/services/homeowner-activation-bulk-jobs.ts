@@ -30,6 +30,7 @@ type FilterSnapshot = {
   digital?: string;
   activationSendMode?: ActivationBulkSendMode;
   retryFailedOnly?: boolean;
+  retryReviewOnly?: boolean;
   sourceJobId?: string;
 };
 
@@ -216,7 +217,7 @@ export async function getHomeownerActivationBulkJobProgress(tenantId: string, jo
   });
 }
 
-export async function createFailedHomeownerActivationBulkRetry(input: {
+export async function createReviewHomeownerActivationBulkRetry(input: {
   tenantId: string;
   initiatedById: string;
   sourceJobId: string;
@@ -241,12 +242,16 @@ export async function createFailedHomeownerActivationBulkRetry(input: {
     throw new Error("Only a completed activation job can be retried.");
   }
 
-  const failedItems = await prisma.homeownerActivationBulkItem.findMany({
-    where: { tenantId: input.tenantId, jobId: source.id, status: HomeownerActivationBulkItemStatus.FAILED },
+  const reviewItems = await prisma.homeownerActivationBulkItem.findMany({
+    where: {
+      tenantId: input.tenantId,
+      jobId: source.id,
+      status: { in: [HomeownerActivationBulkItemStatus.FAILED, HomeownerActivationBulkItemStatus.SKIPPED] },
+    },
     select: { homeownerId: true },
     orderBy: [{ createdAt: "asc" }, { id: "asc" }],
   });
-  if (!failedItems.length) throw new Error("This activation job has no failed records to retry.");
+  if (!reviewItems.length) throw new Error("This activation job has no skipped or failed records to retry.");
 
   const sendMode = sendModeFromSnapshot(source.filterSnapshot);
   try {
@@ -257,15 +262,15 @@ export async function createFailedHomeownerActivationBulkRetry(input: {
           initiatedById: input.initiatedById,
           idempotencyKey,
           selectionMode: HomeownerActivationBulkSelectionMode.SELECTED,
-          filterSnapshot: { retryFailedOnly: true, sourceJobId: source.id, activationSendMode: sendMode } as Prisma.InputJsonValue,
-          totalTargets: failedItems.length,
-          eligibleCount: failedItems.length,
-          queuedCount: failedItems.length,
+          filterSnapshot: { retryReviewOnly: true, sourceJobId: source.id, activationSendMode: sendMode } as Prisma.InputJsonValue,
+          totalTargets: reviewItems.length,
+          eligibleCount: reviewItems.length,
+          queuedCount: reviewItems.length,
           status: HomeownerActivationBulkJobStatus.QUEUED,
         },
       });
       await tx.homeownerActivationBulkItem.createMany({
-        data: failedItems.map((item) => ({
+        data: reviewItems.map((item) => ({
           tenantId: input.tenantId,
           jobId: job.id,
           homeownerId: item.homeownerId,
@@ -277,10 +282,10 @@ export async function createFailedHomeownerActivationBulkRetry(input: {
           tenantId: input.tenantId,
           actorId: input.initiatedById,
           module: "AUTH",
-          action: "HOMEOWNER_ACTIVATION_BULK_FAILED_ONLY_RETRY_QUEUED",
+          action: "HOMEOWNER_ACTIVATION_BULK_REVIEW_ONLY_RETRY_QUEUED",
           entityType: "HomeownerActivationBulkJob",
           entityId: job.id,
-          metadata: { retryFailedOnly: true, sourceJobId: source.id, activationSendMode: sendMode, totalTargets: failedItems.length, idempotencyKey },
+          metadata: { retryReviewOnly: true, sourceJobId: source.id, activationSendMode: sendMode, totalTargets: reviewItems.length, idempotencyKey },
         },
       });
       return job;
@@ -295,6 +300,8 @@ export async function createFailedHomeownerActivationBulkRetry(input: {
     throw error;
   }
 }
+
+export const createFailedHomeownerActivationBulkRetry = createReviewHomeownerActivationBulkRetry;
 
 export async function previewHomeownerActivationBulkSelection(input: Omit<RequestJobInput, "idempotencyKey">) {
   const ids = await resolveEligibleTargets(input);

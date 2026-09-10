@@ -187,7 +187,7 @@ test("activation bulk queues 5,001 first-time eligible homeowners without sendin
   await platformPrisma.homeownerActivationBulkJob.update({ where: { id: job.id }, data: { status: HomeownerActivationBulkJobStatus.SUCCEEDED, completedAt: new Date() } });
 });
 
-test("failed-only activation retry creates a new job without accepted or skipped recipients", async () => {
+test("activation retry creates a new job without accepted recipients", async () => {
   const source = await platformPrisma.homeownerActivationBulkJob.create({
     data: {
       tenantId,
@@ -227,10 +227,10 @@ test("failed-only activation retry creates a new job without accepted or skipped
   }), { role: Role.ADMIN });
 
   assert.equal(duplicate.id, retry.id);
-  assert.equal(retry.totalTargets, 1);
+  assert.equal(retry.totalTargets, 2);
   assert.equal(retry.status, HomeownerActivationBulkJobStatus.QUEUED);
   const retryItems = await platformPrisma.homeownerActivationBulkItem.findMany({ where: { tenantId, jobId: retry.id }, select: { homeownerId: true } });
-  assert.deepEqual(retryItems.map((item) => item.homeownerId), [homeownerId(3)]);
+  assert.deepEqual(retryItems.map((item) => item.homeownerId), [homeownerId(2), homeownerId(3)]);
 });
 
 test("selected activation reissue queues only previously invited homeowners who are not activated", async () => {

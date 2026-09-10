@@ -68,10 +68,11 @@ export function HomeownerActivationBulkProgress({ jobId }: Props) {
   if (!job) return <div className="mb-4 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm font-semibold text-amber-800">{loadError}</div>;
 
   const isTerminal = terminal.has(job.status);
-  const canRetryFailed = isTerminal && job.failedCount > 0;
+  const reviewCount = job.failedCount + job.skippedCount;
+  const canRetryReview = isTerminal && reviewCount > 0;
   const Icon = job.status === "SUCCEEDED" ? CheckCircle2 : job.status === "FAILED" || job.status === "PARTIAL" ? TriangleAlert : LoaderCircle;
-  async function retryFailed() {
-    if (!job || retrying || !canRetryFailed) return;
+  async function retryReview() {
+    if (!job || retrying || !canRetryReview) return;
     setRetrying(true);
     setLoadError("");
     if (!retryKeyRef.current) retryKeyRef.current = window.crypto.randomUUID();
@@ -82,10 +83,10 @@ export function HomeownerActivationBulkProgress({ jobId }: Props) {
         body: JSON.stringify({ idempotencyKey: retryKeyRef.current }),
       });
       const payload = await response.json() as { jobId?: string; error?: string };
-      if (!response.ok || !payload.jobId) throw new Error(payload.error || "Failed activation records could not be retried.");
-      window.location.href = `/admin/homeowners?activationJob=${encodeURIComponent(payload.jobId)}&success=bulkActivationRetry&message=${encodeURIComponent(`Retry queued for ${job.failedCount} failed activation record${job.failedCount === 1 ? "" : "s"}.`)}`;
+      if (!response.ok || !payload.jobId) throw new Error(payload.error || "Activation records requiring review could not be retried.");
+      window.location.href = `/admin/homeowners?activationJob=${encodeURIComponent(payload.jobId)}&success=bulkActivationRetry&message=${encodeURIComponent(`Retry queued for ${reviewCount} skipped or failed activation record${reviewCount === 1 ? "" : "s"}.`)}`;
     } catch (error) {
-      setLoadError(error instanceof Error ? error.message : "Failed activation records could not be retried.");
+      setLoadError(error instanceof Error ? error.message : "Activation records requiring review could not be retried.");
       setRetrying(false);
     }
   }
@@ -97,9 +98,9 @@ export function HomeownerActivationBulkProgress({ jobId }: Props) {
         <p className="mt-1 flex items-center gap-2 font-black text-pine-800"><Icon className={`size-4 ${isTerminal ? "" : "animate-spin"}`} /> {statusLabel(job.status)}</p>
       </div>
       <div className="flex flex-wrap items-center gap-2">
-        {canRetryFailed && <button type="button" className="btn-secondary min-h-10 px-4" disabled={retrying} onClick={retryFailed}>
+        {canRetryReview && <button type="button" className="btn-secondary min-h-10 px-4" disabled={retrying} onClick={retryReview}>
           {retrying ? <LoaderCircle className="size-4 animate-spin motion-reduce:animate-none" /> : <RotateCcw className="size-4" />}
-          {retrying ? "Starting retry..." : `Retry ${job.failedCount.toLocaleString("en-PH")} failed only`}
+          {retrying ? "Starting retry..." : `Retry ${reviewCount.toLocaleString("en-PH")} review item${reviewCount === 1 ? "" : "s"}`}
         </button>}
         <p className="text-2xl font-black text-pine-800">{percent}%</p>
       </div>
@@ -114,7 +115,7 @@ export function HomeownerActivationBulkProgress({ jobId }: Props) {
       <Metric label="Skipped" value={job.skippedCount.toLocaleString("en-PH")} />
       <Metric label="Failed / review" value={job.failedCount.toLocaleString("en-PH")} />
     </div>
-    <p className="mt-3 text-xs font-semibold text-slate-500">Provider accepted means the configured mail provider accepted the message; it does not claim mailbox delivery unless delivery webhooks confirm it. Failed-only retry creates a new job containing failed records only.</p>
+    <p className="mt-3 text-xs font-semibold text-slate-500">Provider accepted means the configured mail provider accepted the message; it does not claim mailbox delivery unless delivery webhooks confirm it. Retry creates a new job containing skipped or failed records only; provider-accepted recipients are never resubmitted by this control.</p>
     {job.lastError && <p className="mt-2 text-xs font-semibold text-rose-700">{job.lastError}</p>}
     {loadError && <p className="mt-2 text-xs font-semibold text-amber-700">Progress refresh warning: {loadError}</p>}
   </section>;

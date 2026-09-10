@@ -97,14 +97,15 @@ test("homeowner list exposes explicit selected-only reissue separate from first-
   assert.doesNotMatch(activationBulkJobs, /reissue[\s\S]{0,120}HomeownerActivationBulkSelectionMode\.FILTERED/);
 });
 
-test("failed-only retry for activation bulk jobs cannot resend accepted recipients", () => {
+test("review-only retry for activation bulk jobs cannot resend accepted recipients", () => {
   assert.match(activationBulkJobs, /createFailedHomeownerActivationBulkRetry/);
   assert.match(activationBulkJobs, /status: HomeownerActivationBulkItemStatus\.FAILED/);
+  assert.match(activationBulkJobs, /status: \{ in: \[HomeownerActivationBulkItemStatus\.FAILED, HomeownerActivationBulkItemStatus\.SKIPPED\] \}/);
   assert.doesNotMatch(activationBulkJobs, /status: HomeownerActivationBulkItemStatus\.ACCEPTED[\s\S]{0,240}createMany/);
-  assert.match(activationBulkJobs, /retryFailedOnly: true/);
+  assert.match(activationBulkJobs, /retryReviewOnly: true/);
   assert.match(activationBulkRetryRoute, /HOMEOWNER_ACTIVATION_BULK_DELIVERY_ENABLED/);
-  assert.match(activationBulkRetryRoute, /createFailedHomeownerActivationBulkRetry/);
-  assert.match(activationBulkProgress, /Retry .* failed only/);
+  assert.match(activationBulkRetryRoute, /createReviewHomeownerActivationBulkRetry/);
+  assert.match(activationBulkProgress, /Retry .* review item/);
 });
 
 test("queued activation bulk jobs are drained and resumable after refresh", () => {

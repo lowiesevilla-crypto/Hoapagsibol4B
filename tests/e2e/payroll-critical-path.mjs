@@ -395,6 +395,7 @@ async function runPayrollFlow(browser, dates) {
     assert.equal(Number(period.payslips[0].deduction), deductionBeforeAdjustment + 125, "Saving a cutoff deduction must refresh the calculated payslip immediately.");
 
     checkpoint("verify duplicate-safe recalculation", page);
+    await page.goto(`${baseUrl}/admin/payroll/periods?period=${payrollId}`, { waitUntil: "networkidle2", timeout });
     const generateAuditCountBefore = await prisma.auditLog.count({
       where: { tenantId: primaryTenantId, entityId: payrollId, action: "GENERATE_PAYROLL" },
     });

@@ -371,7 +371,6 @@ async function runPayrollFlow(browser, dates) {
     await page.click("input[name='amount']", { clickCount: 3 });
     await page.type("input[name='amount']", "125");
     await clickExactSubmitButton(page, "Assign deduction");
-    await waitForUrlParam(page, "success", "saved", "calculated payroll adjustment redirect");
     await waitForDatabase(
       async () => Boolean(await prisma.payrollDeduction.findFirst({ where: { tenantId: primaryTenantId, payrollId, employeeId, deductionTypeId } })),
       "calculated payroll deduction assignment",

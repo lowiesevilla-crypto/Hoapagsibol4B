@@ -366,10 +366,25 @@ async function runPayrollFlow(browser, dates) {
     await page.goto(`${baseUrl}/admin/payroll/adjustments?period=${payrollId}&employee=${employeeId}`, { waitUntil: "networkidle2", timeout });
     await expectText(page, "This payroll has been calculated.");
     await expectText(page, "Assign deduction");
-    await page.select("select[name='employeeId']", employeeId);
-    await page.select("select[name='deductionTypeId']", deductionTypeId);
-    await page.click("input[name='amount']", { clickCount: 3 });
-    await page.type("input[name='amount']", "125");
+    await page.waitForFunction(
+      (expectedEmployeeId, expectedDeductionTypeId) => {
+        const employee = document.querySelector("select[name='employeeId']");
+        const deduction = document.querySelector("select[name='deductionTypeId']");
+        return employee?.value === expectedEmployeeId
+          && Array.from(deduction?.options ?? []).some((option) => option.value === expectedDeductionTypeId);
+      },
+      { timeout },
+      employeeId,
+      deductionTypeId,
+    );
+    const selectedDeductionTypes = await page.select("select[name='deductionTypeId']", deductionTypeId);
+    assert.deepEqual(selectedDeductionTypes, [deductionTypeId], "Expected the disposable deduction type to be selected after hydration.");
+    await page.waitForFunction(
+      (expectedDeductionTypeId) => document.querySelector("select[name='deductionTypeId']")?.value === expectedDeductionTypeId
+        && document.querySelector("input[name='amount']")?.value === "125",
+      { timeout },
+      deductionTypeId,
+    );
     await clickExactSubmitButton(page, "Assign deduction");
     await waitForDatabase(
       async () => Boolean(await prisma.payrollDeduction.findFirst({ where: { tenantId: primaryTenantId, payrollId, employeeId, deductionTypeId } })),

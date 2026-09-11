@@ -112,7 +112,7 @@ Net pay and payable basic pay must not become negative because of lateness/under
 ### Deductions and Loans
 
 #### PAY-DED-001 — Payroll-period deductions
-Authorized users may assign configured deduction types to an employee for a draft payroll period. Finalized/paid payroll cannot be edited through normal deduction maintenance.
+Authorized users may assign configured deduction types to an employee while a payroll period is `DRAFT` or `CALCULATED`. Each change refreshes the working payslip calculation. `FINALIZED` and later payroll cannot be edited through normal deduction maintenance.
 
 #### PAY-DED-002 — Effective-dated scheduled and one-time deductions
 Authorized payroll users can configure an employee deduction as `ONE_TIME`, `RECURRING`, or `UNTIL_FULLY_PAID`, with a start date, optional end date, amount per cutoff, and optional installment limit. Eligible schedules are materialized into mutable payroll cutoffs automatically and idempotently before payslips are calculated.

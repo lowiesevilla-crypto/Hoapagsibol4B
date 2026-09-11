@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { deletePayrollDeductionAction, savePayrollDeductionAction } from "@/lib/actions/payroll";
+import { isPayrollMutable, type PayrollLifecycleState } from "@/lib/payroll-lifecycle";
 import { money } from "@/lib/utils";
 import { DeleteButton, SubmitButton } from "@/components/ui";
 
@@ -55,7 +56,7 @@ export function PayrollCutoffDeductionsPanel({
   initialEmployeeId = "",
 }: {
   payrollId: string;
-  payrollStatus: string;
+  payrollStatus: PayrollLifecycleState;
   canWritePayroll: boolean;
   employees: EmployeeOption[];
   deductionTypes: DeductionTypeOption[];
@@ -80,6 +81,7 @@ export function PayrollCutoffDeductionsPanel({
   }, [deductionTypes, selectedEmployee]);
   const selectedLoan = employeeLoans.find((loan) => loan.id === selectedLoanId) ?? null;
   const employeeLoanBalance = employeeLoans.reduce((sum, loan) => sum + loan.balance, 0);
+  const payrollIsMutable = isPayrollMutable(payrollStatus);
 
   useEffect(() => {
     setError("");
@@ -133,7 +135,7 @@ export function PayrollCutoffDeductionsPanel({
     ? "Your payroll role can view deductions but cannot change employee-specific payroll adjustments."
     : payrollStatus === "PAID"
       ? "Paid payroll is locked. Employee deductions cannot be changed."
-      : "Return this payroll period to draft before changing employee deductions.";
+      : "This payroll period is locked. Begin a controlled correction before changing employee deductions.";
 
   return <section className="card">
     <div className="mb-5">
@@ -165,7 +167,8 @@ export function PayrollCutoffDeductionsPanel({
     {loadingEmployeeData && <p className="mb-4 rounded-2xl border border-blue-100 bg-blue-50 p-3 text-sm font-bold text-blue-700">Loading selected employee deductions and balances...</p>}
     {error && <p className="mb-4 rounded-2xl border border-rose-100 bg-rose-50 p-3 text-sm font-bold text-rose-700">{error}</p>}
 
-    {payrollStatus === "DRAFT" && canWritePayroll ? <div className="rounded-2xl border border-pine-100 bg-pine-50/40 p-4">
+    {payrollIsMutable && canWritePayroll ? <div className="rounded-2xl border border-pine-100 bg-pine-50/40 p-4">
+      {payrollStatus === "CALCULATED" && <p className="mb-3 rounded-xl border border-blue-100 bg-blue-50 p-3 text-sm font-semibold text-blue-800">This payroll has been calculated. Saving or removing a deduction recalculates the affected payroll results automatically. Review the updated totals before finalizing.</p>}
       {employees.length > 0 && deductionTypes.length > 0 ? <form action={savePayrollDeductionAction} onSubmit={validateAssignment} className="grid gap-3 lg:grid-cols-[1.1fr_1fr_1.2fr_.7fr_1fr_auto] lg:items-end">
         <input type="hidden" name="payrollId" value={payrollId} />
         <div>
@@ -220,7 +223,7 @@ export function PayrollCutoffDeductionsPanel({
             <td>{money(deduction.amount)}</td>
             <td>{deduction.remarks || "No remarks."}</td>
             <td>
-              {payrollStatus === "DRAFT" && canWritePayroll ? <details className="min-w-64 rounded-xl border border-slate-100 bg-white p-2">
+              {payrollIsMutable && canWritePayroll ? <details className="min-w-64 rounded-xl border border-slate-100 bg-white p-2">
                 <summary className="cursor-pointer list-none text-sm font-bold text-pine-700">Edit</summary>
                 <form action={savePayrollDeductionAction} className="mt-3 space-y-3 border-t border-slate-100 pt-3">
                   <input type="hidden" name="payrollId" value={payrollId} />

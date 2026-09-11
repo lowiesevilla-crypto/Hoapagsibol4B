@@ -1,6 +1,6 @@
 # Payroll Lifecycle and Revision Contract
 
-Status: **VERIFIED**
+Status: **IMPLEMENTED** — 2026-09-11 lifecycle-defect candidate awaiting exact-head CI
 Task: `PAY-TASK-005`
 Requirements: `PAY-RUN-001`, `PAY-RUN-003`
 
@@ -14,7 +14,7 @@ This document defines the lifecycle and immutable correction contract implemente
 
 Posting failure is recoverable only through `POSTING -> POST_FAILED -> POSTING`. A paid run is terminal.
 
-`CALCULATED -> DRAFT` is permitted before finalization when the payroll manager intentionally discards a calculation and returns to editable inputs. Destructive deletion remains `DRAFT` only.
+`DRAFT` and `CALCULATED` are mutable working states. Authorized payroll writers can change cutoff deductions in either state; each saved or removed deduction refreshes the calculated payslips immediately. Destructive deletion remains `DRAFT` only.
 
 ## Immutable correction rule
 
@@ -40,6 +40,7 @@ The existing `PayrollArchive` pre-reopen snapshot is retained as compatibility e
 4. Payroll and attendance actions block direct mutation of finalized/posted/paid values.
 5. `POSTING`, `POSTED`, and `POST_FAILED` are driven only by the durable tenant/revision/event outbox. A successful accrual journal reaches `POSTED`; a separate successful payment journal reaches `PAID`; failures remain retryable with the same idempotency identity.
 6. Existing calculated, finalized, and paid periods are backfilled into deterministic revision-1 evidence.
+7. Reversal evidence is available only after the accrual has reached `POSTED` (or after payment reaches `PAID`). An unposted `FINALIZED` run uses **Begin correction**, preventing a reversal record that cannot be posted to the Financial Engine.
 
 ## Acceptance criteria
 

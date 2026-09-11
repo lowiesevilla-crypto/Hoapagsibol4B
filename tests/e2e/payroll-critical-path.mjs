@@ -15,7 +15,7 @@ const employeeNumber = `PAY-E2E-${runToken}`.slice(0, 30);
 const employeeName = `Payroll E2E Employee ${runToken}`;
 let payrollId = null;
 let employeeId = null;
-let revisionId = null;
+let deductionTypeId = null;
 let testDates = null;
 
 async function pathExists(path) {
@@ -253,6 +253,18 @@ async function provisionEmployee(dates) {
     },
   });
   employeeId = employee.id;
+  const deductionType = await prisma.payrollDeductionType.create({
+    data: {
+      tenantId: primaryTenantId,
+      name: `Payroll E2E Adjustment ${runToken}`,
+      description: "Disposable calculated-payroll adjustment regression",
+      amount: 125,
+      active: true,
+      applyToMonthly: true,
+      applyToDaily: false,
+    },
+  });
+  deductionTypeId = deductionType.id;
 }
 
 async function resolveCleanupPayrollId() {
@@ -295,6 +307,9 @@ async function cleanup() {
   if (employeeId) {
     await prisma.employeeCompensation.deleteMany({ where: { tenantId: primaryTenantId, employeeId } });
     await prisma.employeeProfile.deleteMany({ where: { tenantId: primaryTenantId, id: employeeId } });
+  }
+  if (deductionTypeId) {
+    await prisma.payrollDeductionType.deleteMany({ where: { tenantId: primaryTenantId, id: deductionTypeId } });
   }
 }
 
@@ -346,6 +361,25 @@ async function runPayrollFlow(browser, dates) {
     assert.ok(Number(period.payslips[0].netPay) > 0 && Number(period.payslips[0].netPay) <= 10000, "Net pay must be positive and no greater than gross pay.");
     assert.equal(period.revisions.length, 0, "Calculated payroll must not create immutable finalization evidence yet.");
 
+    checkpoint("adjust calculated payroll", page);
+    const deductionBeforeAdjustment = Number(period.payslips[0].deduction);
+    await page.goto(`${baseUrl}/admin/payroll/adjustments?period=${payrollId}&employee=${employeeId}`, { waitUntil: "networkidle2", timeout });
+    await expectText(page, "This payroll has been calculated.");
+    await expectText(page, "Assign deduction");
+    await page.select("select[name='employeeId']", employeeId);
+    await page.select("select[name='deductionTypeId']", deductionTypeId);
+    await page.click("input[name='amount']", { clickCount: 3 });
+    await page.type("input[name='amount']", "125");
+    await clickExactSubmitButton(page, "Assign deduction");
+    await waitForUrlParam(page, "success", "saved", "calculated payroll adjustment redirect");
+    await waitForDatabase(
+      async () => Boolean(await prisma.payrollDeduction.findFirst({ where: { tenantId: primaryTenantId, payrollId, employeeId, deductionTypeId } })),
+      "calculated payroll deduction assignment",
+    );
+    period = await fetchPeriod(dates);
+    assert.equal(period.status, "CALCULATED", "A working adjustment must keep the payroll in calculated review state.");
+    assert.equal(Number(period.payslips[0].deduction), deductionBeforeAdjustment + 125, "Saving a cutoff deduction must refresh the calculated payslip immediately.");
+
     checkpoint("verify duplicate-safe recalculation", page);
     const generateAuditCountBefore = await prisma.auditLog.count({
       where: { tenantId: primaryTenantId, entityId: payrollId, action: "GENERATE_PAYROLL" },
@@ -368,6 +402,7 @@ async function runPayrollFlow(browser, dates) {
     assert.equal(payslipCount, 1, "Repeated calculation must upsert rather than duplicate the employee payslip.");
 
     checkpoint("finalize payroll", page);
+    await page.goto(`${baseUrl}/admin/payroll/approval?period=${payrollId}`, { waitUntil: "networkidle2", timeout });
     await clickExactSubmitButton(page, "Finalize");
     await waitForUrlParam(page, "success", "finalized", "successful payroll finalization redirect");
     await expectText(page, "Finalized and ready to post.");
@@ -386,7 +421,6 @@ async function runPayrollFlow(browser, dates) {
     assert.ok(period, "Expected finalized payroll period to remain tenant scoped.");
     assert.equal(period.status, "FINALIZED");
     assert.equal(period.revisions.length, 1, "Finalization must create exactly one immutable revision.");
-    revisionId = period.revisions[0].id;
     assert.equal(period.revisions[0].revisionNumber, 1);
     assert.equal(period.revisions[0].revisionType, "INITIAL");
     assert.equal(period.revisions[0].lifecycleStatus, "FINALIZED");
@@ -424,6 +458,7 @@ try {
   console.log("- payroll calculation created the tenant-scoped cutoff and payslip");
   console.log("- deterministic semi-monthly basic/gross pay assertions passed");
   console.log("- repeated calculation completed and remained duplicate-safe");
+  console.log("- calculated payroll adjustment remained editable and refreshed payslip totals");
   console.log("- finalization created immutable revision evidence");
   console.log("- finalized payroll exposed the controlled Financial Engine next step and removed the finalize action");
 } catch (error) {

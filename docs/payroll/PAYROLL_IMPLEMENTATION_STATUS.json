@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
-  "lastUpdated": "2026-08-24",
-  "branch": "codex/payroll-completion-20260824",
+  "lastUpdated": "2026-09-11",
+  "branch": "fix/payroll-calculated-adjustments-lifecycle",
   "verificationEvidence": {
     "pullRequest": 166,
     "implementationHead": "f596c850a113bcd73d50d5a71116e9951685ffdb",
@@ -236,19 +236,21 @@
     {
       "id": "PAY-DED-001",
       "title": "Payroll-period deductions",
-      "status": "VERIFIED",
+      "status": "IMPLEMENTED",
       "code": [
         "lib/actions/payroll.ts",
         "lib/petty-cash/payroll-integration.ts",
         "prisma/schema.prisma",
         "tests/unit/payroll-remaining-acceptance.test.ts",
-        "tests/unit/petty-cash-payroll-integration.test.ts"
+        "tests/unit/petty-cash-payroll-integration.test.ts",
+        "components/payroll-cutoff-deductions-panel.tsx",
+        "tests/unit/payroll-adjustments-ui.test.ts"
       ],
       "evidence": [
         "PR #166 verified the prior tenant-scoped deduction-maintenance baseline.",
         "PR #171 implementation head c47416e83bc3c40d6bf317786bab264f7b757a15: HOAHub MySQL CI #1136 and Canva Visual Parity #321 SUCCESS, including Petty Cash integration regressions"
       ],
-      "notes": "Tenant-scoped deduction maintenance remains mutable only before finalization. Petty Cash Employee Cash Advance schedules materialize idempotently into each eligible mutable payroll cutoff before payslip calculation, with existing unpaid loan reservations deducted from the available balance; PR #171 preserved and verified this integration before merge."
+      "notes": "The 2026-09-11 defect fix aligns the adjustment UI with the server-authoritative mutable states: authorized writers can add or remove cutoff deductions in DRAFT and CALCULATED, and each mutation refreshes payslips immediately. Exact-head CI is required before this changed requirement returns to VERIFIED. Petty Cash schedule materialization remains unchanged."
     },
     {
       "id": "PAY-DED-002",
@@ -308,7 +310,7 @@
     {
       "id": "PAY-RUN-001",
       "title": "Expanded payroll lifecycle",
-      "status": "VERIFIED",
+      "status": "IMPLEMENTED",
       "code": [
         "prisma/schema.prisma",
         "prisma/migrations/20260824150000_payroll_lifecycle_revisions/migration.sql",
@@ -316,13 +318,15 @@
         "lib/actions/payroll.ts",
         "app/admin/payroll/page.tsx",
         "tests/unit/payroll-lifecycle-policy.test.ts",
-        "tests/unit/payroll-lifecycle-revision-persistence.test.ts"
+        "tests/unit/payroll-lifecycle-revision-persistence.test.ts",
+        "components/payroll-cutoff-deductions-panel.tsx",
+        "tests/unit/payroll-adjustments-ui.test.ts"
       ],
       "evidence": [
         "PR #165 exact-head HOAHub MySQL CI #1111 SUCCESS at 1743245f3d676f50fe026cf6831e9663ab8a666b",
         "PR #165 exact-head HOAHub Canva Visual Parity #300 SUCCESS at 1743245f3d676f50fe026cf6831e9663ab8a666b"
       ],
-      "notes": "DRAFT, CALCULATED, FINALIZED, POSTING, POSTED, POST_FAILED and PAID are persisted. PR #165 verified the lifecycle foundation; the completion candidate activates POST, retry, PAYMENT and REVERSAL through the idempotent finance contract."
+      "notes": "DRAFT, CALCULATED, FINALIZED, POSTING, POSTED, POST_FAILED and PAID remain persisted. The 2026-09-11 defect fix makes CALCULATED adjustments actionable and gives reversed runs an explicit Reverse lifecycle step. Exact-head CI is pending before this changed requirement returns to VERIFIED."
     },
     {
       "id": "PAY-RUN-002",
@@ -340,7 +344,7 @@
     {
       "id": "PAY-RUN-003",
       "title": "Immutable finalized/paid evidence with correction path",
-      "status": "VERIFIED",
+      "status": "IMPLEMENTED",
       "code": [
         "prisma/schema.prisma",
         "prisma/migrations/20260824150000_payroll_lifecycle_revisions/migration.sql",
@@ -349,13 +353,14 @@
         "lib/actions/attendance.ts",
         "app/admin/payroll/page.tsx",
         "tests/unit/payroll-lifecycle-immutability.test.ts",
-        "tests/unit/payroll-lifecycle-revision-persistence.test.ts"
+        "tests/unit/payroll-lifecycle-revision-persistence.test.ts",
+        "tests/unit/payroll-adjustments-ui.test.ts"
       ],
       "evidence": [
         "PR #165 exact-head HOAHub MySQL CI #1111 SUCCESS at 1743245f3d676f50fe026cf6831e9663ab8a666b",
         "PR #165 exact-head HOAHub Canva Visual Parity #300 SUCCESS at 1743245f3d676f50fe026cf6831e9663ab8a666b"
       ],
-      "notes": "Finalization creates immutable tenant-scoped revision headers and per-employee snapshots with monotonic revision number, parent, actor, reason, totals and deltas. Controlled corrections preserve the source revision; finalized/paid evidence cannot be destructively deleted; reversal evidence is immutable. Exact-head PR #165 MySQL CI and visual parity passed."
+      "notes": "Finalization remains immutable and tenant scoped. The 2026-09-11 lifecycle fix restricts reversal evidence to POSTED/PAID source payroll and routes unposted FINALIZED payroll through Begin correction, preventing an unpostable reversal dead end. Exact-head CI is pending before this changed requirement returns to VERIFIED."
     },
     {
       "id": "PAY-STAT-001",
@@ -660,7 +665,7 @@
         "PAY-RUN-003"
       ],
       "title": "Implement expanded lifecycle and correction/revision records",
-      "status": "VERIFIED",
+      "status": "IMPLEMENTED",
       "dependencies": [],
       "code": [
         "prisma/schema.prisma",
@@ -671,6 +676,7 @@
         "tests/unit/payroll-lifecycle-policy.test.ts",
         "tests/unit/payroll-lifecycle-immutability.test.ts",
         "tests/unit/payroll-lifecycle-revision-persistence.test.ts",
+        "tests/unit/payroll-adjustments-ui.test.ts",
         "docs/payroll/PAYROLL_LIFECYCLE_REVISION_DESIGN.md"
       ]
     },

@@ -1,5 +1,13 @@
 # HOAHub Payroll Implementation Progress Report
 
+## 2026-09-11 lifecycle defect remediation
+
+- Restored cutoff deduction add/remove controls for authorized payroll writers when the selected run is `CALCULATED`; server-side tenant/RBAC validation and immediate payslip refresh remain authoritative.
+- Removed the misleading instruction to return calculated payroll to draft.
+- Prevented unposted `FINALIZED` payroll from recording reversal evidence that cannot be posted; it now uses **Begin correction**. Reversal remains available for `POSTED` and `PAID` runs.
+- Reversed runs now expose a dedicated **Reverse** lifecycle step instead of incorrectly showing **Pay** as the next action.
+- `PAY-DED-001`, `PAY-RUN-001`, `PAY-RUN-003`, and `PAY-TASK-005` are `IMPLEMENTED` until the changed exact head passes required CI.
+
 Last updated: 2026-08-24
 Source of truth: `docs/payroll/PAYROLL_IMPLEMENTATION_STATUS.json`
 Current verification branch: `codex/payroll-verification-record-20260824`

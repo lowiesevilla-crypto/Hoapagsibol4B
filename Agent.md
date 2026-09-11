@@ -246,6 +246,9 @@ Complaint remains the intake/operational layer; formal grievance, verification, 
 
 Payroll, salary, deductions, loans/cash advances, corrections, and payslips are confidential tenant data. Employee portal access does not imply payroll administration. Finalization/paid state remains server-authoritative and auditable.
 
+- Cutoff-specific employee deductions are editable by authorized payroll writers in both `DRAFT` and `CALCULATED`. Saving or removing a deduction refreshes the tenant-scoped payslip calculation immediately; the updated totals must be reviewed before finalization. `FINALIZED` and later states remain locked and require the controlled correction/reversal workflow.
+- Unposted `FINALIZED` payroll uses **Begin correction**. Reversal evidence is restricted to `POSTED` or `PAID` payroll so every recorded reversal has a valid Financial Engine source posting and cannot strand the run in an unpostable state.
+
 ### Payroll Requirement Traceability
 
 - Canonical human-readable requirements: `docs/payroll/PAYROLL_REQUIREMENTS.md`.

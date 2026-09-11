@@ -552,7 +552,7 @@ export async function postPayrollReversalToFinanceAction(formData: FormData) {
 /**
  * @requirement PAY-SEC-001 PAY-RUN-003
  * @status IMPLEMENTED
- * @description Records an immutable reversal revision without mutating or deleting the finalized/paid source evidence; the revision can then be posted through the idempotent Financial Engine outbox.
+ * @description Records an immutable reversal revision for posted or paid payroll without mutating or deleting the source evidence; the revision can then be posted through the idempotent Financial Engine outbox.
  */
 export async function recordPayrollReversalAction(formData: FormData) {
   const { user } = await requirePayrollAccess(payrollApprovalRoles);
@@ -562,8 +562,8 @@ export async function recordPayrollReversalAction(formData: FormData) {
   const reversal = await prisma.$transaction(async (tx) => {
     const period = await tx.payrollPeriod.findFirst({ where: { id, tenantId: user.tenantId } });
     if (!period) throw new Error("Payroll period not found.");
-    const reversibleStatuses: readonly PayrollStatus[] = [PayrollStatus.FINALIZED, PayrollStatus.POSTED, PayrollStatus.PAID];
-    if (!reversibleStatuses.includes(period.status)) throw new Error("Only finalized, posted, or paid payroll evidence can be reversed.");
+    const reversibleStatuses: readonly PayrollStatus[] = [PayrollStatus.POSTED, PayrollStatus.PAID];
+    if (!reversibleStatuses.includes(period.status)) throw new Error("Only posted or paid payroll evidence can be reversed. Use Begin correction for finalized payroll that has not been posted.");
 
     const sourceRevision = await tx.payrollCalculationRevision.findFirst({
       where: { tenantId: user.tenantId, payrollId: id, revisionType: { not: PayrollRevisionType.REVERSAL } },

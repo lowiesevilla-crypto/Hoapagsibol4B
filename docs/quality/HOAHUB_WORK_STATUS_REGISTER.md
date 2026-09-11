@@ -1,5 +1,11 @@
 # HOAHub Quality / UX Work Status Register
 
+## 2026-09-11 payroll lifecycle defect remediation
+
+| Work Item | Priority | Status | Evidence / next gate |
+| --- | --- | --- | --- |
+| Calculated payroll adjustment controls and lifecycle dead-end prevention | P0 | IMPLEMENTED | Branch `fix/payroll-calculated-adjustments-lifecycle`; local validation and exact-head CI/visual-parity gates required before merge. |
+
 Status: COMPLETED
 Last updated: 2026-09-03
 

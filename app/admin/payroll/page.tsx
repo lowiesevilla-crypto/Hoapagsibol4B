@@ -473,11 +473,6 @@ export default async function PayrollPage({ searchParams }: PayrollPageProps) {
                     <input type="hidden" name="id" value={selected.id} />
                     <SubmitButton><HandCoins className="size-4" /> Post to Financial Engine</SubmitButton>
                   </form>}
-                  {canApprovePayroll && !selectedReversed && <form action={recordPayrollReversalAction} className="flex min-w-64 flex-col gap-2">
-                    <input type="hidden" name="id" value={selected.id} />
-                    <input className="field min-h-10 py-2 text-xs" name="reason" minLength={10} maxLength={500} required placeholder="Reversal reason (required)" />
-                    <SubmitButton className="btn-danger">Record reversal evidence</SubmitButton>
-                  </form>}
                 </>}
                 {selected.status === "POST_FAILED" && canApprovePayroll && !selectedReversed && <form action={postPayrollToFinanceAction}>
                   <input type="hidden" name="id" value={selected.id} />
@@ -500,7 +495,7 @@ export default async function PayrollPage({ searchParams }: PayrollPageProps) {
               </div>
             </div>
 
-            <PayrollRunStepper status={selected.status} />
+            <PayrollRunStepper status={selected.status} reversed={selectedReversed} reversalPosted={selectedFinancialReversalPosted} />
 
             <div className="mt-5 grid gap-3 sm:grid-cols-3">
               <div className="rounded-2xl border border-pine-100 bg-pine-50 p-4">
@@ -680,13 +675,17 @@ function RunToolLink({ href, active, label }: { href: string; active: boolean; l
  * @requirement PAY-RUN-001 PAY-UX-001
  * @status VERIFIED
  */
-function PayrollRunStepper({ status }: { status: string }) {
-  const current = ({ DRAFT: 0, CALCULATED: 2, FINALIZED: 4, POSTING: 4, POST_FAILED: 4, POSTED: 5, PAID: 6 } as Record<string, number>)[status] ?? 0;
+function PayrollRunStepper({ status, reversed, reversalPosted }: { status: string; reversed: boolean; reversalPosted: boolean }) {
+  const standardCurrent = ({ DRAFT: 0, CALCULATED: 2, FINALIZED: 4, POSTING: 4, POST_FAILED: 4, POSTED: 5, PAID: 6 } as Record<string, number>)[status] ?? 0;
+  const current = reversed ? (reversalPosted ? 6 : 5) : standardCurrent;
   const steps = ["Setup", "Calculate", "Review", "Approve", "Post", "Pay"];
   return <div className="mt-5 rounded-2xl border border-slate-100 bg-slate-50 p-3">
     <p className="mb-3 text-xs font-black uppercase tracking-wider text-slate-500">Payroll lifecycle</p>
     <ol className="grid gap-2 sm:grid-cols-3 xl:grid-cols-6">
-      {steps.map((step, index) => <li key={step} className={`rounded-xl border px-3 py-2 text-center text-xs font-bold ${index < current ? "border-emerald-200 bg-emerald-50 text-emerald-700" : index === current ? "border-pine-500 bg-white text-pine-800 shadow-sm" : "border-slate-200 bg-white text-slate-400"}`}>{index < current ? "✓ " : ""}{step}</li>)}
+      {steps.map((step, index) => {
+        const stepLabel = reversed && step === "Pay" ? "Reverse" : step;
+        return <li key={stepLabel} className={`rounded-xl border px-3 py-2 text-center text-xs font-bold ${index < current ? "border-emerald-200 bg-emerald-50 text-emerald-700" : index === current ? "border-pine-500 bg-white text-pine-800 shadow-sm" : "border-slate-200 bg-white text-slate-400"}`}>{index < current ? "✓ " : ""}{stepLabel}</li>;
+      })}
     </ol>
   </div>;
 }

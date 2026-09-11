@@ -39,6 +39,9 @@ test("PAY-RUN-003: finalization creates immutable revision and per-employee snap
 
 test("PAY-RUN-003: reversal records immutable negative delta evidence without changing payroll status", () => {
   const source = functionSource("recordPayrollReversalAction", "deletePayrollAction");
+  assert.match(source, /\[PayrollStatus\.POSTED, PayrollStatus\.PAID\]/);
+  assert.doesNotMatch(source, /\[PayrollStatus\.FINALIZED, PayrollStatus\.POSTED, PayrollStatus\.PAID\]/);
+  assert.match(source, /Use Begin correction for finalized payroll/);
   assert.match(source, /revisionType: PayrollRevisionType\.REVERSAL/);
   assert.match(source, /reversedRevisionId: sourceRevision\.id/);
   assert.match(source, /tenantId: user\.tenantId/);

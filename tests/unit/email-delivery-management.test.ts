@@ -12,7 +12,14 @@ test("email delivery management reads only tenant-scoped email logs", () => {
   assert.match(page, /take:\s*PAGE_SIZE/);
   assert.match(page, /skip:\s*\(page - 1\) \* PAGE_SIZE/);
   assert.match(page, /recipient:\s*\{\s*is:/);
-  assert.match(page, /maskedEmail\(log\.recipient\.email\)/);
+});
+
+test("email history prefers the delivery-time masked recipient snapshot", () => {
+  assert.match(page, /metadata:\s*true/);
+  assert.match(page, /function deliveryEmailSnapshot/);
+  assert.match(page, /Prisma\.JsonObject\)\.maskedEmail/);
+  assert.match(page, /deliveryEmailSnapshot\(log\.metadata, log\.recipient\.email\)/);
+  assert.match(page, /return maskedEmail\(currentEmail\)/);
 });
 
 test("manual retry is concurrency-safe, tenant-scoped, and never bypasses the protected worker", () => {

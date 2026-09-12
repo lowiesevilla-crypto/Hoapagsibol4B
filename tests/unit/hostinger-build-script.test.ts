@@ -14,3 +14,15 @@ for (const scriptName of ["build", "hostinger:build", "hostinger:build:backfill"
     assert.doesNotMatch(command, /(^|\s|&&|;)pnpm(\s|$)/);
   });
 }
+
+test("Next.js traces Hostinger runtime-only dependencies", () => {
+  const nextConfig = readFileSync("next.config.ts", "utf8");
+  for (const runtimePath of [
+    "./node_modules/react-dom/**/*",
+    "./node_modules/@prisma/client/**/*",
+    "./node_modules/.prisma/client/**/*",
+    "./node_modules/@prisma/engines/**/*",
+  ]) {
+    assert.ok(nextConfig.includes(runtimePath), `next.config.ts must trace ${runtimePath}`);
+  }
+});

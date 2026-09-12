@@ -58,6 +58,17 @@ test("bulk resend supports page or all-filtered selection without direct SMTP", 
   assert.doesNotMatch(action, /nodemailer|sendProtectedRawEmail|sendMail\(/);
 });
 
+test("bulk success redirect stays outside the database try/catch", () => {
+  const bulkStart = action.indexOf("export async function bulkEmailDeliveryAction");
+  const tryStart = action.indexOf("  try {", bulkStart);
+  const catchStart = action.indexOf("  } catch", tryStart);
+  assert.ok(bulkStart >= 0 && tryStart > bulkStart && catchStart > tryStart);
+  const protectedBlock = action.slice(tryStart, catchStart);
+  assert.doesNotMatch(protectedBlock, /redirect\(/);
+  assert.match(action.slice(catchStart), /revalidatePath\("\/admin\/settings\/email-delivery"\)/);
+  assert.match(action.slice(catchStart), /redirect\(managementUrl\(\s*"success"/);
+});
+
 test("delete from queue is a tenant-safe soft removal that preserves audit history", () => {
   assert.match(action, /selectionWhere/);
   assert.match(action, /status:\s*NotificationStatus\.QUEUED/);

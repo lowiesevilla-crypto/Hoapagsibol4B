@@ -171,7 +171,13 @@ export async function bulkEmailDeliveryAction(formData: FormData) {
     if (bulkAction === "remove") {
       const result = await prisma.$transaction(async (tx) => {
         const update = await tx.notificationLog.updateMany({
-          where: { AND: [selectionWhere, { status: NotificationStatus.QUEUED }] },
+          where: {
+            AND: [
+              selectionWhere,
+              { type: { in: RETRYABLE_EMAIL_TYPES } },
+              { status: NotificationStatus.QUEUED },
+            ],
+          },
           data: {
             status: NotificationStatus.SKIPPED,
             errorMessage: `Removed from active email queue by System Administrator on ${requestedAt}.`,
@@ -193,6 +199,7 @@ export async function bulkEmailDeliveryAction(formData: FormData) {
               selectionMode: selectAllFiltered ? "FILTERED" : "IDS",
               selectedIdCount: selectAllFiltered ? null : notificationIds.length,
               filters: { q: filters.q || null, status: filters.status, type: filters.type },
+              queueTypes: RETRYABLE_EMAIL_TYPES,
               hardDeleted: false,
               resultingStatus: NotificationStatus.SKIPPED,
               administratorVisibleDisposition: "REMOVED_FROM_QUEUE",
@@ -256,8 +263,8 @@ export async function bulkEmailDeliveryAction(formData: FormData) {
     redirect(managementUrl(
       "success",
       affectedCount
-        ? `${affectedCount} queued email${affectedCount === 1 ? " was" : "s were"} REMOVED from active delivery and will not be sent. The record remains visible as REMOVED audit history.`
-        : "No QUEUED emails in the selection were eligible for removal. History-only records were left unchanged.",
+        ? `${affectedCount} queued billing/reminder email${affectedCount === 1 ? " was" : "s were"} REMOVED from active delivery and will not be sent. The record remains visible as REMOVED audit history.`
+        : "No eligible QUEUED billing/reminder emails in the selection were available for removal. History-only records were left unchanged.",
       navigation,
     ));
   }

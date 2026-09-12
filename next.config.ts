@@ -4,6 +4,14 @@ const nextConfig: NextConfig = {
   poweredByHeader: false,
   compress: true,
   outputFileTracingRoot: process.cwd(),
+  outputFileTracingIncludes: {
+    "/*": [
+      "./node_modules/react-dom/**/*",
+      "./node_modules/@prisma/client/**/*",
+      "./node_modules/.prisma/client/**/*",
+      "./node_modules/@prisma/engines/**/*",
+    ],
+  },
   experimental: {
     serverActions: {
       bodySizeLimit: "6mb",

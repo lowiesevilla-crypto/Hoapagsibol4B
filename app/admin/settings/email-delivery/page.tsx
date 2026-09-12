@@ -42,6 +42,14 @@ function maskedEmail(email: string) {
   return `${visible}${"*".repeat(Math.max(2, Math.min(8, local.length - visible.length)))}@${domain}`;
 }
 
+function deliveryEmailSnapshot(metadata: Prisma.JsonValue | null, currentEmail: string) {
+  if (metadata && typeof metadata === "object" && !Array.isArray(metadata)) {
+    const candidate = (metadata as Prisma.JsonObject).maskedEmail;
+    if (typeof candidate === "string" && candidate.includes("@")) return candidate;
+  }
+  return maskedEmail(currentEmail);
+}
+
 function dateTime(value: Date | null) {
   if (!value) return "—";
   return new Intl.DateTimeFormat("en-PH", {
@@ -134,6 +142,7 @@ export default async function EmailDeliveryManagementPage({
       createdAt: true,
       sentAt: true,
       errorMessage: true,
+      metadata: true,
       recipient: { select: { id: true, name: true, email: true, active: true } },
     },
     orderBy: [{ createdAt: "desc" }, { id: "desc" }],
@@ -178,7 +187,7 @@ export default async function EmailDeliveryManagementPage({
       <form method="get" className="grid gap-4 lg:grid-cols-[minmax(240px,1fr)_220px_260px_auto_auto] lg:items-end">
         <div>
           <label className="label" htmlFor="email-delivery-search">Search</label>
-          <input id="email-delivery-search" className="field" name="q" defaultValue={q} placeholder="Recipient, email, or subject" maxLength={120} />
+          <input id="email-delivery-search" className="field" name="q" defaultValue={q} placeholder="Recipient, current email, or subject" maxLength={120} />
         </div>
         <div>
           <label className="label" htmlFor="email-delivery-status">Status</label>
@@ -211,8 +220,9 @@ export default async function EmailDeliveryManagementPage({
             {logs.length === 0 && <tr><td colSpan={6} className="py-10 text-center text-sm text-slate-500">No email delivery records match the selected filters.</td></tr>}
             {logs.map((log) => {
               const retryable = log.status === NotificationStatus.FAILED && RETRYABLE_TYPES.has(log.type);
+              const deliveryEmail = deliveryEmailSnapshot(log.metadata, log.recipient.email);
               return <tr key={log.id}>
-                <td className="min-w-48"><p className="font-bold text-slate-800">{log.recipient.name || "Unnamed recipient"}</p><p className="mt-1 font-mono text-xs text-slate-500">{maskedEmail(log.recipient.email)}</p>{!log.recipient.active && <span className="mt-2 inline-flex badge badge-warning">INACTIVE</span>}</td>
+                <td className="min-w-48"><p className="font-bold text-slate-800">{log.recipient.name || "Unnamed recipient"}</p><p className="mt-1 font-mono text-xs text-slate-500">{deliveryEmail}</p>{!log.recipient.active && <span className="mt-2 inline-flex badge badge-warning">INACTIVE</span>}</td>
                 <td className="min-w-64"><p className="font-semibold text-slate-800">{log.subject}</p><p className="mt-1 text-xs font-bold text-slate-500">{log.type.replaceAll("_", " ")}</p><p className="mt-1 font-mono text-[10px] text-slate-400">{log.id}</p></td>
                 <td><span className={`badge ${statusBadge(log.status)}`}>{log.status}</span></td>
                 <td className="min-w-44 text-xs text-slate-600"><p><b>Created:</b> {dateTime(log.createdAt)}</p><p className="mt-1"><b>Sent:</b> {dateTime(log.sentAt)}</p></td>

@@ -1,3 +1,10 @@
+# Hostinger's managed Node.js deployment packages the runtime after pnpm install.
+# pnpm 11 reads linker settings from pnpm-workspace.yaml (not .npmrc).
+# Use a flat, physical node_modules tree so Hostinger does not lose pnpm
+# symlink targets such as react-dom/server.browser or generated .prisma/client.
+nodeLinker: hoisted
+packageImportMethod: copy
+
 allowBuilds:
   "@prisma/client": true
   "@prisma/engines": true

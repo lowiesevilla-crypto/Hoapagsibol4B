@@ -26,3 +26,9 @@ test("Next.js traces Hostinger runtime-only dependencies", () => {
     assert.ok(nextConfig.includes(runtimePath), `next.config.ts must trace ${runtimePath}`);
   }
 });
+
+test("pnpm uses a flat physical node_modules tree for Hostinger", () => {
+  const workspaceConfig = readFileSync("pnpm-workspace.yaml", "utf8");
+  assert.match(workspaceConfig, /^nodeLinker:\s*hoisted$/m);
+  assert.match(workspaceConfig, /^packageImportMethod:\s*copy$/m);
+});

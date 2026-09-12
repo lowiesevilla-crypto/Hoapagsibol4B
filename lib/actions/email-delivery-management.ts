@@ -1,24 +1,42 @@
 "use server";
 
-import { NotificationChannel, NotificationStatus, NotificationType, Prisma } from "@prisma/client";
+import { NotificationChannel, NotificationStatus, Prisma } from "@prisma/client";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { requirePermission } from "@/lib/authorization/guards";
 import { Permission } from "@/lib/authorization/permissions";
 import { prisma } from "@/lib/db";
+import {
+  emailDeliveryWhere,
+  parseEmailDeliveryFilters,
+  parseEmailDeliveryPageSize,
+  PROTECTED_QUEUE_NOTIFICATION_TYPES,
+} from "@/lib/email-delivery-management";
 
-const RETRYABLE_EMAIL_TYPES = [
-  NotificationType.BILLING_NOTIFICATION,
-  NotificationType.BILL_REMINDER,
-] as const;
+const RETRYABLE_EMAIL_TYPES = [...PROTECTED_QUEUE_NOTIFICATION_TYPES];
 
 function metadataObject(value: Prisma.JsonValue | null): Record<string, Prisma.JsonValue> {
   if (!value || typeof value !== "object" || Array.isArray(value)) return {};
   return value as Record<string, Prisma.JsonValue>;
 }
 
-function managementUrl(kind: "success" | "error", message: string) {
-  return `/admin/settings/email-delivery?${kind}=${encodeURIComponent(message)}`;
+function positivePage(value: FormDataEntryValue | null) {
+  const parsed = Number(String(value || "1"));
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : 1;
+}
+
+function managementUrl(
+  kind: "success" | "error",
+  message: string,
+  navigation?: { q: string; status: string; type: string; page: number; pageSize: number },
+) {
+  const params = new URLSearchParams({ [kind]: message });
+  if (navigation?.q) params.set("q", navigation.q);
+  if (navigation?.status) params.set("status", navigation.status);
+  if (navigation?.type) params.set("type", navigation.type);
+  if (navigation && navigation.page > 1) params.set("page", String(navigation.page));
+  if (navigation && navigation.pageSize !== 25) params.set("pageSize", String(navigation.pageSize));
+  return `/admin/settings/email-delivery?${params.toString()}`;
 }
 
 export async function retryEmailDeliveryAction(formData: FormData) {
@@ -69,7 +87,7 @@ export async function retryEmailDeliveryAction(formData: FormData) {
         tenantId: admin.tenantId,
         channel: NotificationChannel.EMAIL,
         status: NotificationStatus.FAILED,
-        type: { in: [...RETRYABLE_EMAIL_TYPES] },
+        type: { in: RETRYABLE_EMAIL_TYPES },
       },
       data: {
         status: NotificationStatus.QUEUED,
@@ -112,4 +130,133 @@ export async function retryEmailDeliveryAction(formData: FormData) {
 
   revalidatePath("/admin/settings/email-delivery");
   redirect(managementUrl("success", "Failed email was placed back into the protected delivery queue."));
+}
+
+export async function bulkEmailDeliveryAction(formData: FormData) {
+  const admin = await requirePermission(Permission.SETTINGS_MANAGE);
+  const bulkAction = String(formData.get("bulkAction") || "");
+  if (bulkAction !== "requeue" && bulkAction !== "remove") {
+    redirect(managementUrl("error", "Choose a valid bulk email action."));
+  }
+
+  const filters = parseEmailDeliveryFilters({
+    q: String(formData.get("q") || ""),
+    status: String(formData.get("status") || ""),
+    type: String(formData.get("type") || ""),
+  });
+  const navigation = {
+    q: filters.q,
+    status: filters.status || "",
+    type: filters.type || "",
+    page: positivePage(formData.get("page")),
+    pageSize: parseEmailDeliveryPageSize(String(formData.get("pageSize") || "")),
+  };
+  const selectAllFiltered = String(formData.get("selectAllFiltered") || "") === "true";
+  const notificationIds = [...new Set(formData.getAll("notificationIds").map((value) => String(value).trim()).filter(Boolean))].slice(0, 100);
+
+  if (!selectAllFiltered && notificationIds.length === 0) {
+    redirect(managementUrl("error", "Select at least one email record, or choose Select all filtered records.", navigation));
+  }
+
+  const filteredWhere = emailDeliveryWhere(admin.tenantId, filters);
+  const selectionWhere: Prisma.NotificationLogWhereInput = selectAllFiltered
+    ? filteredWhere
+    : { AND: [filteredWhere, { id: { in: notificationIds } }] };
+  const requestedAt = new Date().toISOString();
+
+  try {
+    if (bulkAction === "remove") {
+      const result = await prisma.$transaction(async (tx) => {
+        const update = await tx.notificationLog.updateMany({
+          where: { AND: [selectionWhere, { status: NotificationStatus.QUEUED }] },
+          data: {
+            status: NotificationStatus.SKIPPED,
+            errorMessage: `Removed from active email queue by System Administrator on ${requestedAt}.`,
+            sentAt: null,
+            providerMessageId: null,
+          },
+        });
+        await tx.auditLog.create({
+          data: {
+            tenantId: admin.tenantId,
+            actorId: admin.id,
+            module: "EMAIL",
+            action: "BULK_REMOVE_QUEUED_EMAILS",
+            entityType: "NotificationLog",
+            entityId: selectAllFiltered ? "FILTERED_SELECTION" : "PAGE_SELECTION",
+            metadata: {
+              requestedAt,
+              affectedCount: update.count,
+              selectionMode: selectAllFiltered ? "FILTERED" : "IDS",
+              selectedIdCount: selectAllFiltered ? null : notificationIds.length,
+              filters: { q: filters.q || null, status: filters.status, type: filters.type },
+              hardDeleted: false,
+              resultingStatus: NotificationStatus.SKIPPED,
+            },
+          },
+        });
+        return update;
+      });
+      revalidatePath("/admin/settings/email-delivery");
+      redirect(managementUrl(
+        "success",
+        result.count
+          ? `${result.count} queued email${result.count === 1 ? " was" : "s were"} removed from the active queue. Audit history was retained.`
+          : "No queued emails in the selection were eligible for removal.",
+        navigation,
+      ));
+    }
+
+    const result = await prisma.$transaction(async (tx) => {
+      const update = await tx.notificationLog.updateMany({
+        where: {
+          AND: [
+            selectionWhere,
+            { type: { in: RETRYABLE_EMAIL_TYPES } },
+            { status: { in: [NotificationStatus.QUEUED, NotificationStatus.FAILED] } },
+          ],
+        },
+        data: {
+          status: NotificationStatus.QUEUED,
+          errorMessage: null,
+          sentAt: null,
+          providerMessageId: null,
+        },
+      });
+      await tx.auditLog.create({
+        data: {
+          tenantId: admin.tenantId,
+          actorId: admin.id,
+          module: "EMAIL",
+          action: "BULK_REQUEUE_EMAILS",
+          entityType: "NotificationLog",
+          entityId: selectAllFiltered ? "FILTERED_SELECTION" : "PAGE_SELECTION",
+          metadata: {
+            requestedAt,
+            affectedCount: update.count,
+            selectionMode: selectAllFiltered ? "FILTERED" : "IDS",
+            selectedIdCount: selectAllFiltered ? null : notificationIds.length,
+            filters: { q: filters.q || null, status: filters.status, type: filters.type },
+            queueTypes: RETRYABLE_EMAIL_TYPES,
+            directSmtpSend: false,
+          },
+        },
+      });
+      return update;
+    });
+    revalidatePath("/admin/settings/email-delivery");
+    redirect(managementUrl(
+      "success",
+      result.count
+        ? `${result.count} eligible email${result.count === 1 ? " is" : "s are"} queued for protected resend/retry.`
+        : "No queued or failed billing/reminder emails in the selection were eligible for resend/retry.",
+      navigation,
+    ));
+  } catch (error) {
+    redirect(managementUrl(
+      "error",
+      error instanceof Error ? error.message : "The bulk email action could not be completed.",
+      navigation,
+    ));
+  }
 }

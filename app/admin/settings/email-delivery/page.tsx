@@ -6,29 +6,22 @@ import {
   Prisma,
   Role,
 } from "@prisma/client";
+import {
+  EmailDeliveryBulkSubmitButton,
+  EmailDeliverySelectPage,
+} from "@/components/email-delivery-bulk-actions";
 import { PageHeader } from "@/components/page-header";
 import { SubmitButton } from "@/components/ui";
-import { retryEmailDeliveryAction } from "@/lib/actions/email-delivery-management";
+import { bulkEmailDeliveryAction } from "@/lib/actions/email-delivery-management";
 import { requireUser } from "@/lib/auth";
 import { prisma } from "@/lib/db";
-
-const PAGE_SIZE = 25;
-const RETRYABLE_TYPES = new Set<NotificationType>([
-  NotificationType.BILLING_NOTIFICATION,
-  NotificationType.BILL_REMINDER,
-]);
-
-function validStatus(value?: string) {
-  return Object.values(NotificationStatus).includes(value as NotificationStatus)
-    ? value as NotificationStatus
-    : null;
-}
-
-function validType(value?: string) {
-  return Object.values(NotificationType).includes(value as NotificationType)
-    ? value as NotificationType
-    : null;
-}
+import {
+  emailDeliveryWhere,
+  EMAIL_DELIVERY_PAGE_SIZES,
+  isProtectedQueueType,
+  parseEmailDeliveryFilters,
+  parseEmailDeliveryPageSize,
+} from "@/lib/email-delivery-management";
 
 function positivePage(value?: string) {
   const parsed = Number(value || "1");
@@ -71,12 +64,14 @@ function queryHref(input: {
   q: string;
   status: NotificationStatus | null;
   type: NotificationType | null;
+  pageSize: number;
 }) {
   const params = new URLSearchParams();
   if (input.q) params.set("q", input.q);
   if (input.status) params.set("status", input.status);
   if (input.type) params.set("type", input.type);
   if (input.page > 1) params.set("page", String(input.page));
+  if (input.pageSize !== 25) params.set("pageSize", String(input.pageSize));
   const query = params.toString();
   return `/admin/settings/email-delivery${query ? `?${query}` : ""}`;
 }
@@ -89,34 +84,17 @@ export default async function EmailDeliveryManagementPage({
     status?: string;
     type?: string;
     page?: string;
+    pageSize?: string;
     success?: string;
     error?: string;
   }>;
 }) {
   const user = await requireUser(Role.SYSTEM_ADMIN);
   const query = await searchParams;
-  const q = String(query.q || "").trim().slice(0, 120);
-  const status = validStatus(query.status);
-  const type = validType(query.type);
+  const filters = parseEmailDeliveryFilters(query);
+  const pageSize = parseEmailDeliveryPageSize(query.pageSize);
   const requestedPage = positivePage(query.page);
-
-  const searchFilter: Prisma.NotificationLogWhereInput = q
-    ? {
-        OR: [
-          { subject: { contains: q } },
-          { recipient: { is: { name: { contains: q } } } },
-          { recipient: { is: { email: { contains: q } } } },
-        ],
-      }
-    : {};
-
-  const where: Prisma.NotificationLogWhereInput = {
-    tenantId: user.tenantId,
-    channel: NotificationChannel.EMAIL,
-    ...(status ? { status } : {}),
-    ...(type ? { type } : {}),
-    ...searchFilter,
-  };
+  const where = emailDeliveryWhere(user.tenantId, filters);
   const tenantEmailWhere: Prisma.NotificationLogWhereInput = {
     tenantId: user.tenantId,
     channel: NotificationChannel.EMAIL,
@@ -130,7 +108,7 @@ export default async function EmailDeliveryManagementPage({
       _count: { _all: true },
     }),
   ]);
-  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+  const totalPages = Math.max(1, Math.ceil(total / pageSize));
   const page = Math.min(requestedPage, totalPages);
   const logs = await prisma.notificationLog.findMany({
     where,
@@ -146,8 +124,8 @@ export default async function EmailDeliveryManagementPage({
       recipient: { select: { id: true, name: true, email: true, active: true } },
     },
     orderBy: [{ createdAt: "desc" }, { id: "desc" }],
-    skip: (page - 1) * PAGE_SIZE,
-    take: PAGE_SIZE,
+    skip: (page - 1) * pageSize,
+    take: pageSize,
   });
 
   const counts = new Map(statusCounts.map((entry) => [entry.status, entry._count._all]));
@@ -157,7 +135,7 @@ export default async function EmailDeliveryManagementPage({
     <PageHeader
       eyebrow="System administration"
       title="Email Delivery Management"
-      description="Inspect tenant-scoped outbound email history and safely place failed billing/reminder messages back into HOAHub's protected delivery queue. Sent messages are read-only to prevent accidental duplicates."
+      description="Search and manage tenant-scoped outbound email history using server-side filtering and pagination. Bulk actions keep HOAHub's protected delivery controls and audit trail intact."
       action={<Link className="btn-secondary" href="/admin/settings">Back to settings</Link>}
     />
 
@@ -169,11 +147,11 @@ export default async function EmailDeliveryManagementPage({
         <div>
           <p className="text-xs font-black uppercase tracking-[.16em] text-slate-500">Protected worker</p>
           <h2 className="mt-1 text-lg font-black text-ink">{queueWorkerEnabled ? "Automatic queued delivery is enabled" : "Automatic queued delivery is paused"}</h2>
-          <p className="mt-1 max-w-3xl text-sm leading-6 text-slate-600">Retry never sends SMTP directly from this screen. A failed record is changed back to QUEUED and the existing protected email worker performs validation, suppression checks, provider-circuit checks, pacing, and delivery.</p>
+          <p className="mt-1 max-w-3xl text-sm leading-6 text-slate-600">Resend/Retry returns eligible billing and reminder messages to QUEUED; SMTP remains handled by the existing protected worker with validation, suppression, provider-circuit checks, pacing, and retry controls.</p>
         </div>
         <span className={`badge ${queueWorkerEnabled ? "badge-success" : "badge-warning"}`}>{queueWorkerEnabled ? "ENABLED" : "PAUSED"}</span>
       </div>
-      {!queueWorkerEnabled && <p className="mt-3 rounded-2xl bg-white p-3 text-sm font-semibold text-amber-900">A retried email will remain queued until EMAIL_BULK_DELIVERY_ENABLED=true is enabled through the controlled production rollout.</p>}
+      {!queueWorkerEnabled && <p className="mt-3 rounded-2xl bg-white p-3 text-sm font-semibold text-amber-900">Requeued messages remain pending until EMAIL_BULK_DELIVERY_ENABLED=true is enabled through the controlled production rollout.</p>}
     </section>
 
     <section className="mb-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
@@ -184,23 +162,29 @@ export default async function EmailDeliveryManagementPage({
     </section>
 
     <section className="card mb-6">
-      <form method="get" className="grid gap-4 lg:grid-cols-[minmax(240px,1fr)_220px_260px_auto_auto] lg:items-end">
+      <form method="get" className="grid gap-4 lg:grid-cols-[minmax(240px,1fr)_180px_230px_140px_auto_auto] lg:items-end">
         <div>
           <label className="label" htmlFor="email-delivery-search">Search</label>
-          <input id="email-delivery-search" className="field" name="q" defaultValue={q} placeholder="Recipient, current email, or subject" maxLength={120} />
+          <input id="email-delivery-search" className="field" name="q" defaultValue={filters.q} placeholder="Recipient, current email, or subject" maxLength={120} />
         </div>
         <div>
           <label className="label" htmlFor="email-delivery-status">Status</label>
-          <select id="email-delivery-status" className="field" name="status" defaultValue={status || ""}>
+          <select id="email-delivery-status" className="field" name="status" defaultValue={filters.status || ""}>
             <option value="">All statuses</option>
             {Object.values(NotificationStatus).map((item) => <option key={item} value={item}>{item}</option>)}
           </select>
         </div>
         <div>
           <label className="label" htmlFor="email-delivery-type">Type</label>
-          <select id="email-delivery-type" className="field" name="type" defaultValue={type || ""}>
+          <select id="email-delivery-type" className="field" name="type" defaultValue={filters.type || ""}>
             <option value="">All email types</option>
             {Object.values(NotificationType).map((item) => <option key={item} value={item}>{item.replaceAll("_", " ")}</option>)}
+          </select>
+        </div>
+        <div>
+          <label className="label" htmlFor="email-delivery-page-size">Rows</label>
+          <select id="email-delivery-page-size" className="field" name="pageSize" defaultValue={String(pageSize)}>
+            {EMAIL_DELIVERY_PAGE_SIZES.map((size) => <option key={size} value={size}>{size} / page</option>)}
           </select>
         </div>
         <SubmitButton>Apply filters</SubmitButton>
@@ -211,36 +195,77 @@ export default async function EmailDeliveryManagementPage({
     <section className="card overflow-hidden p-0">
       <div className="flex flex-col gap-2 border-b border-slate-100 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
         <div><h2 className="font-black text-ink">Email records</h2><p className="text-sm text-slate-500">{total} matching record{total === 1 ? "" : "s"} · page {page} of {totalPages}</p></div>
-        <p className="text-xs font-semibold text-slate-500">25 records per page</p>
+        <p className="text-xs font-semibold text-slate-500">Server-side pagination · {pageSize} records per page</p>
       </div>
-      <div className="table-wrap rounded-none border-0 shadow-none">
-        <table className="data-table">
-          <thead><tr><th>Recipient</th><th>Message</th><th>Status</th><th>Timeline</th><th>Last error</th><th className="text-right">Action</th></tr></thead>
-          <tbody>
-            {logs.length === 0 && <tr><td colSpan={6} className="py-10 text-center text-sm text-slate-500">No email delivery records match the selected filters.</td></tr>}
-            {logs.map((log) => {
-              const retryable = log.status === NotificationStatus.FAILED && RETRYABLE_TYPES.has(log.type);
-              const deliveryEmail = deliveryEmailSnapshot(log.metadata, log.recipient.email);
-              return <tr key={log.id}>
-                <td className="min-w-48"><p className="font-bold text-slate-800">{log.recipient.name || "Unnamed recipient"}</p><p className="mt-1 font-mono text-xs text-slate-500">{deliveryEmail}</p>{!log.recipient.active && <span className="mt-2 inline-flex badge badge-warning">INACTIVE</span>}</td>
-                <td className="min-w-64"><p className="font-semibold text-slate-800">{log.subject}</p><p className="mt-1 text-xs font-bold text-slate-500">{log.type.replaceAll("_", " ")}</p><p className="mt-1 font-mono text-[10px] text-slate-400">{log.id}</p></td>
-                <td><span className={`badge ${statusBadge(log.status)}`}>{log.status}</span></td>
-                <td className="min-w-44 text-xs text-slate-600"><p><b>Created:</b> {dateTime(log.createdAt)}</p><p className="mt-1"><b>Sent:</b> {dateTime(log.sentAt)}</p></td>
-                <td className="max-w-72"><p className="line-clamp-3 text-xs leading-5 text-slate-600">{log.errorMessage || "—"}</p></td>
-                <td className="text-right">
-                  {retryable ? <form action={retryEmailDeliveryAction}>
-                    <input type="hidden" name="notificationId" value={log.id} />
-                    <SubmitButton>Queue retry</SubmitButton>
-                  </form> : <span className="text-xs font-semibold text-slate-400">{log.status === NotificationStatus.SENT ? "Read only" : log.status === NotificationStatus.QUEUED ? "Awaiting worker" : "No retry"}</span>}
-                </td>
-              </tr>;
-            })}
-          </tbody>
-        </table>
-      </div>
+
+      <form action={bulkEmailDeliveryAction}>
+        <input type="hidden" name="q" value={filters.q} />
+        <input type="hidden" name="status" value={filters.status || ""} />
+        <input type="hidden" name="type" value={filters.type || ""} />
+        <input type="hidden" name="page" value={page} />
+        <input type="hidden" name="pageSize" value={pageSize} />
+
+        <div className="flex flex-col gap-3 border-b border-slate-100 bg-slate-50/70 px-5 py-4 xl:flex-row xl:items-center xl:justify-between">
+          <div className="flex flex-wrap items-center gap-4 text-sm">
+            <EmailDeliverySelectPage count={logs.length} />
+            {total > logs.length && <label className="inline-flex cursor-pointer items-center gap-2 font-bold text-slate-700">
+              <input type="checkbox" name="selectAllFiltered" value="true" className="size-4 rounded border-slate-300" />
+              Select all {total} filtered records
+            </label>}
+            <span className="text-xs font-semibold text-slate-500">Only eligible records are changed by each action.</span>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <EmailDeliveryBulkSubmitButton
+              value="requeue"
+              className="btn-primary"
+              confirmation="Resend/retry the eligible selected billing and reminder emails through HOAHub's protected delivery queue?"
+            >
+              Resend / Retry
+            </EmailDeliveryBulkSubmitButton>
+            <EmailDeliveryBulkSubmitButton
+              value="remove"
+              className="btn-danger"
+              confirmation="Delete the selected queued emails from the active delivery queue? Their audit history will be retained as SKIPPED."
+            >
+              Delete from queue
+            </EmailDeliveryBulkSubmitButton>
+          </div>
+        </div>
+
+        <div className="table-wrap rounded-none border-0 shadow-none">
+          <table className="data-table">
+            <thead><tr><th className="w-12">Select</th><th>Recipient</th><th>Message</th><th>Status</th><th>Timeline</th><th>Last error</th><th className="text-right">Action state</th></tr></thead>
+            <tbody>
+              {logs.length === 0 && <tr><td colSpan={7} className="py-10 text-center text-sm text-slate-500">No email delivery records match the selected filters.</td></tr>}
+              {logs.map((log) => {
+                const queueType = isProtectedQueueType(log.type);
+                const deliveryEmail = deliveryEmailSnapshot(log.metadata, log.recipient.email);
+                const actionState = log.status === NotificationStatus.SENT
+                  ? "Read only"
+                  : queueType && log.status === NotificationStatus.FAILED
+                    ? "Retry eligible"
+                    : queueType && log.status === NotificationStatus.QUEUED
+                      ? "Queue eligible"
+                      : "History only";
+                return <tr key={log.id}>
+                  <td><input aria-label={`Select ${log.subject}`} type="checkbox" name="notificationIds" value={log.id} className="size-4 rounded border-slate-300" /></td>
+                  <td className="min-w-48"><p className="font-bold text-slate-800">{log.recipient.name || "Unnamed recipient"}</p><p className="mt-1 font-mono text-xs text-slate-500">{deliveryEmail}</p>{!log.recipient.active && <span className="mt-2 inline-flex badge badge-warning">INACTIVE</span>}</td>
+                  <td className="min-w-64"><p className="font-semibold text-slate-800">{log.subject}</p><p className="mt-1 text-xs font-bold text-slate-500">{log.type.replaceAll("_", " ")}</p><p className="mt-1 font-mono text-[10px] text-slate-400">{log.id}</p></td>
+                  <td><span className={`badge ${statusBadge(log.status)}`}>{log.status}</span></td>
+                  <td className="min-w-44 text-xs text-slate-600"><p><b>Created:</b> {dateTime(log.createdAt)}</p><p className="mt-1"><b>Sent:</b> {dateTime(log.sentAt)}</p></td>
+                  <td className="max-w-72"><p className="line-clamp-3 text-xs leading-5 text-slate-600">{log.errorMessage || "—"}</p></td>
+                  <td className="text-right text-xs font-semibold text-slate-500">{actionState}</td>
+                </tr>;
+              })}
+            </tbody>
+          </table>
+        </div>
+      </form>
+
       <div className="flex items-center justify-between gap-3 border-t border-slate-100 px-5 py-4">
-        {page > 1 ? <Link className="btn-secondary" href={queryHref({ page: page - 1, q, status, type })}>Previous</Link> : <span />}
-        {page < totalPages ? <Link className="btn-secondary" href={queryHref({ page: page + 1, q, status, type })}>Next</Link> : <span />}
+        {page > 1 ? <Link className="btn-secondary" href={queryHref({ page: page - 1, q: filters.q, status: filters.status, type: filters.type, pageSize })}>Previous</Link> : <span />}
+        <span className="text-xs font-semibold text-slate-500">Page {page} of {totalPages}</span>
+        {page < totalPages ? <Link className="btn-secondary" href={queryHref({ page: page + 1, q: filters.q, status: filters.status, type: filters.type, pageSize })}>Next</Link> : <span />}
       </div>
     </section>
   </>;

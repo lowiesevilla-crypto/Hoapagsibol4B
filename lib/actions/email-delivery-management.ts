@@ -80,53 +80,55 @@ export async function retryEmailDeliveryAction(formData: FormData) {
   } = currentMetadata;
   const requestedAt = new Date().toISOString();
 
-  await prisma.$transaction(async (tx) => {
-    const update = await tx.notificationLog.updateMany({
-      where: {
-        id: notification.id,
-        tenantId: admin.tenantId,
-        channel: NotificationChannel.EMAIL,
-        status: NotificationStatus.FAILED,
-        type: { in: RETRYABLE_EMAIL_TYPES },
-      },
-      data: {
-        status: NotificationStatus.QUEUED,
-        errorMessage: null,
-        sentAt: null,
-        providerMessageId: null,
-        metadata: {
-          ...preservedMetadata,
-          retryAttempts: 0,
-          adminRetryRequestedAt: requestedAt,
-          adminRetryRequestedBy: admin.id,
-        } as Prisma.InputJsonValue,
-      },
-    });
-
-    if (update.count !== 1) throw new Error("The email delivery status changed before the retry could be queued. Refresh and try again.");
-
-    await tx.auditLog.create({
-      data: {
-        tenantId: admin.tenantId,
-        actorId: admin.id,
-        module: "EMAIL",
-        action: "REQUEUE_FAILED_EMAIL",
-        entityType: "NotificationLog",
-        entityId: notification.id,
-        metadata: {
-          notificationType: notification.type,
-          recipientId: notification.recipientId,
-          subject: notification.subject,
-          requestedAt,
-          previousStatus: NotificationStatus.FAILED,
-          newStatus: NotificationStatus.QUEUED,
-          directSmtpSend: false,
+  try {
+    await prisma.$transaction(async (tx) => {
+      const update = await tx.notificationLog.updateMany({
+        where: {
+          id: notification.id,
+          tenantId: admin.tenantId,
+          channel: NotificationChannel.EMAIL,
+          status: NotificationStatus.FAILED,
+          type: { in: RETRYABLE_EMAIL_TYPES },
         },
-      },
+        data: {
+          status: NotificationStatus.QUEUED,
+          errorMessage: null,
+          sentAt: null,
+          providerMessageId: null,
+          metadata: {
+            ...preservedMetadata,
+            retryAttempts: 0,
+            adminRetryRequestedAt: requestedAt,
+            adminRetryRequestedBy: admin.id,
+          } as Prisma.InputJsonValue,
+        },
+      });
+
+      if (update.count !== 1) throw new Error("The email delivery status changed before the retry could be queued. Refresh and try again.");
+
+      await tx.auditLog.create({
+        data: {
+          tenantId: admin.tenantId,
+          actorId: admin.id,
+          module: "EMAIL",
+          action: "REQUEUE_FAILED_EMAIL",
+          entityType: "NotificationLog",
+          entityId: notification.id,
+          metadata: {
+            notificationType: notification.type,
+            recipientId: notification.recipientId,
+            subject: notification.subject,
+            requestedAt,
+            previousStatus: NotificationStatus.FAILED,
+            newStatus: NotificationStatus.QUEUED,
+            directSmtpSend: false,
+          },
+        },
+      });
     });
-  }).catch((error) => {
+  } catch (error) {
     redirect(managementUrl("error", error instanceof Error ? error.message : "Email retry could not be queued."));
-  });
+  }
 
   revalidatePath("/admin/settings/email-delivery");
   redirect(managementUrl("success", "Failed email was placed back into the protected delivery queue."));
@@ -163,6 +165,7 @@ export async function bulkEmailDeliveryAction(formData: FormData) {
     ? filteredWhere
     : { AND: [filteredWhere, { id: { in: notificationIds } }] };
   const requestedAt = new Date().toISOString();
+  let affectedCount = 0;
 
   try {
     if (bulkAction === "remove") {
@@ -197,61 +200,47 @@ export async function bulkEmailDeliveryAction(formData: FormData) {
         });
         return update;
       });
-      revalidatePath("/admin/settings/email-delivery");
-      redirect(managementUrl(
-        "success",
-        result.count
-          ? `${result.count} queued email${result.count === 1 ? " was" : "s were"} removed from the active queue. Audit history was retained.`
-          : "No queued emails in the selection were eligible for removal.",
-        navigation,
-      ));
-    }
-
-    const result = await prisma.$transaction(async (tx) => {
-      const update = await tx.notificationLog.updateMany({
-        where: {
-          AND: [
-            selectionWhere,
-            { type: { in: RETRYABLE_EMAIL_TYPES } },
-            { status: { in: [NotificationStatus.QUEUED, NotificationStatus.FAILED] } },
-          ],
-        },
-        data: {
-          status: NotificationStatus.QUEUED,
-          errorMessage: null,
-          sentAt: null,
-          providerMessageId: null,
-        },
-      });
-      await tx.auditLog.create({
-        data: {
-          tenantId: admin.tenantId,
-          actorId: admin.id,
-          module: "EMAIL",
-          action: "BULK_REQUEUE_EMAILS",
-          entityType: "NotificationLog",
-          entityId: selectAllFiltered ? "FILTERED_SELECTION" : "PAGE_SELECTION",
-          metadata: {
-            requestedAt,
-            affectedCount: update.count,
-            selectionMode: selectAllFiltered ? "FILTERED" : "IDS",
-            selectedIdCount: selectAllFiltered ? null : notificationIds.length,
-            filters: { q: filters.q || null, status: filters.status, type: filters.type },
-            queueTypes: RETRYABLE_EMAIL_TYPES,
-            directSmtpSend: false,
+      affectedCount = result.count;
+    } else {
+      const result = await prisma.$transaction(async (tx) => {
+        const update = await tx.notificationLog.updateMany({
+          where: {
+            AND: [
+              selectionWhere,
+              { type: { in: RETRYABLE_EMAIL_TYPES } },
+              { status: { in: [NotificationStatus.QUEUED, NotificationStatus.FAILED] } },
+            ],
           },
-        },
+          data: {
+            status: NotificationStatus.QUEUED,
+            errorMessage: null,
+            sentAt: null,
+            providerMessageId: null,
+          },
+        });
+        await tx.auditLog.create({
+          data: {
+            tenantId: admin.tenantId,
+            actorId: admin.id,
+            module: "EMAIL",
+            action: "BULK_REQUEUE_EMAILS",
+            entityType: "NotificationLog",
+            entityId: selectAllFiltered ? "FILTERED_SELECTION" : "PAGE_SELECTION",
+            metadata: {
+              requestedAt,
+              affectedCount: update.count,
+              selectionMode: selectAllFiltered ? "FILTERED" : "IDS",
+              selectedIdCount: selectAllFiltered ? null : notificationIds.length,
+              filters: { q: filters.q || null, status: filters.status, type: filters.type },
+              queueTypes: RETRYABLE_EMAIL_TYPES,
+              directSmtpSend: false,
+            },
+          },
+        });
+        return update;
       });
-      return update;
-    });
-    revalidatePath("/admin/settings/email-delivery");
-    redirect(managementUrl(
-      "success",
-      result.count
-        ? `${result.count} eligible email${result.count === 1 ? " is" : "s are"} queued for protected resend/retry.`
-        : "No queued or failed billing/reminder emails in the selection were eligible for resend/retry.",
-      navigation,
-    ));
+      affectedCount = result.count;
+    }
   } catch (error) {
     redirect(managementUrl(
       "error",
@@ -259,4 +248,24 @@ export async function bulkEmailDeliveryAction(formData: FormData) {
       navigation,
     ));
   }
+
+  revalidatePath("/admin/settings/email-delivery");
+
+  if (bulkAction === "remove") {
+    redirect(managementUrl(
+      "success",
+      affectedCount
+        ? `${affectedCount} queued email${affectedCount === 1 ? " was" : "s were"} removed from the active queue. Audit history was retained.`
+        : "No queued emails in the selection were eligible for removal.",
+      navigation,
+    ));
+  }
+
+  redirect(managementUrl(
+    "success",
+    affectedCount
+      ? `${affectedCount} eligible email${affectedCount === 1 ? " is" : "s are"} queued for protected resend/retry.`
+      : "No queued or failed billing/reminder emails in the selection were eligible for resend/retry.",
+    navigation,
+  ));
 }

@@ -115,11 +115,16 @@ export const adminShellLinks: LinkItem[] = [
 
 export const systemAdminLinks: LinkItem[] = [
   { href: "/admin/settings", label: "System settings", icon: "settings", section: "Settings" },
+  { href: "/admin/settings/email-delivery", label: "Email Delivery", icon: "settings", section: "Settings" },
   { href: "/admin/settings/organization", label: "Organization", icon: "homeowners", section: "Settings" },
   ...adminLinks,
 ];
 
-export const systemAdminShellLinks: LinkItem[] = [...adminShellLinks, { href: "/admin/settings", label: "Settings", icon: "settings", section: "Account" }];
+export const systemAdminShellLinks: LinkItem[] = [
+  ...adminShellLinks,
+  { href: "/admin/settings", label: "Settings", icon: "settings", section: "Account" },
+  { href: "/admin/settings/email-delivery", label: "Email Delivery", icon: "settings", section: "Account" },
+];
 
 export const platformLinks: LinkItem[] = [
   { href: "/platform/dashboard", label: "Dashboard", icon: "dashboard", section: "Platform Home" },

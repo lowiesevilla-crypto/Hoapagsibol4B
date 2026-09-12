@@ -31,3 +31,6 @@ cpSync(prismaGeneratedSource, prismaGeneratedTarget, {
 require(join(reactDomTarget, "server.browser.js"));
 require(join(standaloneModules, "@prisma", "client"));
 console.log("Hostinger standalone runtime dependencies verified");
+// Prisma registers process hooks when required. End this build-only verifier
+// explicitly so managed builders do not wait for an idle timeout.
+process.exit(0);

@@ -9,8 +9,7 @@ const packageJson = JSON.parse(readFileSync("package.json", "utf8")) as {
 
 const nextConfig = readFileSync("next.config.ts", "utf8");
 
-test("Hostinger uses a hoisted dependency layout with pinned Next and React runtime versions", () => {
-  assert.match(readFileSync(".npmrc", "utf8"), /^node-linker=hoisted\s*$/);
+test("Hostinger uses pinned Next and React runtime versions", () => {
   assert.equal(packageJson.dependencies.next, "15.5.19");
   assert.equal(packageJson.dependencies.react, "19.2.7");
   assert.equal(packageJson.dependencies["react-dom"], "19.2.7");

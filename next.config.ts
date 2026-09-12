@@ -1,9 +1,20 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
+  // Hostinger prunes pnpm's symlinked node_modules tree when it assembles the
+  // runtime. A standalone build contains the traced, real files instead.
+  output: "standalone",
   poweredByHeader: false,
   compress: true,
   outputFileTracingRoot: process.cwd(),
+  outputFileTracingIncludes: {
+    "/*": [
+      "./node_modules/react-dom/**/*",
+      "./node_modules/@prisma/client/**/*",
+      "./node_modules/.prisma/client/**/*",
+      "./node_modules/@prisma/engines/**/*",
+    ],
+  },
   experimental: {
     serverActions: {
       bodySizeLimit: "6mb",

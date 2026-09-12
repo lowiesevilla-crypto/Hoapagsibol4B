@@ -1,15 +1,21 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import test from "node:test";
 
 const packageJson = JSON.parse(readFileSync("package.json", "utf8")) as {
   dependencies: Record<string, string>;
+  devDependencies: Record<string, string>;
+  packageManager?: string;
   scripts: Record<string, string>;
 };
 
 const nextConfig = readFileSync("next.config.ts", "utf8");
 
 test("Hostinger uses pinned Next and React runtime versions", () => {
+  assert.equal(packageJson.packageManager, undefined);
+  assert.equal(existsSync("pnpm-lock.yaml"), false);
+  assert.equal(packageJson.dependencies["@prisma/client"], "6.19.3");
+  assert.equal(packageJson.devDependencies.prisma, "6.19.3");
   assert.equal(packageJson.dependencies.next, "15.5.19");
   assert.equal(packageJson.dependencies.react, "19.2.7");
   assert.equal(packageJson.dependencies["react-dom"], "19.2.7");

@@ -65,7 +65,7 @@ export async function retryEmailDeliveryAction(formData: FormData) {
     redirect(managementUrl("error", "Only queued billing and bill-reminder email records can be retried from this page."));
   }
   if (notification.status === NotificationStatus.QUEUED) {
-    redirect(managementUrl("success", "This email is already queued for protected delivery."));
+    redirect(managementUrl("success", "This email is already QUEUED and waiting for the protected delivery worker. QUEUED does not mean SENT yet."));
   }
   if (notification.status !== NotificationStatus.FAILED) {
     redirect(managementUrl("error", "Only failed email deliveries can be placed back into the protected queue."));
@@ -131,7 +131,7 @@ export async function retryEmailDeliveryAction(formData: FormData) {
   }
 
   revalidatePath("/admin/settings/email-delivery");
-  redirect(managementUrl("success", "Failed email was placed back into the protected delivery queue."));
+  redirect(managementUrl("success", "Email retry was accepted and is now QUEUED. It is not yet SENT; the page will show SENT, FAILED, or SKIPPED after the protected worker processes it."));
 }
 
 export async function bulkEmailDeliveryAction(formData: FormData) {
@@ -157,7 +157,7 @@ export async function bulkEmailDeliveryAction(formData: FormData) {
   const notificationIds = [...new Set(formData.getAll("notificationIds").map((value) => String(value).trim()).filter(Boolean))].slice(0, 100);
 
   if (!selectAllFiltered && notificationIds.length === 0) {
-    redirect(managementUrl("error", "Select at least one email record, or choose Select all filtered records.", navigation));
+    redirect(managementUrl("error", "Select at least one actionable email record, or choose Apply to all filtered eligible records.", navigation));
   }
 
   const filteredWhere = emailDeliveryWhere(admin.tenantId, filters);
@@ -171,7 +171,13 @@ export async function bulkEmailDeliveryAction(formData: FormData) {
     if (bulkAction === "remove") {
       const result = await prisma.$transaction(async (tx) => {
         const update = await tx.notificationLog.updateMany({
-          where: { AND: [selectionWhere, { status: NotificationStatus.QUEUED }] },
+          where: {
+            AND: [
+              selectionWhere,
+              { type: { in: RETRYABLE_EMAIL_TYPES } },
+              { status: NotificationStatus.QUEUED },
+            ],
+          },
           data: {
             status: NotificationStatus.SKIPPED,
             errorMessage: `Removed from active email queue by System Administrator on ${requestedAt}.`,
@@ -193,8 +199,10 @@ export async function bulkEmailDeliveryAction(formData: FormData) {
               selectionMode: selectAllFiltered ? "FILTERED" : "IDS",
               selectedIdCount: selectAllFiltered ? null : notificationIds.length,
               filters: { q: filters.q || null, status: filters.status, type: filters.type },
+              queueTypes: RETRYABLE_EMAIL_TYPES,
               hardDeleted: false,
               resultingStatus: NotificationStatus.SKIPPED,
+              administratorVisibleDisposition: "REMOVED_FROM_QUEUE",
             },
           },
         });
@@ -255,8 +263,8 @@ export async function bulkEmailDeliveryAction(formData: FormData) {
     redirect(managementUrl(
       "success",
       affectedCount
-        ? `${affectedCount} queued email${affectedCount === 1 ? " was" : "s were"} removed from the active queue. Audit history was retained.`
-        : "No queued emails in the selection were eligible for removal.",
+        ? `${affectedCount} queued billing/reminder email${affectedCount === 1 ? " was" : "s were"} REMOVED from active delivery and will not be sent. The record remains visible as REMOVED audit history.`
+        : "No eligible QUEUED billing/reminder emails in the selection were available for removal. History-only records were left unchanged.",
       navigation,
     ));
   }
@@ -264,8 +272,8 @@ export async function bulkEmailDeliveryAction(formData: FormData) {
   redirect(managementUrl(
     "success",
     affectedCount
-      ? `${affectedCount} eligible email${affectedCount === 1 ? " is" : "s are"} queued for protected resend/retry.`
-      : "No queued or failed billing/reminder emails in the selection were eligible for resend/retry.",
+      ? `${affectedCount} eligible email${affectedCount === 1 ? " is" : "s are"} now QUEUED for protected resend/retry. This confirms queueing only, not delivery; final status will become SENT, FAILED, or SKIPPED after worker processing.`
+      : "No QUEUED or FAILED billing/reminder emails in the selection were eligible for resend/retry. History-only records were left unchanged.",
     navigation,
   ));
 }

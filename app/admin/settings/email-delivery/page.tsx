@@ -107,7 +107,7 @@ export default async function EmailDeliveryManagementPage({
     channel: NotificationChannel.EMAIL,
   };
 
-  const [total, statusCounts, removedCount] = await Promise.all([
+  const [total, statusCounts, removedCount, archivedCount] = await Promise.all([
     prisma.notificationLog.count({ where }),
     prisma.notificationLog.groupBy({
       by: ["status"],
@@ -119,6 +119,14 @@ export default async function EmailDeliveryManagementPage({
         ...tenantEmailWhere,
         status: NotificationStatus.SKIPPED,
         errorMessage: { startsWith: REMOVED_QUEUE_PREFIX },
+      },
+    }),
+    prisma.auditLog.count({
+      where: {
+        tenantId: user.tenantId,
+        module: "EMAIL",
+        action: "ARCHIVE_EMAIL_HISTORY",
+        entityType: "NotificationLogArchive",
       },
     }),
   ]);
@@ -148,6 +156,8 @@ export default async function EmailDeliveryManagementPage({
   const queueWorkerEnabled = process.env.EMAIL_BULK_DELIVERY_ENABLED === "true";
   const actionableOnPage = logs.filter((log) =>
     log.status === NotificationStatus.QUEUED
+    || log.status === NotificationStatus.SENT
+    || log.status === NotificationStatus.SKIPPED
     || (isProtectedQueueType(log.type) && log.status === NotificationStatus.FAILED)
   ).length;
 
@@ -155,8 +165,8 @@ export default async function EmailDeliveryManagementPage({
     <PageHeader
       eyebrow="System administration"
       title="Email Delivery Management"
-      description="Search and manage tenant-scoped outbound email history using server-side filtering and pagination. Delivery outcomes remain visible so administrators can distinguish queued, sent, failed, skipped, and removed-from-queue records."
-      action={<Link className="btn-secondary" href="/admin/settings">Back to settings</Link>}
+      description="Search and manage tenant-scoped outbound email history using server-side filtering and pagination. Queue controls, archive, and permanent history cleanup are permission-scoped and audited."
+      action={<div className="flex flex-wrap gap-2"><Link className="btn-secondary" href="/admin/settings/email-delivery/archive">Archived history ({archivedCount})</Link><Link className="btn-secondary" href="/admin/settings">Back to settings</Link></div>}
     />
 
     {query.error && <div role="alert" className="mb-5 rounded-2xl border border-rose-200 bg-rose-50 p-4 text-sm font-semibold text-rose-800">{query.error}</div>}
@@ -177,7 +187,7 @@ export default async function EmailDeliveryManagementPage({
       {!queueWorkerEnabled && <p className="mt-3 rounded-2xl bg-white p-3 text-sm font-semibold text-amber-900">Requeued messages remain pending until EMAIL_BULK_DELIVERY_ENABLED=true is enabled through the controlled production rollout.</p>}
     </section>
 
-    <section className="mb-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+    <section className="mb-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-6">
       {Object.values(NotificationStatus).map((item) => <div key={item} className="card py-4">
         <p className="text-xs font-black uppercase tracking-[.14em] text-slate-500">{item}</p>
         <p className="mt-2 text-3xl font-black text-ink">{counts.get(item) || 0}</p>
@@ -185,7 +195,12 @@ export default async function EmailDeliveryManagementPage({
       <div className="card py-4">
         <p className="text-xs font-black uppercase tracking-[.14em] text-slate-500">REMOVED FROM QUEUE</p>
         <p className="mt-2 text-3xl font-black text-ink">{removedCount}</p>
-        <p className="mt-1 text-xs text-slate-500">Retained as audit history; not deliverable.</p>
+        <p className="mt-1 text-xs text-slate-500">Retained as delivery history until archived or deleted.</p>
+      </div>
+      <div className="card py-4">
+        <p className="text-xs font-black uppercase tracking-[.14em] text-slate-500">ARCHIVED</p>
+        <p className="mt-2 text-3xl font-black text-ink">{archivedCount}</p>
+        <p className="mt-1 text-xs text-slate-500">Moved out of the live delivery table.</p>
       </div>
     </section>
 
@@ -233,30 +248,20 @@ export default async function EmailDeliveryManagementPage({
         <input type="hidden" name="page" value={page} />
         <input type="hidden" name="pageSize" value={pageSize} />
 
-        <div className="flex flex-col gap-3 border-b border-slate-100 bg-slate-50/70 px-5 py-4 xl:flex-row xl:items-center xl:justify-between">
+        <div className="flex flex-col gap-3 border-b border-slate-100 bg-slate-50/70 px-5 py-4">
           <div className="flex flex-wrap items-center gap-4 text-sm">
             <EmailDeliverySelectPage count={actionableOnPage} />
             {total > logs.length && <label className="inline-flex cursor-pointer items-center gap-2 font-bold text-slate-700">
               <input type="checkbox" name="selectAllFiltered" value="true" className="size-4 rounded border-slate-300" />
               Apply action to all filtered eligible records ({total} matching)
             </label>}
-            <span className="text-xs font-semibold text-slate-500">Any QUEUED email can be deleted from the queue. Resend/Retry remains limited to billing/reminder emails; SENT and SKIPPED history stays read-only.</span>
+            <span className="text-xs font-semibold text-slate-500">Actions are status-scoped: queue delete affects QUEUED; resend affects protected billing/reminder QUEUED/FAILED; archive and permanent delete affect SENT/SKIPPED only.</span>
           </div>
           <div className="flex flex-wrap gap-2">
-            <EmailDeliveryBulkSubmitButton
-              value="requeue"
-              className="btn-primary"
-              confirmation="Queue the eligible selected billing and reminder emails for protected resend/retry? QUEUED is pending; final delivery will later show SENT, FAILED, or SKIPPED."
-            >
-              Resend / Retry
-            </EmailDeliveryBulkSubmitButton>
-            <EmailDeliveryBulkSubmitButton
-              value="remove"
-              className="btn-danger"
-              confirmation="Remove the selected QUEUED email records from active delivery? This applies to any email type. They will remain visible as REMOVED audit history and will not be sent."
-            >
-              Delete from queue
-            </EmailDeliveryBulkSubmitButton>
+            <EmailDeliveryBulkSubmitButton value="requeue" className="btn-primary" confirmation="Queue the eligible selected billing and reminder emails for protected resend/retry? QUEUED is pending; final delivery will later show SENT, FAILED, or SKIPPED.">Resend / Retry</EmailDeliveryBulkSubmitButton>
+            <EmailDeliveryBulkSubmitButton value="remove" className="btn-danger" confirmation="Remove the selected QUEUED email records from active delivery? This applies to any email type. They will remain visible as REMOVED delivery history and will not be sent.">Delete from queue</EmailDeliveryBulkSubmitButton>
+            <EmailDeliveryBulkSubmitButton value="archive" className="btn-secondary" confirmation="Archive the eligible selected SENT/SKIPPED delivery history? Archived records move out of this live table into the auditable Archived History view.">Archive history</EmailDeliveryBulkSubmitButton>
+            <EmailDeliveryBulkSubmitButton value="purge" className="btn-danger" confirmation="Permanently delete the eligible selected SENT/SKIPPED delivery history? Detailed email history cannot be recovered after this operation." confirmationPhrase="DELETE PERMANENTLY">Permanent delete history</EmailDeliveryBulkSubmitButton>
           </div>
         </div>
 
@@ -270,12 +275,14 @@ export default async function EmailDeliveryManagementPage({
                 const deliveryEmail = deliveryEmailSnapshot(log.metadata, log.recipient.email);
                 const removed = removedFromQueue(log.status, log.errorMessage);
                 const actionable = log.status === NotificationStatus.QUEUED
+                  || log.status === NotificationStatus.SENT
+                  || log.status === NotificationStatus.SKIPPED
                   || (queueType && log.status === NotificationStatus.FAILED);
                 const displayStatus = removed ? "REMOVED" : log.status;
                 const actionState = removed
-                  ? "Removed from queue — not sent"
+                  ? "Removed from queue — archive/delete eligible"
                   : log.status === NotificationStatus.SENT
-                    ? "Delivered — SMTP accepted"
+                    ? "Delivered — archive/delete eligible"
                     : queueType && log.status === NotificationStatus.FAILED
                       ? "Failed — retry eligible"
                       : queueType && log.status === NotificationStatus.QUEUED
@@ -283,7 +290,7 @@ export default async function EmailDeliveryManagementPage({
                         : log.status === NotificationStatus.QUEUED
                           ? "Queued — delete eligible"
                           : log.status === NotificationStatus.SKIPPED
-                            ? "Skipped — not sent"
+                            ? "Skipped — archive/delete eligible"
                             : "History only";
                 const deliveryDetail = log.status === NotificationStatus.SENT
                   ? log.providerMessageId ? `Provider message ID: ${log.providerMessageId}` : "SMTP accepted; provider message ID was not recorded."
@@ -299,7 +306,7 @@ export default async function EmailDeliveryManagementPage({
                   <td><span className={`badge ${removed ? "badge-warning" : statusBadge(log.status)}`}>{displayStatus}</span></td>
                   <td className="min-w-44 text-xs text-slate-600"><p><b>Created:</b> {dateTime(log.createdAt)}</p><p className="mt-1"><b>Sent:</b> {dateTime(log.sentAt)}</p></td>
                   <td className="max-w-80"><p className="line-clamp-4 text-xs leading-5 text-slate-600">{deliveryDetail}</p></td>
-                  <td className="min-w-44 text-right text-xs font-semibold text-slate-600">{actionState}</td>
+                  <td className="min-w-52 text-right text-xs font-semibold text-slate-600">{actionState}</td>
                 </tr>;
               })}
             </tbody>

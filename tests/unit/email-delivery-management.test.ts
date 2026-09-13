@@ -103,7 +103,7 @@ test("archive moves only terminal SENT or SKIPPED history out of NotificationLog
 });
 
 test("permanent history deletion is terminal-status scoped and keeps only a non-content administrative audit", () => {
-  assert.match(action, /bulkAction === "purge"/);
+  assert.match(action, /\["requeue", "remove", "archive", "purge"\]/);
   assert.match(action, /status:\s*\{ in:\s*\[\.\.\.TERMINAL_EMAIL_STATUSES\] \}/);
   assert.match(action, /action:\s*"PERMANENT_DELETE_EMAIL_HISTORY"/);
   assert.match(action, /detailedEmailHistoryRetained:\s*false/);

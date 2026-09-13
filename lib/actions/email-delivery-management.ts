@@ -174,7 +174,6 @@ export async function bulkEmailDeliveryAction(formData: FormData) {
           where: {
             AND: [
               selectionWhere,
-              { type: { in: RETRYABLE_EMAIL_TYPES } },
               { status: NotificationStatus.QUEUED },
             ],
           },
@@ -199,7 +198,7 @@ export async function bulkEmailDeliveryAction(formData: FormData) {
               selectionMode: selectAllFiltered ? "FILTERED" : "IDS",
               selectedIdCount: selectAllFiltered ? null : notificationIds.length,
               filters: { q: filters.q || null, status: filters.status, type: filters.type },
-              queueTypes: RETRYABLE_EMAIL_TYPES,
+              removalScope: "ANY_QUEUED_EMAIL",
               hardDeleted: false,
               resultingStatus: NotificationStatus.SKIPPED,
               administratorVisibleDisposition: "REMOVED_FROM_QUEUE",
@@ -263,8 +262,8 @@ export async function bulkEmailDeliveryAction(formData: FormData) {
     redirect(managementUrl(
       "success",
       affectedCount
-        ? `${affectedCount} queued billing/reminder email${affectedCount === 1 ? " was" : "s were"} REMOVED from active delivery and will not be sent. The record remains visible as REMOVED audit history.`
-        : "No eligible QUEUED billing/reminder emails in the selection were available for removal. History-only records were left unchanged.",
+        ? `${affectedCount} queued email record${affectedCount === 1 ? " was" : "s were"} REMOVED from active delivery and will not be sent. The record remains visible as REMOVED audit history.`
+        : "No eligible QUEUED email records in the selection were available for removal. SENT, FAILED, SKIPPED, and REMOVED history were left unchanged.",
       navigation,
     ));
   }

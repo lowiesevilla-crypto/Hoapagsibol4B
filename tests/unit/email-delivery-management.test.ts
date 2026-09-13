@@ -71,21 +71,30 @@ test("bulk success redirect stays outside the database try/catch", () => {
   assert.match(action.slice(catchStart), /redirect\(managementUrl\(\s*"success"/);
 });
 
-test("delete from queue is a tenant-safe soft removal with explicit administrator disposition", () => {
-  assert.match(action, /selectionWhere/);
-  assert.match(action, /status:\s*NotificationStatus\.QUEUED/);
-  assert.match(action, /status:\s*NotificationStatus\.SKIPPED/);
-  assert.match(action, /action:\s*"BULK_REMOVE_QUEUED_EMAILS"/);
-  assert.match(action, /administratorVisibleDisposition:\s*"REMOVED_FROM_QUEUE"/);
-  assert.match(action, /hardDeleted:\s*false/);
-  assert.match(action, /REMOVED from active delivery/);
+test("delete from queue accepts any queued email type while preserving tenant-safe audit history", () => {
+  const removeStart = action.indexOf('if (bulkAction === "remove")');
+  const resendStart = action.indexOf("    } else {", removeStart);
+  assert.ok(removeStart >= 0 && resendStart > removeStart);
+  const removeBlock = action.slice(removeStart, resendStart);
+  assert.match(removeBlock, /selectionWhere/);
+  assert.match(removeBlock, /status:\s*NotificationStatus\.QUEUED/);
+  assert.doesNotMatch(removeBlock, /type:\s*\{\s*in:\s*RETRYABLE_EMAIL_TYPES/);
+  assert.match(removeBlock, /status:\s*NotificationStatus\.SKIPPED/);
+  assert.match(removeBlock, /action:\s*"BULK_REMOVE_QUEUED_EMAILS"/);
+  assert.match(removeBlock, /removalScope:\s*"ANY_QUEUED_EMAIL"/);
+  assert.match(removeBlock, /administratorVisibleDisposition:\s*"REMOVED_FROM_QUEUE"/);
+  assert.match(removeBlock, /hardDeleted:\s*false/);
+  assert.match(action, /queued email record/);
   assert.doesNotMatch(action, /notificationLog\.delete|notificationLog\.deleteMany/);
 });
 
-test("bulk UI exposes only actionable row selection and clear queue outcomes", () => {
+test("bulk UI lets any queued record be selected for delete while resend stays type-restricted", () => {
   assert.match(page, /EmailDeliverySelectPage count=\{actionableOnPage\}/);
+  assert.match(page, /log\.status === NotificationStatus\.QUEUED\s*\|\|\s*\(isProtectedQueueType\(log\.type\) && log\.status === NotificationStatus\.FAILED\)/s);
+  assert.match(page, /const actionable = log\.status === NotificationStatus\.QUEUED\s*\|\|\s*\(queueType && log\.status === NotificationStatus\.FAILED\)/s);
+  assert.match(page, /Any QUEUED email can be deleted from the queue/);
+  assert.match(page, /resend must use its dedicated feature workflow/);
   assert.match(page, /disabled=\{!actionable\}/);
-  assert.match(page, /Apply action to all filtered eligible records/);
   assert.match(page, /Resend \/ Retry/);
   assert.match(page, /Delete from queue/);
   assert.match(page, /displayStatus = removed \? "REMOVED"/);
@@ -107,9 +116,10 @@ test("queued delivery results can refresh without loading the full table client-
   assert.match(liveStatus, /queuedCount < 1/);
 });
 
-test("sent and unsupported records remain history-only", () => {
+test("sent and skipped records remain immutable history", () => {
   assert.match(page, /log\.status === NotificationStatus\.SENT/);
-  assert.match(page, /"History only"/);
+  assert.match(page, /Skipped — not sent/);
+  assert.match(page, /SENT and SKIPPED history stays read-only/);
   assert.match(helper, /NotificationType\.BILLING_NOTIFICATION/);
   assert.match(helper, /NotificationType\.BILL_REMINDER/);
 });

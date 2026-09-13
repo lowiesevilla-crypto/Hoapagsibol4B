@@ -2,6 +2,7 @@
 
 import { Eye, EyeOff } from "lucide-react";
 import { useId, useState } from "react";
+import styles from "./password-input.module.css";
 
 type PasswordInputProps = Omit<React.InputHTMLAttributes<HTMLInputElement>, "type">;
 
@@ -15,9 +16,8 @@ export function PasswordInput({ className = "field", id, ...props }: PasswordInp
       <input
         {...props}
         id={inputId}
-        key={visible ? "password-visible" : "password-hidden"}
         type={visible ? "text" : "password"}
-        className={`${className} pr-12`}
+        className={`${className} ${styles.input} pr-12`}
         autoCapitalize="none"
         autoCorrect="off"
         spellCheck={false}

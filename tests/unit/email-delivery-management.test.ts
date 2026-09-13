@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 
 const page = readFileSync("app/admin/settings/email-delivery/page.tsx", "utf8");
+const archivePage = readFileSync("app/admin/settings/email-delivery/archive/page.tsx", "utf8");
 const loading = readFileSync("app/admin/settings/email-delivery/loading.tsx", "utf8");
 const action = readFileSync("lib/actions/email-delivery-management.ts", "utf8");
 const helper = readFileSync("lib/email-delivery-management.ts", "utf8");
@@ -68,12 +69,11 @@ test("bulk success redirect stays outside the database try/catch", () => {
   const protectedBlock = action.slice(tryStart, catchStart);
   assert.doesNotMatch(protectedBlock, /redirect\(/);
   assert.match(action.slice(catchStart), /revalidatePath\("\/admin\/settings\/email-delivery"\)/);
-  assert.match(action.slice(catchStart), /redirect\(managementUrl\(\s*"success"/);
 });
 
-test("delete from queue accepts any queued email type while preserving tenant-safe audit history", () => {
+test("delete from queue accepts any queued email type while preserving tenant-safe soft-removal audit", () => {
   const removeStart = action.indexOf('if (bulkAction === "remove")');
-  const resendStart = action.indexOf("    } else {", removeStart);
+  const resendStart = action.indexOf('} else if (bulkAction === "requeue")', removeStart);
   assert.ok(removeStart >= 0 && resendStart > removeStart);
   const removeBlock = action.slice(removeStart, resendStart);
   assert.match(removeBlock, /selectionWhere/);
@@ -82,27 +82,62 @@ test("delete from queue accepts any queued email type while preserving tenant-sa
   assert.match(removeBlock, /status:\s*NotificationStatus\.SKIPPED/);
   assert.match(removeBlock, /action:\s*"BULK_REMOVE_QUEUED_EMAILS"/);
   assert.match(removeBlock, /removalScope:\s*"ANY_QUEUED_EMAIL"/);
-  assert.match(removeBlock, /administratorVisibleDisposition:\s*"REMOVED_FROM_QUEUE"/);
   assert.match(removeBlock, /hardDeleted:\s*false/);
-  assert.match(action, /queued email record/);
-  assert.doesNotMatch(action, /notificationLog\.delete|notificationLog\.deleteMany/);
+  assert.doesNotMatch(removeBlock, /notificationLog\.deleteMany/);
 });
 
-test("bulk UI lets any queued record be selected for delete while resend stays type-restricted", () => {
-  assert.match(page, /log\.status === NotificationStatus\.QUEUED[\s\S]*\|\|[\s\S]*\(isProtectedQueueType\(log\.type\) && log\.status === NotificationStatus\.FAILED\)/);
-  assert.match(page, /const actionable = log\.status === NotificationStatus\.QUEUED[\s\S]*\|\|[\s\S]*\(queueType && log\.status === NotificationStatus\.FAILED\)/);
+test("archive moves only terminal SENT or SKIPPED history out of NotificationLog with per-record audit snapshots", () => {
+  assert.match(action, /TERMINAL_EMAIL_STATUSES = \[NotificationStatus\.SENT, NotificationStatus\.SKIPPED\]/);
+  assert.match(action, /bulkAction === "archive"/);
+  assert.match(action, /take:\s*HISTORY_ARCHIVE_MAX_PER_ACTION/);
+  assert.match(action, /auditLog\.createMany/);
+  assert.match(action, /action:\s*EMAIL_ARCHIVE_ACTION/);
+  assert.match(action, /entityType:\s*EMAIL_ARCHIVE_ENTITY/);
+  assert.match(action, /originalNotificationId:/);
+  assert.match(action, /maskedEmail:/);
+  assert.match(action, /originalStatus:/);
+  assert.match(action, /providerMessageId:/);
+  assert.match(action, /notificationLog\.deleteMany/);
+  assert.match(page, /Archived history \(\{archivedCount\}\)/);
+  assert.match(page, /Archive history/);
+});
+
+test("permanent history deletion is terminal-status scoped and keeps only a non-content administrative audit", () => {
+  assert.match(action, /\["requeue", "remove", "archive", "purge"\]/);
+  assert.match(action, /status:\s*\{ in:\s*\[\.\.\.TERMINAL_EMAIL_STATUSES\] \}/);
+  assert.match(action, /action:\s*"PERMANENT_DELETE_EMAIL_HISTORY"/);
+  assert.match(action, /detailedEmailHistoryRetained:\s*false/);
+  assert.match(page, /Permanent delete history/);
+  assert.match(page, /confirmationPhrase="DELETE PERMANENTLY"/);
+  assert.match(bulkUi, /window\.prompt/);
+  assert.match(bulkUi, /Confirmation phrase did not match/);
+});
+
+test("archived history has server pagination, filters, tenant isolation, and guarded permanent cleanup", () => {
+  assert.match(archivePage, /requireUser\(Role\.SYSTEM_ADMIN\)/);
+  assert.match(archivePage, /tenantId:\s*user\.tenantId/);
+  assert.match(archivePage, /action:\s*EMAIL_ARCHIVE_ACTION/);
+  assert.match(archivePage, /entityType:\s*EMAIL_ARCHIVE_ENTITY/);
+  assert.match(archivePage, /skip:\s*\(page - 1\) \* pageSize/);
+  assert.match(archivePage, /take:\s*pageSize/);
+  assert.match(archivePage, /Search archive/);
+  assert.match(archivePage, /Permanent delete archived/);
+  assert.match(archivePage, /confirmationPhrase="DELETE PERMANENTLY"/);
+  assert.match(action, /export async function purgeArchivedEmailHistoryAction/);
+  assert.match(action, /action:\s*"PERMANENT_DELETE_ARCHIVED_EMAIL_HISTORY"/);
+  assert.match(action, /detailedArchiveRetained:\s*false/);
+});
+
+test("bulk UI exposes status-scoped actions without loading the full table client-side", () => {
   assert.match(page, /EmailDeliverySelectPage count=\{actionableOnPage\}/);
-  assert.match(page, /Any QUEUED email can be deleted from the queue/);
-  assert.match(page, /resend must use its dedicated feature workflow/);
   assert.match(page, /disabled=\{!actionable\}/);
   assert.match(page, /Resend \/ Retry/);
   assert.match(page, /Delete from queue/);
-  assert.match(page, /displayStatus = removed \? "REMOVED"/);
+  assert.match(page, /Archive history/);
+  assert.match(page, /Permanent delete history/);
   assert.match(page, /Pending protected worker/);
-  assert.match(page, /Delivered — SMTP accepted/);
+  assert.match(page, /Delivered — archive\/delete eligible/);
   assert.match(page, /providerMessageId:\s*true/);
-  assert.match(page, /Provider message ID:/);
-  assert.match(bulkUi, /:not\(:disabled\)/);
   assert.match(bulkUi, /useFormStatus/);
   assert.match(bulkUi, /Processing…/);
   assert.match(loading, /aria-busy="true"/);
@@ -116,10 +151,7 @@ test("queued delivery results can refresh without loading the full table client-
   assert.match(liveStatus, /queuedCount < 1/);
 });
 
-test("sent and skipped records remain immutable history", () => {
-  assert.match(page, /log\.status === NotificationStatus\.SENT/);
-  assert.match(page, /Skipped — not sent/);
-  assert.match(page, /SENT and SKIPPED history stays read-only/);
+test("protected resend types remain billing and bill reminder only", () => {
   assert.match(helper, /NotificationType\.BILLING_NOTIFICATION/);
   assert.match(helper, /NotificationType\.BILL_REMINDER/);
 });

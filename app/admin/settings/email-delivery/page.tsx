@@ -146,7 +146,10 @@ export default async function EmailDeliveryManagementPage({
   const counts = new Map(statusCounts.map((entry) => [entry.status, entry._count._all]));
   const queuedCount = counts.get(NotificationStatus.QUEUED) || 0;
   const queueWorkerEnabled = process.env.EMAIL_BULK_DELIVERY_ENABLED === "true";
-  const actionableOnPage = logs.filter((log) => isProtectedQueueType(log.type) && (log.status === NotificationStatus.QUEUED || log.status === NotificationStatus.FAILED)).length;
+  const actionableOnPage = logs.filter((log) =>
+    log.status === NotificationStatus.QUEUED
+    || (isProtectedQueueType(log.type) && log.status === NotificationStatus.FAILED)
+  ).length;
 
   return <>
     <PageHeader
@@ -237,7 +240,7 @@ export default async function EmailDeliveryManagementPage({
               <input type="checkbox" name="selectAllFiltered" value="true" className="size-4 rounded border-slate-300" />
               Apply action to all filtered eligible records ({total} matching)
             </label>}
-            <span className="text-xs font-semibold text-slate-500">History-only rows are not selectable. Each action changes only records eligible for that action.</span>
+            <span className="text-xs font-semibold text-slate-500">Any QUEUED email can be deleted from the queue. Resend/Retry remains limited to billing/reminder emails; SENT and SKIPPED history stays read-only.</span>
           </div>
           <div className="flex flex-wrap gap-2">
             <EmailDeliveryBulkSubmitButton
@@ -250,7 +253,7 @@ export default async function EmailDeliveryManagementPage({
             <EmailDeliveryBulkSubmitButton
               value="remove"
               className="btn-danger"
-              confirmation="Remove the eligible selected QUEUED emails from active delivery? They will remain visible as REMOVED audit history and will not be sent."
+              confirmation="Remove the selected QUEUED email records from active delivery? This applies to any email type. They will remain visible as REMOVED audit history and will not be sent."
             >
               Delete from queue
             </EmailDeliveryBulkSubmitButton>
@@ -266,7 +269,8 @@ export default async function EmailDeliveryManagementPage({
                 const queueType = isProtectedQueueType(log.type);
                 const deliveryEmail = deliveryEmailSnapshot(log.metadata, log.recipient.email);
                 const removed = removedFromQueue(log.status, log.errorMessage);
-                const actionable = queueType && (log.status === NotificationStatus.QUEUED || log.status === NotificationStatus.FAILED);
+                const actionable = log.status === NotificationStatus.QUEUED
+                  || (queueType && log.status === NotificationStatus.FAILED);
                 const displayStatus = removed ? "REMOVED" : log.status;
                 const actionState = removed
                   ? "Removed from queue — not sent"
@@ -276,13 +280,17 @@ export default async function EmailDeliveryManagementPage({
                       ? "Failed — retry eligible"
                       : queueType && log.status === NotificationStatus.QUEUED
                         ? "Pending protected worker"
-                        : log.status === NotificationStatus.SKIPPED
-                          ? "Skipped — not sent"
-                          : "History only";
+                        : log.status === NotificationStatus.QUEUED
+                          ? "Queued — delete eligible"
+                          : log.status === NotificationStatus.SKIPPED
+                            ? "Skipped — not sent"
+                            : "History only";
                 const deliveryDetail = log.status === NotificationStatus.SENT
                   ? log.providerMessageId ? `Provider message ID: ${log.providerMessageId}` : "SMTP accepted; provider message ID was not recorded."
                   : log.status === NotificationStatus.QUEUED
-                    ? "Waiting for the protected delivery worker. This is not yet a successful send."
+                    ? queueType
+                      ? "Waiting for the protected delivery worker. This is not yet a successful send."
+                      : "Queued record is not handled by the billing/reminder worker. It can be deleted from the queue; resend must use its dedicated feature workflow."
                     : log.errorMessage || "—";
                 return <tr key={log.id}>
                   <td><input aria-label={`Select ${log.subject}`} type="checkbox" name="notificationIds" value={log.id} disabled={!actionable} className="size-4 rounded border-slate-300 disabled:cursor-not-allowed disabled:opacity-30" /></td>

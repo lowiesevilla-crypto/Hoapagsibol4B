@@ -89,9 +89,9 @@ test("delete from queue accepts any queued email type while preserving tenant-sa
 });
 
 test("bulk UI lets any queued record be selected for delete while resend stays type-restricted", () => {
+  assert.match(page, /log\.status === NotificationStatus\.QUEUED[\s\S]*\|\|[\s\S]*\(isProtectedQueueType\(log\.type\) && log\.status === NotificationStatus\.FAILED\)/);
+  assert.match(page, /const actionable = log\.status === NotificationStatus\.QUEUED[\s\S]*\|\|[\s\S]*\(queueType && log\.status === NotificationStatus\.FAILED\)/);
   assert.match(page, /EmailDeliverySelectPage count=\{actionableOnPage\}/);
-  assert.match(page, /log\.status === NotificationStatus\.QUEUED\s*\|\|\s*\(isProtectedQueueType\(log\.type\) && log\.status === NotificationStatus\.FAILED\)/s);
-  assert.match(page, /const actionable = log\.status === NotificationStatus\.QUEUED\s*\|\|\s*\(queueType && log\.status === NotificationStatus\.FAILED\)/s);
   assert.match(page, /Any QUEUED email can be deleted from the queue/);
   assert.match(page, /resend must use its dedicated feature workflow/);
   assert.match(page, /disabled=\{!actionable\}/);

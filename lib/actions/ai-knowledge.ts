@@ -1,6 +1,6 @@
 "use server";
 
-import { AiPrivacyClassification } from "@prisma/client";
+import { AiPrivacyClassification, RepositoryMalwareScanStatus } from "@prisma/client";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { requireAiAssistanceEntitlement } from "@/lib/ai-assistance/entitlement";
@@ -13,6 +13,11 @@ const GENERAL_AI_BLOCKED_CLASSIFICATIONS = new Set<AiPrivacyClassification>([
   AiPrivacyClassification.PERSONAL,
   AiPrivacyClassification.SENSITIVE,
   AiPrivacyClassification.RESTRICTED,
+]);
+
+const RECORDABLE_MALWARE_RESULTS = new Set<RepositoryMalwareScanStatus>([
+  RepositoryMalwareScanStatus.PASSED,
+  RepositoryMalwareScanStatus.FAILED,
 ]);
 
 function clean(value: FormDataEntryValue | null) {
@@ -55,6 +60,62 @@ export async function updateDocumentAiEligibilityAction(formData: FormData) {
   redirect(`/admin/ai-assistance/knowledge?success=${encodeURIComponent("Document AI eligibility updated. Re-index is required after policy changes.")}`);
 }
 
+export async function recordDocumentMalwareValidationAction(formData: FormData) {
+  const user = await requireAiKnowledgeManager();
+  const documentId = clean(formData.get("documentId"));
+  let errorMessage = "";
+  try {
+    const result = clean(formData.get("validationResult")) as RepositoryMalwareScanStatus;
+    const evidenceReference = clean(formData.get("evidenceReference"));
+    const confirmed = formData.get("validationConfirmed") === "on";
+
+    if (!RECORDABLE_MALWARE_RESULTS.has(result)) throw new Error("Select Passed or Failed as the recorded malware-validation result.");
+    if (!confirmed) throw new Error("Confirm that the document was validated using the HOA's approved malware/antivirus process before recording the result.");
+    if (evidenceReference.length < 5) throw new Error("Record the malware-validation evidence reference, ticket, tool result, or scan date.");
+    if (evidenceReference.length > 500) throw new Error("Malware-validation evidence reference must not exceed 500 characters.");
+
+    const document = await prisma.repositoryDocument.findFirst({
+      where: { tenantId: user.tenantId, id: documentId },
+      select: { id: true, title: true, malwareScanStatus: true },
+    });
+    if (!document) throw new Error("Repository document not found in the active tenant.");
+
+    if (result !== RepositoryMalwareScanStatus.PASSED) await purgeRepositoryDocumentFromAi(document.id);
+
+    await prisma.$transaction([
+      prisma.repositoryDocument.update({
+        where: { tenantId_id: { tenantId: user.tenantId, id: document.id } },
+        data: { malwareScanStatus: result, updatedById: user.id },
+      }),
+      prisma.auditLog.create({
+        data: {
+          tenantId: user.tenantId,
+          actorId: user.id,
+          module: "AI_ASSISTANCE",
+          action: "AI_DOCUMENT_MALWARE_VALIDATION_RECORDED",
+          entityType: "RepositoryDocument",
+          entityId: document.id,
+          metadata: {
+            title: document.title,
+            previousStatus: document.malwareScanStatus,
+            recordedStatus: result,
+            evidenceReference,
+            externallyValidated: true,
+            providerKnowledgePurged: result !== RepositoryMalwareScanStatus.PASSED,
+          },
+          aiAction: false,
+        },
+      }),
+    ]);
+  } catch (error) {
+    errorMessage = error instanceof Error ? error.message : "Document malware validation could not be recorded.";
+  }
+  revalidatePath("/admin/ai-assistance");
+  revalidatePath("/admin/ai-assistance/knowledge");
+  if (errorMessage) redirect(`/admin/ai-assistance/knowledge?error=${encodeURIComponent(errorMessage)}`);
+  redirect(`/admin/ai-assistance/knowledge?success=${encodeURIComponent("Document malware-validation evidence recorded. Indexing is available only when every knowledge gate passes.")}`);
+}
+
 export async function indexDocumentForAiAction(formData: FormData) {
   await requireAiKnowledgeManager();
   const documentId = clean(formData.get("documentId"));
@@ -64,6 +125,7 @@ export async function indexDocumentForAiAction(formData: FormData) {
   } catch (error) {
     errorMessage = error instanceof Error ? error.message : "Document could not be indexed for AI.";
   }
+  revalidatePath("/admin/ai-assistance");
   revalidatePath("/admin/ai-assistance/knowledge");
   if (errorMessage) redirect(`/admin/ai-assistance/knowledge?error=${encodeURIComponent(errorMessage)}`);
   redirect(`/admin/ai-assistance/knowledge?success=${encodeURIComponent("Approved document indexed into this tenant's isolated AI knowledge store.")}`);
@@ -78,6 +140,7 @@ export async function purgeDocumentFromAiAction(formData: FormData) {
   } catch (error) {
     errorMessage = error instanceof Error ? error.message : "Document could not be purged from AI knowledge.";
   }
+  revalidatePath("/admin/ai-assistance");
   revalidatePath("/admin/ai-assistance/knowledge");
   if (errorMessage) redirect(`/admin/ai-assistance/knowledge?error=${encodeURIComponent(errorMessage)}`);
   redirect(`/admin/ai-assistance/knowledge?success=${encodeURIComponent("Document purged from the tenant AI knowledge index.")}`);

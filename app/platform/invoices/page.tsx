@@ -100,7 +100,7 @@ export default async function PlatformInvoicesPage({ searchParams }: { searchPar
           <input className="field" name="q" defaultValue={q} placeholder="Search invoice, tenant, or slug" />
           <select className="field" name="status" defaultValue={status || ""}>
             <option value="">Active / historical invoices</option>
-            {Object.values(PlatformInvoiceStatus).map((value) => <option key={value}>{value.replaceAll("_", " ")}</option>)}
+            {Object.values(PlatformInvoiceStatus).map((value) => <option key={value} value={value}>{value.replaceAll("_", " ")}</option>)}
           </select>
           <button className="btn-secondary">Filter</button>
         </form>

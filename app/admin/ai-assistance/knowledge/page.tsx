@@ -16,6 +16,8 @@ function label(value: string) {
 }
 
 function stateClass(value: string) {
+  if (value === "INDEXED_BLOCKED") return "bg-rose-100 text-rose-800";
+  if (value === "INDEXED_STALE") return "bg-amber-100 text-amber-900";
   if (value === "INDEXED") return "bg-emerald-100 text-emerald-800";
   if (value === "FAILED") return "bg-rose-100 text-rose-800";
   if (value === "PENDING") return "bg-amber-100 text-amber-900";
@@ -50,9 +52,13 @@ export default async function AdminAiKnowledgePage({ searchParams }: { searchPar
         const binding = bindingByDocument.get(document.id);
         const checksumCurrent = binding?.indexedChecksumSha256 === document.checksumSha256;
         const readyForIndex = document.aiEnabled && document.status === "PUBLISHED" && !["PERSONAL", "SENSITIVE", "RESTRICTED"].includes(document.privacyClassification) && document.visibility !== "RESTRICTED" && isAiRepositoryDocumentMalwareValidated(document.malwareScanStatus);
+        const retrievableNow = Boolean(binding?.indexStatus === "INDEXED" && checksumCurrent && readyForIndex);
+        const statusLabel = binding?.indexStatus === "INDEXED" && !retrievableNow
+          ? checksumCurrent ? "INDEXED_BLOCKED" : "INDEXED_STALE"
+          : binding?.indexStatus ?? "NOT_INDEXED";
         return <article key={document.id} className="rounded-3xl border bg-white p-5 shadow-sm sm:p-6">
           <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-            <div className="min-w-0"><div className="flex flex-wrap items-center gap-2"><span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-black text-slate-600">{document.category.name}</span><span className={`rounded-full px-2.5 py-1 text-xs font-black ${stateClass(binding?.indexStatus ?? "NOT_INDEXED")}`}>{label(binding?.indexStatus ?? "NOT_INDEXED")}</span>{binding?.indexStatus === "INDEXED" && !checksumCurrent && <span className="rounded-full bg-amber-100 px-2.5 py-1 text-xs font-black text-amber-900">REINDEX REQUIRED</span>}</div><h2 className="mt-3 text-lg font-black text-slate-950">{document.title}</h2><p className="mt-1 text-sm text-slate-500">{document.documentReference || "No reference"} · Rev {document.currentRevision} · {label(document.status)} · {label(document.visibility)}</p>{binding?.lastError && <p className="mt-2 rounded-xl bg-rose-50 p-3 text-xs leading-5 text-rose-800">{binding.lastError}</p>}</div>
+            <div className="min-w-0"><div className="flex flex-wrap items-center gap-2"><span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-black text-slate-600">{document.category.name}</span><span className={`rounded-full px-2.5 py-1 text-xs font-black ${stateClass(statusLabel)}`}>{label(statusLabel)}</span>{binding?.indexStatus === "INDEXED" && !checksumCurrent && <span className="rounded-full bg-amber-100 px-2.5 py-1 text-xs font-black text-amber-900">REINDEX REQUIRED</span>}</div><h2 className="mt-3 text-lg font-black text-slate-950">{document.title}</h2><p className="mt-1 text-sm text-slate-500">{document.documentReference || "No reference"} · Rev {document.currentRevision} · {label(document.status)} · {label(document.visibility)}</p>{binding?.lastError && <p className="mt-2 rounded-xl bg-rose-50 p-3 text-xs leading-5 text-rose-800">{binding.lastError}</p>}</div>
             <div className="flex flex-wrap gap-2"><Link className="btn-secondary min-h-10" href={`/admin/document-management/${document.id}`}>Repository record</Link>{binding?.indexStatus === "INDEXED" && <form action={purgeDocumentFromAiAction}><input type="hidden" name="documentId" value={document.id} /><button className="btn-secondary min-h-10">Purge from AI</button></form>}{readyForIndex && (binding?.indexStatus !== "INDEXED" || !checksumCurrent) && <form action={indexDocumentForAiAction}><input type="hidden" name="documentId" value={document.id} /><button className="btn-primary min-h-10 inline-flex items-center gap-2"><DatabaseZap className="size-4" /> Index approved source</button></form>}</div>
           </div>
 
@@ -63,7 +69,7 @@ export default async function AdminAiKnowledgePage({ searchParams }: { searchPar
             <div className="text-xs leading-5 text-slate-500"><p>Effective: {document.effectiveAt ? document.effectiveAt.toLocaleDateString("en-PH") : "No start date"}</p><p>Expires: {document.expiresAt ? document.expiresAt.toLocaleDateString("en-PH") : "No expiration"}</p><p>Malware state: {label(document.malwareScanStatus)}</p></div>
             <button className="btn-secondary min-h-11">Save AI policy</button>
           </form>
-          {document.aiEnabled && !readyForIndex && <div className="mt-4 flex items-start gap-2 rounded-xl bg-amber-50 p-3 text-xs leading-5 text-amber-900"><ShieldAlert className="mt-0.5 size-4 shrink-0" /><p>This record cannot be indexed until publication, privacy classification, visibility, malware, and lifecycle requirements permit it.</p></div>}
+          {document.aiEnabled && !readyForIndex && <div className="mt-4 flex items-start gap-2 rounded-xl bg-amber-50 p-3 text-xs leading-5 text-amber-900"><ShieldAlert className="mt-0.5 size-4 shrink-0" /><p>This record is not retrievable by AI until publication, privacy classification, visibility, malware, and lifecycle requirements permit it. If malware state is Not Configured, validate or reconcile the repository malware state before expecting resident/staff answers from this source.</p></div>}
         </article>;
       })}
       {!documents.length && <article className="rounded-3xl border border-dashed bg-white p-8 text-center"><h2 className="font-black text-slate-900">No repository documents yet</h2><p className="mt-2 text-sm text-slate-500">Upload and govern tenant documents in Document Management before enabling approved knowledge for AI.</p><Link className="btn-primary mt-4 inline-flex" href="/admin/document-management/upload">Upload document</Link></article>}

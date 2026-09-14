@@ -105,6 +105,14 @@ test("AI knowledge management is delegated separately from tenant AI governance"
   assert.match(adminLayout, /pathname\.startsWith\("\/admin\/ai-assistance\/knowledge"\)/);
 });
 
+test("AI knowledge page distinguishes provider indexing from retrievable source eligibility", async () => {
+  const knowledgePage = await readFile("app/admin/ai-assistance/knowledge/page.tsx", "utf8");
+  assert.match(knowledgePage, /retrievableNow/);
+  assert.match(knowledgePage, /INDEXED_BLOCKED/);
+  assert.match(knowledgePage, /not retrievable by AI/);
+  assert.match(knowledgePage, /malware state is Not Configured/);
+});
+
 test("AI answers expose feedback capture, out-of-scope human-authority guard, and receipt deep links", async () => {
   const [assistant, feedbackAction, knowledgeAssistant] = await Promise.all([
     readFile("components/ai/resident-ai-assistant.tsx", "utf8"),
@@ -118,6 +126,36 @@ test("AI answers expose feedback capture, out-of-scope human-authority guard, an
   assert.match(feedbackAction, /requestId, actorId: user\.id/);
   assert.match(knowledgeAssistant, /\/receipts\/payment\/\$\{payment\.id\}/);
   assert.match(knowledgeAssistant, /\/receipts\/collection\/\$\{item\.id\}/);
+});
+
+test("AI commercial controls expose usage and repair placeholder premium token caps", async () => {
+  const [featuresPage, migration, runtimePolicy] = await Promise.all([
+    readFile("app/platform/tenants/[id]/features/page.tsx", "utf8"),
+    readFile("prisma/migrations/20260915043000_ai_premium_token_cap_repair/migration.sql", "utf8"),
+    readFile("lib/ai-assistance/runtime-policy.ts", "utf8"),
+  ]);
+  assert.match(featuresPage, /aiUsageLedger\.aggregate/);
+  assert.match(featuresPage, /Input tokens used/);
+  assert.match(featuresPage, /This tenant has reached at least one current-month AI commercial limit/);
+  assert.match(runtimePolicy, /Monthly AI input-token allowance reached for this tenant/);
+  assert.match(migration, /1000000/);
+  assert.match(migration, /500000/);
+  assert.match(migration, /PREMIUM/);
+  assert.match(migration, /placeholder AI token caps/i);
+  assert.doesNotMatch(migration, /DELETE\s+FROM/i);
+});
+
+test("resident operational questions route to HOAHub records instead of no-source RAG fallback", async () => {
+  const [assistant, reasoning] = await Promise.all([
+    readFile("lib/ai-assistance/knowledge-assistant.ts", "utf8"),
+    readFile("lib/ai-assistance/reasoning-assistant.ts", "utf8"),
+  ]);
+  assert.match(assistant, /who\\s\+is\\s\+\(the\\s\+\)\?\(current\\s\+\)\?hoa\\s\+president/);
+  assert.match(assistant, /latest\|last\|recent\|current/);
+  assert.match(assistant, /official receipt/);
+  assert.match(assistant, /ORGANIZATION_OFFICER/);
+  assert.match(assistant, /PAYMENT_HISTORY/);
+  assert.match(reasoning, /current president\|association president\|officers\?\|organization/);
 });
 
 test("repository lifecycle purges provider knowledge before replace, access-boundary changes and permanent delete", async () => {

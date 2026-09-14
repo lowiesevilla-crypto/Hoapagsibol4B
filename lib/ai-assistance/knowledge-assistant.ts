@@ -413,7 +413,11 @@ function directQuestionKind(question: string): DirectQuestionKind | null {
   if (/\b(who are you|what are you|your name|what('?s| is) your name|anong pangalan mo)\b/i.test(question)) return "IDENTITY";
   if (/\b(what can you do|help me|how can you help|what do you know|what questions can i ask)\b/i.test(question)) return "SCOPE";
   if (/\b(another|other|neighbor|neighbour|someone else|different homeowner|all homeowners)\b.{0,80}\b(balance|account number|account|dues|profile|address|phone|email)\b/i.test(question)) return "OTHER_HOMEOWNER_PRIVATE";
-  if (/\b(who|current|association|hoa)\b.{0,80}\b(president|vice president|secretary|treasurer|auditor|officer|board|director|committee)\b/i.test(question) || /\b(president|vice president|secretary|treasurer|auditor)\b.{0,80}\b(association|hoa|current|who)\b/i.test(question)) return "ORGANIZATION_OFFICER";
+  if (
+    /\b(who|current|association|hoa)\b.{0,100}\b(president|vice president|secretary|treasurer|auditor|officer|board|director|committee)\b/i.test(question)
+    || /\b(president|vice president|secretary|treasurer|auditor|officer|board|director|committee)\b.{0,100}\b(association|hoa|current|who)\b/i.test(question)
+    || /\bwho\s+is\s+(the\s+)?(current\s+)?hoa\s+president\b/i.test(question)
+  ) return "ORGANIZATION_OFFICER";
   if (
     /\b(current|outstanding|account|hoa|dues)\s+balance\b/i.test(question)
     || /\bbalance\s+(ko|namin|ng account|on my account|due)\b/i.test(question)
@@ -421,7 +425,11 @@ function directQuestionKind(question: string): DirectQuestionKind | null {
     || /\bwhat('?s| is)\b.{0,40}\b(amount due|outstanding|unpaid dues)\b/i.test(question)
   ) return "CURRENT_BALANCE";
   if (/\b(my|own)?\s*(billing|bills|dues|open billings|unpaid bills|statement)\b/i.test(question)) return "BILLING_SUMMARY";
-  if (/\b(my|own)?\s*(payment history|payments|receipts|latest payment|recent payment|paid)\b/i.test(question)) return "PAYMENT_HISTORY";
+  if (
+    /\b(my|own)?\s*(payment history|payments|receipts|latest payment|recent payment|paid)\b/i.test(question)
+    || /\b(latest|last|recent|current)\b.{0,40}\b(payment|receipt|or\s*(no\.?|number)|official receipt)\b/i.test(question)
+    || /\b(payment|receipt|official receipt)\b.{0,40}\b(latest|last|recent|number|no\.?)\b/i.test(question)
+  ) return "PAYMENT_HISTORY";
   if (/\b(collections?|bonds?|construction bond|contractor bond|refunds?|refundable|forfeited|forfeiture)\b/i.test(question)) return "COLLECTION_BOND_REFUND";
   if (/\b(my|own)\s+(homeowner\s+)?account\s+(number|no\.?|#)\b/i.test(question) || /\bwhat('?s| is)\b.{0,40}\baccount\s+(number|no\.?|#)\b/i.test(question)) return "ACCOUNT_NUMBER";
   if (/\b(my|own)\s+(profile|property|block|lot|address|monthly dues|dues amount)\b/i.test(question) || /\bwhat('?s| is)\b.{0,50}\b(block|lot|address|monthly dues|dues amount)\b/i.test(question)) return "MY_PROFILE";

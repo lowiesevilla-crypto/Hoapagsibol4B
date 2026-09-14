@@ -1,5 +1,5 @@
 import { Role } from "@prisma/client";
-import { Bot, FileCheck2, LockKeyhole, Scale, ShieldCheck } from "lucide-react";
+import { Bot, DatabaseZap, FileCheck2, LockKeyhole, Scale, ShieldCheck } from "lucide-react";
 import Link from "next/link";
 import { saveTenantAiGovernanceAction } from "@/lib/actions/ai-assistance-governance";
 import { aiRepositoryDocumentMalwareWhere } from "@/lib/ai-assistance/knowledge-eligibility";
@@ -44,7 +44,8 @@ export default async function AdminAiAssistancePage({ searchParams }: { searchPa
     Boolean(configuration?.dataSubjectRightsContact),
   ];
   const tenantGovernanceReady = requiredGates.every(Boolean);
-  const operational = entitlement.enabled && globalRuntimeEnabled && providerConfigured && Boolean(configuration?.runtimeEnabled) && tenantGovernanceReady && indexedCount > 0;
+  const runtimeReady = entitlement.enabled && globalRuntimeEnabled && providerConfigured && Boolean(configuration?.runtimeEnabled) && tenantGovernanceReady;
+  const knowledgeReady = indexedCount > 0;
 
   return <div className="space-y-6">
     <div className="flex flex-wrap items-start justify-between gap-4"><div><p className="text-xs font-black uppercase tracking-[.16em] text-indigo-700">Tenant AI governance</p><h1 className="mt-1 text-3xl font-black text-slate-950">HOAHub AI Assistance</h1><p className="mt-2 max-w-3xl text-sm leading-6 text-slate-600">Control whether this tenant may use AI, record required privacy/governance evidence, and manage the approved knowledge boundary. Commercial entitlement alone never activates AI processing.</p></div><Link className="btn-secondary" href="/admin/ai-assistance/knowledge">Manage AI knowledge</Link></div>
@@ -53,10 +54,14 @@ export default async function AdminAiAssistancePage({ searchParams }: { searchPa
     {error && <p className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-semibold text-rose-800">{error}</p>}
 
     <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-      <article className="card"><span className="grid size-11 place-items-center rounded-2xl bg-indigo-50 text-indigo-700"><Bot className="size-5" /></span><p className="mt-4 text-xs font-black uppercase tracking-wider text-slate-400">Tenant AI status</p><p className={`mt-1 text-xl font-black ${operational ? "text-emerald-700" : "text-amber-800"}`}>{operational ? "Ready" : "Gated"}</p></article>
+      <article className="card"><span className="grid size-11 place-items-center rounded-2xl bg-indigo-50 text-indigo-700"><Bot className="size-5" /></span><p className="mt-4 text-xs font-black uppercase tracking-wider text-slate-400">Tenant AI runtime</p><p className={`mt-1 text-xl font-black ${runtimeReady ? "text-emerald-700" : "text-amber-800"}`}>{runtimeReady ? "Ready" : "Gated"}</p><p className="mt-1 text-xs text-slate-500">Runtime readiness is separate from tenant knowledge indexing.</p></article>
       <article className="card"><span className="grid size-11 place-items-center rounded-2xl bg-pine-50 text-pine-700"><Scale className="size-5" /></span><p className="mt-4 text-xs font-black uppercase tracking-wider text-slate-400">Commercial entitlement</p><p className="mt-1 text-xl font-black">{entitlement.enabled ? "Included" : "Not included"}</p><p className="mt-1 text-xs text-slate-500">{entitlement.enabledSource.replaceAll("_", " ")}</p></article>
-      <article className="card"><span className="grid size-11 place-items-center rounded-2xl bg-blue-50 text-blue-700"><FileCheck2 className="size-5" /></span><p className="mt-4 text-xs font-black uppercase tracking-wider text-slate-400">AI-approved documents</p><p className="mt-1 text-xl font-black">{eligibleCount}</p><p className="mt-1 text-xs text-slate-500">{indexedCount} indexed</p></article>
+      <article className="card"><span className="grid size-11 place-items-center rounded-2xl bg-blue-50 text-blue-700"><FileCheck2 className="size-5" /></span><p className="mt-4 text-xs font-black uppercase tracking-wider text-slate-400">Grounded knowledge</p><p className={`mt-1 text-xl font-black ${knowledgeReady ? "text-emerald-700" : "text-amber-800"}`}>{knowledgeReady ? `${indexedCount} indexed` : "Needs setup"}</p><p className="mt-1 text-xs text-slate-500">{eligibleCount} published + AI-enabled + malware-validated source{eligibleCount === 1 ? "" : "s"}.</p></article>
       <article className="card"><span className="grid size-11 place-items-center rounded-2xl bg-slate-100 text-slate-700"><LockKeyhole className="size-5" /></span><p className="mt-4 text-xs font-black uppercase tracking-wider text-slate-400">Platform release switch</p><p className="mt-1 text-xl font-black">{globalRuntimeEnabled ? "Enabled" : "Disabled"}</p><p className="mt-1 text-xs text-slate-500">Platform-controlled; tenant users cannot override it.</p></article>
+    </section>
+
+    <section className="rounded-3xl border border-blue-100 bg-blue-50/50 p-5 sm:p-6">
+      <div className="flex items-start gap-3"><DatabaseZap className="mt-0.5 size-5 shrink-0 text-blue-700" /><div><h2 className="font-black text-blue-950">Recommended setup path</h2><p className="mt-1 text-sm leading-6 text-blue-900/80"><b>1. Governance:</b> complete the approvals below. <b>2. Knowledge:</b> publish the repository document, classify it, enable AI, record approved malware-validation evidence, then index it. <b>3. Experiences:</b> enable Resident Assistant and/or Staff Copilot. <b>4. Test:</b> ask a question that can only be answered from the indexed source and confirm the source citation.</p><p className="mt-2 text-xs font-semibold leading-5 text-blue-900/70">An empty knowledge index does not by itself mean the tenant AI runtime is disabled. It means policy/document questions cannot be grounded in tenant-approved indexed content yet.</p></div></div>
     </section>
 
     <section className="rounded-3xl border border-amber-200 bg-amber-50 p-5 sm:p-6">
@@ -66,7 +71,7 @@ export default async function AdminAiAssistancePage({ searchParams }: { searchPa
     <form action={saveTenantAiGovernanceAction} className="rounded-3xl border bg-white p-5 shadow-sm sm:p-7">
       <div className="grid gap-6 xl:grid-cols-[minmax(0,1.2fr)_minmax(320px,.8fr)]">
         <div>
-          <h2 className="text-xl font-black text-slate-950">Governance evidence</h2><p className="mt-1 text-sm text-slate-500">All required gates must be recorded before the tenant runtime can be enabled.</p>
+          <h2 className="text-xl font-black text-slate-950">Governance evidence</h2><p className="mt-1 text-sm text-slate-500">All required governance gates must be recorded before the tenant runtime can be enabled.</p>
           <div className="mt-5 grid gap-3 sm:grid-cols-2">
             <label className="flex min-h-14 items-center gap-3 rounded-2xl border p-4 text-sm font-bold"><input className="size-5" type="checkbox" name="boardApproved" defaultChecked={Boolean(configuration?.boardApprovedAt)} /> Board / HOA AI policy approved</label>
             <label className="flex min-h-14 items-center gap-3 rounded-2xl border p-4 text-sm font-bold"><input className="size-5" type="checkbox" name="piaApproved" defaultChecked={Boolean(configuration?.piaApprovedAt)} /> Privacy Impact Assessment approved</label>
@@ -83,8 +88,9 @@ export default async function AdminAiAssistancePage({ searchParams }: { searchPa
           </div>
         </div>
         <aside>
-          <h2 className="text-xl font-black text-slate-950">Release readiness</h2>
-          <div className="mt-5 space-y-2">{gate("Board / HOA approval", Boolean(configuration?.boardApprovedAt))}{gate("PIA approval", Boolean(configuration?.piaApprovedAt))}{gate("DPO / privacy approval", Boolean(configuration?.dpoApprovedAt))}{gate("Provider/vendor review", Boolean(configuration?.providerApprovedAt))}{gate("Cross-border review", Boolean(configuration?.crossBorderReviewApprovedAt))}{gate("Privacy notice", privacyNoticeReady)}{gate("Lawful basis", Boolean(configuration?.lawfulBasis))}{gate("Rights contact", Boolean(configuration?.dataSubjectRightsContact))}{gate("Provider credential", providerConfigured)}{gate("Validated indexed knowledge", indexedCount > 0)}</div>
+          <h2 className="text-xl font-black text-slate-950">Runtime readiness</h2>
+          <div className="mt-5 space-y-2">{gate("Board / HOA approval", Boolean(configuration?.boardApprovedAt))}{gate("PIA approval", Boolean(configuration?.piaApprovedAt))}{gate("DPO / privacy approval", Boolean(configuration?.dpoApprovedAt))}{gate("Provider/vendor review", Boolean(configuration?.providerApprovedAt))}{gate("Cross-border review", Boolean(configuration?.crossBorderReviewApprovedAt))}{gate("Privacy notice", privacyNoticeReady)}{gate("Lawful basis", Boolean(configuration?.lawfulBasis))}{gate("Rights contact", Boolean(configuration?.dataSubjectRightsContact))}{gate("Provider credential", providerConfigured)}</div>
+          <div className={`mt-4 rounded-2xl border p-4 ${knowledgeReady ? "border-emerald-200 bg-emerald-50" : "border-amber-200 bg-amber-50"}`}><p className="text-xs font-black uppercase tracking-wider text-slate-500">Knowledge readiness</p><p className={`mt-1 text-base font-black ${knowledgeReady ? "text-emerald-800" : "text-amber-900"}`}>{knowledgeReady ? "Validated indexed knowledge available" : "No validated indexed knowledge yet"}</p><p className="mt-1 text-xs leading-5 text-slate-600">This controls grounded tenant-document answers, not the runtime switch itself.</p><Link className="btn-secondary mt-3 inline-flex min-h-10" href="/admin/ai-assistance/knowledge">Manage AI knowledge</Link></div>
         </aside>
       </div>
 

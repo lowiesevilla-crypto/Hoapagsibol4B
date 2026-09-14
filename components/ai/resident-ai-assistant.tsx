@@ -1,7 +1,8 @@
 "use client";
 
 import { FormEvent, KeyboardEvent, useRef, useState } from "react";
-import { Bot, FileText, Loader2, Send, ShieldCheck } from "lucide-react";
+import { Bot, FileText, Loader2, Send, ShieldCheck, ThumbsDown, ThumbsUp } from "lucide-react";
+import { submitAiFeedbackAction } from "@/lib/actions/ai-feedback";
 
 type Source = {
   documentId: string;
@@ -20,6 +21,8 @@ type Turn = {
   question: string;
   answer: string;
   sources: Source[];
+  requestId?: string;
+  conversationId?: string | null;
 };
 
 type Suggestion = string | {
@@ -70,6 +73,7 @@ export function ResidentAiAssistant({
   const [turns, setTurns] = useState<Turn[]>([]);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [submittedFeedback, setSubmittedFeedback] = useState<Record<string, number>>({});
   const composerRef = useRef<HTMLTextAreaElement>(null);
 
   function resizeComposer(element: HTMLTextAreaElement) {
@@ -102,7 +106,7 @@ export function ResidentAiAssistant({
       });
       const body = await response.json() as { error?: string; conversationId?: string | null; answer?: string; sources?: Source[]; requestId?: string };
       if (!response.ok || !body.answer) throw new Error(body.error || "HOAHub AI could not answer this question.");
-      setTurns((current) => [...current, { id: body.requestId || `${Date.now()}`, question: value, answer: body.answer || "", sources: body.sources || [] }]);
+      setTurns((current) => [...current, { id: body.requestId || `${Date.now()}`, question: value, answer: body.answer || "", sources: body.sources || [], requestId: body.requestId, conversationId: body.conversationId || conversationId }]);
       setConversationId(body.conversationId || conversationId);
       setQuestion("");
       if (composerRef.current) composerRef.current.style.height = "52px";
@@ -162,6 +166,17 @@ export function ResidentAiAssistant({
                 {source.excerpt && <p className="mt-2 line-clamp-3 text-xs leading-5 text-slate-600"><span className="font-bold text-slate-700">Relevant passage:</span> {source.excerpt}</p>}
               </div>)}</div>
             </div>}
+            {turn.requestId && <form action={async (formData) => {
+              await submitAiFeedbackAction(formData);
+              setSubmittedFeedback((current) => ({ ...current, [turn.id]: Number(formData.get("rating")) }));
+            }} className="mt-3 flex flex-wrap items-center gap-2 border-t pt-3">
+              <input type="hidden" name="requestId" value={turn.requestId} />
+              <input type="hidden" name="conversationId" value={turn.conversationId || ""} />
+              <span className="text-xs font-bold text-slate-500">Was this helpful?</span>
+              <button className="rounded-full border px-3 py-1.5 text-xs font-bold text-slate-700 hover:bg-white disabled:opacity-60" name="rating" value="1" disabled={Boolean(submittedFeedback[turn.id])} aria-label="Mark answer helpful"><ThumbsUp className="inline size-3.5" /> Helpful</button>
+              <button className="rounded-full border px-3 py-1.5 text-xs font-bold text-slate-700 hover:bg-white disabled:opacity-60" name="rating" value="-1" disabled={Boolean(submittedFeedback[turn.id])} aria-label="Mark answer not helpful"><ThumbsDown className="inline size-3.5" /> Needs review</button>
+              {submittedFeedback[turn.id] && <span className="text-xs font-bold text-emerald-700">Feedback saved</span>}
+            </form>}
           </div>
         </div>)}
       </div>
@@ -200,7 +215,7 @@ export function ResidentAiAssistant({
     <aside className="hidden space-y-4 xl:block">
       <section className="rounded-3xl border border-indigo-100 bg-indigo-50/40 p-5"><ShieldCheck className="size-6 text-indigo-700" /><h2 className="mt-3 font-black text-indigo-950">Tenant-scoped by design</h2><p className="mt-2 text-sm leading-6 text-indigo-900/80">Your signed-in HOA membership determines the tenant. Typing another association’s name cannot switch the AI tenant or grant access to its documents.</p></section>
       <section className="rounded-3xl border bg-white p-5 shadow-sm"><h2 className="font-black text-slate-900">{rulesTitle}</h2><ul className="mt-3 space-y-2 text-sm leading-6 text-slate-600">{rules.map((rule) => <li key={rule}>• {rule}</li>)}</ul></section>
-      <section className="rounded-3xl border bg-white p-5 shadow-sm"><h2 className="font-black text-slate-900">Human authority</h2><p className="mt-2 text-sm leading-6 text-slate-600">AI explanations are assistance, not autonomous HOA approval, denial, legal advice, medical advice, financial decisions, penalties, or disciplinary decisions. Contact your association for an official determination when needed.</p></section>
+      <section className="rounded-3xl border bg-white p-5 shadow-sm"><h2 className="font-black text-slate-900">Human authority</h2><p className="mt-2 text-sm leading-6 text-slate-600">AI explanations are assistance, not autonomous HOA approval, denial, legal advice, medical advice, financial decisions, penalties, disciplinary decisions, or directions outside HOAHub. Contact your association for an official determination when needed.</p></section>
     </aside>
   </div>;
 }

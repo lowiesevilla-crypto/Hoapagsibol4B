@@ -274,6 +274,8 @@ Payroll, salary, deductions, loans/cash advances, corrections, and payslips are 
 
 AI is commercially/governance/permission controlled. Staff Copilot is tenant scoped and permission scoped; homeowner AI may use approved knowledge plus only that homeowner's authorized data. AI may draft/explain but is not final approval, publication, payment, or grievance authority unless a separately authorized workflow explicitly exists.
 
+AI knowledge management is delegated separately from tenant AI governance. `/admin/ai-assistance/knowledge`, source eligibility updates, indexing, and purge actions require `AI_KNOWLEDGE_MANAGE`; `/admin/ai-assistance` governance controls require `AI_ASSISTANCE_MANAGE`. Resident AI answers can capture thumbs-up/needs-review feedback in tenant-scoped `AiFeedback`. Resident payment and collection answers may include `/receipts/payment/[id]` or `/receipts/collection/[id]` deep links only for records selected under the signed-in homeowner and tenant; the receipt route remains the authorization boundary.
+
 ## Authentication and Protected Navigation
 
 - `https://hoahub.tech/login` is the universal login boundary.

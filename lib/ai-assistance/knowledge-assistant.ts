@@ -741,12 +741,12 @@ async function answerPaymentHistory(input: { tenantId: string; homeownerProfileI
       where: { tenantId: input.tenantId, homeownerId: input.homeownerProfileId, status: "ACTIVE" },
       orderBy: [{ paymentDate: "desc" }, { createdAt: "desc" }],
       take: 5,
-      select: { amount: true, paymentDate: true, method: true, receiptNumber: true, referenceNumber: true, remarks: true },
+      select: { id: true, amount: true, paymentDate: true, method: true, receiptNumber: true, referenceNumber: true, remarks: true },
     }),
     prisma.payment.count({ where: { tenantId: input.tenantId, homeownerId: input.homeownerProfileId, status: "ACTIVE" } }),
   ]);
   if (!payments.length) return { answer: "I did not find active payment records for your signed-in homeowner account yet.", sources: [PAYMENT_HISTORY_SOURCE] };
-  const lines = payments.map((payment, index) => `${index + 1}. ${shortDate(payment.paymentDate)} - ${money(payment.amount)} via ${payment.method.replaceAll("_", " ")}${payment.receiptNumber ? `, receipt ${payment.receiptNumber}` : ""}${payment.referenceNumber ? `, ref ${payment.referenceNumber}` : ""}`);
+  const lines = payments.map((payment, index) => `${index + 1}. ${shortDate(payment.paymentDate)} - ${money(payment.amount)} via ${payment.method.replaceAll("_", " ")}${payment.receiptNumber ? `, receipt ${payment.receiptNumber}` : ""}${payment.referenceNumber ? `, ref ${payment.referenceNumber}` : ""}. Receipt: /receipts/payment/${payment.id}`);
   return {
     answer: `You have ${total} active payment record${total === 1 ? "" : "s"}. Recent payments:\n\n${lines.join("\n")}\n\nOpen Payment History for receipts and full details.`,
     sources: [PAYMENT_HISTORY_SOURCE],
@@ -767,6 +767,7 @@ async function answerCollectionBondRefund(input: { tenantId: string; homeownerPr
       amount: true,
       collectionDate: true,
       method: true,
+      id: true,
       receiptNumber: true,
       referenceNumber: true,
       refundable: true,
@@ -781,7 +782,7 @@ async function answerCollectionBondRefund(input: { tenantId: string; homeownerPr
   const lines = collections.slice(0, 5).map((item, index) => {
     const balance = item.refundable ? Number(item.amount) - Number(item.amountRefunded) - Number(item.amountForfeited) : 0;
     const refund = item.refundable ? `, refunded ${money(item.amountRefunded)}, remaining ${money(balance)}, status ${item.refundStatus.replaceAll("_", " ")}` : "";
-    return `${index + 1}. ${collectionLabel(item.type, item.description)} - ${money(item.amount)} on ${shortDate(item.collectionDate)} via ${item.method.replaceAll("_", " ")}${refund}${item.receiptNumber ? `, receipt ${item.receiptNumber}` : item.referenceNumber ? `, ref ${item.referenceNumber}` : ""}`;
+    return `${index + 1}. ${collectionLabel(item.type, item.description)} - ${money(item.amount)} on ${shortDate(item.collectionDate)} via ${item.method.replaceAll("_", " ")}${refund}${item.receiptNumber ? `, receipt ${item.receiptNumber}` : item.referenceNumber ? `, ref ${item.referenceNumber}` : ""}. Receipt: /receipts/collection/${item.id}`;
   });
   return {
     answer: `I found ${collections.length} collection/bond record${collections.length === 1 ? "" : "s"} for your signed-in account. Refundable balance from the latest records is ${money(refundableBalance)}.\n\nRecent records:\n${lines.join("\n")}\n\nOpen Collections & Bonds for receipts and full refund history.`,

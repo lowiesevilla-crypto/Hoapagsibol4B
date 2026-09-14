@@ -66,6 +66,37 @@ test("resident ask route never accepts browser tenant authority and disables cac
   assert.match(route, /X-Content-Type-Options/);
 });
 
+test("AI knowledge management is delegated separately from tenant AI governance", async () => {
+  const [knowledgeActions, knowledgePage, roleAccess, adminLayout] = await Promise.all([
+    readFile("lib/actions/ai-knowledge.ts", "utf8"),
+    readFile("app/admin/ai-assistance/knowledge/page.tsx", "utf8"),
+    readFile("lib/role-access.ts", "utf8"),
+    readFile("app/admin/layout.tsx", "utf8"),
+  ]);
+  assert.match(knowledgeActions, /requireAiKnowledgeManager\(\);\s*const documentId = clean\(formData\.get\("documentId"\)\);/);
+  assert.match(knowledgePage, /Permission\.AI_KNOWLEDGE_MANAGE/);
+  assert.match(roleAccess, /\["\/admin\/ai-assistance\/knowledge", Permission\.AI_KNOWLEDGE_MANAGE\]/);
+  assert.match(roleAccess, /\["\/admin\/ai-assistance", Permission\.AI_ASSISTANCE_MANAGE\]/);
+  assert.ok(roleAccess.indexOf("/admin/ai-assistance/knowledge") < roleAccess.indexOf("/admin/ai-assistance\", Permission.AI_ASSISTANCE_MANAGE"));
+  assert.match(adminLayout, /canManageAiKnowledge/);
+  assert.match(adminLayout, /pathname\.startsWith\("\/admin\/ai-assistance\/knowledge"\)/);
+});
+
+test("AI answers expose feedback capture, out-of-scope human-authority guard, and receipt deep links", async () => {
+  const [assistant, feedbackAction, knowledgeAssistant] = await Promise.all([
+    readFile("components/ai/resident-ai-assistant.tsx", "utf8"),
+    readFile("lib/actions/ai-feedback.ts", "utf8"),
+    readFile("lib/ai-assistance/knowledge-assistant.ts", "utf8"),
+  ]);
+  assert.match(assistant, /submitAiFeedbackAction/);
+  assert.match(assistant, /Was this helpful\?/);
+  assert.match(assistant, /directions outside HOAHub/);
+  assert.match(feedbackAction, /prisma\.aiFeedback\.create/);
+  assert.match(feedbackAction, /requestId, actorId: user\.id/);
+  assert.match(knowledgeAssistant, /\/receipts\/payment\/\$\{payment\.id\}/);
+  assert.match(knowledgeAssistant, /\/receipts\/collection\/\$\{item\.id\}/);
+});
+
 test("repository lifecycle purges provider knowledge before replace, access-boundary changes and permanent delete", async () => {
   const [replace, update, remove] = await Promise.all([
     readFile("lib/document-repository/replace.ts", "utf8"),

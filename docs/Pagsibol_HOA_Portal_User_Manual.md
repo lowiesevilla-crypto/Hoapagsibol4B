@@ -1,7 +1,7 @@
 # PAGSIBOL VILLAGE PH2 4B EAST HOA Portal - User Manual
 
 Generated: June 24, 2026
-Last revised: August 25, 2026 (PayMongo settlement trace deployed in PR #179; authenticated tenant production UAT remains pending)
+Last revised: September 14, 2026 (AI Assistance completion candidate: delegated knowledge management, answer feedback, human-authority guard, and receipt deep links; production deployment and authenticated UAT remain pending)
 
 This manual explains how officers and homeowners use the portal. Screenshots were captured from the current clean database, so many tables show empty states until real homeowners, bills, payments, employees, and records are added.
 
@@ -309,7 +309,13 @@ Admin can:
 
 Homeowners can view upcoming events.
 
-## 16. Homeowner Portal
+## 16. AI Assistance
+
+AI Assistance is controlled by plan entitlement, platform release switch, tenant governance evidence, and role permissions. Tenant administrators with **AI Assistance management** can record governance controls. Delegated users with **AI knowledge-management** permission can classify, enable, index, or purge approved knowledge sources without access to governance switches.
+
+Resident AI answers use approved tenant knowledge plus the signed-in homeowner's own authorized account data. AI does not approve requests, post payments, issue penalties, make legal or medical determinations, or direct users outside HOAHub authority. Residents can mark answers as helpful or needing review. When the assistant answers about recent payments or collections, it may show a receipt link such as `/receipts/payment/[id]` or `/receipts/collection/[id]`; opening the receipt still requires the normal signed-in tenant and homeowner authorization.
+
+## 17. Homeowner Portal
 
 After an admin creates a homeowner profile and login account, the homeowner can access:
 
@@ -330,7 +336,7 @@ Homeowner rules:
 - The Pay by QR page uses the configured GCash account and QR image.
 - Payment submissions are pending until admin verification.
 
-## 17. Mobile Use
+## 18. Mobile Use
 
 The website is responsive. On smaller screens the sidebar becomes a hamburger menu.
 
@@ -342,7 +348,7 @@ Mobile tips:
 - Scroll tables inside their container when needed.
 - Use large form fields and action buttons for touch input.
 
-## 18. Receipts, Payslips, and Printable Documents
+## 19. Receipts, Payslips, and Printable Documents
 
 Printable outputs use the association profile settings:
 
@@ -361,7 +367,7 @@ Common printable outputs:
 
 Print using browser print on A4 or Letter paper.
 
-## 19. Recommended Daily Workflow
+## 20. Recommended Daily Workflow
 
 1. Check dashboard totals.
 2. Add new homeowners, vehicles, contractors, employees, or events as needed.
@@ -373,7 +379,7 @@ Print using browser print on A4 or Letter paper.
 8. Generate reports before officer meetings.
 9. Back up database and documents regularly.
 
-## 20. Screenshot Index
+## 21. Screenshot Index
 
 | Screenshot | Description |
 | --- | --- |

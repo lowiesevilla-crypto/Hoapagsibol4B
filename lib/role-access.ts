@@ -29,6 +29,7 @@ const adminRoutePermissions: readonly [string, PermissionValue][] = [
   ["/admin/document-management/categories", Permission.DOCUMENT_REPOSITORY_MANAGE_CATEGORIES],
   ["/admin/document-management", Permission.DOCUMENT_REPOSITORY_READ],
   ["/admin/ai-copilot", Permission.AI_ASSISTANCE_USE],
+  ["/admin/ai-assistance/knowledge", Permission.AI_KNOWLEDGE_MANAGE],
   ["/admin/ai-assistance", Permission.AI_ASSISTANCE_MANAGE],
   ["/admin/documents", Permission.DOCUMENTS_MANAGE],
   ["/admin/document-templates", Permission.DOCUMENTS_MANAGE],
@@ -42,6 +43,11 @@ const adminRoutePermissions: readonly [string, PermissionValue][] = [
 function normalizeRoles(roleOrRoles: Role | readonly Role[]) { return typeof roleOrRoles === "string" ? [roleOrRoles] : [...new Set(roleOrRoles)]; }
 export function requiredPermissionForAdminPath(pathname: string) { const path = pathname.split(/[?#]/)[0]; return adminRoutePermissions.find(([prefix]) => path === prefix || path.startsWith(`${prefix}/`))?.[1] ?? null; }
 export function adminPrefixesForRole(role: Role) { if (unrestrictedAdminRoles.has(role)) return null; return adminRoutePermissions.filter(([, permission]) => hasPermission([role], permission)).map(([prefix]) => prefix); }
-export function canAccessAdminPath(roleOrRoles: Role | readonly Role[], pathname: string) { const roles = normalizeRoles(roleOrRoles); const requiredPermission = requiredPermissionForAdminPath(pathname); if (requiredPermission) return hasPermission(roles, requiredPermission); return roles.some((role) => unrestrictedAdminRoles.has(role)); }
-export function filterAdminLinksByRole(links: LinkItem[], roleOrRoles: Role | readonly Role[]) { return links.filter((link) => canAccessAdminPath(roleOrRoles, link.href)); }
+export function canAccessAdminPath(roleOrRoles: Role | readonly Role[], pathname: string, permissions?: readonly PermissionValue[]) {
+  const roles = normalizeRoles(roleOrRoles);
+  const requiredPermission = requiredPermissionForAdminPath(pathname);
+  if (requiredPermission) return permissions?.includes(requiredPermission) || hasPermission(roles, requiredPermission);
+  return roles.some((role) => unrestrictedAdminRoles.has(role));
+}
+export function filterAdminLinksByRole(links: LinkItem[], roleOrRoles: Role | readonly Role[], permissions?: readonly PermissionValue[]) { return links.filter((link) => canAccessAdminPath(roleOrRoles, link.href, permissions)); }
 export function adminHomeForRole(roleOrRoles: Role | readonly Role[]) { const roles = normalizeRoles(roleOrRoles); if (hasPermission(roles, Permission.TENANT_SETTINGS_MANAGE)) return "/admin/dashboard"; if (hasPermission(roles, Permission.BILLING_MANAGE)) return "/admin/billing"; if (hasPermission(roles, Permission.PAYROLL_MANAGE)) return "/admin/payroll"; if (hasPermission(roles, Permission.CHAT_USE)) return "/admin/chat"; return "/admin/dashboard"; }

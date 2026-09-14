@@ -1,16 +1,11 @@
 "use server";
 
-import {
-  PlatformInvoiceStatus,
-  Role,
-  TenantStatus,
-  TenantSubscriptionStatus,
-  TenantSuspensionReason,
-} from "@prisma/client";
+import { PlatformInvoiceStatus, Role } from "@prisma/client";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { requireUser } from "@/lib/auth";
 import { platformPrisma as prisma } from "@/lib/db";
+import { cancelPlatformInvoice } from "@/lib/services/platform-invoice-maintenance";
 
 function clean(value: FormDataEntryValue | null) {
   return String(value || "").trim();
@@ -155,106 +150,11 @@ export async function deletePlatformInvoiceAction(formData: FormData) {
   const invoiceId = clean(formData.get("invoiceId"));
 
   try {
-    await prisma.$transaction(async (tx) => {
-      const invoice = await tx.platformInvoice.findFirst({
-        where: { id: invoiceId, tenantId },
-        include: { _count: { select: { allocations: true } } },
-      });
-      if (!invoice) throw new Error("Platform invoice not found.");
-      if (Number(invoice.amountPaid) > 0 || invoice._count.allocations > 0) {
-        throw new Error("An invoice with payment history cannot be deleted. Preserve it for the financial audit trail.");
-      }
-      if ([PlatformInvoiceStatus.PAID, PlatformInvoiceStatus.PARTIALLY_PAID].includes(invoice.status)) {
-        throw new Error("Paid or partially paid invoices cannot be deleted.");
-      }
-
-      const latest = await tx.platformInvoice.findFirst({
-        where: { subscriptionId: invoice.subscriptionId },
-        orderBy: [{ billingPeriodStart: "desc" }, { createdAt: "desc" }],
-        select: { id: true },
-      });
-      if (!latest || latest.id !== invoice.id) {
-        throw new Error("Only the latest unpaid invoice in a subscription can be deleted. Older invoices are history-protected.");
-      }
-
-      const previous = await tx.platformInvoice.findFirst({
-        where: { subscriptionId: invoice.subscriptionId, id: { not: invoice.id } },
-        orderBy: [{ billingPeriodStart: "desc" }, { createdAt: "desc" }],
-        select: { billingPeriodStart: true, billingPeriodEnd: true },
-      });
-
-      await tx.platformInvoice.delete({ where: { id: invoice.id } });
-      await tx.tenantSubscription.update({
-        where: { id: invoice.subscriptionId },
-        data: {
-          currentPeriodStart: previous?.billingPeriodStart ?? invoice.billingPeriodStart,
-          currentPeriodEnd: previous?.billingPeriodEnd ?? null,
-          nextBillingDate: invoice.billingPeriodStart,
-        },
-      });
-
-      const remainingOutstanding = await tx.platformInvoice.findFirst({
-        where: {
-          tenantId,
-          outstandingBalance: { gt: 0 },
-          status: { in: [PlatformInvoiceStatus.OPEN, PlatformInvoiceStatus.PARTIALLY_PAID, PlatformInvoiceStatus.OVERDUE] },
-        },
-        select: { id: true },
-      });
-
-      if (!remainingOutstanding) {
-        const activeSubscription = await tx.tenantSubscription.findFirst({
-          where: { tenantId, status: { notIn: [TenantSubscriptionStatus.CANCELLED, TenantSubscriptionStatus.EXPIRED] } },
-          orderBy: { createdAt: "desc" },
-          select: { id: true, status: true },
-        });
-        const activeSuspensions = await tx.tenantSuspensionRecord.findMany({
-          where: { tenantId, reinstatedAt: null },
-          select: { id: true, reason: true },
-        });
-        const nonPaymentOnly = activeSuspensions.length > 0 && activeSuspensions.every((item) => item.reason === TenantSuspensionReason.NON_PAYMENT);
-        const delinquencyStatus = activeSubscription && [TenantSubscriptionStatus.PAST_DUE, TenantSubscriptionStatus.GRACE, TenantSubscriptionStatus.RESTRICTED].includes(activeSubscription.status);
-        const nonPaymentSuspended = activeSubscription?.status === TenantSubscriptionStatus.SUSPENDED && nonPaymentOnly;
-
-        if (activeSubscription?.id === invoice.subscriptionId && (delinquencyStatus || nonPaymentSuspended)) {
-          await tx.tenantSubscription.update({ where: { id: activeSubscription.id }, data: { status: TenantSubscriptionStatus.ACTIVE } });
-          if (nonPaymentOnly) {
-            const now = new Date();
-            await tx.tenantSuspensionRecord.updateMany({
-              where: { tenantId, reinstatedAt: null, reason: TenantSuspensionReason.NON_PAYMENT },
-              data: { reinstatedAt: now, reinstatedById: actor.id },
-            });
-            await tx.tenant.update({ where: { id: tenantId }, data: { status: TenantStatus.ACTIVE, subscriptionStatus: TenantSubscriptionStatus.ACTIVE } });
-          } else {
-            await tx.tenant.update({ where: { id: tenantId }, data: { subscriptionStatus: TenantSubscriptionStatus.ACTIVE } });
-          }
-        }
-      }
-
-      await tx.auditLog.create({
-        data: {
-          tenantId,
-          actorId: actor.id,
-          module: "PLATFORM_BILLING",
-          action: "PLATFORM_INVOICE_DELETED",
-          entityType: "PlatformInvoice",
-          entityId: invoice.id,
-          metadata: {
-            invoiceNumber: invoice.invoiceNumber,
-            subscriptionId: invoice.subscriptionId,
-            billingPeriodStart: invoice.billingPeriodStart,
-            billingPeriodEnd: invoice.billingPeriodEnd,
-            total: Number(invoice.total),
-            priorStatus: invoice.status,
-            scheduleResetTo: invoice.billingPeriodStart,
-          },
-        },
-      });
-    });
+    await cancelPlatformInvoice({ tenantId, invoiceId, actorId: actor.id });
   } catch (error) {
     redirect(billingUrl(tenantId, "error", error instanceof Error ? error.message : "Invoice deletion failed."));
   }
 
   revalidateBilling(tenantId);
-  redirect(billingUrl(tenantId, "success", "Platform invoice deleted and the subscription billing schedule was restored."));
+  redirect(billingUrl(tenantId, "success", "Platform invoice deleted from active billing. Audit evidence and billing schedule were preserved."));
 }

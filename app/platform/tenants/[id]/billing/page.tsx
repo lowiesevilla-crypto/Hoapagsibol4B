@@ -56,10 +56,6 @@ export default async function TenantBillingPage({
     PlatformInvoiceStatus.CANCELLED,
     PlatformInvoiceStatus.VOID,
   ].includes(invoice.status));
-  const latestBillingPeriodStart = visibleInvoices.reduce(
-    (latest, invoice) => Math.max(latest, invoice.billingPeriodStart.getTime()),
-    0,
-  );
   const openInvoices = visibleInvoices.filter((invoice) =>
     [
       PlatformInvoiceStatus.OPEN,
@@ -171,7 +167,7 @@ export default async function TenantBillingPage({
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
             <h2 className="text-xl font-black">Invoices</h2>
-            <p className="mt-1 text-sm text-slate-500">Finalized platform receivables. Cancelled invoices remain in the audit record but are removed from active billing views.</p>
+            <p className="mt-1 text-sm text-slate-500">Platform Admin may delete an incorrect unpaid draft, open, or overdue invoice from active billing. The cancelled audit record is retained so the billing cycle cannot regenerate.</p>
           </div>
           {subscription && <form action={generateTenantInvoiceAction}><input type="hidden" name="tenantId" value={tenant.id} /><button className="btn-primary">Generate bill</button></form>}
         </div>
@@ -179,8 +175,7 @@ export default async function TenantBillingPage({
           <table className="min-w-[1160px] w-full text-sm">
             <thead className="bg-slate-50 text-left"><tr><th className="p-3">Invoice</th><th className="p-3">Coverage</th><th className="p-3">Issued / Due</th><th className="p-3">Total</th><th className="p-3">Paid</th><th className="p-3">Balance</th><th className="p-3">Status</th><th className="p-3">Tenant payment</th><th className="p-3">Platform action</th></tr></thead>
             <tbody>{visibleInvoices.map((invoice) => {
-              const cancellable = invoice.billingPeriodStart.getTime() === latestBillingPeriodStart
-                && [PlatformInvoiceStatus.DRAFT, PlatformInvoiceStatus.OPEN, PlatformInvoiceStatus.OVERDUE].includes(invoice.status)
+              const cancellable = [PlatformInvoiceStatus.DRAFT, PlatformInvoiceStatus.OPEN, PlatformInvoiceStatus.OVERDUE].includes(invoice.status)
                 && Number(invoice.amountPaid) < 0.01;
               return (
                 <tr key={invoice.id} className="border-t align-top">
@@ -197,9 +192,9 @@ export default async function TenantBillingPage({
                       <form action={cancelPlatformInvoiceAction}>
                         <input type="hidden" name="tenantId" value={tenant.id} />
                         <input type="hidden" name="invoiceId" value={invoice.id} />
-                        <button className="rounded-lg bg-rose-50 px-3 py-2 text-xs font-black text-rose-700 hover:bg-rose-100">Cancel invoice</button>
+                        <button className="rounded-lg bg-rose-50 px-3 py-2 text-xs font-black text-rose-700 hover:bg-rose-100">Delete invoice</button>
                       </form>
-                    ) : <span className="text-xs text-slate-400">Protected</span>}
+                    ) : <span className="text-xs text-slate-400">Payment/status protected</span>}
                   </td>
                 </tr>
               );

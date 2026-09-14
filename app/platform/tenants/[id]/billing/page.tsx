@@ -10,6 +10,7 @@ import { notFound } from "next/navigation";
 import { PlatformTenantTabs } from "@/components/platform-tenant-tabs";
 import {
   assignTenantSubscriptionAction,
+  cancelPlatformInvoiceAction,
   generateTenantInvoiceAction,
   recordPlatformManualPaymentAction,
   reinstateTenantAction,
@@ -51,7 +52,15 @@ export default async function TenantBillingPage({
     activeSuspension,
     outstanding,
   } = snapshot;
-  const openInvoices = invoices.filter((invoice) =>
+  const visibleInvoices = invoices.filter((invoice) => ![
+    PlatformInvoiceStatus.CANCELLED,
+    PlatformInvoiceStatus.VOID,
+  ].includes(invoice.status));
+  const latestBillingPeriodStart = visibleInvoices.reduce(
+    (latest, invoice) => Math.max(latest, invoice.billingPeriodStart.getTime()),
+    0,
+  );
+  const openInvoices = visibleInvoices.filter((invoice) =>
     [
       PlatformInvoiceStatus.OPEN,
       PlatformInvoiceStatus.PARTIALLY_PAID,
@@ -162,28 +171,42 @@ export default async function TenantBillingPage({
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
             <h2 className="text-xl font-black">Invoices</h2>
-            <p className="mt-1 text-sm text-slate-500">Finalized platform receivables. Homeowner bills are intentionally not shown here.</p>
+            <p className="mt-1 text-sm text-slate-500">Finalized platform receivables. Cancelled invoices remain in the audit record but are removed from active billing views.</p>
           </div>
           {subscription && <form action={generateTenantInvoiceAction}><input type="hidden" name="tenantId" value={tenant.id} /><button className="btn-primary">Generate bill</button></form>}
         </div>
         <div className="mt-5 overflow-auto">
-          <table className="min-w-[1040px] w-full text-sm">
-            <thead className="bg-slate-50 text-left"><tr><th className="p-3">Invoice</th><th className="p-3">Coverage</th><th className="p-3">Issued / Due</th><th className="p-3">Total</th><th className="p-3">Paid</th><th className="p-3">Balance</th><th className="p-3">Status</th><th className="p-3">Tenant payment</th></tr></thead>
-            <tbody>{invoices.map((invoice) => (
-              <tr key={invoice.id} className="border-t">
-                <td className="p-3 font-black">{invoice.invoiceNumber}</td>
-                <td className="p-3">{invoice.billingPeriodStart.toLocaleDateString("en-PH")} – {invoice.billingPeriodEnd.toLocaleDateString("en-PH")}</td>
-                <td className="p-3">{invoice.issueDate.toLocaleDateString("en-PH")}<br /><span className="text-xs text-slate-500">Due {invoice.dueDate.toLocaleDateString("en-PH")}</span></td>
-                <td className="p-3 font-bold">{money(Number(invoice.total), invoice.currency)}</td>
-                <td className="p-3">{money(Number(invoice.amountPaid), invoice.currency)}</td>
-                <td className="p-3 font-black">{money(Number(invoice.outstandingBalance), invoice.currency)}</td>
-                <td className="p-3"><span className="rounded-full bg-slate-100 px-2 py-1 text-xs font-black">{invoice.status.replaceAll("_", " ")}</span></td>
-                <td className="p-3">{[PlatformInvoiceStatus.OPEN, PlatformInvoiceStatus.PARTIALLY_PAID, PlatformInvoiceStatus.OVERDUE].includes(invoice.status) ? <Link className="font-black text-blue-700 hover:underline" href={platformInvoicePaymentUrl(invoice.id)} target="_blank">Open pay link</Link> : <span className="text-slate-400">Closed</span>}</td>
-              </tr>
-            ))}</tbody>
+          <table className="min-w-[1160px] w-full text-sm">
+            <thead className="bg-slate-50 text-left"><tr><th className="p-3">Invoice</th><th className="p-3">Coverage</th><th className="p-3">Issued / Due</th><th className="p-3">Total</th><th className="p-3">Paid</th><th className="p-3">Balance</th><th className="p-3">Status</th><th className="p-3">Tenant payment</th><th className="p-3">Platform action</th></tr></thead>
+            <tbody>{visibleInvoices.map((invoice) => {
+              const cancellable = invoice.billingPeriodStart.getTime() === latestBillingPeriodStart
+                && [PlatformInvoiceStatus.DRAFT, PlatformInvoiceStatus.OPEN, PlatformInvoiceStatus.OVERDUE].includes(invoice.status)
+                && Number(invoice.amountPaid) < 0.01;
+              return (
+                <tr key={invoice.id} className="border-t align-top">
+                  <td className="p-3 font-black">{invoice.invoiceNumber}</td>
+                  <td className="p-3">{invoice.billingPeriodStart.toLocaleDateString("en-PH")} – {invoice.billingPeriodEnd.toLocaleDateString("en-PH")}</td>
+                  <td className="p-3">{invoice.issueDate.toLocaleDateString("en-PH")}<br /><span className="text-xs text-slate-500">Due {invoice.dueDate.toLocaleDateString("en-PH")}</span></td>
+                  <td className="p-3 font-bold">{money(Number(invoice.total), invoice.currency)}</td>
+                  <td className="p-3">{money(Number(invoice.amountPaid), invoice.currency)}</td>
+                  <td className="p-3 font-black">{money(Number(invoice.outstandingBalance), invoice.currency)}</td>
+                  <td className="p-3"><span className="rounded-full bg-slate-100 px-2 py-1 text-xs font-black">{invoice.status.replaceAll("_", " ")}</span></td>
+                  <td className="p-3">{[PlatformInvoiceStatus.OPEN, PlatformInvoiceStatus.PARTIALLY_PAID, PlatformInvoiceStatus.OVERDUE].includes(invoice.status) ? <Link className="font-black text-blue-700 hover:underline" href={platformInvoicePaymentUrl(invoice.id)} target="_blank">Open pay link</Link> : <span className="text-slate-400">Closed</span>}</td>
+                  <td className="p-3">
+                    {cancellable ? (
+                      <form action={cancelPlatformInvoiceAction}>
+                        <input type="hidden" name="tenantId" value={tenant.id} />
+                        <input type="hidden" name="invoiceId" value={invoice.id} />
+                        <button className="rounded-lg bg-rose-50 px-3 py-2 text-xs font-black text-rose-700 hover:bg-rose-100">Cancel invoice</button>
+                      </form>
+                    ) : <span className="text-xs text-slate-400">Protected</span>}
+                  </td>
+                </tr>
+              );
+            })}</tbody>
           </table>
         </div>
-        {!invoices.length && <p className="mt-5 rounded-xl border border-dashed p-8 text-center text-sm text-slate-500">No platform invoices yet.</p>}
+        {!visibleInvoices.length && <p className="mt-5 rounded-xl border border-dashed p-8 text-center text-sm text-slate-500">No active platform invoices.</p>}
       </section>
 
       {openInvoices.length > 0 && (

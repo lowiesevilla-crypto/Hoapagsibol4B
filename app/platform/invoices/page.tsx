@@ -34,7 +34,9 @@ export default async function PlatformInvoicesPage({ searchParams }: { searchPar
   const page = Math.max(1, Number(query.page) || 1);
   const pageSize = 25;
   const where = {
-    ...(status ? { status } : {}),
+    ...(status
+      ? { status }
+      : { status: { notIn: [PlatformInvoiceStatus.CANCELLED, PlatformInvoiceStatus.VOID] } }),
     ...(q ? {
       OR: [
         { invoiceNumber: { contains: q } },
@@ -81,7 +83,7 @@ export default async function PlatformInvoicesPage({ searchParams }: { searchPar
         <div>
           <p className="text-sm font-black uppercase tracking-wider text-leaf-700">Revenue Operations</p>
           <h1 className="text-3xl font-black text-slate-950">Platform Invoices</h1>
-          <p className="mt-2 max-w-3xl text-slate-600">Professional HOAHub subscription invoices across all tenants. Open, print, or download the immutable issued document from this register.</p>
+          <p className="mt-2 max-w-3xl text-slate-600">Professional HOAHub subscription invoices across all tenants. Cancelled invoices are hidden by default and remain available through the status filter for audit.</p>
         </div>
         <span className="inline-flex items-center gap-2 rounded-full bg-pine-50 px-4 py-2 text-sm font-black text-pine-900"><FileText className="size-4" /> Invoice register</span>
       </div>
@@ -97,8 +99,8 @@ export default async function PlatformInvoicesPage({ searchParams }: { searchPar
         <form className="grid gap-3 sm:grid-cols-[1fr_220px_auto]">
           <input className="field" name="q" defaultValue={q} placeholder="Search invoice, tenant, or slug" />
           <select className="field" name="status" defaultValue={status || ""}>
-            <option value="">All invoice statuses</option>
-            {Object.values(PlatformInvoiceStatus).map((value) => <option key={value} value={value}>{value.replaceAll("_", " ")}</option>)}
+            <option value="">Active / historical invoices</option>
+            {Object.values(PlatformInvoiceStatus).map((value) => <option key={value}>{value.replaceAll("_", " ")}</option>)}
           </select>
           <button className="btn-secondary">Filter</button>
         </form>

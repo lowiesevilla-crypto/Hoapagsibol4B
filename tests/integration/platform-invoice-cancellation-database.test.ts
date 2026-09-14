@@ -6,7 +6,9 @@ import {
   PlatformPaymentGateway,
   PlatformPaymentMethod,
   PlatformPaymentStatus,
+  TenantStatus,
   TenantSubscriptionStatus,
+  TenantSuspensionReason,
 } from "@prisma/client";
 import { platformPrisma } from "@/lib/db";
 import { generatePlatformInvoice } from "@/lib/services/platform-billing";
@@ -25,6 +27,7 @@ async function cleanup() {
   await platformPrisma.platformPayment.deleteMany({ where: { tenantId: { in: [tenantId, otherTenantId] } } });
   await platformPrisma.platformInvoice.deleteMany({ where: { tenantId: { in: [tenantId, otherTenantId] } } });
   await platformPrisma.auditLog.deleteMany({ where: { tenantId: { in: [tenantId, otherTenantId] } } });
+  await platformPrisma.tenantSuspensionRecord.deleteMany({ where: { tenantId: { in: [tenantId, otherTenantId] } } });
   await platformPrisma.tenantSubscription.deleteMany({ where: { tenantId: { in: [tenantId, otherTenantId] } } });
   await platformPrisma.subscriptionPlanModule.deleteMany({ where: { planId } });
   await platformPrisma.subscriptionPlan.deleteMany({ where: { id: planId } });
@@ -148,4 +151,44 @@ test("cancellation is tenant scoped and rejects an active PayMongo checkout", as
 
   const again = await cancelPlatformInvoice({ tenantId, invoiceId: latest.id });
   assert.equal(again.status, PlatformInvoiceStatus.CANCELLED);
+});
+
+test("deleting the last incorrect overdue receivable clears non-payment delinquency without rewinding billing", async () => {
+  const subscriptionBefore = await platformPrisma.tenantSubscription.findUniqueOrThrow({ where: { id: subscriptionId } });
+  const issueDate = subscriptionBefore.nextBillingDate || new Date("2026-11-14T00:00:00.000Z");
+  const invoice = await generatePlatformInvoice({ tenantId, issueDate });
+  const nextBillingDate = (await platformPrisma.tenantSubscription.findUniqueOrThrow({ where: { id: subscriptionId } })).nextBillingDate;
+
+  await platformPrisma.platformInvoice.update({
+    where: { id: invoice.id },
+    data: { status: PlatformInvoiceStatus.OVERDUE },
+  });
+  await platformPrisma.tenantSubscription.update({
+    where: { id: subscriptionId },
+    data: { status: TenantSubscriptionStatus.SUSPENDED },
+  });
+  await platformPrisma.tenant.update({
+    where: { id: tenantId },
+    data: { status: TenantStatus.SUSPENDED, subscriptionStatus: TenantSubscriptionStatus.SUSPENDED },
+  });
+  const suspension = await platformPrisma.tenantSuspensionRecord.create({
+    data: {
+      tenantId,
+      reason: TenantSuspensionReason.NON_PAYMENT,
+      notes: "Integration-test delinquency",
+      suspendedAt: new Date(),
+      autoReinstate: true,
+    },
+  });
+
+  await cancelPlatformInvoice({ tenantId, invoiceId: invoice.id });
+
+  const subscriptionAfter = await platformPrisma.tenantSubscription.findUniqueOrThrow({ where: { id: subscriptionId } });
+  const tenantAfter = await platformPrisma.tenant.findUniqueOrThrow({ where: { id: tenantId } });
+  const suspensionAfter = await platformPrisma.tenantSuspensionRecord.findUniqueOrThrow({ where: { id: suspension.id } });
+  assert.equal(subscriptionAfter.status, TenantSubscriptionStatus.ACTIVE);
+  assert.equal(subscriptionAfter.nextBillingDate?.toISOString(), nextBillingDate?.toISOString());
+  assert.equal(tenantAfter.status, TenantStatus.ACTIVE);
+  assert.equal(tenantAfter.subscriptionStatus, TenantSubscriptionStatus.ACTIVE);
+  assert.ok(suspensionAfter.reinstatedAt);
 });

@@ -104,8 +104,11 @@ export function ResidentAiAssistant({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ question: value, conversationId }),
       });
-      const body = await response.json() as { error?: string; conversationId?: string | null; answer?: string; sources?: Source[]; requestId?: string };
-      if (!response.ok || !body.answer) throw new Error(body.error || "HOAHub AI could not answer this question.");
+      const body = await response.json() as { error?: string; code?: string; conversationId?: string | null; answer?: string; sources?: Source[]; requestId?: string };
+      if (!response.ok || !body.answer) {
+        const reference = [body.code, body.requestId ? `Request ${body.requestId}` : ""].filter(Boolean).join(" · ");
+        throw new Error(`${body.error || "HOAHub AI could not answer this question."}${reference ? ` (${reference})` : ""}`);
+      }
       setTurns((current) => [...current, { id: body.requestId || `${Date.now()}`, question: value, answer: body.answer || "", sources: body.sources || [], requestId: body.requestId, conversationId: body.conversationId || conversationId }]);
       setConversationId(body.conversationId || conversationId);
       setQuestion("");

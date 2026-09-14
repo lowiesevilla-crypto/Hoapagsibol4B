@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { AiOperationalError } from "@/lib/ai-assistance/operational-error";
 import { answerTenantKnowledgeQuestionWithReasoning } from "@/lib/ai-assistance/reasoning-assistant";
 
 export const runtime = "nodejs";
@@ -24,7 +25,8 @@ export async function POST(request: Request) {
   } catch (error) {
     const message = error instanceof Error ? error.message : "HOAHub AI could not process this request.";
     const status = statusForAiError(message);
-    return NextResponse.json({ error: message }, {
+    const operational = error instanceof AiOperationalError ? { code: error.code, requestId: error.requestId } : {};
+    return NextResponse.json({ error: message, ...operational }, {
       status,
       headers: {
         "Cache-Control": "private, no-store, max-age=0",

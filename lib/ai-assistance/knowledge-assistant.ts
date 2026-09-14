@@ -1,8 +1,10 @@
 import { randomUUID } from "node:crypto";
 import type { Readable } from "node:stream";
-import { AiRequestOutcome, Prisma, RepositoryDocumentVisibility, RepositoryMalwareScanStatus } from "@prisma/client";
+import { AiRequestOutcome, Prisma, RepositoryDocumentVisibility } from "@prisma/client";
 import { roleSnapshotForRoles } from "@/lib/authorization/effective-access";
 import { aiKnowledgeProvider } from "@/lib/ai-assistance/provider";
+import { aiRepositoryDocumentMalwareWhere } from "@/lib/ai-assistance/knowledge-eligibility";
+import { AiOperationalError, classifyAiOperationalError, safeAiUnavailableMessage } from "@/lib/ai-assistance/operational-error";
 import { assertKnowledgeQuestionIsMinimized, normalizeAiQuestion, redactAiContentForAudit } from "@/lib/ai-assistance/privacy";
 import { estimateAiCostCentavos, recordAiDeniedRequest, requireAiRuntimeAccess, type AiExperience } from "@/lib/ai-assistance/runtime-policy";
 import { getAppUrl } from "@/lib/app-url";
@@ -185,7 +187,7 @@ async function authorizedSources(input: { tenantId: string; experience: AiExperi
       status: "PUBLISHED",
       ...(visibility ? { visibility } : {}),
       privacyClassification: input.experience === "RESIDENT" ? "PUBLIC" : { in: ["PUBLIC", "INTERNAL"] },
-      malwareScanStatus: { notIn: ["PENDING", "FAILED", "BLOCKED"] },
+      malwareScanStatus: aiRepositoryDocumentMalwareWhere(),
       ...effectiveFilter(input.now),
     },
     select: { id: true, title: true, documentReference: true, currentRevision: true, checksumSha256: true, effectiveAt: true, category: { select: { name: true } } },
@@ -478,7 +480,7 @@ function residentDocumentWhere(tenantId: string, now: Date): Prisma.RepositoryDo
     aiEnabled: true,
     status: "PUBLISHED",
     visibility: RepositoryDocumentVisibility.TENANT_PUBLIC,
-    malwareScanStatus: { notIn: [RepositoryMalwareScanStatus.PENDING, RepositoryMalwareScanStatus.FAILED, RepositoryMalwareScanStatus.BLOCKED] },
+    malwareScanStatus: aiRepositoryDocumentMalwareWhere(),
     ...effectiveFilter(now),
   };
 }
@@ -489,7 +491,7 @@ function staffDocumentWhere(tenantId: string, now: Date): Prisma.RepositoryDocum
     aiEnabled: true,
     status: "PUBLISHED",
     visibility: { in: [RepositoryDocumentVisibility.TENANT_PUBLIC, RepositoryDocumentVisibility.INTERNAL] },
-    malwareScanStatus: { notIn: [RepositoryMalwareScanStatus.PENDING, RepositoryMalwareScanStatus.FAILED, RepositoryMalwareScanStatus.BLOCKED] },
+    malwareScanStatus: aiRepositoryDocumentMalwareWhere(),
     ...effectiveFilter(now),
   };
 }
@@ -1305,17 +1307,19 @@ export async function answerTenantKnowledgeQuestion(input: { experience: AiExper
     ]);
     return { conversationId: conversation.id, answer, sources, requestId };
   } catch (error) {
+    const code = classifyAiOperationalError(error);
     console.error("[ai-assistance] Provider answer failed.", {
       tenantId,
       actorId,
       conversationId: conversation.id,
       requestId,
       provider: "OPENAI",
+      code,
       error: error instanceof Error ? error.message : String(error),
     });
-    await prisma.aiUsageLedger.create({ data: { tenantId, actorId, requestId, outcome: AiRequestOutcome.PROVIDER_ERROR, latencyMs: Date.now() - started, denialReason: "PROVIDER_ERROR" } }).catch(() => undefined);
-    await prisma.auditLog.create({ data: { tenantId, actorId, module: "AI_ASSISTANCE", action: "AI_PROVIDER_ERROR", entityType: "AiConversation", entityId: conversation.id, metadata: { requestId, provider: "OPENAI" } } }).catch(() => undefined);
-    throw new Error("HOAHub AI is temporarily unavailable. Core HOAHub services remain available.");
+    await prisma.aiUsageLedger.create({ data: { tenantId, actorId, requestId, outcome: AiRequestOutcome.PROVIDER_ERROR, latencyMs: Date.now() - started, denialReason: code } }).catch(() => undefined);
+    await prisma.auditLog.create({ data: { tenantId, actorId, module: "AI_ASSISTANCE", action: "AI_PROVIDER_ERROR", entityType: "AiConversation", entityId: conversation.id, metadata: { requestId, provider: "OPENAI", code } } }).catch(() => undefined);
+    throw new AiOperationalError(code, safeAiUnavailableMessage(), requestId);
   }
 }
 

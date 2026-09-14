@@ -276,6 +276,8 @@ AI is commercially/governance/permission controlled. Staff Copilot is tenant sco
 
 AI knowledge management is delegated separately from tenant AI governance. `/admin/ai-assistance/knowledge`, source eligibility updates, indexing, and purge actions require `AI_KNOWLEDGE_MANAGE`; `/admin/ai-assistance` governance controls require `AI_ASSISTANCE_MANAGE`. Resident AI answers can capture thumbs-up/needs-review feedback in tenant-scoped `AiFeedback`. Resident payment and collection answers may include `/receipts/payment/[id]` or `/receipts/collection/[id]` deep links only for records selected under the signed-in homeowner and tenant; the receipt route remains the authorization boundary.
 
+AI readiness and retrieval must fail closed on the same tenant-scoped operational gates used by runtime requests. Governance UI must not show `Ready` from flags alone: provider credential presence, tenant runtime/gates, and at least one currently indexed AI knowledge binding whose source document is still published, AI-enabled, tenant authorized, effective, checksum-current, and malware-validated are required before readiness is shown. Repository documents with malware state `NOT_CONFIGURED`, `PENDING`, `FAILED`, or `BLOCKED` are not eligible for AI indexing, citation authorization, or RAG retrieval; legacy `NOT_CONFIGURED` documents must be reconciled/validated without deleting production data.
+
 ## Authentication and Protected Navigation
 
 - `https://hoahub.tech/login` is the universal login boundary.

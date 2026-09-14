@@ -209,7 +209,7 @@ async function setup() {
       fileExtension: "txt",
       fileSizeBytes: BigInt(Buffer.byteLength(repositoryText, "utf8")),
       checksumSha256: repositoryChecksum,
-      malwareScanStatus: "NOT_CONFIGURED",
+      malwareScanStatus: "PASSED",
       aiEnabled: true,
       privacyClassification: "PUBLIC",
       issuingBody: "E2E HOA Board",

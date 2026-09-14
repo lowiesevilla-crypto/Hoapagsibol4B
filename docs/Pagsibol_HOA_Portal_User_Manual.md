@@ -1,7 +1,7 @@
 # PAGSIBOL VILLAGE PH2 4B EAST HOA Portal - User Manual
 
 Generated: June 24, 2026
-Last revised: September 14, 2026 (AI Assistance completion candidate: delegated knowledge management, answer feedback, human-authority guard, and receipt deep links; production deployment and authenticated UAT remain pending)
+Last revised: September 14, 2026 (AI Assistance completion candidate: delegated knowledge management, answer feedback, human-authority guard, receipt deep links, provider/retrieval diagnostics, and malware-validated knowledge readiness; production deployment and authenticated UAT remain pending)
 
 This manual explains how officers and homeowners use the portal. Screenshots were captured from the current clean database, so many tables show empty states until real homeowners, bills, payments, employees, and records are added.
 
@@ -313,6 +313,8 @@ Homeowners can view upcoming events.
 ## 16. AI Assistance
 
 AI Assistance is controlled by plan entitlement, platform release switch, tenant governance evidence, and role permissions. Tenant administrators with **AI Assistance management** can record governance controls. Delegated users with **AI knowledge-management** permission can classify, enable, index, or purge approved knowledge sources without access to governance switches.
+
+The tenant AI status shows **Ready** only when the tenant gates, platform switch, provider credential, and at least one malware-validated indexed knowledge source are all present. A published document that still shows **Malware state: Not Configured** is not considered AI-ready and must be validated/reconciled before it can be indexed or cited by the assistant.
 
 Resident AI answers use approved tenant knowledge plus the signed-in homeowner's own authorized account data. AI does not approve requests, post payments, issue penalties, make legal or medical determinations, or direct users outside HOAHub authority. Residents can mark answers as helpful or needing review. When the assistant answers about recent payments or collections, it may show a receipt link such as `/receipts/payment/[id]` or `/receipts/collection/[id]`; opening the receipt still requires the normal signed-in tenant and homeowner authorization.
 

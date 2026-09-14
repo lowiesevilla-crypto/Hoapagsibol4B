@@ -3,6 +3,8 @@ import { randomUUID } from "node:crypto";
 import { AiRequestOutcome, RepositoryDocumentVisibility } from "@prisma/client";
 import { roleSnapshotForRoles } from "@/lib/authorization/effective-access";
 import { answerTenantKnowledgeQuestion, AI_NO_SOURCE_RESPONSE } from "@/lib/ai-assistance/knowledge-assistant";
+import { aiRepositoryDocumentMalwareWhere } from "@/lib/ai-assistance/knowledge-eligibility";
+import { AiOperationalError, classifyAiOperationalError, safeAiUnavailableMessage } from "@/lib/ai-assistance/operational-error";
 import { assertKnowledgeQuestionIsMinimized, normalizeAiQuestion, redactAiContentForAudit } from "@/lib/ai-assistance/privacy";
 import { estimateAiCostCentavos, recordAiDeniedRequest, requireAiRuntimeAccess, type AiExperience } from "@/lib/ai-assistance/runtime-policy";
 import { searchTenantReasoningEvidence, synthesizeTenantReasoningAnswer, type AiGroundedEvidence, type AiReasoningSearchCandidate } from "@/lib/ai-assistance/reasoning-provider";
@@ -124,7 +126,7 @@ async function authorizeAndRerankEvidence(input: { tenantId: string; experience:
       status: "PUBLISHED",
       ...(visibility ? { visibility } : {}),
       privacyClassification: input.experience === "RESIDENT" ? "PUBLIC" : { in: ["PUBLIC", "INTERNAL"] },
-      malwareScanStatus: { notIn: ["PENDING", "FAILED", "BLOCKED"] },
+      malwareScanStatus: aiRepositoryDocumentMalwareWhere(),
       ...effectiveFilter(input.now),
     },
     select: {
@@ -279,16 +281,18 @@ export async function answerTenantKnowledgeQuestionWithReasoning(input: { experi
     ]);
     return { conversationId: conversation.id, answer, sources, requestId };
   } catch (error) {
+    const code = classifyAiOperationalError(error);
     console.error("[ai-assistance] Grounded reasoning provider failed.", {
       tenantId,
       actorId,
       conversationId: conversation.id,
       requestId,
       provider: "OPENAI",
+      code,
       error: error instanceof Error ? error.message : String(error),
     });
-    await prisma.aiUsageLedger.create({ data: { tenantId, actorId, requestId, outcome: AiRequestOutcome.PROVIDER_ERROR, latencyMs: Date.now() - started, denialReason: "PROVIDER_ERROR" } }).catch(() => undefined);
-    await prisma.auditLog.create({ data: { tenantId, actorId, module: "AI_ASSISTANCE", action: "AI_PROVIDER_ERROR", entityType: "AiConversation", entityId: conversation.id, metadata: { requestId, provider: "OPENAI", reasoningPipeline: true } } }).catch(() => undefined);
-    throw new Error("HOAHub AI is temporarily unavailable. Core HOAHub services remain available.");
+    await prisma.aiUsageLedger.create({ data: { tenantId, actorId, requestId, outcome: AiRequestOutcome.PROVIDER_ERROR, latencyMs: Date.now() - started, denialReason: code } }).catch(() => undefined);
+    await prisma.auditLog.create({ data: { tenantId, actorId, module: "AI_ASSISTANCE", action: "AI_PROVIDER_ERROR", entityType: "AiConversation", entityId: conversation.id, metadata: { requestId, provider: "OPENAI", reasoningPipeline: true, code } } }).catch(() => undefined);
+    throw new AiOperationalError(code, safeAiUnavailableMessage(), requestId);
   }
 }

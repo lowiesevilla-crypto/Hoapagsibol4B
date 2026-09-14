@@ -4,6 +4,9 @@ import {
   PlatformInvoiceStatus,
   PlatformPaymentGateway,
   PlatformPaymentStatus,
+  TenantStatus,
+  TenantSubscriptionStatus,
+  TenantSuspensionReason,
 } from "@prisma/client";
 import { platformPrisma as prisma } from "@/lib/db";
 
@@ -35,23 +38,10 @@ export async function cancelPlatformInvoice(input: {
   }
 
   if (!CANCELLABLE_STATUSES.some((status) => status === invoice.status)) {
-    throw new Error("Only an unpaid draft, open, or overdue invoice can be cancelled.");
+    throw new Error("Only an unpaid draft, open, or overdue invoice can be deleted from active billing.");
   }
   if (Number(invoice.amountPaid) > 0.009 || invoice._count.allocations > 0) {
-    throw new Error("This invoice has payment history and cannot be cancelled.");
-  }
-
-  const newerInvoice = await prisma.platformInvoice.findFirst({
-    where: {
-      subscriptionId: invoice.subscriptionId,
-      billingPeriodStart: { gt: invoice.billingPeriodStart },
-      status: { notIn: [PlatformInvoiceStatus.CANCELLED, PlatformInvoiceStatus.VOID] },
-    },
-    select: { id: true, invoiceNumber: true },
-    orderBy: { billingPeriodStart: "asc" },
-  });
-  if (newerInvoice) {
-    throw new Error(`Cancel protected: newer billing cycle ${newerInvoice.invoiceNumber} already exists.`);
+    throw new Error("This invoice has payment history and cannot be deleted.");
   }
 
   const pendingPayments = await prisma.platformPayment.findMany({
@@ -65,7 +55,7 @@ export async function cancelPlatformInvoice(input: {
     take: 500,
   });
   if (pendingPayments.some((payment) => metadataInvoiceId(payment.metadata) === invoice.id)) {
-    throw new Error("This invoice has an active online payment checkout and cannot be cancelled safely.");
+    throw new Error("This invoice has an active online payment checkout and cannot be deleted safely.");
   }
 
   const now = new Date();
@@ -85,7 +75,79 @@ export async function cancelPlatformInvoice(input: {
       },
     });
     if (changed.count !== 1) {
-      throw new Error("Invoice changed while cancellation was being processed. Refresh and try again.");
+      throw new Error("Invoice changed while deletion was being processed. Refresh and try again.");
+    }
+
+    const remainingOutstanding = await tx.platformInvoice.findFirst({
+      where: {
+        tenantId: input.tenantId,
+        outstandingBalance: { gt: 0 },
+        status: {
+          in: [
+            PlatformInvoiceStatus.OPEN,
+            PlatformInvoiceStatus.PARTIALLY_PAID,
+            PlatformInvoiceStatus.OVERDUE,
+          ],
+        },
+      },
+      select: { id: true },
+    });
+
+    if (!remainingOutstanding) {
+      const activeSubscription = await tx.tenantSubscription.findFirst({
+        where: {
+          tenantId: input.tenantId,
+          status: { notIn: [TenantSubscriptionStatus.CANCELLED, TenantSubscriptionStatus.EXPIRED] },
+        },
+        orderBy: { createdAt: "desc" },
+        select: { id: true, status: true },
+      });
+      const activeSuspensions = await tx.tenantSuspensionRecord.findMany({
+        where: { tenantId: input.tenantId, reinstatedAt: null },
+        select: { id: true, reason: true },
+      });
+      const nonPaymentOnly = activeSuspensions.length > 0
+        && activeSuspensions.every((item) => item.reason === TenantSuspensionReason.NON_PAYMENT);
+      const delinquencyStatus = activeSubscription
+        && [
+          TenantSubscriptionStatus.PAST_DUE,
+          TenantSubscriptionStatus.GRACE,
+          TenantSubscriptionStatus.RESTRICTED,
+        ].includes(activeSubscription.status);
+      const nonPaymentSuspended = activeSubscription?.status === TenantSubscriptionStatus.SUSPENDED && nonPaymentOnly;
+
+      if (activeSubscription?.id === invoice.subscriptionId && (delinquencyStatus || nonPaymentSuspended)) {
+        await tx.tenantSubscription.update({
+          where: { id: activeSubscription.id },
+          data: { status: TenantSubscriptionStatus.ACTIVE },
+        });
+
+        if (nonPaymentOnly) {
+          await tx.tenantSuspensionRecord.updateMany({
+            where: {
+              tenantId: input.tenantId,
+              reinstatedAt: null,
+              reason: TenantSuspensionReason.NON_PAYMENT,
+            },
+            data: {
+              reinstatedAt: now,
+              ...(input.actorId ? { reinstatedById: input.actorId } : {}),
+            },
+          });
+          await tx.tenant.update({
+            where: { id: input.tenantId },
+            data: {
+              status: TenantStatus.ACTIVE,
+              subscriptionStatus: TenantSubscriptionStatus.ACTIVE,
+            },
+          });
+        } else {
+          await tx.tenant.update({
+            where: { id: input.tenantId },
+            data: { subscriptionStatus: TenantSubscriptionStatus.ACTIVE },
+          });
+        }
+      }
     }
 
     await tx.auditLog.create({
@@ -104,6 +166,7 @@ export async function cancelPlatformInvoice(input: {
           previousStatus: invoice.status,
           previousOutstanding,
           scheduleRewound: false,
+          removedFromActiveBilling: true,
         },
       },
     });

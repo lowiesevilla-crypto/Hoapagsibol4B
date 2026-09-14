@@ -1,5 +1,6 @@
 import "server-only";
 import type { AiModelTier } from "@/lib/ai-assistance/commercial";
+import type { AiOperationalErrorCode } from "@/lib/ai-assistance/operational-error";
 
 export type AiReasoningSearchCandidate = {
   fileId: string;
@@ -34,6 +35,27 @@ type SearchInput = {
   vectorStoreId: string;
   allowedAudiences: Array<"RESIDENT" | "STAFF">;
 };
+
+function classifyOpenAiError(status: number, message: string): AiOperationalErrorCode {
+  if (status === 401 || status === 403) return "PROVIDER_AUTH_FAILURE";
+  if (status === 404 && /model/i.test(message)) return "MODEL_UNAVAILABLE";
+  if (status === 408 || /timeout/i.test(message)) return "PROVIDER_TIMEOUT";
+  if (status === 429 && /quota|billing|insufficient/i.test(message)) return "PROVIDER_QUOTA_FAILURE";
+  if (status === 429) return "PROVIDER_RATE_LIMIT";
+  if (status >= 500) return "AI_GATEWAY_UNAVAILABLE";
+  return "RETRIEVAL_FAILURE";
+}
+
+function isUnsupportedSearchOption(status: number, message: string) {
+  return status === 400 && /(unknown|unsupported|unrecognized|invalid).*(rewrite_query|ranking_options|score_threshold|ranker)/i.test(message);
+}
+
+async function parseProviderError(response: Response) {
+  const body = await response.json().catch(() => ({})) as Record<string, unknown>;
+  const errorRecord = body.error && typeof body.error === "object" ? body.error as Record<string, unknown> : {};
+  const message = typeof errorRecord.message === "string" ? errorRecord.message : `OpenAI retrieval error (${response.status}).`;
+  return { body, message, code: classifyOpenAiError(response.status, message) };
+}
 
 type SynthesisInput = {
   question: string;
@@ -109,23 +131,40 @@ export async function searchTenantReasoningEvidence(input: SearchInput): Promise
     }];
   }
 
-  const response = await fetch(`https://api.openai.com/v1/vector_stores/${encodeURIComponent(input.vectorStoreId)}/search`, {
+  const searchUrl = `https://api.openai.com/v1/vector_stores/${encodeURIComponent(input.vectorStoreId)}/search`;
+  const baseBody = {
+    query: input.question,
+    filters: { type: "in", key: "audience", value: input.allowedAudiences },
+    max_num_results: 16,
+  };
+  let response = await fetch(searchUrl, {
     method: "POST",
     headers: { Authorization: `Bearer ${providerKey()}`, "Content-Type": "application/json" },
     body: JSON.stringify({
-      query: input.question,
-      filters: { type: "in", key: "audience", value: input.allowedAudiences },
-      max_num_results: 16,
+      ...baseBody,
       ranking_options: { ranker: "auto", score_threshold: 0.08 },
       rewrite_query: true,
     }),
     signal: AbortSignal.timeout(30_000),
   });
-  const body = await response.json() as Record<string, unknown>;
   if (!response.ok) {
-    const errorRecord = body.error && typeof body.error === "object" ? body.error as Record<string, unknown> : {};
-    throw new Error(typeof errorRecord.message === "string" ? `OpenAI retrieval error: ${errorRecord.message}` : `OpenAI retrieval error (${response.status}).`);
+    const firstError = await parseProviderError(response);
+    if (isUnsupportedSearchOption(response.status, firstError.message)) {
+      response = await fetch(searchUrl, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${providerKey()}`, "Content-Type": "application/json" },
+        body: JSON.stringify(baseBody),
+        signal: AbortSignal.timeout(30_000),
+      });
+      if (!response.ok) {
+        const retryError = await parseProviderError(response);
+        throw new Error(`${retryError.code}: ${retryError.message}`);
+      }
+    } else {
+      throw new Error(`${firstError.code}: ${firstError.message}`);
+    }
   }
+  const body = await response.json() as Record<string, unknown>;
   const data = Array.isArray(body.data) ? body.data : [];
   return data.flatMap((item) => {
     if (!item || typeof item !== "object") return [];

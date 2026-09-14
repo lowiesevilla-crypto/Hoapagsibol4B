@@ -2,6 +2,7 @@ import { Role } from "@prisma/client";
 import { Bot, FileCheck2, LockKeyhole, Scale, ShieldCheck } from "lucide-react";
 import Link from "next/link";
 import { saveTenantAiGovernanceAction } from "@/lib/actions/ai-assistance-governance";
+import { aiRepositoryDocumentMalwareWhere } from "@/lib/ai-assistance/knowledge-eligibility";
 import { resolveAiAssistanceEntitlement } from "@/lib/ai-assistance/entitlement";
 import { requireUser } from "@/lib/auth";
 import { prisma } from "@/lib/db";
@@ -24,10 +25,11 @@ export default async function AdminAiAssistancePage({ searchParams }: { searchPa
   const [entitlement, configuration, indexedCount, eligibleCount] = await Promise.all([
     resolveAiAssistanceEntitlement(user.tenantId),
     prisma.tenantAiConfiguration.findUnique({ where: { tenantId: user.tenantId } }),
-    prisma.aiKnowledgeBinding.count({ where: { tenantId: user.tenantId, indexStatus: "INDEXED" } }),
-    prisma.repositoryDocument.count({ where: { tenantId: user.tenantId, aiEnabled: true, status: "PUBLISHED" } }),
+    prisma.aiKnowledgeBinding.count({ where: { tenantId: user.tenantId, indexStatus: "INDEXED", document: { aiEnabled: true, status: "PUBLISHED", malwareScanStatus: aiRepositoryDocumentMalwareWhere() } } }),
+    prisma.repositoryDocument.count({ where: { tenantId: user.tenantId, aiEnabled: true, status: "PUBLISHED", malwareScanStatus: aiRepositoryDocumentMalwareWhere() } }),
   ]);
   const globalRuntimeEnabled = process.env.AI_RUNTIME_ENABLED === "true";
+  const providerConfigured = Boolean(process.env.OPENAI_API_KEY);
   const success = one(query.success);
   const error = one(query.error);
   const privacyNoticeReady = Boolean(configuration?.privacyNoticePublishedAt && configuration.privacyNoticeVersion);
@@ -42,7 +44,7 @@ export default async function AdminAiAssistancePage({ searchParams }: { searchPa
     Boolean(configuration?.dataSubjectRightsContact),
   ];
   const tenantGovernanceReady = requiredGates.every(Boolean);
-  const operational = entitlement.enabled && globalRuntimeEnabled && Boolean(configuration?.runtimeEnabled) && tenantGovernanceReady;
+  const operational = entitlement.enabled && globalRuntimeEnabled && providerConfigured && Boolean(configuration?.runtimeEnabled) && tenantGovernanceReady && indexedCount > 0;
 
   return <div className="space-y-6">
     <div className="flex flex-wrap items-start justify-between gap-4"><div><p className="text-xs font-black uppercase tracking-[.16em] text-indigo-700">Tenant AI governance</p><h1 className="mt-1 text-3xl font-black text-slate-950">HOAHub AI Assistance</h1><p className="mt-2 max-w-3xl text-sm leading-6 text-slate-600">Control whether this tenant may use AI, record required privacy/governance evidence, and manage the approved knowledge boundary. Commercial entitlement alone never activates AI processing.</p></div><Link className="btn-secondary" href="/admin/ai-assistance/knowledge">Manage AI knowledge</Link></div>
@@ -82,7 +84,7 @@ export default async function AdminAiAssistancePage({ searchParams }: { searchPa
         </div>
         <aside>
           <h2 className="text-xl font-black text-slate-950">Release readiness</h2>
-          <div className="mt-5 space-y-2">{gate("Board / HOA approval", Boolean(configuration?.boardApprovedAt))}{gate("PIA approval", Boolean(configuration?.piaApprovedAt))}{gate("DPO / privacy approval", Boolean(configuration?.dpoApprovedAt))}{gate("Provider/vendor review", Boolean(configuration?.providerApprovedAt))}{gate("Cross-border review", Boolean(configuration?.crossBorderReviewApprovedAt))}{gate("Privacy notice", privacyNoticeReady)}{gate("Lawful basis", Boolean(configuration?.lawfulBasis))}{gate("Rights contact", Boolean(configuration?.dataSubjectRightsContact))}</div>
+          <div className="mt-5 space-y-2">{gate("Board / HOA approval", Boolean(configuration?.boardApprovedAt))}{gate("PIA approval", Boolean(configuration?.piaApprovedAt))}{gate("DPO / privacy approval", Boolean(configuration?.dpoApprovedAt))}{gate("Provider/vendor review", Boolean(configuration?.providerApprovedAt))}{gate("Cross-border review", Boolean(configuration?.crossBorderReviewApprovedAt))}{gate("Privacy notice", privacyNoticeReady)}{gate("Lawful basis", Boolean(configuration?.lawfulBasis))}{gate("Rights contact", Boolean(configuration?.dataSubjectRightsContact))}{gate("Provider credential", providerConfigured)}{gate("Validated indexed knowledge", indexedCount > 0)}</div>
         </aside>
       </div>
 

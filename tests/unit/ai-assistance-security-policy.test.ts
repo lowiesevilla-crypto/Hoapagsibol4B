@@ -58,6 +58,27 @@ test("OpenAI gateway uses server-only Responses file search, no provider storage
   assert.doesNotMatch(provider, /NEXT_PUBLIC_OPENAI/);
 });
 
+test("AI knowledge eligibility requires passed malware validation before indexing, retrieval, readiness, and citations", async () => {
+  const [eligibility, providerIndex, assistant, reasoning, settingsPage, knowledgePage] = await Promise.all([
+    readFile("lib/ai-assistance/knowledge-eligibility.ts", "utf8"),
+    readFile("lib/ai-assistance/provider-index.ts", "utf8"),
+    readFile("lib/ai-assistance/knowledge-assistant.ts", "utf8"),
+    readFile("lib/ai-assistance/reasoning-assistant.ts", "utf8"),
+    readFile("app/admin/ai-assistance/page.tsx", "utf8"),
+    readFile("app/admin/ai-assistance/knowledge/page.tsx", "utf8"),
+  ]);
+  assert.match(eligibility, /RepositoryMalwareScanStatus\.PASSED/);
+  assert.match(providerIndex, /isAiRepositoryDocumentMalwareValidated\(document\.malwareScanStatus\)/);
+  assert.match(assistant, /malwareScanStatus:\s*aiRepositoryDocumentMalwareWhere\(\)/);
+  assert.match(reasoning, /malwareScanStatus:\s*aiRepositoryDocumentMalwareWhere\(\)/);
+  assert.match(settingsPage, /indexedCount > 0/);
+  assert.match(settingsPage, /providerConfigured/);
+  assert.match(settingsPage, /process\.env\.OPENAI_API_KEY/);
+  assert.match(settingsPage, /malwareScanStatus:\s*aiRepositoryDocumentMalwareWhere\(\)/);
+  assert.match(knowledgePage, /isAiRepositoryDocumentMalwareValidated\(document\.malwareScanStatus\)/);
+  assert.doesNotMatch(providerIndex, /notIn:\s*\["PENDING",\s*"FAILED",\s*"BLOCKED"\]/);
+});
+
 test("resident ask route never accepts browser tenant authority and disables caching", async () => {
   const route = await readFile("app/api/portal/ai/ask/route.ts", "utf8");
   assert.match(route, /answerTenantKnowledgeQuestion/);

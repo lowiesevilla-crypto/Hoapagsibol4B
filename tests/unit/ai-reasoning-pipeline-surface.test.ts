@@ -25,6 +25,7 @@ test("grounded reasoning reauthorizes retrieved provider evidence against tenant
   assert.match(orchestrator, /indexStatus:\s*"INDEXED"/);
   assert.match(orchestrator, /aiEnabled:\s*true/);
   assert.match(orchestrator, /status:\s*"PUBLISHED"/);
+  assert.match(orchestrator, /malwareScanStatus:\s*aiRepositoryDocumentMalwareWhere\(\)/);
   assert.match(orchestrator, /binding\.indexedChecksumSha256 !== document\.checksumSha256/);
   assert.match(orchestrator, /NO_AUTHORIZED_REASONING_EVIDENCE/);
 });
@@ -38,6 +39,11 @@ test("reasoning retrieval combines semantic retrieval, lexical reranking, source
   assert.match(provider, /filters:\s*\{\s*type:\s*"in",\s*key:\s*"audience"/);
   assert.match(provider, /rewrite_query:\s*true/);
   assert.match(provider, /score_threshold:\s*0\.08/);
+  assert.match(provider, /isUnsupportedSearchOption/);
+  assert.match(provider, /PROVIDER_AUTH_FAILURE/);
+  assert.match(provider, /PROVIDER_RATE_LIMIT/);
+  assert.match(provider, /PROVIDER_QUOTA_FAILURE/);
+  assert.match(provider, /AI_GATEWAY_UNAVAILABLE/);
   assert.match(orchestrator, /semantic \* 0\.62 \+ lexical \* 0\.28/);
   assert.match(orchestrator, /count >= 2/);
   assert.match(orchestrator, /selected\.length >= 8/);
@@ -62,4 +68,26 @@ test("reasoning answers retain evidence-level locators and index metadata needed
   assert.match(providerIndex, /effective_at:/);
   assert.match(providerIndex, /authority_priority:/);
   assert.match(providerIndex, /updateProviderFileAttributes/);
+});
+
+test("provider failures keep safe browser copy while recording classified operational diagnostics", async () => {
+  const [reasoningAssistant, knowledgeAssistant, adminRoute, portalRoute, assistantComponent] = await Promise.all([
+    readFile("lib/ai-assistance/reasoning-assistant.ts", "utf8"),
+    readFile("lib/ai-assistance/knowledge-assistant.ts", "utf8"),
+    readFile("app/api/admin/ai/ask/route.ts", "utf8"),
+    readFile("app/api/portal/ai/ask/route.ts", "utf8"),
+    readFile("components/ai/resident-ai-assistant.tsx", "utf8"),
+  ]);
+  for (const source of [reasoningAssistant, knowledgeAssistant]) {
+    assert.match(source, /classifyAiOperationalError/);
+    assert.match(source, /denialReason:\s*code/);
+    assert.match(source.replace(/\n/g, " "), /metadata:\s*\{[^}]*code/);
+    assert.match(source, /safeAiUnavailableMessage\(\)/);
+  }
+  for (const route of [adminRoute, portalRoute]) {
+    assert.match(route, /AiOperationalError/);
+    assert.match(route, /code:\s*error\.code/);
+    assert.match(route, /requestId:\s*error\.requestId/);
+  }
+  assert.match(assistantComponent, /Request \$\{body\.requestId\}/);
 });

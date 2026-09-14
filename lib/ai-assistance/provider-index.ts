@@ -2,6 +2,7 @@ import "server-only";
 import { createHash } from "node:crypto";
 import type { Readable } from "node:stream";
 import { requireAiAssistanceEntitlement } from "@/lib/ai-assistance/entitlement";
+import { isAiRepositoryDocumentMalwareValidated } from "@/lib/ai-assistance/knowledge-eligibility";
 import { requireUser } from "@/lib/auth";
 import { Permission } from "@/lib/authorization/permissions";
 import { repositoryStorage } from "@/lib/document-repository/storage";
@@ -204,7 +205,7 @@ export async function indexRepositoryDocumentForAi(documentId: string) {
   if (!document.aiEnabled || document.status !== "PUBLISHED") throw new Error("Only published documents explicitly enabled for AI can be indexed.");
   if (["PERSONAL", "SENSITIVE", "RESTRICTED"].includes(document.privacyClassification)) throw new Error("Personal, sensitive, or restricted documents cannot enter the general AI knowledge index.");
   if (document.visibility === "RESTRICTED") throw new Error("Restricted documents cannot enter the general AI knowledge index.");
-  if (["PENDING", "FAILED", "BLOCKED"].includes(document.malwareScanStatus)) throw new Error("Document malware status does not permit AI indexing.");
+  if (!isAiRepositoryDocumentMalwareValidated(document.malwareScanStatus)) throw new Error("Document malware validation must pass before AI indexing.");
   if (document.effectiveAt && document.effectiveAt > now) throw new Error("A future-effective document cannot be indexed for active AI retrieval.");
   if (document.expiresAt && document.expiresAt <= now) throw new Error("An expired document cannot be indexed for active AI retrieval.");
 

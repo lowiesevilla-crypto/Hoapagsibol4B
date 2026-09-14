@@ -2,6 +2,7 @@ import { AiPrivacyClassification, Role } from "@prisma/client";
 import { Bot, DatabaseZap, ShieldAlert } from "lucide-react";
 import Link from "next/link";
 import { indexDocumentForAiAction, purgeDocumentFromAiAction, updateDocumentAiEligibilityAction } from "@/lib/actions/ai-knowledge";
+import { isAiRepositoryDocumentMalwareValidated } from "@/lib/ai-assistance/knowledge-eligibility";
 import { requireUser } from "@/lib/auth";
 import { Permission } from "@/lib/authorization/permissions";
 import { prisma } from "@/lib/db";
@@ -48,7 +49,7 @@ export default async function AdminAiKnowledgePage({ searchParams }: { searchPar
       {documents.map((document) => {
         const binding = bindingByDocument.get(document.id);
         const checksumCurrent = binding?.indexedChecksumSha256 === document.checksumSha256;
-        const readyForIndex = document.aiEnabled && document.status === "PUBLISHED" && !["PERSONAL", "SENSITIVE", "RESTRICTED"].includes(document.privacyClassification) && document.visibility !== "RESTRICTED" && !["PENDING", "FAILED", "BLOCKED"].includes(document.malwareScanStatus);
+        const readyForIndex = document.aiEnabled && document.status === "PUBLISHED" && !["PERSONAL", "SENSITIVE", "RESTRICTED"].includes(document.privacyClassification) && document.visibility !== "RESTRICTED" && isAiRepositoryDocumentMalwareValidated(document.malwareScanStatus);
         return <article key={document.id} className="rounded-3xl border bg-white p-5 shadow-sm sm:p-6">
           <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
             <div className="min-w-0"><div className="flex flex-wrap items-center gap-2"><span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-black text-slate-600">{document.category.name}</span><span className={`rounded-full px-2.5 py-1 text-xs font-black ${stateClass(binding?.indexStatus ?? "NOT_INDEXED")}`}>{label(binding?.indexStatus ?? "NOT_INDEXED")}</span>{binding?.indexStatus === "INDEXED" && !checksumCurrent && <span className="rounded-full bg-amber-100 px-2.5 py-1 text-xs font-black text-amber-900">REINDEX REQUIRED</span>}</div><h2 className="mt-3 text-lg font-black text-slate-950">{document.title}</h2><p className="mt-1 text-sm text-slate-500">{document.documentReference || "No reference"} · Rev {document.currentRevision} · {label(document.status)} · {label(document.visibility)}</p>{binding?.lastError && <p className="mt-2 rounded-xl bg-rose-50 p-3 text-xs leading-5 text-rose-800">{binding.lastError}</p>}</div>

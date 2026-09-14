@@ -33,7 +33,7 @@ export async function generateMetadata(): Promise<Metadata> {
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
   const user = await requireUser(Role.ADMIN);
   const pathname = (await headers()).get("x-hoa-pathname") || "/admin/dashboard";
-  if (!canAccessAdminPath(user.roles, pathname)) redirect(`${adminHomeForRole(user.roles)}?error=You%20do%20not%20have%20access%20to%20this%20module.`);
+  if (!canAccessAdminPath(user.roles, pathname, user.permissions)) redirect(`${adminHomeForRole(user.roles)}?error=You%20do%20not%20have%20access%20to%20this%20module.`);
 
   const enabledModules = await getEnabledTenantModules(user.tenantId);
   const requestedModule = moduleForPath(pathname);
@@ -52,9 +52,12 @@ export default async function AdminLayout({ children }: { children: React.ReactN
   if (pathname.startsWith("/admin/petty-cash") && !pettyCashEntitlement.enabled) redirect("/admin/dashboard?error=Petty%20Cash%20Voucher%20is%20not%20included%20in%20your%20active%20subscription%20plan.");
 
   const canManageAi = user.permissions.includes(Permission.AI_ASSISTANCE_MANAGE);
+  const canManageAiKnowledge = user.permissions.includes(Permission.AI_KNOWLEDGE_MANAGE);
   if (pathname.startsWith("/admin/ai-assistance")) {
     if (!aiAssistanceEntitlement.enabled) redirect("/admin/dashboard?error=AI%20Assistance%20is%20not%20included%20in%20your%20active%20subscription%20plan.");
-    if (!canManageAi) redirect("/admin/dashboard?error=You%20do%20not%20have%20permission%20to%20manage%20AI%20Assistance.");
+    if (pathname.startsWith("/admin/ai-assistance/knowledge")) {
+      if (!canManageAiKnowledge) redirect("/admin/dashboard?error=You%20do%20not%20have%20permission%20to%20manage%20AI%20knowledge.");
+    } else if (!canManageAi) redirect("/admin/dashboard?error=You%20do%20not%20have%20permission%20to%20manage%20AI%20Assistance.");
   }
 
   const canUseAi = user.permissions.includes(Permission.AI_ASSISTANCE_USE);
@@ -68,10 +71,10 @@ export default async function AdminLayout({ children }: { children: React.ReactN
   const canAccessPayroll = user.permissions.includes(Permission.PAYROLL_MANAGE) || await userCanAccessPayroll(user.id, user.role);
 
   function authorizedAdminLinks(items: LinkItem[]) {
-    return filterAdminLinksByRole(filterLinksByModules(items, enabledModules), user.roles)
+    return filterAdminLinksByRole(filterLinksByModules(items, enabledModules), user.roles, user.permissions)
       .filter((item) => documentManagementEntitlement.enabled || !item.href.startsWith("/admin/document-management"))
       .filter((item) => pettyCashEntitlement.enabled || !item.href.startsWith("/admin/petty-cash"))
-      .filter((item) => (aiAssistanceEntitlement.enabled && canManageAi) || !item.href.startsWith("/admin/ai-assistance"))
+      .filter((item) => (aiAssistanceEntitlement.enabled && (canManageAi || (canManageAiKnowledge && item.href.startsWith("/admin/ai-assistance/knowledge")))) || !item.href.startsWith("/admin/ai-assistance"))
       .filter((item) => (aiAssistanceEntitlement.enabled && canUseAi) || !item.href.startsWith("/admin/ai-copilot"))
       .filter((item) => canAccessPayroll || !["/admin/employees", "/admin/attendance", "/admin/payroll"].includes(item.href));
   }

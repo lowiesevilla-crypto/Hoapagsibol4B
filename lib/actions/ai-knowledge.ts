@@ -56,6 +56,7 @@ export async function updateDocumentAiEligibilityAction(formData: FormData) {
 }
 
 export async function indexDocumentForAiAction(formData: FormData) {
+  await requireAiKnowledgeManager();
   const documentId = clean(formData.get("documentId"));
   let errorMessage = "";
   try {
@@ -69,6 +70,7 @@ export async function indexDocumentForAiAction(formData: FormData) {
 }
 
 export async function purgeDocumentFromAiAction(formData: FormData) {
+  await requireAiKnowledgeManager();
   const documentId = clean(formData.get("documentId"));
   let errorMessage = "";
   try {

@@ -3,6 +3,7 @@ import { Bot, DatabaseZap, ShieldAlert } from "lucide-react";
 import Link from "next/link";
 import { indexDocumentForAiAction, purgeDocumentFromAiAction, updateDocumentAiEligibilityAction } from "@/lib/actions/ai-knowledge";
 import { requireUser } from "@/lib/auth";
+import { Permission } from "@/lib/authorization/permissions";
 import { prisma } from "@/lib/db";
 
 function one(value: string | string[] | undefined) {
@@ -22,6 +23,7 @@ function stateClass(value: string) {
 
 export default async function AdminAiKnowledgePage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   const user = await requireUser(Role.ADMIN);
+  if (!user.permissions.includes(Permission.AI_KNOWLEDGE_MANAGE)) throw new Error("AI knowledge-management permission is required.");
   const query = await searchParams;
   const [documents, bindings] = await Promise.all([
     prisma.repositoryDocument.findMany({

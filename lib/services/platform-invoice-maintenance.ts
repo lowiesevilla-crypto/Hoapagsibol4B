@@ -35,23 +35,10 @@ export async function cancelPlatformInvoice(input: {
   }
 
   if (!CANCELLABLE_STATUSES.some((status) => status === invoice.status)) {
-    throw new Error("Only an unpaid draft, open, or overdue invoice can be cancelled.");
+    throw new Error("Only an unpaid draft, open, or overdue invoice can be deleted from active billing.");
   }
   if (Number(invoice.amountPaid) > 0.009 || invoice._count.allocations > 0) {
-    throw new Error("This invoice has payment history and cannot be cancelled.");
-  }
-
-  const newerInvoice = await prisma.platformInvoice.findFirst({
-    where: {
-      subscriptionId: invoice.subscriptionId,
-      billingPeriodStart: { gt: invoice.billingPeriodStart },
-      status: { notIn: [PlatformInvoiceStatus.CANCELLED, PlatformInvoiceStatus.VOID] },
-    },
-    select: { id: true, invoiceNumber: true },
-    orderBy: { billingPeriodStart: "asc" },
-  });
-  if (newerInvoice) {
-    throw new Error(`Cancel protected: newer billing cycle ${newerInvoice.invoiceNumber} already exists.`);
+    throw new Error("This invoice has payment history and cannot be deleted.");
   }
 
   const pendingPayments = await prisma.platformPayment.findMany({
@@ -65,7 +52,7 @@ export async function cancelPlatformInvoice(input: {
     take: 500,
   });
   if (pendingPayments.some((payment) => metadataInvoiceId(payment.metadata) === invoice.id)) {
-    throw new Error("This invoice has an active online payment checkout and cannot be cancelled safely.");
+    throw new Error("This invoice has an active online payment checkout and cannot be deleted safely.");
   }
 
   const now = new Date();
@@ -85,7 +72,7 @@ export async function cancelPlatformInvoice(input: {
       },
     });
     if (changed.count !== 1) {
-      throw new Error("Invoice changed while cancellation was being processed. Refresh and try again.");
+      throw new Error("Invoice changed while deletion was being processed. Refresh and try again.");
     }
 
     await tx.auditLog.create({
@@ -104,6 +91,7 @@ export async function cancelPlatformInvoice(input: {
           previousStatus: invoice.status,
           previousOutstanding,
           scheduleRewound: false,
+          removedFromActiveBilling: true,
         },
       },
     });

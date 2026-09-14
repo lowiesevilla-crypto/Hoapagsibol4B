@@ -367,13 +367,32 @@ async function runPayrollFlow(browser, dates) {
     const payslipCount = await prisma.payslip.count({ where: { tenantId: primaryTenantId, payrollId, employeeId } });
     assert.equal(payslipCount, 1, "Repeated calculation must upsert rather than duplicate the employee payslip.");
 
-    checkpoint("finalize payroll", page);
-    await clickExactSubmitButton(page, "Finalize");
+    checkpoint("complete payroll review", page);
+    await expectNoExactSubmitButton(page, "Approve Payroll");
+    await clickExactSubmitButton(page, "Complete Review");
+    await waitForUrlParam(page, "success", "reviewed", "successful payroll review redirect");
+    await expectText(page, "Review completed.");
+    await expectText(page, "Approve Payroll");
+    await expectNoExactSubmitButton(page, "Complete Review");
+    const reviewAudit = await prisma.auditLog.findFirst({
+      where: {
+        tenantId: primaryTenantId,
+        module: "PAYROLL",
+        action: "COMPLETE_PAYROLL_REVIEW",
+        entityType: "PayrollPeriod",
+        entityId: payrollId,
+      },
+      orderBy: { createdAt: "desc" },
+    });
+    assert.ok(reviewAudit, "Completing review must create tenant-scoped payroll review audit evidence.");
+
+    checkpoint("approve payroll", page);
+    await clickExactSubmitButton(page, "Approve Payroll");
     await waitForUrlParam(page, "success", "finalized", "successful payroll finalization redirect");
     await expectText(page, "Finalized and ready to post.");
     await expectText(page, "Revision 1");
     await expectText(page, "Post to Financial Engine");
-    await expectNoExactSubmitButton(page, "Finalize");
+    await expectNoExactSubmitButton(page, "Approve Payroll");
 
     checkpoint("verify immutable finalization evidence", page);
     period = await prisma.payrollPeriod.findFirst({

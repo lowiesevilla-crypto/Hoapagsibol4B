@@ -1,4 +1,4 @@
-import { TenantSubscriptionStatus } from "@prisma/client";
+import { AiRequestOutcome, TenantSubscriptionStatus } from "@prisma/client";
 import { Bot, FolderLock, ShieldCheck } from "lucide-react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
@@ -18,6 +18,14 @@ function jsonRecord(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
 }
 
+function monthStart(now = new Date()) {
+  return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
+}
+
+function usageLabel(value: number, limit: number | null) {
+  return `${value.toLocaleString("en-PH")} / ${limit == null ? "Unlimited" : limit.toLocaleString("en-PH")}`;
+}
+
 export default async function PlatformTenantFeaturesPage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ success?: string; error?: string }> }) {
   const { id } = await params;
   const query = await searchParams;
@@ -33,9 +41,18 @@ export default async function PlatformTenantFeaturesPage({ params, searchParams 
   const latest = tenant.subscriptions[0];
   const fallbackPlan = latest ? null : await prisma.subscriptionPlan.findFirst({ where: { code: tenant.subscriptionPlan } });
   const plan = latest?.plan ?? fallbackPlan;
-  const [planFeatures, overrides] = await Promise.all([
+  const [planFeatures, overrides, aiMonthlyUsage] = await Promise.all([
     plan ? prisma.subscriptionPlanFeatureEntitlement.findMany({ where: { planId: plan.id, featureCode: { in: [DOCUMENT_MANAGEMENT_FEATURE_CODE, AI_ASSISTANCE_FEATURE_CODE] } } }) : Promise.resolve([]),
     prisma.tenantFeatureEntitlement.findMany({ where: { tenantId: tenant.id, featureCode: { in: [DOCUMENT_MANAGEMENT_FEATURE_CODE, AI_ASSISTANCE_FEATURE_CODE] } } }),
+    prisma.aiUsageLedger.aggregate({
+      where: {
+        tenantId: tenant.id,
+        createdAt: { gte: monthStart() },
+        outcome: { in: [AiRequestOutcome.SUCCEEDED, AiRequestOutcome.PROVIDER_ERROR] },
+      },
+      _count: { _all: true },
+      _sum: { inputTokens: true, outputTokens: true, estimatedCostCentavos: true },
+    }),
   ]);
   const documentPlan = planFeatures.find((item) => item.featureCode === DOCUMENT_MANAGEMENT_FEATURE_CODE);
   const aiPlan = planFeatures.find((item) => item.featureCode === AI_ASSISTANCE_FEATURE_CODE);
@@ -47,6 +64,14 @@ export default async function PlatformTenantFeaturesPage({ params, searchParams 
   const aiEnabled = Boolean(aiPlan?.enabled && aiOverride?.enabledOverride !== false && commerciallyActive);
   const aiEffective = mergeAiCommercialConfiguration(aiPlan?.configuration, aiOverride?.configurationOverride);
   const aiOverrideConfig = jsonRecord(aiOverride?.configurationOverride);
+  const aiInputUsed = Number(aiMonthlyUsage._sum.inputTokens ?? 0);
+  const aiOutputUsed = Number(aiMonthlyUsage._sum.outputTokens ?? 0);
+  const aiSpendUsed = Number(aiMonthlyUsage._sum.estimatedCostCentavos ?? 0);
+  const aiRequestUsed = aiMonthlyUsage._count._all;
+  const aiInputBlocked = aiEffective.monthlyInputTokenLimit != null && aiInputUsed >= aiEffective.monthlyInputTokenLimit;
+  const aiOutputBlocked = aiEffective.monthlyOutputTokenLimit != null && aiOutputUsed >= aiEffective.monthlyOutputTokenLimit;
+  const aiRequestBlocked = aiEffective.monthlyRequestLimit != null && aiRequestUsed >= aiEffective.monthlyRequestLimit;
+  const aiSpendBlocked = aiEffective.monthlySpendLimitCentavos != null && aiSpendUsed >= aiEffective.monthlySpendLimitCentavos;
 
   return <div>
     <div className="flex flex-wrap items-start justify-between gap-4"><div><p className="text-xs font-black uppercase tracking-[.16em] text-pine-700">Platform commercial controls</p><h1 className="mt-1 text-2xl font-black text-slate-950 sm:text-3xl">{tenant.name} · Feature controls</h1><p className="mt-2 max-w-3xl text-sm leading-6 text-slate-600">The active subscription plan is the capability ceiling. Tenant-specific controls can restrict an included capability or adjust Platform-managed limits, but cannot enable functionality excluded from the plan.</p></div><Link className="btn-secondary" href="/platform/plans">Manage plan catalog</Link></div>
@@ -87,6 +112,13 @@ export default async function PlatformTenantFeaturesPage({ params, searchParams 
           <label><span className="label">Model/service tier</span><select className="field" name="aiModelTier" defaultValue={typeof aiOverrideConfig.modelTier === "string" ? aiOverrideConfig.modelTier : "INHERIT"}><option value="INHERIT">Inherit ({aiEffective.modelTier})</option><option value="ECONOMY">Economy</option><option value="STANDARD">Standard</option><option value="PREMIUM">Premium</option></select></label>
           <label><span className="label">Overage policy</span><select className="field" name="aiOveragePolicy" defaultValue={typeof aiOverrideConfig.overagePolicy === "string" ? aiOverrideConfig.overagePolicy : "INHERIT"}><option value="INHERIT">Inherit ({aiEffective.overagePolicy.replaceAll("_", " ")})</option><option value="HARD_STOP">Hard stop</option><option value="APPROVAL_REQUIRED">Approval required</option></select></label>
         </div>
+        <div className="mt-5 grid gap-3 md:grid-cols-4">
+          <div className={`rounded-2xl border p-4 ${aiRequestBlocked ? "border-rose-200 bg-rose-50 text-rose-900" : "border-slate-200 bg-slate-50 text-slate-700"}`}><p className="text-[10px] font-black uppercase tracking-wider">Current-month requests</p><p className="mt-1 text-lg font-black">{usageLabel(aiRequestUsed, aiEffective.monthlyRequestLimit)}</p></div>
+          <div className={`rounded-2xl border p-4 ${aiInputBlocked ? "border-rose-200 bg-rose-50 text-rose-900" : "border-slate-200 bg-slate-50 text-slate-700"}`}><p className="text-[10px] font-black uppercase tracking-wider">Input tokens used</p><p className="mt-1 text-lg font-black">{usageLabel(aiInputUsed, aiEffective.monthlyInputTokenLimit)}</p></div>
+          <div className={`rounded-2xl border p-4 ${aiOutputBlocked ? "border-rose-200 bg-rose-50 text-rose-900" : "border-slate-200 bg-slate-50 text-slate-700"}`}><p className="text-[10px] font-black uppercase tracking-wider">Output tokens used</p><p className="mt-1 text-lg font-black">{usageLabel(aiOutputUsed, aiEffective.monthlyOutputTokenLimit)}</p></div>
+          <div className={`rounded-2xl border p-4 ${aiSpendBlocked ? "border-rose-200 bg-rose-50 text-rose-900" : "border-slate-200 bg-slate-50 text-slate-700"}`}><p className="text-[10px] font-black uppercase tracking-wider">Provider budget used</p><p className="mt-1 text-lg font-black">{usageLabel(aiSpendUsed, aiEffective.monthlySpendLimitCentavos)}</p></div>
+        </div>
+        {(aiRequestBlocked || aiInputBlocked || aiOutputBlocked || aiSpendBlocked) && <p className="mt-3 rounded-2xl border border-rose-200 bg-rose-50 p-4 text-sm font-semibold text-rose-900">This tenant has reached at least one current-month AI commercial limit. Raise the affected allowance, remove the tenant override to inherit the active plan, or wait for the next monthly period.</p>}
         <div className="mt-5 flex items-start gap-3 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm leading-6 text-amber-950"><ShieldCheck className="mt-0.5 size-5 shrink-0" /><p><b>Privacy gate:</b> Commercial plan inclusion is necessary but not sufficient. Production AI also requires the tenant&apos;s approved lawful basis/PIA, privacy notice, provider and cross-border review, role/audience policy, retention settings, and tenant-isolation UAT.</p></div>
       </section>
 

@@ -1,11 +1,12 @@
 # HOAHub Work Status Register
 
-_Last reconciled: 2026-09-06 (Asia/Manila)_
+_Last reconciled: 2026-09-14 (Asia/Manila)_
 
 This register is the current evidence-backed release snapshot for the active HOAHub production-quality program. It does not replace issue-specific acceptance criteria. A capability is called production-verified only after the exact PR head passes required PR gates, the PR is merged with exact-head protection, and the merged `main` SHA passes HOAHub MySQL CI plus Hostinger managed-production/public-health verification.
 
 ## Current production baseline
 
+- Latest user-provided Hostinger dashboard evidence on 2026-09-14 showed production `main` current at merge commit `878e8851fb6f81dd608997b106500df421e01bfd` from PR #333 (`AI assistance production safeguards`), deployed successfully with Hostinger status `Running`, auto-deployment enabled, SSL/CDN active, and Node.js 22.x. Authenticated production UAT remains separate from this dashboard evidence.
 - Current production-verified `main`: `d79c88074b833b4c760a28d74d3962f557a0c231`, merged from PR #310 (`Rental: expose homeowner contracts and signed agreement workflow`).
 - PR #310 exact head `f782a2069cd093045988be70276b027e93d9e796` passed all required exact-head PR gates: HOAHub MySQL CI #1492 / run `34003875873`, Canva Visual Parity #537 / run `34003875945`, Edge Critical Flow #130 / run `34003875854`, Firefox Critical Flow #126 / run `34003875822`, and Mobile Responsive Evidence #125 / run `34003875835`.
 - PR #310 merged with expected-head protection as `d79c88074b833b4c760a28d74d3962f557a0c231`. Post-merge HOAHub MySQL CI #1493 / run `34005745930` passed on that exact `main` SHA, including lint, Prisma validation/generation/migrations, seed, unit tests, database integration, homeowner verifiers, typecheck, build, production smoke, and the complete critical browser suite. The dependent **Verify Hostinger managed production** job also passed the expected-release marker and public `/api/health` verification.
@@ -26,6 +27,10 @@ This register is the current evidence-backed release snapshot for the active HOA
 - P0 Email Delivery Safety Hotfix: VERIFIED through PR #306 — invalid-recipient preflight, tenant-scoped suppression, provider circuit breaking, durable queueing, serialized/paced bulk delivery, protected Platform Invoice email, privacy-safe audit data, and authenticated queue scheduler. Deployment does not authorize bulk SMTP enablement.
 - Rental Asset Reservations: VERIFIED in production through PR #308 — homeowner `/portal/rentals` inventory/reserve/cancel flow, tenant `AVAILABLE` inventory filtering, private reservation-owner handling in the homeowner portal, Admin Asset reservation owner/status visibility, tenant-scoped composite foreign keys, database-enforced one-active-reservation-per-asset, `SERIALIZABLE` + `FOR UPDATE` mutation protection, audit trail, cancellation history, replacement reservation after cancellation, and second-tenant/cross-tenant FK isolation evidence.
 - Rental Agreements & Contracts: VERIFIED in production through PR #310 — focused Admin agreement view, immutable contract snapshots for existing and newly activated agreements, homeowner-linked agreement visibility, direct Rentals & Contracts discovery, authorized PDF/DOCX/print rendering, tenant/agreement-scoped signed PDF/DOCX upload/download, protected homeowner ownership checks, and reservation fulfillment history preservation. The initial privileged MySQL-trigger implementation was removed after CI proved the managed application user cannot create such triggers; the final production implementation performs snapshot/reservation conversion inside the existing `SERIALIZABLE` agreement transaction instead of weakening database privileges.
+
+## Active production-sensitive candidates
+
+- Payroll lifecycle safe remediation (`codex/payroll-lifecycle-safe-remediation`): IN PROGRESS / NOT DEPLOYED. Current candidate separates calculated payroll Review from Approval without adding persisted payroll statuses or changing statutory deduction formulas. Review is tenant-scoped audit evidence for the current calculated snapshot; Approval creates the existing immutable `FINALIZED` revision required before Financial Engine posting. Local focused payroll lifecycle/statutory/finance tests passed 27/27 on 2026-09-14; broader exact-head gates and PR CI remain pending.
 
 ## Issue #273 reconciliation
 

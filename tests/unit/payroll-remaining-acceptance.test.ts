@@ -74,7 +74,7 @@ test("PAY-RUN-002: finalization requires calculated immutable payslip evidence a
   assert.match(finalization, /status: PayrollStatus\.CALCULATED/);
   assert.match(finalization, /status: PayrollStatus\.FINALIZED/);
   assert.match(finalization, /actorId: user\.id/);
-  assert.match(finalization, /FINALIZE_PAYROLL_REVISION/);
+  assert.match(finalization, /PAYROLL_APPROVAL_AUDIT_ACTION/);
   assert.match(payrollActions, /Calculate at least one employee payslip before finalizing/);
 });
 

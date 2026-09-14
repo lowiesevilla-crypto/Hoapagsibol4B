@@ -1,12 +1,14 @@
 # HOAHub Payroll Implementation Progress Report
 
-Last updated: 2026-08-24
+Last updated: 2026-09-14
 Source of truth: `docs/payroll/PAYROLL_IMPLEMENTATION_STATUS.json`
 Current verification branch: `codex/payroll-verification-record-20260824`
 Completed pull request: PR #171
 Completed task: `PAY-TASK-011`
 
 ## Executive status
+
+Payroll lifecycle safe-remediation candidate `codex/payroll-lifecycle-safe-remediation` separates the user-facing Review and Approval events without adding persisted payroll statuses or redesigning the Financial Engine. Current-state assessment found that `CALCULATED` previously showed the Review lifecycle box while the available action was `Finalize`; that action both created immutable revision evidence and moved the payroll to `FINALIZED`, collapsing Review and Approval. The candidate adds tenant-scoped Review audit evidence for the current calculated snapshot, requires that evidence before Approval/finalization, relabels the approval action as **Approve Payroll**, and preserves `FINALIZED` as the approved/frozen compatibility state required before posting. Statutory deduction formulas were not changed.
 
 PR #165 is merged to `main` at `8b6f07f2b9139ee89d104414a3e17e94d6c1f366`. Its lifecycle requirements remain `VERIFIED` by exact-head HOAHub MySQL CI #1111 and Canva Visual Parity #300.
 

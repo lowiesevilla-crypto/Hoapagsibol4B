@@ -22,6 +22,8 @@ import {
 import { employeeLoanSchema, employeeScheduleRangeSchema, overtimeRecordSchema, payrollAccessSchema, payrollCalendarSchema, payrollDeductionScheduleSchema, payrollDeductionSchema, payrollDeductionTypeSchema, payrollPeriodSchema, payrollStatutoryApplicabilitySchema } from "@/lib/validation";
 
 const MUTABLE_PAYROLL_STATUSES: readonly PayrollStatus[] = [PayrollStatus.DRAFT, PayrollStatus.CALCULATED];
+const PAYROLL_REVIEW_AUDIT_ACTION = "COMPLETE_PAYROLL_REVIEW";
+const PAYROLL_APPROVAL_AUDIT_ACTION = "APPROVE_PAYROLL";
 
 /**
  * @requirement PAY-SEC-001 PAY-CALC-001
@@ -282,6 +284,18 @@ async function createImmutablePayrollRevision(tx: Prisma.TransactionClient, inpu
   if (period.payslips.some((payslip) => payslip.statutoryRuleSetId !== period.statutoryRuleSetId || !payslip.statutorySnapshot)) {
     throw new Error("Every payslip must retain the statutory rule set used by this calculation before finalization.");
   }
+  const reviewEvidence = await tx.auditLog.findFirst({
+    where: {
+      tenantId: input.tenantId,
+      module: "PAYROLL",
+      action: PAYROLL_REVIEW_AUDIT_ACTION,
+      entityType: "PayrollPeriod",
+      entityId: period.id,
+      createdAt: { gte: period.updatedAt },
+    },
+    orderBy: { createdAt: "desc" },
+  });
+  if (!reviewEvidence) throw new Error("Complete payroll review before approving this calculated payroll.");
 
   const latestRevision = await tx.payrollCalculationRevision.findFirst({
     where: { tenantId: input.tenantId, payrollId: period.id },
@@ -343,6 +357,9 @@ async function createImmutablePayrollRevision(tx: Prisma.TransactionClient, inpu
         payDate: period.payDate,
         sourceStatus: period.status,
         finalizedStatus: PayrollStatus.FINALIZED,
+        reviewAuditId: reviewEvidence.id,
+        reviewedAt: reviewEvidence.createdAt,
+        reviewedById: reviewEvidence.actorId,
         statutoryRuleSetId: period.statutoryRuleSetId,
       }),
       deductionSnapshot: jsonValue(period.deductions),
@@ -389,6 +406,69 @@ async function createImmutablePayrollRevision(tx: Prisma.TransactionClient, inpu
 }
 
 /**
+ * @requirement PAY-SEC-001 PAY-RUN-001 PAY-RUN-003
+ * @status IMPLEMENTED
+ * @description Records tenant-scoped review evidence for the current calculated payroll snapshot before approval/finalization.
+ */
+export async function completePayrollReviewAction(formData: FormData) {
+  const { user } = await requirePayrollAccess(payrollWriteRoles);
+  const id = String(formData.get("id") || "");
+  await prisma.$transaction(async (tx) => {
+    const period = await tx.payrollPeriod.findFirst({
+      where: { id, tenantId: user.tenantId },
+      include: {
+        payslips: { where: { tenantId: user.tenantId }, orderBy: { employeeId: "asc" } },
+        statutoryRuleSet: true,
+      },
+    });
+    if (!period) throw new Error("Payroll period not found.");
+    if (period.status !== PayrollStatus.CALCULATED) throw new Error("Only calculated payroll can be reviewed.");
+    if (!period.payslips.length) throw new Error("Calculate at least one employee payslip before review.");
+    if (!period.statutoryRuleSet) throw new Error("Calculated payroll has no verified statutory rule-set evidence.");
+    if (period.payslips.some((payslip) => payslip.statutoryRuleSetId !== period.statutoryRuleSetId || !payslip.statutorySnapshot)) {
+      throw new Error("Every payslip must retain the statutory rule set used by this calculation before review.");
+    }
+    const existingReview = await tx.auditLog.findFirst({
+      where: {
+        tenantId: user.tenantId,
+        module: "PAYROLL",
+        action: PAYROLL_REVIEW_AUDIT_ACTION,
+        entityType: "PayrollPeriod",
+        entityId: id,
+        createdAt: { gte: period.updatedAt },
+      },
+      orderBy: { createdAt: "desc" },
+    });
+    if (existingReview) return;
+    const totals = period.payslips.reduce((sum, slip) => ({
+      grossPay: roundMoney(sum.grossPay + Number(slip.grossPay)),
+      deduction: roundMoney(sum.deduction + Number(slip.deduction)),
+      netPay: roundMoney(sum.netPay + Number(slip.netPay)),
+    }), { grossPay: 0, deduction: 0, netPay: 0 });
+    await tx.auditLog.create({
+      data: {
+        tenantId: user.tenantId,
+        actorId: user.id,
+        module: "PAYROLL",
+        action: PAYROLL_REVIEW_AUDIT_ACTION,
+        entityType: "PayrollPeriod",
+        entityId: id,
+        metadata: {
+          payrollId: id,
+          reviewedStatus: period.status,
+          reviewedPeriodUpdatedAt: period.updatedAt,
+          statutoryRuleSetId: period.statutoryRuleSetId,
+          payslipCount: period.payslips.length,
+          totals,
+        },
+      },
+    });
+  }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+  revalidatePayrollPages();
+  redirect(`/admin/payroll?section=approval&period=${id}&success=reviewed`);
+}
+
+/**
  * @requirement PAY-SEC-001 PAY-RUN-001 PAY-RUN-002 PAY-RUN-003
  * @status IMPLEMENTED
  */
@@ -412,10 +492,10 @@ export async function finalizePayrollAction(formData: FormData) {
         tenantId: user.tenantId,
         actorId: user.id,
         module: "PAYROLL",
-        action: "FINALIZE_PAYROLL_REVISION",
+        action: PAYROLL_APPROVAL_AUDIT_ACTION,
         entityType: "PayrollCalculationRevision",
         entityId: createdRevision.id,
-        metadata: { payrollId: id, revisionNumber: createdRevision.revisionNumber, revisionType: createdRevision.revisionType },
+        metadata: { payrollId: id, revisionNumber: createdRevision.revisionNumber, revisionType: createdRevision.revisionType, finalizedStatus: PayrollStatus.FINALIZED },
       },
     });
     return createdRevision;

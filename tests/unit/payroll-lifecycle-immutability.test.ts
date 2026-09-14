@@ -33,7 +33,7 @@ test("PAY-RUN-003: finalization creates immutable revision and per-employee snap
   assert.match(source, /createImmutablePayrollRevision/);
   assert.match(source, /tenantId: user\.tenantId/);
   assert.match(source, /status: PayrollStatus\.FINALIZED/);
-  assert.match(source, /FINALIZE_PAYROLL_REVISION/);
+  assert.match(source, /PAYROLL_APPROVAL_AUDIT_ACTION/);
   assert.match(source, /Prisma\.TransactionIsolationLevel\.Serializable/);
 });
 

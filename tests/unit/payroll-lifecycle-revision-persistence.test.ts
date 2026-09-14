@@ -45,6 +45,22 @@ test("PAY-SEC-001: payroll revision reads and writes are authenticated-tenant sc
   assert.match(page, /revisions: \{ where: \{ tenantId \}/);
 });
 
+test("PAY-RUN-001: calculated payroll requires current review evidence before approval/finalization", () => {
+  assert.match(actions, /const PAYROLL_REVIEW_AUDIT_ACTION = "COMPLETE_PAYROLL_REVIEW"/);
+  assert.match(actions, /export async function completePayrollReviewAction/);
+  assert.match(actions, /createdAt: \{ gte: period\.updatedAt \}/);
+  assert.match(actions, /Complete payroll review before approving this calculated payroll/);
+  assert.match(actions, /action: PAYROLL_APPROVAL_AUDIT_ACTION/);
+});
+
+test("PAY-UX-001: payroll UI separates Review from Approval while preserving FINALIZED compatibility", () => {
+  assert.match(page, /Complete Review/);
+  assert.match(page, /Approve Payroll/);
+  assert.match(page, /selectedReviewEvidence/);
+  assert.match(page, /Approval will create the immutable finalized revision required before Financial Engine posting/);
+  assert.doesNotMatch(page, /<CheckCircle2 className="size-4" \/> Finalize/);
+});
+
 test("PAY-RUN-003: correction and reversal UI require bounded reasons and expose immutable history", () => {
   assert.match(page, /name="reason" minLength=\{10\} maxLength=\{500\} required/);
   assert.match(page, /Begin correction/);

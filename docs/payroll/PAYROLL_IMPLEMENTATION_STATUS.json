@@ -320,9 +320,10 @@
       ],
       "evidence": [
         "PR #165 exact-head HOAHub MySQL CI #1111 SUCCESS at 1743245f3d676f50fe026cf6831e9663ab8a666b",
-        "PR #165 exact-head HOAHub Canva Visual Parity #300 SUCCESS at 1743245f3d676f50fe026cf6831e9663ab8a666b"
+        "PR #165 exact-head HOAHub Canva Visual Parity #300 SUCCESS at 1743245f3d676f50fe026cf6831e9663ab8a666b",
+        "2026-09-14 local payroll lifecycle focused tests PASS: 27/27 on codex/payroll-lifecycle-safe-remediation"
       ],
-      "notes": "DRAFT, CALCULATED, FINALIZED, POSTING, POSTED, POST_FAILED and PAID are persisted. PR #165 verified the lifecycle foundation; the completion candidate activates POST, retry, PAYMENT and REVERSAL through the idempotent finance contract."
+      "notes": "DRAFT, CALCULATED, FINALIZED, POSTING, POSTED, POST_FAILED and PAID are persisted. Review and Approval are user-facing workflow events: Review is tenant-scoped audit evidence on the current CALCULATED snapshot, recalculation invalidates stale review evidence, and Approval preserves FINALIZED as the approved/frozen state required before posting."
     },
     {
       "id": "PAY-RUN-002",
@@ -333,9 +334,10 @@
         "tests/unit/payroll-remaining-acceptance.test.ts"
       ],
       "evidence": [
-        "Local PAY-RUN-002 acceptance test PASS on completion candidate"
+        "Local PAY-RUN-002 acceptance test PASS on completion candidate",
+        "2026-09-14 local payroll lifecycle focused tests PASS: 27/27 on codex/payroll-lifecycle-safe-remediation"
       ],
-      "notes": "Finalization requires a tenant-scoped draft with generated payslips and records immutable audit/revision evidence."
+      "notes": "Approval/finalization requires tenant-scoped calculated payslips plus current Review audit evidence. Approval records audit evidence and creates the immutable finalized revision."
     },
     {
       "id": "PAY-RUN-003",

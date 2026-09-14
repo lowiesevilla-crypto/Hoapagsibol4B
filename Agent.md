@@ -1,6 +1,6 @@
 # HOAHub Agent Context
 
-Last updated: 2026-09-01
+Last updated: 2026-09-14
 
 ## Purpose
 
@@ -352,6 +352,7 @@ Verification evidence: exact-head PR #164 HOAHub MySQL CI #1108 and Canva Visual
 Implementation task: `PAY-TASK-005`. PR #165 is merged to `main` at `8b6f07f2b9139ee89d104414a3e17e94d6c1f366`. Status: `VERIFIED` by exact-head HOAHub MySQL CI #1111 and Canva Visual Parity #300 at `1743245f3d676f50fe026cf6831e9663ab8a666b`.
 
 - Persisted lifecycle states are `DRAFT`, `CALCULATED`, `FINALIZED`, `POSTING`, `POSTED`, `POST_FAILED`, and `PAID`.
+- The user-facing run lifecycle is `Setup -> Calculate -> Review -> Approve -> Post -> Pay`. `Review` is tenant-scoped audit evidence on the current `CALCULATED` payroll snapshot; recalculation invalidates stale review evidence. `Approve Payroll` then creates the immutable revision and preserves the existing `FINALIZED` approved/frozen compatibility state required before Financial Engine posting.
 - Only `DRAFT` and `CALCULATED` working data is mutable. Finalized or later payroll must not be recalculated, have deductions/attendance changed directly, or be destructively deleted.
 - `PayrollCalculationRevision` and `PayrollCalculationRevisionPayslip` are immutable historical authority for finalized calculations. Each revision carries tenant/payroll identity, monotonic revision number, type, actor, reason, parent/source revision, period/input snapshots, totals, and per-employee/aggregate deltas.
 - Controlled correction of finalized unpaid payroll requires a 10–500 character reason, preserves the source revision, returns working data to `CALCULATED`, and creates a new child revision on re-finalization.

@@ -1,6 +1,6 @@
 # HOAHub Payroll Requirements and Implementation Contract
 
-Last updated: 2026-08-24
+Last updated: 2026-09-14
 Owner: HOAHub Payroll / Workforce
 Status source of truth: `docs/payroll/PAYROLL_IMPLEMENTATION_STATUS.json`
 
@@ -140,10 +140,10 @@ Acceptance criteria:
 ### Payroll Lifecycle / Corrections
 
 #### PAY-RUN-001 — Payroll lifecycle
-The persisted lifecycle distinguishes `DRAFT`, `CALCULATED`, `FINALIZED`, `POSTING`, `POSTED`, `POST_FAILED`, and `PAID` sufficiently to prevent accidental historical mutation. Financial posting uses the durable outbox contract described by `PAY-FIN-001/002/003`; `PAID` is reached only after the accrual post succeeds and net-pay disbursement is posted.
+The persisted lifecycle distinguishes `DRAFT`, `CALCULATED`, `FINALIZED`, `POSTING`, `POSTED`, `POST_FAILED`, and `PAID` sufficiently to prevent accidental historical mutation. The user-facing lifecycle is `Setup → Calculate → Review → Approve → Post → Pay`: a calculated payroll must receive current tenant-scoped Review evidence before Approval; Approval creates the immutable revision and uses the existing `FINALIZED` approved/frozen compatibility state. Financial posting uses the durable outbox contract described by `PAY-FIN-001/002/003`; `PAID` is reached only after the accrual post succeeds and net-pay disbursement is posted.
 
 #### PAY-RUN-002 — Finalization validation
-A payroll cannot finalize without calculated payslips and must preserve audit evidence of the actor and transition.
+A payroll cannot approve/finalize without calculated payslips, current review evidence for the latest calculated snapshot, and audit evidence of the reviewer, approver, and transition. Recalculation invalidates stale Review/Approval evidence by requiring a new current Review before Approval.
 
 #### PAY-RUN-003 — Immutable finalized/paid evidence
 Finalized and paid payroll must not be silently overwritten. Finalization creates an immutable tenant-scoped calculation revision with per-employee snapshots. Corrections preserve the source revision and create a new child revision with actor, reason, parent identity, input snapshots, totals, and deltas. Reversals create immutable negative evidence without deleting or mutating the source payroll/revision. Paid payroll remains terminal.

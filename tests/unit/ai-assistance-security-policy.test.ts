@@ -59,13 +59,14 @@ test("OpenAI gateway uses server-only Responses file search, no provider storage
 });
 
 test("AI knowledge eligibility requires passed malware validation before indexing, retrieval, readiness, and citations", async () => {
-  const [eligibility, providerIndex, assistant, reasoning, settingsPage, knowledgePage] = await Promise.all([
+  const [eligibility, providerIndex, assistant, reasoning, settingsPage, knowledgePage, e2eFixture] = await Promise.all([
     readFile("lib/ai-assistance/knowledge-eligibility.ts", "utf8"),
     readFile("lib/ai-assistance/provider-index.ts", "utf8"),
     readFile("lib/ai-assistance/knowledge-assistant.ts", "utf8"),
     readFile("lib/ai-assistance/reasoning-assistant.ts", "utf8"),
     readFile("app/admin/ai-assistance/page.tsx", "utf8"),
     readFile("app/admin/ai-assistance/knowledge/page.tsx", "utf8"),
+    readFile("scripts/prepare-ai-assistant-e2e.ts", "utf8"),
   ]);
   assert.match(eligibility, /RepositoryMalwareScanStatus\.PASSED/);
   assert.match(providerIndex, /isAiRepositoryDocumentMalwareValidated\(document\.malwareScanStatus\)/);
@@ -76,6 +77,7 @@ test("AI knowledge eligibility requires passed malware validation before indexin
   assert.match(settingsPage, /process\.env\.OPENAI_API_KEY/);
   assert.match(settingsPage, /malwareScanStatus:\s*aiRepositoryDocumentMalwareWhere\(\)/);
   assert.match(knowledgePage, /isAiRepositoryDocumentMalwareValidated\(document\.malwareScanStatus\)/);
+  assert.match(e2eFixture, /malwareScanStatus:\s*"PASSED"/);
   assert.doesNotMatch(providerIndex, /notIn:\s*\["PENDING",\s*"FAILED",\s*"BLOCKED"\]/);
 });
 

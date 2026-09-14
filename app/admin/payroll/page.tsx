@@ -10,6 +10,7 @@ import { StatusBadge } from "@/components/status-badge";
 import { DeleteButton, SubmitButton } from "@/components/ui";
 import {
   cancelEmployeeLoanAction,
+  completePayrollReviewAction,
   deleteEmployeeScheduleAction,
   deletePayrollAccessAction,
   deletePayrollCalendarDayAction,
@@ -86,6 +87,20 @@ export default async function PayrollPage({ searchParams }: PayrollPageProps) {
   const activeDeductionTypes = deductionTypes.filter((deduction) => deduction.active);
   const openEmployeeLoans = employeeLoans.filter((loan) => loan.status === "OPEN" && Number(loan.balance) > 0);
   const selected = periods.find((period) => period.id === periodId) ?? periods[0];
+  const selectedReviewEvidence = selected
+    ? await prisma.auditLog.findFirst({
+      where: {
+        tenantId,
+        module: "PAYROLL",
+        action: "COMPLETE_PAYROLL_REVIEW",
+        entityType: "PayrollPeriod",
+        entityId: selected.id,
+        createdAt: { gte: selected.updatedAt },
+      },
+      include: { actor: true },
+      orderBy: { createdAt: "desc" },
+    })
+    : null;
   const selectedReversed = selected?.revisions[0]?.revisionType === "REVERSAL";
   const selectedFinancialReversalPosted = selected?.financialPostings.some((posting) => posting.eventType === "REVERSAL" && posting.status === "POSTED") ?? false;
   const selectedDeductionAssignments = [...(selected?.deductions ?? [])].sort((a, b) => a.employee.name.localeCompare(b.employee.name) || a.deductionType.name.localeCompare(b.deductionType.name));
@@ -457,9 +472,13 @@ export default async function PayrollPage({ searchParams }: PayrollPageProps) {
                     <input type="hidden" name="id" value={selected.id} />
                     <SubmitButton className="btn-secondary"><RotateCcw className="size-4" /> Recalculate</SubmitButton>
                   </form>}
-                  {selected.status === "CALCULATED" && canApprovePayroll && <form action={finalizePayrollAction}>
+                  {selected.status === "CALCULATED" && canWritePayroll && !selectedReviewEvidence && <form action={completePayrollReviewAction}>
                     <input type="hidden" name="id" value={selected.id} />
-                    <SubmitButton><CheckCircle2 className="size-4" /> Finalize</SubmitButton>
+                    <SubmitButton><CheckCircle2 className="size-4" /> Complete Review</SubmitButton>
+                  </form>}
+                  {selected.status === "CALCULATED" && canApprovePayroll && selectedReviewEvidence && <form action={finalizePayrollAction}>
+                    <input type="hidden" name="id" value={selected.id} />
+                    <SubmitButton><ShieldCheck className="size-4" /> Approve Payroll</SubmitButton>
                   </form>}
                   {selected.status === "DRAFT" && canManagePayroll && <PayrollDeleteForm id={selected.id} paid={false} />}
                 </>}
@@ -500,7 +519,11 @@ export default async function PayrollPage({ searchParams }: PayrollPageProps) {
               </div>
             </div>
 
-            <PayrollRunStepper status={selected.status} />
+            <PayrollRunStepper status={selected.status} reviewed={Boolean(selectedReviewEvidence)} />
+            {selected.status === "CALCULATED" && selectedReviewEvidence && <div className="mt-4 flex gap-3 rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-900">
+              <ShieldCheck className="mt-0.5 size-5 shrink-0" />
+              <p><strong>Review completed.</strong> {selectedReviewEvidence.actor?.name ?? "Authorized reviewer"} reviewed this calculated payroll on {selectedReviewEvidence.createdAt.toLocaleString("en-PH")}. Approval will create the immutable finalized revision required before Financial Engine posting.</p>
+            </div>}
 
             <div className="mt-5 grid gap-3 sm:grid-cols-3">
               <div className="rounded-2xl border border-pine-100 bg-pine-50 p-4">
@@ -619,7 +642,7 @@ export default async function PayrollPage({ searchParams }: PayrollPageProps) {
 
           {section === "approval" && <div className="card border-pine-100 bg-pine-50/40 text-sm leading-6 text-pine-900">
             <h2 className="mb-2 text-lg font-black">Payroll approval workflow</h2>
-            <p>Use the action buttons above to finalize a draft payroll period, return a finalized period to draft for corrections, or mark the period as paid. Paid payroll periods remain locked for audit control.</p>
+            <p>Use the action buttons above to complete review for calculated payroll, approve the reviewed payroll into the finalized/frozen state, return a finalized period for correction before posting, post to the Financial Engine, or record net-pay disbursement. Paid payroll periods remain locked for audit control.</p>
           </div>}
 
           {(section === "processing" || section === "payslips") && <div className="table-wrap">
@@ -680,8 +703,10 @@ function RunToolLink({ href, active, label }: { href: string; active: boolean; l
  * @requirement PAY-RUN-001 PAY-UX-001
  * @status VERIFIED
  */
-function PayrollRunStepper({ status }: { status: string }) {
-  const current = ({ DRAFT: 0, CALCULATED: 2, FINALIZED: 4, POSTING: 4, POST_FAILED: 4, POSTED: 5, PAID: 6 } as Record<string, number>)[status] ?? 0;
+function PayrollRunStepper({ status, reviewed }: { status: string; reviewed?: boolean }) {
+  const current = status === "CALCULATED" && reviewed
+    ? 3
+    : ({ DRAFT: 0, CALCULATED: 2, FINALIZED: 4, POSTING: 4, POST_FAILED: 4, POSTED: 5, PAID: 6 } as Record<string, number>)[status] ?? 0;
   const steps = ["Setup", "Calculate", "Review", "Approve", "Post", "Pay"];
   return <div className="mt-5 rounded-2xl border border-slate-100 bg-slate-50 p-3">
     <p className="mb-3 text-xs font-black uppercase tracking-wider text-slate-500">Payroll lifecycle</p>

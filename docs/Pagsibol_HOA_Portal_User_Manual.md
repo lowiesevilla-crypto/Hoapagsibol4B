@@ -199,7 +199,8 @@ Payroll rules:
 - The payroll workspace has six primary tasks: **Overview**, **Payroll runs**, **Deductions & loans**, **Government contributions**, **Reports**, and **Settings**. Inside a selected payroll run, follow **Setup → Calculate → Review → Approve → Post → Pay**.
 - Compensation basis, pay frequency, attendance policy, rate, standard workdays/hours, allowance, and fixed deduction are effective-dated. Saving changed payroll terms creates a new version instead of rewriting history.
 - Generate/recalculate payroll to reach **CALCULATED**. Only Draft/Calculated working data may be edited; destructive deletion is Draft-only.
-- Finalize only after review. Finalization creates an immutable numbered revision and locks ordinary attendance/deduction changes.
+- Select **Complete Review** after checking the calculated payroll. Review records the reviewer and current calculated snapshot; recalculation requires a new review.
+- Select **Approve Payroll** only after review. Approval creates the immutable numbered revision, moves the payroll into the existing finalized/frozen state, and locks ordinary attendance/deduction changes.
 - A correction to finalized unpaid payroll requires a reason and creates a new child revision when re-finalized. The original revision remains unchanged.
 - Select **Post to Financial Engine** to create the payroll accrual journal. Failed posting can be retried with the same idempotency identity.
 - After the accrual reaches **POSTED**, select **Record net-pay disbursement** to create the cash journal, apply employee-loan deductions once, and reach **PAID**.

@@ -20,6 +20,7 @@ import {
 } from "@/lib/services/platform-billing";
 import { createTenantAgreementDraft } from "@/lib/services/platform-agreements";
 import { sendPlatformInvoiceEmail } from "@/lib/services/platform-invoice-email";
+import { cancelPlatformInvoice } from "@/lib/services/platform-invoice-maintenance";
 import { recordPlatformManualPaymentSafe } from "@/lib/services/platform-manual-payment";
 
 function clean(value: FormDataEntryValue | null) {
@@ -174,6 +175,25 @@ export async function generateTenantInvoiceAction(formData: FormData) {
   }
   const warning = delivery.message || (delivery.status === "SKIPPED" ? "No billing email is configured." : "Invoice email delivery failed.");
   redirect(`/platform/tenants/${tenantId}/billing?error=${encodeURIComponent(`Invoice is ready, but email was not sent: ${warning}`)}`);
+}
+
+export async function cancelPlatformInvoiceAction(formData: FormData) {
+  const actor = await requirePlatformBillingUser();
+  const tenantId = clean(formData.get("tenantId"));
+  const invoiceId = clean(formData.get("invoiceId"));
+  if (!tenantId || !invoiceId) redirect("/platform/invoices?error=Invoice%20not%20found.");
+  try {
+    await cancelPlatformInvoice({ tenantId, invoiceId, actorId: actor.id });
+  } catch (error) {
+    redirect(`/platform/tenants/${tenantId}/billing?error=${encodeURIComponent(error instanceof Error ? error.message : "Invoice cancellation failed.")}`);
+  }
+  revalidatePath("/platform/invoices");
+  revalidatePath("/platform/tenants");
+  revalidatePath("/platform/subscriptions");
+  revalidatePath(`/platform/tenants/${tenantId}`);
+  revalidatePath(`/platform/tenants/${tenantId}/billing`);
+  revalidatePath("/admin/subscription");
+  redirect(`/platform/tenants/${tenantId}/billing?success=${encodeURIComponent("Invoice cancelled. Billing schedule was preserved and was not rewound.")}`);
 }
 
 export async function recordPlatformManualPaymentAction(formData: FormData) {

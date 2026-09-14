@@ -39,7 +39,10 @@ export default async function TenantSubscriptionPage() {
       orderBy: { createdAt: "desc" },
     }),
     prisma.platformInvoice.findMany({
-      where: { tenantId: user.tenantId },
+      where: {
+        tenantId: user.tenantId,
+        status: { notIn: [PlatformInvoiceStatus.CANCELLED, PlatformInvoiceStatus.VOID] },
+      },
       orderBy: { issueDate: "desc" },
       take: 36,
     }),
@@ -124,7 +127,7 @@ export default async function TenantSubscriptionPage() {
 
       <section className="mt-6 rounded-2xl border bg-white p-5 sm:p-6">
         <h2 className="text-xl font-black">Platform invoices</h2>
-        <p className="mt-1 text-sm text-slate-500">Only HOAHub subscription invoices for this tenant are shown here. Every issued invoice can be printed or downloaded as PDF.</p>
+        <p className="mt-1 text-sm text-slate-500">Active HOAHub subscription invoices for this tenant are shown here. Cancelled invoices are retained only in the platform audit record.</p>
         <div className="mt-5 overflow-auto">
           <table className="min-w-[1040px] w-full text-sm">
             <thead className="bg-slate-50 text-left"><tr><th className="p-3">Invoice</th><th className="p-3">Billing period</th><th className="p-3">Due</th><th className="p-3">Total</th><th className="p-3">Paid</th><th className="p-3">Balance</th><th className="p-3">Status</th><th className="p-3">Actions</th></tr></thead>
@@ -149,7 +152,7 @@ export default async function TenantSubscriptionPage() {
             })}</tbody>
           </table>
         </div>
-        {!invoices.length && <p className="mt-5 rounded-xl border border-dashed p-8 text-center text-sm text-slate-500">No HOAHub subscription invoices yet.</p>}
+        {!invoices.length && <p className="mt-5 rounded-xl border border-dashed p-8 text-center text-sm text-slate-500">No active HOAHub subscription invoices.</p>}
       </section>
 
       <section className="mt-6 rounded-2xl border bg-white p-5 sm:p-6">

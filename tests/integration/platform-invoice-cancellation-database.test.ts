@@ -65,14 +65,23 @@ before(async () => {
 
 after(cleanup);
 
-test("cancel keeps invoice as audit evidence, preserves schedule, and prevents same-cycle regeneration", async () => {
+test("platform admin can remove an older unpaid invoice after a newer cycle exists without rewinding the schedule", async () => {
   const first = await generatePlatformInvoice({ tenantId, issueDate: firstPeriodStart });
   assert.equal(first.status, PlatformInvoiceStatus.OPEN);
 
-  const subscriptionAfterGeneration = await platformPrisma.tenantSubscription.findUniqueOrThrow({ where: { id: subscriptionId } });
-  const nextBillingDate = subscriptionAfterGeneration.nextBillingDate;
+  const afterFirst = await platformPrisma.tenantSubscription.findUniqueOrThrow({ where: { id: subscriptionId } });
+  const secondPeriodStart = afterFirst.nextBillingDate;
+  assert.ok(secondPeriodStart);
+  assert.equal(secondPeriodStart?.toISOString().slice(0, 10), "2026-10-14");
+
+  const second = await generatePlatformInvoice({ tenantId, issueDate: secondPeriodStart || new Date("2026-10-14T00:00:00.000Z") });
+  assert.equal(second.status, PlatformInvoiceStatus.OPEN);
+  assert.notEqual(second.id, first.id);
+
+  const afterSecond = await platformPrisma.tenantSubscription.findUniqueOrThrow({ where: { id: subscriptionId } });
+  const nextBillingDate = afterSecond.nextBillingDate;
   assert.ok(nextBillingDate);
-  assert.equal(nextBillingDate?.toISOString().slice(0, 10), "2026-10-14");
+  assert.equal(nextBillingDate?.toISOString().slice(0, 10), "2026-11-14");
 
   const cancelled = await cancelPlatformInvoice({ tenantId, invoiceId: first.id });
   assert.equal(cancelled.status, PlatformInvoiceStatus.CANCELLED);
@@ -84,6 +93,9 @@ test("cancel keeps invoice as audit evidence, preserves schedule, and prevents s
 
   const retained = await platformPrisma.platformInvoice.findUniqueOrThrow({ where: { id: first.id } });
   assert.equal(retained.status, PlatformInvoiceStatus.CANCELLED);
+  const newerStillOpen = await platformPrisma.platformInvoice.findUniqueOrThrow({ where: { id: second.id } });
+  assert.equal(newerStillOpen.status, PlatformInvoiceStatus.OPEN);
+
   const sameCycleCount = await platformPrisma.platformInvoice.count({
     where: {
       subscriptionId,
@@ -97,10 +109,6 @@ test("cancel keeps invoice as audit evidence, preserves schedule, and prevents s
     where: { tenantId, entityId: first.id, action: "PLATFORM_INVOICE_CANCELLED" },
   });
   assert.ok(audit);
-
-  const next = await generatePlatformInvoice({ tenantId, issueDate: nextBillingDate || new Date("2026-10-14T00:00:00.000Z") });
-  assert.notEqual(next.id, first.id);
-  assert.equal(next.billingPeriodStart.toISOString().slice(0, 10), "2026-10-14");
 });
 
 test("cancellation is tenant scoped and rejects an active PayMongo checkout", async () => {

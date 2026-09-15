@@ -25,6 +25,7 @@ const RESIDENT_TRANSACTION_TERMS = /\b(my|own|mine|ako|ko)\b.{0,90}\b(transactio
 const COMMUNITY_TERMS = /\b(announcement|announcements|notice|notices|event|events|meeting|meetings|activity|activities|calendar|schedule|community update|community updates)\b/i;
 const DOCUMENT_SERVICE_TERMS = /\b(document request|document requests|certificate|clearance|gate pass|move[- ]?in|move[- ]?out|requirements?|how to request|request status)\b/i;
 const DRAFT_RESOLUTION = /\b(draft|create|prepare|write|make)\b.{0,80}\b(board\s+)?resolution\b/i;
+const MONTHLY_DUES_COLLECTION_TERMS = /\b(monthly\s+dues?|association\s+dues?|dues?)\b.{0,100}\b(collections?|collected|payments?|receipts?|received)\b|\b(collections?|collected|payments?|receipts?|received)\b.{0,100}\b(monthly\s+dues?|association\s+dues?|dues?)\b/i;
 
 function hasOperationalStaffTerm(value: string) {
   return /\b(homeowners?|home owners?|residents?|members?|payment|payments|transactions?|receipts?|billing|bills?|receivables?|outstanding|overdue|collections?|finance|financial|expenses?|document requests?|complaints?|payroll|attendance|employees?|staff|officers?|president|treasurer|secretary|announcements?|events?|tenant|association profile|hoa profile)\b/i.test(value);
@@ -56,6 +57,7 @@ export function classifyAiBusinessIntent(experience: Experience, question: unkno
   if (/\b(tenant|association|hoa)\b.{0,80}\b(profile|information|details|contact|address|subscription|status|timezone|currency)\b|\bwhat (association|hoa) is this\b/i.test(value)) return "STAFF_TENANT_PROFILE";
   if (ORGANIZATION_TERMS.test(value)) return "STAFF_ORGANIZATION";
   if (/\b(homeowners?|home owners?|residents?|members?|homeowner directory|resident directory)\b/i.test(value)) return "STAFF_HOMEOWNERS";
+  if (!KNOWLEDGE_TERMS.test(value) && MONTHLY_DUES_COLLECTION_TERMS.test(value)) return "STAFF_PAYMENTS";
   if (/\b(payment|payments|payment history|transactions?|transaction history|receipts?|official receipt|or number|gcash|cash|bank transfer|check)\b/i.test(value)) return "STAFF_PAYMENTS";
   if (/\b(receivables?|outstanding|overdue|unpaid|arrears?|balances?|billing|bills?|amount due)\b/i.test(value)) return "STAFF_RECEIVABLES";
   if (/\b(document requests?|pending documents?|certificate requests?|gate pass requests?|move[- ]?in requests?|move[- ]?out requests?)\b/i.test(value)) return "STAFF_DOCUMENT_REQUESTS";

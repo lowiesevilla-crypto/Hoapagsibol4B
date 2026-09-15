@@ -72,7 +72,7 @@ function deniedAnswer(): FinanceAnswer {
   };
 }
 
-async function answerMonthlyDuesCollection(tenantId: string, question: string, range: StaffFinanceDateRange | null): Promise<FinanceAnswer> {
+async function answerMonthlyDuesCollection(tenantId: string, range: StaffFinanceDateRange | null): Promise<FinanceAnswer> {
   const paymentDate = rangeFilter(range, "paymentDate");
   const allocationWhere: Prisma.PaymentAllocationWhereInput = {
     tenantId,
@@ -164,7 +164,7 @@ async function answerTotalCollection(tenantId: string, range: StaffFinanceDateRa
 async function answerFinance(kind: StaffFinanceQueryKind, tenantId: string, permissions: readonly string[], question: string): Promise<FinanceAnswer> {
   if (!hasFinanceReadPermission(permissions)) return deniedAnswer();
   const range = parseStaffFinanceDateRange(question);
-  if (kind === "MONTHLY_DUES_COLLECTION") return answerMonthlyDuesCollection(tenantId, question, range);
+  if (kind === "MONTHLY_DUES_COLLECTION") return answerMonthlyDuesCollection(tenantId, range);
   return answerTotalCollection(tenantId, range);
 }
 

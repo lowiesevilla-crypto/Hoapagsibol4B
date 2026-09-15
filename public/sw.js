@@ -73,7 +73,9 @@ self.addEventListener("fetch", (event) => {
   const url = new URL(request.url);
   if (url.origin !== self.location.origin) return;
   if (hasSensitiveRequest(url)) {
-    event.respondWith(fetch(request));
+    // Authenticated and dynamic routes must use the browser's native network path.
+    // Returning without respondWith prevents the service worker from altering
+    // cache/session semantics for admin, portal, API, and other sensitive traffic.
     return;
   }
   if (request.mode === "navigate") {

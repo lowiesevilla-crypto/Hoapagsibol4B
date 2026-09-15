@@ -91,3 +91,21 @@ test("provider failures keep safe browser copy while recording classified operat
   }
   assert.match(assistantComponent, /Request \$\{body\.requestId\}/);
 });
+
+test("grounded knowledge remains available through authorized fallbacks when provider retrieval or synthesis degrades", async () => {
+  const [orchestrator, provider, operationalError] = await Promise.all([
+    readFile("lib/ai-assistance/reasoning-assistant.ts", "utf8"),
+    readFile("lib/ai-assistance/reasoning-provider.ts", "utf8"),
+    readFile("lib/ai-assistance/operational-error.ts", "utf8"),
+  ]);
+  assert.match(orchestrator, /groundedEvidenceFallbackAnswer/);
+  assert.match(orchestrator, /AI_REASONING_DEGRADED_GROUNDED_FALLBACK/);
+  assert.match(orchestrator, /AI_REASONING_RETRIEVAL_FALLBACK/);
+  assert.match(orchestrator.replace(/\n/g, " "), /answerTenantKnowledgeQuestion\(\{\s*experience:\s*input\.experience,\s*question,\s*conversationId:\s*conversation\.id\s*\}\)/);
+  assert.match(orchestrator, /rechecked tenant, audience, lifecycle, and malware controls/);
+  assert.match(provider, /const code = classifyOpenAiError\(response\.status, message\)/);
+  assert.match(provider, /throw new Error\(`\$\{code\}: \$\{message\}`\)/);
+  assert.match(operationalError, /AI_GATEWAY_UNAVAILABLE/);
+  assert.match(operationalError, /provider credential\.\*not configured/);
+  assert.match(operationalError, /does not have access to model/);
+});

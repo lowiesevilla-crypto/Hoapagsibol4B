@@ -39,6 +39,21 @@ const ATTENDANCE_SOURCE: BusinessSource = { documentId: "hoa-admin-attendance", 
 const EMPLOYEES_SOURCE: BusinessSource = { documentId: "hoa-admin-employees", title: "HOAHub Employee Directory", category: "Employees", reference: "/admin/employees", effectiveAt: null };
 const COMMUNITY_SOURCE: BusinessSource = { documentId: "hoa-community", title: "HOAHub Community Updates", category: "Community", reference: "/admin/announcements", effectiveAt: null };
 
+const MONTH_LOOKUP: Record<string, { month: number; label: string }> = {
+  jan: { month: 1, label: "January" }, january: { month: 1, label: "January" },
+  feb: { month: 2, label: "February" }, february: { month: 2, label: "February" },
+  mar: { month: 3, label: "March" }, march: { month: 3, label: "March" },
+  apr: { month: 4, label: "April" }, april: { month: 4, label: "April" },
+  may: { month: 5, label: "May" },
+  jun: { month: 6, label: "June" }, june: { month: 6, label: "June" },
+  jul: { month: 7, label: "July" }, july: { month: 7, label: "July" },
+  aug: { month: 8, label: "August" }, august: { month: 8, label: "August" },
+  sep: { month: 9, label: "September" }, sept: { month: 9, label: "September" }, september: { month: 9, label: "September" },
+  oct: { month: 10, label: "October" }, october: { month: 10, label: "October" },
+  nov: { month: 11, label: "November" }, november: { month: 11, label: "November" },
+  dec: { month: 12, label: "December" }, december: { month: 12, label: "December" },
+};
+
 function permissionSet(permissions: readonly string[]) {
   return new Set(permissions);
 }
@@ -68,6 +83,23 @@ function tenantMonthStart() {
   return new Date(`${dateString.slice(0, 7)}-01T00:00:00+08:00`);
 }
 
+function requestedMonthRange(question: string) {
+  const match = /\b(jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)\s+(20\d{2})\b/i.exec(question);
+  if (!match) return null;
+  const monthInfo = MONTH_LOOKUP[match[1].toLowerCase()];
+  if (!monthInfo) return null;
+  const year = Number(match[2]);
+  const monthText = String(monthInfo.month).padStart(2, "0");
+  const nextMonth = monthInfo.month === 12 ? 1 : monthInfo.month + 1;
+  const nextYear = monthInfo.month === 12 ? year + 1 : year;
+  const nextMonthText = String(nextMonth).padStart(2, "0");
+  return {
+    start: new Date(`${year}-${monthText}-01T00:00:00+08:00`),
+    end: new Date(`${nextYear}-${nextMonthText}-01T00:00:00+08:00`),
+    label: `${monthInfo.label} ${year}`,
+  };
+}
+
 function blockFilter(question: string) {
   return /\bblock\s+([a-z0-9-]+)\b/i.exec(question)?.[1]?.trim() || null;
 }
@@ -85,6 +117,8 @@ function requestedPaymentMethod(question: string) {
 }
 
 function dateFilterForQuestion(question: string, field: "paymentDate" | "dueDate" | "requestedAt" | "submittedAt" | "date") {
+  const requestedMonth = requestedMonthRange(question);
+  if (requestedMonth) return { [field]: { gte: requestedMonth.start, lt: requestedMonth.end } };
   if (/\b(today|this day)\b/i.test(question)) {
     const { start, end } = tenantDateRange();
     return { [field]: { gte: start, lt: end } };
@@ -93,6 +127,16 @@ function dateFilterForQuestion(question: string, field: "paymentDate" | "dueDate
     return { [field]: { gte: tenantMonthStart() } };
   }
   return {};
+}
+
+function paymentPeriodLabel(question: string) {
+  const requestedMonth = requestedMonthRange(question);
+  if (requestedMonth) return requestedMonth.label;
+  if (/\b(today|this day)\b/i.test(question)) return tenantLocalDateString();
+  if (/\b(this month|month to date|mtd|current month)\b/i.test(question)) {
+    return new Intl.DateTimeFormat("en-US", { timeZone: "Asia/Manila", month: "long", year: "numeric" }).format(new Date());
+  }
+  return null;
 }
 
 async function conversationForBusiness(input: { tenantId: string; actorId: string; actorRoleSnapshot: string; retentionDays: number; conversationId?: string | null }) {
@@ -255,13 +299,48 @@ async function answerPayments(tenantId: string, permissions: readonly string[], 
   const block = blockFilter(question);
   const lot = lotFilter(question);
   const method = requestedPaymentMethod(question);
-  const where: Prisma.PaymentWhereInput = {
+  const paymentWhere: Prisma.PaymentWhereInput = {
     tenantId,
     status: "ACTIVE",
     ...dateFilterForQuestion(question, "paymentDate"),
     ...(method ? { method } : {}),
     ...((block || lot) ? { homeowner: { ...(block ? { block: { equals: block } } : {}), ...(lot ? { lot: { equals: lot } } : {}) } } : {}),
   };
+
+  if (/\bmonthly\s+dues?\b/i.test(question)) {
+    const allocationWhere: Prisma.PaymentAllocationWhereInput = {
+      tenantId,
+      payment: paymentWhere,
+      bill: { tenantId, recurringChargeType: "MONTHLY_DUES", archivedAt: null },
+    };
+    const [allocated, legacyDirect] = await Promise.all([
+      prisma.paymentAllocation.aggregate({ where: allocationWhere, _sum: { amount: true }, _count: { _all: true } }),
+      prisma.payment.aggregate({
+        where: {
+          ...paymentWhere,
+          allocations: { none: {} },
+          bill: { is: { tenantId, recurringChargeType: "MONTHLY_DUES", archivedAt: null } },
+        },
+        _sum: { amount: true },
+        _count: { _all: true },
+      }),
+    ]);
+    const allocatedTotal = Number(allocated._sum.amount || 0);
+    const legacyTotal = Number(legacyDirect._sum.amount || 0);
+    const total = allocatedTotal + legacyTotal;
+    const entryCount = allocated._count._all + legacyDirect._count._all;
+    const period = paymentPeriodLabel(question);
+    if (!entryCount) {
+      return { answer: `I did not find active monthly dues collections${period ? ` for ${period}` : ""} matching that tenant filter.`, sources: [PAYMENTS_SOURCE], action: "AI_BUSINESS_MONTHLY_DUES_COLLECTION" };
+    }
+    return {
+      answer: [`Monthly dues collections${period ? ` for ${period}` : ""} total ${money(total)}.`, `Calculated from ${allocated._count._all} monthly-dues payment allocation${allocated._count._all === 1 ? "" : "s"}${legacyDirect._count._all ? ` plus ${legacyDirect._count._all} legacy direct monthly-dues payment${legacyDirect._count._all === 1 ? "" : "s"}` : ""}.`, "Only active payments in the signed-in tenant are included; voided payments and non-monthly-dues charges are excluded."].join("\n\n"),
+      sources: [PAYMENTS_SOURCE],
+      action: "AI_BUSINESS_MONTHLY_DUES_COLLECTION",
+    };
+  }
+
+  const where = paymentWhere;
   const [records, aggregate] = await Promise.all([
     prisma.payment.findMany({
       where,

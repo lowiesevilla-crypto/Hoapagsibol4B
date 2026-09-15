@@ -12,13 +12,20 @@ function statusForAiError(message: string) {
   return 400;
 }
 
+function normalizeResidentOperationalSynonyms(question: unknown) {
+  if (typeof question !== "string") return question;
+  return question
+    .replace(/\btransaction\s+history\b/gi, "payment history")
+    .replace(/\btransactions?\b/gi, "payments");
+}
+
 export async function POST(request: Request) {
   try {
     const body = await request.json() as { question?: unknown; conversationId?: unknown };
     const conversationId = typeof body.conversationId === "string" ? body.conversationId.trim() || null : null;
-    const input = { experience: "RESIDENT" as const, question: body.question, conversationId };
-    const businessAnswer = await tryAnswerAiBusinessQuestion(input);
-    const result = businessAnswer ?? await answerTenantKnowledgeQuestionWithReasoning(input);
+    const businessInput = { experience: "RESIDENT" as const, question: normalizeResidentOperationalSynonyms(body.question), conversationId };
+    const businessAnswer = await tryAnswerAiBusinessQuestion(businessInput);
+    const result = businessAnswer ?? await answerTenantKnowledgeQuestionWithReasoning({ experience: "RESIDENT", question: body.question, conversationId });
     return NextResponse.json(result, {
       headers: {
         "Cache-Control": "private, no-store, max-age=0",

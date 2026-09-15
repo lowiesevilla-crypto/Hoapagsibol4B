@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { tryAnswerAiBusinessQuestion } from "@/lib/ai-assistance/business-orchestrator";
 import { AiOperationalError } from "@/lib/ai-assistance/operational-error";
 import { answerTenantKnowledgeQuestionWithReasoning } from "@/lib/ai-assistance/reasoning-assistant";
+import { tryAnswerStaffFinanceQuestion } from "@/lib/ai-assistance/staff-finance-orchestrator";
 
 export const runtime = "nodejs";
 
@@ -17,7 +18,8 @@ export async function POST(request: Request) {
     const body = await request.json() as { question?: unknown; conversationId?: unknown };
     const conversationId = typeof body.conversationId === "string" ? body.conversationId.trim() || null : null;
     const input = { experience: "STAFF" as const, question: body.question, conversationId };
-    const businessAnswer = await tryAnswerAiBusinessQuestion(input);
+    const financeAnswer = await tryAnswerStaffFinanceQuestion(input);
+    const businessAnswer = financeAnswer ?? await tryAnswerAiBusinessQuestion(input);
     const result = businessAnswer ?? await answerTenantKnowledgeQuestionWithReasoning(input);
     return NextResponse.json(result, {
       headers: {

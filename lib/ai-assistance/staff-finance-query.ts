@@ -75,8 +75,8 @@ export function classifyStaffFinanceQuery(question: unknown): StaffFinanceQueryK
   // Policy/rule questions must remain on the approved knowledge path, not live finance data.
   if (KNOWLEDGE_ONLY_TERMS.test(value)) return null;
 
-  const monthlyDues = /\b(monthly\s+dues?|association\s+dues?|hoa\s+dues?|dues)\b.{0,90}\b(collections?|collected|payments?|received|receipts?)\b/i.test(value)
-    || /\b(collections?|collected|payments?|received|receipts?)\b.{0,90}\b(monthly\s+dues?|association\s+dues?|hoa\s+dues?|dues)\b/i.test(value);
+  const monthlyDues = /\b(monthly\s+dues?|association\s+dues?|hoa\s+dues?|dues)\b.{0,90}\b(collect(?:ion|ions|ed|ing)?|payments?|received|receipts?)\b/i.test(value)
+    || /\b(collect(?:ion|ions|ed|ing)?|payments?|received|receipts?)\b.{0,90}\b(monthly\s+dues?|association\s+dues?|hoa\s+dues?|dues)\b/i.test(value);
   if (monthlyDues) return "MONTHLY_DUES_COLLECTION";
 
   const totalCollection = /\b(total|overall|all)\s+(?:tenant\s+)?collections?\b/i.test(value)

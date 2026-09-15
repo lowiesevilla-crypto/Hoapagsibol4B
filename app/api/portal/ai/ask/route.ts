@@ -12,7 +12,7 @@ function statusForAiError(message: string) {
   return 400;
 }
 
-export function normalizeResidentOperationalSynonyms(question: unknown) {
+function normalizeResidentOperationalSynonyms(question: unknown) {
   if (typeof question !== "string") return question;
   return question
     .replace(/\btransaction\s+history\b/gi, "payment history")

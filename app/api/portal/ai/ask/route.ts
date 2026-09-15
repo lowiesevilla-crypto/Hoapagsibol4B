@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { tryAnswerAiBusinessQuestion } from "@/lib/ai-assistance/business-orchestrator";
 import { AiOperationalError } from "@/lib/ai-assistance/operational-error";
 import { answerTenantKnowledgeQuestionWithReasoning } from "@/lib/ai-assistance/reasoning-assistant";
 
@@ -11,11 +12,22 @@ function statusForAiError(message: string) {
   return 400;
 }
 
+function normalizeResidentOperationalSynonyms(question: unknown) {
+  if (typeof question !== "string") return question;
+  return question
+    .replace(/\btransaction\s+history\b/gi, "payment history")
+    .replace(/\btransactions?\b/gi, "payments")
+    .replace(/\bwho\s+(?:currently\s+)?(?:heads?|leads?)\s+(?:our|the)\s+(?:hoa|association)\b/gi, "Who is the current HOA president")
+    .replace(/\b(?:head|leader)\s+of\s+(?:our|the)\s+(?:hoa|association)\b/gi, "current HOA president");
+}
+
 export async function POST(request: Request) {
   try {
     const body = await request.json() as { question?: unknown; conversationId?: unknown };
     const conversationId = typeof body.conversationId === "string" ? body.conversationId.trim() || null : null;
-    const result = await answerTenantKnowledgeQuestionWithReasoning({ experience: "RESIDENT", question: body.question, conversationId });
+    const businessInput = { experience: "RESIDENT" as const, question: normalizeResidentOperationalSynonyms(body.question), conversationId };
+    const businessAnswer = await tryAnswerAiBusinessQuestion(businessInput);
+    const result = businessAnswer ?? await answerTenantKnowledgeQuestionWithReasoning({ experience: "RESIDENT", question: body.question, conversationId });
     return NextResponse.json(result, {
       headers: {
         "Cache-Control": "private, no-store, max-age=0",

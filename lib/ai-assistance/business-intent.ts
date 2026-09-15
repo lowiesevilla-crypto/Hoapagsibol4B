@@ -1,7 +1,6 @@
 export type AiBusinessIntent =
   | "RESIDENT_PRIVACY_DENY"
   | "RESIDENT_OPERATIONAL"
-  | "RESIDENT_TRANSACTIONS"
   | "STAFF_EXISTING_OPERATIONAL"
   | "STAFF_TENANT_PROFILE"
   | "STAFF_ORGANIZATION"
@@ -38,7 +37,7 @@ export function classifyAiBusinessIntent(experience: Experience, question: unkno
 
   if (experience === "RESIDENT") {
     if (RESIDENT_DIRECTORY_REQUEST.test(value) || OTHER_RESIDENT_PRIVATE.test(value)) return "RESIDENT_PRIVACY_DENY";
-    if (RESIDENT_TRANSACTION_TERMS.test(value)) return "RESIDENT_TRANSACTIONS";
+    if (RESIDENT_TRANSACTION_TERMS.test(value)) return "RESIDENT_OPERATIONAL";
     if (ORGANIZATION_TERMS.test(value)) return "RESIDENT_OPERATIONAL";
     if (RESIDENT_OWN_RECORD_TERMS.test(value)) return "RESIDENT_OPERATIONAL";
     if (COMMUNITY_TERMS.test(value)) return "RESIDENT_OPERATIONAL";

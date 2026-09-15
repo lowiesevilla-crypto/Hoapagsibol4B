@@ -12,11 +12,13 @@ function statusForAiError(message: string) {
   return 400;
 }
 
-function normalizeResidentOperationalSynonyms(question: unknown) {
+export function normalizeResidentOperationalSynonyms(question: unknown) {
   if (typeof question !== "string") return question;
   return question
     .replace(/\btransaction\s+history\b/gi, "payment history")
-    .replace(/\btransactions?\b/gi, "payments");
+    .replace(/\btransactions?\b/gi, "payments")
+    .replace(/\bwho\s+(?:currently\s+)?(?:heads?|leads?)\s+(?:our|the)\s+(?:hoa|association)\b/gi, "Who is the current HOA president")
+    .replace(/\b(?:head|leader)\s+of\s+(?:our|the)\s+(?:hoa|association)\b/gi, "current HOA president");
 }
 
 export async function POST(request: Request) {

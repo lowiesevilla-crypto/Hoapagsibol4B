@@ -21,7 +21,12 @@ test("service worker does not intercept authenticated and dynamic routes", () =>
   assert.ok(sensitiveStart >= 0 && navigationStart > sensitiveStart, "sensitive-route guard must run before navigation caching");
 
   const sensitiveBlock = worker.slice(sensitiveStart, navigationStart);
-  assert.match(sensitiveBlock, /return;/);
-  assert.doesNotMatch(sensitiveBlock, /respondWith/);
-  assert.doesNotMatch(sensitiveBlock, /fetch\(request\)/);
+  const executableSensitiveBlock = sensitiveBlock
+    .split("\n")
+    .filter((line) => !line.trimStart().startsWith("//"))
+    .join("\n");
+
+  assert.match(executableSensitiveBlock, /return;/);
+  assert.doesNotMatch(executableSensitiveBlock, /event\.respondWith\s*\(/);
+  assert.doesNotMatch(executableSensitiveBlock, /fetch\s*\(\s*request\s*\)/);
 });

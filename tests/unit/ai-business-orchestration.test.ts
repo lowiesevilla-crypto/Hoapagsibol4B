@@ -7,6 +7,7 @@ test("resident operational paraphrases are routed to live HOAHub services before
   assert.equal(classifyAiBusinessIntent("RESIDENT", "Who is the current HOA president?"), "RESIDENT_OPERATIONAL");
   assert.equal(classifyAiBusinessIntent("RESIDENT", "Who heads our association right now?"), "RESIDENT_OPERATIONAL");
   assert.equal(classifyAiBusinessIntent("RESIDENT", "What is my latest payment transaction?"), "RESIDENT_OPERATIONAL");
+  assert.equal(classifyAiBusinessIntent("RESIDENT", "Show my transaction history"), "RESIDENT_OPERATIONAL");
   assert.equal(classifyAiBusinessIntent("RESIDENT", "Show my current dues and statement of account"), "RESIDENT_OPERATIONAL");
   assert.equal(classifyAiBusinessIntent("RESIDENT", "What events are coming up?"), "RESIDENT_OPERATIONAL");
 });
@@ -33,6 +34,7 @@ test("staff business intents cover tenant records named by the BRD", () => {
   assert.equal(classifyAiBusinessIntent("STAFF", "List active employees"), "STAFF_EMPLOYEES");
   assert.equal(classifyAiBusinessIntent("STAFF", "Who is the current HOA president?"), "STAFF_ORGANIZATION");
   assert.equal(classifyAiBusinessIntent("STAFF", "Show the association profile and contact information"), "STAFF_TENANT_PROFILE");
+  assert.equal(classifyAiBusinessIntent("STAFF", "Draft a board resolution for monthly dues collection policy"), "STAFF_EXISTING_OPERATIONAL");
 });
 
 test("staff policy-only questions stay on grounded knowledge reasoning", () => {
@@ -50,6 +52,7 @@ test("both AI ask routes consult business orchestration before grounded knowledg
     assert.match(route, /tryAnswerAiBusinessQuestion/);
     assert.match(route, /businessAnswer \?\? await answerTenantKnowledgeQuestionWithReasoning/);
   }
+  assert.match(residentRoute, /transaction\\s\+history/);
   assert.match(orchestrator, /Permission\.HOMEOWNERS_READ/);
   assert.match(orchestrator, /Permission\.PAYMENTS_READ/);
   assert.match(orchestrator, /Permission\.BILLING_READ/);

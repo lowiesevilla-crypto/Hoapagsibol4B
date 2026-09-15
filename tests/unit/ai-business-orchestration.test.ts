@@ -53,6 +53,8 @@ test("both AI ask routes consult business orchestration before grounded knowledg
     assert.match(route, /businessAnswer \?\? await answerTenantKnowledgeQuestionWithReasoning/);
   }
   assert.match(residentRoute, /transaction\\s\+history/);
+  assert.match(residentRoute, /heads\?\|leads\?/);
+  assert.match(residentRoute, /current HOA president/);
   assert.match(orchestrator, /Permission\.HOMEOWNERS_READ/);
   assert.match(orchestrator, /Permission\.PAYMENTS_READ/);
   assert.match(orchestrator, /Permission\.BILLING_READ/);

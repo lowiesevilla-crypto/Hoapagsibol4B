@@ -26,6 +26,7 @@ test("resident knowledge questions remain on the approved knowledge path", () =>
 test("staff business intents cover tenant records named by the BRD", () => {
   assert.equal(classifyAiBusinessIntent("STAFF", "Give me the list of active homeowners in Block 1"), "STAFF_HOMEOWNERS");
   assert.equal(classifyAiBusinessIntent("STAFF", "Show GCash payment transactions this month"), "STAFF_PAYMENTS");
+  assert.equal(classifyAiBusinessIntent("STAFF", "How much is the Monthly Dues collection for August 2026"), "STAFF_PAYMENTS");
   assert.equal(classifyAiBusinessIntent("STAFF", "Which accounts are overdue?"), "STAFF_RECEIVABLES");
   assert.equal(classifyAiBusinessIntent("STAFF", "How many document requests are pending?"), "STAFF_DOCUMENT_REQUESTS");
   assert.equal(classifyAiBusinessIntent("STAFF", "Summarize current complaints"), "STAFF_COMPLAINTS");
@@ -39,6 +40,7 @@ test("staff business intents cover tenant records named by the BRD", () => {
 
 test("staff policy-only questions stay on grounded knowledge reasoning", () => {
   assert.equal(classifyAiBusinessIntent("STAFF", "What does the approved collection policy say?"), null);
+  assert.equal(classifyAiBusinessIntent("STAFF", "What does the monthly dues collection policy say?"), null);
   assert.equal(classifyAiBusinessIntent("STAFF", "Summarize the AI governance BRD"), null);
 });
 
@@ -62,6 +64,10 @@ test("both AI ask routes consult business orchestration before grounded knowledg
   assert.match(orchestrator, /Permission\.COMPLAINTS_MANAGE/);
   assert.match(orchestrator, /Permission\.PAYROLL_MANAGE/);
   assert.match(orchestrator, /Permission\.ATTENDANCE_MANAGE/);
+  assert.match(orchestrator, /requestedMonthRange/);
+  assert.match(orchestrator, /PaymentAllocationWhereInput/);
+  assert.match(orchestrator, /recurringChargeType: "MONTHLY_DUES"/);
+  assert.match(orchestrator, /AI_BUSINESS_MONTHLY_DUES_COLLECTION/);
   assert.match(orchestrator, /RESIDENT_OTHER_RECORDS_NOT_AUTHORIZED/);
   assert.match(orchestrator, /business-service-orchestrator/);
 });

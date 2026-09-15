@@ -28,11 +28,12 @@ export class AiOperationalError extends Error {
 export function classifyAiOperationalError(error: unknown): AiOperationalErrorCode {
   if (error instanceof AiOperationalError) return error.code;
   const message = error instanceof Error ? error.message : String(error);
-  if (/PROVIDER_AUTH_FAILURE|invalid api key|incorrect api key|unauthorized|forbidden/i.test(message)) return "PROVIDER_AUTH_FAILURE";
+  if (/AI_GATEWAY_UNAVAILABLE|gateway unavailable|upstream.*(?:5\d\d|unavailable)|provider.*(?:5\d\d|unavailable)/i.test(message)) return "AI_GATEWAY_UNAVAILABLE";
+  if (/PROVIDER_AUTH_FAILURE|invalid api key|incorrect api key|unauthorized|forbidden|provider credential.*not configured|OPENAI_API_KEY/i.test(message)) return "PROVIDER_AUTH_FAILURE";
   if (/PROVIDER_QUOTA_FAILURE|insufficient_quota|quota|billing/i.test(message)) return "PROVIDER_QUOTA_FAILURE";
   if (/PROVIDER_RATE_LIMIT|rate limit|429/i.test(message)) return "PROVIDER_RATE_LIMIT";
   if (/PROVIDER_TIMEOUT|timeout|aborted/i.test(message)) return "PROVIDER_TIMEOUT";
-  if (/MODEL_UNAVAILABLE|model.*not found|model.*unavailable/i.test(message)) return "MODEL_UNAVAILABLE";
+  if (/MODEL_UNAVAILABLE|model.*not found|model.*unavailable|does not have access to model|not have access to model/i.test(message)) return "MODEL_UNAVAILABLE";
   if (/INDEX_UNAVAILABLE|vector store.*not found|No tenant AI index/i.test(message)) return "INDEX_UNAVAILABLE";
   if (/RETRIEVAL_FAILURE|retrieval|vector_stores.*search/i.test(message)) return "RETRIEVAL_FAILURE";
   if (/permission|not included|authenticated|TENANT_AI_DISABLED|unavailable:/i.test(message)) return "AUTHORIZATION_DENIED";

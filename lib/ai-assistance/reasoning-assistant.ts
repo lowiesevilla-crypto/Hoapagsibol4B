@@ -195,6 +195,31 @@ function sourceCards(evidence: AiGroundedEvidence[]) {
   });
 }
 
+function groundedEvidenceFallbackAnswer(evidence: AiGroundedEvidence[]) {
+  const unique = evidence.filter((item, index, all) => all.findIndex((candidate) => candidate.documentId === item.documentId) === index).slice(0, 3);
+  const excerpts = unique.map((item, index) => {
+    const locator = item.locator ? ` — ${item.locator}` : "";
+    const text = item.text.replace(/\s+/g, " ").trim().slice(0, 1400);
+    return `${index + 1}. ${item.title}${locator}: ${text}`;
+  });
+  return [
+    "Based on this tenant's approved and currently effective knowledge sources:",
+    excerpts.join("\n\n"),
+    "Reasoning: HOAHub matched your question against the authorized indexed passages, rechecked tenant, audience, lifecycle, and malware controls, and selected the highest-ranked supporting text. I am keeping the conclusion within those approved passages rather than adding an unsupported policy interpretation.",
+  ].join("\n\n");
+}
+
+async function recordGroundedEvidenceFallback(input: { tenantId: string; actorId: string; conversationId: string; requestId: string; started: number; answer: string; evidence: AiGroundedEvidence[]; code: string }) {
+  const sources = sourceCards(input.evidence);
+  const sourceDocumentIds = sources.map((source) => source.documentId);
+  await prisma.$transaction([
+    prisma.aiMessage.create({ data: { tenantId: input.tenantId, conversationId: input.conversationId, role: "ASSISTANT", contentRedacted: redactAiContentForAudit(input.answer), privacyClassification: "INTERNAL", sourceDocumentIds } }),
+    prisma.aiUsageLedger.create({ data: { tenantId: input.tenantId, actorId: input.actorId, requestId: input.requestId, provider: "HOAHUB", model: "grounded-evidence-fallback", latencyMs: Date.now() - input.started, outcome: AiRequestOutcome.SUCCEEDED } }),
+    prisma.auditLog.create({ data: { tenantId: input.tenantId, actorId: input.actorId, module: "AI_ASSISTANCE", action: "AI_REASONING_DEGRADED_GROUNDED_FALLBACK", entityType: "AiConversation", entityId: input.conversationId, metadata: { requestId: input.requestId, provider: "OPENAI", code: input.code, reasoningPipeline: true, sourceDocumentIds, evidenceCount: input.evidence.length, evidenceLocators: input.evidence.map((item) => item.locator).filter(Boolean) } } }),
+  ]);
+  return sources;
+}
+
 async function recordNoSource(input: { tenantId: string; actorId: string; conversationId: string; requestId: string; started: number; reason: string }) {
   await prisma.$transaction([
     prisma.aiMessage.create({ data: { tenantId: input.tenantId, conversationId: input.conversationId, role: "ASSISTANT", contentRedacted: redactAiContentForAudit(AI_NO_SOURCE_RESPONSE), privacyClassification: "INTERNAL", sourceDocumentIds: [] } }),
@@ -240,13 +265,14 @@ export async function answerTenantKnowledgeQuestionWithReasoning(input: { experi
     return { conversationId: conversation.id, answer: AI_NO_SOURCE_RESPONSE, sources: [], requestId };
   }
 
+  let evidence: AiGroundedEvidence[];
   try {
     const candidates = await searchTenantReasoningEvidence({
       question,
       vectorStoreId: providerIndex.vectorStoreId,
       allowedAudiences: input.experience === "RESIDENT" ? ["RESIDENT"] : ["RESIDENT", "STAFF"],
     });
-    const evidence = await authorizeAndRerankEvidence({
+    evidence = await authorizeAndRerankEvidence({
       tenantId,
       experience: input.experience,
       vectorStoreId: providerIndex.vectorStoreId,
@@ -258,19 +284,48 @@ export async function answerTenantKnowledgeQuestionWithReasoning(input: { experi
       await recordNoSource({ tenantId, actorId, conversationId: conversation.id, requestId, started, reason: candidates.length ? "NO_AUTHORIZED_REASONING_EVIDENCE" : "NO_REASONING_EVIDENCE" });
       return { conversationId: conversation.id, answer: AI_NO_SOURCE_RESPONSE, sources: [], requestId };
     }
+  } catch (error) {
+    const code = classifyAiOperationalError(error);
+    console.error("[ai-assistance] Grounded reasoning retrieval failed; falling back to tenant-authorized repository retrieval.", {
+      tenantId,
+      actorId,
+      conversationId: conversation.id,
+      requestId,
+      provider: "OPENAI",
+      code,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    await prisma.aiUsageLedger.create({ data: { tenantId, actorId, requestId, outcome: AiRequestOutcome.PROVIDER_ERROR, latencyMs: Date.now() - started, denialReason: code } }).catch(() => undefined);
+    await prisma.auditLog.create({ data: { tenantId, actorId, module: "AI_ASSISTANCE", action: "AI_REASONING_RETRIEVAL_FALLBACK", entityType: "AiConversation", entityId: conversation.id, metadata: { requestId, provider: "OPENAI", reasoningPipeline: true, code } } }).catch(() => undefined);
+    try {
+      return await answerTenantKnowledgeQuestion({ experience: input.experience, question, conversationId: conversation.id });
+    } catch (fallbackError) {
+      console.error("[ai-assistance] Tenant-authorized repository fallback also failed.", {
+        tenantId,
+        actorId,
+        conversationId: conversation.id,
+        requestId,
+        originalCode: code,
+        fallbackCode: classifyAiOperationalError(fallbackError),
+      });
+      throw new AiOperationalError(code, safeAiUnavailableMessage(), requestId);
+    }
+  }
 
-    const conversationContext = previousMessages.reverse().map((message) => `${message.role}: ${message.contentRedacted.slice(0, 900)}`);
+  const conversationContext = previousMessages.reverse().map((message) => `${message.role}: ${message.contentRedacted.slice(0, 900)}`);
+  const sources = sourceCards(evidence);
+  try {
     const providerResponse = await synthesizeTenantReasoningAnswer({
       question,
       evidence,
       conversationContext,
       modelTier: access.entitlement.configuration.modelTier,
     });
-    const sources = sourceCards(evidence);
     const answer = providerResponse.text.trim();
-    if (!answer || !sources.length) {
-      await recordNoSource({ tenantId, actorId, conversationId: conversation.id, requestId, started, reason: "EMPTY_GROUNDED_SYNTHESIS" });
-      return { conversationId: conversation.id, answer: AI_NO_SOURCE_RESPONSE, sources: [], requestId };
+    if (!answer) {
+      const fallbackAnswer = groundedEvidenceFallbackAnswer(evidence);
+      const fallbackSources = await recordGroundedEvidenceFallback({ tenantId, actorId, conversationId: conversation.id, requestId, started, answer: fallbackAnswer, evidence, code: "EMPTY_GROUNDED_SYNTHESIS" });
+      return { conversationId: conversation.id, answer: fallbackAnswer, sources: fallbackSources, requestId };
     }
     const sourceDocumentIds = sources.map((source) => source.documentId);
     const estimatedCostCentavos = estimateAiCostCentavos(providerResponse.inputTokens, providerResponse.outputTokens) ?? 0;
@@ -282,7 +337,7 @@ export async function answerTenantKnowledgeQuestionWithReasoning(input: { experi
     return { conversationId: conversation.id, answer, sources, requestId };
   } catch (error) {
     const code = classifyAiOperationalError(error);
-    console.error("[ai-assistance] Grounded reasoning provider failed.", {
+    console.error("[ai-assistance] Grounded reasoning synthesis failed; returning authorized evidence fallback.", {
       tenantId,
       actorId,
       conversationId: conversation.id,
@@ -291,8 +346,8 @@ export async function answerTenantKnowledgeQuestionWithReasoning(input: { experi
       code,
       error: error instanceof Error ? error.message : String(error),
     });
-    await prisma.aiUsageLedger.create({ data: { tenantId, actorId, requestId, outcome: AiRequestOutcome.PROVIDER_ERROR, latencyMs: Date.now() - started, denialReason: code } }).catch(() => undefined);
-    await prisma.auditLog.create({ data: { tenantId, actorId, module: "AI_ASSISTANCE", action: "AI_PROVIDER_ERROR", entityType: "AiConversation", entityId: conversation.id, metadata: { requestId, provider: "OPENAI", reasoningPipeline: true, code } } }).catch(() => undefined);
-    throw new AiOperationalError(code, safeAiUnavailableMessage(), requestId);
+    const answer = groundedEvidenceFallbackAnswer(evidence);
+    const fallbackSources = await recordGroundedEvidenceFallback({ tenantId, actorId, conversationId: conversation.id, requestId, started, answer, evidence, code });
+    return { conversationId: conversation.id, answer, sources: fallbackSources, requestId };
   }
 }

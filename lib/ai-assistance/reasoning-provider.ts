@@ -37,6 +37,7 @@ type SearchInput = {
 };
 
 function classifyOpenAiError(status: number, message: string): AiOperationalErrorCode {
+  if ((status === 403 || status === 404) && /(model|does not have access|not have access|model access)/i.test(message)) return "MODEL_UNAVAILABLE";
   if (status === 401 || status === 403) return "PROVIDER_AUTH_FAILURE";
   if (status === 404 && /model/i.test(message)) return "MODEL_UNAVAILABLE";
   if (status === 408 || /timeout/i.test(message)) return "PROVIDER_TIMEOUT";
@@ -53,7 +54,7 @@ function isUnsupportedSearchOption(status: number, message: string) {
 async function parseProviderError(response: Response) {
   const body = await response.json().catch(() => ({})) as Record<string, unknown>;
   const errorRecord = body.error && typeof body.error === "object" ? body.error as Record<string, unknown> : {};
-  const message = typeof errorRecord.message === "string" ? errorRecord.message : `OpenAI retrieval error (${response.status}).`;
+  const message = typeof errorRecord.message === "string" ? errorRecord.message : `OpenAI provider error (${response.status}).`;
   return { body, message, code: classifyOpenAiError(response.status, message) };
 }
 
@@ -238,7 +239,9 @@ export async function synthesizeTenantReasoningAnswer(input: SynthesisInput): Pr
   const body = await response.json() as Record<string, unknown>;
   if (!response.ok) {
     const errorRecord = body.error && typeof body.error === "object" ? body.error as Record<string, unknown> : {};
-    throw new Error(typeof errorRecord.message === "string" ? `OpenAI reasoning error: ${errorRecord.message}` : `OpenAI reasoning error (${response.status}).`);
+    const message = typeof errorRecord.message === "string" ? errorRecord.message : `OpenAI reasoning error (${response.status}).`;
+    const code = classifyOpenAiError(response.status, message);
+    throw new Error(`${code}: ${message}`);
   }
   const usage = body.usage && typeof body.usage === "object" ? body.usage as Record<string, unknown> : {};
   return {

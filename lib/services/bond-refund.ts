@@ -3,6 +3,7 @@ import {
   Prisma,
   RefundStatus,
 } from "@prisma/client";
+import { bondDuesCreditBatchPrefix } from "@/lib/bond-dues-credit";
 import { bondRefundReference } from "@/lib/bond-refund-reference";
 import { isRefundableBondType } from "@/lib/bond-rules";
 import { prisma } from "@/lib/db";
@@ -68,16 +69,26 @@ export async function recordBondRefund({
         throw new Error("This bond is already closed.");
       }
 
+      const appliedAggregate = await tx.payment.aggregate({
+        where: {
+          tenantId: actor.tenantId,
+          status: "ACTIVE",
+          paymentBatchId: { startsWith: bondDuesCreditBatchPrefix(collection.id) },
+        },
+        _sum: { amount: true },
+      });
       const bondAmount = Number(collection.amount);
       const previousRefunded = Number(collection.amountRefunded);
       const amountForfeited = Number(collection.amountForfeited);
-      const available = roundCurrency(bondAmount - previousRefunded - amountForfeited);
+      const amountAppliedToDues = roundCurrency(Number(appliedAggregate._sum.amount ?? 0));
+      const available = roundCurrency(bondAmount - previousRefunded - amountForfeited - amountAppliedToDues);
+      if (available <= 0) throw new Error("No bond balance remains to refund.");
       if (amount > available) {
         throw new Error("Refund cannot exceed the remaining bond balance.");
       }
 
       const amountRefunded = roundCurrency(previousRefunded + amount);
-      const remaining = roundCurrency(bondAmount - amountRefunded - amountForfeited);
+      const remaining = roundCurrency(bondAmount - amountRefunded - amountForfeited - amountAppliedToDues);
       const refundStatus = remaining === 0
         ? RefundStatus.REFUNDED
         : RefundStatus.PARTIALLY_REFUNDED;
@@ -121,6 +132,7 @@ export async function recordBondRefund({
             previousRefunded,
             amountRefunded,
             amountForfeited,
+            amountAppliedToDues,
             remaining,
             refundStatus,
             method,
@@ -133,6 +145,7 @@ export async function recordBondRefund({
         id: refund.id,
         refundReference,
         amountRefunded,
+        amountAppliedToDues,
         remaining,
         refundStatus,
       };

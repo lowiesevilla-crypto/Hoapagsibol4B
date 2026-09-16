@@ -15,6 +15,7 @@ const employeeNumber = `E2E-${runToken}`.slice(0, 40);
 const employeeName = `E2E Employee ${runToken}`;
 const originalEmail = `e2e-employee-${runToken}@example.invalid`;
 const updatedPhone = "09179990002";
+const correctedRate = 19000;
 let createdEmployeeId = null;
 
 async function pathExists(path) {
@@ -214,6 +215,39 @@ async function runEmployeeCreateAndEdit(browser) {
     );
     assert.equal(Number(updated.compensations[0].fixedAllowance), 0, "Valid zero fixed allowance must be preserved.");
     assert.equal(Number(updated.compensations[0].fixedDeduction), 0, "Valid zero fixed deduction must be preserved.");
+
+    // Regression for the production incident: an administrator can create an
+    // employee and then correct the salary/rate again on the same effective date.
+    // The unlocked current configuration must be corrected in place rather than
+    // throwing into the global Next.js error boundary.
+    await page.goto(`${baseUrl}/admin/employees/${created.id}`, { waitUntil: "networkidle2", timeout });
+    await expectText(page, employeeName, "employee salary correction page");
+    const currentEffectiveDate = await page.$eval("#compensationEffectiveFrom", (element) => element.value);
+    assert.equal(
+      currentEffectiveDate,
+      created.compensations[0].effectiveFrom.toISOString().slice(0, 10),
+      "The edit form must preserve the current effective date for a same-day correction.",
+    );
+    await clearAndType(page, "#rate", String(correctedRate));
+    await clickAndWaitForNavigation(page, "button[type='submit']", "Save changes");
+    await page.waitForFunction(
+      () => window.location.pathname === "/admin/employees" && new URL(window.location.href).searchParams.get("success") === "saved",
+      { timeout },
+    );
+
+    const salaryCorrected = await prisma.employeeProfile.findFirst({
+      where: { id: created.id, tenantId: primaryTenantId },
+      include: { compensations: { orderBy: { effectiveFrom: "asc" } } },
+    });
+    assert.ok(salaryCorrected, "Expected employee to remain available after same-day salary correction.");
+    assert.equal(Number(salaryCorrected.baseRate), correctedRate, "Legacy employee rate must stay synchronized.");
+    assert.equal(salaryCorrected.compensations.length, 1, "Same-day correction must not create a duplicate effective-date row.");
+    assert.equal(Number(salaryCorrected.compensations[0].rate), correctedRate, "Same-day salary correction must persist to effective compensation.");
+
+    // A successful salary correction must leave Employee routing healthy so Add
+    // Employee remains directly usable rather than displaying the global error UI.
+    await page.goto(`${baseUrl}/admin/employees/new`, { waitUntil: "networkidle2", timeout });
+    await expectText(page, "Add an employee", "Add Employee route after salary correction");
   } finally {
     await context.close();
   }
@@ -237,6 +271,8 @@ try {
   console.log("- clearing optional email persisted as null");
   console.log("- valid zero payroll fields remained preserved");
   console.log("- identity-only edit did not create duplicate compensation history");
+  console.log("- same-day salary correction persisted without duplicating compensation history");
+  console.log("- Add Employee route remained healthy after salary correction");
 } catch (error) {
   console.error("Employee browser regression suite failed.");
   console.error(error);

@@ -15,6 +15,7 @@ import {
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { requireUser } from "@/lib/auth";
+import { bondDuesCreditBatchPrefix } from "@/lib/bond-dues-credit";
 import { prisma } from "@/lib/db";
 import { buildPaymentCoverage, migratedPaymentCoverageDisplay } from "@/lib/payment-coverage";
 import { recalculateBillFromActivePayments } from "@/lib/services/payment-ledger";
@@ -167,24 +168,35 @@ export async function postMigration(tx: Prisma.TransactionClient, input: Migrati
     postedRecordType = "Collection";
     postedRecordId = collection.id;
   } else {
-    const collection = await tx.collection.findFirst({ where: { receiptNumber: input.relatedReceiptNumber! } });
+    const collection = await tx.collection.findFirst({ where: { tenantId, receiptNumber: input.relatedReceiptNumber! } });
     if (!collection || !collection.refundable) throw new Error("The related refundable bond receipt was not found.");
     const expectsConstruction = input.kind.toString().startsWith("CONSTRUCTION_BOND");
     if ((expectsConstruction && collection.type !== CollectionType.CONSTRUCTION_BOND) || (!expectsConstruction && collection.type !== CollectionType.CONTRACTOR_BOND)) throw new Error("The related receipt belongs to a different bond type.");
-    const available = Number(collection.amount) - Number(collection.amountRefunded) - Number(collection.amountForfeited);
+    const appliedAggregate = collection.type === CollectionType.CONSTRUCTION_BOND
+      ? await tx.payment.aggregate({
+          where: {
+            tenantId,
+            status: "ACTIVE",
+            paymentBatchId: { startsWith: bondDuesCreditBatchPrefix(collection.id) },
+          },
+          _sum: { amount: true },
+        })
+      : null;
+    const amountAppliedToDues = roundCurrency(Number(appliedAggregate?._sum.amount ?? 0));
+    const available = roundCurrency(Number(collection.amount) - Number(collection.amountRefunded) - Number(collection.amountForfeited) - amountAppliedToDues);
     if (input.amount > available) throw new Error("Adjustment exceeds the remaining bond balance.");
     homeownerId = collection.homeownerId ?? undefined;
     contractorId = collection.contractorId ?? undefined;
     if (input.kind.toString().endsWith("REFUND")) {
       const refund = await tx.bondRefund.create({ data: { collectionId: collection.id, amount: input.amount, refundDate: input.period ?? new Date(), method: PaymentMethod.OTHER, referenceNumber: input.referenceNumber, remarks: note, processedById: actorId } });
-      const amountRefunded = Number(collection.amountRefunded) + input.amount;
-      const remaining = Number(collection.amount) - amountRefunded - Number(collection.amountForfeited);
+      const amountRefunded = roundCurrency(Number(collection.amountRefunded) + input.amount);
+      const remaining = roundCurrency(Number(collection.amount) - amountRefunded - Number(collection.amountForfeited) - amountAppliedToDues);
       await tx.collection.update({ where: { id: collection.id }, data: { amountRefunded, refundStatus: remaining <= 0 ? RefundStatus.REFUNDED : RefundStatus.PARTIALLY_REFUNDED } });
       postedRecordType = "BondRefund";
       postedRecordId = refund.id;
     } else {
-      const amountForfeited = Number(collection.amountForfeited) + input.amount;
-      const remaining = Number(collection.amount) - Number(collection.amountRefunded) - amountForfeited;
+      const amountForfeited = roundCurrency(Number(collection.amountForfeited) + input.amount);
+      const remaining = roundCurrency(Number(collection.amount) - Number(collection.amountRefunded) - amountForfeited - amountAppliedToDues);
       await tx.collection.update({ where: { id: collection.id }, data: { amountForfeited, refundStatus: remaining <= 0 ? RefundStatus.FORFEITED : RefundStatus.HELD, forfeitedAt: input.period ?? new Date(), forfeitedById: actorId, remarks: [collection.remarks, note].filter(Boolean).join("\n") } });
       postedRecordType = "CollectionForfeiture";
       postedRecordId = collection.id;
@@ -241,6 +253,7 @@ function parseDate(input: string) { const date = new Date(`${input}T00:00:00.000
 function periodCoverage(date: Date) { return { coverageYear: date.getUTCFullYear(), coverageMonth: date.getUTCMonth() + 1 }; }
 function todayUtc() { const now = new Date(); return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate())); }
 function monthEnd(date: Date) { return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth() + 1, 0)); }
+function roundCurrency(value: number) { return Math.round((value + Number.EPSILON) * 100) / 100; }
 function clean(value: FormDataEntryValue | null) { return String(value || "").trim() || undefined; }
 function failure(message: string, errors: string[]): MigrationImportState { return { success: false, message, imported: 0, errors }; }
 function value(row: Record<string, string>, field: string) { return String(row[field] || "").trim(); }

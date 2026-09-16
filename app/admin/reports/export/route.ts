@@ -1,5 +1,6 @@
 import { Prisma, Role } from "@prisma/client";
 import { requireUser } from "@/lib/auth";
+import { isBondDuesCreditPayment } from "@/lib/bond-dues-credit";
 import { prisma } from "@/lib/db";
 import { paymentAllocationCoverageDisplay } from "@/lib/payment-coverage";
 import { paymentAppliedAmount, paymentUnappliedCredit } from "@/lib/payment-credit";
@@ -42,10 +43,13 @@ export async function GET(request: Request) {
   const header = ["Transaction ID", "Document No.", "Transaction", "Category", "Party", "Date", "Method", "Reference", "Amount", "Payment Coverage", "Accounting treatment"];
   const rows = [
     header,
-    ...payments.flatMap((item) => [
-      [item.id, item.receiptNumber ?? "", "Collection", "Monthly dues applied", item.homeowner.user.name, item.paymentDate.toISOString().slice(0, 10), item.method, item.referenceNumber ?? "", paymentAppliedAmount(item), paymentAllocationCoverageDisplay(item), "Income"],
-      ...(paymentUnappliedCredit(item) > 0 ? [[`${item.id}-credit`, item.receiptNumber ?? "", "Collection", "Unapplied homeowner credit", item.homeowner.user.name, item.paymentDate.toISOString().slice(0, 10), item.method, item.referenceNumber ?? "", paymentUnappliedCredit(item), "", "Liability"]] : []),
-    ]),
+    ...payments.flatMap((item) => {
+      const bondCredit = isBondDuesCreditPayment(item);
+      return [
+        [item.id, item.receiptNumber ?? "", bondCredit ? "Non-cash bond application" : "Collection", bondCredit ? "Construction Bond applied to Monthly Dues" : "Monthly dues applied", item.homeowner.user.name, item.paymentDate.toISOString().slice(0, 10), bondCredit ? "NON-CASH / BOND CREDIT" : item.method, item.referenceNumber ?? "", paymentAppliedAmount(item), paymentAllocationCoverageDisplay(item), bondCredit ? "Bond liability reduction / Monthly Dues settlement (non-cash)" : "Income"],
+        ...(!bondCredit && paymentUnappliedCredit(item) > 0 ? [[`${item.id}-credit`, item.receiptNumber ?? "", "Collection", "Unapplied homeowner credit", item.homeowner.user.name, item.paymentDate.toISOString().slice(0, 10), item.method, item.referenceNumber ?? "", paymentUnappliedCredit(item), "", "Liability"]] : []),
+      ];
+    }),
     ...collections.filter((item) => item.collectionDate >= from && item.collectionDate <= to).map((item) => [item.id, item.receiptNumber ?? "", "Collection", collectionLabel(item.type, item.description), collectionPayerName(item), item.collectionDate.toISOString().slice(0, 10), item.method, item.referenceNumber ?? "", item.amount.toString(), collectionCoverage(item), collectionTreatment(item)]),
     ...collections.filter((item) => Number(item.amountForfeited) > 0 && item.forfeitedAt && item.forfeitedAt >= from && item.forfeitedAt <= to).map((item) => [`${item.id}-forfeiture`, "", "Forfeiture", collectionLabel(item.type), collectionPayerName(item), item.forfeitedAt?.toISOString().slice(0, 10) ?? "", "OTHER", "", item.amountForfeited.toString(), "", "Income"]),
     ...refunds.map((item) => { const source = collections.find((collection) => collection.id === item.collection.id); return [item.id, "", "Refund", collectionLabel(item.collection.type), source ? collectionPayerName(source) : item.collection.homeowner?.user.name ?? item.collection.contractor?.companyName ?? "Unknown", item.refundDate.toISOString().slice(0, 10), item.method, item.referenceNumber ?? "", `-${item.amount.toString()}`, "", "Liability reduction"]; }),

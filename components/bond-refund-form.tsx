@@ -31,7 +31,7 @@ export function BondRefundForm({ bonds, today }: { bonds: BondOption[]; today: s
     </form>
 
     <form action={applyConstructionBondToDuesAction} className="card border-emerald-200">
-      <div className="mb-5"><h2 className="text-lg font-black">Apply Construction Bond to Monthly Dues</h2><p className="text-sm text-slate-500">Non-cash option: reduce the homeowner's oldest open Monthly Dues using an available Construction Bond. Any excess stays in the bond.</p></div>
+      <div className="mb-5"><h2 className="text-lg font-black">Apply Construction Bond to Monthly Dues</h2><p className="text-sm text-slate-500">Non-cash option: reduce the homeowner’s oldest open Monthly Dues using an available Construction Bond. Any excess stays in the bond.</p></div>
       <input type="hidden" name="idempotencyKey" value={idempotencyKey} />
       <div className="grid gap-4 sm:grid-cols-2">
         <div className="sm:col-span-2"><SearchableSelect name="collectionId" label="Construction Bond" items={constructionBonds} placeholder="Search homeowner, property, or Construction Bond" required /></div>

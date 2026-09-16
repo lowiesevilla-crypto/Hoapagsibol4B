@@ -1,4 +1,5 @@
 import { PaymentStatus, RecurringChargeType } from "@prisma/client";
+import { isBondDuesCreditPayment } from "@/lib/bond-dues-credit";
 import { prisma } from "@/lib/db";
 import { PAYMONGO_PAYMENT_REQUEST_MARKER } from "@/lib/homeowner-payment-flow";
 import { collectionLabel } from "@/lib/utils";
@@ -70,22 +71,27 @@ export async function getTransactionHistoryReport(tenantId: string, fromInput?: 
   });
   const refundParty = (item: (typeof refunds)[number]) => item.collection.payerName || item.collection.homeowner?.user.name || item.collection.contractor?.companyName || "Unknown";
   const rows: TransactionHistoryReportRow[] = [
-    ...payments.map((payment) => ({
-      transactionId: payment.id,
-      transactionDate: payment.paymentDate,
-      transactionType: payment.status === PaymentStatus.VOIDED ? "Voided Monthly Dues Payment" : "Monthly Dues Payment",
-      paymentType: payment.paymentRequest ? "Online Payment" : "Admin Recorded Payment",
-      paymentMode: payment.paymentRequest?.proofContentType === PAYMONGO_PAYMENT_REQUEST_MARKER ? "PayMongo Online" : payment.method,
-      homeownerName: payment.homeowner.user.name,
-      block: payment.homeowner.block,
-      lot: payment.homeowner.lot,
-      party: payment.homeowner.user.name,
-      amount: Number(payment.amount),
-      balance: balanceByHomeowner.get(payment.homeownerId) ?? 0,
-      receiptNumber: payment.receiptNumber ?? "",
-      referenceNumber: payment.referenceNumber ?? "",
-      remarks: payment.remarks ?? "",
-    })),
+    ...payments.map((payment) => {
+      const bondCredit = isBondDuesCreditPayment(payment);
+      return {
+        transactionId: payment.id,
+        transactionDate: payment.paymentDate,
+        transactionType: bondCredit
+          ? payment.status === PaymentStatus.VOIDED ? "Voided Bond Applied to Monthly Dues" : "Bond Applied to Monthly Dues"
+          : payment.status === PaymentStatus.VOIDED ? "Voided Monthly Dues Payment" : "Monthly Dues Payment",
+        paymentType: bondCredit ? "Construction Bond Credit" : payment.paymentRequest ? "Online Payment" : "Admin Recorded Payment",
+        paymentMode: bondCredit ? "NON-CASH / BOND CREDIT" : payment.paymentRequest?.proofContentType === PAYMONGO_PAYMENT_REQUEST_MARKER ? "PayMongo Online" : payment.method,
+        homeownerName: payment.homeowner.user.name,
+        block: payment.homeowner.block,
+        lot: payment.homeowner.lot,
+        party: payment.homeowner.user.name,
+        amount: Number(payment.amount),
+        balance: balanceByHomeowner.get(payment.homeownerId) ?? 0,
+        receiptNumber: payment.receiptNumber ?? "",
+        referenceNumber: payment.referenceNumber ?? "",
+        remarks: payment.remarks ?? "",
+      };
+    }),
     ...collections.filter((item) => item.collectionDate >= from && item.collectionDate <= to).map((item) => {
       const homeowner = collectionHomeowner(item);
       return {

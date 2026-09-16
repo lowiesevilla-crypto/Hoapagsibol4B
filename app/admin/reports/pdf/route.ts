@@ -41,9 +41,11 @@ export async function GET(request: Request) {
   row("Rental security deposits received (liability)", report.rentalSecurityDepositsReceived);
   row("Refundable bonds received", report.bondsReceived);
   row("Total cash receipts", report.cashInflows, true);
-  section("PAYMENT ALLOCATION MEMORANDUM");
-  row("Amount applied to dues", report.duesIncome);
+  section("NON-CASH / PAYMENT ALLOCATION MEMORANDUM");
+  row("Construction Bond applied to Monthly Dues (non-cash)", report.bondCreditsAppliedToDues);
+  row("Total amount applied to dues", report.duesIncome);
   row("Unapplied homeowner credits", report.unappliedCredits);
+  section("CASH DISBURSEMENTS");
   row("Operating expenses", -report.operatingExpenses);
   row("Employee payroll", -report.payrollCashDisbursements);
   row("Employee loans / cash advances issued", -report.employeeLoansIssued);
@@ -52,8 +54,9 @@ export async function GET(request: Request) {
   row("NET CASH MOVEMENT", report.netCashMovement, true);
   section("MONTHLY DUES COLLECTION DETAIL");
   if (!report.duesCollectionRows.length) row("No monthly dues collections in this reporting period", 0);
-  for (const item of report.duesCollectionRows) row(`${item.coverage} | ${item.homeowner} | ${item.receiptNumber} | ${item.paymentDate.toISOString().slice(0, 10)}`, item.amount);
+  for (const item of report.duesCollectionRows) row(`${item.source} | ${item.coverage} | ${item.homeowner} | ${item.receiptNumber} | ${item.paymentDate.toISOString().slice(0, 10)}`, item.amount);
   section("BOND ACCOUNTABILITY AND RECEIVABLES");
+  row("Construction Bond applied to Monthly Dues this period", report.bondCreditsAppliedToDues);
   row("Refundable bonds held (ending liability)", report.bondsHeld, true);
   row("Lifetime dues billed", report.lifetimeBilled);
   row("Outstanding dues receivables", report.outstandingReceivables, true);

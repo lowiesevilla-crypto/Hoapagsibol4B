@@ -1,6 +1,6 @@
 import type { Prisma } from "@prisma/client";
 
-export type ReceiptSeries = "MD" | "CB" | "CTB" | "OC";
+export type ReceiptSeries = "MD" | "CB" | "CTB" | "OC" | "BC";
 
 export function collectionReceiptSeries(type: string): ReceiptSeries {
   if (type === "CONSTRUCTION_BOND") return "CB";

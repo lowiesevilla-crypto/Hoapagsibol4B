@@ -35,13 +35,13 @@ export async function GET(request: Request) {
       ["Monthly dues cash received", report.paymentCashReceived], ["Other fee collections", report.feeIncome], ["Rental security deposits received (liability)", report.rentalSecurityDepositsReceived], ["Refundable bonds received", report.bondsReceived], ["Total cash receipts", report.cashInflows, true],
       ["Operating expenses", -report.operatingExpenses], ["Employee payroll", -report.payrollCashDisbursements], ["Employee loans / cash advances issued", -report.employeeLoansIssued], ["Bond refunds", -report.bondsRefunded], ["Total cash disbursements", -report.cashOutflows, true], ["NET CASH MOVEMENT", report.netCashMovement, true],
     ]),
-    sectionHeading("Payment Allocation Memorandum"),
-    financialTable([["Amount applied to dues", report.duesIncome], ["Unapplied homeowner credits", report.unappliedCredits]]),
+    sectionHeading("Non-Cash / Payment Allocation Memorandum"),
+    financialTable([["Construction Bond applied to Monthly Dues (non-cash)", report.bondCreditsAppliedToDues], ["Total amount applied to dues", report.duesIncome], ["Unapplied homeowner credits", report.unappliedCredits]]),
     sectionHeading("Monthly Dues Collection Detail"),
     duesCollectionTable(report.duesCollectionRows),
     sectionHeading("Bond Accountability and Dues Receivables"),
     financialTable([
-      ["Refundable bonds held (ending liability)", report.bondsHeld, true], ["Lifetime dues billed", report.lifetimeBilled], ["Outstanding dues receivables", report.outstandingReceivables, true],
+      ["Construction Bond applied to Monthly Dues this period", report.bondCreditsAppliedToDues], ["Refundable bonds held (ending liability)", report.bondsHeld, true], ["Lifetime dues billed", report.lifetimeBilled], ["Outstanding dues receivables", report.outstandingReceivables, true],
       ...report.statusCounts.map((item) => [`${item.status} bills (${item.count})`, item.balance] as [string, number]),
     ]),
     sectionHeading("Employee Loans and Cash Advances"),
@@ -58,7 +58,7 @@ export async function GET(request: Request) {
   const document = new Document({
     creator: association.documentTitle,
     title: `Financial Report ${report.fromText} to ${report.toText}`,
-    description: "HOA statement of income, expenses, cash receipts, disbursements, bonds, and receivables",
+    description: "HOA statement of income, expenses, cash receipts, disbursements, bonds, non-cash bond credits, and receivables",
     styles: { default: { document: { run: { font: "Arial", size: 20, color: navy }, paragraph: { spacing: { after: 100, line: 276 } } } } },
     sections: [{
       properties: { page: { margin: { top: 900, right: 900, bottom: 900, left: 900 } } },
@@ -75,10 +75,10 @@ function sectionHeading(text: string) { return new Paragraph({ heading: HeadingL
 
 function financialTable(rows: Array<[string, number, boolean?]>) { return new Table({ width: { size: 100, type: WidthType.PERCENTAGE }, columnWidths: [7000, 2360], rows: rows.map(([label, value, total]) => new TableRow({ cantSplit: true, children: [new TableCell({ width: { size: 7000, type: WidthType.DXA }, shading: total ? { fill: lightBlue, type: ShadingType.CLEAR } : undefined, margins: { top: 100, bottom: 100, left: 140, right: 140 }, children: [new Paragraph({ children: [new TextRun({ text: label, bold: total, size: total ? 20 : 19 })] })] }), new TableCell({ width: { size: 2360, type: WidthType.DXA }, shading: total ? { fill: lightBlue, type: ShadingType.CLEAR } : undefined, margins: { top: 100, bottom: 100, left: 140, right: 140 }, children: [new Paragraph({ alignment: AlignmentType.RIGHT, children: [new TextRun({ text: money(value), bold: total, color: value < 0 ? "B4232C" : navy, size: total ? 20 : 19 })] })] })] })) }); }
 
-function duesCollectionTable(rows: Array<{ receiptNumber: string; homeowner: string; paymentDate: Date; coverage: string; amount: number }>) {
-  const values = rows.length ? rows : [{ receiptNumber: "-", homeowner: "No monthly dues collections", paymentDate: new Date(0), coverage: "-", amount: 0 }];
-  const header = new TableRow({ tableHeader: true, children: ["Receipt", "Homeowner", "Date", "Payment Coverage", "Amount"].map((text) => new TableCell({ shading: { fill: lightBlue, type: ShadingType.CLEAR }, margins: { top: 90, bottom: 90, left: 90, right: 90 }, children: [new Paragraph({ children: [new TextRun({ text, bold: true, size: 17, color: navy })] })] })) });
-  return new Table({ width: { size: 100, type: WidthType.PERCENTAGE }, rows: [header, ...values.map((item) => new TableRow({ cantSplit: true, children: [item.receiptNumber, item.homeowner, item.paymentDate.valueOf() ? item.paymentDate.toISOString().slice(0, 10) : "-", item.coverage, money(item.amount)].map((text, index) => new TableCell({ margins: { top: 80, bottom: 80, left: 90, right: 90 }, children: [new Paragraph({ alignment: index === 4 ? AlignmentType.RIGHT : AlignmentType.LEFT, children: [new TextRun({ text, size: 16 })] })] })) }))] });
+function duesCollectionTable(rows: Array<{ receiptNumber: string; homeowner: string; paymentDate: Date; coverage: string; amount: number; source: string }>) {
+  const values = rows.length ? rows : [{ receiptNumber: "-", homeowner: "No monthly dues collections", paymentDate: new Date(0), coverage: "-", amount: 0, source: "-" }];
+  const header = new TableRow({ tableHeader: true, children: ["Receipt", "Homeowner", "Date", "Payment Coverage", "Source", "Amount"].map((text) => new TableCell({ shading: { fill: lightBlue, type: ShadingType.CLEAR }, margins: { top: 90, bottom: 90, left: 90, right: 90 }, children: [new Paragraph({ children: [new TextRun({ text, bold: true, size: 17, color: navy })] })] })) });
+  return new Table({ width: { size: 100, type: WidthType.PERCENTAGE }, rows: [header, ...values.map((item) => new TableRow({ cantSplit: true, children: [item.receiptNumber, item.homeowner, item.paymentDate.valueOf() ? item.paymentDate.toISOString().slice(0, 10) : "-", item.coverage, item.source, money(item.amount)].map((text, index) => new TableCell({ margins: { top: 80, bottom: 80, left: 90, right: 90 }, children: [new Paragraph({ alignment: index === 5 ? AlignmentType.RIGHT : AlignmentType.LEFT, children: [new TextRun({ text, size: 16 })] })] })) }))] });
 }
 
 function noBorders() { return { top: { style: BorderStyle.NONE, size: 0, color: "FFFFFF" }, bottom: { style: BorderStyle.NONE, size: 0, color: "FFFFFF" }, left: { style: BorderStyle.NONE, size: 0, color: "FFFFFF" }, right: { style: BorderStyle.NONE, size: 0, color: "FFFFFF" }, insideHorizontal: { style: BorderStyle.NONE, size: 0, color: "FFFFFF" }, insideVertical: { style: BorderStyle.NONE, size: 0, color: "FFFFFF" } }; }

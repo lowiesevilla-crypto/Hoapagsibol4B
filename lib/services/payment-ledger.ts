@@ -1,4 +1,5 @@
 import { BillStatus, Prisma } from "@prisma/client";
+import { isBondDuesCreditPayment } from "@/lib/bond-dues-credit";
 import { prisma } from "@/lib/db";
 import { paymentAppliedAmount, paymentUnappliedCredit } from "@/lib/payment-credit";
 import { monthLabel } from "@/lib/utils";
@@ -14,6 +15,9 @@ export async function updatePaymentAmountLedger({ paymentId, amount, actor, reas
     });
     if (!payment) throw new Error("Payment record not found.");
     if (payment.status !== "ACTIVE") throw new Error("Voided payments cannot be changed.");
+    if (isBondDuesCreditPayment(payment)) {
+      throw new Error("Construction Bond credits cannot be edited as ordinary payments. Void the bond credit and apply a corrected amount instead.");
+    }
     const previousAmount = Number(payment.amount);
     const previousAppliedAmount = paymentAppliedAmount(payment);
     const previousUnappliedCredit = paymentUnappliedCredit(payment);
@@ -111,6 +115,7 @@ export async function voidPaymentLedger({ paymentId, actor, reason }: { paymentI
     });
     if (!payment) throw new Error("Payment record not found.");
     if (payment.status !== "ACTIVE") throw new Error("This payment has already been voided.");
+    const bondDuesCredit = isBondDuesCreditPayment(payment);
 
     const allocations = payment.allocations.length
       ? payment.allocations.map((allocation) => ({ bill: allocation.bill, amount: Number(allocation.amount) }))
@@ -172,16 +177,17 @@ export async function voidPaymentLedger({ paymentId, actor, reason }: { paymentI
         tenantId: actor.tenantId,
         actorId: actor.id,
         module: "PAYMENTS",
-        action: allocations.length ? "VOID_PAYMENT_TRANSACTION" : "VOID_ADVANCE_PAYMENT_TRANSACTION",
+        action: bondDuesCredit ? "VOID_CONSTRUCTION_BOND_DUES_CREDIT" : allocations.length ? "VOID_PAYMENT_TRANSACTION" : "VOID_ADVANCE_PAYMENT_TRANSACTION",
         entityType: archive ? "PaymentArchive" : "Payment",
         entityId: archive?.id ?? payment.id,
         metadata: {
+          nonCash: bondDuesCredit,
           originalPaymentId: payment.id,
           receiptNumber: payment.receiptNumber,
           homeowner: payment.homeowner.user.name,
           amount: Number(payment.amount),
           appliedAmount: paymentAppliedAmount(payment),
-          unappliedCreditReversed: paymentUnappliedCredit(payment),
+          unappliedCreditReversed: bondDuesCredit ? 0 : paymentUnappliedCredit(payment),
           allocations: allocations.map((allocation) => ({ billId: allocation.bill.id, amount: allocation.amount, coverage: monthLabel(allocation.bill.billingMonth) })),
           referenceNumber: payment.referenceNumber,
           reason: reason || null,

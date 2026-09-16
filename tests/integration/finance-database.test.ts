@@ -339,7 +339,10 @@ test("payment allocation, receipt, statement, idempotency, and void recovery rem
   assert.deepEqual(payment.allocations.map((allocation) => Number(allocation.amount)), [1000, 500]);
   assert.deepEqual(recalculatedBills.map((bill) => Number(bill.amountPaid)), [1000, 500]);
   assert.deepEqual(recalculatedBills.map((bill) => Number(bill.balance)), [0, 500]);
-  assert.deepEqual(recalculatedBills.map((bill) => bill.status), ["PAID", "PARTIAL"]);
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const outstandingStatus = recalculatedBills[1].dueDate < today ? "OVERDUE" : "PARTIAL";
+  assert.deepEqual(recalculatedBills.map((bill) => bill.status), ["PAID", outstandingStatus]);
   assert.equal(await platformPrisma.payment.count({ where: { tenantId: tenantAId, idempotencyKey } }), 1);
   assert.equal(await platformPrisma.auditLog.count({ where: { tenantId: tenantAId, action: "RECORD_PAYMENT_TRANSACTION" } }), 1);
 

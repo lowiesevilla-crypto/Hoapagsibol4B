@@ -1,5 +1,5 @@
-import { BillStatus, Prisma } from "@prisma/client";
-import { isBondDuesCreditPayment } from "@/lib/bond-dues-credit";
+import { BillStatus, Prisma, RefundStatus } from "@prisma/client";
+import { bondDuesCreditBatchPrefix, bondDuesCreditCollectionId, isBondDuesCreditPayment } from "@/lib/bond-dues-credit";
 import { prisma } from "@/lib/db";
 import { paymentAppliedAmount, paymentUnappliedCredit } from "@/lib/payment-credit";
 import { monthLabel } from "@/lib/utils";
@@ -116,6 +116,8 @@ export async function voidPaymentLedger({ paymentId, actor, reason }: { paymentI
     if (!payment) throw new Error("Payment record not found.");
     if (payment.status !== "ACTIVE") throw new Error("This payment has already been voided.");
     const bondDuesCredit = isBondDuesCreditPayment(payment);
+    const bondCollectionId = bondDuesCredit ? bondDuesCreditCollectionId(payment) : null;
+    if (bondDuesCredit && !bondCollectionId) throw new Error("Construction Bond credit source could not be resolved.");
 
     const allocations = payment.allocations.length
       ? payment.allocations.map((allocation) => ({ bill: allocation.bill, amount: Number(allocation.amount) }))
@@ -163,6 +165,25 @@ export async function voidPaymentLedger({ paymentId, actor, reason }: { paymentI
     }) : null;
 
     await tx.payment.update({ where: { id: paymentId }, data: { status: "VOIDED", voidedAt, voidedById: actor.id, voidReason: reason || null } });
+
+    let reopenedBondBalance: number | null = null;
+    if (bondCollectionId) {
+      const collection = await tx.collection.findFirst({ where: { id: bondCollectionId, tenantId: actor.tenantId } });
+      if (!collection) throw new Error("Source Construction Bond not found in this tenant.");
+      const applied = await tx.payment.aggregate({
+        where: { tenantId: actor.tenantId, status: "ACTIVE", paymentBatchId: { startsWith: bondDuesCreditBatchPrefix(collection.id) } },
+        _sum: { amount: true },
+      });
+      const activeApplied = roundMoney(Number(applied._sum.amount ?? 0));
+      reopenedBondBalance = roundMoney(Number(collection.amount) - Number(collection.amountRefunded) - Number(collection.amountForfeited) - activeApplied);
+      if (reopenedBondBalance > 0 && (collection.refundStatus === RefundStatus.REFUNDED || collection.refundStatus === RefundStatus.FORFEITED)) {
+        await tx.collection.update({
+          where: { id: collection.id },
+          data: { refundStatus: Number(collection.amountRefunded) > 0 ? RefundStatus.PARTIALLY_REFUNDED : RefundStatus.HELD },
+        });
+      }
+    }
+
     if (payment.paymentRequest) {
       await tx.paymentRequest.update({
         where: { id: payment.paymentRequest.id },
@@ -182,6 +203,8 @@ export async function voidPaymentLedger({ paymentId, actor, reason }: { paymentI
         entityId: archive?.id ?? payment.id,
         metadata: {
           nonCash: bondDuesCredit,
+          sourceCollectionId: bondCollectionId,
+          reopenedBondBalance,
           originalPaymentId: payment.id,
           receiptNumber: payment.receiptNumber,
           homeowner: payment.homeowner.user.name,
@@ -197,7 +220,7 @@ export async function voidPaymentLedger({ paymentId, actor, reason }: { paymentI
         },
       },
     });
-    return { paymentId: payment.id, homeownerId: payment.homeownerId, archiveId: archive?.id ?? null, billIds: affectedBills.map((bill) => bill.id), recalculated };
+    return { paymentId: payment.id, homeownerId: payment.homeownerId, archiveId: archive?.id ?? null, billIds: affectedBills.map((bill) => bill.id), recalculated, reopenedBondBalance };
   }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
 }
 

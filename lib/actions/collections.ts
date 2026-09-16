@@ -5,12 +5,12 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { requirePermission, requirePermissions } from "@/lib/authorization/guards";
 import { Permission } from "@/lib/authorization/permissions";
+import { isRefundableBondType } from "@/lib/bond-rules";
 import { prisma } from "@/lib/db";
 import { recordBondRefund } from "@/lib/services/bond-refund";
 import { allocateReceiptNumber, collectionReceiptSeries } from "@/lib/services/receipt";
 import { bondRefundSchema, collectionSchema } from "@/lib/validation";
 
-const refundableTypes = new Set<CollectionType>([CollectionType.CONSTRUCTION_BOND, CollectionType.CONTRACTOR_BOND]);
 const rentalPaymentsHref = "/admin/rentals?view=payments&source=collections";
 
 export async function recordCollectionAction(formData: FormData) {
@@ -28,7 +28,7 @@ export async function recordCollectionAction(formData: FormData) {
   const parsed = collectionSchema.safeParse(Object.fromEntries(formData.entries()));
   if (!parsed.success) throw new Error(parsed.error.issues[0]?.message || "Invalid collection details.");
   const data = parsed.data;
-  const refundable = refundableTypes.has(data.type);
+  const refundable = isRefundableBondType(data.type);
   const externalPayer = data.payerType === PayerType.RENTER || data.payerType === PayerType.OTHER;
   const payerName = data.payerName?.trim() ?? "";
 
@@ -122,13 +122,14 @@ export async function forfeitBondAction(formData: FormData) {
     const collection = await tx.collection.findFirst({
       where: { id: collectionId, tenantId: admin.tenantId },
     });
-    if (!collection || !collection.refundable) throw new Error("Refundable bond not found.");
+    if (!collection || !isRefundableBondType(collection.type)) throw new Error("Refundable bond not found.");
     if (collection.refundStatus === RefundStatus.REFUNDED || collection.refundStatus === RefundStatus.FORFEITED) throw new Error("This bond is already closed.");
     const available = Number(collection.amount) - Number(collection.amountRefunded) - Number(collection.amountForfeited);
     if (available <= 0) throw new Error("No bond balance remains to forfeit.");
     await tx.collection.update({
       where: { id: collection.id },
       data: {
+        refundable: true,
         amountForfeited: Number(collection.amountForfeited) + available,
         refundStatus: RefundStatus.FORFEITED,
         forfeitedAt: new Date(),

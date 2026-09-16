@@ -4,6 +4,7 @@ import {
   RefundStatus,
 } from "@prisma/client";
 import { bondRefundReference } from "@/lib/bond-refund-reference";
+import { isRefundableBondType } from "@/lib/bond-rules";
 import { prisma } from "@/lib/db";
 import { currentTenantContext } from "@/lib/tenant-context";
 
@@ -48,6 +49,7 @@ export async function recordBondRefund({
         where: { id: collectionId, tenantId: actor.tenantId },
         select: {
           id: true,
+          type: true,
           amount: true,
           amountRefunded: true,
           amountForfeited: true,
@@ -56,7 +58,7 @@ export async function recordBondRefund({
           refundStatus: true,
         },
       });
-      if (!collection || !collection.refundable) {
+      if (!collection || !isRefundableBondType(collection.type)) {
         throw new Error("Refundable bond not found.");
       }
       if (
@@ -97,7 +99,11 @@ export async function recordBondRefund({
 
       await tx.collection.update({
         where: { id: collection.id },
-        data: { amountRefunded, refundStatus },
+        data: {
+          refundable: true,
+          amountRefunded,
+          refundStatus,
+        },
       });
       await tx.auditLog.create({
         data: {

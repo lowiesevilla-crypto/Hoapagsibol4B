@@ -60,7 +60,10 @@ jobs:
       - name: Unit test suite
         run: pnpm test
       - name: Database finance integration suite
-        run: pnpm test:integration
+        shell: bash
+        run: |
+          set -o pipefail
+          pnpm test:integration 2>&1 | tee /tmp/hoahub-ci-suite-output.log
       - name: Verify auth navigation and cache recovery
         run: pnpm run verify:auth-navigation-cache
       - name: Verify complaint management

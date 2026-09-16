@@ -1,4 +1,5 @@
 import { Prisma } from "@prisma/client";
+import { BOND_DUES_CREDIT_PREFIX, isBondDuesCreditPayment } from "@/lib/bond-dues-credit";
 import { prisma } from "@/lib/db";
 import { paymentAllocationCoverageLabel } from "@/lib/payment-coverage";
 import { rentalCollectionAccounting, summarizeRentalAllocations } from "@/lib/rental-accounting";
@@ -76,10 +77,18 @@ export async function getFinancialReport(tenantId: string, fromInput?: string | 
       WHERE c.tenantId=${tenantId} AND c.type='OTHER' AND c.refundable=FALSE AND c.description='Rental payment'
     `),
   ]);
+  const bondCreditLifetimeRows = await prisma.$queryRaw<TotalRow[]>(Prisma.sql`
+    SELECT COALESCE(SUM(amount),0) AS total
+    FROM Payment
+    WHERE tenantId=${tenantId} AND status='ACTIVE' AND paymentBatchId LIKE ${`${BOND_DUES_CREDIT_PREFIX}%`}
+  `);
 
+  const bondCreditPayments = payments.filter(isBondDuesCreditPayment);
+  const cashDuesPayments = payments.filter((item) => !isBondDuesCreditPayment(item));
   const duesIncome = payments.reduce((sum, item) => sum + paymentAppliedAmount(item), 0);
-  const paymentCashReceived = payments.reduce((sum, item) => sum + Number(item.amount), 0);
-  const unappliedCredits = payments.reduce((sum, item) => sum + paymentUnappliedCredit(item), 0);
+  const bondCreditsAppliedToDues = bondCreditPayments.reduce((sum, item) => sum + paymentAppliedAmount(item), 0);
+  const paymentCashReceived = cashDuesPayments.reduce((sum, item) => sum + Number(item.amount), 0);
+  const unappliedCredits = cashDuesPayments.reduce((sum, item) => sum + paymentUnappliedCredit(item), 0);
   const feeCollections = collections.filter((item) => !item.refundable && item.collectionDate >= from && item.collectionDate <= to);
   const rentalAllocationSummary = summarizeRentalAllocations(rentalAllocations.map((item) => ({ collectionId: item.collectionId, amount: item.amount, chargeType: item.chargeType })));
   const rentalDepositCollectionIds = new Set(allRentalDepositIds.map((item) => item.collectionId));
@@ -120,7 +129,8 @@ export async function getFinancialReport(tenantId: string, fromInput?: string | 
   const cashInflows = paymentCashReceived + feeIncome + rentalAdvanceCreditsReceived + rentalSecurityDepositsReceived + bondsReceived;
   const cashOutflows = operatingExpenses + payrollCashDisbursements + bondsRefunded + rentalSecurityDepositsRefunded + employeeLoansIssued;
   const allBondTotals = allBondTotalsRows[0];
-  const bondsHeld = Number(allBondTotals?.amount ?? 0) - Number(allBondTotals?.amountRefunded ?? 0) - Number(allBondTotals?.amountForfeited ?? 0);
+  const lifetimeBondCreditsAppliedToDues = Number(bondCreditLifetimeRows[0]?.total ?? 0);
+  const bondsHeld = Math.max(0, Number(allBondTotals?.amount ?? 0) - Number(allBondTotals?.amountRefunded ?? 0) - Number(allBondTotals?.amountForfeited ?? 0) - lifetimeBondCreditsAppliedToDues);
   const rentalSecurityDepositsHeld = Number(rentalDepositHeldRows[0]?.total ?? 0);
   const rentalAdvanceCreditsHeld = Number(rentalAdvanceHeldRows[0]?.total ?? 0);
   const expenseMap = new Map<string, number>();
@@ -128,7 +138,7 @@ export async function getFinancialReport(tenantId: string, fromInput?: string | 
 
   return {
     from, to, fromText, toText,
-    duesIncome, paymentCashReceived, unappliedCredits, feeIncome, rentalIncome, rentalAdvanceCreditsReceived, rentalAdvanceCreditsHeld,
+    duesIncome, paymentCashReceived, bondCreditsAppliedToDues, lifetimeBondCreditsAppliedToDues, unappliedCredits, feeIncome, rentalIncome, rentalAdvanceCreditsReceived, rentalAdvanceCreditsHeld,
     rentalSecurityDepositsReceived, rentalSecurityDepositsRefunded, rentalSecurityDepositsHeld,
     forfeitedIncome, recognizedIncome,
     operatingExpenses, payrollExpense, payrollCashDisbursements, totalExpenses, operatingSurplus: recognizedIncome - totalExpenses,
@@ -140,7 +150,7 @@ export async function getFinancialReport(tenantId: string, fromInput?: string | 
     employeeLoanOutstanding: Number(allEmployeeLoanTotals._sum.balance ?? 0),
     employeeLoanIssuanceRows: employeeLoanIssuances.map((item) => ({ id: item.id, employee: item.employee.name, type: item.type, description: item.description, amount: Number(item.principalAmount), issuedDate: item.issuedDate, balance: Number(item.balance) })),
     employeeLoanRepaymentRows: employeeLoanRepaymentRowsRaw.map((item) => ({ id: item.id, employee: item.employee.name, type: item.employeeLoan?.type ?? "OTHER", description: item.employeeLoan?.description ?? item.deductionType.name, amount: Number(item.amount), payDate: item.payroll.payDate, balance: Number(item.employeeLoan?.balance ?? 0) })),
-    duesCollectionRows: payments.map((item) => ({ id: item.id, receiptNumber: item.receiptNumber ?? "Legacy receipt", homeowner: item.homeowner.user.name, paymentDate: item.paymentDate, coverage: paymentAllocationCoverageLabel(item), amount: Number(item.amount), appliedAmount: paymentAppliedAmount(item), unappliedCredit: paymentUnappliedCredit(item) })),
+    duesCollectionRows: payments.map((item) => ({ id: item.id, receiptNumber: item.receiptNumber ?? "Legacy receipt", homeowner: item.homeowner.user.name, paymentDate: item.paymentDate, coverage: paymentAllocationCoverageLabel(item), amount: Number(item.amount), appliedAmount: paymentAppliedAmount(item), unappliedCredit: paymentUnappliedCredit(item), source: isBondDuesCreditPayment(item) ? "Construction Bond Credit" : "Cash / Payment" })),
     feeBreakdown: [...feeMap.entries()].map(([label, value]) => ({ label, value })),
     expenseBreakdown: [...expenseMap.entries()].map(([label, value]) => ({ label, value })),
     lifetimeBilled: Number(billSummary._sum.totalAmount ?? 0),

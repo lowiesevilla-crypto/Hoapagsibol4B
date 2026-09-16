@@ -81,7 +81,7 @@ function samePayrollConfiguration(current: {
 /**
  * @requirement PAY-COMP-001 PAY-COMP-002 PAY-COMP-003 PAY-SEC-001
  * @status IMPLEMENTED
- * @description Create a new immutable effective-dated payroll configuration version, close the prior version, and reject retroactive changes that overlap finalized/paid payroll history.
+ * @description Version payroll configuration changes, permit an unlocked same-effective-date correction, and reject retroactive changes that overlap finalized/paid payroll history.
  */
 async function persistEmployeeCompensationVersion(
   tx: CompensationPersistenceClient,
@@ -98,7 +98,7 @@ async function persistEmployeeCompensationVersion(
   });
 
   if (latest && samePayrollConfiguration(latest, configuration)) {
-    return { id: latest.id, created: false };
+    return { id: latest.id, created: false, corrected: false };
   }
 
   const latestLockedPayroll = await tx.payrollPeriod.findFirst({
@@ -115,8 +115,31 @@ async function persistEmployeeCompensationVersion(
     throw new Error(`New payroll configuration must take effect after the latest finalized/paid payroll ending ${latestLockedPayroll.endDate.toISOString().slice(0, 10)}.`);
   }
 
-  if (latest && configuration.effectiveFrom <= latest.effectiveFrom) {
-    throw new Error(`Choose an effective date after the latest payroll configuration (${latest.effectiveFrom.toISOString().slice(0, 10)}).`);
+  if (latest && configuration.effectiveFrom < latest.effectiveFrom) {
+    throw new Error(`Choose an effective date on or after the latest payroll configuration (${latest.effectiveFrom.toISOString().slice(0, 10)}).`);
+  }
+
+  // Administrators commonly need to correct a rate or allowance immediately after
+  // saving it. If the newest configuration starts on the same date and no locked
+  // payroll covers that date, update that still-unlocked version instead of forcing
+  // a duplicate date or rejecting the correction. Finalized/posted/paid payroll is
+  // checked above, so historical payroll remains immutable.
+  if (latest && configuration.effectiveFrom.getTime() === latest.effectiveFrom.getTime()) {
+    const corrected = await tx.employeeCompensation.update({
+      where: { id: latest.id },
+      data: {
+        compensationBasis: configuration.compensationBasis,
+        payFrequency: configuration.payFrequency,
+        attendancePolicy: configuration.attendancePolicy,
+        rate: configuration.rate,
+        standardWorkDays: configuration.standardWorkDays,
+        standardHoursPerDay: configuration.standardHoursPerDay,
+        fixedAllowance: configuration.fixedAllowance,
+        fixedDeduction: configuration.fixedDeduction,
+        createdById: actorId,
+      },
+    });
+    return { id: corrected.id, created: false, corrected: true };
   }
 
   if (latest) {
@@ -143,13 +166,13 @@ async function persistEmployeeCompensationVersion(
       createdById: actorId,
     },
   });
-  return { id: created.id, created: true };
+  return { id: created.id, created: true, corrected: false };
 }
 
 /**
  * @requirement PAY-COMP-001 PAY-COMP-002 PAY-COMP-003 PAY-SEC-001
  * @status IMPLEMENTED
- * @description Save employee master data while versioning payroll configuration instead of rewriting historical compensation rows.
+ * @description Save employee master data while versioning payroll configuration instead of rewriting locked historical compensation rows.
  */
 export async function saveEmployeeAction(formData: FormData) {
   const { user } = await requirePayrollAccess(payrollWriteRoles);
@@ -252,7 +275,7 @@ export async function saveEmployeeAction(formData: FormData) {
     });
     const compensation = employee.compensations[0];
     if (!compensation) throw new Error("Employee payroll configuration could not be created.");
-    return { employeeId: employee.id, existingUserId: null, version: { id: compensation.id, created: true } };
+    return { employeeId: employee.id, existingUserId: null, version: { id: compensation.id, created: true, corrected: false } };
   }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
 
   if (result.existingUserId || createEmployeeLogin) {
@@ -270,6 +293,7 @@ export async function saveEmployeeAction(formData: FormData) {
       primaryRole,
       compensationVersionId: result.version.id,
       compensationVersionCreated: result.version.created,
+      compensationVersionCorrected: result.version.corrected,
       compensationEffectiveFrom,
     },
   });

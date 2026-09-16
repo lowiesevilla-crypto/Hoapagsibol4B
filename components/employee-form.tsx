@@ -20,6 +20,13 @@ type EmployeeWithPayrollConfiguration = EmployeeProfile & {
   compensations?: EmployeeCompensation[];
 };
 
+function defaultCompensationEffectiveDate(compensation?: EmployeeCompensation) {
+  const today = inputDate(new Date());
+  if (!compensation) return today;
+  const latestEffectiveDate = inputDate(compensation.effectiveFrom);
+  return latestEffectiveDate > today ? latestEffectiveDate : today;
+}
+
 export function EmployeeForm({ employee }: { employee?: EmployeeWithPayrollConfiguration }) {
   const compensation = employee?.compensations?.[0];
   const defaultBasis = compensation?.compensationBasis
@@ -48,7 +55,7 @@ export function EmployeeForm({ employee }: { employee?: EmployeeWithPayrollConfi
 
       <div className="border-t border-slate-100 pt-6">
         <h2 className="text-lg font-black">Payroll configuration</h2>
-        <p className="text-sm text-slate-500">Compensation basis, pay frequency and attendance policy are independent and effective-dated. Changing payroll terms creates a new version instead of rewriting prior payroll history.</p>
+        <p className="text-sm text-slate-500">Compensation basis, pay frequency and attendance policy are effective-dated. A same-date correction is allowed while that configuration is not locked by finalized or paid payroll; later changes create a new version.</p>
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
@@ -76,7 +83,7 @@ export function EmployeeForm({ employee }: { employee?: EmployeeWithPayrollConfi
             <option value={AttendancePolicy.NOT_REQUIRED}>No clock required</option>
           </select>
         </div>
-        <Field label="Effective from" name="compensationEffectiveFrom" type="date" defaultValue={inputDate(new Date())} required />
+        <Field label="Effective from" name="compensationEffectiveFrom" type="date" defaultValue={defaultCompensationEffectiveDate(compensation)} required />
         <Field label="Rate (PHP)" name="rate" type="number" min="0.01" step="0.01" defaultValue={compensation ? String(compensation.rate) : employee ? String(employee.baseRate) : "18000"} required />
         <Field label="Standard workdays / month" name="standardWorkDays" type="number" min="1" max="31" defaultValue={compensation?.standardWorkDays ?? employee?.standardWorkDays ?? 26} required />
         <Field label="Standard hours / day" name="standardHoursPerDay" type="number" min="0.01" max="24" step="0.01" defaultValue={compensation ? String(compensation.standardHoursPerDay) : "8"} required />
@@ -92,7 +99,7 @@ export function EmployeeForm({ employee }: { employee?: EmployeeWithPayrollConfi
       </div>
 
       <div className="rounded-xl bg-amber-50 p-3 text-sm font-semibold text-amber-800">
-        For Daily or Hourly compensation, Attendance Required is mandatory. Backdated payroll-term changes are blocked when they would overlap finalized or paid payroll.
+        Daily or Hourly compensation requires Attendance Required. Same-date payroll corrections are allowed only before finalized, posted, or paid payroll locks the configuration.
       </div>
 
       <div className="border-t border-slate-100 pt-6">

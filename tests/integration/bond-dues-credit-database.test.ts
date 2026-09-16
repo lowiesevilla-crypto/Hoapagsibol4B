@@ -3,14 +3,17 @@ import { after, before, test } from "node:test";
 import {
   BillStatus,
   CollectionType,
+  DataMigrationKind,
   PayerType,
   PaymentMethod,
+  Prisma,
   RefundStatus,
   Role,
   TenantModule,
 } from "@prisma/client";
+import { postMigration } from "@/lib/actions/data-migrations";
 import { isBondDuesCreditPayment } from "@/lib/bond-dues-credit";
-import { platformPrisma } from "@/lib/db";
+import { platformPrisma, prisma } from "@/lib/db";
 import { applyConstructionBondToMonthlyDues } from "@/lib/services/bond-dues-credit";
 import { recordBondRefund } from "@/lib/services/bond-refund";
 import { getFinancialReport } from "@/lib/services/financial-report";
@@ -51,6 +54,7 @@ async function inTenant<T>(tenantId: string, callback: () => T | Promise<T>) {
 
 async function cleanFixtures() {
   await platformPrisma.auditLog.deleteMany({ where: { tenantId: { in: tenantIds } } });
+  await platformPrisma.dataMigration.deleteMany({ where: { tenantId: { in: tenantIds } } });
   await platformPrisma.paymentAllocation.deleteMany({ where: { tenantId: { in: tenantIds } } });
   await platformPrisma.paymentArchive.deleteMany({ where: { tenantId: { in: tenantIds } } });
   await platformPrisma.bondRefund.deleteMany({ where: { tenantId: { in: tenantIds } } });
@@ -215,6 +219,30 @@ test("Construction Bond credit settles oldest monthly dues without creating cash
     inTenant(tenantAId, () => recordBondRefund({ collectionId: collectionAId, amount: 300.01, refundDate: new Date("2026-09-06T00:00:00.000Z"), method: PaymentMethod.CASH, actor: adminA })),
     /cannot exceed the remaining bond balance/i,
   );
+});
+
+test("migration refund cannot reuse Construction Bond value already applied to Monthly Dues", async () => {
+  const referenceNumber = `${runId}-migration-over-refund`;
+  await assert.rejects(
+    inTenant(tenantAId, () => prisma.$transaction(
+      (tx) => postMigration(
+        tx as unknown as Prisma.TransactionClient,
+        {
+          kind: DataMigrationKind.CONSTRUCTION_BOND_REFUND,
+          amount: 300.01,
+          remarks: "Reject migration refund above remaining bond after dues credit",
+          referenceNumber,
+          relatedReceiptNumber: "AR-CB-2026-9000001",
+        },
+        adminAId,
+        tenantAId,
+      ),
+      { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+    )),
+    /Adjustment exceeds the remaining bond balance/i,
+  );
+  assert.equal(await platformPrisma.dataMigration.count({ where: { tenantId: tenantAId, referenceNumber } }), 0);
+  assert.equal(await platformPrisma.bondRefund.count({ where: { tenantId: tenantAId, referenceNumber } }), 0);
 });
 
 test("Construction Bond credit rejects contractor bonds, cross-tenant bonds, and excess dues applications", async () => {

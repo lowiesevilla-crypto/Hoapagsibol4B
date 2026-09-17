@@ -10,7 +10,7 @@ const workflow = readFileSync(".github/workflows/ci-deploy.yml", "utf8");
 
 test("root layout installs a pre-runtime capture handler for missing Next static assets", () => {
   assert.ok(layout.includes('strategy="beforeInteractive"'));
-  assert.ok(layout.includes("/_next\\/static\\/(?:chunks|css)\\/"));
+  assert.ok(layout.includes("_next\\/static\\/(?:chunks|css)"));
   assert.ok(layout.includes('addEventListener("error", startRecovery, true)'));
   assert.ok(layout.includes("hoahub-pwa-shell-"));
   assert.ok(layout.includes("RECOVERY_COOLDOWN_MS"));

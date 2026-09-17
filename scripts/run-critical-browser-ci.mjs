@@ -19,6 +19,11 @@ const suites = [
     args: ["tests/e2e/run-critical-path.mjs"],
   },
   {
+    name: "payment-receipt-critical-path",
+    command: "node",
+    args: ["--import", safeCleanupImport, "tests/e2e/payment-receipt-critical-path.mjs"],
+  },
+  {
     name: "employee-workflow",
     command: "node",
     args: ["--import", safeCleanupImport, "tests/e2e/employee-workflow.mjs"],

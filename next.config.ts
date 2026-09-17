@@ -1,6 +1,30 @@
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import type { NextConfig } from "next";
 
+function resolveDeploymentVersion() {
+  const explicit = process.env.NEXT_DEPLOYMENT_ID?.trim() || process.env.GITHUB_SHA?.trim();
+  if (explicit) return explicit.slice(0, 40);
+
+  try {
+    const stamped = readFileSync(resolve(process.cwd(), "public/release.txt"), "utf8").trim();
+    if (stamped && stamped !== "unknown") return stamped.slice(0, 40);
+  } catch {
+    // Development and pre-build commands may run before release.txt is stamped.
+  }
+
+  return undefined;
+}
+
+const deploymentVersion = resolveDeploymentVersion();
+
 const nextConfig: NextConfig = {
+  ...(deploymentVersion
+    ? {
+        deploymentId: deploymentVersion,
+        generateBuildId: async () => deploymentVersion,
+      }
+    : {}),
   poweredByHeader: false,
   compress: true,
   outputFileTracingRoot: process.cwd(),

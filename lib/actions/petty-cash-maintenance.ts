@@ -2,7 +2,7 @@
 
 import { randomUUID } from "node:crypto";
 import { EmployeeLoanStatus, EmployeeLoanType, PaymentMethod, PayrollStatus, Prisma, TenantModule } from "@prisma/client";
-import { revalidatePath } from "next/cache";
+import { safeRevalidatePettyCashPages } from "@/lib/petty-cash/revalidation";
 import { redirect } from "next/navigation";
 import { requirePermission } from "@/lib/authorization/guards";
 import { Permission } from "@/lib/authorization/permissions";
@@ -194,15 +194,6 @@ async function clearMutablePettyCashLoanDeductions(
   return loan;
 }
 
-function revalidatePettyCashPaths(voucherId?: string) {
-  revalidatePath("/admin/petty-cash");
-  if (voucherId) revalidatePath(`/admin/petty-cash/${voucherId}`);
-  revalidatePath("/admin/expenses");
-  revalidatePath("/admin/reports");
-  revalidatePath("/admin/dashboard");
-  revalidatePath("/admin/payroll");
-}
-
 export async function updatePettyCashVoucherAction(formData: FormData) {
   const actor = await requirePermission(Permission.EXPENSES_MANAGE);
   await requirePettyCashFeature(actor.tenantId);
@@ -368,7 +359,7 @@ export async function updatePettyCashVoucherAction(formData: FormData) {
   }
 
   if (errorMessage) redirect(`/admin/petty-cash/${voucherId}/edit?error=${encodeURIComponent(errorMessage)}`);
-  revalidatePettyCashPaths(voucherId);
+  safeRevalidatePettyCashPages({ action: "update", tenantId: actor.tenantId, actorId: actor.id, voucherId });
   redirect(`/admin/petty-cash/${voucherId}?success=updated`);
 }
 
@@ -418,6 +409,6 @@ export async function deletePettyCashVoucherAction(formData: FormData) {
   }
 
   if (errorMessage) redirect(`/admin/petty-cash/${voucherId}?error=${encodeURIComponent(errorMessage)}`);
-  revalidatePettyCashPaths();
+  safeRevalidatePettyCashPages({ action: "delete", tenantId: actor.tenantId, actorId: actor.id, voucherId });
   redirect("/admin/petty-cash?success=deleted");
 }

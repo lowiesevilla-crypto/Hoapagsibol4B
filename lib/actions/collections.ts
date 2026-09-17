@@ -73,8 +73,9 @@ export async function recordCollectionAction(formData: FormData) {
   if (data.payerType === PayerType.CONTRACTOR && !data.contractorId) redirectCollectionError("Select a contractor.");
 
   let collectionError: string | null = null;
+  let createdCollectionId: string | null = null;
   try {
-    await withTenantContext(admin.tenantId, async () => {
+    createdCollectionId = await withTenantContext(admin.tenantId, async () => {
       if (data.payerType === PayerType.HOMEOWNER) {
         const exists = await prisma.homeownerProfile.count({ where: { id: data.homeownerId, tenantId: admin.tenantId } });
         if (!exists) throw new CollectionPostingError("Homeowner not found.");
@@ -83,7 +84,7 @@ export async function recordCollectionAction(formData: FormData) {
         if (!exists) throw new CollectionPostingError("Contractor not found.");
       }
 
-      await prisma.$transaction(async (tx) => {
+      return await prisma.$transaction(async (tx) => {
         const collectionDate = new Date(`${data.collectionDate}T00:00:00.000Z`);
         const series = collectionReceiptSeries(data.type);
         const receiptNumber = await allocateReceiptNumber(tx as unknown as Prisma.TransactionClient, admin.tenantId, collectionDate, series);
@@ -114,6 +115,7 @@ export async function recordCollectionAction(formData: FormData) {
           entityId: collection.id,
           metadata: { receiptNumber, amount: data.amount, payerType: data.payerType, payerName: externalPayer ? payerName : null },
         } });
+        return collection.id;
       }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
     });
   } catch (error) {
@@ -135,9 +137,10 @@ export async function recordCollectionAction(formData: FormData) {
   }
 
   if (collectionError) redirectCollectionError(collectionError);
+  if (!createdCollectionId) redirectCollectionError("Collection could not be recorded.");
 
   safeRevalidateCollectionPages({ action: "record", tenantId: admin.tenantId, actorId: admin.id });
-  redirect("/admin/collections?success=recorded");
+  redirect(`/receipts/collection/${createdCollectionId}`);
 }
 
 export async function recordBondRefundAction(formData: FormData) {

@@ -39,6 +39,16 @@ const suites = [
     args: ["--import", safeCleanupImport, "tests/e2e/petty-cash-critical-path.mjs"],
   },
   {
+    name: "bond-refund-critical-path",
+    command: "node",
+    args: ["--import", safeCleanupImport, "tests/e2e/bond-refund-critical-path.mjs"],
+  },
+  {
+    name: "collection-delete-critical-path",
+    command: "node",
+    args: ["--import", safeCleanupImport, "tests/e2e/collection-delete-critical-path.mjs"],
+  },
+  {
     name: "onboarding-workflow",
     command: "node",
     args: ["--import", safeCleanupImport, "tests/e2e/onboarding-workflow.mjs"],

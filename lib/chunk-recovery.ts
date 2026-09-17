@@ -6,6 +6,9 @@ const CHUNK_FAILURE_PATTERNS = [
   /failed to fetch dynamically imported module/i,
   /\/_next\/static\/chunks\//i,
   /\/_next\/static\/css\//i,
+  /Failed to find Server Action/i,
+  /older or newer deployment/i,
+  /Server Action.*(?:not found|deployment)/i,
 ];
 
 type StaticResourceStatus = {

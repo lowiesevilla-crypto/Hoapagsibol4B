@@ -1,13 +1,12 @@
 "use server";
 
-import { NotificationType, Prisma, TenantModule } from "@prisma/client";
+import { NotificationType, Prisma } from "@prisma/client";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { requirePermissions } from "@/lib/authorization/guards";
 import { Permission } from "@/lib/authorization/permissions";
 import { getAppUrl } from "@/lib/app-url";
 import { prisma } from "@/lib/db";
-import { isUxActionProgressEnabled } from "@/lib/feature-flags/ux-action-progress";
 import { paymentSchema } from "@/lib/validation";
 import { buildPaymentConfirmation, recordMonthlyDuesPayment } from "@/lib/services/payment-recording";
 import { sendEmailNotification } from "@/lib/services/notifications";
@@ -46,7 +45,7 @@ export async function recordHomeownerPaymentAction(formData: FormData) {
 
 export async function recordHomeownerPaymentProgressAction(_previousState: RecordHomeownerPaymentProgressState, formData: FormData): Promise<RecordHomeownerPaymentProgressState> {
   try {
-    const result = await recordHomeownerPaymentSubmission(formData, { requireActionProgressFlag: true });
+    const result = await recordHomeownerPaymentSubmission(formData);
     const receiptUrl = `/receipts/payment/${result.confirmation.paymentId}`;
     return {
       status: "success",
@@ -108,10 +107,8 @@ export async function reconcileHomeownerPaymentProgressAction(_previousState: Re
   }
 }
 
-async function recordHomeownerPaymentSubmission(formData: FormData, options: { requireActionProgressFlag?: boolean } = {}) {
-  const admin = options.requireActionProgressFlag
-    ? await requirePaymentProgressAdmin()
-    : await requirePermissions([Permission.PAYMENTS_RECORD, Permission.RECEIPTS_ISSUE]);
+async function recordHomeownerPaymentSubmission(formData: FormData) {
+  const admin = await requirePermissions([Permission.PAYMENTS_RECORD, Permission.RECEIPTS_ISSUE]);
   const parsed = paymentSchema.safeParse(Object.fromEntries(formData.entries()));
   if (!parsed.success) throw new Error(parsed.error.issues[0]?.message || "Invalid payment details.");
   const data = parsed.data;
@@ -165,7 +162,7 @@ async function recordHomeownerPaymentSubmission(formData: FormData, options: { r
 
   if (!confirmation) throw new Error("Payment could not be recorded.");
   safeRevalidateHomeownerPaymentPages({
-    action: options.requireActionProgressFlag ? "record_progress" : "record",
+    action: "record",
     tenantId: admin.tenantId,
     actorId: admin.id,
     paymentId: confirmation.paymentId,
@@ -196,11 +193,7 @@ function safeRevalidateHomeownerPaymentPages(context: { action: string; tenantId
 }
 
 async function requirePaymentProgressAdmin() {
-  const admin = await requirePermissions([Permission.PAYMENTS_RECORD, Permission.RECEIPTS_ISSUE]);
-  if (!isUxActionProgressEnabled({ tenantId: admin.tenantId, module: TenantModule.BILLING, role: admin.role })) {
-    throw new Error("Action progress is not enabled for this tenant.");
-  }
-  return admin;
+  return requirePermissions([Permission.PAYMENTS_RECORD, Permission.RECEIPTS_ISSUE]);
 }
 
 function paymentErrorMessage(error: unknown) {

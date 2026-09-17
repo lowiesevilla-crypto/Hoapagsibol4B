@@ -141,7 +141,11 @@ async function runCollectionDeleteRegression(browser) {
   await page.setViewport({ width: 1440, height: 1000 });
   page.setDefaultTimeout(timeout);
   const pageErrors = [];
+  let transientBoundarySeen = false;
   page.on("pageerror", (error) => pageErrors.push(error.message));
+  await page.exposeFunction("__hoahubReportTransientErrorBoundary", () => {
+    transientBoundarySeen = true;
+  });
 
   try {
     await login(page);
@@ -154,12 +158,25 @@ async function runCollectionDeleteRegression(browser) {
     const deleteButton = await row.$("button[type='submit']");
     assert.ok(deleteButton, "Expected a Delete submit button for a history-free collection.");
 
+    await page.evaluate(() => {
+      const boundaryText = /we couldn't finish that request|something went wrong/i;
+      const inspect = () => {
+        const text = document.body?.textContent || "";
+        if (boundaryText.test(text)) window.__hoahubReportTransientErrorBoundary();
+      };
+      inspect();
+      const observer = new MutationObserver(inspect);
+      observer.observe(document.documentElement, { subtree: true, childList: true, characterData: true });
+      window.__hoahubDeleteBoundaryObserver = observer;
+    });
+
     page.once("dialog", async (dialog) => {
       assert.match(dialog.message(), /cannot be undone/i);
       await dialog.accept();
     });
     await deleteButton.click();
     await waitForUrl(page, (url) => url.pathname === "/admin/collections" && url.searchParams.get("success") === "deleted", "successful collection deletion redirect");
+    assert.equal(transientBoundarySeen, false, "Delete must never render the global error boundary, even transiently before redirect/recovery.");
 
     assert.equal(await prisma.collection.count({ where: { id: primaryCollectionId, tenantId: primaryTenantId } }), 0, "Deleted collection must be physically absent from its tenant.");
     assert.equal(await prisma.collection.count({ where: { id: secondaryCollectionId, tenantId: secondaryTenantId } }), 1, "Deleting a primary-tenant collection must not affect another tenant.");
@@ -172,6 +189,7 @@ async function runCollectionDeleteRegression(browser) {
     await page.goto(`${baseUrl}/admin/collections`, { waitUntil: "networkidle2", timeout });
     await expectNoText(page, primaryPayer, "deleted collection after a clean reload");
     await expectNoText(page, "We couldn't finish that request", "global error boundary after deletion");
+    assert.equal(transientBoundarySeen, false, "Delete workflow must remain free of transient global error-boundary renders.");
     assert.deepEqual(pageErrors, [], `Deletion must not trigger browser page errors: ${pageErrors.join(" | ")}`);
   } finally {
     await context.close();
@@ -191,7 +209,7 @@ try {
   console.log("- the deleted database row stayed absent after a clean page reload");
   console.log("- COLLECTION_DELETED audit evidence was committed atomically");
   console.log("- a same-shaped collection in another tenant remained untouched and invisible");
-  console.log("- the delete workflow did not fall into the global error boundary");
+  console.log("- the delete workflow never rendered the global error boundary, including transiently during mutation");
 } catch (error) {
   console.error("Collection Delete browser regression suite failed.");
   console.error(error);

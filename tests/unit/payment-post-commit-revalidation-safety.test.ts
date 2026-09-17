@@ -57,3 +57,23 @@ test("payment update and void actions also use safe post-commit invalidation", a
   assert.match(voiding, /safeRevalidatePaymentPages\(\{ action: "void"/);
   assert.doesNotMatch(voiding, /\brevalidatePath\(/);
 });
+
+test("the production Record Payment actions use guarded post-commit revalidation", async () => {
+  const actions = await source("lib/actions/advance-payments.ts");
+  const submission = section(actions, "async function recordHomeownerPaymentSubmission", "function safeRevalidateHomeownerPaymentPages");
+  const helper = section(actions, "function safeRevalidateHomeownerPaymentPages", "async function requirePaymentProgressAdmin");
+  const form = await source("components/record-payment-advance-form.tsx");
+
+  assert.match(form, /recordHomeownerPaymentAction/);
+  assert.match(form, /recordHomeownerPaymentProgressAction/);
+  assert.match(submission, /TransactionIsolationLevel\.Serializable/);
+  assert.match(submission, /idempotencyKey/);
+  assert.match(submission, /safeRevalidateHomeownerPaymentPages\(/);
+  assert.doesNotMatch(submission, /\brevalidatePath\(/);
+  assert.match(helper, /try \{\s*revalidatePath\(path\);\s*\} catch/);
+  assert.match(helper, /payment_post_commit_revalidation_failed/);
+  assert.match(helper, /tenantId/);
+  assert.match(helper, /actorId/);
+  assert.match(helper, /paymentId/);
+  assert.match(helper, /homeownerId/);
+});

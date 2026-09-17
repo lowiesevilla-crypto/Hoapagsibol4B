@@ -15,11 +15,28 @@ import { withTenantContext } from "@/lib/tenant-context";
 import { bondRefundSchema, collectionSchema } from "@/lib/validation";
 
 const rentalPaymentsHref = "/admin/rentals?view=payments&source=collections";
+const collectionRevalidationPaths = [
+  "/admin/collections",
+  "/admin/dashboard",
+  "/admin/reports",
+  "/portal/collections",
+  "/portal/dashboard",
+] as const;
 
 class CollectionPostingError extends Error {}
+class BondForfeitError extends Error {}
+class CollectionDeleteError extends Error {}
 
 function redirectCollectionError(message: string): never {
   redirect(`/admin/collections?collectionError=${encodeURIComponent(message)}`);
+}
+
+function redirectForfeitError(message: string): never {
+  redirect(`/admin/collections?forfeitError=${encodeURIComponent(message)}`);
+}
+
+function redirectDeleteError(message: string): never {
+  redirect(`/admin/collections?deleteError=${encodeURIComponent(message)}`);
 }
 
 export async function recordCollectionAction(formData: FormData) {
@@ -119,7 +136,7 @@ export async function recordCollectionAction(formData: FormData) {
 
   if (collectionError) redirectCollectionError(collectionError);
 
-  revalidateCollectionPages();
+  safeRevalidateCollectionPages({ action: "record", tenantId: admin.tenantId, actorId: admin.id });
   redirect("/admin/collections?success=recorded");
 }
 
@@ -163,7 +180,7 @@ export async function recordBondRefundAction(formData: FormData) {
     redirect(`/admin/collections?refundError=${encodeURIComponent(refundError)}`);
   }
 
-  revalidateCollectionPages();
+  safeRevalidateCollectionPages({ action: "refund", tenantId: admin.tenantId, actorId: admin.id });
   redirect("/admin/collections?success=refunded");
 }
 
@@ -171,52 +188,152 @@ export async function forfeitBondAction(formData: FormData) {
   const admin = await requirePermission(Permission.COLLECTIONS_FORFEIT);
   const collectionId = String(formData.get("collectionId") || "");
   const reason = String(formData.get("reason") || "").trim();
-  if (!reason) throw new Error("A violation or forfeiture reason is required.");
-  if (reason.length > 500) throw new Error("Forfeiture reason is too long.");
+  if (!collectionId) redirectForfeitError("Refundable bond not found.");
+  if (!reason) redirectForfeitError("A violation or forfeiture reason is required.");
+  if (reason.length > 500) redirectForfeitError("Forfeiture reason is too long.");
 
-  await prisma.$transaction(async (tx) => {
-    const collection = await tx.collection.findFirst({
-      where: { id: collectionId, tenantId: admin.tenantId },
-    });
-    if (!collection || !isRefundableBondType(collection.type)) throw new Error("Refundable bond not found.");
-    if (collection.refundStatus === RefundStatus.REFUNDED || collection.refundStatus === RefundStatus.FORFEITED) throw new Error("This bond is already closed.");
-    const available = Number(collection.amount) - Number(collection.amountRefunded) - Number(collection.amountForfeited);
-    if (available <= 0) throw new Error("No bond balance remains to forfeit.");
-    await tx.collection.update({
-      where: { id: collection.id },
-      data: {
-        refundable: true,
-        amountForfeited: Number(collection.amountForfeited) + available,
-        refundStatus: RefundStatus.FORFEITED,
-        forfeitedAt: new Date(),
-        forfeitedById: admin.id,
-        remarks: [collection.remarks, `Forfeited: ${reason}`].filter(Boolean).join("\n"),
-      },
-    });
-  }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+  let forfeitError: string | null = null;
+  try {
+    await withTenantContext(admin.tenantId, async () => {
+      await prisma.$transaction(async (tx) => {
+        const collection = await tx.collection.findFirst({
+          where: { id: collectionId, tenantId: admin.tenantId },
+        });
+        if (!collection || !isRefundableBondType(collection.type)) throw new BondForfeitError("Refundable bond not found.");
+        if (collection.refundStatus === RefundStatus.REFUNDED || collection.refundStatus === RefundStatus.FORFEITED) {
+          throw new BondForfeitError("This bond is already closed.");
+        }
+        const available = Number(collection.amount) - Number(collection.amountRefunded) - Number(collection.amountForfeited);
+        if (available <= 0) throw new BondForfeitError("No bond balance remains to forfeit.");
 
-  revalidateCollectionPages();
+        const updated = await tx.collection.updateMany({
+          where: { id: collection.id, tenantId: admin.tenantId },
+          data: {
+            refundable: true,
+            amountForfeited: Number(collection.amountForfeited) + available,
+            refundStatus: RefundStatus.FORFEITED,
+            forfeitedAt: new Date(),
+            forfeitedById: admin.id,
+            remarks: [collection.remarks, `Forfeited: ${reason}`].filter(Boolean).join("\n"),
+          },
+        });
+        if (updated.count !== 1) throw new BondForfeitError("Refundable bond not found.");
+
+        await tx.auditLog.create({ data: {
+          tenantId: admin.tenantId,
+          actorId: admin.id,
+          module: "COLLECTIONS",
+          action: "BOND_FORFEITED",
+          entityType: "Collection",
+          entityId: collection.id,
+          metadata: {
+            reason,
+            forfeitedAmount: available,
+            previousRefundStatus: collection.refundStatus,
+            receiptNumber: collection.receiptNumber,
+          },
+        } });
+      }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+    });
+  } catch (error) {
+    if (error instanceof BondForfeitError) {
+      forfeitError = error.message;
+    } else {
+      const supportReference = `BF-${randomUUID().split("-")[0].toUpperCase()}`;
+      console.error("[HOAHub] bond_forfeit_failed", {
+        supportReference,
+        tenantId: admin.tenantId,
+        actorId: admin.id,
+        collectionId,
+        errorName: error instanceof Error ? error.name : "UnknownError",
+        errorMessage: error instanceof Error ? error.message : String(error),
+      });
+      forfeitError = `We couldn't forfeit this bond. No changes were saved. Support reference: ${supportReference}.`;
+    }
+  }
+
+  if (forfeitError) redirectForfeitError(forfeitError);
+
+  safeRevalidateCollectionPages({ action: "forfeit", tenantId: admin.tenantId, actorId: admin.id });
   redirect("/admin/collections?success=forfeited");
 }
 
 export async function deleteCollectionAction(formData: FormData) {
   const admin = await requirePermission(Permission.COLLECTIONS_MANAGE);
   const id = String(formData.get("id") || "");
-  const collection = await prisma.collection.findFirst({
-    where: { id, tenantId: admin.tenantId },
-    select: { _count: { select: { refunds: true } }, amountForfeited: true },
-  });
-  if (!collection) throw new Error("Collection not found.");
-  if (collection._count.refunds || Number(collection.amountForfeited) > 0) throw new Error("A bond with refund or forfeiture history cannot be deleted.");
-  await prisma.collection.delete({ where: { id } });
-  revalidateCollectionPages();
+  if (!id) redirectDeleteError("Collection not found.");
+
+  let deleteError: string | null = null;
+  try {
+    await withTenantContext(admin.tenantId, async () => {
+      await prisma.$transaction(async (tx) => {
+        const collection = await tx.collection.findFirst({
+          where: { id, tenantId: admin.tenantId },
+          select: {
+            _count: { select: { refunds: true } },
+            amount: true,
+            amountForfeited: true,
+            receiptNumber: true,
+            type: true,
+          },
+        });
+        if (!collection) throw new CollectionDeleteError("Collection not found.");
+        if (collection._count.refunds || Number(collection.amountForfeited) > 0) {
+          throw new CollectionDeleteError("This bond has refund or forfeiture history and must be retained for financial and audit integrity.");
+        }
+
+        const deleted = await tx.collection.deleteMany({ where: { id, tenantId: admin.tenantId } });
+        if (deleted.count !== 1) throw new CollectionDeleteError("Collection not found.");
+
+        await tx.auditLog.create({ data: {
+          tenantId: admin.tenantId,
+          actorId: admin.id,
+          module: "COLLECTIONS",
+          action: "COLLECTION_DELETED",
+          entityType: "Collection",
+          entityId: id,
+          metadata: {
+            type: collection.type,
+            amount: Number(collection.amount),
+            receiptNumber: collection.receiptNumber,
+          },
+        } });
+      }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+    });
+  } catch (error) {
+    if (error instanceof CollectionDeleteError) {
+      deleteError = error.message;
+    } else {
+      const supportReference = `CD-${randomUUID().split("-")[0].toUpperCase()}`;
+      console.error("[HOAHub] collection_delete_failed", {
+        supportReference,
+        tenantId: admin.tenantId,
+        actorId: admin.id,
+        collectionId: id,
+        errorName: error instanceof Error ? error.name : "UnknownError",
+        errorMessage: error instanceof Error ? error.message : String(error),
+      });
+      deleteError = `We couldn't delete this collection. No changes were saved. Support reference: ${supportReference}.`;
+    }
+  }
+
+  if (deleteError) redirectDeleteError(deleteError);
+
+  safeRevalidateCollectionPages({ action: "delete", tenantId: admin.tenantId, actorId: admin.id });
   redirect("/admin/collections?success=deleted");
 }
 
-function revalidateCollectionPages() {
-  revalidatePath("/admin/collections");
-  revalidatePath("/admin/dashboard");
-  revalidatePath("/admin/reports");
-  revalidatePath("/portal/collections");
-  revalidatePath("/portal/dashboard");
+function safeRevalidateCollectionPages(context: { action: string; tenantId: string; actorId: string }) {
+  for (const path of collectionRevalidationPaths) {
+    try {
+      revalidatePath(path);
+    } catch (error) {
+      console.error("[HOAHub] collection_post_commit_revalidation_failed", {
+        ...context,
+        path,
+        errorName: error instanceof Error ? error.name : "UnknownError",
+        errorMessage: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
 }

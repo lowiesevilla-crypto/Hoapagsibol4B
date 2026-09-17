@@ -11,6 +11,7 @@ for (const scriptName of ["build", "hostinger:build", "hostinger:build:backfill"
     const command = packageJson.scripts[scriptName];
     assert.ok(command, `${scriptName} must exist`);
     assert.match(command, /node scripts\/write-release-id\.mjs/);
+    assert.match(command, /next build && node scripts\/write-deployment-assets\.mjs/);
     assert.doesNotMatch(command, /(^|\s|&&|;)pnpm(\s|$)/);
   });
 }

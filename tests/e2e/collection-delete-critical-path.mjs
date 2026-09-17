@@ -76,11 +76,12 @@ async function waitForUrl(page, predicate, label) {
   const deadline = Date.now() + timeout;
   let lastUrl = page.url();
   while (Date.now() < deadline) {
-    lastUrl = page.url();
     try {
+      lastUrl = page.url();
       if (predicate(new URL(lastUrl))) return lastUrl;
     } catch {
-      // Next.js can briefly replace the frame during server-action redirects.
+      // Next.js can briefly detach/replace the main frame while a Server Action redirects.
+      // Treat that as an in-flight navigation and retry instead of failing the regression.
     }
     await new Promise((resolve) => setTimeout(resolve, 100));
   }

@@ -10,6 +10,7 @@ const LEGACY_SERVICE_WORKER_PATH_PATTERN = /\/service-worker\.js$|\/workbox-/i;
 const DEVELOPMENT_HOAHUB_CACHE_PREFIX = "hoahub-pwa-";
 const HOAHUB_SERVICE_WORKER_PATH = "/sw.js";
 const PWA_UPDATE_RELOAD_KEY = "hoahub:pwa-update-reload-started";
+const NEXT_STATIC_ASSET_PATH_PATTERN = /\/_next\/static\/(?:chunks|css)\//i;
 
 export function BrowserCacheRecovery() {
   const pathname = usePathname();
@@ -44,8 +45,8 @@ export function BrowserCacheRecovery() {
   useEffect(() => {
     const buildId = process.env.NEXT_PUBLIC_HOAHUB_BUILD_ID || "local";
     const storageKey = chunkRecoveryKey(pathname, buildId);
-    const recover = (event: ErrorEvent | PromiseRejectionEvent, error: unknown) => {
-      if (!isChunkLoadFailure(error)) return;
+    const recover = (event: Event, error: unknown, resourceFailure = false) => {
+      if (!resourceFailure && !isChunkLoadFailure(error)) return;
       event.preventDefault();
       try {
         if (window.sessionStorage.getItem(storageKey) === "1") return;
@@ -53,10 +54,19 @@ export function BrowserCacheRecovery() {
       } catch {
         return;
       }
-      console.info("[HOAHub]", { event: "chunk_load_recovery", route: routeCategory(pathname), action: "reload" });
+      console.info("[HOAHub]", {
+        event: "chunk_load_recovery",
+        route: routeCategory(pathname),
+        action: "reload",
+        reason: resourceFailure ? "next_static_resource_error" : "runtime_chunk_error",
+      });
       window.location.reload();
     };
-    const onError = (event: ErrorEvent) => recover(event, event.error || event.message);
+    const onError = (event: ErrorEvent) => recover(
+      event,
+      event.error || event.message,
+      isFailedSameOriginNextStaticAssetEvent(event),
+    );
     const onUnhandledRejection = (event: PromiseRejectionEvent) => recover(event, event.reason);
     const stableTimer = window.setTimeout(() => {
       try {
@@ -67,16 +77,34 @@ export function BrowserCacheRecovery() {
       }
     }, 4000);
 
-    window.addEventListener("error", onError);
+    window.addEventListener("error", onError, true);
     window.addEventListener("unhandledrejection", onUnhandledRejection);
     return () => {
       window.clearTimeout(stableTimer);
-      window.removeEventListener("error", onError);
+      window.removeEventListener("error", onError, true);
       window.removeEventListener("unhandledrejection", onUnhandledRejection);
     };
   }, [pathname]);
 
   return null;
+}
+
+function isFailedSameOriginNextStaticAssetEvent(event: Event) {
+  const target = event.target as (EventTarget & { src?: unknown; href?: unknown }) | null;
+  if (!target) return false;
+  const candidate = typeof target.src === "string" && target.src
+    ? target.src
+    : typeof target.href === "string" && target.href
+      ? target.href
+      : "";
+  if (!candidate) return false;
+
+  try {
+    const url = new URL(candidate, window.location.href);
+    return url.origin === window.location.origin && NEXT_STATIC_ASSET_PATH_PATTERN.test(url.pathname);
+  } catch {
+    return false;
+  }
 }
 
 function clearCompletedPwaUpdateReloadGuard() {

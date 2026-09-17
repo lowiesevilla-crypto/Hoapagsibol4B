@@ -1,4 +1,4 @@
-const SHELL_CACHE = "hoahub-pwa-shell-v2";
+const SHELL_CACHE = "hoahub-pwa-shell-v3";
 const OFFLINE_URL = "/offline";
 const APP_SHELL_ASSETS = [
   OFFLINE_URL,
@@ -83,7 +83,16 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
-  if (url.pathname.startsWith("/_next/static/") || APP_SHELL_ASSETS.includes(url.pathname)) {
+  if (url.pathname.startsWith("/_next/static/")) {
+    // Next.js build assets are content-hashed, but keeping an old hashed runtime
+    // cache-first across deployments can make that runtime request child chunks
+    // that the new server no longer has. Prefer the active deployment and only
+    // fall back to cache on a genuine network failure, never on an HTTP 404.
+    event.respondWith(networkFirstStatic(request));
+    return;
+  }
+
+  if (APP_SHELL_ASSETS.includes(url.pathname)) {
     event.respondWith(cacheFirstStatic(request));
   }
 });
@@ -118,6 +127,19 @@ async function networkFirstNavigation(request) {
   } catch {
     const cache = await caches.open(SHELL_CACHE);
     return await cache.match(OFFLINE_URL) || Response.error();
+  }
+}
+
+async function networkFirstStatic(request) {
+  const cache = await caches.open(SHELL_CACHE);
+  try {
+    const response = await fetch(request);
+    if (isCacheableStaticResponse(response)) {
+      await cache.put(request, response.clone());
+    }
+    return response;
+  } catch {
+    return await cache.match(request) || Response.error();
   }
 }
 

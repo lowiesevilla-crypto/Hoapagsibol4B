@@ -12,18 +12,33 @@ import { updatePaymentAmountLedger, voidPaymentLedger } from "@/lib/services/pay
 import { buildPaymentConfirmation, recordMonthlyDuesPayment } from "@/lib/services/payment-recording";
 import { sendEmailNotification } from "@/lib/services/notifications";
 
+const paymentRevalidationPaths = [
+  "/admin/payments",
+  "/admin/payments/record",
+  "/admin/payments/requests",
+  "/admin/payments/active",
+  "/admin/payments/history",
+  "/admin/billing",
+  "/admin/receipts",
+  "/admin/reports",
+  "/admin/dashboard",
+  "/portal/billing",
+  "/portal/payments",
+  "/portal/dashboard",
+] as const;
+
 export async function recordPaymentAction(formData: FormData) {
   const admin = await requirePermissions([
     Permission.PAYMENTS_RECORD,
     Permission.RECEIPTS_ISSUE,
   ]);
   const parsed = paymentSchema.safeParse(Object.fromEntries(formData.entries()));
-  if (!parsed.success) throw new Error(parsed.error.issues[0]?.message || "Invalid payment details.");
+  if (!parsed.success) redirect(`/admin/payments/record?error=${encodeURIComponent(parsed.error.issues[0]?.message || "Invalid payment details.")}`);
   const data = parsed.data;
   const billIds = [...new Set(formData.getAll("billIds").map(String).filter(Boolean))];
-  if (!billIds.length) throw new Error("Select at least one open billing item.");
+  if (!billIds.length) redirect("/admin/payments/record?error=Select%20at%20least%20one%20open%20billing%20item.");
   const idempotencyKey = String(formData.get("idempotencyKey") || "").trim();
-  if (!idempotencyKey || idempotencyKey.length > 100) throw new Error("Payment submission token is invalid. Refresh the form and try again.");
+  if (!idempotencyKey || idempotencyKey.length > 100) redirect("/admin/payments/record?error=Payment%20submission%20token%20is%20invalid.%20Refresh%20the%20form%20and%20try%20again.");
 
   let confirmation: Awaited<ReturnType<typeof recordMonthlyDuesPayment>> | null = null;
   try {
@@ -54,13 +69,8 @@ export async function recordPaymentAction(formData: FormData) {
 
   if (confirmation && !confirmation.reused) await sendEmailNotification({ tenantId: admin.tenantId, recipientId: confirmation.recipientId, email: confirmation.email, subject: "HOA payment recorded", heading: "Payment confirmation", message: `Hello ${confirmation.name},\nYour HOA payment of PHP ${confirmation.amount.toFixed(2)} has been recorded successfully.\nPayment for: ${confirmation.coverageDisplay}\nReference: ${confirmation.referenceNumber || "Not required for cash payment"}`, type: NotificationType.PAYMENT_CONFIRMATION, actionLabel: "View payment history", actionUrl: `${getAppUrl()}/portal/payments` }).catch(() => undefined);
 
-  revalidatePath("/admin/payments");
-  revalidatePath("/admin/payments/record");
-  revalidatePath("/admin/payments/active");
-  revalidatePath("/admin/billing");
-  revalidatePath("/admin/dashboard");
   if (!confirmation) redirect("/admin/payments/record?error=Payment%20could%20not%20be%20recorded.");
-  revalidatePath(`/receipts/payment/${confirmation.paymentId}`);
+  safeRevalidatePaymentPages({ action: "record", tenantId: admin.tenantId, actorId: admin.id, paymentId: confirmation.paymentId });
   redirect(`/receipts/payment/${confirmation.paymentId}`);
 }
 
@@ -76,13 +86,7 @@ export async function updatePaymentAmountAction(formData: FormData) {
     redirect(`/admin/payments/active?error=${encodeURIComponent(error instanceof Error ? error.message : "Payment amount could not be updated.")}`);
   }
 
-  revalidatePath("/admin/payments");
-  revalidatePath("/admin/billing");
-  revalidatePath("/admin/dashboard");
-  revalidatePath("/portal/billing");
-  revalidatePath("/portal/payments");
-  revalidatePath("/portal/dashboard");
-  revalidatePath(`/receipts/payment/${id}`);
+  safeRevalidatePaymentPages({ action: "update_amount", tenantId: admin.tenantId, actorId: admin.id, paymentId: id });
   redirect("/admin/payments/active?success=saved&message=Payment%20amount%20updated%20and%20billing%20totals%20recalculated.");
 }
 
@@ -100,27 +104,31 @@ export async function voidPaymentAction(formData: FormData) {
     redirect(`/admin/payments/active?error=${encodeURIComponent(error instanceof Error ? error.message : "Payment could not be voided.")}`);
   }
 
-  revalidatePaymentPages(id, homeownerId);
+  safeRevalidatePaymentPages({ action: "void", tenantId: admin.tenantId, actorId: admin.id, paymentId: id, homeownerId });
   redirect("/admin/payments/active?success=deleted&message=Payment%20voided%2C%20archived%2C%20and%20billing%20totals%20recalculated.");
 }
 
-function revalidatePaymentPages(paymentId?: string, homeownerId?: string) {
-  revalidatePath("/admin/payments");
-  revalidatePath("/admin/payments/record");
-  revalidatePath("/admin/payments/requests");
-  revalidatePath("/admin/payments/active");
-  revalidatePath("/admin/payments/history");
-  revalidatePath("/admin/billing");
-  revalidatePath("/admin/receipts");
-  revalidatePath("/admin/reports");
-  revalidatePath("/admin/dashboard");
-  revalidatePath("/portal/billing");
-  revalidatePath("/portal/payments");
-  revalidatePath("/portal/dashboard");
-  if (paymentId) revalidatePath(`/receipts/payment/${paymentId}`);
-  if (homeownerId) {
-    revalidatePath(`/admin/homeowners/${homeownerId}`);
-    revalidatePath(`/admin/homeowners/${homeownerId}/soa`);
-    revalidatePath(`/admin/homeowners/${homeownerId}/soa/pdf`);
+function safeRevalidatePaymentPages(context: { action: string; tenantId: string; actorId: string; paymentId?: string; homeownerId?: string }) {
+  const paths = [
+    ...paymentRevalidationPaths,
+    ...(context.paymentId ? [`/receipts/payment/${context.paymentId}`] : []),
+    ...(context.homeownerId ? [
+      `/admin/homeowners/${context.homeownerId}`,
+      `/admin/homeowners/${context.homeownerId}/soa`,
+      `/admin/homeowners/${context.homeownerId}/soa/pdf`,
+    ] : []),
+  ];
+
+  for (const path of paths) {
+    try {
+      revalidatePath(path);
+    } catch (error) {
+      console.error("[HOAHub] payment_post_commit_revalidation_failed", {
+        ...context,
+        path,
+        errorName: error instanceof Error ? error.name : "UnknownError",
+        errorMessage: error instanceof Error ? error.message : String(error),
+      });
+    }
   }
 }

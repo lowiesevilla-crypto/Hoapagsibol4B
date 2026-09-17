@@ -72,20 +72,14 @@ async function clickByText(page, selector, matcher) {
   throw new Error(`No ${selector} matched ${String(matcher)} on ${page.url()}`);
 }
 
-async function waitForUrl(page, predicate, label) {
+async function waitForCollectionDeletion() {
   const deadline = Date.now() + timeout;
-  let lastUrl = page.url();
   while (Date.now() < deadline) {
-    try {
-      lastUrl = page.url();
-      if (predicate(new URL(lastUrl))) return lastUrl;
-    } catch {
-      // Next.js can briefly detach/replace the main frame while a Server Action redirects.
-      // Treat that as an in-flight navigation and retry instead of failing the regression.
-    }
+    const remaining = await prisma.collection.count({ where: { id: primaryCollectionId, tenantId: primaryTenantId } });
+    if (remaining === 0) return;
     await new Promise((resolve) => setTimeout(resolve, 100));
   }
-  throw new Error(`Timed out waiting for ${label}. Last URL: ${lastUrl}`);
+  throw new Error("Timed out waiting for the collection deletion transaction to commit.");
 }
 
 async function login(page) {
@@ -93,7 +87,7 @@ async function login(page) {
   await page.type("#identifier", adminEmail);
   await page.type("#password", adminPassword);
   await clickByText(page, "button", "Sign in securely");
-  await waitForUrl(page, (url) => url.pathname.startsWith("/admin/"), "administrator redirect after login");
+  await page.waitForFunction(() => window.location.pathname.startsWith("/admin/"), { timeout });
 }
 
 async function createFixtures() {
@@ -171,13 +165,26 @@ async function runCollectionDeleteRegression(browser) {
       window.__hoahubDeleteBoundaryObserver = observer;
     });
 
-    page.once("dialog", async (dialog) => {
-      assert.match(dialog.message(), /cannot be undone/i);
-      await dialog.accept();
+    const confirmationHandled = new Promise((resolve, reject) => {
+      page.once("dialog", async (dialog) => {
+        try {
+          assert.match(dialog.message(), /cannot be undone/i);
+          await dialog.accept();
+          resolve();
+        } catch (error) {
+          reject(error);
+        }
+      });
     });
-    await deleteButton.click();
-    await waitForUrl(page, (url) => url.pathname === "/admin/collections" && url.searchParams.get("success") === "deleted", "successful collection deletion redirect");
-    assert.equal(transientBoundarySeen, false, "Delete must never render the global error boundary, even transiently before redirect/recovery.");
+    const clickPromise = deleteButton.click();
+    await confirmationHandled;
+    await clickPromise;
+    await waitForCollectionDeletion();
+
+    const currentUrl = new URL(page.url());
+    assert.equal(currentUrl.pathname, "/admin/collections", "Collection deletion must remain on the Collections workflow.");
+    assert.equal(currentUrl.searchParams.has("deleteError"), false, `Collection deletion must not report an error: ${currentUrl.searchParams.get("deleteError") || ""}`);
+    assert.equal(transientBoundarySeen, false, "Delete must never render the global error boundary while the committed mutation completes.");
 
     assert.equal(await prisma.collection.count({ where: { id: primaryCollectionId, tenantId: primaryTenantId } }), 0, "Deleted collection must be physically absent from its tenant.");
     assert.equal(await prisma.collection.count({ where: { id: secondaryCollectionId, tenantId: secondaryTenantId } }), 1, "Deleting a primary-tenant collection must not affect another tenant.");
@@ -207,6 +214,7 @@ try {
   await runCollectionDeleteRegression(browser);
   console.log("Collection Delete browser regression suite passed:");
   console.log("- a history-free collection was deleted through the real admin UI and Server Action");
+  console.log("- the committed deletion, not a transient URL query parameter, is the synchronization authority");
   console.log("- the deleted database row stayed absent after a clean page reload");
   console.log("- COLLECTION_DELETED audit evidence was committed atomically");
   console.log("- a same-shaped collection in another tenant remained untouched and invisible");

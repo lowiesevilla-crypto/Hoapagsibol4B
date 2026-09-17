@@ -16,6 +16,12 @@ import { bondRefundSchema, collectionSchema } from "@/lib/validation";
 
 const rentalPaymentsHref = "/admin/rentals?view=payments&source=collections";
 
+class CollectionPostingError extends Error {}
+
+function redirectCollectionError(message: string): never {
+  redirect(`/admin/collections?collectionError=${encodeURIComponent(message)}`);
+}
+
 export async function recordCollectionAction(formData: FormData) {
   const admin = await requirePermissions([
     Permission.COLLECTIONS_RECORD,
@@ -29,66 +35,89 @@ export async function recordCollectionAction(formData: FormData) {
   }
 
   const parsed = collectionSchema.safeParse(Object.fromEntries(formData.entries()));
-  if (!parsed.success) throw new Error(parsed.error.issues[0]?.message || "Invalid collection details.");
+  if (!parsed.success) redirectCollectionError(parsed.error.issues[0]?.message || "Invalid collection details.");
   const data = parsed.data;
   const refundable = isRefundableBondType(data.type);
   const externalPayer = data.payerType === PayerType.RENTER || data.payerType === PayerType.OTHER;
   const payerName = data.payerName?.trim() ?? "";
 
   if (data.type === CollectionType.CONSTRUCTION_BOND && data.payerType !== PayerType.HOMEOWNER) {
-    throw new Error("A construction bond must be assigned to a homeowner.");
+    redirectCollectionError("A construction bond must be assigned to a homeowner.");
   }
   if (data.type === CollectionType.CONTRACTOR_BOND && data.payerType !== PayerType.CONTRACTOR) {
-    throw new Error("A contractor bond must be assigned to a contractor profile.");
+    redirectCollectionError("A contractor bond must be assigned to a contractor profile.");
   }
   if (externalPayer && data.type !== CollectionType.OTHER) {
-    throw new Error("Renter and other payers are available only for Other income collections.");
+    redirectCollectionError("Renter and other payers are available only for Other income collections.");
   }
-  if (data.type === CollectionType.OTHER && !data.description) throw new Error("Enter a name for the other collection type.");
-  if (externalPayer && !payerName) throw new Error("Enter the payer name.");
-  if (data.payerType === PayerType.HOMEOWNER && !data.homeownerId) throw new Error("Select a homeowner.");
-  if (data.payerType === PayerType.CONTRACTOR && !data.contractorId) throw new Error("Select a contractor.");
+  if (data.type === CollectionType.OTHER && !data.description) redirectCollectionError("Enter a name for the other collection type.");
+  if (externalPayer && !payerName) redirectCollectionError("Enter the payer name.");
+  if (data.payerType === PayerType.HOMEOWNER && !data.homeownerId) redirectCollectionError("Select a homeowner.");
+  if (data.payerType === PayerType.CONTRACTOR && !data.contractorId) redirectCollectionError("Select a contractor.");
 
-  if (data.payerType === PayerType.HOMEOWNER) {
-    const exists = await prisma.homeownerProfile.count({ where: { id: data.homeownerId, tenantId: admin.tenantId } });
-    if (!exists) throw new Error("Homeowner not found.");
-  } else if (data.payerType === PayerType.CONTRACTOR) {
-    const exists = await prisma.contractorProfile.count({ where: { id: data.contractorId, tenantId: admin.tenantId } });
-    if (!exists) throw new Error("Contractor not found.");
+  let collectionError: string | null = null;
+  try {
+    await withTenantContext(admin.tenantId, async () => {
+      if (data.payerType === PayerType.HOMEOWNER) {
+        const exists = await prisma.homeownerProfile.count({ where: { id: data.homeownerId, tenantId: admin.tenantId } });
+        if (!exists) throw new CollectionPostingError("Homeowner not found.");
+      } else if (data.payerType === PayerType.CONTRACTOR) {
+        const exists = await prisma.contractorProfile.count({ where: { id: data.contractorId, tenantId: admin.tenantId } });
+        if (!exists) throw new CollectionPostingError("Contractor not found.");
+      }
+
+      await prisma.$transaction(async (tx) => {
+        const collectionDate = new Date(`${data.collectionDate}T00:00:00.000Z`);
+        const series = collectionReceiptSeries(data.type);
+        const receiptNumber = await allocateReceiptNumber(tx as unknown as Prisma.TransactionClient, admin.tenantId, collectionDate, series);
+        const collection = await tx.collection.create({ data: {
+          tenantId: admin.tenantId,
+          type: data.type,
+          description: data.description || null,
+          payerType: data.payerType,
+          payerName: externalPayer ? payerName : null,
+          homeownerId: data.payerType === PayerType.HOMEOWNER ? data.homeownerId : null,
+          contractorId: data.payerType === PayerType.CONTRACTOR ? data.contractorId : null,
+          amount: data.amount,
+          collectionDate,
+          method: data.method,
+          referenceNumber: data.referenceNumber || null,
+          receiptNumber,
+          remarks: data.remarks || null,
+          refundable,
+          refundStatus: refundable ? RefundStatus.HELD : RefundStatus.NOT_APPLICABLE,
+          createdById: admin.id,
+        } });
+        await tx.auditLog.create({ data: {
+          tenantId: admin.tenantId,
+          actorId: admin.id,
+          module: "RECEIPTS",
+          action: `GENERATE_${series}_RECEIPT`,
+          entityType: "Collection",
+          entityId: collection.id,
+          metadata: { receiptNumber, amount: data.amount, payerType: data.payerType, payerName: externalPayer ? payerName : null },
+        } });
+      }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+    });
+  } catch (error) {
+    if (error instanceof CollectionPostingError) {
+      collectionError = error.message;
+    } else {
+      const supportReference = `BC-${randomUUID().split("-")[0].toUpperCase()}`;
+      console.error("[HOAHub] collection_record_failed", {
+        supportReference,
+        tenantId: admin.tenantId,
+        actorId: admin.id,
+        type: data.type,
+        payerType: data.payerType,
+        errorName: error instanceof Error ? error.name : "UnknownError",
+        errorMessage: error instanceof Error ? error.message : String(error),
+      });
+      collectionError = `We couldn't record this collection. No changes were saved. Support reference: ${supportReference}.`;
+    }
   }
 
-  await prisma.$transaction(async (tx) => {
-    const collectionDate = new Date(`${data.collectionDate}T00:00:00.000Z`);
-    const series = collectionReceiptSeries(data.type);
-    const receiptNumber = await allocateReceiptNumber(tx as unknown as Prisma.TransactionClient, admin.tenantId, collectionDate, series);
-    const collection = await tx.collection.create({ data: {
-      tenantId: admin.tenantId,
-      type: data.type,
-      description: data.description || null,
-      payerType: data.payerType,
-      payerName: externalPayer ? payerName : null,
-      homeownerId: data.payerType === PayerType.HOMEOWNER ? data.homeownerId : null,
-      contractorId: data.payerType === PayerType.CONTRACTOR ? data.contractorId : null,
-      amount: data.amount,
-      collectionDate,
-      method: data.method,
-      referenceNumber: data.referenceNumber || null,
-      receiptNumber,
-      remarks: data.remarks || null,
-      refundable,
-      refundStatus: refundable ? RefundStatus.HELD : RefundStatus.NOT_APPLICABLE,
-      createdById: admin.id,
-    } });
-    await tx.auditLog.create({ data: {
-      tenantId: admin.tenantId,
-      actorId: admin.id,
-      module: "RECEIPTS",
-      action: `GENERATE_${series}_RECEIPT`,
-      entityType: "Collection",
-      entityId: collection.id,
-      metadata: { receiptNumber, amount: data.amount, payerType: data.payerType, payerName: externalPayer ? payerName : null },
-    } });
-  }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+  if (collectionError) redirectCollectionError(collectionError);
 
   revalidateCollectionPages();
   redirect("/admin/collections?success=recorded");

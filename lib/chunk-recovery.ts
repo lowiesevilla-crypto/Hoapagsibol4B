@@ -8,6 +8,11 @@ const CHUNK_FAILURE_PATTERNS = [
   /\/_next\/static\/css\//i,
 ];
 
+type StaticResourceStatus = {
+  name: string;
+  responseStatus?: number;
+};
+
 export function isChunkLoadFailure(error: unknown) {
   const message = typeof error === "string"
     ? error
@@ -17,6 +22,13 @@ export function isChunkLoadFailure(error: unknown) {
         ? String((error as { message?: unknown; reason?: unknown }).message || (error as { reason?: unknown }).reason || "")
         : "";
   return CHUNK_FAILURE_PATTERNS.some((pattern) => pattern.test(message));
+}
+
+export function hasFailedNextStaticResource(entries: readonly StaticResourceStatus[]) {
+  return entries.some((entry) => {
+    if (!/\/_next\/static\/(?:chunks|css)\//i.test(entry.name)) return false;
+    return typeof entry.responseStatus === "number" && entry.responseStatus >= 400;
+  });
 }
 
 export function chunkRecoveryKey(pathname: string, buildId = "unknown") {

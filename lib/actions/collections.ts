@@ -1,14 +1,17 @@
 "use server";
 
+import { randomUUID } from "node:crypto";
 import { CollectionType, PayerType, Prisma, RefundStatus } from "@prisma/client";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { requirePermission, requirePermissions } from "@/lib/authorization/guards";
 import { Permission } from "@/lib/authorization/permissions";
+import { bondRefundUserMessage } from "@/lib/bond-refund-errors";
 import { isRefundableBondType } from "@/lib/bond-rules";
 import { prisma } from "@/lib/db";
 import { recordBondRefund } from "@/lib/services/bond-refund";
 import { allocateReceiptNumber, collectionReceiptSeries } from "@/lib/services/receipt";
+import { withTenantContext } from "@/lib/tenant-context";
 import { bondRefundSchema, collectionSchema } from "@/lib/validation";
 
 const rentalPaymentsHref = "/admin/rentals?view=payments&source=collections";
@@ -94,18 +97,42 @@ export async function recordCollectionAction(formData: FormData) {
 export async function recordBondRefundAction(formData: FormData) {
   const admin = await requirePermission(Permission.COLLECTIONS_REFUND);
   const parsed = bondRefundSchema.safeParse(Object.fromEntries(formData.entries()));
-  if (!parsed.success) throw new Error(parsed.error.issues[0]?.message || "Invalid refund details.");
+  if (!parsed.success) {
+    const message = parsed.error.issues[0]?.message || "Invalid refund details.";
+    redirect(`/admin/collections?refundError=${encodeURIComponent(message)}`);
+  }
   const data = parsed.data;
 
-  await recordBondRefund({
-    collectionId: data.collectionId,
-    amount: data.amount,
-    refundDate: new Date(`${data.refundDate}T00:00:00.000Z`),
-    method: data.method,
-    referenceNumber: data.referenceNumber,
-    remarks: data.remarks,
-    actor: { id: admin.id, tenantId: admin.tenantId },
-  });
+  let refundError: string | null = null;
+  try {
+    await withTenantContext(admin.tenantId, () => recordBondRefund({
+      collectionId: data.collectionId,
+      amount: data.amount,
+      refundDate: new Date(`${data.refundDate}T00:00:00.000Z`),
+      method: data.method,
+      referenceNumber: data.referenceNumber,
+      remarks: data.remarks,
+      actor: { id: admin.id, tenantId: admin.tenantId },
+    }));
+  } catch (error) {
+    refundError = bondRefundUserMessage(error);
+    if (!refundError) {
+      const supportReference = `BR-${randomUUID().split("-")[0].toUpperCase()}`;
+      console.error("[HOAHub] bond_refund_failed", {
+        supportReference,
+        tenantId: admin.tenantId,
+        actorId: admin.id,
+        collectionId: data.collectionId,
+        errorName: error instanceof Error ? error.name : "UnknownError",
+        errorMessage: error instanceof Error ? error.message : String(error),
+      });
+      refundError = `We couldn't process this bond refund. No changes were saved. Support reference: ${supportReference}.`;
+    }
+  }
+
+  if (refundError) {
+    redirect(`/admin/collections?refundError=${encodeURIComponent(refundError)}`);
+  }
 
   revalidateCollectionPages();
   redirect("/admin/collections?success=refunded");

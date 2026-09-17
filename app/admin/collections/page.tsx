@@ -15,15 +15,24 @@ import { prisma } from "@/lib/db";
 import { collectionLabel, inputDate, money, shortDate } from "@/lib/utils";
 
 type CollectionsPageProps = {
-  searchParams?: Promise<{ collectionError?: string | string[]; refundError?: string | string[] }>;
+  searchParams?: Promise<{
+    collectionError?: string | string[];
+    refundError?: string | string[];
+    forfeitError?: string | string[];
+    deleteError?: string | string[];
+  }>;
 };
+
+function firstParam(value?: string | string[]) {
+  return Array.isArray(value) ? value[0] : value;
+}
 
 export default async function CollectionsPage({ searchParams }: CollectionsPageProps) {
   const params = searchParams ? await searchParams : {};
-  const rawCollectionError = params.collectionError;
-  const collectionError = Array.isArray(rawCollectionError) ? rawCollectionError[0] : rawCollectionError;
-  const rawRefundError = params.refundError;
-  const refundError = Array.isArray(rawRefundError) ? rawRefundError[0] : rawRefundError;
+  const collectionError = firstParam(params.collectionError);
+  const refundError = firstParam(params.refundError);
+  const forfeitError = firstParam(params.forfeitError);
+  const deleteError = firstParam(params.deleteError);
   const admin = await requirePermission(Permission.COLLECTIONS_MANAGE);
   const [homeowners, contractors, collections, refunds] = await Promise.all([
     prisma.homeownerProfile.findMany({ where: { tenantId: admin.tenantId }, include: { user: true }, orderBy: { user: { name: "asc" } } }),
@@ -48,6 +57,8 @@ export default async function CollectionsPage({ searchParams }: CollectionsPageP
   return <><PageHeader eyebrow="Income and liabilities" title="Other collections & bonds" description="Record association income separately from refundable homeowner and contractor bonds." />
     {collectionError && <div role="alert" className="mb-6 rounded-2xl border border-rose-200 bg-rose-50 p-4 text-rose-900"><p className="font-black">Collection not recorded</p><p className="mt-1 text-sm">{collectionError}</p><p className="mt-2 text-xs text-rose-700">No receipt, collection, or bond balance is committed when the posting transaction fails.</p></div>}
     {refundError && <div role="alert" className="mb-6 rounded-2xl border border-rose-200 bg-rose-50 p-4 text-rose-900"><p className="font-black">Refund not processed</p><p className="mt-1 text-sm">{refundError}</p><p className="mt-2 text-xs text-rose-700">No refund record or bond-balance change is committed when the refund transaction fails.</p></div>}
+    {forfeitError && <div role="alert" className="mb-6 rounded-2xl border border-rose-200 bg-rose-50 p-4 text-rose-900"><p className="font-black">Bond not forfeited</p><p className="mt-1 text-sm">{forfeitError}</p><p className="mt-2 text-xs text-rose-700">No forfeiture or bond-balance change is committed when the forfeiture transaction fails.</p></div>}
+    {deleteError && <div role="alert" className="mb-6 rounded-2xl border border-rose-200 bg-rose-50 p-4 text-rose-900"><p className="font-black">Collection not deleted</p><p className="mt-1 text-sm">{deleteError}</p><p className="mt-2 text-xs text-rose-700">Refunded or forfeited bonds are retained to preserve the tenant&apos;s financial and audit history.</p></div>}
     <section className="mb-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-4"><StatCard label="Fee income" value={money(feeIncome)} note="Gate passes, stickers, memberships and other" icon={Banknote} /><StatCard label="Forfeited bond income" value={money(forfeitedIncome)} note="Recognized after a recorded violation" icon={Landmark} /><StatCard label="Refundable bonds held" value={money(bondsHeld)} note={`${openBonds.length} open bond${openBonds.length === 1 ? "" : "s"}`} icon={HandCoins} /><StatCard label="Bonds refunded" value={money(refunded)} note="All processed bond returns" icon={RotateCcw} /></section>
     <section className="mb-6 grid gap-5 xl:grid-cols-2"><CollectionForm today={inputDate(new Date())} homeowners={homeowners.map((item) => ({ id: item.id, label: `${item.user.name} - Block ${item.block}, Lot ${item.lot}${item.status === "ACTIVE" ? "" : ` - ${item.status}`}`, search: `${item.user.name} ${item.user.email} ${item.accountNumber ?? ""} block ${item.block} lot ${item.lot} ${item.phase ?? ""} ${item.address} ${item.status}`.toLowerCase() }))} contractors={contractors.map((item) => ({ id: item.id, label: `${item.companyName} - ${item.contactPerson}`, search: `${item.companyName} ${item.contactPerson} ${item.phone} ${item.address}`.toLowerCase() }))} />
       <BondRefundForm today={inputDate(new Date())} bonds={openBonds.map((item) => { const balance = Number(item.amount) - Number(item.amountRefunded) - Number(item.amountForfeited); const payer = payerInfo(item).name; const property = item.homeowner ? `Block ${item.homeowner.block} Lot ${item.homeowner.lot}` : ""; return { id: item.id, label: `${money(balance)} available - ${payer} - ${collectionLabel(item.type)}`, search: `${payer} ${property} ${item.contractor?.contactPerson ?? ""} ${collectionLabel(item.type)} ${item.referenceNumber ?? ""}`.toLowerCase() }; })} />

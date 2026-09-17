@@ -12,6 +12,18 @@ import { paymentSchema } from "@/lib/validation";
 import { buildPaymentConfirmation, recordMonthlyDuesPayment } from "@/lib/services/payment-recording";
 import { sendEmailNotification } from "@/lib/services/notifications";
 
+const homeownerPaymentRevalidationPaths = [
+  "/admin/payments",
+  "/admin/payments/record",
+  "/admin/payments/active",
+  "/admin/payments/history",
+  "/admin/billing",
+  "/admin/dashboard",
+  "/portal/billing",
+  "/portal/payments",
+  "/portal/dashboard",
+] as const;
+
 export type RecordHomeownerPaymentProgressState = {
   status: "idle" | "success" | "error";
   message: string;
@@ -151,19 +163,36 @@ async function recordHomeownerPaymentSubmission(formData: FormData, options: { r
     }).catch(() => undefined);
   }
 
-  revalidatePath("/admin/payments");
-  revalidatePath("/admin/payments/record");
-  revalidatePath("/admin/payments/active");
-  revalidatePath("/admin/payments/history");
-  revalidatePath("/admin/billing");
-  revalidatePath("/admin/dashboard");
-  revalidatePath("/portal/billing");
-  revalidatePath("/portal/payments");
-  revalidatePath("/portal/dashboard");
-  revalidatePath(`/admin/homeowners/${homeownerId}`);
   if (!confirmation) throw new Error("Payment could not be recorded.");
-  revalidatePath(`/receipts/payment/${confirmation.paymentId}`);
+  safeRevalidateHomeownerPaymentPages({
+    action: options.requireActionProgressFlag ? "record_progress" : "record",
+    tenantId: admin.tenantId,
+    actorId: admin.id,
+    paymentId: confirmation.paymentId,
+    homeownerId,
+  });
   return { confirmation, homeownerId };
+}
+
+function safeRevalidateHomeownerPaymentPages(context: { action: string; tenantId: string; actorId: string; paymentId: string; homeownerId: string }) {
+  const paths = [
+    ...homeownerPaymentRevalidationPaths,
+    `/admin/homeowners/${context.homeownerId}`,
+    `/receipts/payment/${context.paymentId}`,
+  ];
+
+  for (const path of paths) {
+    try {
+      revalidatePath(path);
+    } catch (error) {
+      console.error("[HOAHub] payment_post_commit_revalidation_failed", {
+        ...context,
+        path,
+        errorName: error instanceof Error ? error.name : "UnknownError",
+        errorMessage: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
 }
 
 async function requirePaymentProgressAdmin() {

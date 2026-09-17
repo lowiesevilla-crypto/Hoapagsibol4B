@@ -7,6 +7,10 @@ This manual explains how officers and homeowners use the portal. Screenshots wer
 
 ## 1. Website Access
 
+### Receipt Recovery Update (Candidate, September 17, 2026)
+
+Pending release verification: saving an Other Collection opens its existing receipt directly. Use Return to Collections to close the preview. A Petty Cash refresh failure after posting must not block the saved voucher. If a receipt preview cannot load, use Retry preview; this reloads the display without posting another transaction. Check the receipt history or voucher register before submitting again. This candidate does not change refund accounting or add a refund receipt workflow.
+
 Public link:
 
 ```text

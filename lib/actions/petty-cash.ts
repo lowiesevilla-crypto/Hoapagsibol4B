@@ -2,7 +2,7 @@
 
 import { randomUUID } from "node:crypto";
 import { EmployeeLoanType, PaymentMethod, Prisma, TenantModule } from "@prisma/client";
-import { revalidatePath } from "next/cache";
+import { safeRevalidatePettyCashPages } from "@/lib/petty-cash/revalidation";
 import { redirect } from "next/navigation";
 import { requirePermission } from "@/lib/authorization/guards";
 import { Permission } from "@/lib/authorization/permissions";
@@ -280,10 +280,6 @@ export async function createPettyCashVoucherAction(formData: FormData) {
   if (errorMessage) redirect(`/admin/petty-cash/new?error=${encodeURIComponent(errorMessage)}`);
   if (!createdVoucherId) redirect(`/admin/petty-cash/new?error=${encodeURIComponent("Petty cash voucher could not be created.")}`);
 
-  revalidatePath("/admin/petty-cash");
-  revalidatePath("/admin/expenses");
-  revalidatePath("/admin/reports");
-  revalidatePath("/admin/dashboard");
-  revalidatePath("/admin/payroll");
+  safeRevalidatePettyCashPages({ action: "create", tenantId: actor.tenantId, actorId: actor.id, voucherId: createdVoucherId });
   redirect(`/admin/petty-cash/${createdVoucherId}?success=created`);
 }

@@ -21,7 +21,7 @@ test("collection creation treats cache invalidation as post-commit best effort",
   assert.match(record, /withTenantContext\(admin\.tenantId/);
   assert.match(record, /TransactionIsolationLevel\.Serializable/);
   assert.match(record, /safeRevalidateCollectionPages\(\{ action: "record"/);
-  assert.match(record, /redirect\("\/admin\/collections\?success=recorded"\)/);
+  assert.match(record, /redirect\(`\/receipts\/collection\/\$\{createdCollectionId\}`\)/);
   assert.match(actions, /collection_post_commit_revalidation_failed/);
   assert.match(actions, /for \(const path of collectionRevalidationPaths\)/);
   assert.match(actions, /try \{\s*revalidatePath\(path\);\s*\} catch/);

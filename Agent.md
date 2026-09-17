@@ -130,6 +130,8 @@ Homeowner rental asset reservation remains deferred unless a later merged change
 
 ## Collections and Reports
 
+- Receipt follow-up candidate: Other Collection creation redirects to the ID returned by its committed transaction. Petty Cash create/update/delete refreshes are best effort. Receipt/voucher render errors offer read-only preview recovery, not transaction resubmission. These changes do not establish production incident resolution without affected-flow UAT.
+
 - Collection is authoritative for Other Collections and refundable bonds.
 - Refundable bonds remain liabilities until valid refund/forfeiture treatment.
 - `/admin/reports` supports tenant From/To date ranges and accounting for dues, credits, other income, expenses/payroll, cash movement, receivables, bonds, rental deposits, and employee loans.

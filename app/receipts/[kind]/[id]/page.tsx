@@ -110,6 +110,7 @@ export default async function ReceiptPage({ params }: { params: Promise<{ kind: 
   return (
     <main className="print-document mx-auto min-h-screen max-w-4xl bg-white p-4 sm:p-8">
       <div className="print-hidden mb-5 grid gap-2 sm:flex sm:flex-wrap sm:justify-end">
+        {kind === "collection" && <Link className="btn-secondary min-h-12" href={user.role === Role.HOMEOWNER ? "/portal/collections" : "/admin/collections"}><ArrowLeft className="size-4" /> Return to Collections</Link>}
         {kind === "payment" && user.role !== Role.HOMEOWNER && <Link className="btn-secondary min-h-12" href="/admin/payments/record"><ArrowLeft className="size-4" /> Return to Record Payment</Link>}
         {kind === "payment" && user.role !== Role.HOMEOWNER && <Link className="btn-secondary min-h-12" href="/admin/payments/active"><List className="size-4" /> Return to Payments</Link>}
         {kind === "payment" && user.role === Role.HOMEOWNER && <Link className="btn-secondary min-h-12" href="/portal/payments"><ArrowLeft className="size-4" /> Return to My Payments</Link>}

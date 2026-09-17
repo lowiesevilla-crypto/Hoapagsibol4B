@@ -16,6 +16,7 @@ work/*.exe
 work/*.html
 work/build_*.py
 public/uploads/
+public/deployment-assets.json
 storage/uploads/
 Hoapagsibol4B/
 docs/~$*.docx

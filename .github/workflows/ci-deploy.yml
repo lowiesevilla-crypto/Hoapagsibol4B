@@ -178,6 +178,15 @@ jobs:
           echo "::error::Hostinger did not publish expected release $EXPECTED_SHA within 10 minutes."
           exit 1
 
+      - uses: actions/checkout@v4
+
+      - name: Verify production Next.js static asset integrity
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          EXPECTED_SHA="${GITHUB_SHA:0:12}"
+          node scripts/verify-production-assets.mjs "$HOSTINGER_APP_URL" "$EXPECTED_SHA"
+
       - name: Verify public production health
         shell: bash
         run: |

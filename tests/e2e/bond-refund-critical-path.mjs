@@ -178,13 +178,20 @@ async function runBondRefundRegression(browser) {
     const submit = await form.$("button[type='submit']");
     assert.ok(submit, "Expected Process refund submit button.");
     await submit.click();
-    await waitForUrl(page, (url) => url.pathname === "/admin/collections" && url.searchParams.get("success") === "refunded", "successful bond refund redirect");
+    const previewUrl = await waitForUrl(
+      page,
+      (url) => /^\/admin\/collections\/refunds\/[^/]+$/.test(url.pathname) && url.searchParams.get("success") === "refunded",
+      "successful bond refund receipt preview redirect",
+    );
+    await expectText(page, "Official Bond Refund Receipt", "bond refund receipt preview");
+    await expectText(page, refundReference, "refund external reference on receipt preview");
 
     const [primary, refund] = await Promise.all([
       prisma.collection.findFirstOrThrow({ where: { id: primaryCollectionId, tenantId: primaryTenantId } }),
       prisma.bondRefund.findFirstOrThrow({ where: { tenantId: primaryTenantId, collectionId: primaryCollectionId } }),
     ]);
     refundId = refund.id;
+    assert.equal(new URL(previewUrl).pathname, `/admin/collections/refunds/${refund.id}`, "Refund preview must be for the exact committed refund id.");
     assert.equal(Number(primary.amountRefunded), 750.25);
     assert.equal(primary.refundStatus, "PARTIALLY_REFUNDED");
     assert.equal(Number(refund.amount), 750.25);
@@ -234,6 +241,7 @@ try {
   console.log("Bond Refund browser regression suite passed:");
   console.log("- Collections page exposed only the authenticated tenant's refundable bonds");
   console.log("- authorized partial refund persisted tenant-scoped collection and refund evidence");
+  console.log("- successful refund opened the printable receipt for the exact committed refund id");
   console.log("- refund status and remaining liability were updated without changing finance authority");
   console.log("- BOND_REFUND_PROCESSED audit evidence remained tenant scoped");
   console.log("- forged cross-tenant collection id could not create or apply a refund");

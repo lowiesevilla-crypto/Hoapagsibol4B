@@ -62,6 +62,8 @@ test("deletion preserves refunded or forfeited bond history without crashing the
   assert.match(page, />Bond not forfeited</);
   assert.match(page, />Collection not deleted</);
   assert.match(page, /financial and audit history/);
+  assert.match(page, /hasFinancialHistory = item\.refunds\.length > 0 \|\| Number\(item\.amountForfeited\) > 0/);
+  assert.match(page, />Retained for audit<\/p>/);
 });
 
 test("unexpected mutation errors remain tenant-safe and support-reference traceable", async () => {

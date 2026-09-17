@@ -15,11 +15,13 @@ import { prisma } from "@/lib/db";
 import { collectionLabel, inputDate, money, shortDate } from "@/lib/utils";
 
 type CollectionsPageProps = {
-  searchParams?: Promise<{ refundError?: string | string[] }>;
+  searchParams?: Promise<{ collectionError?: string | string[]; refundError?: string | string[] }>;
 };
 
 export default async function CollectionsPage({ searchParams }: CollectionsPageProps) {
   const params = searchParams ? await searchParams : {};
+  const rawCollectionError = params.collectionError;
+  const collectionError = Array.isArray(rawCollectionError) ? rawCollectionError[0] : rawCollectionError;
   const rawRefundError = params.refundError;
   const refundError = Array.isArray(rawRefundError) ? rawRefundError[0] : rawRefundError;
   const admin = await requirePermission(Permission.COLLECTIONS_MANAGE);
@@ -44,6 +46,7 @@ export default async function CollectionsPage({ searchParams }: CollectionsPageP
   });
 
   return <><PageHeader eyebrow="Income and liabilities" title="Other collections & bonds" description="Record association income separately from refundable homeowner and contractor bonds." />
+    {collectionError && <div role="alert" className="mb-6 rounded-2xl border border-rose-200 bg-rose-50 p-4 text-rose-900"><p className="font-black">Collection not recorded</p><p className="mt-1 text-sm">{collectionError}</p><p className="mt-2 text-xs text-rose-700">No receipt, collection, or bond balance is committed when the posting transaction fails.</p></div>}
     {refundError && <div role="alert" className="mb-6 rounded-2xl border border-rose-200 bg-rose-50 p-4 text-rose-900"><p className="font-black">Refund not processed</p><p className="mt-1 text-sm">{refundError}</p><p className="mt-2 text-xs text-rose-700">No refund record or bond-balance change is committed when the refund transaction fails.</p></div>}
     <section className="mb-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-4"><StatCard label="Fee income" value={money(feeIncome)} note="Gate passes, stickers, memberships and other" icon={Banknote} /><StatCard label="Forfeited bond income" value={money(forfeitedIncome)} note="Recognized after a recorded violation" icon={Landmark} /><StatCard label="Refundable bonds held" value={money(bondsHeld)} note={`${openBonds.length} open bond${openBonds.length === 1 ? "" : "s"}`} icon={HandCoins} /><StatCard label="Bonds refunded" value={money(refunded)} note="All processed bond returns" icon={RotateCcw} /></section>
     <section className="mb-6 grid gap-5 xl:grid-cols-2"><CollectionForm today={inputDate(new Date())} homeowners={homeowners.map((item) => ({ id: item.id, label: `${item.user.name} - Block ${item.block}, Lot ${item.lot}${item.status === "ACTIVE" ? "" : ` - ${item.status}`}`, search: `${item.user.name} ${item.user.email} ${item.accountNumber ?? ""} block ${item.block} lot ${item.lot} ${item.phase ?? ""} ${item.address} ${item.status}`.toLowerCase() }))} contractors={contractors.map((item) => ({ id: item.id, label: `${item.companyName} - ${item.contactPerson}`, search: `${item.companyName} ${item.contactPerson} ${item.phone} ${item.address}`.toLowerCase() }))} />

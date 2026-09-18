@@ -1,8 +1,8 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState } from "react";
-import { recordCollectionAction } from "@/lib/actions/collections";
+import { useActionState, useEffect, useState } from "react";
+import { recordCollectionReceiptStateAction, type RecordCollectionReceiptState } from "@/lib/actions/collections";
 import { SearchableHomeownerSelect } from "@/components/searchable-homeowner-select";
 import { SearchableSelect } from "@/components/searchable-select";
 import { SubmitButton } from "@/components/ui";
@@ -12,8 +12,11 @@ type Payer = { id: string; label: string; search: string };
 const profilePayerTypes = new Set(["HOMEOWNER", "CONTRACTOR"]);
 const rentalPaymentsHref = "/admin/rentals?view=payments&source=collections";
 
+const initialReceiptState: RecordCollectionReceiptState = { status: "idle", message: "", receiptUrl: null };
+
 export function CollectionForm({ homeowners, contractors, today }: { homeowners: Payer[]; contractors: Payer[]; today: string }) {
   const router = useRouter();
+  const [receiptState, receiptAction] = useActionState(recordCollectionReceiptStateAction, initialReceiptState);
   const [type, setType] = useState("GATE_PASS");
   const [payerType, setPayerType] = useState("HOMEOWNER");
 
@@ -40,11 +43,18 @@ export function CollectionForm({ homeowners, contractors, today }: { homeowners:
     setPayerType(next);
   }
 
+  useEffect(() => {
+    if (receiptState.status !== "success" || !receiptState.receiptUrl) return;
+    router.push(receiptState.receiptUrl);
+  }, [receiptState.receiptUrl, receiptState.status, router]);
+
   const payerTypeLocked = type === "CONSTRUCTION_BOND" || type === "CONTRACTOR_BOND";
   const externalPayer = payerType === "OTHER";
 
-  return <form action={recordCollectionAction} className="card">
+  return <form action={receiptAction} className="card">
     <div className="mb-5"><h2 className="text-lg font-black">Record a collection</h2><p className="text-sm text-slate-500">Fees become income; bonds are held as refundable liabilities.</p></div>
+    {receiptState.status === "error" && <div role="alert" aria-live="polite" className="mb-4 rounded-xl border border-rose-200 bg-rose-50 p-3 text-sm font-semibold text-rose-800">{receiptState.message}</div>}
+    {receiptState.status === "success" && <div role="status" aria-live="polite" className="mb-4 rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-sm font-semibold text-emerald-800">{receiptState.message}</div>}
     <div className="mb-5 rounded-xl border border-pine-200 bg-pine-50 p-4 text-sm text-pine-950">
       <p className="font-black">Rental payments have one posting workflow.</p>
       <p className="mt-1 text-xs text-pine-800">Post renter payments in Rental Management so HOAHub can select the actual renter record, issue one official receipt, allocate rental invoices, preserve advance credits, and reconcile automatically. Collections remains the central receipt ledger.</p>
@@ -61,6 +71,6 @@ export function CollectionForm({ homeowners, contractors, today }: { homeowners:
       <div><label className="label">Reference number</label><input className="field" name="referenceNumber" /></div>
       <div className="sm:col-span-2"><label className="label">Remarks</label><input className="field" name="remarks" /></div>
     </div>
-    <div className="mt-5"><SubmitButton>Record collection</SubmitButton></div>
+    <div className="mt-5"><SubmitButton success={receiptState.status === "success"} pendingLabel="Recording collection">Record collection</SubmitButton></div>
   </form>;
 }

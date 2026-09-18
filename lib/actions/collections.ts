@@ -57,6 +57,7 @@ export async function recordCollectionReceiptStateAction(
       receiptUrl: result.destination,
     };
   } catch (error) {
+    if (isNextRedirectError(error)) throw error;
     return {
       status: "error",
       message: collectionErrorMessage(error),

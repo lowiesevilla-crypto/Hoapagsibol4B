@@ -263,9 +263,9 @@ async function resolveLoginUser(input: {
     if (primaryRoleForRoles(roles, candidate.role) === Role.EMPLOYEE) {
       const employeeProfile = candidate.employeeProfile;
       return input.identifierType === "email"
-        && Boolean(employeeProfile)
-        && employeeProfile!.tenantId === candidate.tenantId
-        && employeeProfile!.status === EmployeeStatus.ACTIVE;
+        && employeeProfile != null
+        && employeeProfile.tenantId === candidate.tenantId
+        && employeeProfile.status === EmployeeStatus.ACTIVE;
     }
     if (!roles.includes(Role.HOMEOWNER)) return input.identifierType === "email";
     if (!candidate.homeownerProfile) return input.identifierType === "email";

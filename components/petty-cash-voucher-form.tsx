@@ -1,8 +1,10 @@
 "use client";
 
 import { CirclePlus, Landmark, ReceiptText, Search, Trash2, UserRoundCheck, WalletCards } from "lucide-react";
-import { useMemo, useState } from "react";
-import { createPettyCashVoucherAction } from "@/lib/actions/petty-cash";
+import { useActionState, useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
+import { createPettyCashVoucherStateAction, type PettyCashVoucherReceiptState } from "@/lib/actions/petty-cash";
+import { SubmitButton } from "@/components/ui";
 
 type PayeeOption = { id: string; label: string; address: string; search: string };
 type ExpenseOption = { id: string; name: string };
@@ -10,6 +12,8 @@ type OfficerOption = { id: string; label: string; position: string };
 type EmployeeOption = { id: string; label: string; search: string };
 type PayeeType = "EMPLOYEE" | "HOMEOWNER" | "RENTER" | "CONTRACTOR" | "OTHER";
 type DraftItem = { key: string; categoryId: string; otherParticular: string; amount: string };
+
+const initialVoucherState: PettyCashVoucherReceiptState = { status: "idle", message: "", voucherUrl: null };
 
 const PAYEE_TYPES: Array<{ value: PayeeType; label: string }> = [
   { value: "EMPLOYEE", label: "Employee" },
@@ -42,6 +46,8 @@ export function PettyCashVoucherForm({
   employees: EmployeeOption[];
   currentAdminName: string;
 }) {
+  const router = useRouter();
+  const [voucherState, voucherAction] = useActionState(createPettyCashVoucherStateAction, initialVoucherState);
   const [payeeType, setPayeeType] = useState<PayeeType>("EMPLOYEE");
   const [payeeQuery, setPayeeQuery] = useState("");
   const [payeeEntityId, setPayeeEntityId] = useState("");
@@ -101,12 +107,19 @@ export function PettyCashVoucherForm({
 
   const serializedItems = JSON.stringify(items.map(({ categoryId, otherParticular, amount }) => ({ categoryId, otherParticular, amount })));
 
-  return <form action={createPettyCashVoucherAction} className="space-y-5">
+  useEffect(() => {
+    if (voucherState.status !== "success" || !voucherState.voucherUrl) return;
+    router.push(voucherState.voucherUrl);
+  }, [router, voucherState.status, voucherState.voucherUrl]);
+
+  return <form action={voucherAction} className="space-y-5">
     <input type="hidden" name="itemsJson" value={serializedItems} />
     <input type="hidden" name="payeeType" value={payeeType} />
     <input type="hidden" name="payeeEntityId" value={payeeEntityId} />
     <input type="hidden" name="otherPayeeName" value={otherPayeeName} />
     <input type="hidden" name="approverType" value={approverType} />
+    {voucherState.status === "error" && <div role="alert" aria-live="polite" className="rounded-2xl border border-rose-200 bg-rose-50 p-4 text-sm font-semibold text-rose-800">{voucherState.message}</div>}
+    {voucherState.status === "success" && <div role="status" aria-live="polite" className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-sm font-semibold text-emerald-800">{voucherState.message}</div>}
 
     <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6" aria-labelledby="voucher-details-heading">
       <div className="flex items-start gap-3">
@@ -186,7 +199,7 @@ export function PettyCashVoucherForm({
 
     <div className="sticky bottom-3 z-20 rounded-2xl border border-pine-100 bg-white/95 p-3 shadow-xl backdrop-blur sm:flex sm:items-center sm:justify-between sm:gap-4">
       <div className="hidden sm:block"><p className="text-xs font-black uppercase tracking-wide text-slate-400">Ready to post</p><p className="text-sm font-semibold text-slate-600">Creates the voucher and finance expense entries in one transaction.</p></div>
-      <button className="btn-primary inline-flex min-h-12 w-full items-center justify-center gap-2 sm:w-auto"><WalletCards className="size-4" /> Create & open voucher</button>
+      <SubmitButton className="btn-primary inline-flex min-h-12 w-full items-center justify-center gap-2 sm:w-auto" pendingLabel="Creating voucher" success={voucherState.status === "success"}><WalletCards className="size-4" /> Create & open voucher</SubmitButton>
     </div>
   </form>;
 }

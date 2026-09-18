@@ -51,7 +51,7 @@ test("production employee punch UI uses state-return client navigation instead o
   assert.equal(attendancePage.includes("action={employeeClockOutAction}"), false);
 
   assert.ok(clockForm.includes("useActionState"));
-  assert.ok(clockForm.includes("window.location.replace(state.redirectTo)"));
+  assert.ok(clockForm.includes("router.replace(state.redirectTo)"));
   assert.ok(clockForm.includes("employeeClockInStateAction"));
   assert.ok(clockForm.includes("employeeClockOutStateAction"));
 });

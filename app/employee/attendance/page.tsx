@@ -2,8 +2,7 @@ import Link from "next/link";
 import { CheckCircle2, Clock3, LockKeyhole, TimerReset } from "lucide-react";
 import { PayrollStatus, Role } from "@prisma/client";
 import { PageHeader } from "@/components/page-header";
-import { SubmitButton } from "@/components/ui";
-import { employeeClockInAction, employeeClockOutAction } from "@/lib/actions/attendance";
+import { EmployeeClockForm } from "@/components/employee-clock-form";
 import { requireUser } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { shortDate } from "@/lib/utils";
@@ -89,19 +88,9 @@ export default async function EmployeeAttendancePage() {
         </div>
 
         <div className="border-t border-slate-100 p-5 sm:p-6">
-          {!record?.timeIn && !isLocked && <form action={employeeClockInAction}>
-            <label className="label" htmlFor="timeInRemarks">Time In remarks <span className="font-normal text-slate-400">(optional)</span></label>
-            <input className="field" id="timeInRemarks" name="timeInRemarks" maxLength={500} placeholder="Example: On-site duty" />
-            <SubmitButton className="mt-4 w-full min-h-14 text-base">Time In now</SubmitButton>
-            <p className="mt-2 text-center text-xs text-slate-500">HOAHub uses server-authoritative Asia/Manila time.</p>
-          </form>}
+          {!record?.timeIn && !isLocked && <EmployeeClockForm mode="in" />}
 
-          {record?.timeIn && !record.timeOut && !isLocked && <form action={employeeClockOutAction}>
-            <label className="label" htmlFor="timeOutRemarks">Time Out remarks <span className="font-normal text-slate-400">(optional)</span></label>
-            <input className="field" id="timeOutRemarks" name="timeOutRemarks" maxLength={500} placeholder="Example: Completed assigned work" />
-            <SubmitButton className="btn-secondary mt-4 w-full min-h-14 text-base">Time Out now</SubmitButton>
-            <p className="mt-2 text-center text-xs text-slate-500">Your total hours are recalculated automatically.</p>
-          </form>}
+          {record?.timeIn && !record.timeOut && !isLocked && <EmployeeClockForm mode="out" />}
 
           {record?.timeIn && record.timeOut && <div className="flex items-start gap-3 rounded-2xl bg-emerald-50 p-4 text-emerald-900"><CheckCircle2 className="mt-0.5 size-5 shrink-0" /><div><p className="font-black">Today&apos;s timelog is complete.</p><p className="text-sm">If something is wrong and the cutoff is still open, request a correction from Timelogs.</p></div></div>}
 

@@ -97,6 +97,12 @@ jobs:
           fi
           echo "PUPPETEER_EXECUTABLE_PATH=$CHROMIUM_PATH" >> "$GITHUB_ENV"
           echo "Using repository-controlled Chromium for browser verification."
+      - name: Reset MySQL before browser fixtures
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          pnpm exec prisma migrate reset --force --skip-seed
+          pnpm db:seed
       - name: Production smoke and critical browser suite
         run: |
           set -Eeuo pipefail

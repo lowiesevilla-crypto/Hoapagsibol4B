@@ -21,6 +21,8 @@ test("employee sign-in fails closed unless the primary employee account has an a
   assert.ok(auth.includes("requiredRole === Role.EMPLOYEE"));
   assert.ok(auth.includes("employeeProfile.tenantId !== user.tenantId"));
   assert.ok(auth.includes("employeeProfile.status !== EmployeeStatus.ACTIVE"));
+  assert.ok(auth.includes("if (session.role === Role.EMPLOYEE)"));
+  assert.ok(auth.includes("await deleteSession()"));
 });
 
 test("employee Time In and Time Out stay tenant scoped and are retry safe", () => {
@@ -54,6 +56,8 @@ test("production employee punch UI uses state-return client navigation instead o
   assert.ok(clockForm.includes("router.replace(state.redirectTo)"));
   assert.ok(clockForm.includes("employeeClockInStateAction"));
   assert.ok(clockForm.includes("employeeClockOutStateAction"));
+  assert.ok(clockForm.includes("data-employee-clock-ready={hydrated ? \"true\" : \"false\"}"));
+  assert.ok(clockForm.includes("disabled={!hydrated || pending || Boolean(state.redirectTo)}"));
 });
 
 test("critical browser CI gates the full employee login and attendance regression", () => {

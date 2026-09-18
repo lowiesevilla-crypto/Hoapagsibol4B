@@ -198,9 +198,11 @@ export async function requireUser(requiredRole?: Role) {
   if (!roles.includes(session.role)) redirect("/login");
   if (session.roleSnapshot && session.roleSnapshot !== roleSnapshot) redirect("/login");
   if (!session.sessionId) redirect("/login");
+  const employeeProfile = user.employeeProfile;
   if (requiredRole === Role.EMPLOYEE && (
-    user.employeeProfile?.tenantId !== user.tenantId
-    || user.employeeProfile.status !== EmployeeStatus.ACTIVE
+    !employeeProfile
+    || employeeProfile.tenantId !== user.tenantId
+    || employeeProfile.status !== EmployeeStatus.ACTIVE
   )) {
     redirect(`/${session.tenantSlug}/login?error=employee-access-unavailable`);
   }

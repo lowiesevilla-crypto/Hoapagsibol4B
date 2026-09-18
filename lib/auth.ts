@@ -1,7 +1,7 @@
 import "server-only";
 
 import { createHash, randomUUID } from "node:crypto";
-import { Prisma, Role } from "@prisma/client";
+import { EmployeeStatus, Prisma, Role } from "@prisma/client";
 import { SignJWT } from "jose/jwt/sign";
 import { jwtVerify } from "jose/jwt/verify";
 import { cookies } from "next/headers";
@@ -186,7 +186,7 @@ export async function requireUser(requiredRole?: Role) {
       active: true,
       tenant: { select: { slug: true, status: true, subscriptionStatus: true } },
       homeownerProfile: { select: { id: true } },
-      employeeProfile: { select: { id: true } },
+      employeeProfile: { select: { id: true, tenantId: true, status: true } },
       userRoleAssignments: { where: { active: true }, select: { role: true, active: true } },
     },
   });
@@ -198,6 +198,12 @@ export async function requireUser(requiredRole?: Role) {
   if (!roles.includes(session.role)) redirect("/login");
   if (session.roleSnapshot && session.roleSnapshot !== roleSnapshot) redirect("/login");
   if (!session.sessionId) redirect("/login");
+  if (requiredRole === Role.EMPLOYEE && (
+    user.employeeProfile?.tenantId !== user.tenantId
+    || user.employeeProfile.status !== EmployeeStatus.ACTIVE
+  )) {
+    redirect(`/${session.tenantSlug}/login?error=employee-access-unavailable`);
+  }
 
   const activeSession = await prisma.userSession.findFirst({
     where: { tenantId: session.tenantId, userId: session.userId, tokenHash: sessionHash(session.sessionId), revokedAt: null, expiresAt: { gt: new Date() } },

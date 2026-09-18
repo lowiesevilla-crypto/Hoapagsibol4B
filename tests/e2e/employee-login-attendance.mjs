@@ -228,8 +228,10 @@ async function clickPunchAndWait(page, label, successCode) {
         const success = window.location.pathname === "/employee/attendance"
           && new URL(window.location.href).searchParams.get("success") === expected;
         const alert = document.querySelector('[role="alert"]');
-        const status = document.querySelector('[role="status"]');
-        return success || Boolean(alert?.textContent?.trim()) || Boolean(status?.textContent?.trim());
+        // A success status is rendered before client navigation can settle.
+        // Do not treat that transient state as completion: wait for the
+        // canonical success URL, while still failing fast on a real alert.
+        return success || Boolean(alert?.textContent?.trim());
       },
       { timeout },
       successCode,

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { access } from "node:fs/promises";
 import { hash } from "bcryptjs";
-import { PrismaClient, Role, TenantModule } from "@prisma/client";
+import { PrismaClient, Role, TenantModule, TenantSubscriptionStatus } from "@prisma/client";
 import chromium from "@sparticuz/chromium";
 import puppeteer from "puppeteer-core";
 
@@ -124,13 +124,34 @@ async function seedFixtures() {
   });
   primaryEmployeeId = primaryEmployee.id;
 
+  const isolationPlan = await prisma.subscriptionPlan.findFirst({
+    where: {
+      active: true,
+      AND: [
+        { modules: { some: { module: TenantModule.PAYROLL, enabled: true } } },
+        { modules: { some: { module: TenantModule.ATTENDANCE, enabled: true } } },
+        { modules: { some: { module: TenantModule.CHAT, enabled: true } } },
+      ],
+    },
+    select: { id: true, code: true },
+    orderBy: { updatedAt: "desc" },
+  });
+  assert.ok(isolationPlan, "CI must provide an active plan with PAYROLL, ATTENDANCE, and CHAT for the isolation tenant.");
+
   const secondaryTenant = await prisma.tenant.create({
     data: {
       name: `Employee Isolation Tenant ${runToken}`,
       shortName: `EIT-${runToken}`.slice(0, 30),
       slug: secondaryTenantSlug,
       status: "ACTIVE",
-      subscriptionStatus: "ACTIVE",
+      subscriptionPlan: isolationPlan.code,
+      subscriptionStatus: TenantSubscriptionStatus.ACTIVE,
+      subscriptions: {
+        create: {
+          planId: isolationPlan.id,
+          status: TenantSubscriptionStatus.ACTIVE,
+        },
+      },
       moduleEntitlements: {
         create: [
           { module: TenantModule.PAYROLL, enabled: true },
@@ -399,6 +420,7 @@ async function cleanup() {
   }
 
   if (secondaryTenantId) {
+    await prisma.tenantSubscription.deleteMany({ where: { tenantId: secondaryTenantId } }).catch(() => undefined);
     await prisma.tenantModuleEntitlement.deleteMany({ where: { tenantId: secondaryTenantId } }).catch(() => undefined);
     await prisma.auditLog.deleteMany({ where: { tenantId: secondaryTenantId } }).catch(() => undefined);
     await prisma.tenant.deleteMany({ where: { id: secondaryTenantId } }).catch(() => undefined);

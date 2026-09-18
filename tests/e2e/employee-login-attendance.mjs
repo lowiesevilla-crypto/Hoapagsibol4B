@@ -227,10 +227,10 @@ async function clickPunchAndWait(page, label, successCode) {
       (expected) => {
         const success = window.location.pathname === "/employee/attendance"
           && new URL(window.location.href).searchParams.get("success") === expected;
-        const alert = document.querySelector('[role="alert"]');
-        // A success status is rendered before client navigation can settle.
-        // Do not treat that transient state as completion: wait for the
-        // canonical success URL, while still failing fast on a real alert.
+        const alert = document.querySelector('form[data-employee-clock-ready="true"] [role="alert"]');
+        // Global success toasts also use role="alert". Only the punch form's
+        // own alert represents a punch failure; otherwise wait for the
+        // canonical success URL.
         return success || Boolean(alert?.textContent?.trim());
       },
       { timeout },
@@ -241,7 +241,7 @@ async function clickPunchAndWait(page, label, successCode) {
     throw new Error(`Punch ${label} did not complete on ${page.url()}. Page text: ${body.slice(0, 2400)}`, { cause: error });
   }
 
-  const alertText = await page.$eval('[role="alert"]', (node) => node.textContent || "").catch(() => "");
+  const alertText = await page.$eval('form[data-employee-clock-ready="true"] [role="alert"]', (node) => node.textContent || "").catch(() => "");
   if (alertText.trim()) throw new Error(`Punch ${label} returned an error on ${page.url()}: ${alertText.trim()}`);
 
   const success = new URL(page.url()).searchParams.get("success");

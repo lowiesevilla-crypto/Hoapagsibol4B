@@ -221,12 +221,32 @@ async function expectPunchButton(page, label) {
 
 async function clickPunchAndWait(page, label, successCode) {
   await clickByText(page, "button", label);
-  await page.waitForFunction(
-    (expected) => window.location.pathname === "/employee/attendance"
-      && new URL(window.location.href).searchParams.get("success") === expected,
-    { timeout },
-    successCode,
-  );
+  try {
+    await page.waitForFunction(
+      (expected) => {
+        const success = window.location.pathname === "/employee/attendance"
+          && new URL(window.location.href).searchParams.get("success") === expected;
+        const alert = document.querySelector('[role="alert"]');
+        const status = document.querySelector('[role="status"]');
+        return success || Boolean(alert?.textContent?.trim()) || Boolean(status?.textContent?.trim());
+      },
+      { timeout },
+      successCode,
+    );
+  } catch (error) {
+    const body = (await page.evaluate(() => document.body?.textContent || "")).replace(/\s+/g, " ").trim();
+    throw new Error(`Punch ${label} did not complete on ${page.url()}. Page text: ${body.slice(0, 2400)}`, { cause: error });
+  }
+
+  const alertText = await page.$eval('[role="alert"]', (node) => node.textContent || "").catch(() => "");
+  if (alertText.trim()) throw new Error(`Punch ${label} returned an error on ${page.url()}: ${alertText.trim()}`);
+
+  const success = new URL(page.url()).searchParams.get("success");
+  if (success !== successCode) {
+    const statusText = await page.$eval('[role="status"]', (node) => node.textContent || "").catch(() => "");
+    throw new Error(`Punch ${label} committed but navigation did not reach ${successCode}. Current URL: ${page.url()}. Status: ${statusText.trim()}`);
+  }
+
   await page.waitForNetworkIdle({ idleTime: 250, timeout }).catch(() => undefined);
 }
 

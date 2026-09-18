@@ -62,6 +62,10 @@ Homeowners access only their authenticated tenant, their own authorized account 
 
 Employee portal is separate from Tenant Admin payroll authority. Employees may access only their own authorized profile, attendance/corrections, clocking, overtime, leave, paid payslips, loans/cash advances, and enabled support/chat functions.
 
+- Employee self-service sign-in fails closed unless the selected primary Employee identity is linked to an ACTIVE EmployeeProfile in the same authenticated tenant. Universal same-email account selection may expose only eligible accounts and the selected tenant remains authoritative for the session.
+- Employee Time In/Time Out uses server-authoritative Asia/Manila time, authenticated tenant + linked employee identity, and tenant-scoped Attendance writes. Punch mutation and audit evidence commit atomically; duplicate/retried punches reconcile to the first committed Time In/Time Out rather than creating a second row or overwriting the first punch.
+- The production employee attendance form uses a state-return Server Action with client navigation after commit. Post-commit cache refresh or framework redirect handoff must not turn a committed punch into a false employee-visible failure. Legacy redirect actions remain compatibility entry points only.
+
 ## Current Tenant Admin Functional Structure
 
 - `/admin/dashboard` — executive community/finance snapshot.

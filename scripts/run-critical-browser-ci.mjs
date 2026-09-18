@@ -24,6 +24,11 @@ const suites = [
     args: ["--import", safeCleanupImport, "tests/e2e/employee-workflow.mjs"],
   },
   {
+    name: "employee-login-attendance",
+    command: "node",
+    args: ["--import", safeCleanupImport, "tests/e2e/employee-login-attendance.mjs"],
+  },
+  {
     name: "employee-crud-regression",
     command: "node",
     args: ["--import", safeCleanupImport, "tests/e2e/employee-crud-regression.mjs"],

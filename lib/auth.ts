@@ -1,7 +1,7 @@
 import "server-only";
 
 import { createHash, randomUUID } from "node:crypto";
-import { Prisma, Role } from "@prisma/client";
+import { EmployeeStatus, Prisma, Role } from "@prisma/client";
 import { SignJWT } from "jose/jwt/sign";
 import { jwtVerify } from "jose/jwt/verify";
 import { cookies } from "next/headers";
@@ -149,7 +149,9 @@ export async function sessionIsCurrent(session: SessionPayload) {
     select: {
       id: true,
       role: true,
+      tenantId: true,
       tenant: { select: { status: true, subscriptionStatus: true } },
+      employeeProfile: { select: { tenantId: true, status: true } },
       userRoleAssignments: { where: { active: true }, select: { role: true, active: true } },
     },
   });
@@ -157,6 +159,10 @@ export async function sessionIsCurrent(session: SessionPayload) {
   const effectiveRoles = effectiveRolesForUser(user.role, user.userRoleAssignments);
   if (!effectiveRoles.includes(session.role)) return false;
   const platform = isPlatformRoleSet(effectiveRoles);
+  if (session.role === Role.EMPLOYEE) {
+    const employeeProfile = user.employeeProfile;
+    if (!employeeProfile || employeeProfile.tenantId !== user.tenantId || employeeProfile.status !== EmployeeStatus.ACTIVE) return false;
+  }
   if (!platform && (user.tenant.status !== "ACTIVE" || user.tenant.subscriptionStatus === "CANCELLED")) return false;
   if (session.roleSnapshot && session.roleSnapshot !== roleSnapshotForRoles(effectiveRoles)) return false;
   if (!session.sessionId) return false;
@@ -186,7 +192,7 @@ export async function requireUser(requiredRole?: Role) {
       active: true,
       tenant: { select: { slug: true, status: true, subscriptionStatus: true } },
       homeownerProfile: { select: { id: true } },
-      employeeProfile: { select: { id: true } },
+      employeeProfile: { select: { id: true, tenantId: true, status: true } },
       userRoleAssignments: { where: { active: true }, select: { role: true, active: true } },
     },
   });
@@ -198,6 +204,15 @@ export async function requireUser(requiredRole?: Role) {
   if (!roles.includes(session.role)) redirect("/login");
   if (session.roleSnapshot && session.roleSnapshot !== roleSnapshot) redirect("/login");
   if (!session.sessionId) redirect("/login");
+  const employeeProfile = user.employeeProfile;
+  if (requiredRole === Role.EMPLOYEE && (
+    !employeeProfile
+    || employeeProfile.tenantId !== user.tenantId
+    || employeeProfile.status !== EmployeeStatus.ACTIVE
+  )) {
+    await deleteSession();
+    redirect(`/${session.tenantSlug}/login?error=employee-access-unavailable`);
+  }
 
   const activeSession = await prisma.userSession.findFirst({
     where: { tenantId: session.tenantId, userId: session.userId, tokenHash: sessionHash(session.sessionId), revokedAt: null, expiresAt: { gt: new Date() } },

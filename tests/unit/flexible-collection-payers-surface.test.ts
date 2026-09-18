@@ -32,7 +32,7 @@ test("External payers are Other-income-only and bonds stay profile-bound", async
   assert.match(action, /PayerType\.RENTER/);
   assert.match(action, /PayerType\.OTHER/);
   assert.match(action, /requestedPayerType === PayerType\.RENTER/);
-  assert.match(action, /redirect\(rentalPaymentsHref\)/);
+  assert.match(action, /return \{ destination: rentalPaymentsHref \}/);
   assert.match(action, /CONSTRUCTION_BOND[\s\S]*PayerType\.HOMEOWNER/);
   assert.match(action, /CONTRACTOR_BOND[\s\S]*PayerType\.CONTRACTOR/);
   assert.doesNotMatch(action, /payerCategory|\$executeRaw|legacyPayerType/);

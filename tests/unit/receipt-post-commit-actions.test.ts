@@ -105,3 +105,27 @@ test("receipt recovery retries rendering, never financial submission", () => {
     assert.match(readFileSync(path, "utf8"), /ReceiptPreviewError/);
   }
 });
+
+
+test("production financial forms navigate only after committed action state returns the printable route", () => {
+  const paymentPage = readFileSync("app/admin/payments/record/page.tsx", "utf8");
+  const paymentForm = readFileSync("components/record-payment-advance-form.tsx", "utf8");
+  const collectionForm = readFileSync("components/collection-form.tsx", "utf8");
+  const refundForm = readFileSync("components/bond-refund-form.tsx", "utf8");
+  const pettyCashForm = readFileSync("components/petty-cash-voucher-form.tsx", "utf8");
+
+  assert.match(paymentPage, /RecordPaymentAdvanceForm[^>]*actionProgressEnabled/);
+  assert.match(paymentForm, /useActionState\(recordHomeownerPaymentProgressAction/);
+  assert.match(paymentForm, /router\.push\(activeProgressState\.receiptUrl/);
+
+  assert.match(collectionForm, /useActionState\(recordCollectionReceiptStateAction/);
+  assert.match(collectionForm, /router\.push\(receiptState\.receiptUrl/);
+  assert.doesNotMatch(collectionForm, /action=\{recordCollectionAction\}/);
+
+  assert.match(refundForm, /useActionState\(recordBondRefundAndOpenReceiptAction/);
+  assert.match(refundForm, /router\.push\(refundState\.receiptUrl/);
+
+  assert.match(pettyCashForm, /useActionState\(createPettyCashVoucherStateAction/);
+  assert.match(pettyCashForm, /router\.push\(voucherState\.voucherUrl/);
+  assert.doesNotMatch(pettyCashForm, /action=\{createPettyCashVoucherAction\}/);
+});

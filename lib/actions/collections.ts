@@ -39,7 +39,44 @@ function redirectDeleteError(message: string): never {
   redirect(`/admin/collections?deleteError=${encodeURIComponent(message)}`);
 }
 
+export type RecordCollectionReceiptState = {
+  status: "idle" | "success" | "error";
+  message: string;
+  receiptUrl: string | null;
+};
+
+export async function recordCollectionReceiptStateAction(
+  _previousState: RecordCollectionReceiptState,
+  formData: FormData,
+): Promise<RecordCollectionReceiptState> {
+  try {
+    const result = await recordCollectionSubmission(formData);
+    return {
+      status: "success",
+      message: "Collection recorded successfully. Opening receipt.",
+      receiptUrl: result.destination,
+    };
+  } catch (error) {
+    if (isNextRedirectError(error)) throw error;
+    return {
+      status: "error",
+      message: collectionErrorMessage(error),
+      receiptUrl: null,
+    };
+  }
+}
+
 export async function recordCollectionAction(formData: FormData) {
+  let destination: string;
+  try {
+    destination = (await recordCollectionSubmission(formData)).destination;
+  } catch (error) {
+    redirectCollectionError(collectionErrorMessage(error));
+  }
+  redirect(destination);
+}
+
+async function recordCollectionSubmission(formData: FormData) {
   const admin = await requirePermissions([
     Permission.COLLECTIONS_RECORD,
     Permission.RECEIPTS_ISSUE,
@@ -48,32 +85,31 @@ export async function recordCollectionAction(formData: FormData) {
   const requestedType = String(formData.get("type") || "");
   const requestedPayerType = String(formData.get("payerType") || "");
   if (requestedType === "RENTAL_PAYMENT" || (requestedType === CollectionType.OTHER && requestedPayerType === PayerType.RENTER)) {
-    redirect(rentalPaymentsHref);
+    return { destination: rentalPaymentsHref };
   }
 
   const parsed = collectionSchema.safeParse(Object.fromEntries(formData.entries()));
-  if (!parsed.success) redirectCollectionError(parsed.error.issues[0]?.message || "Invalid collection details.");
+  if (!parsed.success) throw new CollectionPostingError(parsed.error.issues[0]?.message || "Invalid collection details.");
   const data = parsed.data;
   const refundable = isRefundableBondType(data.type);
   const externalPayer = data.payerType === PayerType.RENTER || data.payerType === PayerType.OTHER;
   const payerName = data.payerName?.trim() ?? "";
 
   if (data.type === CollectionType.CONSTRUCTION_BOND && data.payerType !== PayerType.HOMEOWNER) {
-    redirectCollectionError("A construction bond must be assigned to a homeowner.");
+    throw new CollectionPostingError("A construction bond must be assigned to a homeowner.");
   }
   if (data.type === CollectionType.CONTRACTOR_BOND && data.payerType !== PayerType.CONTRACTOR) {
-    redirectCollectionError("A contractor bond must be assigned to a contractor profile.");
+    throw new CollectionPostingError("A contractor bond must be assigned to a contractor profile.");
   }
   if (externalPayer && data.type !== CollectionType.OTHER) {
-    redirectCollectionError("Renter and other payers are available only for Other income collections.");
+    throw new CollectionPostingError("Renter and other payers are available only for Other income collections.");
   }
-  if (data.type === CollectionType.OTHER && !data.description) redirectCollectionError("Enter a name for the other collection type.");
-  if (externalPayer && !payerName) redirectCollectionError("Enter the payer name.");
-  if (data.payerType === PayerType.HOMEOWNER && !data.homeownerId) redirectCollectionError("Select a homeowner.");
-  if (data.payerType === PayerType.CONTRACTOR && !data.contractorId) redirectCollectionError("Select a contractor.");
+  if (data.type === CollectionType.OTHER && !data.description) throw new CollectionPostingError("Enter a name for the other collection type.");
+  if (externalPayer && !payerName) throw new CollectionPostingError("Enter the payer name.");
+  if (data.payerType === PayerType.HOMEOWNER && !data.homeownerId) throw new CollectionPostingError("Select a homeowner.");
+  if (data.payerType === PayerType.CONTRACTOR && !data.contractorId) throw new CollectionPostingError("Select a contractor.");
 
-  let collectionError: string | null = null;
-  let createdCollectionId: string | null = null;
+  let createdCollectionId: string;
   try {
     createdCollectionId = await withTenantContext(admin.tenantId, async () => {
       if (data.payerType === PayerType.HOMEOWNER) {
@@ -84,7 +120,7 @@ export async function recordCollectionAction(formData: FormData) {
         if (!exists) throw new CollectionPostingError("Contractor not found.");
       }
 
-      return await prisma.$transaction(async (tx) => {
+      return prisma.$transaction(async (tx) => {
         const collectionDate = new Date(`${data.collectionDate}T00:00:00.000Z`);
         const series = collectionReceiptSeries(data.type);
         const receiptNumber = await allocateReceiptNumber(tx as unknown as Prisma.TransactionClient, admin.tenantId, collectionDate, series);
@@ -119,28 +155,23 @@ export async function recordCollectionAction(formData: FormData) {
       }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
     });
   } catch (error) {
-    if (error instanceof CollectionPostingError) {
-      collectionError = error.message;
-    } else {
-      const supportReference = `BC-${randomUUID().split("-")[0].toUpperCase()}`;
-      console.error("[HOAHub] collection_record_failed", {
-        supportReference,
-        tenantId: admin.tenantId,
-        actorId: admin.id,
-        type: data.type,
-        payerType: data.payerType,
-        errorName: error instanceof Error ? error.name : "UnknownError",
-        errorMessage: error instanceof Error ? error.message : String(error),
-      });
-      collectionError = `We couldn't record this collection. No changes were saved. Support reference: ${supportReference}.`;
-    }
+    if (error instanceof CollectionPostingError) throw error;
+    const supportReference = `BC-${randomUUID().split("-")[0].toUpperCase()}`;
+    console.error("[HOAHub] collection_record_failed", {
+      supportReference,
+      tenantId: admin.tenantId,
+      actorId: admin.id,
+      type: data.type,
+      payerType: data.payerType,
+      errorName: error instanceof Error ? error.name : "UnknownError",
+      errorMessage: error instanceof Error ? error.message : String(error),
+    });
+    throw new CollectionPostingError(`We couldn't record this collection. No changes were saved. Support reference: ${supportReference}.`);
   }
 
-  if (collectionError) redirectCollectionError(collectionError);
-  if (!createdCollectionId) redirectCollectionError("Collection could not be recorded.");
-
+  if (!createdCollectionId) throw new CollectionPostingError("Collection could not be recorded.");
   safeRevalidateCollectionPages({ action: "record", tenantId: admin.tenantId, actorId: admin.id });
-  redirect(`/receipts/collection/${createdCollectionId}`);
+  return { destination: `/receipts/collection/${createdCollectionId}` };
 }
 
 export async function recordBondRefundAction(formData: FormData) {
@@ -153,8 +184,9 @@ export async function recordBondRefundAction(formData: FormData) {
   const data = parsed.data;
 
   let refundError: string | null = null;
+  let refundId: string | null = null;
   try {
-    await withTenantContext(admin.tenantId, () => recordBondRefund({
+    const refund = await withTenantContext(admin.tenantId, () => recordBondRefund({
       collectionId: data.collectionId,
       amount: data.amount,
       refundDate: new Date(`${data.refundDate}T00:00:00.000Z`),
@@ -163,6 +195,7 @@ export async function recordBondRefundAction(formData: FormData) {
       remarks: data.remarks,
       actor: { id: admin.id, tenantId: admin.tenantId },
     }));
+    refundId = refund.id;
   } catch (error) {
     refundError = bondRefundUserMessage(error);
     if (!refundError) {
@@ -183,8 +216,9 @@ export async function recordBondRefundAction(formData: FormData) {
     redirect(`/admin/collections?refundError=${encodeURIComponent(refundError)}`);
   }
 
+  if (!refundId) redirect(`/admin/collections?refundError=${encodeURIComponent("Bond refund could not be processed.")}`);
   safeRevalidateCollectionPages({ action: "refund", tenantId: admin.tenantId, actorId: admin.id });
-  redirect("/admin/collections?success=refunded");
+  redirect(`/receipts/refund/${refundId}`);
 }
 
 export async function forfeitBondAction(formData: FormData) {
@@ -339,4 +373,12 @@ function safeRevalidateCollectionPages(context: { action: string; tenantId: stri
       });
     }
   }
+}
+
+function collectionErrorMessage(error: unknown) {
+  return error instanceof Error ? error.message : "Collection could not be recorded.";
+}
+
+function isNextRedirectError(error: unknown) {
+  return Boolean(error && typeof error === "object" && "digest" in error && String((error as { digest?: unknown }).digest || "").startsWith("NEXT_REDIRECT"));
 }

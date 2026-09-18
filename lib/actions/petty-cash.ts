@@ -134,7 +134,44 @@ async function resolveVoucherItems(tx: Prisma.TransactionClient, tenantId: strin
   return items;
 }
 
+export type PettyCashVoucherReceiptState = {
+  status: "idle" | "success" | "error";
+  message: string;
+  voucherUrl: string | null;
+};
+
+export async function createPettyCashVoucherStateAction(
+  _previousState: PettyCashVoucherReceiptState,
+  formData: FormData,
+): Promise<PettyCashVoucherReceiptState> {
+  try {
+    const result = await createPettyCashVoucherSubmission(formData);
+    return {
+      status: "success",
+      message: "Petty cash voucher created successfully. Opening voucher.",
+      voucherUrl: result.voucherUrl,
+    };
+  } catch (error) {
+    if (isNextRedirectError(error)) throw error;
+    return {
+      status: "error",
+      message: pettyCashErrorMessage(error),
+      voucherUrl: null,
+    };
+  }
+}
+
 export async function createPettyCashVoucherAction(formData: FormData) {
+  let voucherUrl: string;
+  try {
+    voucherUrl = (await createPettyCashVoucherSubmission(formData)).voucherUrl;
+  } catch (error) {
+    redirect(`/admin/petty-cash/new?error=${encodeURIComponent(pettyCashErrorMessage(error))}`);
+  }
+  redirect(voucherUrl);
+}
+
+async function createPettyCashVoucherSubmission(formData: FormData) {
   const actor = await requirePermission(Permission.EXPENSES_MANAGE);
   await requirePettyCashFeature(actor.tenantId);
 
@@ -150,12 +187,11 @@ export async function createPettyCashVoucherAction(formData: FormData) {
   const draftItems = parseItems(clean(formData.get("itemsJson")));
 
   if (!/^\d{4}-\d{2}-\d{2}$/.test(transactionDateRaw)) redirect(`/admin/petty-cash/new?error=${encodeURIComponent("Choose a valid transaction date.")}`);
-  if (!["EMPLOYEE", "HOMEOWNER", "RENTER", "CONTRACTOR", "OTHER"].includes(payeeType)) redirect(`/admin/petty-cash/new?error=${encodeURIComponent("Choose a payee type.")}`);
-  if (!["ADMIN", "OFFICER"].includes(approverType)) redirect(`/admin/petty-cash/new?error=${encodeURIComponent("Choose who approved the voucher.")}`);
+  if (!["EMPLOYEE", "HOMEOWNER", "RENTER", "CONTRACTOR", "OTHER"].includes(payeeType)) throw new Error("Choose a payee type.");
+  if (!["ADMIN", "OFFICER"].includes(approverType)) throw new Error("Choose who approved the voucher.");
 
   const transactionDate = new Date(`${transactionDateRaw}T00:00:00.000Z`);
   let createdVoucherId = "";
-  let errorMessage = "";
 
   try {
     const enabledModules = await getEnabledTenantModules(actor.tenantId);
@@ -274,12 +310,19 @@ export async function createPettyCashVoucherAction(formData: FormData) {
       return voucherId;
     }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
   } catch (error) {
-    errorMessage = error instanceof Error ? error.message : "Petty cash voucher could not be created.";
+    throw error instanceof Error ? error : new Error("Petty cash voucher could not be created.");
   }
 
-  if (errorMessage) redirect(`/admin/petty-cash/new?error=${encodeURIComponent(errorMessage)}`);
-  if (!createdVoucherId) redirect(`/admin/petty-cash/new?error=${encodeURIComponent("Petty cash voucher could not be created.")}`);
+  if (!createdVoucherId) throw new Error("Petty cash voucher could not be created.");
 
   safeRevalidatePettyCashPages({ action: "create", tenantId: actor.tenantId, actorId: actor.id, voucherId: createdVoucherId });
-  redirect(`/admin/petty-cash/${createdVoucherId}?success=created`);
+  return { voucherId: createdVoucherId, voucherUrl: `/admin/petty-cash/${createdVoucherId}?success=created` };
+}
+
+function pettyCashErrorMessage(error: unknown) {
+  return error instanceof Error ? error.message : "Petty cash voucher could not be created.";
+}
+
+function isNextRedirectError(error: unknown) {
+  return Boolean(error && typeof error === "object" && "digest" in error && String((error as { digest?: unknown }).digest || "").startsWith("NEXT_REDIRECT"));
 }

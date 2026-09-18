@@ -213,7 +213,8 @@ async function loginAndSelectTenant(page, userId) {
 
 async function expectPunchButton(page, label) {
   await page.waitForFunction(
-    (expected) => [...document.querySelectorAll("button")].some((button) => (button.textContent || "").includes(expected)),
+    (expected) => [...document.querySelectorAll("form[data-employee-clock-ready=\"true\"] button")]
+      .some((button) => !button.disabled && (button.textContent || "").includes(expected)),
     { timeout },
     label,
   );

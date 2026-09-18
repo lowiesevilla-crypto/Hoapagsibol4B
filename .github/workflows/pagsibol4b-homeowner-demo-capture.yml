@@ -1,0 +1,138 @@
+name: HOAHub Pagsibol 4B Homeowner Demo Capture
+
+on:
+  push:
+    branches:
+      - presentation/pagsibol4b-homeowner-demo-20260918
+
+concurrency:
+  group: hoahub-pagsibol4b-homeowner-demo
+  cancel-in-progress: true
+
+jobs:
+  capture:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    services:
+      mysql:
+        image: mysql:8.4
+        env:
+          MYSQL_DATABASE: hoa_portal
+          MYSQL_ALLOW_EMPTY_PASSWORD: "yes"
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h localhost -uroot"
+          --health-interval=5s --health-timeout=5s --health-retries=20
+    env:
+      DATABASE_URL: mysql://root@127.0.0.1:3306/hoa_portal
+      AUTH_SECRET: ci-presentation-auth-value-with-at-least-32-characters
+      APP_URL: http://127.0.0.1:3000
+      BASE_URL: http://127.0.0.1:3000
+      API_URL: http://127.0.0.1:3000/api
+      ALLOWED_ORIGINS: http://127.0.0.1:3000
+      CRON_SECRET: ci-presentation-cron-value-with-at-least-32-characters
+      STORAGE_ROOT: /tmp/hoahub-storage
+      SEED_SYSTEM_ADMIN_EMAIL: ci-system@example.invalid
+      SEED_SYSTEM_ADMIN_PASSWORD: CI-Temporary-Password-2026!
+      E2E_BASE_URL: http://127.0.0.1:3000
+      E2E_COVERAGE_YEAR: "2099"
+      E2E_COVERAGE_MONTH: "1"
+      AI_RUNTIME_ENABLED: "true"
+      AI_PROVIDER_MODE: mock
+      DEMO_CAPTURE_DIR: /tmp/hoahub-demo
+      DISPLAY: ":99"
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.9.0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm exec prisma validate
+      - run: pnpm exec prisma generate
+      - run: pnpm exec prisma migrate deploy
+      - run: pnpm db:seed
+      - run: pnpm e2e:prepare
+      - run: pnpm build
+
+      - name: Prepare browser recording environment
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          mkdir -p /tmp/hoahub-demo
+          CHROME_PATH="$(command -v google-chrome || command -v google-chrome-stable || command -v chromium || command -v chromium-browser || true)"
+          if [ -z "$CHROME_PATH" ]; then
+            echo "::error::A system Chrome/Chromium executable is required for headful screen recording."
+            exit 1
+          fi
+          echo "PUPPETEER_EXECUTABLE_PATH=$CHROME_PATH" >> "$GITHUB_ENV"
+          if ! command -v Xvfb >/dev/null; then
+            sudo apt-get update
+            sudo apt-get install -y xvfb
+          fi
+          if ! command -v ffmpeg >/dev/null; then
+            sudo apt-get update
+            sudo apt-get install -y ffmpeg
+          fi
+          "$CHROME_PATH" --version
+          ffmpeg -version | head -n 1
+
+      - name: Record actual HOAHub browser walkthrough
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          pnpm start > /tmp/hoahub-demo/next-server.log 2>&1 &
+          APP_PID=$!
+
+          cleanup() {
+            kill -INT "${REC_PID:-0}" 2>/dev/null || true
+            if [ -n "${REC_PID:-}" ]; then wait "$REC_PID" 2>/dev/null || true; fi
+            kill "$APP_PID" 2>/dev/null || true
+            pnpm e2e:cleanup || true
+          }
+          trap cleanup EXIT
+
+          for attempt in {1..60}; do
+            if curl --fail --silent http://127.0.0.1:3000/api/health >/dev/null; then break; fi
+            sleep 2
+          done
+          curl --fail --silent http://127.0.0.1:3000/api/health
+
+          Xvfb :99 -screen 0 1366x768x24 -ac +extension RANDR >/tmp/hoahub-demo/xvfb.log 2>&1 &
+          XVFB_PID=$!
+          sleep 2
+
+          ffmpeg -y -f x11grab -draw_mouse 1 -video_size 1366x768 -framerate 12 -i :99.0             -c:v libx264 -preset ultrafast -crf 23 -pix_fmt yuv420p             /tmp/hoahub-demo/HOAHub_Pagsibol4B_Actual_UI_Homeowner_Demo.mp4             >/tmp/hoahub-demo/ffmpeg.log 2>&1 &
+          REC_PID=$!
+          sleep 2
+
+          node tests/e2e/pagsibol4b-homeowner-demo-capture.mjs
+
+          kill -INT "$REC_PID" 2>/dev/null || true
+          wait "$REC_PID" 2>/dev/null || true
+          unset REC_PID
+          kill "$XVFB_PID" 2>/dev/null || true
+
+          test -s /tmp/hoahub-demo/HOAHub_Pagsibol4B_Actual_UI_Homeowner_Demo.mp4
+          ffprobe -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1             /tmp/hoahub-demo/HOAHub_Pagsibol4B_Actual_UI_Homeowner_Demo.mp4             | tee /tmp/hoahub-demo/video-duration-seconds.txt
+
+      - name: Upload actual HOAHub demo evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: hoahub-pagsibol4b-homeowner-demo
+          path: |
+            /tmp/hoahub-demo/*.png
+            /tmp/hoahub-demo/*.mp4
+            /tmp/hoahub-demo/video-duration-seconds.txt
+            /tmp/hoahub-demo/next-server.log
+            /tmp/hoahub-demo/ffmpeg.log
+          if-no-files-found: warn
+          retention-days: 7

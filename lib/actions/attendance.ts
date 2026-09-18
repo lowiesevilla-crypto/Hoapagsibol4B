@@ -131,7 +131,7 @@ export async function employeeClockInStateAction(
 ): Promise<EmployeeClockState> {
   try {
     const result = await performEmployeeClockIn(formData);
-    safeRevalidateEmployeeAttendancePages({ action: "clock-in", reused: result.reused });
+    safeRevalidateEmployeeAttendancePages({ action: "clock-in", reused: result.reused }, false);
     return { status: "success", message: result.message, redirectTo: result.destination };
   } catch (error) {
     if (isNextRedirectError(error)) throw error;
@@ -285,7 +285,7 @@ export async function employeeClockOutStateAction(
 ): Promise<EmployeeClockState> {
   try {
     const result = await performEmployeeClockOut(formData);
-    safeRevalidateEmployeeAttendancePages({ action: "clock-out", reused: result.reused });
+    safeRevalidateEmployeeAttendancePages({ action: "clock-out", reused: result.reused }, false);
     return { status: "success", message: result.message, redirectTo: result.destination };
   } catch (error) {
     if (isNextRedirectError(error)) throw error;
@@ -586,8 +586,18 @@ function timeInManila() {
   return new Intl.DateTimeFormat("en-GB", { timeZone: "Asia/Manila", hour: "2-digit", minute: "2-digit", hour12: false }).format(new Date());
 }
 
-function safeRevalidateEmployeeAttendancePages(context: { action: "clock-in" | "clock-out"; reused: boolean }) {
-  for (const path of ["/employee/attendance", "/employee/attendance/history"]) {
+function safeRevalidateEmployeeAttendancePages(
+  context: { action: "clock-in" | "clock-out"; reused: boolean },
+  includeCurrentRoute = true,
+) {
+  // State-return actions deliberately avoid revalidating the currently rendered
+  // attendance route before React can consume the returned redirectTo state.
+  // The client performs a full replacement navigation to the success URL, which
+  // reads the committed row. Legacy redirect actions still invalidate both pages.
+  const paths = includeCurrentRoute
+    ? ["/employee/attendance", "/employee/attendance/history"]
+    : ["/employee/attendance/history"];
+  for (const path of paths) {
     try {
       revalidatePath(path);
     } catch (error) {

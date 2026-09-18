@@ -153,8 +153,9 @@ export async function recordBondRefundAction(formData: FormData) {
   const data = parsed.data;
 
   let refundError: string | null = null;
+  let refundId: string | null = null;
   try {
-    await withTenantContext(admin.tenantId, () => recordBondRefund({
+    const refund = await withTenantContext(admin.tenantId, () => recordBondRefund({
       collectionId: data.collectionId,
       amount: data.amount,
       refundDate: new Date(`${data.refundDate}T00:00:00.000Z`),
@@ -163,6 +164,7 @@ export async function recordBondRefundAction(formData: FormData) {
       remarks: data.remarks,
       actor: { id: admin.id, tenantId: admin.tenantId },
     }));
+    refundId = refund.id;
   } catch (error) {
     refundError = bondRefundUserMessage(error);
     if (!refundError) {
@@ -183,8 +185,9 @@ export async function recordBondRefundAction(formData: FormData) {
     redirect(`/admin/collections?refundError=${encodeURIComponent(refundError)}`);
   }
 
+  if (!refundId) redirect(`/admin/collections?refundError=${encodeURIComponent("Bond refund could not be processed.")}`);
   safeRevalidateCollectionPages({ action: "refund", tenantId: admin.tenantId, actorId: admin.id });
-  redirect("/admin/collections?success=refunded");
+  redirect(`/receipts/refund/${refundId}`);
 }
 
 export async function forfeitBondAction(formData: FormData) {

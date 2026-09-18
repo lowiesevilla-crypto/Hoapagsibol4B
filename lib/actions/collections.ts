@@ -67,13 +67,13 @@ export async function recordCollectionReceiptStateAction(
 }
 
 export async function recordCollectionAction(formData: FormData) {
+  let destination: string;
   try {
-    const result = await recordCollectionSubmission(formData);
-    redirect(result.destination);
+    destination = (await recordCollectionSubmission(formData)).destination;
   } catch (error) {
-    if (isNextRedirectError(error)) throw error;
     redirectCollectionError(collectionErrorMessage(error));
   }
+  redirect(destination);
 }
 
 async function recordCollectionSubmission(formData: FormData) {

@@ -88,6 +88,16 @@ async function waitForUrl(page, predicate, label) {
   throw new Error(`Timed out waiting for ${label}. Last URL: ${lastUrl}`);
 }
 
+async function waitForCollectionDeletion(collectionId, tenantId) {
+  const deadline = Date.now() + timeout;
+  while (Date.now() < deadline) {
+    const count = await prisma.collection.count({ where: { id: collectionId, tenantId } });
+    if (count === 0) return;
+    await new Promise((resolve) => setTimeout(resolve, 100));
+  }
+  throw new Error(`Timed out waiting for collection ${collectionId} to be deleted from tenant ${tenantId}.`);
+}
+
 async function login(page) {
   await page.goto(`${baseUrl}/login`, { waitUntil: "networkidle2", timeout });
   await page.type("#identifier", adminEmail);
@@ -176,7 +186,10 @@ async function runCollectionDeleteRegression(browser) {
       await dialog.accept();
     });
     await deleteButton.click();
-    await waitForUrl(page, (url) => url.pathname === "/admin/collections" && !url.searchParams.has("deleteError"), "successful collection deletion return");
+    await waitForCollectionDeletion(primaryCollectionId, primaryTenantId);
+    const deleteReturnUrl = new URL(page.url());
+    assert.equal(deleteReturnUrl.pathname, "/admin/collections", "Delete should remain within the Collections workflow.");
+    assert.ok(!deleteReturnUrl.searchParams.has("deleteError"), `Delete returned an error: ${deleteReturnUrl.searchParams.get("deleteError")}`);
     assert.equal(transientBoundarySeen, false, "Delete must never render the global error boundary, even transiently before redirect/recovery.");
 
     assert.equal(await prisma.collection.count({ where: { id: primaryCollectionId, tenantId: primaryTenantId } }), 0, "Deleted collection must be physically absent from its tenant.");

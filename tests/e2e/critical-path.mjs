@@ -127,6 +127,21 @@ async function clickAndWaitForNavigation(page, selector, matcher) {
   return clicked;
 }
 
+async function waitForUrl(page, predicate, label) {
+  const deadline = Date.now() + timeout;
+  let lastUrl = page.url();
+  while (Date.now() < deadline) {
+    lastUrl = page.url();
+    try {
+      if (predicate(new URL(lastUrl))) return lastUrl;
+    } catch {
+      // Next.js can briefly replace the frame during server-action and client-router handoffs.
+    }
+    await new Promise((resolve) => setTimeout(resolve, 100));
+  }
+  throw new Error(`Timed out waiting for ${label}. Last URL: ${lastUrl}`);
+}
+
 async function clearAndType(page, selector, value) {
   await page.waitForSelector(selector, { timeout });
   await page.$eval(selector, (element) => {
@@ -188,8 +203,12 @@ async function runAdminFlow(browser) {
     await clickByText(page, "button[type='button']", homeownerName);
     await page.waitForFunction(() => Number(document.querySelector("input[name='amount']")?.value || 0) > 0, { timeout });
     await page.select("select[name='method']", "CASH");
-    await clickAndWaitForNavigation(page, "button[type='submit']", /Record payment/i);
-    assert.ok(new URL(page.url()).pathname.startsWith("/receipts/payment/"), `Expected payment receipt redirect, received ${page.url()}`);
+    await clickByText(page, "button[type='submit']", /Record payment/i);
+    await waitForUrl(
+      page,
+      (url) => /^\/receipts\/payment\/[^/]+$/.test(url.pathname),
+      "payment receipt client navigation after committed action state",
+    );
     await expectText(page, "Receipt No.", "payment receipt page");
     await expectText(page, homeownerName);
     await page.waitForFunction(

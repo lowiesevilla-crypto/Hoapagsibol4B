@@ -2,7 +2,6 @@
 
 import { randomUUID } from "node:crypto";
 import { revalidatePath } from "next/cache";
-import { redirect } from "next/navigation";
 import { requirePermission } from "@/lib/authorization/guards";
 import { Permission } from "@/lib/authorization/permissions";
 import { bondRefundUserMessage } from "@/lib/bond-refund-errors";
@@ -10,12 +9,24 @@ import { recordBondRefund } from "@/lib/services/bond-refund";
 import { withTenantContext } from "@/lib/tenant-context";
 import { bondRefundSchema } from "@/lib/validation";
 
-export async function recordBondRefundAndOpenReceiptAction(formData: FormData) {
+export type BondRefundReceiptState = {
+  status: "idle" | "success" | "error";
+  message: string;
+  receiptUrl: string | null;
+};
+
+export async function recordBondRefundAndOpenReceiptAction(
+  _previousState: BondRefundReceiptState,
+  formData: FormData,
+): Promise<BondRefundReceiptState> {
   const admin = await requirePermission(Permission.COLLECTIONS_REFUND);
   const parsed = bondRefundSchema.safeParse(Object.fromEntries(formData.entries()));
   if (!parsed.success) {
-    const message = parsed.error.issues[0]?.message || "Invalid refund details.";
-    redirect(`/admin/collections?refundError=${encodeURIComponent(message)}`);
+    return {
+      status: "error",
+      message: parsed.error.issues[0]?.message || "Invalid refund details.",
+      receiptUrl: null,
+    };
   }
 
   const data = parsed.data;
@@ -49,8 +60,8 @@ export async function recordBondRefundAndOpenReceiptAction(formData: FormData) {
     }
   }
 
-  if (refundError) redirect(`/admin/collections?refundError=${encodeURIComponent(refundError)}`);
-  if (!refundId) redirect(`/admin/collections?refundError=${encodeURIComponent("Bond refund could not be processed.")}`);
+  if (refundError) return { status: "error", message: refundError, receiptUrl: null };
+  if (!refundId) return { status: "error", message: "Bond refund could not be processed.", receiptUrl: null };
 
   for (const path of ["/admin/collections", "/admin/dashboard", "/admin/reports", "/portal/collections", "/portal/dashboard"]) {
     try {
@@ -67,5 +78,9 @@ export async function recordBondRefundAndOpenReceiptAction(formData: FormData) {
     }
   }
 
-  redirect(`/receipts/refund/${refundId}`);
+  return {
+    status: "success",
+    message: "Bond refund processed successfully. Opening refund receipt.",
+    receiptUrl: `/receipts/refund/${refundId}`,
+  };
 }

@@ -152,6 +152,7 @@ export async function createPettyCashVoucherStateAction(
       voucherUrl: result.voucherUrl,
     };
   } catch (error) {
+    if (isNextRedirectError(error)) throw error;
     return {
       status: "error",
       message: pettyCashErrorMessage(error),

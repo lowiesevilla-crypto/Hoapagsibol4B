@@ -1,6 +1,6 @@
 "use server";
 
-import { HomeownerActivationStatus, Role } from "@prisma/client";
+import { EmployeeStatus, HomeownerActivationStatus, Role } from "@prisma/client";
 import { compare } from "bcryptjs";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
@@ -250,6 +250,7 @@ async function resolveLoginUser(input: {
     },
     include: {
       homeownerProfile: true,
+      employeeProfile: { select: { id: true, tenantId: true, status: true } },
       userRoleAssignments: { where: { active: true }, select: { role: true, active: true } },
       tenant: { include: { advisories: { where: { active: true }, orderBy: { createdAt: "desc" }, take: 1 }, moduleEntitlements: true } },
     },
@@ -259,6 +260,11 @@ async function resolveLoginUser(input: {
     const roles = effectiveRolesForUser(candidate.role, candidate.userRoleAssignments);
     const platform = isPlatformRoleSet(roles);
     if (!platform && !tenantCanSignIn(candidate.tenant)) return false;
+    if (primaryRoleForRoles(roles, candidate.role) === Role.EMPLOYEE) {
+      return input.identifierType === "email"
+        && candidate.employeeProfile?.tenantId === candidate.tenantId
+        && candidate.employeeProfile.status === EmployeeStatus.ACTIVE;
+    }
     if (!roles.includes(Role.HOMEOWNER)) return input.identifierType === "email";
     if (!candidate.homeownerProfile) return input.identifierType === "email";
     return candidate.homeownerProfile.status === "ACTIVE"
@@ -308,6 +314,7 @@ async function resolveVerifiedLoginChoice(userId: string): Promise<SuccessfulLog
     },
     include: {
       homeownerProfile: true,
+      employeeProfile: { select: { id: true, tenantId: true, status: true } },
       userRoleAssignments: { where: { active: true }, select: { role: true, active: true } },
       tenant: { include: { advisories: { where: { active: true }, orderBy: { createdAt: "desc" }, take: 1 }, moduleEntitlements: true } },
     },
@@ -316,6 +323,9 @@ async function resolveVerifiedLoginChoice(userId: string): Promise<SuccessfulLog
   const roles = effectiveRolesForUser(user.role, user.userRoleAssignments);
   const platform = isPlatformRoleSet(roles);
   if (!platform && !tenantCanSignIn(user.tenant)) return null;
+  if (primaryRoleForRoles(roles, user.role) === Role.EMPLOYEE) {
+    if (user.employeeProfile?.tenantId !== user.tenantId || user.employeeProfile.status !== EmployeeStatus.ACTIVE) return null;
+  }
   if (roles.includes(Role.HOMEOWNER) && user.homeownerProfile) {
     const profile = user.homeownerProfile;
     if (profile.status !== "ACTIVE"

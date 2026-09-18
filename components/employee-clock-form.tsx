@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useActionState, useEffect } from "react";
+import { useActionState, useEffect, useState } from "react";
 import { SubmitButton } from "@/components/ui";
 import {
   employeeClockInStateAction,
@@ -17,8 +17,13 @@ const initialState: EmployeeClockState = {
 
 export function EmployeeClockForm({ mode }: { mode: "in" | "out" }) {
   const router = useRouter();
+  const [hydrated, setHydrated] = useState(false);
   const clockAction = mode === "in" ? employeeClockInStateAction : employeeClockOutStateAction;
   const [state, action, pending] = useActionState(clockAction, initialState);
+
+  useEffect(() => {
+    setHydrated(true);
+  }, []);
 
   useEffect(() => {
     if (!state.redirectTo) return;
@@ -31,7 +36,7 @@ export function EmployeeClockForm({ mode }: { mode: "in" | "out" }) {
   const placeholder = mode === "in" ? "Example: On-site duty" : "Example: Completed assigned work";
 
   return (
-    <form action={action}>
+    <form action={action} data-employee-clock-ready={hydrated ? "true" : "false"}>
       <label className="label" htmlFor={inputId}>
         {label} <span className="font-normal text-slate-400">(optional)</span>
       </label>
@@ -57,7 +62,7 @@ export function EmployeeClockForm({ mode }: { mode: "in" | "out" }) {
 
       <SubmitButton
         className={mode === "in" ? "mt-4 w-full min-h-14 text-base" : "btn-secondary mt-4 w-full min-h-14 text-base"}
-        disabled={pending || Boolean(state.redirectTo)}
+        disabled={!hydrated || pending || Boolean(state.redirectTo)}
         pendingLabel={mode === "in" ? "Recording Time In" : "Recording Time Out"}
         confirmedProcessing={state.status === "success"}
       >

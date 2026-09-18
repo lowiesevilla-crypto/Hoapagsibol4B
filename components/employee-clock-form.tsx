@@ -1,5 +1,6 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import { useActionState, useEffect } from "react";
 import { SubmitButton } from "@/components/ui";
 import {
@@ -15,13 +16,14 @@ const initialState: EmployeeClockState = {
 };
 
 export function EmployeeClockForm({ mode }: { mode: "in" | "out" }) {
+  const router = useRouter();
   const clockAction = mode === "in" ? employeeClockInStateAction : employeeClockOutStateAction;
   const [state, action, pending] = useActionState(clockAction, initialState);
 
   useEffect(() => {
     if (!state.redirectTo) return;
-    window.location.replace(state.redirectTo);
-  }, [state.redirectTo]);
+    router.replace(state.redirectTo);
+  }, [router, state.redirectTo]);
 
   const inputId = mode === "in" ? "timeInRemarks" : "timeOutRemarks";
   const inputName = inputId;

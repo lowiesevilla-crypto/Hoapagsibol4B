@@ -52,10 +52,12 @@ test("production employee punch UI uses state-return client navigation instead o
   assert.equal(attendancePage.includes("action={employeeClockInAction}"), false);
   assert.equal(attendancePage.includes("action={employeeClockOutAction}"), false);
 
-  assert.ok(clockForm.includes("useActionState"));
-  assert.ok(clockForm.includes("router.replace(state.redirectTo)"));
+  assert.ok(clockForm.includes("useTransition"));
+  assert.ok(clockForm.includes("router.replace(nextState.redirectTo)"));
   assert.ok(clockForm.includes("employeeClockInStateAction"));
   assert.ok(clockForm.includes("employeeClockOutStateAction"));
+  assert.ok(clockForm.includes("const nextState = await clockAction(initialState, formData)"));
+  assert.ok(clockForm.includes("<form onSubmit={handleSubmit}"));
   assert.ok(clockForm.includes("data-employee-clock-ready={hydrated ? \"true\" : \"false\"}"));
   assert.ok(clockForm.includes("disabled={!hydrated || pending || Boolean(state.redirectTo)}"));
 });

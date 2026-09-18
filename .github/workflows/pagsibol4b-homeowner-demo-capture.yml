@@ -92,8 +92,10 @@ jobs:
           APP_PID=$!
 
           cleanup() {
-            kill -INT "${REC_PID:-0}" 2>/dev/null || true
-            if [ -n "${REC_PID:-}" ]; then wait "$REC_PID" 2>/dev/null || true; fi
+            if [ -n "${REC_PID:-}" ]; then
+              kill -INT "$REC_PID" 2>/dev/null || true
+              wait "$REC_PID" 2>/dev/null || true
+            fi
             kill "$APP_PID" 2>/dev/null || true
             pnpm e2e:cleanup || true
           }

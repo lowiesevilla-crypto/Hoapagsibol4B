@@ -13,14 +13,14 @@ test("employee sign-in fails closed unless the primary employee account has an a
   assert.ok(loginAction.includes("EmployeeStatus"));
   assert.ok(loginAction.includes("employeeProfile: { select: { id: true, tenantId: true, status: true } }"));
   assert.ok(loginAction.includes("primaryRoleForRoles(roles, candidate.role) === Role.EMPLOYEE"));
-  assert.ok(loginAction.includes("candidate.employeeProfile?.tenantId === candidate.tenantId"));
-  assert.ok(loginAction.includes("candidate.employeeProfile.status === EmployeeStatus.ACTIVE"));
+  assert.ok(loginAction.includes("employeeProfile.tenantId === candidate.tenantId"));
+  assert.ok(loginAction.includes("employeeProfile.status === EmployeeStatus.ACTIVE"));
   assert.ok(loginAction.includes("primaryRoleForRoles(roles, user.role) === Role.EMPLOYEE"));
-  assert.ok(loginAction.includes("user.employeeProfile?.tenantId !== user.tenantId"));
+  assert.ok(loginAction.includes("employeeProfile.tenantId !== user.tenantId"));
 
   assert.ok(auth.includes("requiredRole === Role.EMPLOYEE"));
-  assert.ok(auth.includes("user.employeeProfile?.tenantId !== user.tenantId"));
-  assert.ok(auth.includes("user.employeeProfile.status !== EmployeeStatus.ACTIVE"));
+  assert.ok(auth.includes("employeeProfile.tenantId !== user.tenantId"));
+  assert.ok(auth.includes("employeeProfile.status !== EmployeeStatus.ACTIVE"));
 });
 
 test("employee Time In and Time Out stay tenant scoped and are retry safe", () => {

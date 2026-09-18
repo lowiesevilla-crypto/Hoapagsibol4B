@@ -261,9 +261,11 @@ async function resolveLoginUser(input: {
     const platform = isPlatformRoleSet(roles);
     if (!platform && !tenantCanSignIn(candidate.tenant)) return false;
     if (primaryRoleForRoles(roles, candidate.role) === Role.EMPLOYEE) {
+      const employeeProfile = candidate.employeeProfile;
       return input.identifierType === "email"
-        && candidate.employeeProfile?.tenantId === candidate.tenantId
-        && candidate.employeeProfile.status === EmployeeStatus.ACTIVE;
+        && Boolean(employeeProfile)
+        && employeeProfile!.tenantId === candidate.tenantId
+        && employeeProfile!.status === EmployeeStatus.ACTIVE;
     }
     if (!roles.includes(Role.HOMEOWNER)) return input.identifierType === "email";
     if (!candidate.homeownerProfile) return input.identifierType === "email";
@@ -324,7 +326,8 @@ async function resolveVerifiedLoginChoice(userId: string): Promise<SuccessfulLog
   const platform = isPlatformRoleSet(roles);
   if (!platform && !tenantCanSignIn(user.tenant)) return null;
   if (primaryRoleForRoles(roles, user.role) === Role.EMPLOYEE) {
-    if (user.employeeProfile?.tenantId !== user.tenantId || user.employeeProfile.status !== EmployeeStatus.ACTIVE) return null;
+    const employeeProfile = user.employeeProfile;
+    if (!employeeProfile || employeeProfile.tenantId !== user.tenantId || employeeProfile.status !== EmployeeStatus.ACTIVE) return null;
   }
   if (roles.includes(Role.HOMEOWNER) && user.homeownerProfile) {
     const profile = user.homeownerProfile;

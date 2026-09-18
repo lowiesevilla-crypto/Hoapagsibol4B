@@ -1,6 +1,6 @@
 "use server";
 
-import { AttendanceAdjustmentStatus, AttendanceStatus, NotificationChannel, NotificationStatus, NotificationType, PayrollDayType, PayrollStatus, Role } from "@prisma/client";
+import { AttendanceAdjustmentStatus, AttendanceStatus, NotificationChannel, NotificationStatus, NotificationType, PayrollDayType, PayrollStatus, Prisma, Role } from "@prisma/client";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { requireUser } from "@/lib/auth";
@@ -108,11 +108,53 @@ export async function deleteAttendanceAction(formData: FormData) {
   redirect("/admin/attendance/history?success=deleted");
 }
 
+export type EmployeeClockState = {
+  status: "idle" | "success" | "error";
+  message: string;
+  redirectTo: string | null;
+};
+
+type EmployeeClockSubmission = {
+  destination: string;
+  message: string;
+  reused: boolean;
+};
+
 /**
  * @requirement PAY-EMP-002 PAY-ATT-001 PAY-SEC-001
  * @status IMPLEMENTED
+ * @description Return a stable post-commit state for the employee client so a successful punch cannot be reported as failed when framework redirect/revalidation handoff is interrupted.
+ */
+export async function employeeClockInStateAction(
+  _previousState: EmployeeClockState,
+  formData: FormData,
+): Promise<EmployeeClockState> {
+  try {
+    const result = await performEmployeeClockIn(formData);
+    safeRevalidateEmployeeAttendancePages({ action: "clock-in", reused: result.reused });
+    return { status: "success", message: result.message, redirectTo: result.destination };
+  } catch (error) {
+    if (isNextRedirectError(error)) throw error;
+    return {
+      status: "error",
+      message: error instanceof Error ? error.message : "Time In could not be recorded. Please try again.",
+      redirectTo: null,
+    };
+  }
+}
+
+/**
+ * @requirement PAY-EMP-002 PAY-ATT-001 PAY-SEC-001
+ * @status IMPLEMENTED
+ * @description Legacy server-action entry point retained for compatibility; production employee UI uses employeeClockInStateAction for resilient post-commit navigation.
  */
 export async function employeeClockInAction(formData: FormData) {
+  const result = await performEmployeeClockIn(formData);
+  safeRevalidateEmployeeAttendancePages({ action: "clock-in", reused: result.reused });
+  redirect(result.destination);
+}
+
+async function performEmployeeClockIn(formData: FormData): Promise<EmployeeClockSubmission> {
   const user = await requireUser(Role.EMPLOYEE);
   if (!user.employeeProfile) throw new Error("Employee profile not linked to this login.");
   const parsed = employeeClockSchema.safeParse(Object.fromEntries(formData.entries()));
@@ -120,53 +162,233 @@ export async function employeeClockInAction(formData: FormData) {
 
   const date = todayInManila();
   const timeIn = timeInManila();
-  const existing = await prisma.attendance.findFirst({ where: { tenantId: user.tenantId, employeeId: user.employeeProfile.id, date } });
-  if (existing) await assertAttendanceEditable(existing.employeeId, existing.date, user.tenantId);
-  if (existing?.timeIn) throw new Error("You have already completed your Time In for today.");
+  const employeeId = user.employeeProfile.id;
+  const existing = await prisma.attendance.findFirst({
+    where: { tenantId: user.tenantId, employeeId, date },
+  });
 
-  const remarks = mergeClockRemark(existing?.remarks ?? null, "Time In Remarks", parsed.data.timeInRemarks || parsed.data.remarks);
-  const metrics = await deriveAttendanceMetrics({ tenantId: user.tenantId, employeeId: user.employeeProfile.id, date, timeIn, timeOut: existing?.timeOut ?? null, status: AttendanceStatus.PRESENT, overtimeHours: Number(existing?.overtimeHours ?? 0) });
-
-  let record;
-  if (existing) {
-    record = await prisma.attendance.update({ where: { id: existing.id }, data: { timeIn, status: AttendanceStatus.PRESENT, remarks, ...metrics } });
-  } else {
-    record = await prisma.attendance.create({
-      data: { tenantId: user.tenantId, employeeId: user.employeeProfile.id, date, timeIn, status: AttendanceStatus.PRESENT, remarks, ...metrics },
-    });
+  // A browser retry, double-submit, or restored request after a transient network
+  // failure must reconcile to the already committed punch instead of showing a
+  // false error or creating a duplicate attendance row.
+  if (existing?.timeIn) {
+    return {
+      destination: "/employee/attendance?success=clocked-in",
+      message: "Time In is already recorded for today.",
+      reused: true,
+    };
   }
 
-  await writeAuditLog({ actorId: user.id, module: "ATTENDANCE", action: "EMPLOYEE_CLOCK_IN", entityType: "Attendance", entityId: record.id, metadata: { timeIn } });
-  revalidatePath("/employee/attendance");
-  revalidatePath("/employee/attendance/history");
-  redirect("/employee/attendance?success=clocked-in");
+  if (existing) await assertAttendanceEditable(existing.employeeId, existing.date, user.tenantId);
+
+  const remarks = mergeClockRemark(
+    existing?.remarks ?? null,
+    "Time In Remarks",
+    parsed.data.timeInRemarks || parsed.data.remarks,
+  );
+  const metrics = await deriveAttendanceMetrics({
+    tenantId: user.tenantId,
+    employeeId,
+    date,
+    timeIn,
+    timeOut: existing?.timeOut ?? null,
+    status: AttendanceStatus.PRESENT,
+    overtimeHours: Number(existing?.overtimeHours ?? 0),
+  });
+
+  let committedId: string | null = null;
+  try {
+    if (existing) {
+      committedId = await prisma.$transaction(async (tx) => {
+        const updated = await tx.attendance.updateMany({
+          where: {
+            id: existing.id,
+            tenantId: user.tenantId,
+            employeeId,
+            timeIn: null,
+          },
+          data: { timeIn, status: AttendanceStatus.PRESENT, remarks, ...metrics },
+        });
+        if (updated.count !== 1) return null;
+        await tx.auditLog.create({
+          data: {
+            tenantId: user.tenantId,
+            actorId: user.id,
+            module: "ATTENDANCE",
+            action: "EMPLOYEE_CLOCK_IN",
+            entityType: "Attendance",
+            entityId: existing.id,
+            metadata: { timeIn },
+          },
+        });
+        return existing.id;
+      });
+    } else {
+      committedId = await prisma.$transaction(async (tx) => {
+        const record = await tx.attendance.create({
+          data: {
+            tenantId: user.tenantId,
+            employeeId,
+            date,
+            timeIn,
+            status: AttendanceStatus.PRESENT,
+            remarks,
+            ...metrics,
+          },
+        });
+        await tx.auditLog.create({
+          data: {
+            tenantId: user.tenantId,
+            actorId: user.id,
+            module: "ATTENDANCE",
+            action: "EMPLOYEE_CLOCK_IN",
+            entityType: "Attendance",
+            entityId: record.id,
+            metadata: { timeIn },
+          },
+        });
+        return record.id;
+      });
+    }
+  } catch (error) {
+    const duplicatePunch = error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002";
+    if (!duplicatePunch) throw error;
+  }
+
+  if (!committedId) {
+    const reconciled = await prisma.attendance.findFirst({
+      where: { tenantId: user.tenantId, employeeId, date },
+      select: { id: true, timeIn: true },
+    });
+    if (!reconciled?.timeIn) throw new Error("Time In could not be recorded. Please try again.");
+    return {
+      destination: "/employee/attendance?success=clocked-in",
+      message: "Time In was already recorded successfully.",
+      reused: true,
+    };
+  }
+
+  return {
+    destination: "/employee/attendance?success=clocked-in",
+    message: "Time In recorded successfully.",
+    reused: false,
+  };
 }
 
 /**
  * @requirement PAY-EMP-002 PAY-ATT-001 PAY-SEC-001
  * @status IMPLEMENTED
+ * @description Return a stable post-commit state for Time Out and reconcile duplicate/retried submissions without overwriting the first committed punch.
+ */
+export async function employeeClockOutStateAction(
+  _previousState: EmployeeClockState,
+  formData: FormData,
+): Promise<EmployeeClockState> {
+  try {
+    const result = await performEmployeeClockOut(formData);
+    safeRevalidateEmployeeAttendancePages({ action: "clock-out", reused: result.reused });
+    return { status: "success", message: result.message, redirectTo: result.destination };
+  } catch (error) {
+    if (isNextRedirectError(error)) throw error;
+    return {
+      status: "error",
+      message: error instanceof Error ? error.message : "Time Out could not be recorded. Please try again.",
+      redirectTo: null,
+    };
+  }
+}
+
+/**
+ * @requirement PAY-EMP-002 PAY-ATT-001 PAY-SEC-001
+ * @status IMPLEMENTED
+ * @description Legacy server-action entry point retained for compatibility; production employee UI uses employeeClockOutStateAction for resilient post-commit navigation.
  */
 export async function employeeClockOutAction(formData: FormData) {
+  const result = await performEmployeeClockOut(formData);
+  safeRevalidateEmployeeAttendancePages({ action: "clock-out", reused: result.reused });
+  redirect(result.destination);
+}
+
+async function performEmployeeClockOut(formData: FormData): Promise<EmployeeClockSubmission> {
   const user = await requireUser(Role.EMPLOYEE);
   if (!user.employeeProfile) throw new Error("Employee profile not linked to this login.");
   const parsed = employeeClockSchema.safeParse(Object.fromEntries(formData.entries()));
   if (!parsed.success) throw new Error(parsed.error.issues[0]?.message || "Invalid clock-out details.");
 
   const date = todayInManila();
-  const existing = await prisma.attendance.findFirst({ where: { tenantId: user.tenantId, employeeId: user.employeeProfile.id, date } });
+  const employeeId = user.employeeProfile.id;
+  const existing = await prisma.attendance.findFirst({
+    where: { tenantId: user.tenantId, employeeId, date },
+  });
   if (!existing?.timeIn) throw new Error("Clock in first before clocking out.");
-  if (existing.timeOut) throw new Error("You have already completed your Time Out for today.");
+
+  if (existing.timeOut) {
+    return {
+      destination: "/employee/attendance?success=clocked-out",
+      message: "Time Out is already recorded for today.",
+      reused: true,
+    };
+  }
+
   await assertAttendanceEditable(existing.employeeId, existing.date, user.tenantId);
-
   const timeOut = timeInManila();
-  const remarks = mergeClockRemark(existing.remarks, "Time Out Remarks", parsed.data.timeOutRemarks || parsed.data.remarks);
-  const metrics = await deriveAttendanceMetrics({ tenantId: user.tenantId, employeeId: user.employeeProfile.id, date, timeIn: existing.timeIn, timeOut, status: existing.status, overtimeHours: Number(existing.overtimeHours) });
-  const record = await prisma.attendance.update({ where: { id: existing.id }, data: { timeOut, remarks, ...metrics } });
+  const remarks = mergeClockRemark(
+    existing.remarks,
+    "Time Out Remarks",
+    parsed.data.timeOutRemarks || parsed.data.remarks,
+  );
+  const metrics = await deriveAttendanceMetrics({
+    tenantId: user.tenantId,
+    employeeId,
+    date,
+    timeIn: existing.timeIn,
+    timeOut,
+    status: existing.status,
+    overtimeHours: Number(existing.overtimeHours),
+  });
 
-  await writeAuditLog({ actorId: user.id, module: "ATTENDANCE", action: "EMPLOYEE_CLOCK_OUT", entityType: "Attendance", entityId: record.id, metadata: { timeOut, totalHours: metrics.totalHours } });
-  revalidatePath("/employee/attendance");
-  revalidatePath("/employee/attendance/history");
-  redirect("/employee/attendance?success=clocked-out");
+  const committedId = await prisma.$transaction(async (tx) => {
+    const updated = await tx.attendance.updateMany({
+      where: {
+        id: existing.id,
+        tenantId: user.tenantId,
+        employeeId,
+        timeOut: null,
+      },
+      data: { timeOut, remarks, ...metrics },
+    });
+    if (updated.count !== 1) return null;
+    await tx.auditLog.create({
+      data: {
+        tenantId: user.tenantId,
+        actorId: user.id,
+        module: "ATTENDANCE",
+        action: "EMPLOYEE_CLOCK_OUT",
+        entityType: "Attendance",
+        entityId: existing.id,
+        metadata: { timeOut, totalHours: metrics.totalHours },
+      },
+    });
+    return existing.id;
+  });
+
+  if (!committedId) {
+    const reconciled = await prisma.attendance.findFirst({
+      where: { tenantId: user.tenantId, employeeId, date },
+      select: { id: true, timeOut: true },
+    });
+    if (!reconciled?.timeOut) throw new Error("Time Out could not be recorded. Please try again.");
+    return {
+      destination: "/employee/attendance?success=clocked-out",
+      message: "Time Out was already recorded successfully.",
+      reused: true,
+    };
+  }
+
+  return {
+    destination: "/employee/attendance?success=clocked-out",
+    message: "Time Out recorded successfully.",
+    reused: false,
+  };
 }
 
 /**
@@ -362,6 +584,33 @@ function todayInManila() {
 
 function timeInManila() {
   return new Intl.DateTimeFormat("en-GB", { timeZone: "Asia/Manila", hour: "2-digit", minute: "2-digit", hour12: false }).format(new Date());
+}
+
+function safeRevalidateEmployeeAttendancePages(context: { action: "clock-in" | "clock-out"; reused: boolean }) {
+  for (const path of ["/employee/attendance", "/employee/attendance/history"]) {
+    try {
+      revalidatePath(path);
+    } catch (error) {
+      // Punch persistence and its audit row are already committed atomically.
+      // Cache refresh is best-effort and must never turn a successful punch into
+      // an employee-visible failure.
+      console.error("[HOAHub] employee_attendance_post_commit_revalidation_failed", {
+        ...context,
+        path,
+        errorName: error instanceof Error ? error.name : "UnknownError",
+        errorMessage: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+}
+
+function isNextRedirectError(error: unknown) {
+  return Boolean(
+    error
+    && typeof error === "object"
+    && "digest" in error
+    && String((error as { digest?: unknown }).digest || "").startsWith("NEXT_REDIRECT"),
+  );
 }
 
 function revalidateAttendancePages() {

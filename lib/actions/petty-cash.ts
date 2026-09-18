@@ -162,13 +162,13 @@ export async function createPettyCashVoucherStateAction(
 }
 
 export async function createPettyCashVoucherAction(formData: FormData) {
+  let voucherUrl: string;
   try {
-    const result = await createPettyCashVoucherSubmission(formData);
-    redirect(result.voucherUrl);
+    voucherUrl = (await createPettyCashVoucherSubmission(formData)).voucherUrl;
   } catch (error) {
-    if (isNextRedirectError(error)) throw error;
     redirect(`/admin/petty-cash/new?error=${encodeURIComponent(pettyCashErrorMessage(error))}`);
   }
+  redirect(voucherUrl);
 }
 
 async function createPettyCashVoucherSubmission(formData: FormData) {

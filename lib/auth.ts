@@ -149,7 +149,9 @@ export async function sessionIsCurrent(session: SessionPayload) {
     select: {
       id: true,
       role: true,
+      tenantId: true,
       tenant: { select: { status: true, subscriptionStatus: true } },
+      employeeProfile: { select: { tenantId: true, status: true } },
       userRoleAssignments: { where: { active: true }, select: { role: true, active: true } },
     },
   });
@@ -157,6 +159,10 @@ export async function sessionIsCurrent(session: SessionPayload) {
   const effectiveRoles = effectiveRolesForUser(user.role, user.userRoleAssignments);
   if (!effectiveRoles.includes(session.role)) return false;
   const platform = isPlatformRoleSet(effectiveRoles);
+  if (session.role === Role.EMPLOYEE) {
+    const employeeProfile = user.employeeProfile;
+    if (!employeeProfile || employeeProfile.tenantId !== user.tenantId || employeeProfile.status !== EmployeeStatus.ACTIVE) return false;
+  }
   if (!platform && (user.tenant.status !== "ACTIVE" || user.tenant.subscriptionStatus === "CANCELLED")) return false;
   if (session.roleSnapshot && session.roleSnapshot !== roleSnapshotForRoles(effectiveRoles)) return false;
   if (!session.sessionId) return false;
@@ -204,6 +210,7 @@ export async function requireUser(requiredRole?: Role) {
     || employeeProfile.tenantId !== user.tenantId
     || employeeProfile.status !== EmployeeStatus.ACTIVE
   )) {
+    await deleteSession();
     redirect(`/${session.tenantSlug}/login?error=employee-access-unavailable`);
   }
 

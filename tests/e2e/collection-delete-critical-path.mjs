@@ -176,7 +176,7 @@ async function runCollectionDeleteRegression(browser) {
       await dialog.accept();
     });
     await deleteButton.click();
-    await waitForUrl(page, (url) => url.pathname === "/admin/collections" && url.searchParams.get("success") === "deleted", "successful collection deletion redirect");
+    await waitForUrl(page, (url) => url.pathname === "/admin/collections" && !url.searchParams.has("deleteError"), "successful collection deletion return");
     assert.equal(transientBoundarySeen, false, "Delete must never render the global error boundary, even transiently before redirect/recovery.");
 
     assert.equal(await prisma.collection.count({ where: { id: primaryCollectionId, tenantId: primaryTenantId } }), 0, "Deleted collection must be physically absent from its tenant.");

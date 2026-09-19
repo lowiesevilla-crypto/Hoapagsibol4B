@@ -47,7 +47,7 @@ test("tenant admin subscription page exposes a receipt link only for successful 
 test("tenant receipt loader enforces payment and allocation tenant scope", async () => {
   const service = await source("lib/services/platform-manual-payment.ts");
   assert.match(service, /getTenantPlatformManualPaymentReceipt\(paymentId: string, tenantId: string\)/);
-  assert.match(service, /id: paymentId,[\\s\\S]*tenantId,/);
+  assert.match(service, /id: paymentId,[\s\S]*tenantId,/);
   assert.match(service, /allocation\.tenantId !== tenantId/);
   assert.match(service, /allocation\.invoice\.tenantId !== tenantId/);
 });

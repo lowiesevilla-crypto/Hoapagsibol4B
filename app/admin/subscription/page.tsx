@@ -1,4 +1,4 @@
-import { PlatformInvoiceStatus, Role } from "@prisma/client";
+import { PlatformInvoiceStatus, PlatformPaymentStatus, Role } from "@prisma/client";
 import { CreditCard, Download, ExternalLink, FileText, ReceiptText, ShieldCheck } from "lucide-react";
 import Link from "next/link";
 import { requireUser } from "@/lib/auth";
@@ -47,7 +47,7 @@ export default async function TenantSubscriptionPage() {
       take: 36,
     }),
     prisma.platformPayment.findMany({
-      where: { tenantId: user.tenantId },
+      where: { tenantId: user.tenantId, status: PlatformPaymentStatus.SUCCEEDED },
       orderBy: { receivedAt: "desc" },
       take: 12,
     }),

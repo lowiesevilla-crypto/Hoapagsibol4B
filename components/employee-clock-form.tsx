@@ -43,9 +43,10 @@ export function EmployeeClockForm({ mode }: { mode: "in" | "out" }) {
 
       // Navigation is deliberately initiated by the hydrated client only after
       // the server action returns a committed/reconciled punch result. This
-      // avoids relying on redirect-after-commit Server Action handoff.
+      // avoids relying on redirect-after-commit Server Action handoff. A route
+      // replacement already fetches fresh server data, so do not also issue a
+      // competing refresh for the same route.
       router.replace(nextState.redirectTo);
-      router.refresh();
     });
   }
 

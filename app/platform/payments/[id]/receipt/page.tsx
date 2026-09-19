@@ -71,7 +71,7 @@ export default async function PlatformManualPaymentReceiptPage({
         </section>
 
         <footer className="mt-8 border-t pt-4 text-center text-xs text-slate-500">
-          This receipt is generated from HOAHub's platform payment ledger after the manual payment transaction is committed.
+          This receipt is generated from the HOAHub platform payment ledger after the manual payment transaction is committed.
         </footer>
       </article>
     </div>

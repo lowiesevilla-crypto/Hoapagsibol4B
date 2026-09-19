@@ -70,6 +70,34 @@ Object.defineProperty(puppeteer, "launch", {
         const context = isolatedBrowser.defaultBrowserContext();
         isolatedBrowsers.add(isolatedBrowser);
 
+        const originalNewPage = context.newPage.bind(context);
+        Object.defineProperty(context, "newPage", {
+          configurable: true,
+          value: async (...pageArguments) => {
+            const page = await originalNewPage(...pageArguments);
+            if (process.env.HOAHUB_E2E_PRESERVE_SEASONAL_GREETING !== "1") {
+              await page.evaluateOnNewDocument(() => {
+                const installSeasonalGreetingDismissal = () => {
+                  const dismiss = () => {
+                    const close = document.querySelector('button[aria-label="Close seasonal greeting"]');
+                    if (close instanceof HTMLButtonElement) close.click();
+                  };
+                  dismiss();
+                  const root = document.documentElement;
+                  if (!root) return;
+                  new MutationObserver(dismiss).observe(root, { childList: true, subtree: true });
+                };
+                if (document.readyState === "loading") {
+                  document.addEventListener("DOMContentLoaded", installSeasonalGreetingDismissal, { once: true });
+                } else {
+                  installSeasonalGreetingDismissal();
+                }
+              });
+            }
+            return page;
+          },
+        });
+
         Object.defineProperty(context, "close", {
           configurable: true,
           value: async () => {

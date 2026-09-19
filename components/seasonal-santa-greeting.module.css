@@ -1,14 +1,324 @@
-.backdrop { position: fixed; inset: 0; z-index: 100; display: grid; place-items: center; overflow-y: auto; padding: max(1rem, env(safe-area-inset-top)) max(1rem, env(safe-area-inset-right)) max(1rem, env(safe-area-inset-bottom)) max(1rem, env(safe-area-inset-left)); background: rgba(7, 25, 38, .48); }
-.card { position: relative; width: min(100%, 29rem); max-height: calc(100dvh - 2rem); overflow: auto; border: 1px solid rgba(255,255,255,.72); border-radius: 1.5rem; background: linear-gradient(145deg, #fffdf8, #eef9f2); box-shadow: 0 24px 70px rgba(0,0,0,.3); padding: 1.5rem; text-align: center; }
-.close { position: absolute; top: .65rem; right: .65rem; min-width: 2.75rem; min-height: 2.75rem; border-radius: 999px; color: #13384b; font-weight: 800; }
-.santa { display: inline-flex; align-items: end; gap: .45rem; margin: .25rem auto 1rem; transform-origin: 72% 70%; animation: wave 1.1s ease-in-out infinite alternate; }
-.head { display: grid; width: 5.4rem; height: 5.4rem; place-items: center; border: .35rem solid #c92d36; border-radius: 50%; background: #ffe1c4; box-shadow: inset 0 .55rem 0 #fff; font-size: 2.65rem; }
-.gift { display: grid; width: 4.7rem; height: 4.7rem; place-items: center; overflow: hidden; border: .35rem solid #cf2733; border-radius: .9rem; background: #d83740; box-shadow: inset .75rem 0 0 #fff, inset -.75rem 0 0 #fff; }
-.logo { width: 3.3rem; height: 3.3rem; border-radius: .65rem; background: #fff; object-fit: contain; padding: .16rem; }
-.eyebrow { margin: 0; color: #ad2029; font-size: .72rem; font-weight: 900; letter-spacing: .13em; text-transform: uppercase; }
-.title { margin: .35rem 2rem .5rem; color: #12384a; font-size: clamp(1.35rem, 5vw, 1.8rem); font-weight: 900; line-height: 1.15; }
-.copy { margin: 0 auto 1.1rem; max-width: 24rem; color: #42606f; font-size: .95rem; line-height: 1.5; }
-.skip { min-height: 2.75rem; border-radius: .8rem; padding: .55rem 1rem; color: #17455a; font-size: .9rem; font-weight: 800; text-decoration: underline; }
-@keyframes wave { from { transform: rotate(-4deg); } to { transform: rotate(7deg); } }
-@media (prefers-reduced-motion: reduce) { .santa { animation: none; } }
-@media print { .backdrop { display: none !important; } }
+.backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: grid;
+  place-items: center;
+  overflow-y: auto;
+  padding: max(.75rem, env(safe-area-inset-top)) max(.75rem, env(safe-area-inset-right)) max(.75rem, env(safe-area-inset-bottom)) max(.75rem, env(safe-area-inset-left));
+  background: rgba(7, 25, 38, .48);
+}
+
+.card {
+  position: relative;
+  width: min(92vw, 24rem);
+  max-height: calc(100dvh - 2rem);
+  overflow: auto;
+  border: 1px solid rgba(255,255,255,.72);
+  border-radius: 1.35rem;
+  background: linear-gradient(145deg, #fffdf8, #eef9f2);
+  box-shadow: 0 20px 54px rgba(0,0,0,.28);
+  padding: 1rem 1rem .9rem;
+  text-align: center;
+}
+
+.close {
+  position: absolute;
+  top: .45rem;
+  right: .45rem;
+  z-index: 3;
+  display: grid;
+  min-width: 2.5rem;
+  min-height: 2.5rem;
+  place-items: center;
+  border-radius: 999px;
+  color: #13384b;
+  font-weight: 800;
+}
+
+.scene {
+  position: relative;
+  width: min(100%, 18rem);
+  height: 7.25rem;
+  margin: .1rem auto .45rem;
+  overflow: hidden;
+  border-radius: 1rem;
+  background: linear-gradient(180deg, rgba(219,240,247,.5), rgba(255,255,255,0));
+}
+
+.walkTrack {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: end;
+  justify-content: center;
+}
+
+.santa {
+  position: relative;
+  width: 10.8rem;
+  height: 6.6rem;
+  transform-origin: 50% 100%;
+  animation: santaWalk 1.2s ease-in-out infinite;
+}
+
+.santaBody {
+  position: absolute;
+  right: 1.1rem;
+  bottom: .35rem;
+  width: 5.25rem;
+  height: 5.8rem;
+}
+
+.face {
+  position: absolute;
+  top: .5rem;
+  left: 1rem;
+  z-index: 3;
+  display: grid;
+  width: 2.85rem;
+  height: 2.85rem;
+  place-items: center;
+  border: .18rem solid #fff7ef;
+  border-radius: 50%;
+  background: #f8d1b3;
+  box-shadow: 0 .18rem .4rem rgba(0,0,0,.14);
+  font-size: 1.82rem;
+  line-height: 1;
+}
+
+.hat {
+  position: absolute;
+  top: .05rem;
+  left: 1.4rem;
+  z-index: 4;
+  width: 2.75rem;
+  height: 1.25rem;
+  border-radius: 1.6rem 1.6rem .5rem .5rem;
+  background: #ca2c35;
+  transform: rotate(7deg);
+}
+
+.hat::after {
+  content: "";
+  position: absolute;
+  left: -.2rem;
+  bottom: -.18rem;
+  width: 2.95rem;
+  height: .52rem;
+  border-radius: 999px;
+  background: #fff;
+}
+
+.hatPom {
+  position: absolute;
+  top: .2rem;
+  right: .35rem;
+  z-index: 5;
+  width: .72rem;
+  height: .72rem;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 .08rem .2rem rgba(0,0,0,.16);
+}
+
+.coat {
+  position: absolute;
+  left: .9rem;
+  bottom: .5rem;
+  width: 3.45rem;
+  height: 3rem;
+  border-radius: 1.2rem 1.2rem .65rem .65rem;
+  background:
+    linear-gradient(90deg, transparent 46%, #fff 46% 56%, transparent 56%),
+    #cf2e37;
+  box-shadow: inset 0 -.35rem 0 #fff;
+}
+
+.arm {
+  position: absolute;
+  left: .35rem;
+  bottom: 1.6rem;
+  width: 2.1rem;
+  height: .72rem;
+  border-radius: 999px;
+  background: #cf2e37;
+  transform-origin: right center;
+  animation: armSwing 1.2s ease-in-out infinite alternate;
+}
+
+.legLeft,
+.legRight {
+  position: absolute;
+  bottom: 0;
+  width: .82rem;
+  height: 1.3rem;
+  border-radius: .45rem;
+  background: #26343b;
+  transform-origin: 50% 10%;
+}
+
+.legLeft {
+  left: 1.55rem;
+  animation: legLeft 1.2s ease-in-out infinite;
+}
+
+.legRight {
+  left: 3rem;
+  animation: legRight 1.2s ease-in-out infinite;
+}
+
+.sack {
+  position: absolute;
+  left: .35rem;
+  bottom: .8rem;
+  z-index: 1;
+  width: 5.2rem;
+  height: 4.9rem;
+  border-radius: 52% 48% 42% 42% / 36% 38% 62% 64%;
+  background: linear-gradient(145deg, #b61e2c, #d9474f);
+  box-shadow: inset -.45rem -.4rem 0 rgba(115,19,31,.15), 0 .3rem .65rem rgba(0,0,0,.18);
+  transform: rotate(-5deg);
+  animation: sackSway 1.2s ease-in-out infinite alternate;
+}
+
+.sack::before {
+  content: "";
+  position: absolute;
+  top: -.35rem;
+  left: 1.7rem;
+  width: 1.8rem;
+  height: .7rem;
+  border-radius: 50%;
+  background: #8f1824;
+}
+
+.logoPlate {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  display: grid;
+  width: 2.95rem;
+  height: 2.95rem;
+  place-items: center;
+  overflow: hidden;
+  border: .14rem solid rgba(255,255,255,.92);
+  border-radius: .72rem;
+  background: #fff;
+  box-shadow: 0 .2rem .45rem rgba(0,0,0,.16);
+  transform: translate(-50%, -45%);
+}
+
+.logo {
+  width: 2.45rem;
+  height: 2.45rem;
+  object-fit: contain;
+  padding: .08rem;
+}
+
+.eyebrow {
+  margin: 0;
+  color: #ad2029;
+  font-size: .68rem;
+  font-weight: 900;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+}
+
+.title {
+  margin: .28rem .4rem .4rem;
+  color: #12384a;
+  font-size: clamp(1.4rem, 4.8vw, 2rem);
+  font-weight: 900;
+  line-height: 1.08;
+  text-wrap: balance;
+  overflow-wrap: anywhere;
+}
+
+.copy {
+  margin: 0 auto .65rem;
+  max-width: 21rem;
+  color: #42606f;
+  font-size: .95rem;
+  line-height: 1.42;
+}
+
+.skip {
+  min-height: 2.5rem;
+  border-radius: .75rem;
+  padding: .45rem .8rem;
+  color: #17455a;
+  font-size: .88rem;
+  font-weight: 800;
+  text-decoration: underline;
+}
+
+@keyframes santaWalk {
+  0% { transform: translateX(-1rem) translateY(0) rotate(-1deg); }
+  25% { transform: translateX(-.45rem) translateY(-.24rem) rotate(.5deg); }
+  50% { transform: translateX(1rem) translateY(0) rotate(1deg); }
+  75% { transform: translateX(.45rem) translateY(-.24rem) rotate(-.5deg); }
+  100% { transform: translateX(-1rem) translateY(0) rotate(-1deg); }
+}
+
+@keyframes armSwing {
+  from { transform: rotate(-14deg); }
+  to { transform: rotate(16deg); }
+}
+
+@keyframes sackSway {
+  from { transform: rotate(-8deg) translateY(0); }
+  to { transform: rotate(-2deg) translateY(-.12rem); }
+}
+
+@keyframes legLeft {
+  0%, 100% { transform: rotate(18deg); }
+  50% { transform: rotate(-18deg); }
+}
+
+@keyframes legRight {
+  0%, 100% { transform: rotate(-18deg); }
+  50% { transform: rotate(18deg); }
+}
+
+@media (max-width: 420px) {
+  .card {
+    width: min(90vw, 22rem);
+    padding: .85rem .85rem .75rem;
+    border-radius: 1.2rem;
+  }
+
+  .scene {
+    height: 6.65rem;
+    margin-bottom: .25rem;
+  }
+
+  .santa {
+    transform: scale(.92);
+    transform-origin: 50% 100%;
+  }
+
+  .title {
+    margin-inline: .2rem;
+    font-size: clamp(1.25rem, 5.6vw, 1.55rem);
+  }
+
+  .copy {
+    font-size: .9rem;
+    line-height: 1.38;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .santa,
+  .arm,
+  .sack,
+  .legLeft,
+  .legRight {
+    animation: none;
+  }
+}
+
+@media print {
+  .backdrop { display: none !important; }
+}

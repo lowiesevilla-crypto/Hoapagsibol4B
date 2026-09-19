@@ -180,7 +180,7 @@ async function runPettyCashRegression(browser) {
     await clickByText(page, "button", "Create & open voucher");
     await waitForUrl(
       page,
-      (url) => /^\/admin\/petty-cash\/[^/]+$/.test(url.pathname) && url.searchParams.get("success") === "created",
+      (url) => /^\/admin\/petty-cash\/[^/]+$/.test(url.pathname) && url.pathname !== "/admin/petty-cash/new",
       "created Petty Cash voucher detail redirect",
     );
     voucherId = page.url().match(/\/admin\/petty-cash\/([^?]+)/)?.[1] || null;

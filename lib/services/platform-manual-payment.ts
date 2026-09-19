@@ -213,3 +213,53 @@ export async function getPlatformManualPaymentReceipt(paymentId: string) {
 
   return payment;
 }
+
+
+export async function getTenantPlatformManualPaymentReceipt(paymentId: string, tenantId: string) {
+  if (!paymentId || !tenantId) throw new Error("Payment receipt not found.");
+
+  const payment = await prisma.platformPayment.findFirst({
+    where: {
+      id: paymentId,
+      tenantId,
+      gateway: PlatformPaymentGateway.MANUAL,
+      status: PlatformPaymentStatus.SUCCEEDED,
+    },
+    include: {
+      tenant: {
+        select: {
+          id: true,
+          name: true,
+          shortName: true,
+          slug: true,
+        },
+      },
+      allocations: {
+        include: {
+          invoice: {
+            select: {
+              id: true,
+              tenantId: true,
+              invoiceNumber: true,
+              total: true,
+              amountPaid: true,
+              outstandingBalance: true,
+              currency: true,
+              billingPeriodStart: true,
+              billingPeriodEnd: true,
+            },
+          },
+        },
+        orderBy: { createdAt: "asc" },
+      },
+    },
+  });
+
+  if (!payment) throw new Error("Manual payment receipt not found.");
+
+  if (payment.allocations.some((allocation) => allocation.tenantId !== tenantId || allocation.invoice.tenantId !== tenantId)) {
+    throw new Error("Payment receipt tenant scope is invalid.");
+  }
+
+  return payment;
+}

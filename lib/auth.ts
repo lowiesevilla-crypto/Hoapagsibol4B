@@ -16,6 +16,7 @@ import {
 } from "@/lib/authorization/effective-access";
 import { permissionsForRoles } from "@/lib/authorization/permissions";
 import { prisma } from "@/lib/db";
+import { SEASONAL_SANTA_LOGIN_COOKIE } from "@/lib/seasonal-santa";
 import { adminHomeForRole } from "@/lib/role-access";
 import { setTenantContext } from "@/lib/tenant-context";
 import { getEnabledTenantModules } from "@/lib/tenant";
@@ -95,6 +96,9 @@ export async function setSessionCookie(prepared: PreparedSession) {
     path: "/",
     maxAge: prepared.maxAge,
   });
+  store.set(SEASONAL_SANTA_LOGIN_COOKIE, `${prepared.payload.tenantId}.${Date.now()}`, {
+    httpOnly: false, sameSite: "lax", secure: process.env.NODE_ENV === "production", path: "/", maxAge: 60,
+  });
 }
 
 export async function deleteSession() {
@@ -109,6 +113,7 @@ export async function deleteSession() {
   }
   const store = await cookies();
   store.delete(COOKIE_NAME);
+  store.delete(SEASONAL_SANTA_LOGIN_COOKIE);
 }
 
 export async function readSession(): Promise<SessionPayload | null> {

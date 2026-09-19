@@ -1,5 +1,6 @@
 export const SEASONAL_SANTA_SESSION_KEY = "hoahub.seasonal-santa.shown.v1";
 export const SEASONAL_SANTA_LOGIN_KEY = "hoahub.seasonal-santa.login.v1";
+export const SEASONAL_SANTA_LOGIN_COOKIE = "hoahub.seasonal-santa.login";
 
 /** True for September 1 through December 31 in the visitor's local calendar year. */
 export function isSeasonalSantaWindow(date: Date): boolean {

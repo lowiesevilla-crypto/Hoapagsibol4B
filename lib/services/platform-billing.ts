@@ -77,7 +77,7 @@ export async function getTenantCommercialSnapshot(tenantId: string) {
       take: 24,
     }),
     prisma.platformPayment.findMany({
-      where: { tenantId },
+      where: { tenantId, status: PlatformPaymentStatus.SUCCEEDED },
       include: { allocations: true },
       orderBy: { receivedAt: "desc" },
       take: 24,

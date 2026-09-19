@@ -35,8 +35,8 @@ export function LoginForm({
     if (!state.redirectTo) return;
     setVerified(true);
     try {
-      const authenticatedAt = String(Date.now());
-      window.sessionStorage.setItem(LOGIN_HANDOFF_STORAGE_KEY, authenticatedAt);
+      window.sessionStorage.setItem(LOGIN_HANDOFF_STORAGE_KEY, String(Date.now()));
+      const authenticatedAt = window.sessionStorage.getItem(LOGIN_HANDOFF_STORAGE_KEY) || "";
       // This intentionally outlives the short logo-orbit handoff so the lazy
       // greeting still sees the successful-login event on slower devices.
       window.sessionStorage.setItem(SEASONAL_SANTA_LOGIN_KEY, authenticatedAt);

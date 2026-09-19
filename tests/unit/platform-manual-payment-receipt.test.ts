@@ -47,7 +47,7 @@ test("tenant admin subscription page exposes a receipt link only for successful 
 test("tenant receipt loader enforces payment and allocation tenant scope", async () => {
   const service = await source("lib/services/platform-manual-payment.ts");
   assert.match(service, /getTenantPlatformManualPaymentReceipt\(paymentId: string, tenantId: string\)/);
-  assert.match(service, /id: paymentId,\s*tenantId,/s);
+  assert.match(service, /id: paymentId,[\\s\\S]*tenantId,/);
   assert.match(service, /allocation\.tenantId !== tenantId/);
   assert.match(service, /allocation\.invoice\.tenantId !== tenantId/);
 });
@@ -60,4 +60,19 @@ test("platform and tenant admin payment history show only successful platform pa
   const adminPage = await source("app/admin/subscription/page.tsx");
   assert.match(adminPage, /PlatformPaymentStatus/);
   assert.match(adminPage, /where: \{ tenantId: user\.tenantId, status: PlatformPaymentStatus\.SUCCEEDED \}/);
+});
+
+
+test("manual payment receipts use the shared HOAHub billing issuer logo and address source", async () => {
+  for (const path of [
+    "app/platform/payments/[id]/receipt/page.tsx",
+    "app/admin/subscription/payments/[id]/receipt/page.tsx",
+  ]) {
+    const receipt = await source(path);
+    assert.match(receipt, /platformBillingIssuer/);
+    assert.match(receipt, /Hoahub-logo\.png/);
+    assert.match(receipt, /issuer\.address/);
+    assert.match(receipt, /issuer\.email/);
+    assert.match(receipt, /issuer\.website/);
+  }
 });

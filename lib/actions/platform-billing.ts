@@ -202,8 +202,9 @@ export async function recordPlatformManualPaymentAction(formData: FormData) {
   const invoiceId = clean(formData.get("invoiceId"));
   const method = clean(formData.get("method")) as PlatformPaymentMethod;
   if (!Object.values(PlatformPaymentMethod).includes(method)) redirect(`/platform/tenants/${tenantId}/billing?error=Select%20a%20valid%20payment%20method.`);
+  let payment: Awaited<ReturnType<typeof recordPlatformManualPaymentSafe>>;
   try {
-    await recordPlatformManualPaymentSafe({ tenantId, invoiceId, amount: numberValue(formData.get("amount")), method, referenceNumber: clean(formData.get("referenceNumber")), actorId: actor.id });
+    payment = await recordPlatformManualPaymentSafe({ tenantId, invoiceId, amount: numberValue(formData.get("amount")), method, referenceNumber: clean(formData.get("referenceNumber")), actorId: actor.id });
   } catch (error) {
     redirect(`/platform/tenants/${tenantId}/billing?error=${encodeURIComponent(error instanceof Error ? error.message : "Payment recording failed.")}`);
   }
@@ -212,7 +213,7 @@ export async function recordPlatformManualPaymentAction(formData: FormData) {
   revalidatePath(`/platform/tenants/${tenantId}`);
   revalidatePath(`/platform/tenants/${tenantId}/billing`);
   revalidatePath("/admin/subscription");
-  redirect(`/platform/tenants/${tenantId}/billing?success=Payment%20recorded.`);
+  redirect(`/platform/payments/${payment.id}/receipt`);
 }
 
 export async function suspendTenantAction(formData: FormData) {

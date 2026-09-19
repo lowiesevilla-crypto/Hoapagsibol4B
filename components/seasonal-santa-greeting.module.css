@@ -254,8 +254,11 @@
 }
 
 @keyframes santaWalk {
-  0%, 100% { transform: translateY(0) rotate(-1deg); }
-  50% { transform: translateY(-.3rem) rotate(1deg); }
+  0% { transform: translateX(-1rem) translateY(0) rotate(-1deg); }
+  25% { transform: translateX(-.45rem) translateY(-.24rem) rotate(.5deg); }
+  50% { transform: translateX(1rem) translateY(0) rotate(1deg); }
+  75% { transform: translateX(.45rem) translateY(-.24rem) rotate(-.5deg); }
+  100% { transform: translateX(-1rem) translateY(0) rotate(-1deg); }
 }
 
 @keyframes armSwing {

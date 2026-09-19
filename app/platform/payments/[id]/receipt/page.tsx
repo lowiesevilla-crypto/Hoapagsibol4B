@@ -1,4 +1,3 @@
-import Image from "next/image";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { PlatformPaymentReceiptActions } from "@/components/platform-payment-receipt-actions";
@@ -46,7 +45,7 @@ export default async function PlatformManualPaymentReceiptPage({
       <article className="rounded-2xl border bg-white p-6 shadow-sm print:border-0 print:shadow-none sm:p-8">
         <header className="border-b pb-5 text-center">
           <div className="mx-auto flex max-w-xl flex-col items-center">
-            <Image src="/Hoahub-logo.png" alt="HOAHub platform logo" width={72} height={72} className="h-16 w-16 object-contain print:h-14 print:w-14" priority />
+            <img src="/Hoahub-logo.png" alt="HOAHub platform logo" width="72" height="72" className="h-16 w-16 object-contain print:h-14 print:w-14" />
             <p className="mt-2 text-xs font-black uppercase tracking-[0.22em] text-leaf-700">{issuer.name}</p>
             {issuer.address ? <p className="mt-1 max-w-lg text-xs leading-5 text-slate-600">{issuer.address}</p> : null}
             <p className="text-xs text-slate-500">{[issuer.email, issuer.website].filter(Boolean).join(" · ")}</p>

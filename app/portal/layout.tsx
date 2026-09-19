@@ -20,6 +20,7 @@ import { tenantMetadata, tenantNameForMetadata } from "@/lib/metadata-title";
 import { getUnreadChatCount } from "@/lib/services/chat";
 import { getAssociationSettings } from "@/lib/system-settings";
 import { getEnabledTenantModules } from "@/lib/tenant";
+import { SeasonalSantaGreetingLoader } from "@/components/seasonal-santa-greeting-loader";
 
 export async function generateMetadata(): Promise<Metadata> {
   const user = await requireUser(Role.HOMEOWNER);
@@ -62,6 +63,7 @@ export default async function PortalLayout({ children }: { children: React.React
   const mobileRouteTitles = links.map(({ href, label }) => ({ href, label }));
 
   return <div className="canva-portal-shell min-h-screen">
+    <SeasonalSantaGreetingLoader tenantId={user.tenantId} associationName={association.name} logoUrl={association.logoUrl} />
     <Sidebar user={user} links={links} roleLabel="Homeowner" association={association} initialChatUnreadCount={initialChatUnreadCount} desktopOnly />
     <PortalMobileHeader association={association} user={user} unreadCount={initialChatUnreadCount} routeTitles={mobileRouteTitles} showChat={navigation.hasChat} />
     {navigation.hasChat && <ChatUnreadNotifier initialUnreadCount={initialChatUnreadCount} chatHref="/portal/chat" />}

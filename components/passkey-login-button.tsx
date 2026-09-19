@@ -5,6 +5,7 @@ import { Fingerprint } from "lucide-react";
 import type { RefObject } from "react";
 import { useState } from "react";
 import { LOGIN_HANDOFF_STORAGE_KEY } from "@/components/post-login-brand-orbit";
+import { SEASONAL_SANTA_LOGIN_KEY } from "@/lib/seasonal-santa";
 import { safeReturnTo } from "@/lib/auth-return-to";
 
 export function PasskeyLoginButton({ formRef }: { formRef: RefObject<HTMLFormElement | null> }) {
@@ -37,6 +38,8 @@ export function PasskeyLoginButton({ formRef }: { formRef: RefObject<HTMLFormEle
       if (!verifyResponse.ok) throw new Error(result.error || "Passkey login failed.");
       try {
         window.sessionStorage.setItem(LOGIN_HANDOFF_STORAGE_KEY, String(Date.now()));
+        const authenticatedAt = window.sessionStorage.getItem(LOGIN_HANDOFF_STORAGE_KEY) || "";
+        window.sessionStorage.setItem(SEASONAL_SANTA_LOGIN_KEY, authenticatedAt);
       } catch { /* Storage restrictions must never block authenticated navigation. */ }
       window.location.replace(returnTo || result.redirectTo || "/portal/dashboard");
     } catch (error) {

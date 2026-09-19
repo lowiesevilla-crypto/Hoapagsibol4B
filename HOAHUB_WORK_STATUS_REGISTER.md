@@ -30,6 +30,8 @@ This register is the current evidence-backed release snapshot for the active HOA
 
 ## Active production-sensitive candidates
 
+- Seasonal Welcome Santa greeting (`codex/seasonal-welcome-santa`): IN PROGRESS / NOT DEPLOYED. Tenant-scoped post-login greeting for homeowner and admin dashboards, active only September 1 through December 31, with session-only display, tenant-brand fallback, accessibility controls, reduced-motion support, and deterministic boundary/isolation tests. Pending exact-head CI, merge, Hostinger deployment, and production verification.
+
 - Payroll lifecycle safe remediation (`codex/payroll-lifecycle-safe-remediation`): IN PROGRESS / NOT DEPLOYED. Current candidate separates calculated payroll Review from Approval without adding persisted payroll statuses or changing statutory deduction formulas. Review is tenant-scoped audit evidence for the current calculated snapshot; Approval creates the existing immutable `FINALIZED` revision required before Financial Engine posting. Local focused payroll lifecycle/statutory/finance tests passed 27/27 on 2026-09-14; broader exact-head gates and PR CI remain pending.
 
 ## Issue #273 reconciliation

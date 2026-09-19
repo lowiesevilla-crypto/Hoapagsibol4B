@@ -21,6 +21,7 @@ import { getUnreadChatCount } from "@/lib/services/chat";
 import { getAssociationSettings } from "@/lib/system-settings";
 import { getEnabledTenantModules } from "@/lib/tenant";
 import { getActionableDocumentRequestCount } from "@/lib/services/document-request-action-count";
+import { SeasonalSantaGreetingLoader } from "@/components/seasonal-santa-greeting-loader";
 
 export async function generateMetadata(): Promise<Metadata> {
   const user = await requireUser(Role.ADMIN);
@@ -99,6 +100,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
   const hasChat = links.some((item) => item.icon === "chat" && item.href === "/admin/chat");
 
   return <div className="canva-tenant-shell min-h-screen print:bg-white">
+    <SeasonalSantaGreetingLoader tenantId={user.tenantId} associationName={association.name} logoUrl={association.logoUrl} />
     <div className="print:hidden">
       <Sidebar
         user={user}

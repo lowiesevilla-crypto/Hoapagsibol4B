@@ -60,6 +60,7 @@ test("production employee punch UI uses state-return client navigation instead o
   assert.ok(clockForm.includes("<form onSubmit={handleSubmit}"));
   assert.ok(clockForm.includes("data-employee-clock-ready={hydrated ? \"true\" : \"false\"}"));
   assert.ok(clockForm.includes("disabled={!hydrated || pending || Boolean(state.redirectTo)}"));
+  assert.equal(clockForm.includes("router.refresh()"), false, "A route replacement must not race a same-route refresh after a successful punch.");
 });
 
 test("critical browser CI gates the full employee login and attendance regression", () => {

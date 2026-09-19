@@ -83,12 +83,25 @@ Object.defineProperty(puppeteer, "launch", {
                 const installSeasonalGreetingDismissal = () => {
                   const dismiss = () => {
                     const close = document.querySelector('button[aria-label="Close seasonal greeting"]');
-                    if (close instanceof HTMLButtonElement) close.click();
+                    if (close instanceof HTMLButtonElement) {
+                      close.click();
+                      return true;
+                    }
+                    return false;
                   };
+                  // React may insert the client-only greeting before delegated click
+                  // handlers are fully ready. Keep retrying briefly so non-seasonal
+                  // CI suites deterministically dismiss the intentional post-login
+                  // modal without changing product behavior.
                   dismiss();
                   const root = document.documentElement;
-                  if (!root) return;
-                  new MutationObserver(dismiss).observe(root, { childList: true, subtree: true });
+                  if (root) new MutationObserver(dismiss).observe(root, { childList: true, subtree: true });
+                  let attempts = 0;
+                  const retry = window.setInterval(() => {
+                    attempts += 1;
+                    dismiss();
+                    if (attempts >= 100) window.clearInterval(retry);
+                  }, 100);
                 };
                 if (document.readyState === "loading") {
                   document.addEventListener("DOMContentLoaded", installSeasonalGreetingDismissal, { once: true });

@@ -13,6 +13,7 @@ import { platformPrisma } from "@/lib/db";
 import { generatePlatformInvoice } from "@/lib/services/platform-billing";
 import {
   getPlatformManualPaymentReceipt,
+  getTenantPlatformManualPaymentReceipt,
   recordPlatformManualPaymentSafe,
 } from "@/lib/services/platform-manual-payment";
 
@@ -134,6 +135,14 @@ test("platform admin manual payment supports a 4000 partial payment on a 6000 in
   assert.equal(receipt.allocations[0].invoice.invoiceNumber, invoice.invoiceNumber);
   assert.equal(Number(receipt.allocations[0].invoice.outstandingBalance), 2000);
   assert.equal((receipt.metadata as { externalReference?: string } | null)?.externalReference, "BANK-4000-PARTIAL");
+
+  const tenantReceipt = await getTenantPlatformManualPaymentReceipt(payment.id, tenantId);
+  assert.equal(tenantReceipt.id, payment.id);
+  assert.equal(tenantReceipt.tenantId, tenantId);
+  await assert.rejects(
+    getTenantPlatformManualPaymentReceipt(payment.id, otherTenantId),
+    /receipt not found/i,
+  );
 });
 
 test("manual payment remains tenant scoped and rejects overpayment", async () => {

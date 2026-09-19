@@ -187,6 +187,7 @@ export async function getPlatformManualPaymentReceipt(paymentId: string) {
           invoice: {
             select: {
               id: true,
+              tenantId: true,
               invoiceNumber: true,
               total: true,
               amountPaid: true,
@@ -206,9 +207,7 @@ export async function getPlatformManualPaymentReceipt(paymentId: string) {
 
   // Defense-in-depth: every allocation on a platform payment must stay within
   // the payment tenant even though the database relation is tenant scoped.
-  if (payment.allocations.some((allocation) => allocation.tenantId !== payment.tenantId || allocation.invoice.tenantId !== undefined)) {
-    // invoice.tenantId is intentionally not selected above; the relation itself
-    // is tenant-scoped. The allocation tenant check remains explicit.
+  if (payment.allocations.some((allocation) => allocation.tenantId !== payment.tenantId || allocation.invoice.tenantId !== payment.tenantId)) {
     throw new Error("Payment receipt tenant scope is invalid.");
   }
 

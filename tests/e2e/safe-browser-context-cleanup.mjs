@@ -2,6 +2,9 @@ import puppeteer from "puppeteer-core";
 
 const pageCloseTimeout = 5_000;
 const browserCloseTimeout = 15_000;
+const autoDismissSeasonalGreeting =
+  process.env.HOAHUB_E2E_PRESERVE_SEASONAL_GREETING !== "1" &&
+  !(process.env.HOAHUB_E2E_BROWSER || "").trim();
 
 async function settleWithin(promise, label, timeoutMs) {
   let timer;
@@ -75,7 +78,7 @@ Object.defineProperty(puppeteer, "launch", {
           configurable: true,
           value: async (...pageArguments) => {
             const page = await originalNewPage(...pageArguments);
-            if (process.env.HOAHUB_E2E_PRESERVE_SEASONAL_GREETING !== "1") {
+            if (autoDismissSeasonalGreeting) {
               await page.evaluateOnNewDocument(() => {
                 const installSeasonalGreetingDismissal = () => {
                   const dismiss = () => {

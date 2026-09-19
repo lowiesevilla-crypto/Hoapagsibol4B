@@ -51,3 +51,13 @@ test("tenant receipt loader enforces payment and allocation tenant scope", async
   assert.match(service, /allocation\.tenantId !== tenantId/);
   assert.match(service, /allocation\.invoice\.tenantId !== tenantId/);
 });
+
+
+test("platform and tenant admin payment history show only successful platform payments", async () => {
+  const service = await source("lib/services/platform-billing.ts");
+  assert.match(service, /where: \{ tenantId, status: PlatformPaymentStatus\.SUCCEEDED \}/);
+
+  const adminPage = await source("app/admin/subscription/page.tsx");
+  assert.match(adminPage, /PlatformPaymentStatus/);
+  assert.match(adminPage, /where: \{ tenantId: user\.tenantId, status: PlatformPaymentStatus\.SUCCEEDED \}/);
+});

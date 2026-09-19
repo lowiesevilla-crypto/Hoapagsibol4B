@@ -61,6 +61,23 @@ async function resolveBrowserExecutable() {
   throw new Error("No Chromium or Chrome executable is available for the WCAG critical-flow suite.");
 }
 
+async function gotoWithRetry(page, url) {
+  const attempts = requestedBrowser === "firefox" ? 3 : 1;
+  let lastError;
+  for (let attempt = 1; attempt <= attempts; attempt += 1) {
+    try {
+      return await page.goto(url, { waitUntil: "networkidle2", timeout });
+    } catch (error) {
+      lastError = error;
+      const message = String(error?.message || error);
+      const isTransientFirefoxAbort = requestedBrowser === "firefox" && message.includes("NS_BINDING_ABORTED");
+      if (!isTransientFirefoxAbort || attempt === attempts) throw error;
+      await new Promise((resolve) => setTimeout(resolve, 300 * attempt));
+    }
+  }
+  throw lastError;
+}
+
 async function clickNamedButton(page, name) {
   const clicked = await page.evaluate((expected) => {
     const buttons = Array.from(document.querySelectorAll("button"));
@@ -73,7 +90,7 @@ async function clickNamedButton(page, name) {
 }
 
 async function login(page, email, password, expectedPrefix) {
-  await page.goto(`${baseUrl}/login`, { waitUntil: "networkidle2", timeout });
+  await gotoWithRetry(page, `${baseUrl}/login`);
   await assertAccessibilitySurface(page, "Login");
   await page.type("#identifier", email);
   await page.type("#password", password);
@@ -136,7 +153,7 @@ async function assertAccessibilitySurface(page, label) {
 }
 
 async function visitAndCheck(page, path, label) {
-  await page.goto(`${baseUrl}${path}`, { waitUntil: "networkidle2", timeout });
+  await gotoWithRetry(page, `${baseUrl}${path}`);
   assert.ok(!page.url().includes("/login"), `${label}: authenticated route unexpectedly redirected to login`);
   await assertAccessibilitySurface(page, label);
 }

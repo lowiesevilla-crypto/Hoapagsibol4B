@@ -1,13 +1,13 @@
 # HOAHub Work Status Register
 
-_Last reconciled: 2026-09-14 (Asia/Manila)_
+_Last reconciled: 2026-09-19 (Asia/Manila)_
 
 This register is the current evidence-backed release snapshot for the active HOAHub production-quality program. It does not replace issue-specific acceptance criteria. A capability is called production-verified only after the exact PR head passes required PR gates, the PR is merged with exact-head protection, and the merged `main` SHA passes HOAHub MySQL CI plus Hostinger managed-production/public-health verification.
 
 ## Current production baseline
 
 - Latest user-provided Hostinger dashboard evidence on 2026-09-14 showed production `main` current at merge commit `878e8851fb6f81dd608997b106500df421e01bfd` from PR #333 (`AI assistance production safeguards`), deployed successfully with Hostinger status `Running`, auto-deployment enabled, SSL/CDN active, and Node.js 22.x. Authenticated production UAT remains separate from this dashboard evidence.
-- Current production-verified `main`: `d79c88074b833b4c760a28d74d3962f557a0c231`, merged from PR #310 (`Rental: expose homeowner contracts and signed agreement workflow`).
+- Current production public-health baseline: `bd8239b8a0a1da0effa7ca9e8ca524e38b651396`, merged from PR #367 (`tenant-safe seasonal Welcome Santa greeting`). Hostinger serves deployment manifest release `bd8239b8a0a1` and `/api/health` returned `status: ok`, `app: HOAHub`, `database: mysql` on 2026-09-19.
 - PR #310 exact head `f782a2069cd093045988be70276b027e93d9e796` passed all required exact-head PR gates: HOAHub MySQL CI #1492 / run `34003875873`, Canva Visual Parity #537 / run `34003875945`, Edge Critical Flow #130 / run `34003875854`, Firefox Critical Flow #126 / run `34003875822`, and Mobile Responsive Evidence #125 / run `34003875835`.
 - PR #310 merged with expected-head protection as `d79c88074b833b4c760a28d74d3962f557a0c231`. Post-merge HOAHub MySQL CI #1493 / run `34005745930` passed on that exact `main` SHA, including lint, Prisma validation/generation/migrations, seed, unit tests, database integration, homeowner verifiers, typecheck, build, production smoke, and the complete critical browser suite. The dependent **Verify Hostinger managed production** job also passed the expected-release marker and public `/api/health` verification.
 - The prior production baseline `f98bf3db72e91ec611b9715bf074480377453409` came from PR #308 Rental Asset Reservations and remains part of the evidence history.
@@ -30,7 +30,7 @@ This register is the current evidence-backed release snapshot for the active HOA
 
 ## Active production-sensitive candidates
 
-- Seasonal Welcome Santa greeting (`codex/seasonal-welcome-santa`): IN PROGRESS / NOT DEPLOYED. Tenant-scoped post-login greeting for homeowner and admin dashboards, active only September 1 through December 31, with session-only display, tenant-brand fallback, accessibility controls, reduced-motion support, and deterministic boundary/isolation tests. Pending exact-head CI, merge, Hostinger deployment, and production verification.
+- Seasonal Welcome Santa greeting: DEPLOYED / PUBLIC-HEALTH VERIFIED through PR #367. Exact PR head `f7c1e1adac5efb6b462202c95fe7cff4e81538b2` passed HOAHub MySQL CI #1723 / run `35422305329`, Canva Visual Parity #706 / run `35422305327`, Edge Critical Flow #299 / run `35422305359`, Firefox Critical Flow #295 / run `35422305389`, and Mobile Responsive Evidence #294 / run `35422305322`. It merged with expected-head protection as `bd8239b8a0a1da0effa7ca9e8ca524e38b651396`; public Hostinger assets reported `bd8239b8a0a1` and health was green. The feature remains tenant-scoped, session/event-scoped, reduced-motion aware, focus-managed, print-hidden, and short-mobile-safe. Authenticated homeowner/admin production smoke is correctly blocked by issue #194's dedicated-smoke-identity control; no tenant credentials were used.
 
 - Payroll lifecycle safe remediation (`codex/payroll-lifecycle-safe-remediation`): IN PROGRESS / NOT DEPLOYED. Current candidate separates calculated payroll Review from Approval without adding persisted payroll statuses or changing statutory deduction formulas. Review is tenant-scoped audit evidence for the current calculated snapshot; Approval creates the existing immutable `FINALIZED` revision required before Financial Engine posting. Local focused payroll lifecycle/statutory/finance tests passed 27/27 on 2026-09-14; broader exact-head gates and PR CI remain pending.
 
@@ -82,4 +82,4 @@ Authenticated non-destructive production smoke remains tracked by open issue #19
 
 ## Current execution state
 
-Current production is VERIFIED at `d79c88074b833b4c760a28d74d3962f557a0c231` through post-merge HOAHub MySQL CI #1493 / run `34005745930`, Hostinger expected-release verification, and public production health. The code-first #146 audit confirms items 1, 3, 5 and 6 are already complete and must not be reimplemented; item 2's financial-statement/reporting core is also complete, with only the specific PayMongo Maya/QR Ph rail-attribution subclause unresolved. Item 4 is genuinely absent from the production baseline and is being implemented by PR #311. Issue #194 remains externally blocked and must not be bypassed. Email bulk delivery remains fail-closed pending provider restoration and controlled canary approval.
+Current production public-health baseline is `bd8239b8a0a1da0effa7ca9e8ca524e38b651396` from PR #367, with all required exact-head gates green and Hostinger serving manifest release `bd8239b8a0a1` plus healthy MySQL-backed `/api/health`. The code-first #146 audit confirms items 1, 3, 5 and 6 are already complete and must not be reimplemented; item 2's financial-statement/reporting core is also complete, with only the specific PayMongo Maya/QR Ph rail-attribution subclause unresolved. Item 4 is genuinely absent from the production baseline and is being implemented by PR #311. Issue #194 remains externally blocked and must not be bypassed. Email bulk delivery remains fail-closed pending provider restoration and controlled canary approval.

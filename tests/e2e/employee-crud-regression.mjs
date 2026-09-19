@@ -85,6 +85,19 @@ async function clickByText(page, selector, text) {
   throw new Error(`Could not find ${selector} containing ${text} on ${page.url()}`);
 }
 
+async function dismissSeasonalGreetingIfPresent(page) {
+  // A successful September-December login intentionally opens the tenant-scoped
+  // Santa modal. This CRUD regression is not testing that modal, so dismiss it
+  // before interacting with the underlying form. Waiting briefly also removes
+  // the login->authenticated-shell lazy-mount race introduced by the reliable
+  // server-issued fallback signal.
+  const dialog = await page.waitForSelector('[role="dialog"][aria-modal="true"]', { timeout: 3_000 }).catch(() => null);
+  if (!dialog) return;
+  const close = await page.$('button[aria-label="Close seasonal greeting"]');
+  if (close) await close.click();
+  await page.waitForSelector('[role="dialog"][aria-modal="true"]', { hidden: true, timeout: 5_000 });
+}
+
 async function clearAndType(page, selector, value) {
   await page.waitForSelector(selector, { timeout });
   await page.$eval(selector, (element) => {
@@ -121,6 +134,7 @@ try {
 
   await page.goto(`${baseUrl}/admin/employees/new`, { waitUntil: "networkidle2", timeout });
   await page.waitForFunction(() => (document.body?.textContent || "").includes("Add an employee"), { timeout });
+  await dismissSeasonalGreetingIfPresent(page);
   await clearAndType(page, "#employeeNumber", targetEmployeeNumber);
   await clearAndType(page, "#name", targetEmployeeName);
   await clearAndType(page, "#position", "E2E CRUD Specialist");

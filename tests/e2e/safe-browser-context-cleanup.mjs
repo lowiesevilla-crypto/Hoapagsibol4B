@@ -2,6 +2,9 @@ import puppeteer from "puppeteer-core";
 
 const pageCloseTimeout = 5_000;
 const browserCloseTimeout = 15_000;
+const autoDismissSeasonalGreeting =
+  process.env.HOAHUB_E2E_PRESERVE_SEASONAL_GREETING !== "1" &&
+  !(process.env.HOAHUB_E2E_BROWSER || "").trim();
 
 async function settleWithin(promise, label, timeoutMs) {
   let timer;
@@ -54,7 +57,44 @@ Object.defineProperty(puppeteer, "launch", {
   value: async (...launchArguments) => {
     const browser = await originalLaunch(...launchArguments);
     const originalBrowserClose = browser.close.bind(browser);
+    const originalBrowserNewPage = browser.newPage.bind(browser);
     const isolatedBrowsers = new Set();
+
+    Object.defineProperty(browser, "newPage", {
+      configurable: true,
+      value: async (...pageArguments) => {
+        const page = await originalBrowserNewPage(...pageArguments);
+        if (autoDismissSeasonalGreeting) {
+          await page.evaluateOnNewDocument(() => {
+            const installSeasonalGreetingDismissal = () => {
+              const dismiss = () => {
+                const close = document.querySelector('button[aria-label="Close seasonal greeting"]');
+                if (close instanceof HTMLButtonElement) {
+                  close.click();
+                  return true;
+                }
+                return false;
+              };
+              dismiss();
+              const root = document.documentElement;
+              if (root) new MutationObserver(dismiss).observe(root, { childList: true, subtree: true });
+              let attempts = 0;
+              const retry = window.setInterval(() => {
+                attempts += 1;
+                dismiss();
+                if (attempts >= 100) window.clearInterval(retry);
+              }, 100);
+            };
+            if (document.readyState === "loading") {
+              document.addEventListener("DOMContentLoaded", installSeasonalGreetingDismissal, { once: true });
+            } else {
+              installSeasonalGreetingDismissal();
+            }
+          });
+        }
+        return page;
+      },
+    });
 
     Object.defineProperty(browser, "createBrowserContext", {
       configurable: true,
@@ -69,6 +109,47 @@ Object.defineProperty(puppeteer, "launch", {
         const isolatedBrowserClose = isolatedBrowser.close.bind(isolatedBrowser);
         const context = isolatedBrowser.defaultBrowserContext();
         isolatedBrowsers.add(isolatedBrowser);
+
+        const originalNewPage = context.newPage.bind(context);
+        Object.defineProperty(context, "newPage", {
+          configurable: true,
+          value: async (...pageArguments) => {
+            const page = await originalNewPage(...pageArguments);
+            if (autoDismissSeasonalGreeting) {
+              await page.evaluateOnNewDocument(() => {
+                const installSeasonalGreetingDismissal = () => {
+                  const dismiss = () => {
+                    const close = document.querySelector('button[aria-label="Close seasonal greeting"]');
+                    if (close instanceof HTMLButtonElement) {
+                      close.click();
+                      return true;
+                    }
+                    return false;
+                  };
+                  // React may insert the client-only greeting before delegated click
+                  // handlers are fully ready. Keep retrying briefly so non-seasonal
+                  // CI suites deterministically dismiss the intentional post-login
+                  // modal without changing product behavior.
+                  dismiss();
+                  const root = document.documentElement;
+                  if (root) new MutationObserver(dismiss).observe(root, { childList: true, subtree: true });
+                  let attempts = 0;
+                  const retry = window.setInterval(() => {
+                    attempts += 1;
+                    dismiss();
+                    if (attempts >= 100) window.clearInterval(retry);
+                  }, 100);
+                };
+                if (document.readyState === "loading") {
+                  document.addEventListener("DOMContentLoaded", installSeasonalGreetingDismissal, { once: true });
+                } else {
+                  installSeasonalGreetingDismissal();
+                }
+              });
+            }
+            return page;
+          },
+        });
 
         Object.defineProperty(context, "close", {
           configurable: true,

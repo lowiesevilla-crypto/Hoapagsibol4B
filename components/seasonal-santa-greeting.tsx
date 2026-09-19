@@ -2,11 +2,17 @@
 
 import { useEffect, useId, useRef, useState } from "react";
 import { X } from "lucide-react";
-import { isSeasonalSantaWindow, SEASONAL_SANTA_LOGIN_KEY, seasonalSantaSessionKey, wasSeasonalSantaShownForLogin } from "@/lib/seasonal-santa";
+import { isSeasonalSantaWindow, SEASONAL_SANTA_LOGIN_COOKIE, SEASONAL_SANTA_LOGIN_KEY, seasonalSantaSessionKey, wasSeasonalSantaShownForLogin } from "@/lib/seasonal-santa";
 import styles from "./seasonal-santa-greeting.module.css";
 
 const AUTO_DISMISS_MS = 6_500;
 const LOGIN_SIGNAL_MAX_AGE_MS = 30_000;
+
+function cookieLoginAt(tenantId: string): number {
+  const value = document.cookie.split("; ").find((item) => item.startsWith(`${SEASONAL_SANTA_LOGIN_COOKIE}=`))?.split("=")[1];
+  const [signalTenantId, rawLoginAt] = decodeURIComponent(value || "").split(".");
+  return signalTenantId === tenantId ? Number(rawLoginAt) : 0;
+}
 
 export function SeasonalSantaGreeting({ tenantId, associationName, logoUrl }: { tenantId: string; associationName: string; logoUrl?: string | null }) {
   const [open, setOpen] = useState(false);
@@ -18,10 +24,11 @@ export function SeasonalSantaGreeting({ tenantId, associationName, logoUrl }: { 
   useEffect(() => {
     try {
       const key = seasonalSantaSessionKey(tenantId);
-      const authenticatedAt = Number(window.sessionStorage.getItem(SEASONAL_SANTA_LOGIN_KEY));
+      const authenticatedAt = Number(window.sessionStorage.getItem(SEASONAL_SANTA_LOGIN_KEY)) || cookieLoginAt(tenantId);
       const isFreshLogin = Number.isFinite(authenticatedAt) && authenticatedAt > 0 && Date.now() - authenticatedAt <= LOGIN_SIGNAL_MAX_AGE_MS;
       if (!isFreshLogin || !isSeasonalSantaWindow(new Date()) || wasSeasonalSantaShownForLogin(window.sessionStorage.getItem(key), authenticatedAt)) return;
       window.sessionStorage.setItem(key, String(authenticatedAt));
+      document.cookie = `${SEASONAL_SANTA_LOGIN_COOKIE}=; Path=/; Max-Age=0; SameSite=Lax`;
       previousFocusRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
       setOpen(true);
     } catch { /* Storage restrictions must never affect authenticated navigation. */ }

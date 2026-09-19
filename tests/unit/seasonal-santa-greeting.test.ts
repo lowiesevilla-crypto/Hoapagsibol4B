@@ -28,9 +28,20 @@ test("greeting uses server-provided brand and has session, accessibility, and sa
   assert.match(source, /aria-label="Close seasonal greeting"/);
   assert.match(source, /AUTO_DISMISS_MS = 6_500/);
   assert.match(source, /SEASONAL_SANTA_LOGIN_KEY/);
+  assert.match(source, /SEASONAL_SANTA_LOGIN_COOKIE/);
+  assert.match(source, /cookieLoginAt\(tenantId\)/);
+  assert.match(source, /signalTenantId === tenantId/);
   assert.match(source, /trapFocus/);
   assert.match(source, /closeButtonRef\.current\?\.focus\(\)/);
   const css = readFileSync("components/seasonal-santa-greeting.module.css", "utf8");
   assert.match(css, /max-height: calc\(100dvh - 2rem\)/);
   assert.match(css, /@media print/);
+});
+
+test("homeowner and admin authenticated shells mount the tenant-scoped greeting", () => {
+  const homeownerLayout = readFileSync("app/portal/layout.tsx", "utf8");
+  const adminLayout = readFileSync("app/admin/layout.tsx", "utf8");
+  for (const layout of [homeownerLayout, adminLayout]) {
+    assert.match(layout, /<SeasonalSantaGreetingLoader tenantId=\{user\.tenantId\} associationName=\{association\.name\} logoUrl=\{association\.logoUrl\}/);
+  }
 });

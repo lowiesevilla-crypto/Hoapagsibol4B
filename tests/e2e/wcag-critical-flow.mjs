@@ -72,8 +72,28 @@ async function clickNamedButton(page, name) {
   assert.ok(clicked, `Expected button containing ${name} on ${page.url()}`);
 }
 
+async function gotoWithTransientFirefoxRetry(page, url) {
+  const maxAttempts = requestedBrowser === "firefox" ? 3 : 1;
+  let lastError;
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    try {
+      return await page.goto(url, { waitUntil: "networkidle2", timeout });
+    } catch (error) {
+      lastError = error;
+      const message = error instanceof Error ? error.message : String(error);
+      const transientFirefoxNavigation =
+        requestedBrowser === "firefox" &&
+        (message.includes("NS_BINDING_ABORTED") || message.includes("browsingContext.navigate"));
+      if (!transientFirefoxNavigation || attempt === maxAttempts) throw error;
+      console.log(`[firefox:navigation-retry] transient BiDi navigation abort for ${url}; retrying ${attempt}/${maxAttempts - 1}`);
+      await new Promise((resolve) => setTimeout(resolve, 250 * attempt));
+    }
+  }
+  throw lastError;
+}
+
 async function login(page, email, password, expectedPrefix) {
-  await page.goto(`${baseUrl}/login`, { waitUntil: "networkidle2", timeout });
+  await gotoWithTransientFirefoxRetry(page, `${baseUrl}/login`);
   await assertAccessibilitySurface(page, "Login");
   await page.type("#identifier", email);
   await page.type("#password", password);
@@ -136,7 +156,7 @@ async function assertAccessibilitySurface(page, label) {
 }
 
 async function visitAndCheck(page, path, label) {
-  await page.goto(`${baseUrl}${path}`, { waitUntil: "networkidle2", timeout });
+  await gotoWithTransientFirefoxRetry(page, `${baseUrl}${path}`);
   assert.ok(!page.url().includes("/login"), `${label}: authenticated route unexpectedly redirected to login`);
   await assertAccessibilitySurface(page, label);
 }

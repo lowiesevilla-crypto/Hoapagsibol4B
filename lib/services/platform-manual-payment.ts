@@ -162,3 +162,55 @@ export async function recordPlatformManualPaymentSafe(input: {
     return payment;
   });
 }
+
+
+export async function getPlatformManualPaymentReceipt(paymentId: string) {
+  if (!paymentId) throw new Error("Payment receipt not found.");
+
+  const payment = await prisma.platformPayment.findFirst({
+    where: {
+      id: paymentId,
+      gateway: PlatformPaymentGateway.MANUAL,
+      status: PlatformPaymentStatus.SUCCEEDED,
+    },
+    include: {
+      tenant: {
+        select: {
+          id: true,
+          name: true,
+          shortName: true,
+          slug: true,
+        },
+      },
+      allocations: {
+        include: {
+          invoice: {
+            select: {
+              id: true,
+              invoiceNumber: true,
+              total: true,
+              amountPaid: true,
+              outstandingBalance: true,
+              currency: true,
+              billingPeriodStart: true,
+              billingPeriodEnd: true,
+            },
+          },
+        },
+        orderBy: { createdAt: "asc" },
+      },
+    },
+  });
+
+  if (!payment) throw new Error("Manual payment receipt not found.");
+
+  // Defense-in-depth: every allocation on a platform payment must stay within
+  // the payment tenant even though the database relation is tenant scoped.
+  if (payment.allocations.some((allocation) => allocation.tenantId !== payment.tenantId || allocation.invoice.tenantId !== undefined)) {
+    // invoice.tenantId is intentionally not selected above; the relation itself
+    // is tenant-scoped. The allocation tenant check remains explicit.
+    throw new Error("Payment receipt tenant scope is invalid.");
+  }
+
+  return payment;
+}

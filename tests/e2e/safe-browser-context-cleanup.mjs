@@ -57,7 +57,44 @@ Object.defineProperty(puppeteer, "launch", {
   value: async (...launchArguments) => {
     const browser = await originalLaunch(...launchArguments);
     const originalBrowserClose = browser.close.bind(browser);
+    const originalBrowserNewPage = browser.newPage.bind(browser);
     const isolatedBrowsers = new Set();
+
+    Object.defineProperty(browser, "newPage", {
+      configurable: true,
+      value: async (...pageArguments) => {
+        const page = await originalBrowserNewPage(...pageArguments);
+        if (autoDismissSeasonalGreeting) {
+          await page.evaluateOnNewDocument(() => {
+            const installSeasonalGreetingDismissal = () => {
+              const dismiss = () => {
+                const close = document.querySelector('button[aria-label="Close seasonal greeting"]');
+                if (close instanceof HTMLButtonElement) {
+                  close.click();
+                  return true;
+                }
+                return false;
+              };
+              dismiss();
+              const root = document.documentElement;
+              if (root) new MutationObserver(dismiss).observe(root, { childList: true, subtree: true });
+              let attempts = 0;
+              const retry = window.setInterval(() => {
+                attempts += 1;
+                dismiss();
+                if (attempts >= 100) window.clearInterval(retry);
+              }, 100);
+            };
+            if (document.readyState === "loading") {
+              document.addEventListener("DOMContentLoaded", installSeasonalGreetingDismissal, { once: true });
+            } else {
+              installSeasonalGreetingDismissal();
+            }
+          });
+        }
+        return page;
+      },
+    });
 
     Object.defineProperty(browser, "createBrowserContext", {
       configurable: true,

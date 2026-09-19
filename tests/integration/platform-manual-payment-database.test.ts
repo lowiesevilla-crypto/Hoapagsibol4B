@@ -6,6 +6,7 @@ import {
   PlatformPaymentGateway,
   PlatformPaymentMethod,
   PlatformPaymentStatus,
+  Role,
   TenantSubscriptionStatus,
 } from "@prisma/client";
 import { platformPrisma } from "@/lib/db";
@@ -29,6 +30,7 @@ async function cleanup() {
   await platformPrisma.platformPayment.deleteMany({ where: { tenantId: { in: [tenantId, otherTenantId] } } });
   await platformPrisma.platformInvoice.deleteMany({ where: { tenantId: { in: [tenantId, otherTenantId] } } });
   await platformPrisma.auditLog.deleteMany({ where: { tenantId: { in: [tenantId, otherTenantId] } } });
+  await platformPrisma.user.deleteMany({ where: { id: actorId } });
   await platformPrisma.tenantSubscription.deleteMany({ where: { tenantId: { in: [tenantId, otherTenantId] } } });
   await platformPrisma.subscriptionPlanModule.deleteMany({ where: { planId } });
   await platformPrisma.subscriptionPlan.deleteMany({ where: { id: planId } });
@@ -66,6 +68,17 @@ before(async () => {
         subscriptionStatus: TenantSubscriptionStatus.ACTIVE,
       },
     ],
+  });
+  await platformPrisma.user.create({
+    data: {
+      id: actorId,
+      tenantId,
+      name: "Platform Billing Test Admin",
+      email: runId + "@example.invalid",
+      passwordHash: "integration-test-only",
+      role: Role.PLATFORM_ADMIN,
+      active: true,
+    },
   });
   await platformPrisma.tenantSubscription.create({
     data: {

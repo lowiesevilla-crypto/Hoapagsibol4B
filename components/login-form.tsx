@@ -8,6 +8,7 @@ import { AssociationLogo } from "@/components/association-logo";
 import { PasskeyLoginButton } from "@/components/passkey-login-button";
 import { PasswordInput } from "@/components/password-input";
 import { LOGIN_HANDOFF_STORAGE_KEY } from "@/components/post-login-brand-orbit";
+import { SEASONAL_SANTA_LOGIN_KEY } from "@/lib/seasonal-santa";
 import transitionStyles from "./login-verified-transition.module.css";
 
 const VERIFIED_TRANSITION_MS = 800;
@@ -34,7 +35,11 @@ export function LoginForm({
     if (!state.redirectTo) return;
     setVerified(true);
     try {
-      window.sessionStorage.setItem(LOGIN_HANDOFF_STORAGE_KEY, String(Date.now()));
+      const authenticatedAt = String(Date.now());
+      window.sessionStorage.setItem(LOGIN_HANDOFF_STORAGE_KEY, authenticatedAt);
+      // This intentionally outlives the short logo-orbit handoff so the lazy
+      // greeting still sees the successful-login event on slower devices.
+      window.sessionStorage.setItem(SEASONAL_SANTA_LOGIN_KEY, authenticatedAt);
     } catch { /* Storage restrictions must never block authenticated navigation. */ }
     const redirectTimer = window.setTimeout(() => {
       window.location.replace(returnTo || state.redirectTo!);

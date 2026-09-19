@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
-import { isSeasonalSantaWindow, seasonalSantaSessionKey } from "../../lib/seasonal-santa";
+import { isSeasonalSantaWindow, seasonalSantaSessionKey, wasSeasonalSantaShownForLogin } from "../../lib/seasonal-santa";
 
 test("seasonal Santa runs from September 1 through December 31 every year", () => {
   assert.equal(isSeasonalSantaWindow(new Date(2026, 7, 31, 23, 59)), false);
@@ -14,6 +14,11 @@ test("seasonal greeting state is tenant-specific", () => {
   assert.notEqual(seasonalSantaSessionKey("tenant-a"), seasonalSantaSessionKey("tenant-b"));
 });
 
+test("shown state applies only to the exact login event", () => {
+  assert.equal(wasSeasonalSantaShownForLogin("100", 100), true);
+  assert.equal(wasSeasonalSantaShownForLogin("100", 101), false);
+});
+
 test("greeting uses server-provided brand and has session, accessibility, and safe fallback guards", () => {
   const source = readFileSync("components/seasonal-santa-greeting.tsx", "utf8");
   assert.match(source, /seasonalSantaSessionKey\(tenantId\)/);
@@ -22,4 +27,10 @@ test("greeting uses server-provided brand and has session, accessibility, and sa
   assert.match(source, /role="dialog"/);
   assert.match(source, /aria-label="Close seasonal greeting"/);
   assert.match(source, /AUTO_DISMISS_MS = 6_500/);
+  assert.match(source, /SEASONAL_SANTA_LOGIN_KEY/);
+  assert.match(source, /trapFocus/);
+  assert.match(source, /closeButtonRef\.current\?\.focus\(\)/);
+  const css = readFileSync("components/seasonal-santa-greeting.module.css", "utf8");
+  assert.match(css, /max-height: calc\(100dvh - 2rem\)/);
+  assert.match(css, /@media print/);
 });

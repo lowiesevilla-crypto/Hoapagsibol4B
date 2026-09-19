@@ -23,19 +23,39 @@ test("greeting uses server-provided brand and has session, accessibility, and sa
   const source = readFileSync("components/seasonal-santa-greeting.tsx", "utf8");
   assert.match(source, /seasonalSantaSessionKey\(tenantId\)/);
   assert.match(source, /isSeasonalSantaWindow\(new Date\(\)\)/);
-  assert.match(source, /logoUrl\?\.trim\(\) \|\| "\/Hoahub-logo\.png"/);
+  assert.match(source, /const requestedLogo = logoUrl\?\.trim\(\) \|\| DEFAULT_LOGO/);
+  assert.match(source, /const displayedLogo = logoFailed \? DEFAULT_LOGO : requestedLogo/);
+  assert.match(source, /onError=\{\(\) =>/);
   assert.match(source, /role="dialog"/);
   assert.match(source, /aria-label="Close seasonal greeting"/);
+  assert.match(source, /event\.key === "Escape"/);
   assert.match(source, /AUTO_DISMISS_MS = 6_500/);
   assert.match(source, /SEASONAL_SANTA_LOGIN_KEY/);
   assert.match(source, /SEASONAL_SANTA_LOGIN_COOKIE/);
   assert.match(source, /cookieLoginAt\(tenantId\)/);
   assert.match(source, /signalTenantId === tenantId/);
-  assert.match(source, /trapFocus/);
+  assert.match(source, /handleDialogKeyDown/);
   assert.match(source, /closeButtonRef\.current\?\.focus\(\)/);
+
   const css = readFileSync("components/seasonal-santa-greeting.module.css", "utf8");
+  assert.match(css, /width: min\(92vw, 24rem\)/);
   assert.match(css, /max-height: calc\(100dvh - 2rem\)/);
+  assert.match(css, /font-size: clamp\(1\.4rem, 4\.8vw, 2rem\)/);
+  assert.match(css, /text-wrap: balance/);
+  assert.match(css, /@keyframes santaWalk/);
+  assert.match(css, /@keyframes legLeft/);
+  assert.match(css, /@keyframes legRight/);
+  assert.match(css, /@media \(prefers-reduced-motion: reduce\)/);
   assert.match(css, /@media print/);
+});
+
+test("animated Santa carries the authenticated tenant logo in a dedicated sack", () => {
+  const source = readFileSync("components/seasonal-santa-greeting.tsx", "utf8");
+  assert.match(source, /className=\{styles\.sack\}/);
+  assert.match(source, /className=\{styles\.logoPlate\}/);
+  assert.match(source, /src=\{displayedLogo\}/);
+  assert.match(source, /className=\{styles\.legLeft\}/);
+  assert.match(source, /className=\{styles\.legRight\}/);
 });
 
 test("homeowner and admin authenticated shells mount the tenant-scoped greeting", () => {

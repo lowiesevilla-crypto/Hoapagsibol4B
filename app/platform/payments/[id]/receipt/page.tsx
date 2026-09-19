@@ -1,7 +1,9 @@
+import Image from "next/image";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { PlatformPaymentReceiptActions } from "@/components/platform-payment-receipt-actions";
 import { getPlatformManualPaymentReceipt } from "@/lib/services/platform-manual-payment";
+import { platformBillingIssuer } from "@/lib/services/platform-invoice-document";
 
 function money(value: number, currency = "PHP") {
   return new Intl.NumberFormat("en-PH", {
@@ -30,6 +32,7 @@ export default async function PlatformManualPaymentReceiptPage({
   if (!allocation) notFound();
   const invoice = allocation.invoice;
   const externalRef = externalReference(payment.metadata);
+  const issuer = platformBillingIssuer();
 
   return (
     <div className="mx-auto max-w-3xl">
@@ -42,8 +45,13 @@ export default async function PlatformManualPaymentReceiptPage({
 
       <article className="rounded-2xl border bg-white p-6 shadow-sm print:border-0 print:shadow-none sm:p-8">
         <header className="border-b pb-5 text-center">
-          <p className="text-xs font-black uppercase tracking-[0.22em] text-leaf-700">HOAHub Platform</p>
-          <h1 className="mt-2 text-2xl font-black text-slate-950">Official Manual Payment Receipt</h1>
+          <div className="mx-auto flex max-w-xl flex-col items-center">
+            <Image src="/Hoahub-logo.png" alt="HOAHub platform logo" width={72} height={72} className="h-16 w-16 object-contain print:h-14 print:w-14" priority />
+            <p className="mt-2 text-xs font-black uppercase tracking-[0.22em] text-leaf-700">{issuer.name}</p>
+            {issuer.address ? <p className="mt-1 max-w-lg text-xs leading-5 text-slate-600">{issuer.address}</p> : null}
+            <p className="text-xs text-slate-500">{[issuer.email, issuer.website].filter(Boolean).join(" · ")}</p>
+          </div>
+          <h1 className="mt-3 text-2xl font-black text-slate-950">Official Manual Payment Receipt</h1>
           <p className="mt-1 text-sm text-slate-500">Tenant subscription payment</p>
         </header>
 

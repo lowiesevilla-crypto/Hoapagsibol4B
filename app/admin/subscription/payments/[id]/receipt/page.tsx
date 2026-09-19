@@ -1,8 +1,10 @@
+import { Role } from "@prisma/client";
 import Image from "next/image";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { PlatformPaymentReceiptActions } from "@/components/platform-payment-receipt-actions";
-import { getPlatformManualPaymentReceipt } from "@/lib/services/platform-manual-payment";
+import { requireUser } from "@/lib/auth";
+import { getTenantPlatformManualPaymentReceipt } from "@/lib/services/platform-manual-payment";
 import { platformBillingIssuer } from "@/lib/services/platform-invoice-document";
 
 function money(value: number, currency = "PHP") {
@@ -19,13 +21,14 @@ function externalReference(metadata: unknown) {
   return typeof value === "string" ? value.trim() : "";
 }
 
-export default async function PlatformManualPaymentReceiptPage({
+export default async function TenantAdminPlatformManualPaymentReceiptPage({
   params,
 }: {
   params: Promise<{ id: string }>;
 }) {
+  const user = await requireUser(Role.ADMIN);
   const { id } = await params;
-  const payment = await getPlatformManualPaymentReceipt(id).catch(() => null);
+  const payment = await getTenantPlatformManualPaymentReceipt(id, user.tenantId).catch(() => null);
   if (!payment) notFound();
 
   const allocation = payment.allocations[0];
@@ -37,8 +40,8 @@ export default async function PlatformManualPaymentReceiptPage({
   return (
     <div className="mx-auto max-w-3xl">
       <div className="print:hidden mb-5 flex flex-wrap items-center justify-between gap-3">
-        <Link className="font-black text-blue-700 hover:underline" href={`/platform/tenants/${payment.tenantId}/billing`}>
-          ← Back to tenant billing
+        <Link className="font-black text-blue-700 hover:underline" href="/admin/subscription">
+          ← Back to HOAHub subscription
         </Link>
         <PlatformPaymentReceiptActions />
       </div>

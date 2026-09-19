@@ -1,4 +1,4 @@
-import { PlatformInvoiceStatus, Role } from "@prisma/client";
+import { PlatformInvoiceStatus, PlatformPaymentStatus, Role } from "@prisma/client";
 import { CreditCard, Download, ExternalLink, FileText, ReceiptText, ShieldCheck } from "lucide-react";
 import Link from "next/link";
 import { requireUser } from "@/lib/auth";
@@ -47,7 +47,7 @@ export default async function TenantSubscriptionPage() {
       take: 36,
     }),
     prisma.platformPayment.findMany({
-      where: { tenantId: user.tenantId },
+      where: { tenantId: user.tenantId, status: PlatformPaymentStatus.SUCCEEDED },
       orderBy: { receivedAt: "desc" },
       take: 12,
     }),
@@ -158,7 +158,7 @@ export default async function TenantSubscriptionPage() {
       <section className="mt-6 rounded-2xl border bg-white p-5 sm:p-6">
         <h2 className="text-xl font-black">Payment history</h2>
         <div className="mt-4 space-y-3">
-          {payments.map((payment) => <div key={payment.id} className="flex flex-wrap items-center justify-between gap-3 rounded-xl border p-4 text-sm"><div><p className="font-black">{payment.paymentReference}</p><p className="mt-1 text-xs text-slate-500">{payment.gateway} · {payment.method.replaceAll("_", " ")} · {payment.status.replaceAll("_", " ")}</p></div><div className="text-right"><p className="font-black text-pine-900">{money(Number(payment.amount), payment.currency)}</p><p className="mt-1 text-xs text-slate-500">{(payment.paidAt || payment.receivedAt).toLocaleString("en-PH")}</p></div></div>)}
+          {payments.map((payment) => <div key={payment.id} className="flex flex-wrap items-center justify-between gap-3 rounded-xl border p-4 text-sm"><div><p className="font-black">{payment.paymentReference}</p><p className="mt-1 text-xs text-slate-500">{payment.gateway} · {payment.method.replaceAll("_", " ")} · {payment.status.replaceAll("_", " ")}</p>{payment.gateway === "MANUAL" && payment.status === "SUCCEEDED" ? <Link className="mt-2 inline-flex text-xs font-black text-blue-700 hover:underline" href={`/admin/subscription/payments/${payment.id}/receipt`} target="_blank">View receipt</Link> : null}</div><div className="text-right"><p className="font-black text-pine-900">{money(Number(payment.amount), payment.currency)}</p><p className="mt-1 text-xs text-slate-500">{(payment.paidAt || payment.receivedAt).toLocaleString("en-PH")}</p></div></div>)}
           {!payments.length && <p className="rounded-xl border border-dashed p-6 text-center text-sm text-slate-500">No HOAHub subscription payments recorded.</p>}
         </div>
       </section>
